@@ -443,17 +443,18 @@ export function HierarchySidebar({
                             }
                           >
                             {workspace.name}
-                            {workspace.branch &&
-                            workspace.branch !== workspace.name
-                              ? ` (${workspace.branch})`
-                              : ""}
                             {workspace.unavailable ? " (unavailable)" : ""}
                           </button>
                           {runningCount > 0 && (
                             <span
                               title={`${runningCount} running agents`}
                               aria-label={`${runningCount} running agents`}
-                              style={{ display: "inline-flex", alignItems: "center", gap: 3 }}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 3,
+                                flexShrink: 0,
+                              }}
                             >
                               <Bot size={14} aria-hidden="true" />
                               {runningCount}
