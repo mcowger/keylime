@@ -1,32 +1,28 @@
 // Retention of sent uploads, the daemon's side (docs/specs/2026-11-02-file-uploads-design.md, U6): main sends the
 // `uploadRetentionDays` setting (op `setUploadRetention`), the daemon keeps it in `<agent dir>/omp-web/upload-retention.json`
 // and deletes files older than that from every session's `local://uploads/`, at start and every 24 h.
-// Loaded by the daemon through jiti: no `@/` imports and no Bun APIs.
+// Loaded by the daemon through Bun's native TypeScript runtime: no `@/` imports.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { lstat, readdir, unlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { getAgentDir, getArchivedSessionsDir, getSessionsDir } from "../omp/paths";
 import { isRecord } from "../type-guards";
 import { isUploadRetentionDays } from "../upload-limits";
 import { HostOpError } from "./link-protocol";
-import { UPLOADS_LOCAL_DIR, uploadOwnerNamespace, withUploadNameLock } from "./uploads";
+import { UPLOADS_LOCAL_DIR, withUploadNameLock } from "./uploads";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Where sent uploads live: `<sessions>/<project>/<session>/local/uploads/*`, the same under the archive (a session's
- * artifacts directory moves there whole), and this daemon's namespace within the Windows fallback uploads directory.
- * `tmp` is null where that fallback never applies. */
+/** Where sent uploads live: `<sessions>/<project>/<session>/local/uploads/*`, and the same under the archive
+ * (a session's artifacts directory moves there whole). */
 export interface RetentionRoots {
   sessions: string;
   archive: string;
-  tmp: { dir: string; namespace: string } | null;
 }
 
 function defaultRoots(): RetentionRoots {
   return {
     sessions: getSessionsDir(), archive: getArchivedSessionsDir(),
-    tmp: process.platform === "win32" ? { dir: join(tmpdir(), "omp-local"), namespace: uploadOwnerNamespace() } : null,
   };
 }
 
@@ -98,12 +94,6 @@ export async function sweepSentUploads(days: number | (() => number | null), now
         const local = join(session, "local");
         if (await isRealDir(local)) folders.push(join(local, UPLOADS_LOCAL_DIR));
       }
-    }
-  }
-  if (roots.tmp && await isRealDir(roots.tmp.dir)) {
-    for (const session of await subdirs(roots.tmp.dir)) {
-      const uploads = join(session, UPLOADS_LOCAL_DIR);
-      if (await isRealDir(uploads)) folders.push(join(uploads, roots.tmp.namespace));
     }
   }
   for (const folder of folders) {

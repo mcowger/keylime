@@ -4,8 +4,6 @@ import test, { afterEach, before } from "node:test";
 import React from "react";
 const { act, cleanup, render, renderHook } = await import("@testing-library/react/pure.js");
 
-// Same specifiers as useNotifications' own imports: on Windows a relative path
-// can load a second toast module, whose manager the rendered provider never sees.
 const { ClampedDescription, ToastProvider, toast } = await import("@/components/ui/toast");
 const { useNotifications } = await import("@/hooks/useNotifications");
 const { notificationHistory } = await import("@/lib/notification-history");

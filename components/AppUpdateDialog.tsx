@@ -121,7 +121,7 @@ export interface AppUpdateInfo {
   availableVersion: string | null;
   updateAvailable: boolean;
   /** "binary": a compiled release, whose `updateCommand` is the download page. */
-  installMethod?: "npm" | "bun" | "binary";
+  installMethod?: "bun" | "binary";
   updateCommand?: string;
   selfUpdateSupported?: boolean;
   updatesDisabled?: boolean;
@@ -204,7 +204,7 @@ export function AppUpdateDialog({ open, update, phase, visibleStage, error, onPr
     return () => controller.abort();
   }, [availableVersion, releaseNotes?.version, shouldLoadReleaseNotes]);
   const busy = phase === "preparing" || phase === "restarting" || phase === "completed";
-  const command = update?.updateCommand || "npm install -g @kahme247/ompweb";
+  const command = update?.updateCommand || "bun add -g @kahme247/ompweb";
   const completedVersion = update?.selfUpdateStatus?.targetVersion ?? update?.availableVersion ?? update?.currentVersion ?? "?";
   const versionTransition = getAppUpdateVersionTransition(update, phase);
   const effectiveStage = visibleStage ?? update?.selfUpdateStatus?.stage;

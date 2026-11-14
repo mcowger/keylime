@@ -1,10 +1,10 @@
-// This file is copied outside the install before an update. Keep it self-contained and Node 24 compatible.
+// This file is copied outside the install before an update. Keep it self-contained and Bun compatible.
 import { createHash, randomUUID } from "node:crypto";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { chmodSync, closeSync, createReadStream, createWriteStream, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync, readSync, realpathSync, renameSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { createGunzip, inflateRawSync } from "node:zlib";
+import { createGunzip } from "node:zlib";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
 import type { HostUpdateOperation, HostUpdateTarget } from "./update-types";
@@ -17,7 +17,7 @@ const exec = promisify(execFile);
 export const HOST_RELEASE_MAX_ARCHIVE = 512 * 1024 * 1024;
 export const HOST_RELEASE_MAX_EXPANDED = 1024 * 1024 * 1024;
 export const HOST_RELEASE_MAX_MEMBER = 512 * 1024 * 1024;
-/** The whole release download (or npm install): 512 MiB in 15 min needs about 5 Mbit/s. */
+/** The whole release download (or package install): 512 MiB in 15 min needs about 5 Mbit/s. */
 const DOWNLOAD_TIMEOUT_MS = 15 * 60 * 1000;
 export const HOST_VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$/;
 
@@ -32,7 +32,7 @@ export interface HostUpdateDescriptor {
   target: HostUpdateTarget;
   version: string;
   fromVersion: string;
-  installMethod: "npm" | "bun" | "binary";
+  installMethod: "bun" | "binary";
   installDir: string;
   runtime: string;
   hostArgs: string[];
@@ -54,7 +54,7 @@ export function hostUpdateRoot(): string {
 export function assertOwnedPath(path: string, directory = false): void {
   const info = lstatSync(path);
   if (info.isSymbolicLink() || (directory ? !info.isDirectory() : !info.isFile() || info.nlink !== 1) ||
-      (process.getuid && info.uid !== process.getuid()) || (process.platform !== "win32" && (info.mode & 0o077) !== 0)) {
+      (process.getuid && info.uid !== process.getuid()) || (info.mode & 0o077) !== 0) {
     throw new Error("Unsafe host update state ownership or permissions");
   }
 }
@@ -62,7 +62,7 @@ export function ensureHostUpdateRoot(): string {
   const root = hostUpdateRoot();
   mkdirSync(dirname(root), { recursive: true, mode: 0o700 });
   const parent = lstatSync(dirname(root));
-  if (parent.isSymbolicLink() || !parent.isDirectory() || (process.getuid && parent.uid !== process.getuid()) || (process.platform !== "win32" && (parent.mode & 0o022))) throw new Error("Unsafe omp-web data directory");
+  if (parent.isSymbolicLink() || !parent.isDirectory() || (process.getuid && parent.uid !== process.getuid()) || (parent.mode & 0o022)) throw new Error("Unsafe omp-web data directory");
   mkdirSync(root, { recursive: true, mode: 0o700 });
   assertOwnedPath(root, true);
   return root;
@@ -104,10 +104,6 @@ export async function processStartIdentity(pid: number): Promise<string | null> 
     if (process.platform === "darwin") {
       const { stdout } = await exec("ps", ["-o", "lstart=", "-p", String(pid)], { timeout: 5000, env: { ...process.env, LC_ALL: "C" } });
       return stdout.trim() ? `darwin:${stdout.trim()}` : null;
-    }
-    if (process.platform === "win32") {
-      const { stdout } = await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `(Get-Process -Id ${pid}).StartTime.ToUniversalTime().Ticks`], { timeout: 10000, windowsHide: true });
-      return /^\d+$/.test(stdout.trim()) ? `win32:${stdout.trim()}` : null;
     }
   } catch {
     // The process is gone or its start time is unreadable: no identity.
@@ -161,8 +157,8 @@ export async function downloadHostUpdateFile(url: string, file: string, maxBytes
   return `sha256:${hash.digest("hex")}`;
 }
 export function hostReleaseName(platform = process.platform, arch = process.arch): string {
-  if (!["linux", "darwin", "win32"].includes(platform) || !["x64", "arm64"].includes(arch) || (platform === "win32" && arch !== "x64")) throw new Error(`Host updates are unsupported on ${platform}/${arch}`);
-  return `ompweb-${platform === "win32" ? "windows" : platform}-${arch}`;
+  if (!["linux", "darwin"].includes(platform) || !["x64", "arm64"].includes(arch)) throw new Error(`Host updates are unsupported on ${platform}/${arch}`);
+  return `ompweb-${platform}-${arch}`;
 }
 interface ArchiveMember { name: string; directory: boolean; size: number; write(file: string): void }
 function memberName(name: string, root: string): string {
@@ -170,8 +166,7 @@ function memberName(name: string, root: string): string {
   if (normalized.includes("\\") || normalized.includes(":") || normalized.startsWith("/") || normalized.split("/").some((part) => !part || part === ".." || part === "." || /[. ]$/.test(part) || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part) || [...part].some((char) => char.charCodeAt(0) < 32)) || (normalized !== root && !normalized.startsWith(`${root}/`))) throw new Error("Unsafe release archive member path");
   return normalized;
 }
-/** Checks every member of a tar or ZIP (bytes, or an open file descriptor) before anything is written; each member's
- * `write` then copies (tar, stored ZIP) or inflates (deflated ZIP) only that member. */
+/** Checks every tar member before anything is written. */
 export function validateHostReleaseArchive(input: Uint8Array | number, root: string): ArchiveMember[] {
   const length = typeof input === "number" ? fstatSync(input).size : input.length;
   const read = (position: number, count: number): Buffer => {
@@ -200,66 +195,27 @@ export function validateHostReleaseArchive(input: Uint8Array | number, root: str
     if (size > HOST_RELEASE_MAX_MEMBER || (expanded += size) > HOST_RELEASE_MAX_EXPANDED) throw new Error("Release member size is too large");
     seen.add(name); entries.push({ name, directory, size, write });
   };
-  if (length >= 4 && read(0, 4).readUInt32LE(0) === 0x04034b50) {
-    // Read central metadata first: Unix symlink attributes are not present in local headers.
-    const tailStart = Math.max(0, length - 65557);
-    const tail = read(tailStart, length - tailStart);
-    let end = tail.length - 22;
-    while (end >= 0 && tail.readUInt32LE(end) !== 0x06054b50) end--;
-    if (end < 0 || tail.readUInt16LE(end + 4) || tail.readUInt16LE(end + 6)) throw new Error("Invalid or multi-disk ZIP archive");
-    const count = tail.readUInt16LE(end + 10);
-    const centralStart = tail.readUInt32LE(end + 16);
-    end += tailStart;
-    if (count > 20000 || centralStart >= end) throw new Error("Invalid ZIP member count or offset");
-    const central = read(centralStart, end - centralStart);
-    let offset = 0;
-    for (let index = 0; index < count; index++) {
-      if (offset + 46 > central.length || central.readUInt32LE(offset) !== 0x02014b50) throw new Error("Invalid ZIP central member");
-      const flags = central.readUInt16LE(offset + 8), method = central.readUInt16LE(offset + 10);
-      const size = central.readUInt32LE(offset + 24), compressed = central.readUInt32LE(offset + 20);
-      const nameLength = central.readUInt16LE(offset + 28), extraLength = central.readUInt16LE(offset + 30), commentLength = central.readUInt16LE(offset + 32);
-      const mode = central.readUInt32LE(offset + 38) >>> 16;
-      const name = central.subarray(offset + 46, offset + 46 + nameLength).toString("utf8");
-      if ((flags & 1) || ![0, 8].includes(method) || ((mode & 0o170000) !== 0 && ![0o100000, 0o040000].includes(mode & 0o170000))) throw new Error("Unsupported ZIP member type or encryption");
-      if (size > HOST_RELEASE_MAX_MEMBER || expanded + size > HOST_RELEASE_MAX_EXPANDED) throw new Error("Release member size is too large");
-      const local = central.readUInt32LE(offset + 42);
-      const header = read(local, 30);
-      if (header.length < 30 || header.readUInt32LE(0) !== 0x04034b50) throw new Error("Invalid ZIP local member");
-      const localNameLength = header.readUInt16LE(26), localExtraLength = header.readUInt16LE(28);
-      if (read(local + 30, localNameLength).toString("utf8") !== name) throw new Error("ZIP member path mismatch");
-      const start = local + 30 + localNameLength + localExtraLength;
-      if (start + compressed > centralStart || (method === 0 && compressed !== size)) throw new Error("Invalid ZIP member size");
-      add(name, name.endsWith("/"), size, method === 0 ? copy(start, size) : (file) => {
-        const data = inflateRawSync(read(start, compressed), { maxOutputLength: HOST_RELEASE_MAX_MEMBER });
-        if (data.length !== size) throw new Error("ZIP member size mismatch");
-        writeFileSync(file, data, { mode: 0o644, flag: "wx" });
-      });
-      offset += 46 + nameLength + extraLength + commentLength;
-    }
-  } else {
-    for (let offset = 0; offset + 512 <= length;) {
-      const header = read(offset, 512);
-      if (header.every((byte) => byte === 0)) break;
-      const text = (start: number, count: number) => header.subarray(start, start + count).toString("utf8").replace(/\0[\s\S]*$/, "");
-      const name = text(345, 155) ? `${text(345, 155)}/${text(0, 100)}` : text(0, 100);
-      memberName(name, root);
-      const type = header[156];
-      if (![0, 48, 53].includes(type)) throw new Error("Unsupported release member type (links are forbidden)");
-      const sizeText = text(124, 12).trim();
-      const size = /^[0-7]+$/.test(sizeText) ? parseInt(sizeText, 8) : NaN;
-      if (!Number.isSafeInteger(size) || size > HOST_RELEASE_MAX_MEMBER || size < 0 || expanded + size > HOST_RELEASE_MAX_EXPANDED) throw new Error("Release member size is too large or invalid");
-      const checksumText = text(148, 8).trim();
-      const checksum = header.reduce((sum, value, index) => sum + (index >= 148 && index < 156 ? 32 : value), 0);
-      if (!/^[0-7]+$/.test(checksumText) || parseInt(checksumText, 8) !== checksum || offset + 512 + size > length) throw new Error("Invalid release tar header or size");
-      add(name, type === 53, size, copy(offset + 512, size));
-      offset += 512 + Math.ceil(size / 512) * 512;
-    }
+  for (let offset = 0; offset + 512 <= length;) {
+    const header = read(offset, 512);
+    if (header.every((byte) => byte === 0)) break;
+    const text = (start: number, count: number) => header.subarray(start, start + count).toString("utf8").replace(/\0[\s\S]*$/, "");
+    const name = text(345, 155) ? `${text(345, 155)}/${text(0, 100)}` : text(0, 100);
+    memberName(name, root);
+    const type = header[156];
+    if (![0, 48, 53].includes(type)) throw new Error("Unsupported release member type (links are forbidden)");
+    const sizeText = text(124, 12).trim();
+    const size = /^[0-7]+$/.test(sizeText) ? parseInt(sizeText, 8) : NaN;
+    if (!Number.isSafeInteger(size) || size > HOST_RELEASE_MAX_MEMBER || size < 0 || expanded + size > HOST_RELEASE_MAX_EXPANDED) throw new Error("Release member size is too large or invalid");
+    const checksumText = text(148, 8).trim();
+    const checksum = header.reduce((sum, value, index) => sum + (index >= 148 && index < 156 ? 32 : value), 0);
+    if (!/^[0-7]+$/.test(checksumText) || parseInt(checksumText, 8) !== checksum || offset + 512 + size > length) throw new Error("Invalid release tar header or size");
+    add(name, type === 53, size, copy(offset + 512, size));
+    offset += 512 + Math.ceil(size / 512) * 512;
   }
   if (!entries.length) throw new Error("Empty release archive");
   return entries;
 }
-/** Unpacks a release archive (`.tar.gz`, or `.zip`) into `staging` through the checks above, without holding it in
- * memory: a `.tar.gz` is gunzipped to a scratch tar beside it first. Returns the members (only names and sizes stay valid). */
+/** Unpacks a release tarball after decompressing and validating its members. */
 export async function extractHostReleaseArchive(archive: string, root: string, staging: string): Promise<ArchiveMember[]> {
   let source = archive;
   if (archive.endsWith(".tar.gz")) {
@@ -293,7 +249,7 @@ export async function extractHostReleaseArchive(archive: string, root: string, s
 
 async function stageBinary(d: HostUpdateDescriptor, staging: string): Promise<string> {
   const name = hostReleaseName();
-  const assetName = `${name}${process.platform === "win32" ? ".zip" : ".tar.gz"}`;
+  const assetName = `${name}.tar.gz`;
   const metadata = JSON.parse((await fetchHostUpdateBytes(`https://api.github.com/repos/${d.releaseRepo}/releases/tags/v${d.version}`, 2 * 1024 * 1024)).toString("utf8")) as { tag_name?: string; assets?: { name: string; digest?: string }[] };
   const asset = metadata.assets?.find((item) => item.name === assetName);
   if (metadata.tag_name !== `v${d.version}` || !asset?.digest || !/^sha256:[a-f0-9]{64}$/.test(asset.digest)) throw new Error("Official release asset digest is unavailable");
@@ -302,11 +258,11 @@ async function stageBinary(d: HostUpdateDescriptor, staging: string): Promise<st
   const release = join(staging, name);
   mkdirSync(release, { mode: 0o700 });
   try { await extractHostReleaseArchive(download, name, staging); } finally { rmSync(download, { force: true }); }
-  const binary = join(release, process.platform === "win32" ? "ompweb.exe" : "ompweb");
+  const binary = join(release, "ompweb");
   if (!existsSync(join(release, "dist", "index.html"))) throw new Error("Incomplete host binary release layout");
   chmodSync(binary, 0o755);
   // Releases from before the runner became its own asset (preflightHostRelease fetches it otherwise) carry it here.
-  const runner = join(release, process.platform === "win32" ? "ompweb-omp.exe" : "ompweb-omp");
+  const runner = join(release, "ompweb-omp");
   if (existsSync(runner)) chmodSync(runner, 0o755);
   if (!(await binaryReportsVersion(binary, release, d.version))) throw new Error("Downloaded host binary reports a different version");
   return release;
@@ -316,12 +272,9 @@ async function stagePackage(d: HostUpdateDescriptor, staging: string): Promise<s
   mkdirSync(prefix, { mode: 0o700 });
   writeFileSync(join(prefix, "package.json"), '{"private":true}', { mode: 0o600 });
   const packageName = `@kahme247/ompweb@${d.version}`;
-  const args = d.installMethod === "bun" ? ["add", "--cwd", prefix, "--production", "--exact", "--registry=https://registry.npmjs.org", packageName] : ["install", "--prefix", prefix, "--omit=dev", "--no-audit", "--no-fund", "--registry=https://registry.npmjs.org", packageName];
-  const command = d.managerPath || d.installMethod;
-  const windows = process.platform === "win32" && /\.(cmd|bat)$/i.test(command);
-  // `/s /c` strips one outer pair of quotes; verbatim so Node does not escape the inner ones (as Node's `shell: true`).
-  const line = [command, ...args].map((arg) => `"${arg.replaceAll('"', '')}"`).join(" ");
-  await exec(windows ? process.env.ComSpec || "cmd.exe" : command, windows ? ["/d", "/s", "/c", `"${line}"`] : args, { timeout: DOWNLOAD_TIMEOUT_MS, maxBuffer: 1024 * 1024, env: workerEnvironment(), windowsHide: true, windowsVerbatimArguments: windows });
+  const args = ["add", "--cwd", prefix, "--production", "--exact", "--registry=https://registry.npmjs.org", packageName];
+  const command = d.managerPath || d.runtime;
+  await exec(command, args, { timeout: DOWNLOAD_TIMEOUT_MS, maxBuffer: 1024 * 1024, env: workerEnvironment() });
   const modules = join(prefix, "node_modules");
   const packageDir = join(modules, "@kahme247", "ompweb");
   const metadata = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8"));
@@ -365,18 +318,11 @@ export async function sharedHostInstallReason(installDir: string, ignoredPids: n
   }
   if (process.platform === "darwin" && process.ppid === 1) return "A launchd-managed or orphaned host must be updated manually to avoid duplicate daemon starts";
   try {
-    // Cold CIM startup can exceed five seconds on contended Windows hosts.
-    const { stdout } = process.platform === "win32"
-      ? await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance Win32_Process | Select-Object ProcessId,ExecutablePath,CommandLine | ConvertTo-Json -Compress"], { timeout: 20000, maxBuffer: 8 * 1024 * 1024, windowsHide: true })
-      : await exec("ps", ["-axo", "pid=,command="], { timeout: 5000, maxBuffer: 8 * 1024 * 1024 });
-    const rows: { pid: number; command: string; executable?: string }[] = process.platform === "win32"
-      ? (JSON.parse(stdout) as { ProcessId: number; CommandLine: string; ExecutablePath: string }[]).map((row) => ({ pid: row.ProcessId, command: row.CommandLine || "", executable: row.ExecutablePath }))
-      : stdout.split("\n").flatMap((line) => { const match = line.match(/^\s*(\d+)\s+(.*)$/); return match ? [{ pid: Number(match[1]), command: match[2] }] : []; });
+    const { stdout } = await exec("ps", ["-axo", "pid=,command="], { timeout: 5000, maxBuffer: 8 * 1024 * 1024 });
+    const rows = stdout.split("\n").flatMap((line) => { const match = line.match(/^\s*(\d+)\s+(.*)$/); return match ? [{ pid: Number(match[1]), command: match[2] }] : []; });
     for (const row of rows) {
       if (ignoredPids.includes(row.pid)) continue;
-      const command = process.platform === "win32" ? row.command.toLowerCase().replaceAll("\\", "/") : row.command;
-      const root = process.platform === "win32" ? installDir.toLowerCase().replaceAll("\\", "/") : installDir;
-      if ((row.executable && inside(row.executable)) || command.includes(`${root}/`) || row.command.split(/\s+/).some((arg) => inside(arg.replace(/^"|"$/g, "")))) return "This installation is shared with another running process (possibly the web server); update it manually or use a dedicated host installation";
+      if (row.command.includes(`${installDir}/`) || row.command.split(/\s+/).some((arg) => inside(arg.replace(/^"|"$/g, "")))) return "This installation is shared with another running process (possibly the web server); update it manually or use a dedicated host installation";
     }
     return null;
   } catch { return "Cannot establish that this installation is host-only; update it manually"; }
@@ -390,7 +336,7 @@ export async function verifyHostServiceInstall(service: NonNullable<HostUpdateDe
   const start = realpathSync(executable);
   const launcher = join(installDir, "bin", "omp-web.js");
   const host = join(installDir, "bin", "omp-web-host.js");
-  const expected = join(installDir, process.platform === "win32" ? "ompweb.exe" : "ompweb");
+  const expected = join(installDir, "ompweb");
   const hostFlag = /(?:^|\s)host(?:\s|$)/.test(args);
   const valid = binary ? start === expected && hostFlag : ((start === launcher && hostFlag) || start === host || (start === realpathSync(runtime) && (args.includes(host) || (args.includes(launcher) && hostFlag))));
   if (!valid) throw new Error("Host service restart targets a different installation or unsupported wrapper; update it manually");
@@ -410,18 +356,18 @@ export const PREFLIGHT_MARKER_BASE64 = "b21wd2ViLXByZWZsaWdodC1zY3JhdGNoLQ==";
  * runs. */
 async function preflightHostRelease(d: HostUpdateDescriptor, release: string): Promise<void> {
   const binary = d.installMethod === "binary";
-  const entry = binary ? join(release, process.platform === "win32" ? "ompweb.exe" : "ompweb") : join(release, "bin", "omp-web.js");
+  const entry = binary ? join(release, "ompweb") : join(release, "bin", "omp-web.js");
   // Detected statically: an older ompweb takes `preflight` for a positional and starts the web server.
   if (!(binary ? readFileSync(entry).includes(Buffer.from(PREFLIGHT_MARKER_BASE64, "base64")) : existsSync(join(release, "lib", "hosts", "preflight.ts")))) {
     if (binary && !d.restartOnly) throw new Error("The new host release has no preflight command to check its omp with");
     console.warn(`ompweb ${d.version} has no preflight command; its omp was not checked`);
     return;
   }
-  const command = (args: string[], timeout: number) => exec(binary ? entry : d.runtime, binary ? args : [entry, ...args], { cwd: release, timeout, env: workerEnvironment(), maxBuffer: 1024 * 1024, windowsHide: true });
+  const command = (args: string[], timeout: number) => exec(binary ? entry : d.runtime, binary ? args : [entry, ...args], { cwd: release, timeout, env: workerEnvironment(), maxBuffer: 1024 * 1024 });
   const detail = (error: unknown) => (String((error as { stderr?: unknown }).stderr ?? "").trim() || (error instanceof Error ? error.message : String(error))).slice(-500);
   // A binary release with the preflight command and no runner beside it has `fetch-omp`; every npm one that has
   // runner-fetch.ts does (an npm package never carries the runner).
-  if (binary ? !existsSync(join(release, process.platform === "win32" ? "ompweb-omp.exe" : "ompweb-omp")) : existsSync(join(release, "lib", "omp", "runner-fetch.ts"))) {
+  if (binary ? !existsSync(join(release, "ompweb-omp")) : existsSync(join(release, "lib", "omp", "runner-fetch.ts"))) {
     try { await command(["fetch-omp"], DOWNLOAD_TIMEOUT_MS); }
     catch (error) { throw new Error(`The new host release could not fetch its omp: ${detail(error)}`); }
   }
@@ -435,7 +381,7 @@ async function preflightHostRelease(d: HostUpdateDescriptor, release: string): P
 /** The installation on disk already holds `version`: what a restart-only update relies on. */
 export async function installedHostVersionMatches(method: HostUpdateDescriptor["installMethod"], installDir: string, version: string): Promise<boolean> {
   try {
-    if (method === "binary") return await binaryReportsVersion(join(installDir, process.platform === "win32" ? "ompweb.exe" : "ompweb"), installDir, version);
+    if (method === "binary") return await binaryReportsVersion(join(installDir, "ompweb"), installDir, version);
     const metadata = JSON.parse(readFileSync(join(installDir, "package.json"), "utf8"));
     return metadata.name === "@kahme247/ompweb" && metadata.version === version;
   } catch { return false; }
@@ -449,7 +395,7 @@ function removeOwnedTree(path: string): boolean {
     if (!info.isDirectory() || info.isSymbolicLink() || (process.getuid && info.uid !== process.getuid())) return false;
     rmSync(path, { recursive: true, force: true });
     return !existsSync(path);
-  } catch { return false; } // e.g. a locked executable on Windows: the next update retries
+  } catch { return false; }
 }
 /**
  * Bounds the disk an update leaves behind. Only paths an owned, trusted attempt descriptor for THIS install proves this
@@ -497,7 +443,7 @@ export function pruneHostUpdateArtifacts(installDir: string, options: { keepAtte
   }
   for (const id of attempts.keys()) {
     const dir = join(root, id);
-    for (const heavy of ["runtime", "runtime.exe", "worker.mts"]) { try { rmSync(join(dir, heavy), { force: true }); } catch { /* locked: retried next update */ } }
+    for (const heavy of ["runtime", "worker.mts"]) { try { rmSync(join(dir, heavy), { force: true }); } catch { /* retried next update */ } }
     if (id !== state?.operation.id && id !== keepBackup && id !== options.keepAttempt && !leftover.has(id)) removeOwnedTree(dir);
   }
 }
@@ -540,9 +486,9 @@ async function launchDaemon(d: HostUpdateDescriptor, health: string, expected: s
   let spawnError: Error | undefined;
   if (d.systemd) await controlService(d, "start");
   else {
-    const runtime = d.installMethod === "binary" ? join(d.installDir, process.platform === "win32" ? "ompweb.exe" : "ompweb") : d.runtime;
+    const runtime = d.installMethod === "binary" ? join(d.installDir, "ompweb") : d.runtime;
     const args = d.installMethod === "binary" ? ["host", ...d.hostArgs] : [join(d.installDir, "bin", "omp-web-host.js"), ...d.hostArgs];
-    child = spawn(runtime, args, { cwd: d.cwd, detached: true, stdio: "ignore", windowsHide: true, env: workerEnvironment() });
+    child = spawn(runtime, args, { cwd: d.cwd, detached: true, stdio: "ignore", env: workerEnvironment() });
     child.once("error", (error) => { spawnError = error; });
     child.unref();
   }
@@ -576,7 +522,7 @@ function validateDescriptor(path: string): HostUpdateDescriptor {
   const root = ensureHostUpdateRoot();
   assertOwnedPath(path);
   const d = JSON.parse(readFileSync(path, "utf8")) as HostUpdateDescriptor;
-  if (!/^[a-zA-Z0-9-]{1,80}$/.test(d.id) || resolve(path) !== join(root, d.id, "descriptor.json") || !HOST_VERSION_PATTERN.test(d.version) || !HOST_VERSION_PATTERN.test(d.fromVersion) || d.target !== "ompweb" || !["npm", "bun", "binary"].includes(d.installMethod) || !isAbsolute(d.installDir) || !isAbsolute(d.runtime) || !isAbsolute(d.cwd) || !Number.isSafeInteger(d.daemonPid) || d.daemonPid <= 1 || !Array.isArray(d.hostArgs) || d.hostArgs.some((arg) => arg !== "--allow-http") || typeof d.releaseRepo !== "string" || !/^[\w.-]+\/[\w.-]+$/.test(d.releaseRepo)) throw new Error("Invalid host update descriptor");
+  if (!/^[a-zA-Z0-9-]{1,80}$/.test(d.id) || resolve(path) !== join(root, d.id, "descriptor.json") || !HOST_VERSION_PATTERN.test(d.version) || !HOST_VERSION_PATTERN.test(d.fromVersion) || d.target !== "ompweb" || !["bun", "binary"].includes(d.installMethod) || !isAbsolute(d.installDir) || !isAbsolute(d.runtime) || !isAbsolute(d.cwd) || !Number.isSafeInteger(d.daemonPid) || d.daemonPid <= 1 || !Array.isArray(d.hostArgs) || d.hostArgs.some((arg) => arg !== "--allow-http") || typeof d.releaseRepo !== "string" || !/^[\w.-]+\/[\w.-]+$/.test(d.releaseRepo)) throw new Error("Invalid host update descriptor");
   if (d.restartOnly !== undefined && typeof d.restartOnly !== "boolean") throw new Error("Invalid host restart-only descriptor");
   if (!d.systemd && (typeof d.daemonIdentity !== "string" || !d.daemonIdentity || d.daemonIdentity.length > 200)) throw new Error("Invalid host update descriptor: the daemon's process identity is missing");
   assertOwnedPath(dirname(path), true);
@@ -584,12 +530,12 @@ function validateDescriptor(path: string): HostUpdateDescriptor {
   if (state?.operation.id !== d.id || state.operation.state !== "running" || state.operation.version !== d.version || state.daemonPid !== d.daemonPid) throw new Error("Host update descriptor does not own the running operation");
   if (d.systemd && (!/^[a-zA-Z0-9_.@\\:-]+\.service$/.test(d.systemd.unit) || /^ompweb-api(?:[.@-]|$)/i.test(d.systemd.unit) || typeof d.systemd.user !== "boolean")) throw new Error("Refusing to control a non-host service");
   const info = lstatSync(d.installDir);
-  if (!info.isDirectory() || info.isSymbolicLink() || realpathSync(d.installDir) !== resolve(d.installDir) || (process.getuid && info.uid !== process.getuid()) || (process.platform !== "win32" && (info.mode & 0o022))) throw new Error("Unsupported or unsafe host installation layout");
+  if (!info.isDirectory() || info.isSymbolicLink() || realpathSync(d.installDir) !== resolve(d.installDir) || (process.getuid && info.uid !== process.getuid()) || (info.mode & 0o022)) throw new Error("Unsupported or unsafe host installation layout");
   const parent = lstatSync(dirname(d.installDir));
-  if (!parent.isDirectory() || parent.isSymbolicLink() || (process.getuid && parent.uid !== process.getuid()) || (process.platform !== "win32" && (parent.mode & 0o022))) throw new Error("Unsafe host installation parent directory");
+  if (!parent.isDirectory() || parent.isSymbolicLink() || (process.getuid && parent.uid !== process.getuid()) || (parent.mode & 0o022)) throw new Error("Unsafe host installation parent directory");
   if (d.installMethod === "binary") {
     hostReleaseName();
-    if (!existsSync(join(d.installDir, process.platform === "win32" ? "ompweb.exe" : "ompweb")) || !existsSync(join(d.installDir, "dist", "index.html")) || !existsSync(join(d.installDir, process.platform === "win32" ? "ompweb-omp.exe" : "ompweb-omp"))) throw new Error("Incomplete host binary release layout");
+    if (!existsSync(join(d.installDir, "ompweb")) || !existsSync(join(d.installDir, "dist", "index.html")) || !existsSync(join(d.installDir, "ompweb-omp"))) throw new Error("Incomplete host binary release layout");
   } else {
     if (basename(d.installDir) !== "ompweb" || basename(dirname(d.installDir)) !== "@kahme247" || basename(dirname(dirname(d.installDir))) !== "node_modules") throw new Error("Package updates require an installed npm/bun package layout");
     const current = JSON.parse(readFileSync(join(d.installDir, "package.json"), "utf8"));

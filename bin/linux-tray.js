@@ -1,13 +1,11 @@
 "use strict";
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-require("./node-version").exitIfUnsupportedNode();
 
 // Linux system tray for ompweb (KDE Plasma and any StatusNotifierItem host).
 //
 // Registers a StatusNotifierItem on the session bus with a DBusMenu context
-// menu mirroring the Windows tray: open, copy URL, start/stop/restart the
-// systemd user service, view logs, autostart toggle, quit.
+// menu: open, copy URL, start/stop/restart the systemd user service, view
+// logs, autostart toggle, quit.
 //
 // CLI:
 //   ompweb-tray --install [--no-autostart]   install icons/autostart, start tray
@@ -47,8 +45,8 @@ const { hashPassword } = require("./omp-web-password-hash");
 // menu code read; the real D-Bus path always uses the real Variant.
 const DBUS_MISSING_MESSAGE =
   "The Linux tray requires dbus-next, which is not bundled with ompweb. " +
-  "Install it with: npm install dbus-next@^0.10.2 " +
-  "(in the ompweb install directory, or globally with npm install -g dbus-next@^0.10.2), " +
+  "Install it with: bun add dbus-next@^0.10.2 " +
+  "(in the ompweb install directory, or globally with bun add -g dbus-next@^0.10.2), " +
   "then run the tray command again.";
 
 class FallbackVariant {
@@ -432,7 +430,7 @@ function sanitizeHostname(val, fallback = "127.0.0.1") {
 }
 
 // Tray configuration precedence: CLI overrides, then the service env file
-// (the source the tray edits), then the Windows-style JSON config, then
+// (the source the tray edits), then the JSON config, then
 // defaults.
 function readTrayConfig(overrides = {}, env = process.env, home = os.homedir()) {
   const agentDir = (env.PI_CODING_AGENT_DIR ?? path.join(home, ".omp", "agent")).replace(/^~(?=\/|$)/, home);
@@ -542,11 +540,11 @@ function buildAutostartDesktop(execLine) {
 }
 
 function buildAutostartExec() {
-  const nodeBin = process.execPath;
+  const bunBin = process.execPath;
   const script = path.resolve(__filename);
-  const needsQuoting = [nodeBin, script].some((part) => /\s/.test(part));
-  if (!needsQuoting) return `${nodeBin} ${script} --start`;
-  return `"${nodeBin.replace(/"/g, '\\"')}" "${script.replace(/"/g, '\\"')}" --start`;
+  const needsQuoting = [bunBin, script].some((part) => /\s/.test(part));
+  if (!needsQuoting) return `${bunBin} ${script} --start`;
+  return `"${bunBin.replace(/"/g, '\\"')}" "${script.replace(/"/g, '\\"')}" --start`;
 }
 
 // Terminal used to open logs; ordered candidates, first hit wins.
@@ -1129,7 +1127,7 @@ async function readStatus(overrides) {
 // autostart); they fail with DBUS_MISSING_MESSAGE instead.
 function defaultNpmInstallDbus() {
   try {
-    const res = spawnSync("npm", ["install", "dbus-next@^0.10.2", "--no-save"], {
+    const res = spawnSync(process.execPath, ["add", "dbus-next@^0.10.2", "--no-save"], {
       cwd: path.join(__dirname, ".."),
       stdio: "inherit",
     });
@@ -1192,7 +1190,7 @@ async function runCli(argv = process.argv.slice(2)) {
   });
 
   if (process.platform !== "linux") {
-    console.error("error: the Linux tray is only supported on Linux (see omp-web-tray for Windows)");
+    console.error("error: the system tray is only supported on Linux");
     return { exitCode: 1 };
   }
 

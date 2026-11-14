@@ -1,14 +1,12 @@
-import { existsSync, lstatSync, readdirSync, readlinkSync, realpathSync, statSync } from "fs";
+import fs, { existsSync, lstatSync, readdirSync, readlinkSync, realpathSync } from "fs";
 import { homedir } from "os";
 import path from "path";
 import { isUtf8 } from "node:buffer";
 import { getAgentDir, getConfigRoot } from "./omp/paths";
-import { isWindowsAbsolutePath } from "./paths";
 import { hostSessions } from "./hosts/session-index";
 import { LOCAL_HOST_ID } from "./hosts/registry";
 import { HostOpError } from "./hosts/link-protocol";
 
-export { isWindowsAbsolutePath } from "./paths";
 
 
 // Allowed roots — in-memory plus session-derived, globalThis for hot-reload.
@@ -17,20 +15,6 @@ declare global {
   var __piAdditionalAllowedRoots: Set<string> | undefined;
 }
 
-export function normalizeSlashes(filePath: string): string {
-  return stripLongPathPrefix(filePath.replace(/\\/g, "/"));
-}
-
-/** Windows device paths (\\?\C:\... , \\?\UNC\server\share\...) come back from
- *  realpathSync and defeat plain startsWith prefix checks against ordinary
- *  drive/UNC roots, producing false 403s on long paths and junctions. */
-function stripLongPathPrefix(filePath: string): string {
-  if (filePath.startsWith("//?/UNC/")) return "//" + filePath.slice(8);
-  if (filePath.startsWith("//?/")) return filePath.slice(4);
-  if (filePath.startsWith("\\\\?\\UNC\\")) return "\\\\" + filePath.slice(8);
-  if (filePath.startsWith("\\\\?\\")) return filePath.slice(4);
-  return filePath;
-}
 
 function getAdditionalAllowedRoots(): Set<string> {
   if (!globalThis.__piAdditionalAllowedRoots) globalThis.__piAdditionalAllowedRoots = new Set();
@@ -39,7 +23,7 @@ function getAdditionalAllowedRoots(): Set<string> {
 
 export function allowFileRoot(root: string): void {
   if (!root) return;
-  const n = normalizeSlashes(root);
+  const n = root;
   getAdditionalAllowedRoots().add(n);
   globalThis.__piAllowedRootsCache?.roots.add(n);
 }
@@ -66,7 +50,7 @@ export function getConfigAgentRoots(): string[] {
     getAgentDir(),
     path.join(homedir(), ".agents"),
     path.join(homedir(), ".agent"),
-  ].map(normalizeSlashes);
+  ];
 }
 
 /**
@@ -130,11 +114,11 @@ export function isOmpSecretFile(filePath: string): boolean {
       const databaseDir = path.dirname(database);
       const databaseName = path.basename(database);
       const sidecars = new Set(["-wal", "-shm", "-journal"].map((suffix) => `${databaseName}${suffix}`));
-      const basename = process.platform === "win32" ? databaseName.toLowerCase() : databaseName;
+      const basename = databaseName;
       try {
         for (const entry of readdirSync(databaseDir, { encoding: "buffer" })) {
           const name = entry.toString("utf8");
-          const candidate = process.platform === "win32" ? name.toLowerCase() : name;
+          const candidate = name;
           const suffix = candidate.startsWith(basename) ? candidate.slice(basename.length)
             : candidate.startsWith(`.${basename}`) ? candidate.slice(basename.length + 1) : null;
           // Apply the same agent.db copy/editor rule to a renamed canonical database.
@@ -191,7 +175,7 @@ function ompConfigDirs(filePaths: string[], onUnavailable: () => void, onRequest
 
 function fileIdentity(filePath: string, onUnavailable?: () => void) {
   try {
-    const stat = statSync(withoutWindowsStream(filePath), { bigint: true });
+    const stat = fs.statSync(filePath, { bigint: true });
     return stat.isFile() ? stat : null;
   } catch (error) {
     if (!isMissingPathError(error)) onUnavailable?.();
@@ -199,18 +183,11 @@ function fileIdentity(filePath: string, onUnavailable?: () => void) {
   }
 }
 
-function withoutWindowsStream(filePath: string): string {
-  if (process.platform !== "win32") return filePath;
-  const name = path.basename(filePath);
-  const stream = name.indexOf(":");
-  // Slice the final component only: preserve drive prefixes and native link/.. traversal.
-  return stream < 0 ? filePath : filePath.slice(0, filePath.lastIndexOf(name) + stream);
-}
 
 function resolvedOrSelf(dir: string, onUnavailable?: () => void, seen?: Set<string>): string {
-  const base = withoutWindowsStream(dir);
+  const base = dir;
   try {
-    return withoutWindowsStream(realpathSync.native(base));
+    return realpathSync.native(base);
   } catch (error) {
     if (!isMissingPathError(error)) { onUnavailable?.(); return base; }
   }
@@ -228,7 +205,7 @@ function resolvedOrSelf(dir: string, onUnavailable?: () => void, seen?: Set<stri
         const target = path.isAbsolute(link) ? link : joinWithoutNormalizing(resolvedOrSelf(path.dirname(current), onUnavailable, visited), link);
         return resolvedOrSelf(suffix ? joinWithoutNormalizing(target, suffix) : target, onUnavailable, visited);
       }
-      const canonical = withoutWindowsStream(realpathSync.native(current));
+      const canonical = realpathSync.native(current);
       return suffix ? joinWithoutNormalizing(canonical, suffix) : canonical;
     } catch (error) {
       if (!isMissingPathError(error)) { onUnavailable?.(); return base; }
@@ -255,17 +232,17 @@ function prospectiveMacAlias(requested: string, owned: string, onUnavailable: ()
   let directory = path.dirname(owned);
   for (;;) {
     try {
-      const original = statSync(directory, { bigint: true });
+      const original = fs.statSync(directory, { bigint: true });
       const parent = path.dirname(directory);
-      if (!original.isDirectory() || parent === directory || statSync(parent, { bigint: true }).dev !== original.dev) break;
+      if (!original.isDirectory() || parent === directory || fs.statSync(parent, { bigint: true }).dev !== original.dev) break;
       const alternate = path.basename(directory).replace(/[a-zA-Z]/, (letter) => letter === letter.toUpperCase() ? letter.toLowerCase() : letter.toUpperCase());
       if (alternate !== path.basename(directory)) {
         try {
-          const alias = statSync(path.join(parent, alternate), { bigint: true });
+          const alias = fs.statSync(path.join(parent, alternate), { bigint: true });
           return original.dev === alias.dev && original.ino === alias.ino;
         } catch (error) {
           if (!isMissingPathError(error)) break;
-          const stillPresent = statSync(directory, { bigint: true });
+          const stillPresent = fs.statSync(directory, { bigint: true });
           if (original.dev === stillPresent.dev && original.ino === stillPresent.ino) return false;
           break;
         }
@@ -282,10 +259,9 @@ function prospectiveMacAlias(requested: string, owned: string, onUnavailable: ()
   return false;
 }
 
-/** Canonical comparison keys preserve literal POSIX backslashes and fold Windows path spelling only. */
+/** Canonical comparison keys preserve literal POSIX backslashes. */
 function comparablePath(filePath: string): string {
-  const normalized = (process.platform === "win32" ? normalizeSlashes(filePath) : filePath).replace(/\/+$/, "");
-  return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+  return filePath.replace(/\/+$/, "");
 }
 
 
@@ -297,8 +273,8 @@ export async function getAllowedFileRoots(): Promise<Set<string>> {
   const sessions = await hostSessions(LOCAL_HOST_ID);
   const roots = new Set<string>();
   for (const s of sessions) {
-    if (s.cwd) roots.add(normalizeSlashes(s.cwd));
-    if (s.projectRoot) roots.add(normalizeSlashes(s.projectRoot));
+    if (s.cwd) roots.add(s.cwd);
+    if (s.projectRoot) roots.add(s.projectRoot);
   }
   for (const root of getAdditionalAllowedRoots()) roots.add(root);
   // Config roots are appended LAST: a relative request must fan out over real
@@ -311,15 +287,9 @@ export async function getAllowedFileRoots(): Promise<Set<string>> {
 
 export function isPathWithinRoots(target: string, roots: Set<string>): boolean {
   for (const root of roots) {
-    const useWindowsRules = isWindowsAbsolutePath(target) || isWindowsAbsolutePath(root);
-    const resolver = useWindowsRules ? path.win32 : path;
-    const sep = useWindowsRules ? "\\" : path.sep;
-    // `\\?\C:\x` and `C:\x` name the same file: compare without the namespace prefix on either side.
-    const n = resolver.resolve(useWindowsRules ? stripLongPathPrefix(target) : target);
-    const nr = resolver.resolve(useWindowsRules ? stripLongPathPrefix(root) : root);
-    const c = useWindowsRules ? n.toLowerCase() : n;
-    const cr = useWindowsRules ? nr.toLowerCase() : nr;
-    const withSep = cr.endsWith(sep) ? cr : cr + sep;
+    const c = path.resolve(target);
+    const cr = path.resolve(root);
+    const withSep = cr.endsWith(path.sep) ? cr : cr + path.sep;
     if (c === cr || c.startsWith(withSep)) return true;
   }
   return false;
@@ -327,12 +297,9 @@ export function isPathWithinRoots(target: string, roots: Set<string>): boolean {
 
 export const isFilePathAllowed = isPathWithinRoots;
 
-/** An /api/files request path is absolute when it is a posix `/…` root, a
- *  Windows drive `C:/…` path, or a UNC `//server/share…` path. Everything else
- *  is relative and only becomes meaningful once resolved against a root. */
+/** An absolute file request starts at the POSIX root. */
 export function isAbsoluteFileRequestPath(filePath: string): boolean {
-  const normalized = normalizeSlashes(filePath);
-  return normalized.startsWith("/") || isWindowsAbsolutePath(normalized);
+  return filePath.startsWith("/");
 }
 
 /**
@@ -355,23 +322,17 @@ export function isAbsoluteFileRequestPath(filePath: string): boolean {
  * relative name maps to, never past a root.
  */
 export function resolveRequestedFilePath(requestPath: string, roots: Set<string>): string | null {
-  const request = normalizeSlashes(requestPath);
-  // Checked before any trimming: a UNC `//server/share` request is absolute,
-  // not a relative path with a doubled slash.
+  const request = requestPath;
   if (!request || isAbsoluteFileRequestPath(request)) return null;
   const relative = request.replace(/^\/+/, "");
   if (!relative) return null;
   for (const root of roots) {
-    // Mirror isPathWithinRoots' resolver choice so a Windows-style root stays
-    // Windows-style even when the strings are built on another platform.
-    const useWindowsRules = isWindowsAbsolutePath(root) || isWindowsAbsolutePath(relative);
-    const resolver = useWindowsRules ? path.win32 : path;
-    const candidate = resolver.resolve(root, relative);
+    const candidate = path.resolve(root, relative);
     // The candidate is checked against the ONE root that produced it, never
     // against the whole set: `path.resolve(root, "../..")` escapes that root.
     if (!isPathWithinRoots(candidate, new Set([root]))) continue;
     if (!existsSync(candidate)) continue;
-    return normalizeSlashes(candidate);
+    return candidate;
   }
   return null;
 }
@@ -379,10 +340,10 @@ export function resolveRequestedFilePath(requestPath: string, roots: Set<string>
 /** isExistingPathWithinRoots for many targets: realpaths the roots once. */
 export function existingPathWithinRootsChecker(roots: Set<string>): (target: string) => boolean {
   const realRoots = new Set<string>();
-  for (const root of roots) { try { realRoots.add(stripLongPathPrefix(realpathSync(root))); } catch { /* stale */ } }
+  for (const root of roots) { try { realRoots.add(realpathSync(root)); } catch { /* stale */ } }
   return (target) => {
     let realTarget: string;
-    try { realTarget = stripLongPathPrefix(realpathSync(target)); } catch { return false; }
+    try { realTarget = realpathSync(target); } catch { return false; }
     return isPathWithinRoots(realTarget, realRoots);
   };
 }

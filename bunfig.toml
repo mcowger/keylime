@@ -2,3 +2,6 @@
 [serve.static]
 plugins = ["./scripts/tailwind-plugin.ts"]
 env = "OMP_WEB_PUBLIC_*"
+
+[run]
+bun = true

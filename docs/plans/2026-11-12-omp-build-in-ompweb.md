@@ -73,7 +73,7 @@ Order: I1 → K1–K4 → K5 → K6 → W1+W2+I2 (PR B) → W3 (PR C) → K7 →
 - [x] `omp.yml` first job `version` (no fork code; `contents: read`; blobless clone at `inputs.sha`): the release-tag lines from F9 verbatim (`stamp=…`, `version="$(jq -r .version packages/utils/package.json)"`, `rel="v$version-int.$stamp.g${SHA:0:7}"`); outputs `stamp`, `version` (`${rel#v}`), `tag` (`$rel`); `workflow_call` outputs `version`, `tag`.
 - [x] `binaries` "Build release binary": F9's snippet verbatim, plus the natives line (same `jq` on `packages/natives/package.json`).
 - [x] `natives`: before `bazel-natives.ts`, the same stamp and natives `jq` line. `pack` (K4): utils and natives lines.
-- [x] `smoke`: `bin/omp --version` (and `omp.exe`) == `omp/${{ needs.version.outputs.version }}`; linux-x64: `grep -c ompweb-dev/oh-my-pi bin/omp` > 0.
+- [x] `smoke`: `bin/omp --version` == `omp/${{ needs.version.outputs.version }}`; linux-x64: `grep -c ompweb-dev/oh-my-pi bin/omp` > 0.
 - [x] `omp-auto.yml` `release`: tag `${{ needs.build.outputs.tag }}`; fail unless it matches `^v[0-9]+\.[0-9]+\.[0-9]+-int\.[0-9]{12}\.g[0-9a-f]{7}$` and its base equals the round's tag without `v`; skip when a release whose tag ends `.g<sha7>` exists; `--latest`, never `--prerelease`/`--draft`. Prune only the new format.
 - [x] `publish.yml` callers: same `version` job.
 - [x] Verify `actionlint`; K5's round. Commit `ci: stamp fork versions and update fork binaries from fork releases`.
@@ -83,7 +83,7 @@ Order: I1 → K1–K4 → K5 → K6 → W1+W2+I2 (PR B) → W3 (PR C) → K7 →
 **Files:** `.github/workflows/omp.yml`, `.github/workflows/omp-auto.yml`, `scripts/fake-npm/npm` (new, executable).
 
 - [x] `scripts/fake-npm/npm`: a stub `npm` that, for `publish <tarball>`, copies the tarball into `$OMP_PACK_OUT` and exits 0; anything else exits 0 without network.
-- [x] `omp.yml` job `pack` (needs `version`, `natives`; `contents: read`; fork code at `inputs.sha`): `./.github/actions/bun-install`; utils+natives version lines; `natives-*` artifacts into `packages/natives/native`; `PATH="$GITHUB_WORKSPACE/ci/scripts/fake-npm:$PATH" bun scripts/ci-release-publish.ts` (12 JS tarballs); `bun scripts/ci-release-publish.ts --native-leaf <tag>` for `linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64 win32-arm64`; `index.json`; zip `omp-packages-<version>.zip`; fail unless 18 tarballs; artifact `omp-packages`. `publish` needs `pack`.
+- [x] `omp.yml` job `pack` (needs `version`, `natives`; `contents: read`; fork code at `inputs.sha`): `./.github/actions/bun-install`; utils+natives version lines; `natives-*` artifacts into `packages/natives/native`; `PATH="$GITHUB_WORKSPACE/ci/scripts/fake-npm:$PATH" bun scripts/ci-release-publish.ts` (12 JS tarballs); `bun scripts/ci-release-publish.ts --native-leaf <tag>` for `linux-x64 linux-arm64 darwin-x64 darwin-arm64`; `index.json`; zip `omp-packages-<version>.zip`; fail unless 16 tarballs; artifact `omp-packages`. `publish` needs `pack`.
 - [x] `omp-auto.yml` `release`: upload the zip. Prune: skip the tag in `ompweb-dev/ompweb` `main` `runner/omp-build.json` (`gh api repos/ompweb-dev/ompweb/contents/runner/omp-build.json`; missing → nothing extra kept).
 - [x] Verify `actionlint`. Commit `ci: attach the npm packages to each integration release`.
 

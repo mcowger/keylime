@@ -38,7 +38,7 @@ function archiveRootPath(root: string): string {
 
 function normalizeArchiveKey(key: string): string {
   if (!key || key.includes("\\") || path.isAbsolute(key)) throw new Error("Invalid archive key");
-  const normalized = path.posix.normalize(key.replaceAll("\\", "/"));
+  const normalized = path.posix.normalize(key);
   if (normalized === "." || normalized.startsWith("../") || normalized.includes("/../") || normalized.endsWith("/..") || !normalized.endsWith(".jsonl.gz")) {
     throw new Error("Invalid archive key");
   }
@@ -361,20 +361,10 @@ function lstatSyncIfExists(filePath: string) {
  * between (an attachment's `mkdir -p`, say). Here `to` is first taken with mkdir, which is exclusive: once it succeeds the
  * name is this call's, and the rename replaces only that empty directory of its own. If something has been put into it since,
  * the rename fails (ENOTEMPTY) rather than replace it, and what was put there is never removed (rmdir refuses a directory
- * that is not empty, so only our own, still-empty claim is dropped). Windows' MoveFileEx refuses to replace a directory, so
- * there a plain rename already never does.
+ * that is not empty, so only our own, still-empty claim is dropped).
  */
 function moveDirectoryNoReplace(from: string, to: string): void {
   const taken = () => new Error("Active session destination already exists");
-  if (process.platform === "win32") {
-    try {
-      renameSync(from, to);
-    } catch (error) {
-      if (lstatSyncIfExists(to)) throw taken();
-      throw error;
-    }
-    return;
-  }
   try {
     mkdirSync(to);
   } catch (error) {

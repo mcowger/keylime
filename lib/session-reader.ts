@@ -182,7 +182,7 @@ export function invalidateSessionListMeta(): void {
   globalThis.__piSessionListCache = undefined;
   // The session-file walk cache keys on the sessions-root mtime, which does
   // not change when a file is added inside an existing project subdirectory
-  // (Windows/NTFS). Clear it too so new sessions appear immediately.
+  // on some filesystems. Clear it too so new sessions appear immediately.
   invalidateSessionFileListCache();
 }
 
@@ -220,8 +220,7 @@ export function invalidateSessionCaches(filePath?: string): void {
  * concrete filename) use this instead of invalidateSessionListCache() so
  * unrelated sessions keep their parsed-entry cache — a single busy session no
  * longer forces every other open session to re-parse multi-MB transcripts.
- * The key is normalized with sessionPathKey so Windows case/spacing variants
- * still hit the same entry. */
+ * The key is normalized with sessionPathKey. */
 export function invalidateSessionEntriesCache(filePath: string): void {
   globalThis.__ompSessionEntriesCache?.delete(sessionPathKey(filePath));
   for (const [key, index] of globalThis.__ompSessionHistoryIndexes ?? []) {

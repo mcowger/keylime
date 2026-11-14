@@ -1,6 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "child_process";
 import { createInterface } from "readline";
-import { wrapWindowsScript } from "./omp-cli";
 
 /**
  * Byte pipe under `RpcProcess`. A transport owns the child (or any other
@@ -16,7 +15,7 @@ export interface RpcTransport {
   /** Fires once; a spawn error fires (null, null) after an onStderr("\nspawn error: …"). */
   onExit(listener: (code: number | null, signal: NodeJS.Signals | null) => void): void;
   endInput(): void;
-  /** force=false → SIGTERM the tree, true → SIGKILL (taskkill /t[/f] on Windows). */
+  /** force=false → SIGTERM the tree, true → SIGKILL. */
   killTree(force: boolean): void;
   /** A linked host dropped buffered output for this child; the session must reconcile. Remote transports only. */
   onResync?(listener: () => void): void;
@@ -47,17 +46,12 @@ export function spawnLocalRpcTransport(options: {
   spawn?: typeof spawn;
 }): RpcTransport {
   const spawnProcess = options.spawn ?? spawn;
-  const target = wrapWindowsScript(options.bin, options.args);
-  const child: ChildProcessWithoutNullStreams = spawnProcess(target.file, target.args, {
+  const child: ChildProcessWithoutNullStreams = spawnProcess(options.bin, options.args, {
     cwd: options.cwd,
     env: options.env,
     stdio: ["pipe", "pipe", "pipe"],
-    windowsHide: true,
-    // On POSIX, omp launches grandchildren (LSP servers, extension subprocesses). Run the
-    // child in its own process group so killTree() can SIGTERM/SIGKILL the whole
-    // tree — otherwise a crashed omp would orphan its LSP children as zombies.
-    // Windows uses taskkill /t instead, so detaching would only create a console.
-    detached: process.platform !== "win32",
+    // Give omp its own process group so killTree() also stops its grandchildren.
+    detached: true,
   });
 
   // A write queued when the child dies fails both the write callback and an
@@ -99,17 +93,6 @@ export function spawnLocalRpcTransport(options: {
     const signal: NodeJS.Signals = force ? "SIGKILL" : "SIGTERM";
     const pid = child.pid;
     if (!pid) return;
-    // POSIX can signal the detached process group directly. Windows has no
-    // portable negative-pid equivalent, so use taskkill's tree operation to
-    // avoid orphaning extension and LSP grandchildren.
-    if (process.platform === "win32") {
-      const args = ["/pid", String(pid), "/t", ...(force ? ["/f"] : [])];
-      const reaper = spawnProcess("taskkill", args, { windowsHide: true, stdio: "ignore" });
-      reaper.once("error", () => {
-        try { child.kill(signal); } catch {}
-      });
-      return;
-    }
     try {
       process.kill(-pid, signal);
     } catch {

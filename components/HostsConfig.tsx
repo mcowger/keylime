@@ -130,7 +130,7 @@ function JoinDialog({ host, localJoins, reload, onClose }: { host: HostRow; loca
     let current = true;
     void call("GET", `/api/home?hostId=${encodeURIComponent(host.id)}`)
       .then(({ home }) => {
-        if (current && typeof home === "string" && home) setFolder((typed) => typed || `${home}${home.includes("\\") ? "\\" : "/"}${CLUSTER_PROJECTS_DIR}`);
+        if (current && typeof home === "string" && home) setFolder((typed) => typed || `${home}/${CLUSTER_PROJECTS_DIR}`);
       })
       .catch(() => {});
     return () => { current = false; };
@@ -139,8 +139,7 @@ function JoinDialog({ host, localJoins, reload, onClose }: { host: HostRow; loca
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const projectsRoot = folder.trim();
-    // POSIX, drive-letter or UNC; the server applies its own rules too.
-    if (!/^(\/|[A-Za-z]:[\\/]|\\\\)/.test(projectsRoot)) return setError(t("errors.path_must_be_absolute"));
+    if (!projectsRoot.startsWith("/")) return setError(t("errors.path_must_be_absolute"));
     setBusy(true);
     setError(null);
     try {

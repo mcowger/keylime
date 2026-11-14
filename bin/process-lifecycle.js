@@ -2,8 +2,6 @@
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const os = require("node:os");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { spawn } = require("node:child_process");
 
 const forwardedSignals = ["SIGINT", "SIGTERM"];
 // SIGHUP arrives when a CLI-run launcher loses its terminal (window closed,
@@ -21,25 +19,9 @@ function getSignalExitCode(signal) {
   return typeof signalNumber === "number" ? 128 + signalNumber : 1;
 }
 
-function killChildTree(child, force, platform = process.platform, gracefulSignal = "SIGTERM") {
-  if (platform === "win32" && child.pid) {
-    const reaper = spawn("taskkill", ["/pid", String(child.pid), "/t", ...(force ? ["/f"] : [])], {
-      windowsHide: true,
-      stdio: "ignore",
-    });
-    const fallback = () => {
-      try { child.kill(force ? "SIGKILL" : "SIGTERM"); } catch {}
-    };
-    reaper.once("error", fallback);
-    reaper.once("exit", (code) => {
-      if (code !== 0) fallback();
-    });
-    reaper.unref?.();
-    return;
-  }
-
+function killChildTree(child, force, gracefulSignal = "SIGTERM") {
   const signal = force ? "SIGKILL" : gracefulSignal;
-  if (platform !== "win32" && child.pid) {
+  if (child.pid) {
     try {
       process.kill(-child.pid, signal);
       return;
@@ -69,18 +51,17 @@ function waitForChildExit(child, timeoutMs) {
   });
 }
 
-async function terminateChildProcess(child, timeoutMs = STOP_TIMEOUT_MS, platform = process.platform) {
+async function terminateChildProcess(child, timeoutMs = STOP_TIMEOUT_MS) {
   if (childHasExited(child)) return true;
   const exited = waitForChildExit(child, timeoutMs);
-  killChildTree(child, true, platform);
+  killChildTree(child, true);
   return exited;
 }
 
 function wireChildProcessLifecycle(child, parentProcess = process, timeoutMs = shutdownTimeoutMs, handleChildExit) {
   const signalHandlers = new Map();
   let shutdownTimer;
-  const platform = parentProcess.platform ?? process.platform;
-  const forceKill = () => killChildTree(child, true, platform);
+  const forceKill = () => killChildTree(child, true);
   const killChildOnSignal = (childSignal) => {
     if (shutdownTimer) {
       forceKill();
@@ -88,7 +69,7 @@ function wireChildProcessLifecycle(child, parentProcess = process, timeoutMs = s
     }
     shutdownTimer = setTimeout(forceKill, timeoutMs);
     shutdownTimer.unref?.();
-    killChildTree(child, false, platform, childSignal);
+    killChildTree(child, false, childSignal);
   };
   for (const signal of forwardedSignals) {
     const handler = () => killChildOnSignal(signal);

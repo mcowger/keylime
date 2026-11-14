@@ -6,8 +6,6 @@ import {
   isExistingPathWithinRoots,
   isFilePathAllowed,
   isOmpSecretFile,
-  isWindowsAbsolutePath,
-  normalizeSlashes,
   resolveRequestedFilePath,
 } from "./file-access";
 import { isFilePathReferencedBySession } from "./session-file-references";
@@ -17,8 +15,6 @@ import { sessionLocalRootContaining } from "./session-local-files";
 /** Rebuild an absolute path from `/api/files/[...path]` catch-all segments. */
 export function filePathFromSegments(segments: string[]): string {
   const joined = segments.join("/");
-  const slashJoined = normalizeSlashes(joined);
-  if (isWindowsAbsolutePath(slashJoined)) return slashJoined;
   return "/" + joined.replace(/^\/+/, "");
 }
 
@@ -41,7 +37,7 @@ async function resolveReadFilePath(
 ): Promise<{ filePath: string; localRoot: string | null }> {
   // `~/…` names the server user's home, never a workspace-relative candidate.
   const homePath = segments[0] === "~";
-  const absolutePath = homePath ? normalizeSlashes(path.join(homedir(), ...segments.slice(1))) : filePathFromSegments(segments);
+  const absolutePath = homePath ? path.join(homedir(), ...segments.slice(1)) : filePathFromSegments(segments);
   let filePath = absolutePath;
   let localRoot = allowSessionReference ? await sessionLocalRootContaining(absolutePath, sessionId, sessionFile) : null;
   // A session-owned absolute path must not be shadowed by a workspace-relative namesake, even when it is missing.

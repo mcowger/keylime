@@ -32,7 +32,7 @@ function getBrowserUrl(hostname, port) {
 function openInBrowser(url) {
   // getBuiltinModule: bin/ files add no new eslint-disable comments (see bin/bun-runtime.js).
   const { spawn } = process.getBuiltinModule("node:child_process");
-  const command = process.platform === "win32" ? "explorer.exe" : process.platform === "darwin" ? "open" : "xdg-open";
+  const command = process.platform === "darwin" ? "open" : "xdg-open";
   const opener = spawn(command, [url], { stdio: "ignore", detached: true });
   opener.on("error", (error) => console.warn(`Could not open browser automatically: ${error.message}`));
   opener.unref();
@@ -189,11 +189,6 @@ function formatAddressBanner({
   if (passwordEnabled) {
     lines.push("");
     lines.push(`  ${dim("🔒 Password protection enabled (OMP_WEB_PASSWORD_HASH)")}`);
-  }
-
-  if (process.platform === "win32" && !process.env.OMP_WEB_SERVICE) {
-    lines.push("");
-    lines.push(`  ${dim("💡 Windows Tray: Run 'ompweb --install-tray' to enable background startup & Desktop shortcut.")}`);
   }
 
   lines.push("");

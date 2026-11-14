@@ -1,13 +1,7 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 "use strict";
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-require("./node-version").exitIfUnsupportedNode();
-
-// Forward service subcommands from the main bin. This makes both
-// `npx @kahme247/ompweb@latest ompweb-launchd ...` and
-// `npx @kahme247/ompweb@latest ompweb-systemd ...` work without requiring
-// callers to know the path of the secondary executable.
+// Forward service subcommands without requiring callers to know the secondary executable path.
 const forwardedServiceScripts = {
   launchd: "omp-web-launchd.js",
   "ompweb-launchd": "omp-web-launchd.js",
@@ -35,7 +29,7 @@ function startLauncher() {
 // `ompweb preflight` (lib/hosts/preflight.ts): what an updater runs on a candidate release; it prints "preflight ok: <omp> <version>".
 if (process.argv[2] === "preflight") {
   process.env.OMP_WEB_PACKAGE_DIR ??= module.require("node:path").join(__dirname, "..");
-  module.require("jiti").createJiti(__filename).import("../lib/hosts/preflight.ts").then(
+  import("../lib/hosts/preflight.ts").then(
     ({ runPreflight }) => runPreflight().then((code) => process.exit(code)),
     (error) => {
       console.error(`preflight failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -47,7 +41,7 @@ if (process.argv[2] === "preflight") {
 // `ompweb fetch-omp` (lib/omp/runner-fetch.ts): fetch this version's omp runner if missing; updaters run it before preflight.
 if (process.argv[2] === "fetch-omp") {
   process.env.OMP_WEB_PACKAGE_DIR ??= module.require("node:path").join(__dirname, "..");
-  module.require("jiti").createJiti(__filename).import("../lib/omp/runner-fetch.ts").then(
+  import("../lib/omp/runner-fetch.ts").then(
     ({ runFetchOmp }) => runFetchOmp().then((code) => process.exit(code)),
     (error) => {
       console.error(`fetch-omp failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -93,8 +87,6 @@ const { isPortAvailable } = require("./port-availability");
 const { terminateChildProcess, wireChildProcessLifecycle } = require("./process-lifecycle");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { getAccessibleAddresses, getBrowserUrl, formatAddressBanner, openInBrowser } = require("./network-addresses");
-// module.require: bin/ files add no new eslint-disable comments (see bin/bun-runtime.js).
-const { resolveBunBinary } = module.require("./bun-runtime");
 
 const UPDATE_PROTOCOL = 1;
 const UPDATE_MESSAGE = "ompweb:update-control";
@@ -126,21 +118,6 @@ function runRestartGate(startMessageType) {
   };
   const killTree = (signal) => {
     if (!child) return finish(undefined, signal);
-    if (process.platform === "win32") {
-      const reaper = spawnChild("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
-        windowsHide: true,
-        stdio: "ignore",
-      });
-      const fallback = () => {
-        try { child.kill(signal); } catch {}
-      };
-      reaper.once("error", fallback);
-      reaper.once("exit", (code) => {
-        if (code !== 0) fallback();
-      });
-      reaper.unref();
-      return;
-    }
     try { process.kill(-process.pid, signal); }
     catch {
       try { child.kill(signal); } catch {}
@@ -217,9 +194,8 @@ const hostname = launchOptions.hostname;
 const openBrowser = launchOptions.openBrowser;
 const passwordEnabled = checkLaunchSecurity(launchOptions) !== undefined;
 
-// Resolved at every spawn, so a restart after an update finds the updated Bun.
 function serverCommand() {
-  return [resolveBunBinary(pkgDir), path.join(pkgDir, "server", "main.ts"), "-p", String(port), "-H", String(hostname)];
+  return [process.execPath, path.join(pkgDir, "server", "main.ts"), "-p", String(port), "-H", String(hostname)];
 }
 const restartDescriptor = JSON.stringify({
   launcherPath: path.join(pkgDir, "bin", "omp-web.js"),
@@ -238,7 +214,7 @@ function updatePath(control, suffix) {
 }
 
 function ownedByCurrentUser(info) {
-  return process.platform === "win32" || typeof process.getuid !== "function" || info.uid === process.getuid();
+  return typeof process.getuid !== "function" || info.uid === process.getuid();
 }
 
 function secureDirectory(directory) {
@@ -447,7 +423,7 @@ function serverEnvironment() {
     ...process.env,
     OMP_WEB_PACKAGE_DIR: pkgDir,
     OMP_WEB_LAUNCHER_PID: String(process.pid),
-    OMP_WEB_NODE_BIN: process.execPath,
+    OMP_WEB_BUN_BIN: process.execPath,
     OMP_WEB_PORT: port,
     OMP_WEB_HOSTNAME: hostname,
     OMP_WEB_RESTART_DESCRIPTOR: restartDescriptor,
@@ -493,7 +469,7 @@ function spawnRestartGate() {
     `(${runRestartGate.toString()})(${JSON.stringify(RESTART_GATE_START)})`,
   ], {
     cwd: pkgDir,
-    detached: process.platform !== "win32",
+    detached: true,
     stdio: ["inherit", "pipe", "inherit", "ipc"],
     env: serverEnvironment(),
   });

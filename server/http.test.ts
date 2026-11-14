@@ -108,7 +108,7 @@ test("serveFile refuses traversal and sets the cache policy", async () => {
   assert.equal(await get("/assets"), null);
 });
 
-test("serveFile never follows a symlink out of its directory", { skip: process.platform === "win32" }, async (t) => {
+test("serveFile never follows a symlink out of its directory", async (t) => {
   const packageDir = mkdtempSync(path.join(os.tmpdir(), "omp-web-serve-link-"));
   t.after(() => rmSync(packageDir, { recursive: true, force: true }));
   const outside = path.join(packageDir, "outside");
@@ -173,7 +173,7 @@ test("serveFile skips a missing directory and serves from it once it exists", as
 });
 
 test("serveFile follows a static directory swapped while it runs", async (t) => {
-  // A release swapped in place: public/ is a link (a junction on Windows) that moves to a new directory.
+  // A release swapped in place: public/ is a link that moves to a new directory.
   const packageDir = mkdtempSync(path.join(os.tmpdir(), "omp-web-serve-swap-"));
   t.after(() => rmSync(packageDir, { recursive: true, force: true }));
   for (const release of ["old", "new"]) await Bun.write(path.join(packageDir, release, "page.txt"), release);

@@ -10,7 +10,7 @@ import { CHANNEL_PROTO } from "./omp-socket";
 // `ompweb preflight`: start the session omp the way a host starts one for a new session (same resolver, same
 // spawn, plus --no-session in a scratch cwd) and wait for its channel hello. Updaters run it on a candidate
 // release before they switch to it. Deploy scripts grep its output for the literal success prefix below.
-// Loaded by Node/jiti and the compiled binary: no `@/` imports.
+// Loaded by Bun's native TypeScript runtime and the compiled binary: no `@/` imports.
 // shortcut: no credentials env, --resume/--tools or cluster config as the daemon adds; upgrade if those break a start.
 
 /** Only this module embeds it (the scratch cwd's prefix): the host updater finds the command in a compiled release
@@ -24,9 +24,7 @@ export async function runPreflight(timeoutMs = 30_000): Promise<number> {
   };
   const bin = resolveOmpBin();
   if (!bin) return fail(process.env.OMP_WEB_OMP_BIN || "ompweb-omp", "not found");
-  if (process.platform !== "win32") {
-    try { accessSync(bin, constants.X_OK); } catch { return fail(bin, "not executable"); }
-  }
+  try { accessSync(bin, constants.X_OK); } catch { return fail(bin, "not executable"); }
   const cwd = mkdtempSync(join(tmpdir(), PREFLIGHT_MARKER));
   try {
     const transport = spawnOmpTransport({ cwd, env: getAgentEnvOverrides(), extraArgs: ["--no-session"] });
@@ -53,7 +51,6 @@ export async function runPreflight(timeoutMs = 30_000): Promise<number> {
     transport.endInput();
     await Promise.race([exited.promise, sleep(2_000, undefined, { ref: false })]);
     transport.killTree(true);
-    // Windows keeps the scratch cwd busy until the child is gone.
     await Promise.race([exited.promise, sleep(5_000, undefined, { ref: false })]);
     if (failure) return fail(bin, failure);
     console.log(`preflight ok: ${bin} ${(await getOmpVersion()) ?? "(version unknown)"}`);
@@ -61,7 +58,7 @@ export async function runPreflight(timeoutMs = 30_000): Promise<number> {
   } catch (error) {
     return fail(bin, error instanceof Error ? error.message : String(error));
   } finally {
-    // Best effort: a scratch dir still locked (Windows) must not turn the verdict into a crash.
+    // Best effort: cleanup must not turn the verdict into a crash.
     try { rmSync(cwd, { recursive: true, force: true, maxRetries: 3 }); } catch { /* left in tmpdir */ }
   }
 }

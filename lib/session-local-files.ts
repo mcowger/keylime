@@ -28,7 +28,7 @@ function verifiedSessionFile(sessionId: string, hint: string | null | undefined)
 async function sessionLocalRootFor(sessionId: string | null, hint: string | null | undefined): Promise<SessionLocalRoot> {
   if (!isValidSessionId(sessionId)) return SESSION_NOT_FOUND;
   const sessionFile = verifiedSessionFile(sessionId, hint) ?? (await resolveSessionPath(sessionId));
-  return sessionFile ? { ok: true, root: sessionLocalRoot(sessionFile, sessionId) } : SESSION_NOT_FOUND;
+  return sessionFile ? { ok: true, root: sessionLocalRoot(sessionFile) } : SESSION_NOT_FOUND;
 }
 
 /** True when `target`, or its nearest existing ancestor (so a missing file still counts), resolves through symlinks to

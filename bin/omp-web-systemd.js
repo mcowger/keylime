@@ -1,14 +1,11 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 "use strict";
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-require("./node-version").exitIfUnsupportedNode();
 
 // Install ompweb as a Linux systemd user service.
 //
 // Usage:
 //   ompweb-systemd [install|uninstall|start|stop|restart|status|open]
-//   npx --yes --package=@kahme247/ompweb@latest ompweb-systemd install
+//   bunx --package @kahme247/ompweb@latest ompweb-systemd install
 //
 // `install` creates ~/.omp/agent/web-service.env. The file is deliberately
 // separate from the unit so port, hostname, password, and omp path can be
@@ -146,7 +143,7 @@ function readLauncherInterpreter(binPath) {
 function launcherInterpreterDir(binPath, env = process.env) {
   const interpreter = readLauncherInterpreter(binPath);
   if (!interpreter) return null;
-  if (path.posix.isAbsolute(interpreter) || path.win32.isAbsolute(interpreter)) {
+  if (path.isAbsolute(interpreter)) {
     try {
       if (fs.statSync(interpreter).isFile()) return path.dirname(interpreter);
     } catch {
@@ -199,7 +196,7 @@ function formatExecStart(value) {
 }
 
 // Resolve the ompweb binary the unit will run. An explicit override wins,
-// followed by the sibling of node (npm/bun global installs), then PATH.
+// followed by the sibling of Bun, then PATH.
 function resolveOmpwebBin(env = process.env) {
   const override = env.OMP_WEB_SYSTEMD_BIN;
   if (override) {
@@ -212,7 +209,7 @@ function resolveOmpwebBin(env = process.env) {
 
   const onPath = which("ompweb", env);
   if (onPath) return onPath;
-  throw new Error("ompweb binary not found (next to node or on PATH); set OMP_WEB_SYSTEMD_BIN");
+  throw new Error("ompweb binary not found (next to bun or on PATH); set OMP_WEB_SYSTEMD_BIN");
 }
 function validatePort(value) {
   const port = Number(value);
@@ -534,8 +531,7 @@ async function runCli(argv = process.argv.slice(2)) {
     return { exitCode: 2 };
   }
 
-  // Validate the install inputs before the platform gate so misconfigured
-  // launchers fail loudly on any platform (and stay testable on Windows).
+  // Validate install inputs before the platform gate so misconfigured launchers fail loudly.
   // An OMP_WEB_OMP_BIN launcher script whose interpreter is nowhere on PATH
   // would install a unit that can only fail later with exit 127 (issue #116) — fail now.
   if (command === "install") {
@@ -552,7 +548,7 @@ async function runCli(argv = process.argv.slice(2)) {
   }
 
   if (process.platform !== "linux") {
-    fail("systemd services are Linux-only (use ompweb-launchd on macOS or ompweb --install-tray on Windows)");
+    fail("systemd services are Linux-only (use ompweb-launchd on macOS)");
   }
 
   const installOptions = {

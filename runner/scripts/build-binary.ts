@@ -24,18 +24,12 @@ interface Target {
 	readonly outName: string;
 }
 
-// The five targets omp's release ships to glibc/macOS/Windows users.
+// The four targets omp's release ships to glibc/macOS users.
 const TARGETS: Record<string, Target> = {
 	"linux-x64": { platform: "linux", arch: "x64", bun: "bun-linux-x64-baseline", outName: "ompweb-omp-linux-x64" },
 	"linux-arm64": { platform: "linux", arch: "arm64", bun: "bun-linux-arm64", outName: "ompweb-omp-linux-arm64" },
 	"darwin-x64": { platform: "darwin", arch: "x64", bun: "bun-darwin-x64", outName: "ompweb-omp-darwin-x64" },
 	"darwin-arm64": { platform: "darwin", arch: "arm64", bun: "bun-darwin-arm64", outName: "ompweb-omp-darwin-arm64" },
-	"windows-x64": {
-		platform: "win32",
-		arch: "x64",
-		bun: "bun-windows-x64-baseline",
-		outName: "ompweb-omp-windows-x64.exe",
-	},
 };
 
 /** Never bundled: omp installs them on demand at runtime (upstream `COMPILED_EXTERNAL_DEPENDENCIES`). */
@@ -168,7 +162,7 @@ async function build(id: string, target: Target, statsClient: Record<string, str
 	// entitlements); add omp's Developer ID signing step before distributing outside our own machines.
 }
 
-const hostId = `${process.platform === "win32" ? "windows" : process.platform}-${process.arch}`;
+const hostId = `${process.platform}-${process.arch}`;
 const ids = process.argv.length > 2 ? process.argv.slice(2) : [hostId];
 for (const id of ids) {
 	if (!TARGETS[id]) throw new Error(`unknown target ${id}; expected one of ${Object.keys(TARGETS).join(", ")}`);

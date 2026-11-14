@@ -23,18 +23,13 @@ function runGitClone(url: string, target: string, signal: AbortSignal, output: (
   if (signal.aborted) return Promise.resolve(null);
   return new Promise((resolve) => {
     const child = spawn("git", ["clone", "--progress", "--", url, target], {
-      stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32", windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"], detached: true,
       env: createGitEnvironment({ GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "", SSH_ASKPASS: "", GIT_ALLOW_PROTOCOL: "https:ssh" }),
     });
     let escalation: NodeJS.Timeout | undefined;
     const kill = (force: boolean) => {
       if (!child.pid) return;
-      if (process.platform === "win32") {
-        const killer = spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
-        killer.on("error", () => { child.kill(); });
-      } else {
-        try { process.kill(-child.pid, force ? "SIGKILL" : "SIGTERM"); } catch { /* Group already exited. */ }
-      }
+      try { process.kill(-child.pid, force ? "SIGKILL" : "SIGTERM"); } catch { /* Group already exited. */ }
     };
     const abort = () => { kill(false); escalation = setTimeout(() => kill(true), 5_000); escalation.unref?.(); };
     signal.addEventListener("abort", abort, { once: true });

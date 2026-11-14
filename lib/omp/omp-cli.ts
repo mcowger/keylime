@@ -17,21 +17,9 @@ let cachedVersion: { fingerprint: string; value: string; expiresAt: number } | n
 let versionMiss: { fingerprint: string | null; retryAt: number } | null = null;
 let versionProbe: Promise<string | null> | null = null;
 
-const BIN_NAME = process.platform === "win32" ? "ompweb-omp.exe" : "ompweb-omp";
+const BIN_NAME = "ompweb-omp";
 /** This platform's runner: `runner/release/<name>` in a source checkout and the asset of that name on each release. */
-export const OMP_RUNNER_ASSET = `ompweb-omp-${process.platform === "win32" ? "windows" : process.platform}-${process.arch}${process.platform === "win32" ? ".exe" : ""}`;
-// .cmd/.bat launchers (e.g. OMP_WEB_OMP_BIN pointing at a wrapper script) cannot
-// be spawned directly by Node — spawning them requires a shell. Route them
-// through `cmd.exe /c`; every other platform and binary passes through.
-const WINDOWS_SCRIPT_RE = /\.cmd$|\.bat$/i;
-
-/** Spawn target for `bin args`, routing Windows script launchers through cmd.exe. */
-export function wrapWindowsScript(bin: string, args: string[]): { file: string; args: string[] } {
-  if (process.platform === "win32" && WINDOWS_SCRIPT_RE.test(bin)) {
-    return { file: "cmd.exe", args: ["/c", bin, ...args] };
-  }
-  return { file: bin, args };
-}
+export const OMP_RUNNER_ASSET = `ompweb-omp-${process.platform}-${process.arch}`;
 // Retry missing binaries and failed version probes after a short backoff so
 // a later install or repair is picked up without a web server restart.
 const MISS_TTL_MS = 30_000;
@@ -118,11 +106,9 @@ async function probeOmpVersion(): Promise<string | null> {
   }
   try {
     const output = await new Promise<string>((resolve, reject) => {
-      const target = wrapWindowsScript(bin, ["--version"]);
       // Without an explicit env this probe would inherit the server's full
       // environment, including omp-web's own secrets, into the child.
-      // 30 s: a fresh ~120 MB runner binary's first start on Windows waits on the antivirus scan.
-      execFile(target.file, target.args, { timeout: 30_000, windowsHide: true, env: createChildProcessEnvironment() }, (error, stdout) => {
+      execFile(bin, ["--version"], { timeout: 30_000, env: createChildProcessEnvironment() }, (error, stdout) => {
         if (error) reject(error);
         else resolve(stdout);
       });

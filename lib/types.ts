@@ -439,7 +439,7 @@ export interface SessionInfo {
    *  Always set by the server; optional because the client builds transient
    *  SessionInfo objects before the first refresh. Fall back to cwd. */
   projectRoot?: string;
-  /** Stable identity key for grouping and comparison (case-folded on Windows). */
+  /** Stable identity key for grouping and comparison. */
   projectKey?: string;
   /** Branch name when cwd is a linked git worktree (not the main checkout) */
   worktreeBranch?: string;

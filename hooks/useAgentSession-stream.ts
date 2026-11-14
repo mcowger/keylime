@@ -414,7 +414,7 @@ export async function runHostTool(
       let text: string | void = undefined;
       if (handlers.openFile) {
         try {
-          text = handlers.openFile(path, path.split(/[\\/]/).pop() || path, owner);
+          text = handlers.openFile(path, path.split("/").pop() || path, owner);
         } catch (error) {
           return { text: error instanceof Error ? error.message : `Could not open ${requested}`, isError: true };
         }

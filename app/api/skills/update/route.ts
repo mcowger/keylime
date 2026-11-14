@@ -1,4 +1,4 @@
-import { runNpx } from "@/lib/npx";
+import { runBunx } from "@/lib/bunx";
 import { createChildProcessEnvironment } from "@/lib/project-command-env";
 import type { SkillInstallScope } from "@/lib/api-types";
 import { buildSkillUpdateArgs } from "@/lib/skill-updates";
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
       return Response.json({ error: "This skill cannot be updated automatically", code: "skill_update_unsupported" }, { status: 400 });
     }
 
-    const { stdout, stderr } = await runNpx(buildSkillUpdateArgs(skill.install), {
+    const { stdout, stderr } = await runBunx(buildSkillUpdateArgs(skill.install), {
       timeout: 60_000,
       cwd: scope === "project" ? cwd : undefined,
       env: createChildProcessEnvironment({ FORCE_COLOR: "0" }),

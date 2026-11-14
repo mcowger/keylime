@@ -5,7 +5,7 @@ import { ToggleSwitch } from "@/components/ui/ToggleSwitch";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useTransition, cloneElement, isValidElement, type ReactElement, type ReactNode } from "react";
 import { getSubmitDuringRunBehavior, getWordCompletionMode, setSubmitDuringRunBehavior, setWordCompletionMode, type SubmitDuringRunBehavior, type WordCompletionMode } from "@/lib/composer-prefs";
 import dynamic from "@/lib/dynamic";
-import { ArrowDown, ArrowLeft, ArrowUp, Copy, Download, RefreshCw, RotateCcw, Search, Monitor, Play, Square, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, Copy, Download, RefreshCw, Search, X } from "lucide-react";
 import { COMPACTION_METHODS, DEFAULT_COMPACTION_METHOD_ORDER, type CompactionMethod } from "@/lib/compaction-methods";
 import { formatAgentEnvText, parseAgentEnvText, type AgentEnvErrorLabels } from "@/lib/omp/agent-env-policy";
 import { isRecord } from "@/lib/type-guards";
@@ -45,23 +45,6 @@ const McpConfig = dynamic(() => import("./McpConfig").then((module) => module.Mc
 const AgentsConfig = dynamic(() => import("./AgentsConfig").then((module) => module.AgentsConfig), { loading: SettingsTabLoading });
 const HostsConfig = dynamic(() => import("./HostsConfig").then((module) => module.HostsConfig), { loading: SettingsTabLoading });
 const UsageConfig = dynamic(() => import("./UsageConfig").then((module) => module.UsageConfig), { loading: SettingsTabLoading });
-
-type WindowsServiceStatus = {
-  isWindows: boolean;
-  isInstalled: boolean;
-  autostart: boolean;
-  isRunning: boolean;
-  port: number;
-  hostname: string;
-  mode: "start" | "dev";
-  desktopShortcutExists: boolean;
-  startMenuShortcutExists: boolean;
-  startupShortcutExists: boolean;
-  logFile: string;
-  configFile: string;
-  serviceUrl: string;
-  version: string;
-};
 
 type NativeSettings = {
   defaultThinkingLevel?: "auto" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -215,13 +198,10 @@ const SETTING_INDEX: SettingIndexEntry[] = [
   { id: "token-cost", tab: "usage", sectionKey: "settingsTabs.usage.label", labelKey: "usageConfig.rawTokenCost", descKey: "usageConfig.billedAtFullRate", fallbackSection: "Usage", fallbackLabel: "Raw Token Cost", fallbackDesc: "Token expenditure across providers and models", scope: "UI" },
   { id: "cache-savings", tab: "usage", sectionKey: "settingsTabs.usage.label", labelKey: "usageConfig.cacheSavings", descKey: "usageConfig.costQuality", fallbackSection: "Usage", fallbackLabel: "Cache Savings", fallbackDesc: "Prompt caching savings and cost quality breakdown", scope: "UI" },
   { id: "model-breakdown", tab: "usage", sectionKey: "settingsTabs.usage.label", labelKey: "usageConfig.breakdown", descKey: "usageConfig.model", fallbackSection: "Usage", fallbackLabel: "Model Breakdown", fallbackDesc: "Historical token usage and cost per model, day, and project", scope: "UI" },
-  // Windows Background Service & System Tray
   { id: "auto-resume-sessions", tab: "system", sectionKey: "settingsConfig.systemUpdates", labelKey: "settingsConfig.autoResumeSessions", descKey: "settingsConfig.autoResumeSessionsDesc", fallbackSection: "System", fallbackLabel: "Resume running sessions after a restart", fallbackDesc: "When omp-web restarts while agents are working, restart those sessions and tell each agent: \"Session interrupted and resumed. Continue as you would have done without the interruption.\" Work in progress at the moment of the restart, such as a running command, is lost." },
   { id: "agent-tools-cross-session", tab: "system", sectionKey: "settingsConfig.systemUpdates", labelKey: "settingsConfig.agentTools", descKey: "settingsConfig.agentToolsDesc", fallbackSection: "System", fallbackLabel: "Agent tools (cross-session)", fallbackDesc: "Allow agents to call list_sessions, new_session and send_to_session to reach other omp-web sessions, even with no browser tab open. Delivered messages are prefixed with the sending session's ID." },
   { id: "upload-retention", tab: "system", sectionKey: "settingsConfig.systemUpdates", labelKey: "settingsConfig.uploadRetention", descKey: "settingsConfig.uploadRetentionDesc", fallbackSection: "System", fallbackLabel: "Delete sent uploads after", fallbackDesc: "Files attached As file are deleted from each session's local://uploads folder on every host, archived sessions included, once they are this old. Never keeps them for ever." },
   { id: "agent-env", tab: "system", sectionKey: "settingsConfig.systemUpdates", labelKey: "settingsConfig.agentEnv", descKey: "settingsConfig.agentEnvDesc", fallbackSection: "System", fallbackLabel: "Agent environment variables", fallbackDesc: "Extra environment variables passed to the omp process, one KEY=VALUE per line. Applied to sessions started after saving.", scope: "UI" },
-  { id: "windows-service-autostart", tab: "system", sectionKey: "settingsConfig.windowsServiceTitle", labelKey: "settingsConfig.windowsServiceAutostart", descKey: "settingsConfig.windowsServiceAutostartDesc", fallbackSection: "Windows Background Service & System Tray", fallbackLabel: "Start with Windows", fallbackDesc: "Launch background service quietly in system tray when logging into Windows.", scope: "UI" },
-  { id: "windows-service-shortcuts", tab: "system", sectionKey: "settingsConfig.windowsServiceTitle", labelKey: "settingsConfig.windowsServiceInstallBtn", descKey: "settingsConfig.windowsServiceDesc", fallbackSection: "Windows Background Service & System Tray", fallbackLabel: "Install Service & Shortcuts", fallbackDesc: "Manage background service execution, system tray monitor, Windows logon autostart, and Desktop shortcuts.", scope: "UI" },
   // Notifications
   { id: "notifications-enable", tab: "notifications", sectionKey: "notifications.title", labelKey: "notifications.enable", descKey: "notifications.enableDesc", fallbackSection: "Notifications", fallbackLabel: "Enable notifications", fallbackDesc: "Asks the browser for permission to show notifications.", scope: "UI" },
   { id: "notifications-completed", tab: "notifications", sectionKey: "notifications.title", labelKey: "notifications.typeCompleted", descKey: "notifications.typeCompletedDesc", fallbackSection: "Notifications", fallbackLabel: "Task finished", fallbackDesc: "A prompt and the background work it started are done. Subagents never notify.", scope: "UI" },
@@ -941,10 +921,6 @@ export function SettingsConfig({ activeTab, toolCallsDefaultCollapsed, onToolCal
   });
   const [checkingAppUpdate, setCheckingAppUpdate] = useState(false);
   const [appUpdateMessage, setAppUpdateMessage] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const [windowsService, setWindowsService] = useState<WindowsServiceStatus | null>(null);
-  const [loadingWindowsService, setLoadingWindowsService] = useState(false);
-  const [windowsServiceActionPending, setWindowsServiceActionPending] = useState(false);
 
   const appUpdateIsAvailable = Boolean(appUpdate?.updateAvailable);
   const appUpdatesDisabled = Boolean(appUpdate?.updatesDisabled);
@@ -958,43 +934,6 @@ export function SettingsConfig({ activeTab, toolCallsDefaultCollapsed, onToolCal
     return tabs;
   }, [systemNeedsAttention, t]);
 
-  const fetchWindowsServiceStatus = useCallback(async () => {
-    try {
-      setLoadingWindowsService(true);
-      const res = await fetch("/api/windows-service");
-      if (res.ok) {
-        const data = (await res.json()) as WindowsServiceStatus;
-        setWindowsService(data);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLoadingWindowsService(false);
-    }
-  }, []);
-
-  const performWindowsServiceAction = useCallback(async (action: "install" | "uninstall" | "toggle-autostart" | "start" | "stop" | "restart", payload: object = {}) => {
-    try {
-      setWindowsServiceActionPending(true);
-      setMessage(null);
-      const res = await fetch("/api/windows-service", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, ...payload }),
-      });
-      const data = (await res.json()) as { success?: boolean; error?: string; status?: WindowsServiceStatus; message?: string };
-      if (!res.ok || data.error) {
-        setMessage(data.error || t("settingsConfig.windowsServiceActionFailed"));
-      } else {
-        if (data.status) setWindowsService(data.status);
-        setMessage(data.message || t("settingsConfig.windowsServiceActionSuccess"));
-      }
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : t("settingsConfig.windowsServiceActionFailed"));
-    } finally {
-      setWindowsServiceActionPending(false);
-    }
-  }, [t]);
 
 
   const [nativeSettings, setNativeSettings] = useState<NativeSettings | null>(null);
@@ -1092,11 +1031,6 @@ export function SettingsConfig({ activeTab, toolCallsDefaultCollapsed, onToolCal
 
   const currentTab = activeTab === "skills" ? activeTab : getNormalizedActive(activeTab);
   const nativeSettingsRequired = currentTab === "general" || currentTab === "safety" || currentTab === "models" || currentTab === "intelligence" || currentTab === "mcp";
-  useEffect(() => {
-    if (currentTab === "system") {
-      void fetchWindowsServiceStatus();
-    }
-  }, [currentTab, fetchWindowsServiceStatus]);
 
 
   const trimmedQuery = searchQuery.trim().toLowerCase();
@@ -1897,11 +1831,11 @@ export function SettingsConfig({ activeTab, toolCallsDefaultCollapsed, onToolCal
                             <a href={appUpdate.updateCommand} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--accent)", wordBreak: "break-all" }}>{appUpdate.updateCommand}</a>
                           ) : (
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <code style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--accent)", wordBreak: "break-all" }}>{appUpdate.updateCommand || "npm install -g @kahme247/ompweb"}</code>
+                              <code style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--accent)", wordBreak: "break-all" }}>{appUpdate.updateCommand || "bun add -g @kahme247/ompweb"}</code>
                               <button
                                 type="button"
                                 onClick={() => {
-                                  void copyText(appUpdate.updateCommand || "npm install -g @kahme247/ompweb")
+                                  void copyText(appUpdate.updateCommand || "bun add -g @kahme247/ompweb")
                                     .then(() => toast.success(t("appShell.commandCopied")))
                                     .catch(() => toast.error(t("appShell.commandCopyFailed")));
                                 }}
@@ -1918,122 +1852,6 @@ export function SettingsConfig({ activeTab, toolCallsDefaultCollapsed, onToolCal
                   {appUpdateMessage && <Alert variant={appUpdateMessage.toLowerCase().includes("fail") || appUpdateMessage.toLowerCase().includes("error") ? "error" : "info"} description={appUpdateMessage} onDismiss={() => setAppUpdateMessage(null)} />}
                 </section>
 
-                {/* Windows Background Service & System Tray card (Windows only) */}
-                {windowsService?.isWindows && (
-                  <section style={{ padding: 14, border: "1px solid var(--border)", borderRadius: "var(--radius-card)", background: "var(--bg-panel)", display: "flex", flexDirection: "column", gap: 12 }}>
-                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-                          <Monitor size={15} aria-hidden="true" />
-                          {t("settingsConfig.windowsServiceTitle")}
-                        </div>
-                        <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--text-muted)", lineHeight: 1.4 }}>
-                          {t("settingsConfig.windowsServiceDesc")}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void fetchWindowsServiceStatus()}
-                        disabled={loadingWindowsService}
-                        aria-label={t("settingsConfig.refresh")}
-                        style={{ padding: "6px 10px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "transparent", color: "var(--text)", cursor: loadingWindowsService ? "wait" : "pointer", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 5 }}
-                      >
-                        <RefreshCw size={13} aria-hidden="true" /> {t("settingsConfig.refresh")}
-                      </button>
-                    </div>
-
-                    {/* Status badges grid */}
-                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: 10 }}>
-                      <div style={{ padding: 10, border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg)", display: "flex", flexDirection: "column", gap: 4 }}>
-                        <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                          {t("settingsConfig.windowsServiceStatus")}
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 500, color: windowsService.isRunning ? "var(--accent)" : "var(--text-muted)" }}>
-                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: windowsService.isRunning ? "var(--accent)" : "var(--border)" }} />
-                          {windowsService.isRunning ? t("settingsConfig.windowsServiceRunning", { port: windowsService.port }) : t("settingsConfig.windowsServiceStopped")}
-                        </div>
-                      </div>
-
-                      <div style={{ padding: 10, border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg)", display: "flex", flexDirection: "column", gap: 4 }}>
-                        <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                          {t("settingsConfig.windowsServiceDesktopShortcut", { status: "" }).replace(/:\s*$/, "")}
-                        </div>
-                        <div style={{ fontSize: 12, color: windowsService.desktopShortcutExists ? "var(--text)" : "var(--text-muted)" }}>
-                          {windowsService.desktopShortcutExists ? t("settingsConfig.windowsServicePresent") : t("settingsConfig.windowsServiceMissing")}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Autostart Toggle */}
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg)" }}>
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 500 }}>{t("settingsConfig.windowsServiceAutostart")}</div>
-                        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{t("settingsConfig.windowsServiceAutostartDesc")}</div>
-                      </div>
-                      <ToggleSwitch
-                        id="windows-service-autostart-toggle"
-                        checked={windowsService.autostart}
-                        disabled={windowsServiceActionPending}
-                        onChange={(checked) => void performWindowsServiceAction("toggle-autostart", { autostart: checked })}
-                      />
-                    </div>
-
-                    {/* Action buttons toolbar */}
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                      <button
-                        type="button"
-                        onClick={() => void performWindowsServiceAction("install", { startImmediately: false })}
-                        disabled={windowsServiceActionPending}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg-subtle)", color: "var(--text)", cursor: windowsServiceActionPending ? "wait" : "pointer", fontSize: 12 }}
-                      >
-                        <Monitor size={13} aria-hidden="true" />
-                        {windowsService.isInstalled ? t("settingsConfig.windowsServiceReinstallBtn") : t("settingsConfig.windowsServiceInstallBtn")}
-                      </button>
-
-                      {windowsService.isRunning ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => void performWindowsServiceAction("restart")}
-                            disabled={windowsServiceActionPending}
-                            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg-subtle)", color: "var(--text)", cursor: windowsServiceActionPending ? "wait" : "pointer", fontSize: 12 }}
-                          >
-                            <RotateCcw size={13} aria-hidden="true" /> {t("settingsConfig.windowsServiceRestartBtn")}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void performWindowsServiceAction("stop")}
-                            disabled={windowsServiceActionPending}
-                            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg-subtle)", color: "var(--text)", cursor: windowsServiceActionPending ? "wait" : "pointer", fontSize: 12 }}
-                          >
-                            <Square size={13} aria-hidden="true" /> {t("settingsConfig.windowsServiceStopBtn")}
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => void performWindowsServiceAction("start")}
-                          disabled={windowsServiceActionPending}
-                          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg-subtle)", color: "var(--text)", cursor: windowsServiceActionPending ? "wait" : "pointer", fontSize: 12 }}
-                        >
-                          <Play size={13} aria-hidden="true" /> {t("settingsConfig.windowsServiceStartBtn")}
-                        </button>
-                      )}
-
-                      {windowsService.isInstalled && (
-                        <button
-                          type="button"
-                          onClick={() => void performWindowsServiceAction("uninstall", { cleanConfig: false })}
-                          disabled={windowsServiceActionPending}
-                          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "transparent", color: "var(--text-muted)", cursor: windowsServiceActionPending ? "wait" : "pointer", fontSize: 12 }}
-                        >
-                          <Trash2 size={13} aria-hidden="true" /> {t("settingsConfig.windowsServiceUninstallBtn")}
-                        </button>
-                      )}
-                    </div>
-                    {message && <Alert variant={message.toLowerCase().includes("fail") || message.toLowerCase().includes("error") ? "error" : "info"} description={message} onDismiss={() => setMessage(null)} />}
-                  </section>
-                )}
               </div>
             )}
               </>

@@ -35,19 +35,9 @@ interface WorktreeContext {
   /** Resolves "dirty" when the worktree has uncommitted changes and force was false; rejects with a user-facing Error otherwise. */
   remove(path: string, force: boolean): Promise<"removed" | "dirty">;
 }
-/** Normalize a repository/project path for use as a Git-state map key. The
- *  same physical repo may be reached via different path spellings (forward /
- *  back slashes, drive-letter casing); folding them makes distinct spellings
- *  resolve to one shared Git context, while genuinely different repos stay
- *  separate. */
+/** Normalize a project path for use as a Git-state map key. */
 function normalizeProjectKey(value: string): string {
-  // Clip trailing separators and unify separators. Fold case when the path is
-  // Windows-style (drive-letter rooted or backslash-y) so Drive:\ vs C:\ and
-  // path casing variants map to the same repository, while preserving
-  // case-sensitivity for POSIX paths (client has no process.platform).
-  const isWindowsPath = /^[a-zA-Z]:/.test(value) || value.includes("\\");
-  const normalized = value.replace(/[\/]+$/, "").replace(/\\/g, "/");
-  return isWindowsPath ? normalized.toLowerCase() : normalized;
+  return value.replace(/\/+$/, "");
 }
 // Bounded retry window for restoring a brand-new session from its URL before
 // omp flushes the JSONL (typically appears within a second or two of the
@@ -134,10 +124,10 @@ function displayCwd(cwd: string, homeDir?: string): string {
   return (homeDir && cwd.startsWith(homeDir)) ? "~" + cwd.slice(homeDir.length) : cwd;
 }
 
-/** Final folder name of a project path, portable across / and \ separators. */
+/** Final folder name of a project path. */
 function projectLabel(projectPath: string): string {
-  const trimmed = projectPath.replace(/[\\/]+$/, "");
-  const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  const trimmed = projectPath.replace(/\/+$/, "");
+  const index = trimmed.lastIndexOf("/");
   return index >= 0 ? trimmed.slice(index + 1) : trimmed;
 }
 function formatRelativeTime(value: string, _locale: string, now: number): string | null {

@@ -141,9 +141,7 @@ export function nextPinOrder(projects: ManagedProject[]): number {
 }
 
 /** Running/unread/exit session counts per project, for the activity indicators
- *  on project rows. Keys are the case-folded comparable form of the projectRoot
- *  so casing-only differences (Windows/NTFS) still resolve — callers must
- *  look up with foldedHostProjectKey(project.hostId, project.path). */
+ *  on project rows. Callers must look up with foldedHostProjectKey(project.hostId, project.path). */
 export function projectActivityCounts(
   sessions: SessionInfo[],
   runningIds: Iterable<string>,
@@ -168,8 +166,7 @@ export function projectActivityCounts(
 }
 
 /** Group sessions by logical project identity, or by host-bound physical path.
- * Every managed project gets a bucket, including empty projects. Physical paths
- * compare case-insensitively on Windows; logical IDs stay case-sensitive. */
+ * Every managed project gets a bucket, including empty projects. */
 export function groupSessionsByProject(
   projects: ManagedProject[],
   sessions: SessionInfo[],

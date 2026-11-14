@@ -574,9 +574,6 @@ export const SessionSidebar = memo(function SessionSidebar({ selectedSessionId, 
   }, [worktreeStateByProject, allSessions, projects]);
 
   // ---- Expansion (used by the sync/notify effects below, so declared first) --
-  // Keys are stored in comparableProjectPath form so case-variant spellings of
-  // the same Windows path map to one entry (the server lowercases projectKey
-  // on win32, while project.path preserves registry casing).
   const expandProject = useCallback((path: string, hostId: string = LOCAL_HOST_ID) => {
     const key = foldedHostProjectKey(hostId, path);
     setExpandedProjects((prev) => {
@@ -1243,8 +1240,6 @@ export const SessionSidebar = memo(function SessionSidebar({ selectedSessionId, 
       }
       // Hiding the active project leaves nothing selected; activate the next
       // most-relevant project so New Session and Explorer stay usable.
-      // Compare case-folded — the selected cwd can spell the project path
-      // with different casing than this row (Windows/NTFS).
       if (selectedProject !== null && (project.poolId ? selectedProject === removedKey : !selectedPoolKey && selectedHostId === hostOf(project) && comparableProjectPath(selectedProject) === comparableProjectPath(project.path))) {
         const next = sortedProjects.find((p) => projectIdentity(p) !== removedKey && (p.poolId || !hostUnavailableReason(hostOf(p))));
         if (next) activateProject(next);
@@ -1420,8 +1415,6 @@ export const SessionSidebar = memo(function SessionSidebar({ selectedSessionId, 
     && activeGitState.isTopLevel
     && selectedCwd
     && selectedProject !== null
-    // Case-folded: the active project may be spelled differently than the
-    // server-resolved git root (Windows/NTFS), yet still be the same repo.
     && comparableProjectPath(selectedProject) === comparableProjectPath(activeGitState.projectRoot),
   );
   // The file panel's Worktrees tab renders the ACTIVE repo's own worktrees
@@ -1807,11 +1800,6 @@ export const SessionSidebar = memo(function SessionSidebar({ selectedSessionId, 
               const node = project.poolId || host.id === hostOf(project) ? undefined : hosts?.find((candidate) => candidate.id === hostOf(project));
               const unavailable = node ? hostUnavailableReason(node.id) : null;
               const tree = treesByProject.get(projectKey) ?? buildSessionTree(sessions);
-              // Sessions group under a project through the case-folded comparable
-              // form (see groupSessionsByProject), so the active highlight must
-              // use the same comparison: a session whose cwd/projectRoot spells
-              // the project folder with different casing (Windows/NTFS) lands in
-              // this row — the row must light up for it too.
               const isActive = selectedProject !== null && (project.poolId ? selectedProject === projectKey : !selectedPoolKey && selectedHostId === hostOf(project) && comparableProjectPath(selectedProject) === comparableProjectPath(project.path));
               return (
                 <ProjectRow

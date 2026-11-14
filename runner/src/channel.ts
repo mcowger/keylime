@@ -164,8 +164,6 @@ export class HostChannel {
 	 */
 	static async connect(session: AgentSession, subagentEventBus?: EventBus): Promise<HostChannel> {
 		const channel = new HostChannel(session, subagentEventBus);
-		// shortcut: the Windows host has no named pipe yet; dial there once it does.
-		if (process.platform === "win32") return channel;
 		const { promise: waited, resolve } = Promise.withResolvers<void>();
 		setTimeout(resolve, CONNECT_WAIT_MS).unref();
 		await Promise.race([channel.#dial(), waited]);

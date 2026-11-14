@@ -1,8 +1,8 @@
 import { execFile } from "child_process";
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync } from "fs";
 import { basename, dirname, join, resolve } from "path";
 import { promisify } from "util";
-import { normalizeForComparison, samePath, toNativePath } from "./paths";
+import { normalizeForComparison, samePath } from "./paths";
 import { createGitEnvironment } from "./project-command-env";
 import { loadProjectRegistry } from "./project-registry";
 
@@ -43,8 +43,6 @@ const PROJECT_CACHE_TTL_MS = 60_000;
 
 function realPathOrSelf(filePath: string): string {
   try {
-    // Use the OS-native resolver so Windows 8.3 aliases and filesystem casing
-    // canonicalize to the same identity Git reports.
     return realpathSync.native(filePath);
   } catch {
     return filePath;
@@ -71,41 +69,9 @@ async function git(cwd: string, args: string[]): Promise<string> {
   return stdout.trim();
 }
 
-/**
- * Proactively sanitize Git worktree metadata on Windows: Git records the
- * absolute path to the worktree's `.git` file in `.git/worktrees/<id>/gitdir`.
- * If recorded with Windows backslashes (`\`), Git's internal C path parsing
- * (`strip_suffix(path, "/.git")`) fails to match the forward-slash `/.git`
- * delimiter, which corrupts Git's worktree root resolution and causes
- * `git worktree remove` to check `<path>/.git/.git` and fail validation.
- */
-export function repairWorktreeGitdirs(repoRoot: string): void {
-  try {
-    const worktreesDir = join(repoRoot, ".git", "worktrees");
-    if (!existsSync(worktreesDir)) return;
-    const entries = readdirSync(worktreesDir);
-    for (const entry of entries) {
-      const gitdirPath = join(worktreesDir, entry, "gitdir");
-      if (!existsSync(gitdirPath)) continue;
-      try {
-        const content = readFileSync(gitdirPath, "utf8");
-        const trimmed = content.trim();
-        const normalized = trimmed.replace(/\\/g, "/");
-        if (normalized !== trimmed) {
-          writeFileSync(gitdirPath, normalized + "\n", "utf8");
-        }
-      } catch {
-        // Ignore single-file read/write errors
-      }
-    }
-  } catch {
-    // Ignore worktrees directory read errors
-  }
-}
 
 /**
- * When a worktree directory no longer exists or is no longer a valid git directory
- * (worktree removed, or leftover folders like .next/ remained on Windows),
+ * When a worktree directory no longer exists or is no longer a valid git directory,
  * resolve its sessions back under the main repo root instead of letting them dangle.
  */
 function inferRemovedWorktree(cwd: string): ProjectInfo | null {
@@ -179,7 +145,7 @@ export async function resolveProject(cwd: string): Promise<ProjectInfo> {
       "--abbrev-ref", "HEAD",
     ]);
     const [commonDirRaw, gitDirRaw, toplevelRaw, ref] = out.split("\n").map((l) => l.trim());
-    const [commonDir, gitDir, toplevel] = [commonDirRaw, gitDirRaw, toplevelRaw].map((p) => realPathOrSelf(toNativePath(p)));
+    const [commonDir, gitDir, toplevel] = [commonDirRaw, gitDirRaw, toplevelRaw].map(realPathOrSelf);
     // git prints resolved (symlink-free) paths; normalize cwd the same way
     const realCwd = realPathOrSelf(cwd);
     // For a linked worktree, --git-dir differs from --git-common-dir.
@@ -192,8 +158,7 @@ export async function resolveProject(cwd: string): Promise<ProjectInfo> {
     const topLevelProjectRoot = isWorktreeTopLevel ? dirname(commonDir) : toplevel;
     info = {
       // realCwd is the symlink-free, on-disk-cased form git itself resolved;
-      // use it for the non-worktree root too so the project registry and the
-      // session-discovered roots produce identical strings (Windows casing).
+      // Use the canonical path for the non-worktree root too.
       projectRoot: isTopLevel ? realPathOrSelf(topLevelProjectRoot) : realPathOrSelf(cwd),
       branch: ref && ref !== "HEAD" ? ref : null,
       isWorktree: isWorktreeTopLevel,
@@ -219,20 +184,17 @@ export async function resolveProject(cwd: string): Promise<ProjectInfo> {
 /** Main repo root (parent of the shared .git dir), or throws for non-git dirs */
 async function getRepoRoot(cwd: string): Promise<string> {
   const commonDir = await git(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
-  return realPathOrSelf(dirname(toNativePath(commonDir)));
+  return realPathOrSelf(dirname(commonDir));
 }
 
 export async function listWorktrees(cwd: string): Promise<WorktreeInfo[]> {
   const repoRoot = await getRepoRoot(cwd);
-  repairWorktreeGitdirs(repoRoot);
   const out = await git(cwd, ["worktree", "list", "--porcelain"]);
   const worktrees: WorktreeInfo[] = [];
   let current: (Partial<WorktreeInfo> & { prunable?: boolean }) | null = null;
 
   const flush = () => {
     if (current?.path) {
-      // Git may emit forward-slash absolute paths on Windows; normalize before
-      // comparing with API/UI paths produced by Node's path helpers.
       const worktreePath = resolve(current.path);
       // Prunable worktrees point at missing/broken gitdirs and cannot be
       // browsed or selected usefully. Also skip vanished paths even if git has
@@ -251,7 +213,7 @@ export async function listWorktrees(cwd: string): Promise<WorktreeInfo[]> {
   for (const line of out.split("\n")) {
     if (line.startsWith("worktree ")) {
       flush();
-      current = { path: toNativePath(line.slice("worktree ".length).trim()) };
+      current = { path: line.slice("worktree ".length).trim() };
     } else if (line.startsWith("branch ") && current) {
       current.branch = line.slice("branch ".length).trim().replace(/^refs\/heads\//, "");
     } else if (line.startsWith("prunable") && current) {
@@ -321,19 +283,14 @@ export async function addWorktree(cwd: string, branch: string): Promise<{ path: 
     throw new Error(extractGitError(error));
   }
 
-  repairWorktreeGitdirs(repoRoot);
   invalidateProjectCache();
   return { path: worktreePath, branch: trimmed };
 }
 
 export async function removeWorktree(cwd: string, worktreePath: string, force = false): Promise<void> {
   const repoRoot = await getRepoRoot(cwd);
-  repairWorktreeGitdirs(repoRoot);
   const worktrees = await listWorktrees(cwd);
-  // Compare on the same canonical form listWorktrees produces (resolve +
-  // case-fold on win32): the client body value may use a drive-letter case
-  // variant or forward slashes, and an exact string compare would reject a
-  // legitimate worktree with a misleading not_a_worktree error.
+  // Compare on the same canonical form listWorktrees produces.
   const target = findWorktreeByPath(worktrees, worktreePath);
   if (!target) throw new Error(`Not a worktree of this repository: ${worktreePath}`);
   if (target.isMain) throw new Error("Cannot remove the main worktree");

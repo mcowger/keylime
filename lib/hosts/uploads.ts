@@ -1,19 +1,17 @@
 // Composer file uploads, the daemon's side (docs/specs/2026-11-02-file-uploads-design.md, U3 and U5): an upload is
 // staged as `<agent dir>/omp-web/uploads/<id>.part` plus `<id>.json`, written in order at the part's length, and on
 // attach hard-linked (or copied) into the session's `local://uploads/`.
-// Loaded by the daemon through jiti: no `@/` imports and no Bun APIs.
-import { createHash, randomUUID } from "node:crypto";
-import { constants as fsConstants, createReadStream, realpathSync } from "node:fs";
+// Loaded by the daemon through Bun's native TypeScript runtime: no `@/` imports.
+import { randomUUID } from "node:crypto";
+import { constants as fsConstants, createReadStream } from "node:fs";
 import { appendFile, link, lstat, mkdir, open, readdir, readFile, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { basename, extname, join, resolve } from "node:path";
+import { basename, extname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { getAgentDir, sessionLocalRoot } from "../omp/paths";
 import { inspectUploadTargets, parseUploadConflictStrategy, validateUploadFileNames, type UploadConflictStrategy } from "../file-upload";
 import type { WorkspaceOwner, WorkspaceUploadResult } from "../workspace-types";
 import { authorizeWorkspaceDirectory } from "./workspace-roots";
-import { sessionPathKey } from "../paths";
 import { isValidSessionId } from "../session-file-references-core";
 import { isRecord } from "../type-guards";
 import { MAX_UPLOAD_BYTES, UPLOAD_ID_RE } from "../upload-limits";
@@ -22,13 +20,6 @@ import { HostOpError, LINK_LIMITS } from "./link-protocol";
 /** Uploads land in this subdirectory of the session's `local://` root. */
 export const UPLOADS_LOCAL_DIR = "uploads";
 
-/** Separate daemons' files inside omp's shared Windows temp root, including copied session UUIDs. */
-export function uploadOwnerNamespace(agentDir = getAgentDir()): string {
-  let canonical: string;
-  try { canonical = realpathSync.native(agentDir); }
-  catch { canonical = resolve(agentDir); }
-  return createHash("sha256").update(sessionPathKey(canonical)).digest("hex").slice(0, 32);
-}
 // Leaves room for ` (n)` under the usual 255-byte file name limit.
 const MAX_NAME_BYTES = 200;
 const MAX_EXT_BYTES = 20;
@@ -69,21 +60,18 @@ function clipUtf8(text: string, bytes: number): string {
   return out;
 }
 
-/** A file name safe to create in one directory on any OS: no separators, control or bidi characters, Windows device
- * names or trailing dots and spaces, at most MAX_NAME_BYTES; never empty. */
+/** A single safe file name with no separators, control or bidi characters, at most MAX_NAME_BYTES; never empty. */
 export function sanitizeUploadName(name: string): string {
   let clean = basename(name.replace(/\\/g, "/"))
     .replace(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
-    .replace(/[\u0000-\u001f\u007f<>:"|?*]/g, "_")
-    .trim()
-    .replace(/[. ]+$/, "");
-  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9]) *(\.|$)/i.test(clean)) clean = `_${clean}`;
+    .replace(/[\u0000-\u001f\u007f]/g, "_")
+    .trim();
   if (Buffer.byteLength(clean) > MAX_NAME_BYTES) {
     const ext = extname(clean);
     const keptExt = clipUtf8(ext, MAX_EXT_BYTES);
-    clean = (clipUtf8(clean.slice(0, clean.length - ext.length), MAX_NAME_BYTES - Buffer.byteLength(keptExt)) + keptExt).replace(/[. ]+$/, "");
+    clean = clipUtf8(clean.slice(0, clean.length - ext.length), MAX_NAME_BYTES - Buffer.byteLength(keptExt)) + keptExt;
   }
-  return clean || "file";
+  return !clean || clean === "." || clean === ".." ? "file" : clean;
 }
 
 /** What the daemon sends up as `upload_ack`. */
@@ -468,10 +456,10 @@ export class StagedUploads {
    * existing file (a taken name gets ` (1)`, ` (2)`, ...). `sessionFile` is already confined to the sessions directory. */
   async attach(id: unknown, sessionFile: string, sessionId: unknown): Promise<{ path: string; url: string }> {
     if (!isUploadId(id) || typeof sessionId !== "string" || !isValidSessionId(sessionId)) throw new HostOpError(400, "invalid_request", "Invalid upload attach");
-    return this.control(id, () => this.finishAttach(id, sessionFile, sessionId));
+    return this.control(id, () => this.finishAttach(id, sessionFile));
   }
 
-  private async finishAttach(id: string, sessionFile: string, sessionId: string): Promise<{ path: string; url: string }> {
+  private async finishAttach(id: string, sessionFile: string): Promise<{ path: string; url: string }> {
     const part = this.path(id, "part");
     const meta = await this.meta(id);
     if (meta?.workspace) throw new HostOpError(409, "upload_destination_conflict", "The upload already belongs to a workspace");
@@ -486,9 +474,8 @@ export class StagedUploads {
     const size = meta ? await sizeOf(part) : null;
     if (!meta || size === null) throw new HostOpError(404, "upload_missing", "The upload is gone: attach the file again");
     if (this.open.has(id) || size !== meta.size) throw new HostOpError(409, "upload_incomplete", "The upload has not finished");
-    const local = sessionLocalRoot(sessionFile, sessionId);
-    const relativeDir = local === join(tmpdir(), "omp-local", sessionId)
-      ? `${UPLOADS_LOCAL_DIR}/${uploadOwnerNamespace(this.agentDir)}` : UPLOADS_LOCAL_DIR;
+    const local = sessionLocalRoot(sessionFile);
+    const relativeDir = UPLOADS_LOCAL_DIR;
     const dir = join(local, relativeDir);
     await mkdir(dir, { recursive: true });
     const name = sanitizeUploadName(meta.name);

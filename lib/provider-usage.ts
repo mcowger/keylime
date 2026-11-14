@@ -218,7 +218,6 @@ async function fetchProviderUsage(refresh = false): Promise<string> {
     await execFileAsync(bin, ["usage", "invalidate"], {
       timeout: USAGE_TIMEOUT_MS,
       maxBuffer: USAGE_MAX_BUFFER,
-      windowsHide: true,
       // No `env` option would inherit the server's full environment,
       // including omp-web's own secrets, into this child.
       env: createChildProcessEnvironment(),
@@ -229,7 +228,6 @@ async function fetchProviderUsage(refresh = false): Promise<string> {
   const { stdout } = await execFileAsync(bin, ["usage", "--json"], {
     timeout: USAGE_TIMEOUT_MS,
     maxBuffer: USAGE_MAX_BUFFER,
-    windowsHide: true,
     env: createChildProcessEnvironment(),
   });
   return stdout;

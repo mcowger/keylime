@@ -1,4 +1,4 @@
-import { runNpx } from "@/lib/npx";
+import { runBunx } from "@/lib/bunx";
 import { createChildProcessEnvironment } from "@/lib/project-command-env";
 import type { SkillSearchResult } from "@/lib/api-types";
 
@@ -97,7 +97,7 @@ export async function POST(req: Request) {
       const results = await searchSkillsApi(query.trim(), limit);
       return Response.json({ results });
     } catch {
-      const { stdout, stderr } = await runNpx(["skills", "find", query.trim()], {
+      const { stdout, stderr } = await runBunx(["skills", "find", query.trim()], {
         timeout: 20000,
         env: createChildProcessEnvironment({ FORCE_COLOR: "0" }),
       });

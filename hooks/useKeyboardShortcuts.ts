@@ -45,7 +45,7 @@ interface UseGlobalKeyboardShortcutsOptions {
  *   Esc          – stop the running agent (via module-level abort handler)
  *   Ctrl+Alt+N   – create a new session in the active project directory
  *   Ctrl/Cmd+A   – select the active message, transcript, or file contents
- *   ⌘[/⌘] (Alt+←/→ on Windows/Linux, plus the mouse back/forward buttons)
+ *   ⌘[/⌘] (Alt+←/→ on Linux, plus the mouse back/forward buttons)
  *                – in-app navigate back/forward (see lib/navigation-history.ts)
  *
  * Note: Esc inside <textarea> or <input> is deliberately NOT handled here.

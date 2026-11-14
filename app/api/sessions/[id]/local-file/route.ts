@@ -8,7 +8,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const uri = new URL(request.url).searchParams.get("uri") ?? "";
   // Main checks only shared URI syntax; the owning daemon applies its platform's filename rules.
-  const parsed = parseLocalUri(uri, null);
+  const parsed = parseLocalUri(uri);
   if (!parsed.ok) return Response.json({ error: parsed.error, code: "invalid_local_uri" }, { status: 400 });
   try {
     const resolved = await resolveWorkspaceHost(undefined, id, { followAlias: true });

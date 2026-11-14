@@ -12,7 +12,6 @@ test("the package ships the font license texts with the fonts", () => {
   const packed = JSON.parse(execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
     cwd: repo,
     encoding: "utf8",
-    shell: process.platform === "win32",
   }))[0].files.map((file) => file.path);
   const licenses = readdirSync(path.join(repo, "app", "fonts")).filter((name) => /OFL|LICENSE/.test(name));
   assert.ok(licenses.length >= 5, licenses.join(", "));

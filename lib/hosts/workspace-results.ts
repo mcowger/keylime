@@ -1,5 +1,4 @@
 import { isRecord } from "../type-guards";
-import { isWindowsAbsolutePath } from "../paths";
 import type { WorkspaceOps } from "../workspace-types";
 import { LINK_LIMITS } from "./link-protocol";
 
@@ -25,7 +24,7 @@ export function validWorkspaceResult(op: keyof WorkspaceOps, result: unknown): b
   switch (op) {
     case "home": return text(value.home);
     case "defaultCwd": return text(value.cwd);
-    case "resolveLocalFile": return text(value.path) && (value.path.startsWith("/") || isWindowsAbsolutePath(value.path));
+    case "resolveLocalFile": return text(value.path) && value.path.startsWith("/");
     case "startClone": return text(value.id);
     case "readClone": case "cancelClone": return count(value.cursor) && typeof value.reset === "boolean" && typeof value.terminal === "boolean"
       && Array.isArray(value.frames) && value.frames.length <= 8193 && value.frames.every((frame) => isRecord(frame) && (
@@ -33,8 +32,7 @@ export function validWorkspaceResult(op: keyof WorkspaceOps, result: unknown): b
           : frame.type === "done" || frame.type === "cancelled" ? text(frame.path)
             : frame.type === "error" && text(frame.error) && text(frame.code)));
     case "browseDirectories": return text(value.path) && (value.parentPath === null || text(value.parentPath))
-      && Array.isArray(value.directories) && value.directories.every((entry) => isRecord(entry) && text(entry.name) && text(entry.path))
-      && (value.drives === undefined || Array.isArray(value.drives) && value.drives.every((entry) => isRecord(entry) && text(entry.name) && text(entry.path)));
+      && Array.isArray(value.directories) && value.directories.every((entry) => isRecord(entry) && text(entry.name) && text(entry.path));
     case "gitOrigins": return Array.isArray(value.origins) && value.origins.length <= 500 && value.origins.every((entry) =>
       isRecord(entry) && typeof entry.path === "string" && entry.path.length <= 4096
       && (entry.origin === null || typeof entry.origin === "string" && entry.origin.length <= 2048) && typeof entry.mainCheckout === "boolean");

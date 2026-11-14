@@ -3,7 +3,7 @@ import { homedir } from "os";
 import { createInterface } from "readline";
 import type { Readable } from "stream";
 import { sanitizeProjectCommandEnvironment } from "../project-command-env";
-import { OMP_NOT_FOUND, resolveOmpBin, wrapWindowsScript } from "./omp-cli";
+import { OMP_NOT_FOUND, resolveOmpBin } from "./omp-cli";
 
 /**
  * Shared `omp auth-broker serve` child: omp's own credentials behind its
@@ -61,19 +61,13 @@ function getState(): AuthBrokerState {
 }
 
 function terminate(child: BrokerChild): void {
-  if (process.platform === "win32") {
-    // A .cmd launcher runs as cmd.exe, which dies alone: kill the tree. Forced, as child.kill() is there anyway
-    // (a graceful taskkill cannot stop a windowless console process).
-    if (child.pid) spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore", windowsHide: true }).once("error", () => child.kill());
-    return;
-  }
   child.kill("SIGTERM");
   const killTimer = setTimeout(() => child.kill("SIGKILL"), AUTH_BROKER_TIMINGS.killMs);
   killTimer.unref?.();
   child.once("exit", () => clearTimeout(killTimer));
 }
 
-/** Stop the broker child now (SIGTERM, then SIGKILL; its whole tree at once on Windows). Safe to call any time. */
+/** Stop the broker child now (SIGTERM, then SIGKILL). Safe to call any time. */
 export function disposeAuthBroker(): void {
   const state = globalThis.__ompAuthBrokerState;
   if (!state) return;
@@ -93,9 +87,8 @@ async function startBroker(state: AuthBrokerState, isCurrent: () => boolean): Pr
   delete env.PI_PROFILE;
   const { readyMs } = AUTH_BROKER_TIMINGS;
 
-  const tokenCommand = wrapWindowsScript(bin, ["auth-broker", "token"]);
   const tokenRun = Promise.withResolvers<string>();
-  execFile(tokenCommand.file, tokenCommand.args, { cwd: homedir(), env, timeout: readyMs, windowsHide: true }, (error, stdout) => {
+  execFile(bin, ["auth-broker", "token"], { cwd: homedir(), env, timeout: readyMs }, (error, stdout) => {
     if (error) tokenRun.reject(new AuthBrokerUnavailableError(`omp auth-broker token failed: ${error.message}`, "token_command_failed", { cause: error }));
     else tokenRun.resolve(stdout.trim());
   });
@@ -104,8 +97,7 @@ async function startBroker(state: AuthBrokerState, isCurrent: () => boolean): Pr
   // disposeAuthBroker() ran while the token command did: spawning now would leave an unowned child.
   if (!isCurrent()) throw new AuthBrokerUnavailableError("omp auth-broker was stopped while starting");
 
-  const serveCommand = wrapWindowsScript(bin, ["auth-broker", "serve", "--bind=127.0.0.1:0"]);
-  const child = spawn(serveCommand.file, serveCommand.args, { cwd: homedir(), env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+  const child = spawn(bin, ["auth-broker", "serve", "--bind=127.0.0.1:0"], { cwd: homedir(), env, stdio: ["ignore", "pipe", "pipe"] });
   state.child = child;
   child.stdout.on("error", () => {});
   let stderrTail = "";

@@ -92,14 +92,12 @@ test("an offline this-machine row says to start the service, with the server's i
   send([row({})]);
   const hint = await screen.findByText(/ompweb-host service/);
   assert.deepEqual([...hint.closest("li").querySelectorAll("code")].map((code) => code.textContent), ["ompweb launchd install", "ompweb host"]);
-  assert.match(hint.closest("li").textContent, /in a terminal or with npx/);
+  assert.match(hint.closest("li").textContent, /in a terminal or with bunx/);
   // The commands are copyable; the local row still has no Revoke.
   assert.equal(within(hint.closest("li")).queryByRole("button", { name: "Revoke" }), null);
 
   send([row({ serverPlatform: "linux" })]);
   assert.equal((await screen.findByText(/ompweb-host service/)).closest("li").querySelector("code").textContent, "ompweb systemd install");
-  send([row({ serverPlatform: "win32" })]);
-  assert.equal((await screen.findByText(/ompweb-host service/)).closest("li").querySelector("code").textContent, "ompweb-tray install");
 
   // Dev mode: offline by design, nothing to install.
   send([row({ daemonManaged: false })]);

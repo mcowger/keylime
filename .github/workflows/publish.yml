@@ -18,19 +18,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+
       - name: Verify tag matches package version
         run: |
-          VERSION="$(node -p 'require("./package.json").version')"
+          VERSION="$(bun -p 'require("./package.json").version')"
           test "$GITHUB_REF_NAME" = "v$VERSION"
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-          registry-url: https://registry.npmjs.org
-
-      - run: npm install --global npm@^11.5.1
-      - run: npm ci
+      - run: bun install --frozen-lockfile
       # The omp the runners compile against: the fork's newest integration build, not runner/omp-build.json's pin
       # (not committed back). No such release or a runner that fails tsc against it fails the release. Pinned before
       # the tests: they import the runner (lib/hosts/omp-socket.test.mjs), and must run against the omp that ships.
@@ -49,16 +44,16 @@ jobs:
           echo "OMP_TAG=$tag" >> "$GITHUB_ENV"
       # Without GH_TOKEN: bun install runs the omp packages' scripts.
       - name: Pin the runner to it
-        run: npx bun runner/scripts/use-omp-build.ts "$OMP_TAG" && (cd runner && npx bun x tsc -p .)
-      - run: npm test
-      - run: npm run build
+        run: bun runner/scripts/use-omp-build.ts "$OMP_TAG" && (cd runner && bunx --bun tsc -p .)
+      - run: bun run test
+      - run: bun run build
       # Builds the omp runners too, which the source smoke spawns from runner/release/. The archives leave them out:
       # every install fetches its runner from this release (lib/omp/runner-fetch.ts), attached below.
       - name: Build the release binaries
         run: sh scripts/build-release-binaries.sh --no-runner
-      - run: npm run smoke
+      - run: bun run smoke
       # --omp: the draft release cannot serve the runner to the binary yet.
-      - run: npm run smoke -- --binary release/ompweb-linux-x64/ompweb --omp runner/release/ompweb-omp-linux-x64
+      - run: bun run smoke --binary release/ompweb-linux-x64/ompweb --omp runner/release/ompweb-omp-linux-x64
 
       - name: Create draft GitHub Release
         env:
@@ -66,7 +61,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            node bin/generate-release-notes.js --tag "$TAG" --output release-notes.md
+            bun bin/generate-release-notes.js --tag "$TAG" --output release-notes.md
             printf '\nomp: ompweb-dev/oh-my-pi %s\n' "$OMP_TAG" >> release-notes.md
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$TAG" --notes-file release-notes.md --draft
           fi
@@ -79,9 +74,9 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          runners=(ompweb-omp-linux-x64 ompweb-omp-linux-arm64 ompweb-omp-darwin-x64 ompweb-omp-darwin-arm64 ompweb-omp-windows-x64.exe)
+          runners=(ompweb-omp-linux-x64 ompweb-omp-linux-arm64 ompweb-omp-darwin-x64 ompweb-omp-darwin-arm64)
           (cd runner/release && sha256sum "${runners[@]}" > ompweb-omp.sha256)
-          gh release upload "$TAG" release/ompweb-*.tar.gz release/ompweb-*.zip "${runners[@]/#/runner/release/}" runner/release/ompweb-omp.sha256 --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$TAG" release/ompweb-*.tar.gz "${runners[@]/#/runner/release/}" runner/release/ompweb-omp.sha256 --repo "$GITHUB_REPOSITORY" --clobber
 
       # Before npm: an npm install fetches its runner from this release, which a draft does not serve.
       - name: Publish GitHub Release
@@ -90,14 +85,17 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
 
+      # Bun does not yet generate provenance; configure NPM_TOKEN as a repository secret.
       - name: Publish to npm
+        env:
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          PACKAGE_NAME="$(node -p 'require("./package.json").name')"
-          VERSION="$(node -p 'require("./package.json").version')"
-          if npm view "$PACKAGE_NAME@$VERSION" version --registry https://registry.npmjs.org/ >/dev/null 2>&1; then
+          PACKAGE_NAME="$(bun -p 'require("./package.json").name')"
+          VERSION="$(bun -p 'require("./package.json").version')"
+          if curl -fsS "https://registry.npmjs.org/$PACKAGE_NAME/$VERSION" >/dev/null; then
             echo "$PACKAGE_NAME@$VERSION is already published"
           else
-            npm publish --provenance --access public
+            bun publish --access public
           fi
 
   notify-discord:

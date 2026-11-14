@@ -130,8 +130,8 @@ export interface NavigationShortcutEvent {
  *
  * macOS: ⌘[ / ⌘] — the Safari/Finder standard. Alt+Arrow stays free there
  * (it is word-wise caret movement while typing).
- * Windows/Linux: Alt+← / Alt+→ — the platform's back/forward pair in every
- * browser and Explorer. Ctrl+[ / Ctrl+] is accepted as an alias for the
+ * Linux: Alt+← / Alt+→ — the platform's back/forward pair in browsers
+ * and file managers. Ctrl+[ / Ctrl+] is accepted as an alias for the
  * physical gesture; on macOS Ctrl+[ is the terminal Esc and stays free.
  * The mouse back/forward buttons arrive as BrowserBack / BrowserForward on
  * every platform. Shift chords are excluded: Cmd+Shift+] switches tabs.

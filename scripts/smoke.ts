@@ -1,8 +1,8 @@
-// `npm run smoke [-- --package <dir> | --binary <path>]`: starts ompweb (`node <dir>/bin/omp-web.js`, or the compiled
+// `bun run smoke [--package <dir> | --binary <path>]`: starts ompweb (`bun <dir>/bin/omp-web.js`, or the compiled
 // binary) on a free port with a throwaway HOME, then `ompweb host` from the same install, and checks the shipped
 // bundle, the SPA, a hashed asset, the API, a session listed through the daemon, a live session started through the
 // omp runner (no model call) and the SSE stream, then stops both.
-// <dir>: the repo root (after `npm run build` and `bun runner/scripts/build-binary.ts`) or a packed install;
+// <dir>: the repo root (after `bun run build` and `bun runner/scripts/build-binary.ts`) or a packed install;
 // <path>: release/ompweb-<os>-<arch>/ompweb, whose directory holds the static files and the runner (ompweb-omp) unless
 // built --no-runner. Prints one `ok <step>` / `FAIL <step>: <detail>` line per step.
 import assert from "node:assert/strict";
@@ -15,7 +15,7 @@ import { releaseRepo } from "../lib/release-repo";
 const { values } = parseArgs({ args: Bun.argv.slice(2), options: { package: { type: "string" }, binary: { type: "string" }, omp: { type: "string" }, "second-server": { type: "boolean" } } });
 const binary = values.binary && path.resolve(values.binary);
 const dir = binary ? path.dirname(binary) : path.resolve(values.package ?? path.join(import.meta.dir, ".."));
-const ompweb = binary ? [binary] : ["node", path.join(dir, "bin", "omp-web.js")];
+const ompweb = binary ? [binary] : [process.execPath, path.join(dir, "bin", "omp-web.js")];
 
 let failed = false;
 async function step(name: string, run: () => unknown): Promise<boolean> {
@@ -79,11 +79,9 @@ writeFileSync(path.join(agentDir, "sessions", "-project", `2026-01-01_${SESSION_
   { type: "message", id: "m0", parentId: null, timestamp: "2026-01-01T00:00:01.000Z", message: { role: "user", content: "hello" } },
   { type: "message", id: "m1", parentId: "m0", timestamp: "2026-01-01T00:00:02.000Z", message: { role: "assistant", content: [{ type: "text", text: "hi" }] } },
 ].map((line) => `${JSON.stringify(line)}\n`).join(""));
-// USERPROFILE: os.homedir() on Windows, so the real ~/.omp stays untouched there too.
 const env: Record<string, string | undefined> = {
   ...process.env,
   HOME: home,
-  USERPROFILE: home,
   PI_CODING_AGENT_DIR: agentDir,
   // A smoke launched from an installed agent inherits its package root; test this install instead.
   OMP_WEB_PACKAGE_DIR: dir,
@@ -98,10 +96,7 @@ let log = "";
 let launcher: Bun.Subprocess<"ignore", "pipe", "pipe"> | undefined;
 let daemon: Bun.Subprocess<"ignore", "pipe", "pipe"> | undefined;
 let secondLauncher: Bun.Subprocess<"ignore", "pipe", "pipe"> | undefined;
-const stop = (child: Bun.Subprocess) => {
-  if (process.platform === "win32") Bun.spawnSync(["taskkill", "/pid", String(child.pid), "/t", "/f"]);
-  else child.kill("SIGTERM");
-};
+const stop = (child: Bun.Subprocess) => child.kill("SIGTERM");
 try {
   const ready = Promise.withResolvers<void>();
   const started = await step(`launcher prints Ready on port ${port}`, async () => {
@@ -279,9 +274,6 @@ try {
       }
     });
   }
-  // omp's shared brokers (daemon broker, LSP mux, embedding server) detach and outlive the session by design;
-  // on Windows they keep the throwaway HOME locked, so stop every runner process this smoke started.
-  if (process.platform === "win32") Bun.spawnSync(["taskkill", "/f", "/t", "/im", "ompweb-omp.exe"]);
   await step("temp dirs removed", () => rmSync(temp, { recursive: true, force: true, maxRetries: 20, retryDelay: 500 }));
 }
 

@@ -5,8 +5,8 @@ import { CircleAlert, MessageSquareText } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 export function projectLabel(projectPath: string): string {
-  const trimmed = projectPath.replace(/[\\/]+$/, "");
-  const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  const trimmed = projectPath.replace(/\/+$/, "");
+  const index = trimmed.lastIndexOf("/");
   return index >= 0 ? trimmed.slice(index + 1) : trimmed;
 }
 

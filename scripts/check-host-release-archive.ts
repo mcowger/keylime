@@ -1,4 +1,4 @@
-// `bun scripts/check-host-release-archive.ts release/ompweb-<os>-<arch>.tar.gz` (.zip for Windows): unpacks a built
+// `bun scripts/check-host-release-archive.ts release/ompweb-<os>-<arch>.tar.gz`: unpacks a built
 // release archive through the host updater's own checks and limits (lib/hosts/update-worker.ts), so a release the
 // updater would refuse fails the build instead.
 import { mkdtempSync, rmSync, statSync } from "node:fs";

@@ -1,7 +1,6 @@
 import { execFile, spawn } from "child_process";
-import { createHash } from "crypto";
 import { lstat, mkdir, realpath } from "fs/promises";
-import { basename, dirname, isAbsolute, join, parse, posix, resolve, win32 } from "path";
+import { basename, dirname, isAbsolute, join, parse, resolve } from "path";
 import { promisify } from "util";
 import { cloneDirectoryName, repositoryKey } from "./git-clone";
 import { cloneRepository, withProjectReservation } from "./project-clone";
@@ -18,20 +17,6 @@ const CREATION_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const PROJECT_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const preparations = new Map<string, Promise<void>>();
 const exec = promisify(execFile);
-const WINDOWS_WORKTREE_NAME_MAX = 16;
-
-/**
- * Directory and branch name of a creation's worktree, shared by the worker and the hub's check of its answer.
- * Git for Windows refuses a GIT_DIR of 220 characters or more, and a linked worktree's is
- * `<clone>\.git\worktrees\<name>`: a 128-character ID would leave only ~76 for the clone root.
- * On a Windows path a longer ID is named by a digest instead; `+` is outside the ID alphabet,
- * so a digest name can never equal a verbatim one. POSIX paths keep the ID itself.
- */
-export function sessionWorktreeName(cloneRoot: string, creationId: string): string {
-  const windows = win32.isAbsolute(cloneRoot) && !posix.isAbsolute(cloneRoot);
-  if (!windows || creationId.length <= WINDOWS_WORKTREE_NAME_MAX) return creationId;
-  return `+${createHash("sha256").update(creationId).digest("hex").slice(0, WINDOWS_WORKTREE_NAME_MAX)}`;
-}
 
 class PreparationError extends Error {
   constructor(readonly code: string, message: string, readonly status = 409) {
@@ -85,7 +70,6 @@ async function git(cwd: string, ...args: string[]): Promise<string> {
   const { stdout } = await exec("git", ["-C", cwd, ...args], {
     encoding: "utf8",
     maxBuffer: 1024 * 1024,
-    windowsHide: true,
     env: createGitEnvironment({ GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "", SSH_ASKPASS: "", GIT_ALLOW_PROTOCOL: "https:ssh" }),
   });
   return stdout.trim();
@@ -102,8 +86,7 @@ async function fetchRemoteRef(cwd: string, ref: string): Promise<void> {
   const child = spawn("git", ["-C", cwd, "fetch", "--no-tags", "origin", ref], {
     stdio: "ignore",
     env: createGitEnvironment({ GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "", SSH_ASKPASS: "", GIT_ALLOW_PROTOCOL: "https:ssh" }),
-    detached: process.platform !== "win32",
-    windowsHide: true,
+    detached: true,
   });
   child.on("error", () => reject(new PreparationError("pool_fetch_failed", "Could not run git fetch", 500)));
   child.on("close", (code) => {
@@ -117,7 +100,7 @@ async function fetchRemoteRef(cwd: string, ref: string): Promise<void> {
 async function directoryExists(path: string): Promise<boolean> {
   const root = parse(path).root;
   let current = root;
-  for (const component of path.slice(root.length).split(/[\\/]/).filter(Boolean)) {
+  for (const component of path.slice(root.length).split("/").filter(Boolean)) {
     current = join(current, component);
     let stat;
     try {
@@ -143,7 +126,7 @@ async function prepare(input: {
   const { cloneRoot, origin, creationId, projectId, ref } = input;
   const parent = dirname(cloneRoot);
   const sessionRoot = join(parent, `.${basename(cloneRoot)}_worktrees`, "session");
-  const name = sessionWorktreeName(cloneRoot, creationId);
+  const name = creationId;
   const cwd = join(sessionRoot, name);
   const branch = `session/${name}`;
   const metadataKey = `branch.${branch}.ompwebPoolProject`;

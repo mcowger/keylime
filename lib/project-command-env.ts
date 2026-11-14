@@ -14,7 +14,7 @@
  *    must keep reaching it.
  */
 
-/** Exact names that never reach a child process (compared case-insensitively on Windows). */
+/** Exact names that never reach a child process. */
 const HOST_RUNTIME_NAMES: readonly string[] = ["PORT", "NODE_ENV"];
 
 /**
@@ -35,32 +35,23 @@ export const OMP_WEB_SECRET_ENV_VARS: readonly string[] = [
   "OMP_WEB_STT_KEY",
 ];
 
-function comparableName(name: string, platform: NodeJS.Platform): string {
-  return platform === "win32" ? name.toUpperCase() : name;
-}
-
-function matches(name: string, candidates: readonly string[], platform: NodeJS.Platform): boolean {
-  const comparable = comparableName(name, platform);
-  return candidates.some((candidate) => comparable === comparableName(candidate, platform));
-}
 
 /** True when the variable belongs to the omp-web host rather than the child. */
-export function isHostRuntimeVariable(name: string, platform: NodeJS.Platform = process.platform): boolean {
-  return matches(name, HOST_RUNTIME_NAMES, platform);
+export function isHostRuntimeVariable(name: string): boolean {
+  return HOST_RUNTIME_NAMES.includes(name);
 }
 
 /** True when the variable is one of omp-web's secrets. */
-export function isOmpWebSecretVariable(name: string, platform: NodeJS.Platform = process.platform): boolean {
-  return matches(name, OMP_WEB_SECRET_ENV_VARS, platform);
+export function isOmpWebSecretVariable(name: string): boolean {
+  return OMP_WEB_SECRET_ENV_VARS.includes(name);
 }
 
 export function sanitizeProjectCommandEnvironment(
   baseEnvironment: NodeJS.ProcessEnv,
-  platform: NodeJS.Platform = process.platform,
 ): NodeJS.ProcessEnv {
   const environment = { ...baseEnvironment };
   for (const name of Object.keys(environment)) {
-    if (isHostRuntimeVariable(name, platform) || isOmpWebSecretVariable(name, platform)) {
+    if (isHostRuntimeVariable(name) || isOmpWebSecretVariable(name)) {
       delete environment[name];
     }
   }
@@ -80,9 +71,8 @@ export function sanitizeProjectCommandEnvironment(
 export function createChildProcessEnvironment(
   additions: Readonly<Record<string, string | undefined>> = {},
   baseEnvironment: NodeJS.ProcessEnv = process.env,
-  platform: NodeJS.Platform = process.platform,
 ): NodeJS.ProcessEnv {
-  return sanitizeProjectCommandEnvironment({ ...baseEnvironment, ...additions }, platform);
+  return sanitizeProjectCommandEnvironment({ ...baseEnvironment, ...additions });
 }
 
 /**
@@ -103,11 +93,10 @@ const GIT_CONFIG_ENTRY = /^GIT_CONFIG_(KEY|VALUE)_\d+$/i;
 export function createGitEnvironment(
   additions: Readonly<Record<string, string | undefined>> = {},
   baseEnvironment: NodeJS.ProcessEnv = process.env,
-  platform: NodeJS.Platform = process.platform,
 ): NodeJS.ProcessEnv {
-  const environment = createChildProcessEnvironment(additions, baseEnvironment, platform);
+  const environment = createChildProcessEnvironment(additions, baseEnvironment);
   for (const name of Object.keys(environment)) {
-    if (matches(name, GIT_REPOSITORY_NAMES, platform) || GIT_CONFIG_ENTRY.test(name)) delete environment[name];
+    if (GIT_REPOSITORY_NAMES.includes(name) || GIT_CONFIG_ENTRY.test(name)) delete environment[name];
   }
   return environment;
 }

@@ -28,10 +28,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.4.4
+      - name: Setup mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
 
       - name: Fetch the pinned omp packages
         run: bun scripts/use-omp-build.ts
@@ -57,7 +55,6 @@ jobs:
           - { target: linux-arm64, os: linux, cpu: arm64, binary: ompweb-omp-linux-arm64 }
           - { target: darwin-x64, os: darwin, cpu: x64, binary: ompweb-omp-darwin-x64 }
           - { target: darwin-arm64, os: darwin, cpu: arm64, binary: ompweb-omp-darwin-arm64 }
-          - { target: windows-x64, os: win32, cpu: x64, binary: ompweb-omp-windows-x64.exe }
     defaults:
       run:
         working-directory: runner
@@ -66,10 +63,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.4.4
+      - name: Setup mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
 
       - name: Fetch the pinned omp packages
         run: bun scripts/use-omp-build.ts

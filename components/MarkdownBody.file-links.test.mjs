@@ -15,15 +15,15 @@ function renderChat(markdown, opened = []) {
 test("an inline-code path opens the cleaned path in the file panel", () => {
   const opened = [];
   const { container } = renderChat(
-    "Shot: `/var/tmp/omp-sshots-1.webp`, see `src/app.ts:12`, `~/notes/a.md`, `C:\\Users\\me\\b.txt:3:4`.",
+    "Shot: `/var/tmp/omp-sshots-1.webp`, see `src/app.ts:12`, `~/notes/a.md`.",
     opened,
   );
   const links = [...container.querySelectorAll("a")];
 
-  assert.deepEqual(links.map((a) => a.textContent), ["/var/tmp/omp-sshots-1.webp", "src/app.ts:12", "~/notes/a.md", "C:\\Users\\me\\b.txt:3:4"]);
+  assert.deepEqual(links.map((a) => a.textContent), ["/var/tmp/omp-sshots-1.webp", "src/app.ts:12", "~/notes/a.md"]);
   assert.ok(links.every((a) => a.firstElementChild?.tagName === "CODE" && !a.hasAttribute("target")));
   for (const link of links) assert.equal(fireEvent.click(link, { button: 0 }), false, "click default must be prevented");
-  assert.deepEqual(opened, ["/var/tmp/omp-sshots-1.webp", "/home/me/project/src/app.ts", "~/notes/a.md", "C:/Users/me/b.txt"]);
+  assert.deepEqual(opened, ["/var/tmp/omp-sshots-1.webp", "/home/me/project/src/app.ts", "~/notes/a.md"]);
 });
 
 test("ordinary code, scheme handles, fenced blocks and escaping paths stay unlinked", () => {
@@ -52,25 +52,24 @@ test("inline-code paths stay code outside a file-opening view and inside existin
   assert.equal(links[0].getAttribute("href"), "https://x.test");
 });
 
-test("an Attached files line opens its upload, POSIX or Windows, whatever the name holds", () => {
+test("an Attached files line opens its upload whatever the name holds", () => {
   const opened = [];
   const { container } = renderChat(
     [
       "Attached files (this session's local:// directory):",
       "- [`local://uploads/a (1) #2 &amp; 50%.txt`](/home/u/s/local/uploads/a%20%281%29%20%232%20%26amp;%2050%25.txt) (/home/u/s/local/uploads/a (1) #2 &amp; 50%.txt, 10 B, text/plain)",
-      "- [`local://uploads/[z] b.bin`](d:%5CUsers%5Cme%5C.omp%5Cs%5Clocal%5Cuploads%5C%5Bz%5D%20b.bin) (d:\\Users\\me\\.omp\\s\\local\\uploads\\[z] b.bin, 1 B, application/octet-stream)",
     ].join("\n"),
     opened,
   );
   const links = [...container.querySelectorAll("a")];
-  assert.deepEqual(links.map((a) => a.textContent), ["local://uploads/a (1) #2 &amp; 50%.txt", "local://uploads/[z] b.bin"]);
+  assert.deepEqual(links.map((a) => a.textContent), ["local://uploads/a (1) #2 &amp; 50%.txt"]);
   for (const link of links) assert.equal(fireEvent.click(link, { button: 0 }), false, "click default must be prevented");
   assert.equal(fireEvent.click(links[0], { button: 0, ctrlKey: true }), false, "a modified click opens the file too");
   for (const link of links) {
     const middleClick = new MouseEvent("auxclick", { button: 1, bubbles: true, cancelable: true });
     assert.equal(fireEvent(link, middleClick), false, "middle-click must not navigate to the filesystem href");
   }
-  assert.deepEqual(opened, ["/home/u/s/local/uploads/a (1) #2 &amp; 50%.txt", "d:/Users/me/.omp/s/local/uploads/[z] b.bin", "/home/u/s/local/uploads/a (1) #2 &amp; 50%.txt"]);
+  assert.deepEqual(opened, ["/home/u/s/local/uploads/a (1) #2 &amp; 50%.txt", "/home/u/s/local/uploads/a (1) #2 &amp; 50%.txt"]);
 });
 
 test("without a file panel (a remote host's session) a path link renders as its text, not an app URL", () => {

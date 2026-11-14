@@ -6,6 +6,12 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ## [Unreleased]
 
+### Breaking changes
+
+- Bun is the sole runtime and package manager. Node/npm launchers are retired; install Bun and use `bun install`, `bun run` and `bunx --bun`. Native compiled distributions remain supported.
+- Runtime management uses mise with a pinned Bun version. Nix packaging and installation support are removed.
+- Windows support is removed, including services, tray, installers, binaries and Windows-specific path handling. This hard fork supports macOS and Linux only; no compatibility or migration is provided.
+
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

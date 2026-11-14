@@ -11,7 +11,6 @@ import {
   getFileDirectory,
   getFileName,
   getRelativeFilePath,
-  normalizeFilePathSlashes,
 } from "@/lib/file-paths";
 import type { GitCollapseReason, GitFileDiffResponse, GitFileStatus, GitStatusResponse } from "@/lib/git-types";
 
@@ -145,7 +144,7 @@ export function GitChangesPanel({ cwd, hostId, sourceSessionId, refreshKey, onOp
   const [primaryFiles, attributeFiles] = useMemo(() => {
     const q = filter.trim().toLowerCase();
     const matching = q
-      ? files.filter((f) => normalizeFilePathSlashes(getRelativeFilePath(f.filePath, cwd)).toLowerCase().includes(q))
+      ? files.filter((f) => getRelativeFilePath(f.filePath, cwd).toLowerCase().includes(q))
       : files;
     return [matching.filter((f) => !f.collapseReason), matching.filter((f) => f.collapseReason)];
   }, [files, filter, cwd]);

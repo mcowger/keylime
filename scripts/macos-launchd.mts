@@ -1,15 +1,15 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Install ompweb as a macOS launchd user agent (starts at login, restarts on crash).
 //
-// Usage (installed as the `ompweb-launchd` bin, or run via npx / node directly):
+// Usage (installed as the `ompweb-launchd` bin, or run via bunx / bun directly):
 //   ompweb-launchd [install [package-spec]|uninstall|status]
-//   npx -p @kahme247/ompweb@latest ompweb-launchd install
+//   bunx --package @kahme247/ompweb@latest ompweb-launchd install
 //
-// The positional package-spec picks what the service runs via `npx --yes`
+// The positional package-spec picks what the service runs via `bunx --bun`
 // (default @kahme247/ompweb@latest; env OMP_WEB_PKG is an equivalent override).
 //
 // Configuration (read at install time, baked into the plist):
-//   OMP_WEB_PKG          npm package spec run via npx               default @kahme247/ompweb@latest
+//   OMP_WEB_PKG          package spec run via bunx                  default @kahme247/ompweb@latest
 //   PORT                 Server port                                default 30177
 //   OMP_WEB_HOSTNAME     Server bind host                           default 127.0.0.1
 //   OMP_WEB_PASSWORD     Optional plaintext password, hashed before it is written
@@ -74,14 +74,8 @@ function launchctl(args: string[], { ignoreFailure = false } = {}): string {
 }
 
 function install(pkgArg?: string): void {
-  // Resolve absolute paths now: launchd agents run with a minimal PATH
-  // (/usr/bin:/bin:/usr/sbin:/sbin), so nothing from nvm/asdf/homebrew is visible.
-  // Prefer the npx sitting next to the real node binary over the PATH hit:
-  // version-manager shims (asdf/nvm) re-invoke their manager by name and can
-  // fail under launchd's minimal environment.
-  const nodeBin = process.execPath;
-  const siblingNpx = path.join(path.dirname(nodeBin), "npx");
-  const npxBin = isExecutableFile(siblingNpx) ? siblingNpx : (which("npx") ?? fail("npx not found on PATH"));
+  // Launchd uses a minimal PATH, so record the absolute Bun executable.
+  const bunBin = process.execPath;
 
   // Only an explicit override: ompweb runs its own omp (ompweb-omp). A stock omp on PATH cannot run its sessions.
   const ompBin = process.env.OMP_WEB_OMP_BIN || null;
@@ -104,15 +98,12 @@ function install(pkgArg?: string): void {
   // launchd does not expand `~` in environment values — resolve it now.
   const agentDir = process.env.PI_CODING_AGENT_DIR?.replace(/^~(?=\/|$)/, HOME);
 
-  // Give the service a PATH covering npx/node, omp, and system tools (`open`
-  // for the browser). asdf/nvm shims re-invoke their manager by name, so the
-  // manager's own directory must be reachable too when present.
+  // Include Bun, omp, and system tools in the service PATH.
   const asdfBin = which("asdf");
   const svcPath = [
     ...(ompBin ? [path.dirname(ompBin)] : []),
     ...(asdfBin ? [path.dirname(asdfBin)] : []),
-    path.dirname(npxBin),
-    path.dirname(nodeBin),
+    path.dirname(bunBin),
     "/usr/bin",
     "/bin",
     "/usr/sbin",
@@ -140,8 +131,9 @@ function install(pkgArg?: string): void {
   <key>Label</key><string>${LABEL}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${xmlEscape(npxBin)}</string>
-    <string>--yes</string>
+    <string>${xmlEscape(bunBin)}</string>
+    <string>x</string>
+    <string>--bun</string>
     <string>${xmlEscape(pkg)}</string>
   </array>
   <key>EnvironmentVariables</key>
@@ -168,10 +160,10 @@ ${envXml}
   launchctl(["bootstrap", DOMAIN, PLIST]);
 
   console.log(`installed: ${PLIST}`);
-  console.log(`package:   ${pkg} (via npx --yes)`);
+  console.log(`package:   ${pkg} (via bunx --bun)`);
   console.log(`url:       http://${hostname}:${port}`);
   console.log(`logs:      ${path.join(LOG_DIR, "ompweb.log")}`);
-  if (password) console.log("note:      password is stored in plain text in the plist (mode 600)");
+  if (passwordHash) console.log("note:      the password hash is stored in the plist (mode 600)");
 }
 
 function uninstall(): void {

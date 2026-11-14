@@ -1,6 +1,6 @@
 name: Binary prerelease
 
-# Every commit on main that passed Verify PR becomes a GitHub prerelease carrying the five single binaries,
+# Every commit on main that passed Verify PR becomes a GitHub prerelease carrying the four single binaries,
 # titled with the time it was created (2026-11-01T10:30:00Z), tag 20261101T103000Z-<short sha> (git tags
 # cannot hold ":"; the sha keeps parallel runs apart). Prereleases are never "latest", so the in-app update
 # notice and `v*` releases are unaffected.
@@ -30,16 +30,13 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ env.SHA }}
-          # npm ci runs dependency install scripts: keep the write token out of .git/config (gh reads GH_TOKEN).
+          # Dependency install scripts must not see the write token in .git/config.
           persist-credentials: false
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version-file: .nvmrc
-          cache: npm
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
 
-      - run: npm ci
-      - run: npm run build
+      - run: bun install --frozen-lockfile
+      - run: bun run build
       # The omp the runners compile against: the fork's newest integration build, not runner/omp-build.json's pin
       # (not committed back). No such release or a runner that fails tsc against it fails the release.
       - name: Find the newest omp integration build
@@ -57,10 +54,10 @@ jobs:
           echo "OMP_TAG=$tag" >> "$GITHUB_ENV"
       # Without GH_TOKEN: bun install runs the omp packages' scripts.
       - name: Pin the runner to it
-        run: npx bun runner/scripts/use-omp-build.ts "$OMP_TAG" && (cd runner && npx bun x tsc -p .)
+        run: bun runner/scripts/use-omp-build.ts "$OMP_TAG" && (cd runner && bunx --bun tsc -p .)
       - name: Build the release binaries
         run: sh scripts/build-release-binaries.sh
-      - run: npm run smoke -- --binary release/ompweb-linux-x64/ompweb
+      - run: bun run smoke --binary release/ompweb-linux-x64/ompweb
 
       - name: Publish the prerelease
         env:
@@ -71,7 +68,7 @@ jobs:
           tag=$(date -u -d "@$now" +%Y%m%dT%H%M%SZ)-$(git rev-parse --short=10 "$SHA")
           subject=$(git log -1 --format=%s "$SHA")
           # A draft first, so a failed upload never leaves a published prerelease missing archives.
-          gh release create "$tag" release/ompweb-*.tar.gz release/ompweb-*.zip \
+          gh release create "$tag" release/ompweb-*.tar.gz \
             --repo "$GITHUB_REPOSITORY" --target "$SHA" --draft --prerelease --title "$title" \
             --notes "Binaries built from $GITHUB_REPOSITORY@$SHA ($subject), omp: ompweb-dev/oh-my-pi $OMP_TAG. Not a release: no npm package, no update notice."
           gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false

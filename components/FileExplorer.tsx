@@ -25,7 +25,6 @@ import {
   getFileDirectory,
   getRelativeFilePath,
   joinFilePath,
-  normalizeFilePathSlashes,
 } from "@/lib/file-paths";
 import type { GitFileStatus, GitFileStatusKind, GitStatusResponse } from "@/lib/git-types";
 import { MAX_RESULT_LIMIT, type FileIndexEntry } from "@/lib/file-fuzzy";
@@ -280,7 +279,7 @@ const ExplorerRow = memo(function ExplorerRow({
   }
 
   const { node, secondaryLabel } = row;
-  const normalizedPath = normalizeFilePathSlashes(node.fullPath);
+  const normalizedPath = node.fullPath;
   const gitStatus = gitStatusByPath.get(normalizedPath);
   const containsGitChanges = node.isDir && (
     gitStatus !== undefined || changedDirectoryPaths.has(normalizedPath)
@@ -698,7 +697,7 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
   const focusedIndexRef = useRef(0);
   focusedIndexRef.current = focusedIndex;
 
-  const normalizedActiveFilePath = activeFilePath ? normalizeFilePathSlashes(activeFilePath) : null;
+  const normalizedActiveFilePath = activeFilePath;
   const totalListHeight = rows.length * rowHeight;
   const windowStart = Math.max(0, Math.floor(scrollTop / rowHeight) - OVERSCAN_ROWS);
   const windowEnd = Math.min(
@@ -707,14 +706,14 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
   );
 
   const gitStatusByPath = useMemo(() => new Map(
-    gitFiles.map((status) => [normalizeFilePathSlashes(status.filePath), status]),
+    gitFiles.map((status) => [status.filePath, status]),
   ), [gitFiles]);
 
   const changedDirectoryPaths = useMemo(() => {
     const directories = new Set<string>();
-    const normalizedCwd = normalizeFilePathSlashes(cwd).replace(/\/$/, "");
+    const normalizedCwd = cwd.replace(/\/$/, "");
     for (const status of gitFiles) {
-      let directory = getFileDirectory(normalizeFilePathSlashes(status.filePath));
+      let directory = getFileDirectory(status.filePath);
       while (directory === normalizedCwd || directory.startsWith(`${normalizedCwd}/`)) {
         directories.add(directory);
         if (directory === normalizedCwd) break;
@@ -1102,8 +1101,8 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
   // loaded but the target still isn't listed.
   useEffect(() => {
     if (!revealPath) return;
-    const normalizedCwd = normalizeFilePathSlashes(cwd).replace(/\/$/, "");
-    const normalizedTarget = normalizeFilePathSlashes(revealPath);
+    const normalizedCwd = cwd.replace(/\/$/, "");
+    const normalizedTarget = revealPath;
     if (normalizedTarget !== normalizedCwd && !normalizedTarget.startsWith(`${normalizedCwd}/`)) {
       onRevealDone?.();
       return;
@@ -1132,7 +1131,7 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
       return new Set(prev).add(revealPath);
     });
     const targetIndex = rows.findIndex(
-      (row) => row.kind === "node" && normalizeFilePathSlashes(row.node.fullPath) === normalizedTarget,
+      (row) => row.kind === "node" && row.node.fullPath === normalizedTarget,
     );
     if (targetIndex >= 0) {
       goToRow(targetIndex);
@@ -1209,7 +1208,7 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
                 open={node.isDir && !node.outsideRoot && expandedPaths.has(node.fullPath)}
                 loading={loadingPaths.has(node.fullPath)}
                 highlighted={highlightedPaths.has(node.fullPath)}
-                isActiveFile={!node.isDir && normalizedActiveFilePath === normalizeFilePathSlashes(node.fullPath)}
+                isActiveFile={!node.isDir && normalizedActiveFilePath === node.fullPath}
                 focused={index === focusedIndex}
                 gitStatusByPath={gitStatusByPath}
                 changedDirectoryPaths={changedDirectoryPaths}

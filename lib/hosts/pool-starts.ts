@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, isAbsolute, join, normalize } from "node:path";
 import { getAgentDir } from "../omp/paths";
 import { RpcCommandError } from "../omp/rpc-process";
-import { sessionWorktreeName, type PreparedPoolProject } from "../pooled-projects";
+import type { PreparedPoolProject } from "../pooled-projects";
 import { isValidSessionId } from "../session-file-references-core";
 import { isRecord } from "../type-guards";
 import type { ProjectLaunchConfig } from "../types";
@@ -11,7 +11,7 @@ import { sharesCredentials } from "./cluster";
 import type { Host } from "./host";
 import { adoptedChild, getHost, getHostCapacity, getHostLinkProtocol, hostOwnsLifecycle, isHostConfigCurrent, reconcilePooledChild } from "./hub";
 import { CREATION_ID_RE, HostOpError, type HelloChannel } from "./link-protocol";
-import { loadPools, pathApi, selectPoolHost, type PoolHostSnapshot } from "./pools";
+import { loadPools, selectPoolHost, type PoolHostSnapshot } from "./pools";
 
 export interface PoolCreateInput {
   creationId: string;
@@ -89,10 +89,9 @@ function canonical(value: unknown): string {
   throw new PoolStartError(400, "invalid_creation_intent", "Creation intent must contain only JSON values");
 }
 function fingerprint(value: unknown): string { return createHash("sha256").update("ompweb:pool-creation:v1:").update(canonical(value)).digest("hex"); }
-function absolute(path: unknown): path is string { return typeof path === "string" && !path.includes("\0") && pathApi(path).isAbsolute(path) && pathApi(path).normalize(path) === path; }
+function absolute(path: unknown): path is string { return typeof path === "string" && !path.includes("\0") && isAbsolute(path) && normalize(path) === path; }
 function creationCwd(cloneRoot: string, creationId: string): string {
-  const path = pathApi(cloneRoot);
-  return path.join(path.dirname(cloneRoot), `.${path.basename(cloneRoot)}_worktrees`, "session", sessionWorktreeName(cloneRoot, creationId));
+  return join(dirname(cloneRoot), `.${basename(cloneRoot)}_worktrees`, "session", creationId);
 }
 
 function readJournal(): Journal {
@@ -139,11 +138,8 @@ function writeJournal(journal: Journal): void {
     fsyncSync(fd);
     closeSync(fd); fd = undefined;
     renameSync(temporary, file);
-    // Windows cannot open directories for fsync; the synced file is already committed by rename.
-    if (process.platform !== "win32") {
-      fd = openSync(dirname(file), "r");
-      fsyncSync(fd);
-    }
+    fd = openSync(dirname(file), "r");
+    fsyncSync(fd);
   } catch { throw unavailable(); }
   finally {
     if (fd !== undefined) closeSync(fd);
@@ -340,7 +336,7 @@ export function startPooledSession(input: PoolCreateInput, start: Start, authori
         throw new PoolStartError(503, "pool_unavailable", eligibleOnceCurrent ? "The pool's workers are still receiving the cluster's configuration" : "No pool worker currently has eligible capacity");
       }
       const member = pool.members.find((candidate) => candidate.hostId === hostId)!;
-      const cloneRoot = project.clonePaths[hostId] ?? pathApi(member.projectsRoot).join(member.projectsRoot, project.id);
+      const cloneRoot = project.clonePaths[hostId] ?? join(member.projectsRoot, project.id);
       const ref = input.ref ?? project.defaultRef;
       entry = { creationId: input.creationId, poolId: pool.id, projectId: project.id, requestFingerprint,
         fingerprint: fingerprint({ creationId: input.creationId, poolId: pool.id, projectId: project.id, hostId, requestFingerprint, origin: project.origin, cloneRoot, ref: ref ?? null, launchConfig: project.launchConfig ?? null }),

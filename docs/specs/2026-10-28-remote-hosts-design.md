@@ -146,14 +146,14 @@ an explicit update-support error instead of running anything on the web server.
 The helper keeps the newest rollback backup and its identifying metadata, pruning
 older backups, failed/staging releases and copied runtimes after completion or at
 the next claim. Only owned paths proven by that installation's update descriptor
-are eligible. Windows-locked files are retried at the next update.
+are eligible.
 
 If the host and web server share an installation, the host cannot replace it
 under the running web app. Update the web server first; once the exact candidate
 is already on disk, the host can perform a restart-only update. That operation
 does not reinstall the package or promise rollback to the old loaded runtime.
 Source checkouts, unsafe/linked layouts and unknown service identities show a
-manual-update reason. Script-supervised macOS and Windows hosts are blocked
+manual-update reason. Script-supervised macOS hosts are blocked
 instead of attempting a competing daemon. External restart loops must be stopped
 before a foreground update; an inline shell loop cannot reliably be distinguished
 from an interactive shell.
@@ -163,7 +163,7 @@ between the stop and a healthy acknowledgement leaves the host offline and the
 installation either the old release or the candidate (with `.ompweb-backup-<id>`
 beside it); recovery is manual, as the README describes. Automatic recovery
 would need a supervisor that outlives the helper on every platform; there is
-none on unmanaged macOS and Windows hosts, so none was added.
+none on unmanaged macOS hosts, so none was added.
 
 ### Routing
 

@@ -1,14 +1,11 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 "use strict";
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-require("./node-version").exitIfUnsupportedNode();
 
 // Install ompweb as a macOS launchd user agent (starts at login, restarts on crash).
 //
-// Usage (installed as the `ompweb-launchd` bin, or run via npx / node directly):
+// Usage (installed as the `ompweb-launchd` bin, or run via bunx / bun directly):
 //   ompweb-launchd [install [package-spec]|uninstall|status]
-//   npx -p @kahme247/ompweb@latest ompweb-launchd install
+//   bunx --package @kahme247/ompweb@latest ompweb-launchd install
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { spawnSync } = require("node:child_process");
@@ -103,9 +100,7 @@ function buildHostEnv({ svcPath, ompBin, agentDir }) {
 }
 
 function install(pkgArg) {
-  const nodeBin = process.execPath;
-  const siblingNpx = path.join(path.dirname(nodeBin), "npx");
-  const npxBin = isExecutableFile(siblingNpx) ? siblingNpx : (which("npx") ?? fail("npx not found on PATH"));
+  const bunBin = process.execPath;
 
   // Only an explicit override: ompweb runs its own omp (ompweb-omp). A stock omp on PATH cannot run its sessions.
   const ompBin = process.env.OMP_WEB_OMP_BIN || null;
@@ -138,8 +133,7 @@ function install(pkgArg) {
   const svcPath = [
     ...(ompBin ? [path.dirname(ompBin)] : []),
     ...(asdfBin ? [path.dirname(asdfBin)] : []),
-    path.dirname(npxBin),
-    path.dirname(nodeBin),
+    path.dirname(bunBin),
     "/usr/bin",
     "/bin",
     "/usr/sbin",
@@ -158,10 +152,10 @@ function install(pkgArg) {
     ...(ompBin ? { OMP_WEB_OMP_BIN: ompBin } : {}),
     ...(agentDir ? { PI_CODING_AGENT_DIR: agentDir } : {}),
   };
-  const web = buildPlist({ label: LABEL, args: [npxBin, "--yes", pkg], env, logName: "ompweb" });
+  const web = buildPlist({ label: LABEL, args: [bunBin, "x", "--bun", pkg], env, logName: "ompweb" });
   const host = buildPlist({
     label: HOST_LABEL,
-    args: [npxBin, "--yes", pkg, "host"],
+    args: [bunBin, "x", "--bun", pkg, "host"],
     env: buildHostEnv({ svcPath, ompBin, agentDir }),
     logName: "ompweb-host",
     // host.json does not exist until the web server first starts; the daemon exits until then.
@@ -182,7 +176,7 @@ function install(pkgArg) {
 
   console.log(`installed: ${PLIST}`);
   console.log(`installed: ${HOST_PLIST}`);
-  console.log(`package:   ${pkg} (via npx --yes)`);
+  console.log(`package:   ${pkg} (via bunx --bun)`);
   console.log(`url:       http://${hostname}:${port}`);
   console.log(`logs:      ${path.join(LOG_DIR, "ompweb.log")}, ${path.join(LOG_DIR, "ompweb-host.log")}`);
   if (passwordHash) console.log("note:      the password hash is stored in the plist (mode 600)");

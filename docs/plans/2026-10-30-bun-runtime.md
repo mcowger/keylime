@@ -18,7 +18,7 @@
 - `node_modules` in this worktree is a symlink to another worktree's (`../local-daemon/node_modules`). Task 1 replaces it with a real `npm ci` (`rm node_modules` removes only the link). Never install through the symlink.
 - Ports: verification uses port 0 or 30300–30399. Never use 30177–30195. Never start, stop or restart a systemd/launchd/tray service. Never touch the real `~/.omp`: servers started for checks get `HOME`, `PI_CODING_AGENT_DIR` (temp dirs) and `OMP_WEB_OMP_BIN=/nonexistent/omp`, as `spike/env.sh` does.
 - **Bun built-ins first (user rule):** whenever a dependency or Node-specific pattern is a problem or a cost under Bun, first check Bun's built-in alternatives (`Bun.*` APIs, `bun:*` modules, Bun.serve/bundler/test features) and use one if it fits. Only after that, assess whether keeping the Node dependency is viable. Do not churn working code just to use a Bun API. The decisions already made are in "Bun built-ins check" below; a new case gets a row there in the same commit.
-- Modules loaded by the Node-run daemon and tray (`lib/hosts/**` and what they import, `lib/windows-service.ts`, `bin/*.js`) never use `Bun.*` or `bun:*`. They keep loading through `jiti`.
+- Modules loaded by the daemon and tray (`lib/hosts/**` and what they import, `bin/*.js`) keep loading through `jiti`.
 - Server runtime code resolves files from `const root = process.env.OMP_WEB_PACKAGE_DIR ?? process.cwd()`, never from `import.meta.dir`/`__dirname` (spec R11). Build scripts and tests may use `import.meta.dir`.
 - Client code never uses `AbortSignal.timeout/any` or `Promise.withResolvers`. Every new UI string exists in all `lib/i18n/locales/*.json` (this plan adds none).
 - No feature or behavior change: spec invariants 1–10 are the contract. No new `eslint-disable` comments.
@@ -30,7 +30,6 @@
 1. **SSE and host link through an idle gap longer than Bun's 10 s default:** `/api/events` stays open and keeps delivering (Task 5 `server/app.test.ts` idle test, Task 8 smoke step).
 2. **Sign-in over the new server:** with a password set, `/?session=x` → 307 `/login?next=%2F%3Fsession%3Dx`. The login page's `/assets/*` load without a cookie and `/api/hosts/link` answers its own 401 (Task 5 `lib/web-auth.test.mjs` + `server/app.test.ts`). No code sets an `x-middleware-*` header any more, so the final review dropped that never-firing assertion.
 3. **Static path traversal:** `/..%2Fpackage.json`, `/%2e%2e/package.json`, `/assets/..%5C..%5Cpackage.json` and a NUL byte all answer 404 and never a file outside `dist/`, `public/` or the KaTeX dir (Task 5 `server/http.test.ts`).
-4. **Windows in-app update:** no process runs from the package's `bun.exe` while `npm install -g` replaces it. The update worker command is `OMP_WEB_NODE_BIN`, and the worker stops the server first (Task 7 `lib/self-update.test.mjs`).
 5. **Installs where Bun's postinstall did not run** (`--ignore-scripts`, `bun add -g` without trusted deps, npm blocking scripts): the launcher uses the `@oven/bun-<os>-<arch>` binary (Task 1 `bin/bun-runtime.test.mjs`, Task 8 packed smoke).
 
 ## Inventory (completeness checks; counts at `ae868dc1`)
@@ -46,7 +45,7 @@
 | `.cookies` | 2 | `app/api/web-auth/session/route.ts` (response), `proxy.ts` (request) | 5 |
 | Other `next*` imports | 10 files | type `next` (`app/layout.tsx`, `app/api/manifest/route.ts`, `next.config.ts`); `next/constants`, `next/dist/.../path-match` (`lib/security-headers.test.mjs`); `next/experimental/testing/server.js` (`lib/web-auth.test.mjs`); `next/dynamic` (`AppShell`, `CommandPaletteMount`, `SettingsConfig`: 9 call sites); `next/navigation` (`AppShell`); `next/font/google`, `next/script` (`layout.tsx`); `next/headers` (`layout.tsx`, `page.tsx`) | 3–5 |
 | Route files / `export const dynamic` / `runtime` | 70 / 38 / 2 | `runtime`: `sessions/[id]/export`, `sessions/archive` | 5 |
-| `.next` / `next` CLI in code and config | — | `bin/omp-web.js` (`nextDir`, `resolveNextBin`, `nextArgs`, `main` check); `bin/omp-web-security.test.mjs:22-26`; `package.json` (`files`: 8 `.next` entries + `next.config.ts`; scripts: 5 `next` commands); `tsconfig.json` (plugin + 3 `.next` includes + `next-env.d.ts`); `.gitignore` (`/.next/`, `/.next-dev*.log` ×2, `next-env.d.ts`); `scripts/windows/omp-web-service.ps1:33,131`; `scripts/windows/omp-web-tray.ps1:79-80,249`; `nix/package.nix` (fonts patch, fileset); comments in `lib/directory-browser.ts:62`, `lib/rpc-manager.test.mjs:1524`. **Keep:** the `".next"` entries in the ignore lists of `app/api/file-index/route.ts:21` and `app/api/files/[...path]/route.ts:28`, and `lib/worktree.ts:109` (they are about user projects) | 5, 7, 8 |
+| `.next` / `next` CLI in code and config | — | `bin/omp-web.js` (`nextDir`, `resolveNextBin`, `nextArgs`, `main` check); `bin/omp-web-security.test.mjs:22-26`; `package.json` (`files`: 8 `.next` entries + `next.config.ts`; scripts: 5 `next` commands); `tsconfig.json` (plugin + 3 `.next` includes + `next-env.d.ts`); `.gitignore` (`/.next/`, `/.next-dev*.log` ×2, `next-env.d.ts`); `nix/package.nix` (fonts patch, fileset); comments in `lib/directory-browser.ts:62`, `lib/rpc-manager.test.mjs:1524`. **Keep:** the `".next"` entries in the ignore lists of `app/api/file-index/route.ts:21` and `app/api/files/[...path]/route.ts:28`, and `lib/worktree.ts:109` (they are about user projects) | 5, 7, 8 |
 | jiti | 121 test files + 2 bins | 120 `createJiti`; 18 with `alias` (17 only `"@/"`; 1 real mock: toast stub in `hooks/useAgentSession.rpc.test.mjs`); 6 `moduleCache: false`; 7 call-style `jiti(…)`. **Kept:** `bin/omp-web-host.js`, `bin/omp-web-tray.js` (Node) | 2 |
 | `--experimental-strip-types` / `syncBuiltinESMExports` | 3 / 3 | `package.json`, `lib/draft-store.test.mjs`, `lib/github-repo.test.mjs` / `lib/rpc-manager.test.mjs`, `lib/session-reader.test.mjs`, `lib/session-routes.test.mjs` | 2 |
 | Tests importing `app/api` modules | 16 | 14 through jiti; `lib/api-contract.test.mjs` reads source text | 2–3 |
@@ -76,7 +75,7 @@
 | `NextRequest.cookies` / `NextResponse.cookies` | `Bun.CookieMap` / `Bun.Cookie` | Replace |
 | Next's built-in gzip | `CompressionStream("gzip")` (web standard, built in) | Replace |
 | Gzip of `/api/` answers (Next 16 never compressed route-handler responses; a 40 MB session read cost ~1 s per request) | `CompressionStream`, `Bun.gzipSync` (blocks the loop ~650 ms per 40 MB), `node:zlib` streams (slower under Bun) | None: `/api/` answers go uncompressed, as under Next |
-| `node:sqlite` `close()` finalized open statements | `bun:sqlite` `close()` keeps the file open until its prepared statements are collected (Windows: EBUSY) | `close(true)` |
+| `node:sqlite` `close()` finalized open statements | `bun:sqlite` `close()` keeps the file open until its prepared statements are collected | `close(true)` |
 | Next's `listen` failed on a taken port | `Bun.serve` sets `SO_REUSEPORT` when `development` is false | `reusePort: false` |
 | `node:child_process` (45 files) incl. IPC to the Node launcher | `Bun.spawn`; Node's API works under Bun, including Node↔Bun IPC | Keep (no problem) |
 | `web-push` (VAPID, aes128gcm) | No built-in; works under Bun (spike probe 5) | Keep |
@@ -90,7 +89,7 @@
 | next/font preloaded each family's subsets (Link header) | Bun's HTML bundler adds no font preloads; tried `<link rel="preload" as="font">` tags from `scripts/build-client.ts` | Dropped (reverted): on Slow 4G the SPA's first paint moved from 3.2 s to 4.0 s, because the fonts share the link with the bundle it needs to paint. The metric-adjusted `* Fallback` faces cover the swap instead |
 | Next server-rendered the route loading skeleton (and the shell), and the sign-in form on `/login`, before the bundle ran | `Bun.serve` serves the SPA as static HTML; no server rendering | `app/index.html` carries the `components/RouteLoadingFallback.tsx` markup in `#root`, and LoginForm's first render in a `<template>` that an inline script swaps in on `/login` (it also stops Enter from reloading the page until the bundle runs; `app/client.tsx` carries a typed password over). Both paint with the HTML and CSS, and `createRoot` replaces them. `components/RouteLoadingFallback.test.mjs` and `components/LoginForm.test.mjs` keep the copies identical to what the components render |
 | Single-binary release (Node + npm install of the package) | `Bun.build` `compile` (cross-compiles all five targets from Linux; `autoloadDotenv`/`autoloadBunfig` off), `Bun.isStandaloneExecutable` | `scripts/build-binary.ts` compiles `server/binary.ts` with the `NODE_ENV` define `--production` sets; the static files ship beside it. `Bun.isStandaloneExecutable` turns the in-app update off (the update worker needs Node and an npm install) and points the UI at the release page |
-| Release archives (`tar -czf`, `zip`) | `Bun.Archive` (tar/tar.gz only): every entry is written 0644, so the binary loses its execute bit; no zip | System `tar` (Windows: System32's bsdtar, `tar -a` for the zip), and `zip` |
+| Release archives (`tar -czf`, `zip`) | `Bun.Archive` (tar/tar.gz only): every entry is written 0644, so the binary loses its execute bit; no zip | System `tar` and `zip` |
 | Third-party license notices for the release (a license-checker npm package) | `Bun.build` `metafile` lists every bundled input, so the bundled npm packages, for the server compile and the client build | `scripts/licenses.ts` copies those packages' license files into the release's `licenses/`; Bun's own license is vendored per version (`scripts/bun-LICENSE-<version>.md`) |
 | Files a compiled module hands another process (`lib/omp/session-edit-extension.mjs`, which omp loads) | `import.meta.url` in a compiled binary is the virtual `/$bunfs/…`; `with { type: "file" }` embeds into the same virtual filesystem, which omp cannot read | The file ships in the static root; `lib/hosts/local-host.ts` falls back to `OMP_WEB_PACKAGE_DIR` when the file beside the module does not exist |
 
@@ -132,16 +131,16 @@ The two notification routes are async, but every query is a microsecond-scale lo
   /** Absolute path of the Bun that runs the server, or "bun" when only PATH has one. Throws Error("Bun runtime not found: …") naming the reinstall command. */
   function resolveBunBinary(packageDir, env = process.env) // → string
   module.exports = { MIN_BUN_VERSION, resolveBunBinary };
-  // CLI: `node bin/bun-runtime.js <args…>` runs Bun with <args>, inherits stdio, exits with its status (used by the Windows dev fallback, Task 7).
+  // CLI: `node bin/bun-runtime.js <args…>` runs Bun with <args>, inherits stdio, exits with its status.
   ```
-  Order: (1) `require.resolve("bun/package.json", { paths: [packageDir] })` → `<dir>/bin/bun.exe` if it is a file > 1 MiB (the 450-byte placeholder means the postinstall did not run). (2) The first existing `@oven/bun-<os>-<arch>{,-musl,-baseline}/bin/bun[.exe]`, resolved from the `bun` package dir: os `darwin|linux|windows` (from `process.platform`, win32 → windows), arch `aarch64|x64`. (3) `bun` on `env.PATH` whose `--version` is ≥ `MIN_BUN_VERSION`, returned as `"bun"`.
+  Order: (1) `require.resolve("bun/package.json", { paths: [packageDir] })` → `<dir>/bin/bun.exe` if it is a file > 1 MiB (the 450-byte placeholder means the postinstall did not run). (2) The first existing `@oven/bun-<os>-<arch>{,-musl,-baseline}/bin/bun`, resolved from the `bun` package dir: os `darwin|linux`, arch `aarch64|x64`. (3) `bun` on `env.PATH` whose `--version` is ≥ `MIN_BUN_VERSION`, returned as `"bun"`.
 
 - [ ] **Step 1: Real install.** `rm node_modules && npm ci`. Expected: `test -d node_modules && ! test -L node_modules` succeeds.
 - [ ] **Step 2: Add Bun.** `npm install --save-exact bun@1.4.4 && npm install --save-dev --save-exact @types/bun@1.4.4`. Expected: `node_modules/.bin/bun --version` → `1.4.4`.
 - [ ] **Step 3: Failing tests** in `bin/bun-runtime.test.mjs` (`node:test`; runs under `node --test` now and `bun test` after Task 2):
   - `resolves the package's own Bun`: `resolveBunBinary(repoRoot)` is an existing file, and running it with `--version` prints `require("../package.json").dependencies.bun`.
-  - `falls back to the platform package when the postinstall did not run`: a temp dir with `node_modules/bun/package.json` (`{"name":"bun","version":"1.4.4"}`), a 450-byte `node_modules/bun/bin/bun.exe` and `node_modules/@oven/bun-<os>-<arch>/{package.json,bin/bun[.exe]}` → returns that `@oven` path.
-  - `uses bun on PATH last and refuses an old one` (skip on win32): a temp `PATH` dir whose `bun` script prints `1.3.0` → throws matching `/1\.4\.4/`; printing `1.4.4` → returns `"bun"`.
+  - `falls back to the platform package when the postinstall did not run`: a temp dir with `node_modules/bun/package.json` (`{"name":"bun","version":"1.4.4"}`), a 450-byte `node_modules/bun/bin/bun.exe` and `node_modules/@oven/bun-<os>-<arch>/{package.json,bin/bun}` → returns that `@oven` path.
+  - `uses bun on PATH last and refuses an old one`: a temp `PATH` dir whose `bun` script prints `1.3.0` → throws matching `/1\.4\.4/`; printing `1.4.4` → returns `"bun"`.
   - `no Bun anywhere`: `resolveBunBinary(emptyDir, { PATH: "" })` throws `/Bun runtime not found/`.
 - [ ] **Step 4: Run** `node --test bin/bun-runtime.test.mjs` → FAIL (module missing).
 - [ ] **Step 5: Implement** `bin/bun-runtime.js` (version compare: split on `.`, numeric).
@@ -156,7 +155,7 @@ The two notification routes are async, but every query is a microsecond-scale lo
      - `stat -c %a notifications.db` → `600`;
      - a second `bun` process doing `BEGIN IMMEDIATE` while the first holds a write transaction waits (`busy_timeout = 5000`), then succeeds after the first commits.
   5. Body cap: a streamed 150 MiB POST to `Bun.serve` → 413 by default, 200 with `maxRequestBodySize: Number.MAX_SAFE_INTEGER` (pre-checked; re-run and record).
-  6. Add rows marked "pending: user's Mac (Task 8 packed smoke)" and "pending: Windows CI (Task 8)".
+  6. Add a row marked "pending: user's Mac (Task 8 packed smoke)".
 - [ ] **Step 8: Verify** `npm test` (still `node --test`) and `npm run typecheck` → pass.
 - [ ] **Step 9: Commit** `build(bun): pin the Bun runtime and add its resolver`.
 
@@ -362,7 +361,7 @@ The two notification routes are async, but every query is a microsecond-scale lo
     - gzip happens for a 2 KB JSON body and is skipped for `text/event-stream`, status 206, a 500-byte body, and requests without `accept-encoding`;
     - `serveFile` returns 404/null for the four traversal inputs in Review Focus 3, `immutable` for `/assets/*` and `no-cache` for `/sw.js`;
     - with `OMP_WEB_NAME=<script>`, `renderIndex` puts `&lt;script&gt;` in `<title>`, and the manifest link sits before `</head>`.
-  - `server/app.test.ts`: `startServer({ port: 0, dev: false, root })` where `root` is a temp dir holding a fixture `dist/index.html` plus `public` and `node_modules` linked to the repo's (`fs.symlinkSync(target, link, "junction")`, which needs no admin on Windows). Env: `PI_CODING_AGENT_DIR`/`HOME` temp and `OMP_WEB_OMP_BIN=/nonexistent/omp`:
+  - `server/app.test.ts`: `startServer({ port: 0, dev: false, root })` where `root` is a temp dir holding a fixture `dist/index.html` plus `public` and `node_modules` linked to the repo's. Env: `PI_CODING_AGENT_DIR`/`HOME` temp and `OMP_WEB_OMP_BIN=/nonexistent/omp`:
     - `GET /api/hosts` → 200 JSON;
     - `POST /api/hosts` with `Origin: https://evil.example` → 403;
     - `GET /api/nope` → 404; `GET /api/sessions/%E0%A4%A/state` → 400;
@@ -436,7 +435,7 @@ The two notification routes are async, but every query is a microsecond-scale lo
 - [ ] **Step 1: Failing tests.**
   - `lib/notification-store.test.mjs`:
     - a store file created with `node:sqlite` `DatabaseSync` (available under Bun) using the current schema plus a VAPID row and a device opens through the store with the same keys and device;
-    - after a write, `notifications.db` and `notifications.db-wal` have mode `0o600` (skip on win32).
+    - after a write, `notifications.db` and `notifications.db-wal` have mode `0o600`.
   - `lib/usage-db.test.mjs`: the failed-migration test still rolls back (`inTransaction`).
   - `lib/media-route.test.mjs` (no sharp; images from `new Bun.Image(await Bun.file("public/icon-192.png").bytes()).resize(w, h, { fit: "fill" }).png().bytes()`):
     - 1600×1000 → thumbnail 480×300 WebP (`RIFF`);
@@ -457,10 +456,10 @@ The two notification routes are async, but every query is a microsecond-scale lo
   - Live: a server on 30311 shows `?thumb=1` for a fixture image tool result (or curl `/api/media/<hash>?thumb=1` → `image/webp`).
 - [ ] **Step 5: Commit** `refactor(runtime): use bun:sqlite, Bun.Image and Bun's fetch proxy support`.
 
-### Task 7: Update worker on Node, Windows scripts and services
+### Task 7: Update worker
 
 **Files:**
-- Modify: `bin/omp-web.js` (`serverEnvironment`), `lib/self-update.ts`, `lib/self-update.test.mjs`, `scripts/windows/omp-web-service.ps1`, `scripts/windows/omp-web-tray.ps1`, `lib/windows-service.ts`, `lib/windows-service.test.mjs`
+- Modify: `bin/omp-web.js` (`serverEnvironment`), `lib/self-update.ts`, `lib/self-update.test.mjs`
 
 **Interfaces:**
 - Consumes: the `bin/bun-runtime.js` CLI (Task 1).
@@ -468,22 +467,15 @@ The two notification routes are async, but every query is a microsecond-scale lo
 
 - [ ] **Step 1: Failing tests.**
   - `lib/self-update.test.mjs`: with `OMP_WEB_NODE_BIN=/opt/node/bin/node`, the spawned worker command (direct, or after `systemd-run … --scope …`) is `/opt/node/bin/node` and not `process.execPath`. Without it, the command falls back to `process.execPath`.
-  - `lib/windows-service.test.mjs`: the generated orphan-kill script matches `-like "node*"` and `-like "bun*"`.
 - [ ] **Step 2: Run** → FAIL.
 - [ ] **Step 3: Implement.**
   - `serverEnvironment()` adds `OMP_WEB_NODE_BIN: process.execPath`.
-  - `lib/self-update.ts` uses `const runtime = process.env.OMP_WEB_NODE_BIN || process.execPath` for `command` and inside `commandArgs`. Add a one-line comment: Windows locks a running `bun.exe`, and npm replaces the package's.
-  - `lib/windows-service.ts`: `if ($owner -and ($owner.Name -like "node*" -or $owner.Name -like "bun*"))`.
-  - Both `.ps1` scripts:
-    - `$NextDir = …".next"` → `$BuildIndex = Join-Path $RepoRoot "dist\index.html"` in the start→dev fallback (comment updated);
-    - the dev branch becomes `$inner = "`"$NodeExe`" `"$(Join-Path $RepoRoot 'bin\bun-runtime.js')`" --hot server\dev.ts -H $EffectiveHostname -p $EffectivePort"`;
-    - `omp-web-host.ps1` is unchanged (Node launcher).
+  - `lib/self-update.ts` uses `const runtime = process.env.OMP_WEB_NODE_BIN || process.execPath` for `command` and inside `commandArgs`.
   - `bin/omp-web-update-worker.js` needs no change: it now runs on Node, and its `process.execPath` tray call stays valid.
 - [ ] **Step 4: Verify.**
   - `npm test` → pass.
   - `rg -n '\.next[/"]|next\\dist|next dev' scripts lib bin` → only `lib/worktree.ts` and `lib/worktree.test.mjs` (comments about user projects).
-  - Windows parsing is checked in CI (Task 8).
-- [ ] **Step 5: Commit** `fix(update): run the update worker on Node; Windows scripts start Bun`.
+- [ ] **Step 5: Commit** `fix(update): run the update worker on Node`.
 
 ### Task 8: Packaging, CI and the smoke test
 
@@ -507,21 +499,14 @@ The two notification routes are async, but every query is a microsecond-scale lo
   5. The first `/assets/*.js` named in it → 200 with `immutable`, plus `content-encoding: gzip` when requested with `accept-encoding: gzip`.
   6. `GET /api/hosts` → 200 JSON.
   7. `GET /api/events` → first event received, and the stream is still open after 12 s.
-  8. Stop the launcher (`SIGTERM`; on win32 `taskkill /pid <pid> /t /f`), then wait until a TCP connect to the port fails (≤ 15 s).
+  8. Stop the launcher (`SIGTERM`), then wait until a TCP connect to the port fails (≤ 15 s).
   9. Remove the temp dirs.
 - [ ] **Step 3: Run** `npm run build && npm run smoke` → all `ok`. Then the packed install:
   - `npm pack --ignore-scripts && npm install -g --prefix /tmp/bunplan-t8 ./kahme247-ompweb-*.tgz`;
   - `npm run smoke -- --package "$(npm root -g --prefix /tmp/bunplan-t8)/@kahme247/ompweb"` → all `ok`.
 - [ ] **Step 4: CI.**
-  - `verify-pr.yml` steps: after "Verify production build", add "Smoke test" (`npm run smoke`) and "Packed install smoke test" with `shell: bash` (the Step 3 commands with `$RUNNER_TEMP/ompweb-prefix`), both on ubuntu and windows.
-  - Windows only: parse both `.ps1` scripts (`pwsh -NoProfile -Command "foreach ($f in 'scripts/windows/omp-web-service.ps1','scripts/windows/omp-web-tray.ps1') { $e=$null; [System.Management.Automation.Language.Parser]::ParseFile($f,[ref]$null,[ref]$e) | Out-Null; if ($e) { $e; exit 1 } }"`).
+  - `verify-pr.yml` steps: after "Verify production build", add "Smoke test" (`npm run smoke`) and "Packed install smoke test" with `shell: bash` (the Step 3 commands with `$RUNNER_TEMP/ompweb-prefix`) on ubuntu.
   - `publish.yml`: add `npm run smoke` after `npm run build`.
-- [ ] **Step 5: Nix.** (As built: nixpkgs' `bun` is 1.4.2, below the pinned 1.4.4, so Nix keeps the npm `@oven/bun-<os>-<arch>` binary that every install uses.)
-  - `nix/package.nix`: delete the four `fetchurl` fonts, `localFontsPatch`, `patches` and `postPatch`. In the fileset, drop `instrumentation.ts`, `next.config.ts`, `next-env.d.ts` and `postcss.config.mjs`, and add `../server` and `../bunfig.toml`.
-  - `npmRebuildFlags = [ "--ignore-scripts" ]`: bun's postinstall execs the unpatched binary, so `bin/bun-runtime.js` resolves the `@oven` binary itself.
-  - Linux only: `autoPatchelfHook` with `dontAutoPatchelf = true`; `preBuild` runs `autoPatchelf -- node_modules/@oven`, removes `node_modules/.bin/bun{,x}` and puts the resolved binary's directory on `PATH` for the build. The shipped `@oven` binary stays in `node_modules` for the launcher.
-  - `flake.nix` devShell: add `bun`.
-  - Unverified: written without nix. `npmDepsHash` changes with the lockfile and needs `nix build .#default` to report the new hash; the controller refreshes it on a machine with nix.
 - [ ] **Step 6: Verify** `npm run typecheck && npm run lint && npm test && npm run build && npm run smoke` → pass.
 - [ ] **Step 7: Commit** `ci: smoke-test the Bun server and the packed install`.
 

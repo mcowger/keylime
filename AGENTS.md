@@ -1,19 +1,34 @@
 # omp-web - Development Notes
 
+## Hard fork policy
+
+This repository is a hard fork of ompweb for Matt Cowger's preferences, not a compatibility-preserving downstream. This policy takes precedence over inherited compatibility and migration requirements elsewhere in this file, `DESIGN.md`, and other upstream documentation.
+
+- Do not preserve backward compatibility with upstream or earlier versions of this fork unless the user explicitly requests it for a specific change.
+- No migration paths are required for legacy data, schemas, configuration, APIs, protocols, CLI commands, or deployment workflows.
+- Make clean cutovers: update all in-repository callers and remove obsolete code. Do not add compatibility shims, deprecated aliases, legacy fallbacks, dual-format support, or migration code merely to preserve old behavior.
+- Breaking changes and divergence from upstream are acceptable. Prefer the simplest implementation that serves this fork's current requirements.
+- This policy does not authorize deleting user data or weakening security, data integrity, or license compliance. Call out destructive consequences before implementing them.
+
+## Runtime management
+
+Use mise exclusively for runtime management. `mise.toml` pins Bun, the sole JavaScript/TypeScript runtime. Run `mise trust && mise install` before installing dependencies; use `mise exec -- bun <args>` when shell activation is unavailable. Do not add Node runtime requirements, Nix packaging, flakes, or alternate runtime managers. Bun's supported `node:*` APIs and compatibility types are allowed.
+
 ## Quick Start
 
 ```bash
-npm run dev     # Bun server with hot reload (HMR for the SPA), port 30178
-npm run build   # bundle the SPA into dist/ (scripts/build-client.ts)
-npm start       # serve dist/ + the API, port 30177
-npm test        # bun test --parallel
-npm run smoke   # start the built server and `ompweb host` (or a packed install: -- --package <dir>; a binary: -- --binary <path>) and check them
-npm run build:binary [-- --target bun-<os>-<arch>]   # build, then compile release/ompweb-<os>-<arch>/ and its .tar.gz/.zip (scripts/build-binary.ts)
-npm run typecheck && npm run lint
+bun install     # install dependencies (Bun is required)
+bun run dev     # Bun server with hot reload (HMR for the SPA), port 30178
+bun run build   # bundle the SPA into dist/ (scripts/build-client.ts)
+bun run start   # serve dist/ + the API, port 30177
+bun run test    # bun test --parallel
+bun run smoke   # start the built server and `ompweb host` (or a packed install: -- --package <dir>; a binary: -- --binary <path>) and check them
+bun run build:binary [-- --target bun-<os>-<arch>]   # build, then compile release/ompweb-<os>-<arch>/ and its .tar.gz/.zip (scripts/build-binary.ts)
+bun run typecheck && bun run lint
 ```
 
 The dev server needs ompweb's omp build (`runner/`). Fetch the pinned omp packages first, then install
-(`npm test` needs this too):
+(`bun run test` needs this too):
 `bun runner/scripts/use-omp-build.ts && cd runner && bun install --frozen-lockfile`; then build
 `runner/release/ompweb-omp-<os>-<arch>` (`bun runner/scripts/build-binary.ts`, this machine's target), which a source checkout
 finds by itself, or point `OMP_WEB_OMP_BIN` at it or at a wrapper running `bun runner/src/cli.ts`.
@@ -44,15 +59,14 @@ Browser              Bun server (server/app.ts)          omp child process
   │◀── event: s<n> data: {...} ──│                               │
 ```
 
-The launcher (`bin/omp-web.js`) and the host daemon (`bin/omp-web-host.js`)
-and tray run on Node. The launcher spawns `bun server/main.ts` (Bun resolved by
-`bin/bun-runtime.js`: the npm `@oven/bun-*` binary, else `bun` on `PATH`), which
-serves the SPA from `dist/`, the API routes and the password gate in one
-process. Nothing in the daemon or tray may use a Bun API. The compiled binary
-(`server/binary.ts`) is the exception: one Bun program that runs the server in
-its own process (no launcher), `ompweb host` and `ompweb hash-password`.
+The launcher (`bin/omp-web.js`), host daemon (`bin/omp-web-host.js`), tray,
+server and update workers run on Bun. Install Bun before running from source or
+a package; Node is not required. The server serves the SPA from `dist/`, the
+API routes and the password gate in one process. The compiled binary
+(`server/binary.ts`) embeds Bun and runs the server in its own process (no
+launcher), `ompweb host` and `ompweb hash-password`. Bun supports `node:*` APIs.
 
-**Session browsing** (read-only): pure-Node parsing of omp session `.jsonl`
+**Session browsing** (read-only): parsing of omp session `.jsonl`
 files via `lib/session-reader.ts` — no child process involved.  
 **Sending a message**: `startRpcSession()` in `lib/rpc-manager.ts` asks the
 session's `Host` (`lib/hosts/host.ts`; `localHost` in `lib/hosts/local-host.ts`)
@@ -63,7 +77,7 @@ goes through that host.
 
 Shared foundations in `lib/omp/`:
 
-- `paths.ts` — Node port of omp's directory resolution (`~/.omp/agent`,
+- `paths.ts` — port of omp's directory resolution (`~/.omp/agent`,
   XDG, session dir slugs) and `sessionLocalRoot`, omp's `local://` root rule.
 - `omp-cli.ts` — locate/probe the `ompweb-omp` binary (`resolveOmpBin`,
   `getOmpVersion`): `OMP_WEB_OMP_BIN`, else a source checkout's `runner/release/`, else the fetched copy
@@ -139,7 +153,7 @@ app/api/
   projects/route.ts               GET registered+discovered projects | POST add | DELETE hide
   projects/clone/route.ts         POST clone a git URL into a new workspace (NDJSON progress) | DELETE cancel
   skills/route.ts                 GET/PATCH loaded skills and disable-model-invocation; GET without `cwd` lists the user level only (`skills/check` and `skills/update` likewise; project scope needs a `cwd`: 400 `cwd_required` from check, `cwd_package_scope_required` from update)
-  skills/install/route.ts         POST install skills through npx skills add
+  skills/install/route.ts         POST install skills through bunx --bun skills add
   skills/search/route.ts          GET/POST skills.sh search
   stt/route.ts                    POST audio (+scope) → 202 { jobId } | GET ?scope= live jobs (lib/stt-jobs.ts)
   stt/[jobId]/route.ts            GET job state | POST retry with kept audio | DELETE ?claim= claim/discard
@@ -153,7 +167,7 @@ lib/
   navigation.ts        `useRouter`/`useSearchParams` over the History API
   omp/                 shared omp foundations (paths, CLI probe, RpcProcess)
     plugins-cli.ts     `runOmpCli`, `listPlugins` (`omp plugin list --json` as `PluginEntry[]`), `parseJsonLoose`, `ANSI_RE`; loaded by the daemon too (relative imports only); used by `app/api/plugins/route.ts`, `cluster-config-server.ts` and `daemon-cluster-config.ts`
-  hosts/               hosts and the local daemon (see "Remote hosts"); none of the daemon-loaded files may import `@/` (the daemon runs on Node through `jiti`)
+  hosts/               hosts and the local daemon (see "Remote hosts"); daemon-loaded files use relative imports, not `@/`
     host.ts            `Host` interface, `HostStatus`, `isLinkUp`
     local-host.ts      `localHost`, the daemon's side: spawn + file checks on the daemon's machine; `resolveSpawnCwdResult`. Never imported by main, nor is `daemon.ts` (`no-direct-local.test.mjs`)
     local-bootstrap.ts web server side of the local link: `localLinkUrl`, `ensureLocalHostLink` (the `local` record + `host.json`)
@@ -171,7 +185,7 @@ lib/
     cluster.ts         pure cluster rules: `clusterOf` (= `pools[0]`), `isClusterMember`, `sharesCredentials`, `joinCluster`/`leaveCluster`, `clusterJoinBlock`, `ompSharesCredentials` (also the daemon's spawn check); browser-importable (Settings uses it)
     cluster-config.ts  pure, daemon-safe: what a cluster member mirrors from the master (`MIRRORED`, `LOCAL_SETTINGS`, `CONFIG_LIMITS`), `buildManifest`, `stripLocalSettings`/`mergeLocalSettings`, `isManagedPath`, `ClusterConfigError`
     cluster-config-server.ts main side: `currentClusterConfig` (the manifest cached per fingerprint, one build at a time, `omp plugin list` cached 120 s), `clusterConfigVersion`, `admitClusterMember`, `configErrorResponse`; used by the two `app/api/hosts/cluster-config/` routes and `hub.ts`
-    daemon-cluster-config.ts daemon side: `createClusterConfig` (`ensure`/`apply`/`restore`/`state`/`holds`/`stop`): download, verify, apply whole or not at all, the member's backup (`own-config/`), plugins, leaving; Node only, relative imports
+    daemon-cluster-config.ts daemon side: `createClusterConfig` (`ensure`/`apply`/`restore`/`state`/`holds`/`stop`): download, verify, apply whole or not at all, the member's backup (`own-config/`), plugins, leaving; relative imports
     host-bearer.ts     `hostFromBearer`: the host an `Authorization: Bearer <host token>` request names, or the 401/503 answer; used by `admitClusterMember`
     update-types.ts    shared per-host software status and operation contract
     updates.ts         daemon-side version checks, compatibility gate and durable update state
@@ -197,7 +211,7 @@ lib/
   github-repo.ts       server: pick the gh-default GitHub remote from git config
   markdown.ts          shared markdown helpers
   remark-pandoc-math.ts  remark-math with Pandoc's single-dollar rule, so prices ("$5 and $10", "R$5") stay text; chat and search listing
-  npx.ts               npx runner used by skill install
+  npx.ts               package runner used by skill install (`bunx --bun`)
   pi-types.ts          local structural types for agent/RPC objects
   project-command-env.ts  child-process environments: strips PORT/NODE_ENV/NEXT_* and omp-web's secrets
   project-ordering.ts  pure project sort/group/activity helpers (client + tests)
@@ -220,7 +234,7 @@ lib/
   web-settings.ts      omp-web server settings (~/.omp/agent/omp-web-settings.json)
   transport-metrics.ts transport samples → `<agent dir>/omp-web/transport-metrics.jsonl` (renamed to `.jsonl.1` above 20 MiB)
   transport-stats.ts   durations of transport samples (percentiles, per-metric derivation) shared by the worker's Connection tab stats and scripts/transport-metrics.ts
-  skills-service.ts    skill listing via `omp skill list --json`; pure-Node replica scan as fallback
+  skills-service.ts    skill listing via `omp skill list --json`; replica scan as fallback
   tool-presets.ts      PRESET_NONE/DEFAULT/FULL + getToolNamesForPreset()
   types.ts             shared TypeScript types
   normalize.ts         normalizeToolCalls() — field name mismatch between file format and our types
@@ -277,16 +291,15 @@ hooks/
   useChatSearchHighlights.ts  find-in-page for the sidebar search: CSS Custom Highlight API paint + jump to a picked hit
 
 bin/
-  bun-runtime.js      resolves the Bun binary (npm `@oven/bun-*`, else PATH, minimum version check); used by the launcher, scripts and nix
-  omp-web-host.js     `ompweb host [login]`: loads lib/hosts/host-cli.ts through jiti; token read from stdin, never argv. `omp-web.js host` requires it in-process (no child) so SIGTERM/SIGINT reach the daemon's stop
+  omp-web-host.js     `ompweb host [login]`: loads lib/hosts/host-cli.ts natively through Bun; token read from stdin, never argv. `omp-web.js host` loads it in-process (no child) so SIGTERM/SIGINT reach the daemon's stop
 
 scripts/
-  build-client.ts     `npm run build`: bundles app/index.html into dist/ (Bun.build + tailwind-plugin.ts; fonts emitted as /assets files)
+  build-client.ts     `bun run build`: bundles app/index.html into dist/ (Bun.build + tailwind-plugin.ts; fonts emitted as /assets files)
   tailwind-plugin.ts  bun-plugin-tailwind minus Tailwind's color-mix() polyfill (Bun 1.4.4 drops repeated @supports rules); build and dev
-  smoke.ts            `npm run smoke`: starts the built server (or `--binary <path>`) and `ompweb host` with a throwaway HOME; checks the SPA, an asset, the API, a session listed through the daemon and SSE
+  smoke.ts            `bun run smoke`: starts the built server (or `--binary <path>`) and `ompweb host` with a throwaway HOME; checks the SPA, an asset, the API, a session listed through the daemon and SSE
   transport-metrics.ts `bun scripts/transport-metrics.ts [--since 2h|<ISO>] [--until <ISO>] [--client <id>] [--session <id>] [--file <path>]`: per-transport summary of the browser transport samples and per host and direction of the host link samples (`--session`: link samples of one session; default: the last 24 h of the agent dir's file)
   link-hol-probe.ts   `bun scripts/link-hol-probe.ts --host <id> --model <provider/modelId>`: head-of-line load on one host link (large prompts down, large session reads up, get_state beside them) for the link samples; usage at its top
-  build-binary.ts     `npm run build:binary`: compiles server/binary.ts (NODE_ENV define, no .env/bunfig autoload) into release/ompweb-<os>-<arch>/ beside dist/, public/, the KaTeX files, the omp runner (`ompweb-omp`, built first by `runner/scripts/build-binary.ts`; not with `--no-runner`, which releases use: they attach the runners as separate assets) and the licenses; archives it
+  build-binary.ts     `bun run build:binary`: compiles server/binary.ts (NODE_ENV define, no .env/bunfig autoload) into release/ompweb-<os>-<arch>/ beside dist/, public/, the KaTeX files, the omp runner (`ompweb-omp`, built first by `runner/scripts/build-binary.ts`; not with `--no-runner`, which releases use: they attach the runners as separate assets) and the licenses; archives it
   build-release-binaries.sh  the five release targets (one list), run by publish.yml and prerelease.yml (a prerelease per verified `main` commit, titled by build time; one concurrency group per commit, so no commit's run is dropped)
   licenses.ts         the release's `licenses/`: license files of every npm package the server and client bundles hold (Bun.build metafiles; build-client.ts writes build/client-packages.json) and `bun-LICENSE-<version>.md`, the vendored license of the embedded Bun runtime. Bumping Bun: vendor its LICENSE.md for the new version, or build-binary.ts stops
 
@@ -311,19 +324,19 @@ The table is static imports, not a runtime glob, so `bun build --compile` (`scri
 - Redirects carry a relative `Location` (`request.url` is always `http://` under Bun, so an absolute URL would leave https behind a TLS proxy).
 - `Response.redirect()` headers are immutable; `finalizeResponse` (`server/http.ts`) copies every answer into a fresh `Response` to set the security headers and gzip. Do not mutate a handler's response headers elsewhere.
 - `globalThis` state survives `bun --hot` re-evaluation, and `register()` (`instrumentation.node.ts`) runs once per process behind a `globalThis` guard in `server/dev.ts`. New server singletons use the `globalThis` registry pattern of `rpc-manager.ts`.
-- Dev (`npm run dev`) serves the SPA from the HTML import with HMR, bundled in memory, and re-runs itself once with `OMP_WEB_PUBLIC_*` set because `bunfig.toml` inlines them from the environment Bun started with. Dev pages carry `script-src blob:` in their CSP (HMR updates run as blob scripts); production does not.
+- Dev (`bun run dev`) serves the SPA from the HTML import with HMR, bundled in memory, and re-runs itself once with `OMP_WEB_PUBLIC_*` set because `bunfig.toml` inlines them from the environment Bun started with. Dev pages carry `script-src blob:` in their CSP (HMR updates run as blob scripts); production does not.
 - `OMP_WEB_PACKAGE_DIR` (set by the launcher) is the root for `dist/`, `public/` and KaTeX; `process.cwd()` is the fallback for dev and tests. The compiled binary sets it to its own directory (unless set) before any server module loads, so every runtime file must come from that root: a module's `import.meta.url` in the binary is Bun's virtual `/$bunfs/`, which no other process can read. A new file the server or daemon reads at runtime also goes into `scripts/build-binary.ts`'s copy list.
-- The binary needs `process.env.NODE_ENV` defined as `"production"` at build time (`scripts/build-binary.ts`): a plain `bun build --compile` inlines `"development"`, and the server then never writes the daemon's link. `npm run smoke -- --binary` catches that (no session lists).
+- The binary needs `process.env.NODE_ENV` defined as `"production"` at build time (`scripts/build-binary.ts`): a plain `bun build --compile` inlines `"development"`, and the server then never writes the daemon's link. `bun run smoke -- --binary` catches that (no session lists).
 - `Bun.serve` turns on `SO_REUSEPORT` when `development` is false, so a second omp-web would share the port instead of failing; `startServer` passes `reusePort: false`, and `startProduction` (`server/app.ts`) reports an `EADDRINUSE` in one line.
-- The web-server in-app update worker runs on Node (`OMP_WEB_NODE_BIN`, the launcher's `process.execPath`), not Bun. The compiled web server updates by download (`lib/self-update.ts`). Host-daemon updates use their own helper in `lib/hosts/update-worker.ts`, including for binary hosts; never reuse the web-server worker to restart a host.
+- The web-server in-app update worker runs on Bun. The compiled web server updates by download (`lib/self-update.ts`). Host-daemon updates use their own helper in `lib/hosts/update-worker.ts`, including for binary hosts; never reuse the web-server worker to restart a host.
 - Both updaters run the new release's `ompweb fetch-omp` (its runner, from its own release) and then its `ompweb preflight` (`lib/hosts/preflight.ts`) in the live environment before they stop anything, and abort on failure: it starts the session omp the release resolves (the web worker sets `OMP_WEB_PACKAGE_DIR` to the scratch-installed candidate) and requires its hello on `CHANNEL_PROTO`. A candidate with a runner but no preflight command is refused; a compiled release is recognized by `PREFLIGHT_MARKER`, which only `preflight.ts` may embed. A failed or aborted web update writes `complete.json` so the armed launcher disarms.
 - The daemon-owned watcher (`lib/hosts/workspace-watch.ts`) re-stats ~50 ms after every event to catch burst saves (Bun may drop native events within ~2 ms); main only routes its sequenced watch events.
 - `bun:sqlite` `.get()` returns `null` for no row (not `undefined`).
-- `bun:sqlite` `close()` keeps the database file open while prepared statements are alive (until GC), so Windows cannot remove or replace it: the stores close with `close(true)`, which finalizes them (`closeNotificationStore`, `closeUsageDatabase`).
+- `bun:sqlite` `close()` keeps the database file open while prepared statements are alive; stores use `close(true)` to finalize them (`closeNotificationStore`, `closeUsageDatabase`).
 - `readSttConfig` lives in server-only `lib/stt-jobs.ts`; the browser bundle must never import it.
 - Browser code must not import `next/*`: use `lib/dynamic.tsx` and `lib/navigation.ts`.
 
-### Tests (`npm test`, or `bun test --parallel`)
+### Tests (`bun run test`, or `bun test --parallel`)
 - `--parallel` is required, not just faster: Bun gives each file a fresh global/module registry. The transport singleton (`lib/event-stream.ts`) and each file's `SharedWorker`/fetch/DOM fakes otherwise leak into the next file; a shared-process run can send commands to another file's fake worker. These fixtures are deliberately file-isolated rather than reset between files. Use `--parallel` even for a multi-file subset.
 - DOM tests import `tests/setup-dom.mjs` first and then import Testing Library dynamically, so its queries bind to that document. Nothing is torn down.
 - A module under test that must see a fake builtin is imported with a fresh query (`?fresh=N`) after `mockBuiltin(t, name, overrides)` (`tests/mock-builtin.mjs`, built on `mock.module`; Bun's `mock.restore()` does not undo `mock.module`, so the helper restores by hand).
@@ -359,7 +372,7 @@ The table is static imports, not a runtime glob, so `bun build --compile` (`scri
   (`instrumentation.node.ts`) consumes it, restarts each session and sends
   `RESUME_PROMPT`.
 - Each instance writes only its own pid's list, so a second omp-web sharing
-  the agent dir (e.g. `npm run dev` beside an installed one) never resumes or
+  the agent dir (e.g. `bun run dev` beside an installed one) never resumes or
   overwrites sessions the other is running. Startup claims a list only when its
   pid is dead or the file predates the last boot, plus the legacy unsuffixed
   list. Same-boot pid reuse or a zombie writer leaves that list unresumed.
@@ -705,11 +718,10 @@ The table is static imports, not a runtime glob, so `bun build --compile` (`scri
   in `hub.ts`, and `sessionFileExists`/`spawn` accept only paths under the
   daemon's sessions directory. A remote session export is always served as an
   attachment: inline, its HTML would run on main's origin.
-- **Daemon-loaded modules must not import `@/` or use Bun APIs.** `bin/omp-web-host.js`
-  loads `lib/hosts/daemon.ts` through plain `jiti` on the Node runtime, which does
-  not resolve the `@/` alias and has no `Bun` global (the tray modules likewise). That covers everything the daemon pulls in
-  (`daemon.ts`, `link-protocol.ts`, `local-host.ts`, `session-ops.ts`,
-  `host.ts`, and their `lib/` imports). Use relative imports there.
+- **Daemon-loaded modules must use relative imports, not `@/`.** Bun loads
+  the TypeScript modules natively; no `jiti` loader is involved. This covers
+  everything the daemon pulls in (`daemon.ts`, `link-protocol.ts`,
+  `local-host.ts`, `session-ops.ts`, `host.ts`, and their `lib/` imports).
 - **Registry.** `<agent dir>/omp-web/hosts.json` (0600, atomic write) stores
   only `sha256(token)`; the token is shown once. Mutations use the strict
   reader and throw `HostRegistryUnreadableError` (503) instead of rewriting a
@@ -889,7 +901,7 @@ The table is static imports, not a runtime glob, so `bun build --compile` (`scri
   `moveDirectoryNoReplace`: POSIX `rename(2)` replaces an *empty* directory at its
   target, so the target is first taken with `mkdir` (exclusive) and the rename then
   replaces only that empty directory of its own, failing ENOTEMPTY, and removing
-  nothing, if anything was put into it; Windows' rename never replaces a directory.
+  nothing if anything was put into it.
   The same helper undoes the move, so an archive path retaken meanwhile is not
   replaced either (the artifacts then stay at the destination and the error says the
   undo failed). The transcript is published by an exclusive hard link, and undone by
@@ -931,7 +943,7 @@ The table is static imports, not a runtime glob, so `bun build --compile` (`scri
   this machine's files.
 
 #### Local daemon (`docs/specs/2026-10-29-local-daemon-design.md`)
-- **Two services.** `ompweb` (web) and `ompweb-host` (`ompweb host`, the daemon) are installed together by `ompweb systemd install`, `ompweb launchd install` and the Windows tray install; uninstall removes both, `ompweb systemd restart` restarts the web unit only. The daemon owns this machine's omp children, so a web restart, update or redeploy leaves runs going; restarting the daemon ends them (auto-resume then resumes the sessions that were running). An upgrade restarts the daemon only when the running daemon's link version is outside the new release's `[MIN_LINK_PROTOCOL_VERSION, LINK_PROTOCOL_VERSION]` range (it would get 4426 or 426 and exit); a daemon inside the range keeps running.
+- **Two services.** `ompweb` (web) and `ompweb-host` (`ompweb host`, the daemon) are installed together by `ompweb systemd install` and `ompweb launchd install`; uninstall removes both. The daemon owns the omp children, so a web restart leaves runs going. An upgrade restarts the daemon only when its link version is outside the supported range.
 - **Local link bootstrap** (`lib/hosts/local-bootstrap.ts`, `instrumentation.node.ts`): async `ensureLocalHostLink()` atomically upserts this server's `{url, token}` in `host.json.links` under the same lock as token selection, preserving the primary pair and other links. Files stay 0600. The directory watch reconciles added/removed links without restarting the daemon; malformed configuration is not overwritten. `ompweb host login --add --url <url>` adds a remote server (token from stdin); `host logout --url <url>` removes its link. A remote primary remains protected from local bootstrap replacement.
 - **Dev mode does not take the daemon.** With `NODE_ENV=development` `ensureLocalHostLink` is skipped, so the daemon stays linked to production and the dev server shows "This machine" offline. The local row of `GET /api/hosts` carries `daemonManaged: false` there, which hides the install banner.
 - **`local` is a registry record like any host**, with three exceptions: it is listed first, `PATCH` takes `label` only (`allowAgentStart` is fixed), and it cannot be revoked. Renaming "This machine" is a `PATCH /api/hosts {id: "local", label}`; an empty label resets it (`registry.ts` stores `""`; `customLocalLabel()` / `DEFAULT_LOCAL_LABEL` map it). `getHost("local")` works without the record: it is the daemon link, offline while none is linked, and "needs upgrade" on a protocol mismatch (`hostVersion` in the row is the daemon's).
@@ -939,7 +951,7 @@ The table is static imports, not a runtime glob, so `bun build --compile` (`scri
 - **The daemon replays open blocking requests** (`pending-requests.ts`): `host_tool_call`, `host_uri_request` and blocking `ui_request` lines, until answered or cancelled, capped at `LINK_LIMITS.pendingBytes` per channel. An adopted wrapper feeds them through `handleFrame` (`replaying`; agent tools are not re-run), so dialogs reappear and browser tool calls wait for the next tab (`hostToolsUnknown`, `parkHostTool`). A request opened while the old server stopped is also resent unacked: `RpcProcess.release` skips held requests the replay already delivered, so it is handled once. The hello also carries `autoApproveExtension`, which an adopted run has no spawn result for.
 - **Adoption failure** or disposal closes the server's membership; the host decides abandonment and continues any peer's run. Explicit delete/archive is fenced on the host against a concurrent open, even before this server has a wrapper.
 - **Shutdown freezes the links and never kills daemon children.** The `cleanup` in `rpc-manager.ts` runs `markShuttingDown()` and `freezeHostLinks()`: link sockets are closed 1001 and from then on a link neither sends nor applies anything (no kill, no rejection of open host tool calls as tabs close); new upgrades get 503 "omp-web is shutting down". A real SIGTERM exits in the same tick (`process.exit` in `instrumentation.node.ts`), before Bun writes the close frame, so daemons usually see 1006 or ECONNREFUSED rather than 1001 and redial the same way. The daemon keeps the output unacked and redials for the next server. An adoption that fails after the freeze leaves its child to the next server instead of killing it.
-- **Install banner** (`components/LocalDaemonBanner.tsx`). In production, when the local row stays offline with `hostVersion === null` (no daemon has linked since this server started) for 90 s of a page view (well past the daemon's redial wait, at most 3 s on loopback, so a restarting daemon does not trip it), it shows the platform's install command and, for a foreground `ompweb` (terminal or npx, no service), `ompweb host` to keep running in another terminal; Settings → Hosts shows both for an offline local row. Dismissal is kept in `localStorage`. Main never installs services or starts the daemon.
+- **Install banner** (`components/LocalDaemonBanner.tsx`). In production, when the local row stays offline with `hostVersion === null` (no daemon has linked since this server started) for 90 s of a page view (well past the daemon's redial wait, at most 3 s on loopback, so a restarting daemon does not trip it), it shows the platform's install command and, for a foreground `ompweb` (terminal or bunx, no service), `ompweb host` to keep running in another terminal; Settings → Hosts shows both for an offline local row. Dismissal is kept in `localStorage`. Main never installs services or starts the daemon.
 - **No direct local path.** `local-host.ts` is the daemon's; `lib/hosts/no-direct-local.test.mjs` fails when anything outside its allow-list spawns omp or imports it. The utility omp (`rpc-utility.ts`, login) is the one deliberate exception: it is not a session.
 
 ### Session moves (omp >= 18.5 ownership) and title generation
@@ -1585,7 +1597,7 @@ during the wait.
 - Registry paths are canonical `projectRoot`s: `POST` resolves worktrees to
   their main repo via `resolveProject`, and `resolveProject` returns the
   symlink-free on-disk form for plain directories so registered and
-  session-discovered paths compare equal on Windows casing.
+  session-discovered paths compare equal.
 - `GET /api/projects` re-authorizes registered roots with `allowFileRoot()` —
   the in-memory browse allowlist does not survive restarts, and empty managed
   projects derive no root from sessions.
@@ -1645,9 +1657,8 @@ during the wait.
 - The sidebar and command palette list sessions per host: `listSessionsAllHosts()` (`lib/hosts/session-index.ts`) calls each host's `listSessions` op and caches it 30 s per host (`LIST_TTL_MS`, the daemon's own TTL). **This machine's list is its daemon's**; a host that fails or is offline keeps its last list. Nothing on main parses session files to build it.
 - **A lookup miss is not deletion while any host's list is unavailable.** `hostForSessionId()` returns no host only after successful current-generation discovery across all registered hosts; offline or failed-refresh lists produce retryable 503, including a cold remote cache after main restarts while the local daemon is already online. Cached positive mappings remain usable. Outbox acceptance retains validated messages during unknown ownership and normal host-hello dispatch resolves them later; never guess a local owner or trust a caller's host hint.
 - The daemon's `listSessions` is `listAllSessions()` (`lib/session-reader.ts`): a 30 s TTL list cache plus an mtime-keyed directory walk in `lib/omp/session-files.ts` (`listSessionFiles`), both in the daemon process.
-- The walk cache keys on the **sessions root** mtime. On Windows/NTFS a new
-  `.jsonl` inside an existing project subdirectory does NOT bump the root
-  mtime, so the walk stays stale indefinitely.
+- The walk cache keys on the **sessions root** mtime. A new `.jsonl` inside an
+  existing project subdirectory does not necessarily bump the root mtime.
 - `invalidateSessionListCache()` (fired on `agent_end`, `session_info_update`,
   compaction, renames) must therefore ALSO clear the walk cache via
   `invalidateSessionFileListCache()` — never add a session-mutation path that
@@ -1721,10 +1732,10 @@ during the wait.
 
 ### Plugins and skills
 - `/api/plugins` shells out to the user's `omp plugin` CLI (`list/install/uninstall/enable/disable/upgrade`, `--json` where available) — never the Bun-only SDK.
-- `/api/skills` lists through `lib/skills-service.ts`, which execs `omp skill list --json` with the project as the process cwd (omp ≥ 18.3.3; never pass the directory as an argument — Windows `.cmd` launchers run through `cmd.exe`, which would interpret `&` in it). That is the same discovery sessions use, including `namespace/name` collision aliases and plugin/registry/custom-directory skills. A pure-Node replica scan (project `.omp/skills` walk-up, `~/.omp/agent/skills`, the `.claude` / `.agent(s)` / `.codex` / `.github` compat dirs, managed skills) is only the fallback for older binaries and failed or malformed output. A failed run is negative-cached per binary fingerprint **and cwd** (5 min) so old installs don't spawn per request while one broken project config cannot degrade the others. Listing runs omp's normal startup, so it has omp's side effects (e.g. omp renames an unparseable `config.yml` aside, as a session would).
+- `/api/skills` lists through `lib/skills-service.ts`, which runs `omp skill list --json` with the project as cwd. It falls back to a replica scan for older binaries and failed or malformed output; failures are negative-cached per binary fingerprint and cwd for five minutes.
 - Skill toggling edits only the `disable-model-invocation` frontmatter key on the target `SKILL.md`; keep that surgical so user formatting survives. omp reports it back as `hide` (it reads `hide`/`disableModelInvocation`/`disable-model-invocation`). Frontmatter is omp's only per-skill "hide from model, keep `/skill:`" knob; `disabledExtensions: ["skill:<name>"]` removes the skill entirely.
 - Only user-owned skills are togglable: `getSkillToggleRoots()` (allowed file roots — workspaces the user opened — plus replica scan roots) is the single allowlist for both PATCH and the `togglable` flag GET returns; it is `main`'s pre-CLI allowlist, unchanged. Skills omp lists from anywhere else (the plugin cache, registry installs, custom directories outside a workspace) render a disabled toggle — their files belong to an installer and an update would discard the edit. Never widen PATCH to whatever omp lists.
-- `/api/skills/install` shells through `npx skills add ... --agent universal`, which installs into the ecosystem-standard `.agents/skills` dirs omp reads; project installs run with the selected cwd.
+- `/api/skills/install` shells through `bunx --bun skills add ... --agent universal`, which installs into the ecosystem-standard `.agents/skills` dirs omp reads; project installs run with the selected cwd.
 - `GET /api/plugins`, `POST /api/plugins`, `GET /api/skills`, `POST /api/skills/check` and `POST /api/skills/update` take no `cwd` for the user level (`loadUserSkillsWithInstallInfo`; omp runs in the agent directory, `ensureAgentDir`; the replica scan reads the user roots only, before names are deduplicated, so an agent directory below a project keeps its user skills). The GET routes have no project scope; a project-scope `POST /api/plugins` or `/api/skills/check` without a `cwd` answers 400 `cwd_required`, and `/api/skills/update` answers 400 `cwd_package_scope_required`. Settings uses this for a cluster session on another member, whose project is not on this machine.
 
 ### Updates: web server versus host software
@@ -1760,7 +1771,7 @@ during the wait.
   during the await (versioned ref) aborts the navigation so a slow fetch
   never yanks the chat away.
 - Shortcuts live in `useGlobalKeyboardShortcuts`: ⌘[/⌘] (macOS standard),
-  Alt+←/Alt+→ (Windows/Linux standard; on macOS Alt+Arrow stays free — it is
+  Alt+←/Alt+→ (Linux standard; on macOS Alt+Arrow stays free — it is
   word-wise caret movement), plus the mouse back/forward buttons
   (`BrowserBack`/`BrowserForward`). The keystroke is always swallowed while a
   handler is registered — an exhausted stack stops dead rather than falling
@@ -1874,8 +1885,7 @@ during the wait.
   (a file it cannot delete is logged and tried again next sweep): a rejection
   from its timer would stop the daemon, and one before `uploadStart` would fail
   every new upload.
-  Sent uploads expire by the `uploadRetentionDays` web setting (default 30, `null` = never; `lib/web-settings.ts`, spec U6): main sends it to each daemon with the op `setUploadRetention` at sync startup, on every hello and when the setting changes (an older daemon's 501 is ignored, no protocol bump; other live-link failures retry with capped backoff). The daemon sweeps at startup and every 24 h, deleting regular files older than that by mtime from `local/uploads/` of active and archived sessions, and from only its own namespace under Windows' `<tmp>/omp-local/<id>/uploads/`. It skips symlinked project, session, `local`, `uploads` and namespace directories as checked; concurrent directory swaps are outside this same-user threat model (U6). A running sweep re-reads the policy before unlink, so Never or a longer retention spares remaining files. `uploadAttach` stamps the hard link's mtime at attach time, or copies if stamping fails, so age counts from the send. Staged files keep the separate 24 h expiry and hourly sweep above.
-  Only Windows fallback attachments use `local://uploads/<daemon namespace>/<name>`; `uploadOwnerNamespace` derives the namespace from the canonical agent-directory path. Copied session UUIDs cannot share cleanup ownership, and archival/deletion of session metadata does not disable cleanup. Legacy flat files and foreign namespaces are preserved; moving the agent directory leaves the old namespace untouched (U6). This namespace is provenance for retention, not an authentication capability.
+  Sent uploads expire by the `uploadRetentionDays` web setting (default 30, `null` = never). The daemon sweeps active and archived session `local/uploads/` folders at startup and every 24 hours, skipping symlinked directories. It re-reads the policy before unlinking. Attachments are stamped at send time; staged files retain the separate 24-hour expiry.
   Retention also covers Files-panel uploads placed in those selected session-upload folders; workspace publication receipts do not exempt a destination from its folder's policy.
   Stamp the staged inode before publishing any hard link of it (attach and Files-panel publication), so a concurrent retention sweep cannot capture its old age and delete the newly sent file. If timestamping fails, publish only a fresh exclusive copy; never expose an unstamped hard link. The sweep's per-file `lstat`→`unlink` and every step that puts a file at a name (attach link/exclusive create, publication rename/link) run under `withUploadNameLock` (`lib/hosts/uploads.ts`), so an overwrite cannot land between a stale stat and its unlink. The lock is per daemon process; a different process writing the same folder is not covered.
   `uploadAttach` has a 10-minute op timeout (a 2 GiB EXDEV copy), not
@@ -1914,8 +1924,8 @@ during the wait.
 
 ### open_file and `local://`
 - The `open_file` host tool takes an absolute path, a workspace-relative path or a `local://` URL. `runHostTool` (`hooks/useAgentSession-stream.ts`) resolves a `local://` URL **before** a tab exists, with the id of the session that called (`useAgentSession` for the viewed session, `AppShell` for a call from another one), through `GET /api/sessions/[id]/local-file`: the tab, its de-duplication and the cross-session confirmation all see the absolute path and `sourceSessionId`, so two sessions' `local://note.md` are two files.
-- `lib/session-local-files.ts` resolves on the **owning Node daemon**, without consulting main's live-session or host state. Main's `GET /api/sessions/[id]/local-file` checks shared URI syntax (early 400), uses `resolveWorkspaceHost(undefined, id, { followAlias: true })` to canonicalize a live alias to its current ID and file, and calls the additive `resolveLocalFile(id, uri, sessionFile)` workspace op. An older daemon answers 501 `workspace_unsupported`; there is no main-disk fallback. The daemon applies its native URI rules and uses a live-file hint only after checking realpath containment in its sessions directory and the header's session ID; otherwise its own `resolveSessionPath` decides, including any custom file its index knows. `sessionLocalRoot` (`lib/omp/paths.ts`) retains omp's Windows temp fallback. File GET and watch carry the tab's own ID (and the live file hint only while the wrapper still reports that ID) to `authorizeFileAccess` and `sessionLocalRootContaining`. Never derive the root from cwd or the viewed session, and never read artifact contents in the resolver. The response path must be absolute, and confinement compares native paths without rewriting literal POSIX backslashes.
-- `lib/local-uri.ts` reads the URL as omp 18.3.1+'s `extractRelativePath`/`validateRelativePath` do: the authority is the first path segment and is decoded once, with the rest (`local://100%25.md` is `100%.md`; a second decode would open another file); query and fragment are dropped; a segment that is `..` or starts with `..` (`..hidden.md`, `a/..b`), and an absolute suffix (`/x`, `\x`; on Windows also `C:x`), are refused. A colon is an ordinary character off Windows. The resolver answers in this order, so the agent hears it before any tab opens: 503 `local_root_unavailable` when the session's existing local root cannot be canonicalized (only a missing root counts as having nothing to escape), 403 for a path that leaves the root through a symlink (or a link loop), 404 `file_not_found` for a file that is not there, 400 `not_a_file` for a directory (`local://.`, `local://dir/`) or other non-file.
+- `lib/session-local-files.ts` resolves on the owning daemon. Main checks URI syntax, canonicalizes live aliases, and calls the `resolveLocalFile` workspace op; there is no main-disk fallback.
+- `lib/local-uri.ts` decodes path segments once, drops query and fragment, and rejects traversal and absolute suffixes. The resolver checks canonical containment before opening files.
 - `runHostTool` bounds the lookup with `LOCAL_FILE_LOOKUP_TIMEOUT_MS` (an `AbortController` and timer, not `AbortSignal.timeout`): a stalled lookup reports an error to the agent. Viewed-chat and global handlers own request-scoped controllers; native `host_tool_cancel`, request withdrawal and unmount abort pending lookups and suppress late open/confirmation and result callbacks. Cross-session cancellation uses the privately captured original source alias, keyed with the request ID, so another session's identical ID is unaffected. Confirmed identity moves keep the mounted request valid. The shell rechecks the committed session and Settings view at completion before using its existing confirmation. A thrown opener becomes `isError`, never a false “Opened” result.
   A resolved `local://` tab stores the route's returned `sessionId` (the canonical owner) as `sourceSessionId`; the `host_tool_result` still goes to the calling id. A subscription error (the viewed chat's `session` stream or AppShell's `host-tools` stream) also aborts pending lookups: the server already rejected those calls when the subscription left, and the `host_tool_cancel` it emitted had no listener.
   File reads, downloads and watches (`/api/files`, the `file` channel) keep the tab's own `sessionId` and never follow an alias: a tab opened for A stays confined to A's root after omp later moves A to B, and the live wrapper's file is passed as a hint only while it still reports that id. Only the `local://` lookup uses `resolveWorkspaceHost(..., { followAlias: true })`.
@@ -2004,7 +2014,7 @@ during the wait.
   the SQLite notification store in omp-web's data dir
   (`lib/notification-store.ts`, server-only; mode 0600 because it also holds
   the VAPID private key; WAL with a busy timeout). It also keeps the
-  notification history. An installed server and `npm run dev` sharing the agent
+  notification history. An installed server and `bun run dev` sharing the agent
   dir share it safely; the first open imports and deletes the old
   `notifications.json`. Push text is
   rendered server-side in the device's locale. Browsers with saved settings (enabled or not) sync on load; never-configured browsers do not.

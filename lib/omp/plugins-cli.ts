@@ -1,10 +1,10 @@
-// Loaded by the host daemon too (Node, through jiti): relative imports and `node:*` modules only, no `Bun` global.
-import { execFile, spawn } from "node:child_process";
+// Loaded by the host daemon too (Bun's native TypeScript runtime): relative imports and `node:*` modules only.
+import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { PluginEntry } from "../hosts/cluster-config";
 import { createChildProcessEnvironment } from "../project-command-env";
-import { OMP_NOT_FOUND, resolveOmpBin, wrapWindowsScript } from "./omp-cli";
+import { OMP_NOT_FOUND, resolveOmpBin } from "./omp-cli";
 
 export const ANSI_RE = /\x1B\[[0-9;]*m/g;
 
@@ -24,27 +24,17 @@ export function parseJsonLoose<T>(stdout: string): T | null {
 export function runOmpCli(args: string[], timeoutMs: number, signal?: AbortSignal): Promise<string> {
   const bin = resolveOmpBin();
   if (!bin) return Promise.reject(new Error(OMP_NOT_FOUND));
-  const target = wrapWindowsScript(bin, args);
-  // A .cmd launcher runs as cmd.exe, which dies alone when execFile's signal kills it: the abort kills the tree, omp included.
-  const launcher = process.platform === "win32" && target.file === "cmd.exe";
   return new Promise((resolve, reject) => {
-    const killTree = () => {
-      if (child.pid) spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore", windowsHide: true }).once("error", () => child.kill());
-    };
-    const child = execFile(
-      target.file,
-      target.args,
-      { timeout: timeoutMs, signal: launcher ? undefined : signal, maxBuffer: 16 * 1024 * 1024, env: createChildProcessEnvironment({ FORCE_COLOR: "0", NO_COLOR: "1" }), windowsHide: true },
+    execFile(
+      bin,
+      args,
+      { timeout: timeoutMs, signal, maxBuffer: 16 * 1024 * 1024, env: createChildProcessEnvironment({ FORCE_COLOR: "0", NO_COLOR: "1" }) },
       (error, stdout, stderr) => {
-        if (launcher) signal?.removeEventListener("abort", killTree);
         if (!error) return resolve(stdout);
         const detail = (stderr || stdout || error.message).replace(ANSI_RE, "").trim();
         reject(new Error(detail.slice(-600) || `omp ${args.join(" ")} failed`));
       },
     );
-    if (!launcher || !signal) return;
-    if (signal.aborted) killTree();
-    else signal.addEventListener("abort", killTree, { once: true });
   });
 }
 

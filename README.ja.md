@@ -6,7 +6,6 @@
 
 <p>
   <a href="https://www.npmjs.com/package/@kahme247/ompweb"><img src="https://img.shields.io/npm/v/@kahme247/ompweb.svg?logo=npm&amp;color=e05d44" alt="npm version"></a>
-  <a href="https://nodejs.org"><img src="https://img.shields.io/node/v/@kahme247/ompweb.svg?logo=node.js&amp;color=44cc11" alt="node version"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/ompweb-dev/ompweb.svg?color=44cc11" alt="license"></a>
   <a href="https://www.npmjs.com/package/@kahme247/ompweb"><img src="https://img.shields.io/npm/dm/@kahme247/ompweb.svg?color=44cc11" alt="npm downloads"></a>
   <a href="https://github.com/ompweb-dev/ompweb/stargazers"><img src="https://img.shields.io/github/stars/ompweb-dev/ompweb.svg?logo=github" alt="GitHub stars"></a>
@@ -34,8 +33,8 @@
 
 ## 必要条件
 
-- omp を別途インストールする必要はありません。ompweb は独自の [omp](https://github.com/can1357/oh-my-pi) ビルド `ompweb-omp` を使い、`~/.omp` の設定、認証、セッションをそのまま使います。どのインストール（npm、npx、単一バイナリ）も、初回起動時に同じバージョンの `ompweb-omp` をそのバージョンの [GitHub リリース](https://github.com/ompweb-dev/ompweb/releases)からダウンロードし、SHA-256 を確認して保存します（単一バイナリでは同じディレクトリ、それ以外は `~/.omp/agent/omp-web/omp/<version>/`）。`ompweb fetch-omp` でも取得できます。対応プラットフォームは linux-x64、linux-arm64、darwin-x64、darwin-arm64、windows-x64 です。それ以外（musl の Linux、Arm 版 Windows、FreeBSD）ではセッションを開始できません。GitHub に接続できないマシンでは、`OMP_WEB_OMP_BIN` にそのリリースの `ompweb-omp-<os>-<arch>` のコピーを指定してください
-- Node.js `>= 24`。サーバーは [Bun](https://bun.sh) で動作し、npm パッケージの依存関係として自動的にインストールされます（同梱の Bun が見つからない場合は `PATH` 上の Bun を使用します）
+- macOS と glibc Linux の x64 / arm64 に対応します。`ompweb-omp` は対応するリリースから取得され、SHA-256 が検証されます。`ompweb fetch-omp` でも取得できます。
+- Bun の管理には mise を使用します。`mise trust && mise install` で指定バージョンをインストールしてください。
 
 キュー内のメッセージに対する **Steer**、**Delete**、**Edit** 操作は `ompweb-omp` チャネルのコマンド（`promote_queued_message`、`remove_queued_message`）です。omp がキャンセルを確認してから表示を削除し、編集時はキャンセル成功後にテキストを入力欄へ戻します。すでにキューに存在しないメッセージでは、キューを変更せず通知を表示します。ompweb が重複したステアリングメッセージを送信することはありません。
 
@@ -46,17 +45,17 @@
 **インストールせずに直接実行:**
 
 ```bash
-npx @kahme247/ompweb@latest
+bunx --bun @kahme247/ompweb@latest
 ```
 
 **またはグローバルにインストール:**
 
 ```bash
-npm install -g @kahme247/ompweb
+bun add -g @kahme247/ompweb
 ompweb
 ```
 
-**Node や npm を使わない単一バイナリ**もリリースごとに配布しています。手順は英語版 README の [Single binary](README.md#single-binary) を参照してください。
+**Bun のインストールが不要な単一バイナリ**もリリースごとに配布しています。手順は英語版 README の [Single binary](README.md#single-binary) を参照してください。
 
 ブラウザで [http://127.0.0.1:30177](http://127.0.0.1:30177) を開きます。
 
@@ -106,7 +105,7 @@ OMP_WEB_PASSWORD_HASH='scrypt$15$8$1$…' ompweb
 偽造できません。
 
 サービスインストーラー（`ompweb systemd install`、`ompweb-launchd install`、
-Linux トレイ、Windows サービス）はインストール時に `OMP_WEB_PASSWORD` を
+Linux トレイ）はインストール時に `OMP_WEB_PASSWORD` を
 受け付け、設定ファイルへ書き込む前にハッシュ化します。保存されるのは
 ハッシュだけです。
 
@@ -150,22 +149,22 @@ Linux トレイ、Windows サービス）はインストール時に `OMP_WEB_PA
 ```bash
 git clone https://github.com/ompweb-dev/ompweb.git
 cd ompweb
-npm install
-npx bun runner/scripts/use-omp-build.ts && (cd runner && npx bun install --frozen-lockfile)
-npx bun runner/scripts/build-binary.ts   # このマシン用の ompweb の omp ビルド: runner/release/ompweb-omp-<os>-<arch>
-npm run dev
+bun install
+bun runner/scripts/use-omp-build.ts && (cd runner && bun install --frozen-lockfile)
+bun runner/scripts/build-binary.ts   # このマシン用の ompweb の omp ビルド: runner/release/ompweb-omp-<os>-<arch>
+bun run dev
 ```
 
-ローカル開発サーバーは [http://127.0.0.1:30178](http://127.0.0.1:30178) で起動します。`runner/release/` のランナーは自動的に見つかります。`npm test` と `npm run build:binary` にもランナーのセットアップが必要です。
+ローカル開発サーバーは [http://127.0.0.1:30178](http://127.0.0.1:30178) で起動します。`runner/release/` のランナーは自動的に見つかります。`bun run test` と `bun run build:binary` にもランナーのセットアップが必要です。
 
-`npm run dev` は Bun のホットリロード付きでサーバーを起動します。`npm run build` はブラウザアプリを `dist/` にバンドルし、`npm start` はそれをポート 30177 で配信します（`npm run smoke` で結果を確認できます）。`npm run dev:lan` は開発サーバーをすべてのインターフェースにバインドします。
+`bun run dev` は Bun のホットリロード付きでサーバーを起動します。`bun run build` はブラウザアプリを `dist/` にバンドルし、`bun run start` はそれをポート 30177 で配信します（`bun run smoke` で結果を確認できます）。`bun run dev:lan` は開発サーバーをすべてのインターフェースにバインドします。
 
 ### チェックコマンド
 
 ```bash
-npm run typecheck   # 型チェック (TypeScript)
-npm run lint        # ESLint
-npm test            # テスト実行 (bun test)
+bun run typecheck   # 型チェック (TypeScript)
+bun run lint        # ESLint
+bun run test            # テスト実行 (bun test)
 ```
 
 ## クレジットとライセンス

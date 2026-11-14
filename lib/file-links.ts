@@ -1,5 +1,4 @@
 import type { Link, Nodes, Root } from "mdast";
-import { normalizeFilePathSlashes } from "./file-paths";
 
 function safeDecode(value: string): string {
   try {
@@ -14,10 +13,8 @@ function stripLineSuffix(filePath: string): string {
 }
 
 export function normalizeLocalPath(filePath: string): string {
-  const normalized = normalizeFilePathSlashes(filePath);
-  const isWindowsDrive = /^[a-zA-Z]:\//.test(normalized);
-  const isUnc = normalized.startsWith("//");
-  const leadingSlash = normalized.startsWith("/") && !isWindowsDrive && !isUnc;
+  const normalized = filePath;
+  const leadingSlash = normalized.startsWith("/");
   const parts: string[] = [];
 
   for (const part of normalized.split("/")) {
@@ -25,7 +22,7 @@ export function normalizeLocalPath(filePath: string): string {
     if (part === "..") {
       if (parts.length > 0 && parts[parts.length - 1] !== "..") {
         parts.pop();
-      } else if (!leadingSlash && !isWindowsDrive && !isUnc) {
+      } else if (!leadingSlash) {
         parts.push(part);
       }
       continue;
@@ -34,18 +31,13 @@ export function normalizeLocalPath(filePath: string): string {
   }
 
   const joined = parts.join("/");
-  if (isWindowsDrive) return joined;
-  if (isUnc) return `//${joined}`;
   return leadingSlash ? `/${joined}` : joined;
 }
 
 function isPathInside(candidate: string, root: string): boolean {
   const normalizedCandidate = normalizeLocalPath(candidate).replace(/\/+$/, "");
   const normalizedRoot = normalizeLocalPath(root).replace(/\/+$/, "");
-  const useCaseInsensitive = /^[a-zA-Z]:\//.test(normalizedCandidate) || /^[a-zA-Z]:\//.test(normalizedRoot);
-  const filePath = useCaseInsensitive ? normalizedCandidate.toLowerCase() : normalizedCandidate;
-  const rootPath = useCaseInsensitive ? normalizedRoot.toLowerCase() : normalizedRoot;
-  return filePath === rootPath || filePath.startsWith(`${rootPath}/`);
+  return normalizedCandidate === normalizedRoot || normalizedCandidate.startsWith(`${normalizedRoot}/`);
 }
 
 function looksLikeRelativeFileHref(href: string): boolean {
@@ -60,10 +52,7 @@ function fileUrlToPath(href: string): string | null {
     const url = new URL(href);
     if (url.protocol !== "file:") return null;
     const pathname = safeDecode(url.pathname);
-    if (url.hostname) {
-      return `//${url.hostname}${pathname.startsWith("/") ? pathname : `/${pathname}`}`;
-    }
-    if (/^\/[a-zA-Z]:\//.test(pathname)) return pathname.slice(1);
+    if (url.hostname && url.hostname !== "localhost") return null;
     return pathname;
   } catch {
     return null;
@@ -83,22 +72,18 @@ export function resolveLocalFileHref(
   let candidate: string | null = null;
   let candidateKind: "absolute" | "relative" | null = null;
   const decodedHref = safeDecode(cleanHref);
-  const isBackslashUncPath = decodedHref.startsWith("\\\\");
-  const normalizedHref = normalizeFilePathSlashes(decodedHref);
+  const normalizedHref = decodedHref;
   const lowerHref = normalizedHref.toLowerCase();
 
   if (lowerHref.startsWith("/api/")) return null;
-  if (!isBackslashUncPath && normalizedHref.startsWith("//")) return null;
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/i.test(normalizedHref) && !lowerHref.startsWith("file:") && !/^[a-zA-Z]:\//.test(normalizedHref)) {
+  if (normalizedHref.startsWith("//")) return null;
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/i.test(normalizedHref) && !lowerHref.startsWith("file:")) {
     return null;
   }
 
   if (lowerHref.startsWith("file:")) {
     candidate = fileUrlToPath(normalizedHref);
     candidateKind = candidate ? "absolute" : null;
-  } else if (/^[a-zA-Z]:\//.test(normalizedHref)) {
-    candidate = normalizedHref;
-    candidateKind = "absolute";
   } else if (normalizedHref.startsWith("/")) {
     candidate = normalizedHref;
     candidateKind = "absolute";
@@ -107,7 +92,7 @@ export function resolveLocalFileHref(
     candidate = normalizedHref;
     candidateKind = "absolute";
   } else if (baseDir && looksLikeRelativeFileHref(normalizedHref)) {
-    candidate = `${normalizeFilePathSlashes(baseDir).replace(/\/+$/, "")}/${normalizedHref}`;
+    candidate = `${baseDir.replace(/\/+$/, "")}/${normalizedHref}`;
     candidateKind = "relative";
   }
 
@@ -135,7 +120,6 @@ const INLINE_CODE_PATH_RE = new RegExp(
   "^(?:"
     + `/${PATH_SEGMENT}(?:/${PATH_SEGMENT})+`
     + `|~/${PATH_SEGMENT}(?:/${PATH_SEGMENT})*`
-    + String.raw`|[A-Za-z]:[\\/]${PATH_SEGMENT}(?:[\\/]${PATH_SEGMENT})*`
     + `|(?:${PATH_SEGMENT}/)+[\\w.@+~\\[\\]-]*\\.[A-Za-z][A-Za-z0-9]*`
     + String.raw`)(?::\d+(?::\d+)?)?$`,
 );

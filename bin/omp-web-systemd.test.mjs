@@ -6,8 +6,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-// The scripts under test run on Node in production. Some tests narrow PATH, so resolve it up front.
-const NODE = Bun.which("node");
+// Some tests narrow PATH, so use the current Bun executable by absolute path.
+const NODE = process.execPath;
 const require = createRequire(import.meta.url);
 const {
   buildHostUnit,
@@ -53,7 +53,7 @@ test("writeServiceEnv creates the parent directory and a private file", () => {
       PORT: "40100",
       OMP_WEB_HOSTNAME: "127.0.0.1",
     });
-    if (process.platform !== "win32") assert.equal(statSync(envPath).mode & 0o777, 0o600);
+    assert.equal(statSync(envPath).mode & 0o777, 0o600);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -291,8 +291,7 @@ test("install fails loudly when the omp launcher interpreter is missing", () => 
 
     const childEnv = {
       ...process.env,
-      // No node dir: the spawn uses an absolute process.execPath, and adding
-      // it breaks the premise when node and bun share a directory.
+      // The spawn uses an absolute Bun path, which is intentionally absent here.
       PATH: binDir,
       OMP_WEB_SYSTEMD_BIN: fakeOmpweb,
       OMP_WEB_OMP_BIN: path.join(binDir, "omp"),

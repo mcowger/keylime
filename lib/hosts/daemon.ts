@@ -66,11 +66,10 @@ function updateCompatibility(value: unknown): HostUpdateCompatibility {
   return { min: Number(value.min), max: Number(value.max) };
 }
 
-/** Whether `command` names an executable: a path as given, else a name on PATH (with PATHEXT's extensions on Windows). */
+/** Whether `command` names an executable: a path as given, else a name on PATH. */
 async function commandExists(command: string): Promise<boolean> {
-  const names = process.platform === "win32" ? ["", ...(process.env.PATHEXT ?? ".EXE;.CMD;.BAT").split(";")].map(ext => command + ext) : [command];
-  const dirs = /[\\/]/.test(command) ? [""] : (process.env.PATH ?? "").split(delimiter).filter(Boolean);
-  for (const dir of dirs) for (const name of names) if (await access(join(dir, name), constants.X_OK).then(() => true, () => false)) return true;
+  const dirs = command.includes("/") ? [""] : (process.env.PATH ?? "").split(delimiter).filter(Boolean);
+  for (const dir of dirs) if (await access(join(dir, command), constants.X_OK).then(() => true, () => false)) return true;
   return false;
 }
 

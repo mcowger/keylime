@@ -81,7 +81,6 @@ function runOmp(
         timeout: opts.timeout ?? 60_000,
         maxBuffer: 16 * 1024 * 1024,
         env: createChildProcessEnvironment({ FORCE_COLOR: "0", NO_COLOR: "1" }),
-        windowsHide: true,
       },
       (error, stdout, stderr) => {
         if (error) {

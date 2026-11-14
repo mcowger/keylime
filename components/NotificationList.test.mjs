@@ -4,8 +4,6 @@ import test, { afterEach, before } from "node:test";
 import React from "react";
 const { act, cleanup, render } = await import("@testing-library/react/pure.js");
 
-// Same specifiers as NotificationList's own imports: on Windows a relative path
-// can load a second copy of the module, whose list the component never sees.
 const { NotificationList } = await import("@/components/NotificationList");
 const { notificationHistory } = await import("@/lib/notification-history");
 const { OPEN_SESSION_EVENT } = await import("@/lib/notification-client");

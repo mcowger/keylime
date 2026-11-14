@@ -141,7 +141,7 @@ function db(): Database {
   return database;
 }
 
-/** Closes the cached store. `close(true)` finalizes the statements still alive: without it the file stays open until GC, and Windows keeps it locked. */
+/** Closes the cached store and finalizes its prepared statements. */
 export function closeOutboxStore(): void {
   const state = globalThis.__ompOutbox;
   if (state) {

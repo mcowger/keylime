@@ -20,9 +20,8 @@ function readStdin() {
 }
 
 /**
- * One line, EOF-terminated. Trailing newlines are stripped (a here-string ends
- * with a newline; CRLF is what Windows shells pipe), but nothing else is: a
- * password may legitimately contain spaces or trailing punctuation.
+ * One line, EOF-terminated. Trailing newlines are stripped, but nothing else is:
+ * a password may legitimately contain spaces or trailing punctuation.
  */
 async function readPipedLine() {
   const piped = await readStdin();

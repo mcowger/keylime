@@ -185,10 +185,7 @@ export async function runIsolatedUtilityCommand<T = unknown>(
     throw error;
   } finally {
     if (signal) signal.removeEventListener("abort", onAbort);
-    // Await the child's exit (not fire-and-forget): callers like the
-    // models-config test remove their throwaway temp dir right after this
-    // resolves, and on Windows a still-exiting child holding handles on that
-    // dir makes rmSync fail (EBUSY, only suppressed by force: true).
+    // Wait for the child to exit before releasing its resources.
     await proc.dispose();
   }
 }

@@ -7,31 +7,6 @@ export interface BrowsableDirectory {
   path: string;
 }
 
-export function shouldShowWindowsDrivePicker(
-  directory?: string,
-  platform: NodeJS.Platform = process.platform,
-): boolean {
-  return platform === "win32" && !directory;
-}
-
-export function getWindowsDriveCandidates(): BrowsableDirectory[] {
-  return "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map((letter) => ({
-    name: `${letter}:`,
-    path: `${letter}:\\`,
-  }));
-}
-
-export async function listWindowsDrives(): Promise<BrowsableDirectory[]> {
-  const candidates = await Promise.all(getWindowsDriveCandidates().map(async (drive) => {
-    try {
-      const driveStat = await fsPromises.stat(drive.path);
-      return driveStat.isDirectory() ? drive : null;
-    } catch {
-      return null;
-    }
-  }));
-  return candidates.filter((drive): drive is BrowsableDirectory => drive !== null);
-}
 
 export function getBrowseStartDirectory(directory?: string): string {
   return directory || homedir();
@@ -44,11 +19,8 @@ export function normalizeDirectory(directory: string): string {
 }
 
 export function getParentDirectory(directory: string): string | null {
-  const pathApi = /^[a-zA-Z]:[\\/]/.test(directory) || directory.startsWith("\\\\")
-    ? path.win32
-    : directory.startsWith("/") ? path.posix : path;
-  const normalized = pathApi.normalize(directory);
-  const parent = pathApi.dirname(normalized);
+  const normalized = path.normalize(directory);
+  const parent = path.dirname(normalized);
   return parent === normalized ? null : parent;
 }
 

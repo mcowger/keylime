@@ -165,7 +165,7 @@ export function unpackBundled(targetDir: string, force = false): { targetDir: st
   const safeTargetDir = secureScopeDir(targetDir);
   const before = new Set(readdirSync(safeTargetDir, { withFileTypes: true }).filter((entry) => entry.name.toLowerCase().endsWith(".md")).map((entry) => entry.name));
   const bin = resolveOmpBin() ?? "omp";
-  execFileSync(bin, ["agents", "unpack", "--dir", safeTargetDir, "--json", ...(force ? ["--force"] : [])], { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: createChildProcessEnvironment() });
+  execFileSync(bin, ["agents", "unpack", "--dir", safeTargetDir, "--json", ...(force ? ["--force"] : [])], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: createChildProcessEnvironment() });
   const after = readdirSync(safeTargetDir, { withFileTypes: true }).filter((entry) => entry.name.toLowerCase().endsWith(".md")).map((entry) => entry.name);
   const written = after.filter((name) => !before.has(name)).length;
   return { targetDir, total: after.length, written, skipped: Math.max(0, after.length - written) };
@@ -192,8 +192,7 @@ export async function discoverAgents(cwd?: string): Promise<{ agents: AgentInfo[
   const byName = new Map<string, AgentInfo>();
   for (const root of roots) {
     for (const agent of await scanRoot(root, diagnostics)) {
-      const key = process.platform === "win32" ? agent.name.toLowerCase() : agent.name;
-      byName.set(key, agent);
+      byName.set(agent.name, agent);
     }
   }
   return { agents: [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)), diagnostics, bundledPath };
@@ -227,7 +226,7 @@ export function getAgentFilePath(scopeDir: string, name: string): string {
 function sameAgentPath(left: string, right: string): boolean {
   const a = resolve(left);
   const b = resolve(right);
-  return process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b;
+  return a === b;
 }
 
 // On a case-insensitive filesystem (macOS APFS default) a case-only rename
@@ -307,13 +306,12 @@ export function writeAgent(scopeDir: string, name: string, payload: AgentPayload
   writeFileSync(tmpPath, serialized, { encoding: "utf8", flag: "wx" });
   let displacedPath: string | undefined;
   try {
-    // Windows cannot replace an existing file with renameSync, and on a
-    // case-insensitive filesystem (macOS APFS default) renaming over a
+    // On a case-insensitive filesystem (macOS APFS default) renaming over a
     // case-variant keeps the OLD directory entry's casing. Move the old file
     // aside first so updates and case-only renames remain atomic from the
     // caller's view and the new name's casing lands on disk.
     const caseOnlyReplace = Boolean(previousPath && !sameAgentPath(filePath, previousPath) && sameOnDiskEntry(filePath, previousPath));
-    if ((process.platform === "win32" || caseOnlyReplace) && replacesPreviousPath && existsSync(filePath)) {
+    if (caseOnlyReplace && replacesPreviousPath && existsSync(filePath)) {
       displacedPath = `${filePath}.${process.pid}.${Date.now()}.old`;
       renameSync(filePath, displacedPath);
     }

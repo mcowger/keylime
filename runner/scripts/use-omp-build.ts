@@ -22,7 +22,7 @@ const pinPath = path.join(runnerDir, "omp-build.json");
 const manifestPath = path.join(runnerDir, "package.json");
 const TAG = /^v\d+\.\d+\.\d+-int\.\d{12}\.g[0-9a-f]{7}$/;
 // Without an override per leaf, bun installs upstream's npm leaf instead and the runner embeds upstream's addon.
-const LEAVES = ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64", "win32-x64", "win32-arm64"].map(
+const LEAVES = ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"].map(
 	target => `@oh-my-pi/pi-natives-${target}`,
 );
 
@@ -45,13 +45,19 @@ async function fetchBuild({ repo, tag }: Pin, required: string[] = []): Promise<
 	await fs.mkdir(staging);
 	const zip = path.join(staging, "omp-packages.zip");
 	await Bun.write(zip, response);
-	// Windows' bundled tar is bsdtar, which reads zip.
-	run(process.platform === "win32" ? ["tar", "-xf", zip, "-C", staging] : ["unzip", "-q", zip, "-d", staging]);
+	run(["unzip", "-q", zip, "-d", staging]);
 	await fs.rm(zip);
 	const index: Record<string, string> = await Bun.file(path.join(staging, "index.json")).json();
 	for (const [name, file] of Object.entries(index)) {
 		if (!/^[\w.-]+\.tgz$/.test(file)) throw new Error(`index.json: bad file ${file} for ${name}`);
 	}
+	for (const [name, file] of Object.entries(index)) {
+		if (name.startsWith("@oh-my-pi/pi-natives-") && !LEAVES.includes(name)) {
+			await fs.rm(path.join(staging, file));
+			delete index[name];
+		}
+	}
+	await Bun.write(path.join(staging, "index.json"), `${JSON.stringify(index, null, 2)}\n`);
 	const missing = required.filter(name => !index[name]);
 	if (missing.length > 0) throw new Error(`${tag} has no package for ${missing.join(", ")}`);
 	await fs.rm(vendorDir, { recursive: true, force: true });

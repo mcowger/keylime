@@ -32,8 +32,6 @@ export async function openRegularFileNoFollow(filePath: string) {
   try {
     const fileInfo = await handle.stat();
     if (!fileInfo.isFile()) throw new Error("Bash output path is not a regular file");
-    // On platforms without O_NOFOLLOW (Windows defines none) a symlink swapped
-    // between the lstat above and this open would pass the file-type checks.
     // Verify the opened inode is the same one we validated; when the
     // filesystem reports no identity at all (FAT/exFAT give dev=ino=0) the
     // check is meaningless, so fail closed rather than serve an unverifiable

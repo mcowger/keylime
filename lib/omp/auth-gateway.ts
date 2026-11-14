@@ -2,7 +2,7 @@ import { type ChildProcessWithoutNullStreams, spawn } from "child_process";
 import { homedir } from "os";
 import { createInterface } from "readline";
 import { sanitizeProjectCommandEnvironment } from "../project-command-env";
-import { OMP_NOT_FOUND, resolveOmpBin, wrapWindowsScript } from "./omp-cli";
+import { OMP_NOT_FOUND, resolveOmpBin } from "./omp-cli";
 
 /**
  * Shared `omp auth-gateway stdio` child: omp's own credentials (OAuth
@@ -72,8 +72,7 @@ function startGateway(state: AuthGatewayState): Gateway {
   const env = sanitizeProjectCommandEnvironment({ ...process.env });
   delete env.OMP_PROFILE;
   delete env.PI_PROFILE;
-  const target = wrapWindowsScript(bin, ["auth-gateway", "stdio"]);
-  const child = spawn(target.file, target.args, { cwd: homedir(), env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+  const child = spawn(bin, ["auth-gateway", "stdio"], { cwd: homedir(), env, stdio: ["pipe", "pipe", "pipe"] });
   child.stdin.on("error", () => {});
   child.stdout.on("error", () => {});
 

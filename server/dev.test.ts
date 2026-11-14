@@ -16,7 +16,7 @@ function alive(pid: number): boolean {
   }
 }
 
-test("a SIGHUP to the dev parent also stops the server it re-ran", { skip: process.platform === "win32", timeout: 60_000 }, async (t) => {
+test("a SIGHUP to the dev parent also stops the server it re-ran", { timeout: 60_000 }, async (t) => {
   const home = mkdtempSync(path.join(os.tmpdir(), "omp-web-dev-"));
   // Without OMP_WEB_PUBLIC_* in its environment, dev.ts runs itself once more with them set.
   const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("OMP_WEB_")));
@@ -51,7 +51,7 @@ test("a SIGHUP to the dev parent also stops the server it re-ran", { skip: proce
   assert.equal(alive(child), false, "the re-run dev server outlived its parent");
 });
 
-test("hot reload of a shared worker dependency keeps the dev server listening", { skip: process.platform === "win32", timeout: 60_000 }, async (t) => {
+test("hot reload of a shared worker dependency keeps the dev server listening", { timeout: 60_000 }, async (t) => {
   const home = mkdtempSync(path.join(os.tmpdir(), "omp-web-hot-"));
   const source = path.join(home, "source");
   for (const name of ["server", "app", "lib", "components", "hooks", "public", "scripts", "bin", "tsconfig.json", "bunfig.toml", "package.json", "instrumentation.node.ts", "proxy.ts"]) {

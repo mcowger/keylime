@@ -1,4 +1,4 @@
-// Host daemon only (Node, loaded through jiti): relative imports, `node:*` modules and the global fetch.
+// Host daemon only (Bun's native TypeScript runtime): relative imports, `node:*` modules and the global fetch.
 // omp's auth-broker client talks to a loopback listener here; each request goes on to the server's /api/hosts/broker route
 // with the host's link token, which so never enters an omp child's environment (the child holds only this listener's secret).
 import { randomBytes, timingSafeEqual } from "node:crypto";

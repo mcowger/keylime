@@ -126,7 +126,7 @@ function db(): Database {
   return database;
 }
 
-/** Closes the cached store. `close(true)` finalizes the statements still alive: without it the file stays open until GC, and Windows keeps it locked. */
+/** Close the cached store and finalize its statements. */
 export function closeNotificationStore(): void {
   globalThis.__ompNotificationStore?.db.close(true);
   globalThis.__ompNotificationStore = undefined;

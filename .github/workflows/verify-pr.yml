@@ -24,12 +24,8 @@ permissions:
 
 jobs:
   verify:
-    name: Verify (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+    name: Verify
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
@@ -37,54 +33,45 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version-file: .nvmrc
-          cache: npm
+      - name: Setup mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
 
       # The runner's own deps too: lib/hosts/omp-socket.test.mjs checks the host against runner/src/channel.ts.
       - name: Install dependencies
         run: |
-          npm ci
-          npx bun runner/scripts/use-omp-build.ts
-          npx bun install --cwd runner --frozen-lockfile
+          bun install --frozen-lockfile
+          bun runner/scripts/use-omp-build.ts
+          bun install --cwd runner --frozen-lockfile
 
       - name: TypeScript typecheck
-        run: npm run typecheck
+        run: bun run typecheck
 
       - name: ESLint check
-        run: npm run lint
+        run: bun run lint
 
       - name: Run unit & integration test suite
-        run: npm test
+        run: bun run test
 
       - name: Verify production build
-        run: npm run build
+        run: bun run build
 
       - name: Build the omp runner
-        run: npx bun runner/scripts/build-binary.ts
+        run: bun runner/scripts/build-binary.ts
 
       - name: Smoke test
-        run: npm run smoke
+        run: bun run smoke
 
       # The release binary for this runner (the -baseline x64 build releases ship), from the client built above, with its
       # own `ompweb host` daemon (scripts/build-binary.ts).
       - name: Binary smoke test
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = Windows ]; then
-            npx bun scripts/build-binary.ts --target bun-windows-x64-baseline
-            bin=release/ompweb-windows-x64/ompweb.exe
-            archive=release/ompweb-windows-x64.zip
-          else
-            npx bun scripts/build-binary.ts --target bun-linux-x64-baseline
-            bin=release/ompweb-linux-x64/ompweb
-            archive=release/ompweb-linux-x64.tar.gz
-          fi
+          bun scripts/build-binary.ts --target bun-linux-x64-baseline
+          bin=release/ompweb-linux-x64/ompweb
+          archive=release/ompweb-linux-x64.tar.gz
           # The archive a host downloads must pass the updater's own size limits and checks.
-          npx bun scripts/check-host-release-archive.ts "$archive"
-          npm run smoke -- --binary "$bin"
+          bun scripts/check-host-release-archive.ts "$archive"
+          bun run smoke --binary "$bin"
           # What the host updater checks on a new release before it switches (lib/hosts/update-worker.ts): the marker
           # it finds the command by, then the command itself against the bundled ompweb-omp.
           grep -qa ompweb-preflight-scratch- "$bin"
@@ -93,34 +80,10 @@ jobs:
       - name: Packed install smoke test
         shell: bash
         run: |
-          npm pack --ignore-scripts
-          npm install -g --prefix "$RUNNER_TEMP/ompweb-prefix" ./kahme247-ompweb-*.tgz
-          npm run smoke -- --omp "$(ls runner/release/ompweb-omp-*)" --package "$(npm root -g --prefix "$RUNNER_TEMP/ompweb-prefix")/@kahme247/ompweb"
-
-      # Bun's postinstall does not run here: the launcher must fall back to @oven/bun-<os>-<arch> (spec R1).
-      - name: Packed install smoke test (install scripts disabled)
-        shell: bash
-        run: |
-          npm install -g --ignore-scripts --prefix "$RUNNER_TEMP/ompweb-prefix-no-scripts" ./kahme247-ompweb-*.tgz
-          npm run smoke -- --omp "$(ls runner/release/ompweb-omp-*)" --package "$(npm root -g --prefix "$RUNNER_TEMP/ompweb-prefix-no-scripts")/@kahme247/ompweb"
-
-      - name: Parse Windows PowerShell scripts (Windows only)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          foreach ($f in 'scripts/windows/omp-web-service.ps1', 'scripts/windows/omp-web-tray.ps1') {
-            $e = $null
-            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f).Path, [ref]$null, [ref]$e) | Out-Null
-            if ($e) { $e; exit 1 }
-          }
-
-      - name: Verify Windows System Tray & Shortcuts (Windows only)
-        if: runner.os == 'Windows'
-        run: |
-          node bin/omp-web-tray.js --status
-          node bin/omp-web-tray.js --install
-          node bin/omp-web-tray.js --status
-          node bin/omp-web-tray.js --uninstall
+          bun pm pack --ignore-scripts
+          mkdir -p "$RUNNER_TEMP/ompweb-package"
+          (cd "$RUNNER_TEMP/ompweb-package" && bun add "$GITHUB_WORKSPACE"/kahme247-ompweb-*.tgz)
+          bun run smoke --omp "$(ls runner/release/ompweb-omp-*)" --package "$RUNNER_TEMP/ompweb-package/node_modules/@kahme247/ompweb"
 
   pr-rules:
     name: PR Rules & Quality Gates

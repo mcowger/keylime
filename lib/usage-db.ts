@@ -163,7 +163,7 @@ export function getUsageDatabase(customPath?: string): Database {
   return db;
 }
 
-/** Close the usage database instance. `close(true)` finalizes the statements still alive: without it the file stays open until GC, and Windows keeps it locked. */
+/** Close the usage database instance and finalize its statements. */
 export function closeUsageDatabase(): void {
   if (globalThis.__ompUsageDatabase) {
     try {

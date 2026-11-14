@@ -41,8 +41,7 @@ function shorten(p: string) {
 function splitCsv(v: string): string[] { return v.split(",").map((s) => s.trim()).filter(Boolean); }
 function toCsv(arr?: string[] | string): string { if (!arr) return ""; if (typeof arr === "string") return arr; return arr.join(", "); }
 function fileStem(filePath: string): string {
-  const normalized = filePath.replace(/\\/g, "/");
-  const fileName = normalized.slice(normalized.lastIndexOf("/") + 1);
+  const fileName = filePath.slice(filePath.lastIndexOf("/") + 1);
   return fileName.toLowerCase().endsWith(".md") ? fileName.slice(0, -3) : fileName;
 }
 

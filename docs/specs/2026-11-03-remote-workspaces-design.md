@@ -30,7 +30,7 @@ below also records the current hidden-item behavior and search limits.
 | Composer and chat | File suggestions, file mentions, relative/absolute file links, referenced bash output and GitHub repository resolution |
 | Git | Existing status and per-file diff views; no new Git actions |
 | Worktrees | Listing, current-worktree selection, create, remove with dirty confirmation, new-session selector and project grouping |
-| Directory picker | Host home, parent/child navigation, Windows drives, typed-path validation and default scratch directory |
+| Directory picker | Host home, parent/child navigation, typed-path validation and default scratch directory |
 | Clone | Host-side clone with existing progress, cancellation, cleanup and project registration |
 
 Search across session transcripts, usage, import, archive and config surfaces
@@ -125,8 +125,7 @@ the newly selected workspace. URLs used for images, media, previews and
 explicit downloads carry the same host context.
 
 Relative links resolve against their source document/workspace on its host;
-`~`, Windows drives, UNC paths and separators are interpreted by that host.
-The browser does not apply main's POSIX path rules to a Windows host.
+`~` and paths are interpreted by that host.
 
 ### Main
 
@@ -367,8 +366,7 @@ ordinary imported source modules need no separate copied asset.
    dev behavior under the single-daemon-path rule.
 8. Run affected existing suites with `bun test --parallel`, typecheck/lint/build,
    the packaged smoke command and browser checks of Explorer, file viewer, Git,
-   Worktrees and directory picker. Cover Windows path semantics in deterministic
-   tests; report separately if no live Windows host was exercised.
+   Worktrees and directory picker.
 
 Permanent tests target authorization, observable transfer outcomes, identity
 isolation, lifecycle transitions and mutation safety. Do not pin source text,

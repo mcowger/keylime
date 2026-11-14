@@ -2,7 +2,7 @@
 // Session reads take IDs, never paths; pooled preparation takes registered paths
 // derived by server admission, never browser-supplied filesystem authority.
 // Live-wrapper work (RPC sends, stopping a child) stays in the routes on main.
-// No `next/*` or `@/` imports: the daemon loads this through plain jiti.
+// No `next/*` or `@/` imports: the daemon loads this through Bun's native TypeScript runtime.
 import { randomUUID } from "crypto";
 import { execFile } from "child_process";
 import { closeSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, realpathSync, rmSync, statSync, type Stats } from "fs";
@@ -12,7 +12,7 @@ import { basename, dirname, isAbsolute, join, resolve } from "path";
 import { promisify } from "util";
 import { comparableProjectPath } from "../comparable-path";
 import { mediaFilePath } from "../media-cache";
-import { OMP_NOT_FOUND, resolveOmpBin, wrapWindowsScript } from "../omp/omp-cli";
+import { OMP_NOT_FOUND, resolveOmpBin } from "../omp/omp-cli";
 import { listArchivedSessionInfos, restoreArchivedSession, restoreFailureStatus } from "../omp/archive";
 import {
   archiveSessionFileWithArtifacts,
@@ -305,12 +305,10 @@ async function runOmpExport(filePath: string, outputPath: string): Promise<void>
   if (!bin) {
     throw new Error(OMP_NOT_FOUND);
   }
-  const target = wrapWindowsScript(bin, ["--export", filePath, outputPath]);
-  await execFileAsync(target.file, target.args, {
+  await execFileAsync(bin, ["--export", filePath, outputPath], {
     cwd: tmpdir(),
     timeout: 60_000,
     maxBuffer: 4 * 1024 * 1024,
-    windowsHide: true,
   });
 }
 

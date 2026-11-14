@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { join } from "node:path";
 import { apiErrorResponse, opErrorResponse, resolveHostOrError } from "@/lib/api-utils";
 import { isValidOmpProfile } from "@/lib/omp-profile";
 import { allowFileRoot } from "@/lib/file-access";
 import { LOCAL_HOST_ID } from "@/lib/hosts/registry";
-import { isValidPoolOrigin, loadPools, pathApi, poolManagedProject, savePools } from "@/lib/hosts/pools";
+import { isValidPoolOrigin, loadPools, poolManagedProject, savePools } from "@/lib/hosts/pools";
 import { listProjectsAllHosts } from "@/lib/hosts/session-index";
 import type { ProjectUpdate } from "@/lib/hosts/session-ops";
 import { applyProjectPresentation, isReservedLaunchArg, ProjectPathError, type ProjectPresentationUpdate } from "@/lib/project-registry";
@@ -20,7 +21,7 @@ function parseLaunchConfig(value: unknown): ProjectLaunchConfig | undefined {
   const raw = value as Record<string, unknown>;
   const profile = raw.profile === undefined ? undefined : typeof raw.profile === "string" && raw.profile.trim() ? raw.profile.trim() : undefined;
   if (raw.profile !== undefined && !profile) throw new ProjectPathError("invalid_profile", "Profile must be a non-empty string");
-  if (profile !== undefined && !isValidOmpProfile(profile)) throw new ProjectPathError("invalid_profile", "Profile names must match ^[a-z0-9][a-z0-9._-]{0,63}$, cannot end with '.', and cannot be a Windows reserved device name (CON, PRN, AUX, NUL, COM0-9, LPT0-9, or any of those with an extension)");
+  if (profile !== undefined && !isValidOmpProfile(profile)) throw new ProjectPathError("invalid_profile", "Profile names must match ^[a-z0-9][a-z0-9._-]{0,63}$, cannot end with '.', and cannot use OMP-reserved device names (CON, PRN, AUX, NUL, COM0-9, LPT0-9, including names with extensions)");
   const advisor = raw.advisor === undefined ? undefined : raw.advisor;
   if (advisor !== undefined && typeof advisor !== "boolean") throw new ProjectPathError("invalid_advisor", "Advisor must be a boolean");
   if (raw.extraArgs !== undefined && (!Array.isArray(raw.extraArgs) || raw.extraArgs.length > MAX_EXTRA_ARGS)) throw new ProjectPathError("invalid_extra_args", "Extra args must contain at most 32 arguments");
@@ -127,7 +128,7 @@ export async function POST(req: Request) {
       if (typeof body.name === "string") project.name = body.name.trim();
       if (typeof body.defaultRef === "string") project.defaultRef = body.defaultRef;
       if (launchConfig !== undefined) project.launchConfig = launchConfig;
-      for (const member of pool.members) project.clonePaths[member.hostId] ??= pathApi(member.projectsRoot).join(member.projectsRoot, project.id);
+      for (const member of pool.members) project.clonePaths[member.hostId] ??= join(member.projectsRoot, project.id);
       savePools(pools);
       return Response.json({ project: poolManagedProject(pool, project) });
     }

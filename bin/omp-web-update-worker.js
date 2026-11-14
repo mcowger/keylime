@@ -1,6 +1,6 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 "use strict";
-// Dependency-free CommonJS - copied outside pkgDir to survive Windows file-lock
+// Dependency-free CommonJS, copied outside pkgDir to survive replacement.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const fs = require("node:fs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -20,7 +20,6 @@ function arg(name) {
 const attemptId = arg("--attempt");
 const root = arg("--root");
 const packageDir = arg("--package-dir");
-const manager = arg("--manager");
 const managerPath = arg("--manager-path");
 const target = arg("--target");
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -31,13 +30,10 @@ const serverPid = Number(arg("--server-pid"));
 const systemdUnit = arg("--systemd-unit");
 const systemctlScope = arg("--systemd-user") === "1" ? ["--user"] : [];
 let descriptor;
-let managerPrefix;
 try {
   descriptor = JSON.parse(arg("--descriptor") || "null");
-  managerPrefix = JSON.parse(arg("--manager-prefix") || "[]");
 } catch {
   descriptor = null;
-  managerPrefix = [];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -103,7 +99,7 @@ async function stopOriginalProcesses() {
   if (launchd) {
     try {
       const uid = typeof process.getuid === "function" ? process.getuid() : 501;
-      cp.spawnSync("launchctl", ["bootout", `gui/${uid}/com.kahme247.ompweb`], { timeout: 15000, windowsHide: true });
+      cp.spawnSync("launchctl", ["bootout", `gui/${uid}/com.kahme247.ompweb`], { timeout: 15000 });
     } catch {}
     await sleep(500);
   }
@@ -111,7 +107,7 @@ async function stopOriginalProcesses() {
     try {
       const trayBin = path.join(packageDir, "bin", "omp-web-tray.js");
       if (fs.existsSync(trayBin)) {
-        cp.spawnSync(process.execPath, [trayBin, "--stop"], { timeout: 15000, windowsHide: true });
+        cp.spawnSync(process.execPath, [trayBin, "--stop"], { timeout: 15000 });
       }
     } catch {}
     await sleep(500);
@@ -141,10 +137,8 @@ function preflightCandidate() {
   try {
     fs.writeFileSync(path.join(prefix, "package.json"), '{"private":true}');
     const pkg = `@kahme247/ompweb@${target}`;
-    // shell: true (Windows) joins arguments unquoted.
-    const where = process.platform === "win32" ? `"${prefix}"` : prefix;
-    const args = manager === "bun" ? ["add", "--cwd", where, "--production", "--exact", pkg] : ["install", "--prefix", where, "--omit=dev", "--no-audit", "--no-fund", pkg];
-    const install = cp.spawnSync(manager === "bun" ? (managerPath || "bun") : (managerPath || "npm"), args, { timeout: 5 * 60 * 1000, windowsHide: true, env: process.env, shell: process.platform === "win32" });
+    const args = ["add", "--cwd", prefix, "--production", "--exact", pkg];
+    const install = cp.spawnSync(managerPath || process.execPath, args, { timeout: 5 * 60 * 1000, env: process.env });
     if (install.status !== 0) {
       const detail = install.stderr ? install.stderr.toString().trim().slice(-300) : String(install.error || "");
       throw new Error(`candidate install failed (exit ${install.status})${detail ? `: ${detail}` : ""}`);
@@ -157,7 +151,7 @@ function preflightCandidate() {
     }
     // OMP_WEB_PACKAGE_DIR: the launcher set it to the running install, whose omp this must not check.
     const candidate = (command, timeout) => {
-      const result = cp.spawnSync(process.execPath, [path.join(release, "bin", "omp-web.js"), command], { cwd: prefix, timeout, windowsHide: true, env: { ...process.env, OMP_WEB_PACKAGE_DIR: release }, encoding: "utf8" });
+      const result = cp.spawnSync(process.execPath, [path.join(release, "bin", "omp-web.js"), command], { cwd: prefix, timeout, env: { ...process.env, OMP_WEB_PACKAGE_DIR: release }, encoding: "utf8" });
       return result.status === 0 ? null : ((result.stderr || "").trim() || String(result.error || `exit ${result.status}`)).slice(-300);
     };
     // 15 min, as the host updater allows the download.
@@ -167,20 +161,19 @@ function preflightCandidate() {
     const preflightFailure = candidate("preflight", 120 * 1000);
     if (preflightFailure) throw new Error(`the new release cannot start a session: ${preflightFailure}`);
   } finally {
-    // Best effort: a locked file (Windows) must not fail an update the check passed.
+    // Cleanup is best effort after the preflight.
     try { fs.rmSync(prefix, { recursive: true, force: true, maxRetries: 3 }); } catch {}
   }
 }
 
 async function runManagerGate() {
   updateStatus({ stage: "installing" });
-  const cmd = manager === "bun" ? (managerPath || "bun") : (managerPath || "npm");
-  const args = manager === "bun" ? ["add", "-g", `@kahme247/ompweb@${target}`] : ["install", "-g", `@kahme247/ompweb@${target}`];
-  if (Array.isArray(managerPrefix) && managerPrefix.length) args.unshift(...managerPrefix);
+  const cmd = managerPath || process.execPath;
+  const args = ["add", "-g", `@kahme247/ompweb@${target}`];
   let retries = 0;
   let lastResult;
   while (retries <= 1) {
-    const result = cp.spawnSync(cmd, args, { timeout: 5 * 60 * 1000, windowsHide: true, env: process.env, shell: process.platform === "win32" });
+    const result = cp.spawnSync(cmd, args, { timeout: 5 * 60 * 1000, env: process.env });
     lastResult = result;
     const stderr = result.stderr ? result.stderr.toString() : "";
     const spawnError = result.error ? String(result.error.code || result.error.message || "") : "";
@@ -214,7 +207,7 @@ async function restartServices(info) {
   if (info.launchd) {
     try {
       const uid = typeof process.getuid === "function" ? process.getuid() : 501;
-      cp.spawnSync("launchctl", ["bootstrap", `gui/${uid}`, path.join(os.homedir(), "Library", "LaunchAgents", "com.kahme247.ompweb.plist")], { timeout: 15000, windowsHide: true });
+      cp.spawnSync("launchctl", ["bootstrap", `gui/${uid}`, path.join(os.homedir(), "Library", "LaunchAgents", "com.kahme247.ompweb.plist")], { timeout: 15000 });
     } catch {}
     await sleep(1000);
     return;
@@ -223,7 +216,7 @@ async function restartServices(info) {
     try {
       const trayBin = path.join(packageDir, "bin", "omp-web-tray.js");
       if (fs.existsSync(trayBin)) {
-        cp.spawn(process.execPath, [trayBin, "--start"], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+        cp.spawn(process.execPath, [trayBin, "--start"], { detached: true, stdio: "ignore" }).unref();
       }
     } catch {}
     await sleep(1000);

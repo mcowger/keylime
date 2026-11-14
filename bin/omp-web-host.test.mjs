@@ -9,15 +9,14 @@ import { fileURLToPath } from "node:url";
 
 const bin = fileURLToPath(new URL("./omp-web.js", import.meta.url));
 
-// Windows has no signals: child.kill("SIGTERM") terminates the process outright, so the daemon's handler never runs.
-test("SIGTERM to `ompweb host` stops the daemon itself, leaving no orphan", { skip: process.platform === "win32" && "Windows kills on SIGTERM without running handlers" }, async (t) => {
+test("SIGTERM to `ompweb host` stops the daemon itself, leaving no orphan", async (t) => {
   const scratch = mkdtempSync(join(tmpdir(), "omp-web-host-cli-"));
   const agentDir = join(scratch, "agent");
   mkdirSync(join(agentDir, "omp-web"), { recursive: true });
   // Nothing listens on this loopback port: the daemon redials until it is stopped.
   writeFileSync(join(agentDir, "omp-web", "host.json"), JSON.stringify({ url: "http://127.0.0.1:9", token: "t" }), { mode: 0o600 });
-  const child = spawn("node", [bin, "host"], {
-    env: { ...process.env, HOME: scratch, USERPROFILE: scratch, PI_CODING_AGENT_DIR: agentDir },
+  const child = spawn(process.execPath, [bin, "host"], {
+    env: { ...process.env, HOME: scratch, PI_CODING_AGENT_DIR: agentDir },
     stdio: ["ignore", "pipe", "pipe"],
   });
   t.after(() => {
@@ -48,8 +47,8 @@ async function login(t, input, { end = true } = {}) {
   const scratch = mkdtempSync(join(tmpdir(), "omp-web-host-login-"));
   const agentDir = join(scratch, "agent");
   t.after(() => rmSync(scratch, { recursive: true, force: true }));
-  const child = spawn("node", [bin, "host", "login", "--url", "http://127.0.0.1:9"], {
-    env: { ...process.env, HOME: scratch, USERPROFILE: scratch, PI_CODING_AGENT_DIR: agentDir },
+  const child = spawn(process.execPath, [bin, "host", "login", "--url", "http://127.0.0.1:9"], {
+    env: { ...process.env, HOME: scratch, PI_CODING_AGENT_DIR: agentDir },
     stdio: ["pipe", "pipe", "pipe"],
   });
   t.after(() => child.kill("SIGKILL"));
@@ -77,7 +76,7 @@ test("`ompweb host login` refuses a token line over 4096 bytes without waiting f
 });
 
 async function hostCommand(env, ...args) {
-  const child = spawn("node", [bin, "host", ...args], { env, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(process.execPath, [bin, "host", ...args], { env, stdio: ["ignore", "pipe", "pipe"] });
   let stdout = "";
   let stderr = "";
   child.stdout.on("data", (chunk) => { stdout += chunk; });
@@ -95,7 +94,7 @@ function controlFixture(t, { url, longRoot = false } = {}) {
   const omp = join(scratch, "fixture-omp");
   writeFileSync(omp, `#!${process.execPath}\nconsole.log("18.0.0-cli-fixture");\n`, { mode: 0o700 });
   const env = {
-    ...process.env, HOME: scratch, USERPROFILE: scratch, PI_CODING_AGENT_DIR: agentDir,
+    ...process.env, HOME: scratch, PI_CODING_AGENT_DIR: agentDir,
     XDG_CONFIG_HOME: join(scratch, "config"), XDG_DATA_HOME: join(scratch, "data"),
     XDG_STATE_HOME: join(scratch, "state"), XDG_CACHE_HOME: join(scratch, "cache"),
     OMP_WEB_OMP_BIN: omp, OMP_WEB_DISABLE_AUTOUPDATE: "1",
@@ -107,7 +106,7 @@ function controlFixture(t, { url, longRoot = false } = {}) {
 }
 
 function launchHost(t, env) {
-  const child = spawn("node", [bin, "host"], { env, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(process.execPath, [bin, "host"], { env, stdio: ["ignore", "pipe", "pipe"] });
   let stderr = "";
   child.stderr.on("data", (chunk) => { stderr += chunk; });
   const closed = new Promise((resolve) => child.once("close", (code) => resolve(code)));
@@ -132,7 +131,7 @@ async function controlReady(env) {
   assert.fail(`the real CLI endpoint did not become ready: ${answer.stderr}`);
 }
 
-const unixControl = { skip: process.platform === "win32" && "Unix worker control; Windows ordinary host tests above remain unchanged" };
+const unixControl = {};
 
 test("status/drain/resume consume the real CLI daemon endpoint and SIGTERM removes it", unixControl, async (t) => {
   let hellos = 0;
@@ -195,36 +194,12 @@ test("CLI startup failure cleans its endpoint without dialing or needing credent
   assert.equal(existsSync(hostControlPath(f.agentDir)), false);
 });
 
-test("Windows: status/drain/resume reach the real daemon over its pipe; a duplicate is refused and a crash leaves no live control", { skip: process.platform !== "win32" && "Windows named-pipe CLI control" }, async (t) => {
-  const f = controlFixture(t);
-  const daemon = launchHost(t, f.env);
-  let status = await controlReady(f.env);
-  assert.equal(status.pid, daemon.child.pid);
-  assert.equal(status.drained, false);
-  for (const [command, drained] of [["drain", true], ["status", true], ["resume", false]]) {
-    const answer = await hostCommand(f.env, command);
-    assert.equal(answer.code, 0, answer.stderr);
-    assert.equal(JSON.parse(answer.stdout).drained, drained);
-  }
-  const duplicate = await hostCommand(f.env);
-  assert.equal(duplicate.code, 1, duplicate.stderr);
-  assert.match(duplicate.stderr, /already running/);
-  // Windows terminates without running handlers: the descriptor stays, but nothing answers on its pipe.
-  daemon.child.kill();
-  await daemon.closed;
-  assert.equal((await hostCommand(f.env, "status")).code, 1, "status must not start a replacement daemon");
-  const restarted = launchHost(t, f.env);
-  status = await controlReady(f.env);
-  assert.equal(status.pid, restarted.child.pid, "a stale descriptor is replaced by the next daemon");
-});
 
 test("worker maintenance startup is drained before linking and can be explicitly resumed", async (t) => {
   const f = controlFixture(t);
   const daemon = launchHost(t, { ...f.env, OMP_WEB_HOST_DRAINED: "1" });
-  if (process.platform !== "win32") {
-    const { hostControlPath } = await import("../lib/hosts/host-control.ts");
-    t.after(() => rmSync(join(hostControlPath(f.agentDir), ".."), { recursive: true, force: true }));
-  }
+  const { hostControlPath } = await import("../lib/hosts/host-control.ts");
+  t.after(() => rmSync(join(hostControlPath(f.agentDir), ".."), { recursive: true, force: true }));
   const status = await controlReady(f.env);
   assert.equal(status.pid, daemon.child.pid);
   assert.equal(status.drained, true);
@@ -244,8 +219,8 @@ test("`ompweb host login --add` and logout change only the selected URL without 
   t.after(() => rmSync(scratch, { recursive: true, force: true }));
   const run = async (args, input = "") => {
     assert.ok(!args.includes(staging.token));
-    const child = spawn("node", [bin, "host", ...args], {
-      env: { ...process.env, HOME: scratch, USERPROFILE: scratch, PI_CODING_AGENT_DIR: agentDir },
+    const child = spawn(process.execPath, [bin, "host", ...args], {
+      env: { ...process.env, HOME: scratch, PI_CODING_AGENT_DIR: agentDir },
       stdio: ["pipe", "pipe", "pipe"],
     });
     t.after(() => child.kill("SIGKILL"));

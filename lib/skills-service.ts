@@ -5,7 +5,7 @@ import * as path from "path";
 import { promisify } from "util";
 import { parse as parseYaml } from "yaml";
 import { existingPathWithinRootsChecker, getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
-import { resolveOmpBin, versionFingerprint, wrapWindowsScript } from "@/lib/omp/omp-cli";
+import { resolveOmpBin, versionFingerprint } from "@/lib/omp/omp-cli";
 import { ensureAgentDir, getAgentDir } from "@/lib/omp/paths";
 import { createChildProcessEnvironment } from "@/lib/project-command-env";
 import { isRecord } from "@/lib/type-guards";
@@ -193,7 +193,7 @@ async function scanRoot(root: SkillScanRoot, diagnostics: SkillDiagnostic[]): Pr
   try {
     // `root.dir` is user-controlled and can be outside the app. Keep this
     // runtime discovery opaque to Next's NFT tracer so builds never glob the
-    // user's profile (or protected Windows junctions).
+    // user's profile.
     const readDirectory = Reflect.get(fs, "readdir") as typeof fs.readdir;
     entries = await readDirectory(root.dir, { withFileTypes: true });
   } catch (error) {
@@ -313,16 +313,11 @@ async function discoverSkillsViaCli(cwd: string, ompBin: string | null): Promise
   const missKey = `${versionFingerprint(ompBin) ?? ompBin}\0${cwdPath}`;
   const now = Date.now();
   if ((skillsCliMisses.get(missKey) ?? 0) > now) return undefined;
-  // Windows .cmd/.bat launchers need cmd.exe, as in the version probe. The
-  // directory goes in as the process cwd, never as an argument: cmd.exe would
-  // interpret `&` and friends in a directory name.
-  const target = wrapWindowsScript(ompBin, ["skill", "list", "--json"]);
   try {
-    const { stdout } = await execFileAsync(target.file, target.args, {
+    const { stdout } = await execFileAsync(ompBin, ["skill", "list", "--json"], {
       cwd: cwdPath,
       timeout: SKILLS_CLI_TIMEOUT_MS,
       maxBuffer: 16 * 1024 * 1024,
-      windowsHide: true,
       // Otherwise this child inherits the server's full environment,
       // including omp-web's own secrets.
       env: createChildProcessEnvironment(),

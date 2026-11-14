@@ -15,10 +15,8 @@
  *      sessions, settings and agents from: the child would start fine and its sessions
  *      would vanish from the UI. Those are denied as well.
  *
- * Matching is case-insensitive on purpose: Windows environment names are, and the
- * denied names are mostly Windows plumbing (`SystemRoot`, `ComSpec`, `PATH`, ...). A
- * POSIX tool wanting an oddly-cased `Path` is far less likely than a Windows user
- * typing `systemroot`.
+ * Matching is case-insensitive to prevent differently cased variants of reserved
+ * names from bypassing the policy.
  */
 import { isRecord } from "../type-guards";
 
@@ -33,17 +31,10 @@ const DENIED_NAMES: ReadonlySet<string> = new Set([
   // Process plumbing — a rewritten PATH breaks omp's own binary/tool lookups,
   // NODE_OPTIONS injects code into every child node process.
   "PATH",
-  "PATHEXT",
-  "COMSPEC",
-  "SYSTEMROOT",
-  "WINDIR",
   "NODE_OPTIONS",
   // Where omp keeps its state. Redirecting these splits the child from the ~/.omp
   // that omp-web enumerates sessions, settings and agents from.
   "HOME",
-  "USERPROFILE",
-  "HOMEDRIVE",
-  "HOMEPATH",
   "XDG_DATA_HOME",
   "XDG_CONFIG_HOME",
   "PI_CODING_AGENT_DIR",

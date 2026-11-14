@@ -17,8 +17,7 @@ restart still kills them as orphans.
 - **The local daemon is required.** This machine is reached only through a
   local `ompweb host` daemon, linked over loopback. `LocalHost`'s direct spawn
   path is removed; there is one code path for every host.
-- **The daemon is its own service** (systemd unit / launchd agent / Windows
-  service), installed next to the web service.
+- **The daemon is its own service** (systemd unit / launchd agent), installed next to the web service.
 - **Restarts adopt live children.** A restarted web server takes over the omp
   children the daemon still runs instead of killing them.
 - **Dev mode does not take the local daemon.** Only the production web server
@@ -141,8 +140,6 @@ or an adoption failure.
 - `ompweb systemd install` and `ompweb launchd install` install two units: the
   existing web unit and `ompweb-host` (`ompweb host`), both restarting on
   failure. Uninstall removes both.
-- Windows (`lib/windows-service.ts`, tray): the same split, a second service
-  for the daemon. The tray shows both states.
 - **Existing installs:** on first start after the upgrade, if no local daemon
   links within 90 s (well past the daemon's redial wait, at most 3 s on
   loopback, so a restart does not trip it), the web server shows a one-time

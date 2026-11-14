@@ -14,9 +14,6 @@ function safeDecode(value: string): string {
   }
 }
 
-function normalizeSlashes(value: string): string {
-  return value.replace(/\\/g, "/");
-}
 
 function isPathChar(ch: string): boolean {
   return /[A-Za-z0-9._~+%@/\\:-]/.test(ch);
@@ -30,9 +27,9 @@ function hasReferenceBoundaryAfter(text: string, index: number): boolean {
 }
 
 function containsExactPathReference(text: string, filePath: string): boolean {
-  const target = normalizeSlashes(filePath);
+  const target = filePath;
   const targets = target.startsWith("/") ? [target, `file://${target}`] : [target];
-  const haystacks = new Set([normalizeSlashes(text), normalizeSlashes(safeDecode(text))]);
+  const haystacks = new Set([text, safeDecode(text)]);
 
   for (const haystack of haystacks) {
     for (const t of targets) {
@@ -70,8 +67,8 @@ function collectStrings(value: unknown, out: string[]): void {
  */
 export function isFilePathReferencedByEntries(filePath: string, entries: SessionEntry[], homeDir?: string): boolean {
   const targets = [filePath];
-  const target = normalizeSlashes(filePath);
-  const home = homeDir ? normalizeSlashes(homeDir).replace(/\/+$/, "") : "";
+  const target = filePath;
+  const home = homeDir ? homeDir.replace(/\/+$/, "") : "";
   if (home && target.startsWith(`${home}/`)) targets.push(`~${target.slice(home.length)}`);
   for (const entry of entries) {
     const strings: string[] = [];

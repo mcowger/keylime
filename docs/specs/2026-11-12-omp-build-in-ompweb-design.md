@@ -97,8 +97,8 @@ Push with `GITHUB_TOKEN` first, then retry once with `OMP_FORK_TOKEN` (fine-grai
 
 1. `bun install --frozen-lockfile`; F9's version rewrite; every `natives-*` artifact into `packages/natives/native`.
 2. `bun scripts/ci-release-publish.ts` with a stub `npm` first on `PATH` that keeps each tarball instead of publishing it: 12 JS tarballs (manifests rewritten, `catalog:`/`workspace:` resolved, `prepack` run; `pi-coding-agent` ships `dist/docs-index.generated.txt` and `scripts/`, stats ships `dist/client`). ~20 s.
-3. `bun scripts/ci-release-publish.ts --native-leaf <tag>` for each of the six leaf targets — `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`, `win32-x64`, `win32-arm64` — from the `.node` files already in `packages/natives/native`. ~10 s each; no extra native builds.
-4. Zip all 18 tarballs as `omp-packages-<version>.zip` with an `index.json` (`{ "<npm name>": "<file>.tgz" }`). Artifact `omp-packages`.
+3. `bun scripts/ci-release-publish.ts --native-leaf <tag>` for each of the four leaf targets — `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64` — from the `.node` files already in `packages/natives/native`. ~10 s each; no extra native builds.
+4. Zip all 16 tarballs as `omp-packages-<version>.zip` with an `index.json` (`{ "<npm name>": "<file>.tgz" }`). Artifact `omp-packages`.
 
 `omp-auto.yml` `release` (no fork code) uploads the zip beside the binaries and `SHA256SUMS.txt`. Pruning keeps the newest 10 new-format `-int.` releases plus the one ompweb `main` pins (`runner/omp-build.json` on `ompweb-dev/ompweb` `main`, public). Releases older than F6 have no zip; ompweb cannot pin them.
 
@@ -130,7 +130,7 @@ Release contract (from the update-source note; `feat/configurable-update-source`
 3. Version format: `<upstream version>-int.<YYYYMMDDHHMM UTC>.g<sha7>`, e.g. `18.20.0-int.202611130355.gd2c2eff`.
    The numeric time identifier makes same-base builds sort (verified with `compareVersions` and `Bun.semver.order`); the `g` keeps an all-digit hash from becoming a numeric identifier with a leading zero (decided).
 4. **Stamp** = the integration commit's committer time in UTC (decided, confirmed): `TZ=UTC git show -s --format=%cd --date=format-local:%Y%m%d%H%M "$SHA"`. It is a property of the commit, so every matrix job and the tag compute the same value; no job uses its own clock. `omp.yml`'s first job `version` (no fork code; blobless clone at the sha) also outputs `stamp` and `version` for jobs without a checkout (`smoke`, and `omp-auto.yml` `release` through a `workflow_call` output). Each round makes a new integration commit, so stamps grow.
-5. **Assets** keep upstream's names: `omp-{linux,darwin}-{x64,arm64}`, `omp-windows-{x64,arm64}.exe`. GitHub's per-asset `digest` (sha256) is what omp verifies; `SHA256SUMS.txt` stays. No musl assets: musl hosts get a clear error.
+5. **Assets** keep upstream's names: `omp-{linux,darwin}-{x64,arm64}`. GitHub's per-asset `digest` (sha256) is what omp verifies; `SHA256SUMS.txt` stays. No musl assets: musl hosts get a clear error.
 6. **Latest.** Every promoted `-int.` release is a full release created with `--latest` (never prerelease or draft); `releases/latest` ignores prereleases and drafts. `apple-sdk` and the rolling `oh-my-pi` release are `--latest=false`.
 
 Build step (each `binaries` matrix job), verbatim from the note:

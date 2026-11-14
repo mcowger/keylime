@@ -94,7 +94,7 @@ Behaviour the signature does not fix:
 - A request is in flight until its response body ends, errors or is cancelled. The idle timer runs only at zero in flight.
 - Upstream 401 → stop the child and throw `AuthBrokerUnavailableError`. A start failure, a ready timeout and a child that exits mid-start throw it too.
 
-- [ ] **Step 1: Write the failing tests.** Use a fake `omp` through `OMP_WEB_OMP_BIN`: a Node script (with the `.cmd` wrapper on Windows, as `lib/hosts/link-integration.test.mjs` does) that prints `tok-N` for `auth-broker token` (N from a counter file) and, for `auth-broker serve`, appends a line to a starts file, listens on port 0, prints the listening line, answers `GET /v1/echo` with the received `authorization` header, `GET /v1/stream` with one chunk and then stays open, and `GET /v1/deny` with 401.
+- [ ] **Step 1: Write the failing tests.** Use a fake `omp` through `OMP_WEB_OMP_BIN`: a script that prints `tok-N` for `auth-broker token` (N from a counter file) and, for `auth-broker serve`, appends a line to a starts file, listens on port 0, prints the listening line, answers `GET /v1/echo` with the received `authorization` header, `GET /v1/stream` with one chunk and then stays open, and `GET /v1/deny` with 401.
   - `starts once for concurrent calls`: no starts-file line before the first call; two parallel `brokerFetch("h1", "/v1/echo")` → one line; both bodies equal `Bearer tok-1`.
   - `stays up while a stream is open, stops when idle`: `idleMs = 50`; with `/v1/stream` open, the child is alive after 200 ms; after cancelling the body, it exits within 1 s.
   - `aborts only the named host`: streams open for `h1` and `h2`; `abortBrokerRequests("h1")` → `h1`'s reader rejects, `h2`'s reads on.

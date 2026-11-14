@@ -28,7 +28,7 @@ import { addWorktree, findCurrentWorktreePath, listWorktrees, removeWorktree, re
 import { projectIdentityKey } from "../paths";
 import { invalidateSessionListCache } from "../session-reader";
 import { grantWorkspaceRoot, invalidateWorkspaceRoots } from "./workspace-roots";
-import { getBrowseStartDirectory, getParentDirectory, listDirectories, listWindowsDrives, resolveDirectory, shouldShowWindowsDrivePicker } from "../directory-browser";
+import { getBrowseStartDirectory, getParentDirectory, listDirectories, resolveDirectory } from "../directory-browser";
 import { WorkspaceClones } from "./workspace-clone";
 import { parseLocalUri } from "../local-uri";
 import { resolveSessionLocalFile } from "../session-local-files";
@@ -51,7 +51,7 @@ const NO_GIT_ORIGIN = { origin: null, mainCheckout: false } as const;
 export const gitOriginLimits = { concurrency: 8, budgetMs: 20_000 };
 const execFileAsync = promisify(execFile);
 const git = async (cwd: string, ...args: string[]) => (await execFileAsync("git", ["-C", cwd, ...args], {
-  encoding: "utf8", timeout: 5_000, windowsHide: true, env: createGitEnvironment({ LC_ALL: "C" }),
+  encoding: "utf8", timeout: 5_000, env: createGitEnvironment({ LC_ALL: "C" }),
 })).stdout;
 
 /** Unauthorized, missing and non-repository paths answer the same as a plain folder. */
@@ -164,7 +164,6 @@ export function createWorkspaceService(uploads: StagedUploads, emit: (id: string
     browseDirectories: (requested) => result(async () => {
       if (requested !== null && typeof requested !== "string") throw invalid();
       const input = requested?.trim();
-      if (shouldShowWindowsDrivePicker(input)) return { path: "" as const, parentPath: null, directories: [], drives: await listWindowsDrives() };
       let directory: string;
       try { directory = await resolveDirectory(getBrowseStartDirectory(input)); }
       catch { throw new HostOpError(404, "directory_not_found", "Directory does not exist"); }

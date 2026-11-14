@@ -397,7 +397,7 @@ export function AppShell({ appName }: { appName: string }) {
           <UpdateToastBody
             currentVersion={data.currentVersion}
             availableVersion={version}
-            target={data.updateCommand || "npm install -g @kahme247/ompweb"}
+            target={data.updateCommand || "bun add -g @kahme247/ompweb"}
             link={binary}
             action={binary ? undefined : {
               label: translate("settingsConfig.appUpdateAction"),
@@ -1178,9 +1178,6 @@ export function AppShell({ appName }: { appName: string }) {
     // Worktrees of one repo share a project root. Moving the effective cwd
     // within the same project (e.g. switching worktree, or clicking a session
     // that lives in another worktree) must not close the open session.
-    // Compare case-folded: the same folder can be spelled with different
-    // casing (Windows/NTFS) between the session's projectRoot and the
-    // sidebar's resolved project root.
     const newProject = projectRoot ?? cwd;
     const sessionProject = selectedSession ? (selectedSession.projectRoot ?? selectedSession.cwd) : null;
     if (sessionProject && remoteHostId(selectedSession?.hostId) === remoteHostId(hostId) && comparableProjectPath(sessionProject) === comparableProjectPath(newProject)) {
@@ -1571,7 +1568,7 @@ export function AppShell({ appName }: { appName: string }) {
   }, [fileTabs]);
 
   const handleOpenFile = useCallback((filePath: string, fileName: string, source: WorkspaceFileSource) => {
-    const absolute = filePath.startsWith("/") || filePath.startsWith("~/") || filePath.startsWith("\\\\") || /^[a-zA-Z]:[\\/]/.test(filePath);
+    const absolute = filePath.startsWith("/") || filePath.startsWith("~/");
     const rooted = !absolute && source.cwd ? joinFilePath(source.cwd, filePath) : filePath;
     const target = filePath.startsWith("~/") ? filePath : normalizeLocalPath(rooted);
     const tabId = `file:${source.sessionId ?? hostProjectKey(source.hostId, source.cwd ?? "")}:${target}`;

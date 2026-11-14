@@ -908,7 +908,7 @@ export const ChatInput = memo(forwardRef<ChatInputHandle, Props>(function ChatIn
   }, [markInputEdited, t]);
 
   // The clipboard read API exists only in a secure context, so a plain-http LAN
-  // session (`npm run dev:lan` on http://192.168.x.x) cannot use this at all.
+  // session (`bun run dev:lan` on http://192.168.x.x) cannot use this at all.
   // Hide the item rather than offer an entry that can only fail. The plus menu
   // is never open on the server, so reading navigator here cannot desync.
   const canReadClipboardImages =

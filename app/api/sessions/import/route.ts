@@ -92,7 +92,7 @@ export async function POST(req: Request) {
     writeFileSync(sessionFile, rewritten.join("\n") + "\n", "utf8");
 
     // New session must appear immediately: clear both the list cache and the
-    // mtime-keyed walk cache (the AGENTS.md-documented Windows/NTFS trap).
+    // mtime-keyed walk cache so cached project entries cannot hide the new file.
     invalidateSessionListCache();
     invalidateSessionFileListCache();
     // The sidebar lists this machine's sessions through its daemon.

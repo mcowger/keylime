@@ -67,8 +67,8 @@ export function sharesCredentials(record: { id: string; shareCredentials: boolea
   return record.id !== LOCAL_HOST_ID && (record.shareCredentials || isClusterMember(pools, record.id));
 }
 
-/** A path under a host's root, in the separator that root uses (hosts may run another OS than the server). */
-const under = (root: string, name: string) => `${root}${root.includes("\\") ? "\\" : "/"}${name}`;
+/** A path under a host's root. */
+const under = (root: string, name: string) => `${root}/${name}`;
 
 /** `path` is `root` or below it; both in comparableProjectPath form. */
 const within = (path: string, root: string) => path === root || path.startsWith(`${root}/`);
@@ -114,7 +114,7 @@ export function joinCluster(
       ? { ...existing, hidden: existing.hidden && project.hidden === true, clonePaths: { ...existing.clonePaths, [member.hostId]: project.path } }
       : {
         // The name the host showed: its own, else its folder's (spec M3); the origin's only for a root path.
-        id: newId(), name: project.name || project.path.split(/[\\/]/).filter(Boolean).pop() || cloneDirectoryName(origin)!, origin, clonePaths: { [member.hostId]: project.path },
+        id: newId(), name: project.name || project.path.split("/").filter(Boolean).pop() || cloneDirectoryName(origin)!, origin, clonePaths: { [member.hostId]: project.path },
         addedAt: project.addedAt ?? now, hidden: project.hidden ?? false,
         alias: project.alias, sortOrder: project.sortOrder, pinOrder: project.pinOrder, launchConfig: project.launchConfig,
       };

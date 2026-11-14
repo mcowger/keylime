@@ -1028,8 +1028,7 @@ declare global {
 
 const MAX_SESSION_SCAN_CACHE_ENTRIES = 2048;
 
-/** Normalized cache key: sessionPathKey lowercases and normalizes separators
- * on Windows so invalidation from a differently-cased path still hits. */
+/** Normalized cache key shared with cache invalidation. */
 function scanCacheKey(filePath: string): string {
   return sessionPathKey(filePath);
 }
@@ -1127,10 +1126,9 @@ declare global {
 
 /** Cached walk of `<sessionsRoot>/<project>/*.jsonl`, keyed on the root's
  * mtimeMs. Adding/removing a session bumps the root's mtime, invalidating
- * automatically — except on filesystems where a write inside a project
- * subdirectory does not touch the parent directory's mtime (Windows/NTFS
- * behaves this way in some configurations). Callers that know a session
- * changed must therefore also call invalidateSessionFileListCache(). */
+ * automatically — except when a write inside a project subdirectory does not
+ * touch the parent directory's mtime. Callers that know a session changed must
+ * therefore also call invalidateSessionFileListCache(). */
 export function invalidateSessionFileListCache(): void {
   globalThis.__ompSessionFileListCache?.clear();
 }
@@ -1146,7 +1144,7 @@ export async function listSessionFiles(sessionsRoot: string): Promise<string[]> 
   const cache = globalThis.__ompSessionFileListCache;
   const cached = cache.get(sessionsRoot);
   if (cached && cached.rootMtimeMs === rootStat.mtimeMs) {
-    // Windows/NTFS: root mtime may not bump when a file is added inside a project subdir.
+    // Root mtime may not bump when a file is added inside a project subdir.
     // Validate by sampling subdir mtimes (cheap: stat per project dir, not per file).
     let stale = false;
     try {

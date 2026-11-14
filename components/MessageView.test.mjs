@@ -272,11 +272,8 @@ test("read paths with an internal URL scheme are not file links", () => {
   assert.match(render("src/foo.ts:10"), /activity-file-link/);
 });
 
-test("tool-row file links keep Windows drive paths and colon filenames intact", () => {
+test("tool-row file links keep colon filenames intact", () => {
   const cases = [
-    // Drive-letter colon is not a line suffix: splitting on ":" opened "C".
-    ["C:\\Users\\me\\proj\\src\\file.ts", "C:\\Users\\me\\proj\\src\\file.ts"],
-    ["C:/Users/me/proj/src/file.ts:42", "C:/Users/me/proj/src/file.ts"],
     ["src/my:file.txt", "src/my:file.txt"],
   ];
   for (const [path, expected] of cases) {

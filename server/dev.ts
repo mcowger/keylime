@@ -1,4 +1,4 @@
-// Dev entry (`npm run dev`): API plus the SPA from Bun's HTML import with HMR, bundled in memory; never reads dist/.
+// Dev entry (`bun run dev`): API plus the SPA from Bun's HTML import with HMR, bundled in memory; never reads dist/.
 import html from "../app/index.html";
 import { buildEventStreamWorker, clientEnv } from "./client-env";
 

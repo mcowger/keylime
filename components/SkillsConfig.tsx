@@ -146,7 +146,7 @@ function SkillDetail({
 
   function displayPath(p: string): string {
     if (label === "project" && cwd && p.startsWith(cwd)) {
-      const rel = p.slice(cwd.length).replace(/^[/\\]/, "");
+      const rel = p.slice(cwd.length).replace(/^\//, "");
       return `./${rel}`;
     }
     return shortenPath(p);

@@ -18,7 +18,6 @@ interface BrowseResponse {
   path?: string;
   parentPath?: string | null;
   directories?: DirectoryEntry[];
-  drives?: DirectoryEntry[];
   error?: string;
   code?: string;
 }
@@ -42,19 +41,6 @@ function FolderIcon() {
   );
 }
 
-function DriveIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="2" y="3" width="12" height="10" rx="1.5" />
-      <path d="M2 9h12" />
-      <circle cx="11.5" cy="11" r="0.6" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-function isWindowsDriveRoot(directory: string): boolean {
-  return /^[a-zA-Z]:[\\/]?$/.test(directory);
-}
 
 interface Props {
   onCancel: () => void;
@@ -72,7 +58,6 @@ export function DirectoryPicker({ onCancel, onSelect, busy = false, error, host,
   const [parentDirectory, setParentDirectory] = useState<string | null>(null);
   const [pathInput, setPathInput] = useState("");
   const [directories, setDirectories] = useState<DirectoryEntry[]>([]);
-  const [drives, setDrives] = useState<DirectoryEntry[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [profile, setProfile] = useState("");
   const [advisor, setAdvisor] = useState(false);
@@ -108,7 +93,6 @@ export function DirectoryPicker({ onCancel, onSelect, busy = false, error, host,
       setParentDirectory(data.parentPath ?? null);
       setPathInput(nextPath);
       setDirectories(data.directories ?? []);
-      setDrives(data.drives ?? null);
     } catch (cause) {
       if (!controller.signal.aborted) setLoadError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -137,11 +121,11 @@ export function DirectoryPicker({ onCancel, onSelect, busy = false, error, host,
   };
   const hasUncommittedPath = !pool && pathInput.trim() !== currentPath;
   const cloneName = cloneUrl.trim() ? cloneDirectoryName(cloneUrl) : null;
-  const cloneTarget = cloneName && currentPath ? `${currentPath.replace(/[\\/]+$/, "")}${currentPath.includes("\\") ? "\\" : "/"}${cloneName}` : null;
+  const cloneTarget = cloneName && currentPath ? `${currentPath.replace(/\/+$/, "")}/${cloneName}` : null;
   const profileInvalid = profile.trim() !== "" && !isValidOmpProfile(profile.trim());
   const canSelect = Boolean(pool ? pathInput.trim() : currentPath) && !loading && !hasUncommittedPath && !locked && (!cloneUrl.trim() || cloneName !== null) && !profileInvalid;
   const goDisabled = loading || locked || !pathInput.trim();
-  const canNavigateUp = !locked && (Boolean(parentDirectory) || isWindowsDriveRoot(currentPath));
+  const canNavigateUp = !locked && Boolean(parentDirectory);
   const submitSelection = async () => {
     if (locked || cloneAbortRef.current) return;
     const args = extraArgs.split("\n").map((arg) => arg.trim()).filter(Boolean);
@@ -319,13 +303,6 @@ export function DirectoryPicker({ onCancel, onSelect, busy = false, error, host,
                 />
               ))}
             </div>
-          ) : drives !== null ? (
-            drives.length > 0 ? drives.map((entry) => (
-              <button key={entry.path} disabled={locked} className="directory-picker-entry" type="button" onClick={() => void navigateTo(entry.path)} title={entry.path} style={{ width: "100%", minHeight: 30, display: "flex", alignItems: "center", gap: 7, padding: "5px 8px", border: 0, borderRadius: 5, background: "none", color: "var(--text-muted)", cursor: "pointer", textAlign: "left", fontFamily: "var(--font-mono)", fontSize: 11 }}>
-                <DriveIcon />
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</span>
-              </button>
-            )) : <div style={{ padding: 8, color: "var(--text-dim)", fontSize: 11 }}>{t("directoryPicker.noDrives")}</div>
           ) : directories.length > 0 ? (
             directories.map((entry) => (
               <button

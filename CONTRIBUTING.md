@@ -4,15 +4,17 @@ Thanks for your interest in contributing!
 
 ## Setup
 
-- Node.js 24 or newer (the server runs on [Bun](https://bun.sh), which `npm install` provides)
+- [mise](https://mise.jdx.dev) manages the Bun version pinned in `mise.toml`. No Node or Nix setup is required.
 
 ```bash
-npm install
-npx bun runner/scripts/use-omp-build.ts && (cd runner && npx bun install --frozen-lockfile)   # ompweb's omp build; npm test needs it too
-npm run dev   # http://127.0.0.1:30178, Bun hot reload
+mise trust
+mise install
+bun install
+bun runner/scripts/use-omp-build.ts && (cd runner && bun install --frozen-lockfile)   # ompweb's omp build; bun run test needs it too
+bun run dev   # http://127.0.0.1:30178, Bun hot reload
 ```
 
-For live sessions, build the runner for this machine with `npx bun runner/scripts/build-binary.ts`: ompweb finds
+For live sessions, build the runner for this machine with `bun runner/scripts/build-binary.ts`: ompweb finds
 `runner/release/ompweb-omp-<os>-<arch>` by itself (`OMP_WEB_OMP_BIN` overrides it). A stock `omp` does not
 speak ompweb's channel.
 
@@ -36,12 +38,12 @@ afterwards and commit the graph.
 ## Checks (must pass before submitting)
 
 ```bash
-npm run typecheck                                  # type check
-npm run lint                                       # ESLint, zero warnings
-npm test                                           # unit tests (bun test --parallel)
+bun run typecheck                                  # type check
+bun run lint                                       # ESLint, zero warnings
+bun run test                                           # unit tests (bun test --parallel)
 ```
 
-`npm run build` bundles the browser app into `dist/` and `npm run smoke`
+`bun run build` bundles the browser app into `dist/` and `bun run smoke`
 starts the built server and checks it; the dev server never reads `dist/`.
 
 ### React tests
@@ -78,5 +80,5 @@ The jsdom dependency stays on 29.x for now; moving to a newer major is a separat
 
 ## Reporting issues
 
-Please use the issue templates and include your OS, Node version, omp version,
+Please use the issue templates and include your OS, Bun version, omp version,
 and browser.

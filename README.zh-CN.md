@@ -6,7 +6,6 @@
 
 <p>
   <a href="https://www.npmjs.com/package/@kahme247/ompweb"><img src="https://img.shields.io/npm/v/@kahme247/ompweb.svg?logo=npm&amp;color=e05d44" alt="npm version"></a>
-  <a href="https://nodejs.org"><img src="https://img.shields.io/node/v/@kahme247/ompweb.svg?logo=node.js&amp;color=44cc11" alt="node version"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/ompweb-dev/ompweb.svg?color=44cc11" alt="license"></a>
   <a href="https://www.npmjs.com/package/@kahme247/ompweb"><img src="https://img.shields.io/npm/dm/@kahme247/ompweb.svg?color=44cc11" alt="npm downloads"></a>
   <a href="https://github.com/ompweb-dev/ompweb/stargazers"><img src="https://img.shields.io/github/stars/ompweb-dev/ompweb.svg?logo=github" alt="GitHub stars"></a>
@@ -34,8 +33,8 @@
 
 ## 环境要求
 
-- 无需另行安装 omp：ompweb 使用自己的 [omp](https://github.com/can1357/oh-my-pi) 构建 `ompweb-omp`，直接使用 `~/.omp` 中的设置、认证和会话。每种安装方式（npm、npx 或单一可执行文件）都会在首次启动时从该版本的 [GitHub 发布](https://github.com/ompweb-dev/ompweb/releases)下载同一版本的 `ompweb-omp`，校验 SHA-256 后保存（单一可执行文件放在同一目录，其他方式放在 `~/.omp/agent/omp-web/omp/<version>/`）；也可用 `ompweb fetch-omp` 手动获取。支持的平台为 linux-x64、linux-arm64、darwin-x64、darwin-arm64 和 windows-x64；在其他平台（musl 的 Linux、Arm 版 Windows、FreeBSD）上无法启动会话。无法访问 GitHub 的机器请将 `OMP_WEB_OMP_BIN` 指向该发布的 `ompweb-omp-<os>-<arch>` 副本
-- Node.js `>= 24`。服务器运行在 [Bun](https://bun.sh) 上，Bun 会作为 npm 包的依赖自动安装（找不到随包安装的 Bun 时使用 `PATH` 中的 Bun）
+- 支持 macOS 和 glibc Linux 的 x64、arm64。`ompweb-omp` 从对应版本下载并校验 SHA-256，也可运行 `ompweb fetch-omp` 获取。
+- 使用 mise 管理 Bun，运行 `mise trust && mise install` 安装指定版本。
 
 排队消息的 **Steer**、**Delete** 和 **Edit** 操作是 `ompweb-omp` 通道的命令（`promote_queued_message`、`remove_queued_message`）。只有 omp 确认取消后才会移除消息；编辑时也必须先取消成功，再将文本恢复到输入框。消息已不在队列中时，界面保留队列并显示提示；ompweb 不会重复发送一条引导消息。
 
@@ -46,17 +45,17 @@
 **免安装直接运行：**
 
 ```bash
-npx @kahme247/ompweb@latest
+bunx --bun @kahme247/ompweb@latest
 ```
 
 **或全局安装：**
 
 ```bash
-npm install -g @kahme247/ompweb
+bun add -g @kahme247/ompweb
 ompweb
 ```
 
-每个版本也提供**无需 Node 或 npm 的单一可执行文件**，用法见英文 README 的 [Single binary](README.md#single-binary)。
+每个版本也提供**无需安装 Bun 的单一可执行文件**，用法见英文 README 的 [Single binary](README.md#single-binary)。
 
 在浏览器中打开 [http://127.0.0.1:30177](http://127.0.0.1:30177)。
 
@@ -99,8 +98,7 @@ OMP_WEB_PASSWORD_HASH='scrypt$15$8$1$…' ompweb
 `~/.omp/agent/omp-web/web-auth-secret.json`（权限 `0600`），再与哈希混合得到
 签名密钥：修改密码会让已有会话失效，而仅凭保存的哈希无法伪造会话。
 
-服务安装脚本（`ompweb systemd install`、`ompweb-launchd install`、Linux 托盘、
-Windows 服务）仍在安装时接受 `OMP_WEB_PASSWORD`，但在写入配置前会先做哈希，
+服务安装脚本（`ompweb systemd install`、`ompweb-launchd install`、Linux 托盘）仍在安装时接受 `OMP_WEB_PASSWORD`，但在写入配置前会先做哈希，
 最终只保存哈希。
 
 ## 功能特性
@@ -143,22 +141,22 @@ Windows 服务）仍在安装时接受 `OMP_WEB_PASSWORD`，但在写入配置�
 ```bash
 git clone https://github.com/ompweb-dev/ompweb.git
 cd ompweb
-npm install
-npx bun runner/scripts/use-omp-build.ts && (cd runner && npx bun install --frozen-lockfile)
-npx bun runner/scripts/build-binary.ts   # 为本机构建 ompweb 的 omp：runner/release/ompweb-omp-<os>-<arch>
-npm run dev
+bun install
+bun runner/scripts/use-omp-build.ts && (cd runner && bun install --frozen-lockfile)
+bun runner/scripts/build-binary.ts   # 为本机构建 ompweb 的 omp：runner/release/ompweb-omp-<os>-<arch>
+bun run dev
 ```
 
-本地开发服务器运行在 [http://127.0.0.1:30178](http://127.0.0.1:30178)。它会自动找到 `runner/release/` 中的 runner；`npm test` 和 `npm run build:binary` 也需要先准备好 runner。
+本地开发服务器运行在 [http://127.0.0.1:30178](http://127.0.0.1:30178)。它会自动找到 `runner/release/` 中的 runner；`bun run test` 和 `bun run build:binary` 也需要先准备好 runner。
 
-`npm run dev` 以 Bun 热重载方式运行服务器。`npm run build` 将浏览器端应用打包到 `dist/`，`npm start` 在 30177 端口提供该产物（可用 `npm run smoke` 检查结果）。`npm run dev:lan` 会将开发服务器绑定到所有网络接口。
+`bun run dev` 以 Bun 热重载方式运行服务器。`bun run build` 将浏览器端应用打包到 `dist/`，`bun run start` 在 30177 端口提供该产物（可用 `bun run smoke` 检查结果）。`bun run dev:lan` 会将开发服务器绑定到所有网络接口。
 
 ### 代码检查
 
 ```bash
-npm run typecheck   # TypeScript 类型检查
-npm run lint        # ESLint 检查
-npm test            # 运行测试套件 (bun test)
+bun run typecheck   # TypeScript 类型检查
+bun run lint        # ESLint 检查
+bun run test            # 运行测试套件 (bun test)
 ```
 
 ## 致谢与许可证

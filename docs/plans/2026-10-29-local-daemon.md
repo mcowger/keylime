@@ -6,7 +6,7 @@
 
 **Architecture:** Builds on PR #339 (`feat/remote-hosts`). The hub stops killing unknown channels on `hello` and adopts them into `AgentSessionWrapper`s rebuilt from omp's state. The daemon replays still-open blocking requests it saw on each channel. "This machine" becomes a linked host `local` over loopback, bootstrapped by the web server; main no longer spawns omp or reads session files itself.
 
-**Tech Stack:** Next 16 route handlers, Node 24, `node:test`, jiti; systemd/launchd/Windows service helpers in `bin/` and `lib/windows-service.ts`.
+**Tech Stack:** Next 16 route handlers, Node 24, `node:test`, jiti; systemd and launchd service helpers in `bin/`.
 
 **Spec:** `docs/specs/2026-10-29-local-daemon-design.md` (and `docs/specs/2026-10-28-remote-hosts-design.md` for the link it extends).
 
@@ -138,7 +138,7 @@
 
 **Interfaces:**
 - Consumes: `hosts` channel status for `local`.
-- Produces: when `local` is offline, Settings → Hosts shows "start the ompweb-host service"; when it has never linked since this web server started and 10 s have passed, AppShell shows a one-time dismissible banner "This machine needs the ompweb-host service. Install it with: <command>", where the command is the platform's helper from Task 7 (`ompweb systemd install` / `ompweb launchd install` / the Windows service command).
+- Produces: when `local` is offline, Settings → Hosts shows "start the ompweb-host service"; when it has never linked since this web server started and 10 s have passed, AppShell shows a one-time dismissible banner "This machine needs the ompweb-host service. Install it with: <command>", where the command is the platform's helper from Task 7 (`ompweb systemd install` / `ompweb launchd install`).
 - [ ] **Step 1: Failing tests** — local row renders no Rename/Revoke; offline local row shows the hint; banner appears once after 10 s offline, not again after dismissal (localStorage key), not when local links.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → PASS; lint.
 - [ ] **Step 5: Commit** `feat(hosts): tell users to install the local daemon`.
@@ -146,12 +146,12 @@
 ### Task 7: Service helpers install both units
 
 **Files:**
-- Modify: `bin/omp-web-systemd.js`, `bin/omp-web-launchd.js`, `lib/windows-service.ts`, `bin/omp-web-tray.js`
-- Test: `bin/omp-web-systemd.test.mjs`, `lib/windows-service.test.mjs`, a launchd plist test
+- Modify: `bin/omp-web-systemd.js`, `bin/omp-web-launchd.js`, `bin/omp-web-tray.js`
+- Test: `bin/omp-web-systemd.test.mjs`, a launchd plist test
 
 **Interfaces:**
-- Produces: `install` writes and enables two units — the existing web unit and `ompweb-host` running `<ompweb bin> host` with `Restart=always` (systemd) / `KeepAlive` (launchd) / a second Windows service; `uninstall` removes both; `status` reports both. The tray shows the daemon state next to the web state.
-- [ ] **Step 1: Failing tests** — generated systemd units: two files, the host unit's `ExecStart` ends with ` host`; launchd: two plists with `KeepAlive`; Windows: two service definitions.
+- Produces: `install` writes and enables two units — the existing web unit and `ompweb-host` running `<ompweb bin> host` with `Restart=always` (systemd) / `KeepAlive` (launchd); `uninstall` removes both; `status` reports both. The tray shows the daemon state next to the web state.
+- [ ] **Step 1: Failing tests** — generated systemd units: two files, the host unit's `ExecStart` ends with ` host`; launchd: two plists with `KeepAlive`.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → PASS.
 - [ ] **Step 5: Commit** `feat(service): install the ompweb-host daemon next to the web service`.
 

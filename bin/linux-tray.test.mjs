@@ -152,9 +152,9 @@ test("buildLayout nests all items under the root with the given revision", () =>
 });
 
 test("autostart desktop file references the tray script", () => {
-  const desktop = buildAutostartDesktop("/usr/bin/node /opt/ompweb/bin/linux-tray.js --start");
+  const desktop = buildAutostartDesktop("/usr/bin/bun /opt/ompweb/bin/linux-tray.js --start");
   assert.match(desktop, /^\[Desktop Entry\]/);
-  assert.match(desktop, /^Exec=\/usr\/bin\/node \/opt\/ompweb\/bin\/linux-tray\.js --start$/m);
+  assert.match(desktop, /^Exec=\/usr\/bin\/bun \/opt\/ompweb\/bin\/linux-tray\.js --start$/m);
   assert.match(desktop, /^Terminal=false$/m);
   assert.match(desktop, /^X-KDE-autostart-after=panel$/m);
 });
@@ -250,11 +250,7 @@ test("writeServiceEnv writes atomically with mode 600 and readServiceEnv round-t
   try {
     const file = path.join(dir, "web-service.env");
     writeServiceEnv({ PORT: "40100", OMP_WEB_PASSWORD: "s3cret" }, file);
-    // Windows has no Unix permission bits (chmod is best-effort there), so
-    // the mode assertion only applies elsewhere.
-    if (process.platform !== "win32") {
-      assert.equal(statSync(file).mode & 0o777, 0o600);
-    }
+    assert.equal(statSync(file).mode & 0o777, 0o600);
     assert.deepEqual(readServiceEnv(file), { PORT: "40100", OMP_WEB_PASSWORD: "s3cret" });
     assert.ok(escapeEnvValue("a\nb").includes(" "));
   } finally {
@@ -321,7 +317,7 @@ test("tray --start fails gracefully with an install hint when dbus-next is absen
   const home = mkdtempSync(path.join(tmpdir(), "ompweb-tray-nodbus-"));
   try {
     const script = path.join(path.dirname(fileURLToPath(import.meta.url)), "linux-tray.js");
-    const res = spawnSync("node", [script, "--start"], {
+    const res = spawnSync(process.execPath, [script, "--start"], {
       env: { ...process.env, HOME: home },
       encoding: "utf8",
       timeout: 15000,
@@ -329,7 +325,7 @@ test("tray --start fails gracefully with an install hint when dbus-next is absen
     const output = `${res.stdout || ""}\n${res.stderr || ""}`;
     assert.equal(res.status, 1);
     assert.match(output, /dbus-next/);
-    assert.match(output, /npm install dbus-next/);
+    assert.match(output, /bun add dbus-next/);
     assert.doesNotMatch(output, /MODULE_NOT_FOUND|Cannot find module/);
   } finally {
     rmSync(home, { recursive: true, force: true });

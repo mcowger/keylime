@@ -21,10 +21,9 @@ do not assume that Pi-specific implementation changes can be merged unchanged.
 2. **Local-first by default.** The server binds to `127.0.0.1`; remote access
    is an explicit user choice and must be protected by a trusted network
    boundary and HTTPS.
-3. **Node-first installation.** A normal user installs Node.js 24+ and OMP,
-   then runs `npx ompweb@latest` or installs `ompweb` globally. The npm package
-   brings its own Bun for the web server, so users do not install Bun
-   themselves.
+3. **Bun-first installation.** Install Bun, then run `bunx --bun @kahme247/ompweb@latest`
+   or install the npm package globally with `bun add -g @kahme247/ompweb`.
+   Native compiled releases do not require a separate Bun installation.
 4. **Native compatibility over imitation.** Prefer OMP's CLI and documented
    on-disk formats to copied SDK internals. If a capability cannot be done
    safely through those boundaries, leave it out rather than emulating it
@@ -35,7 +34,7 @@ do not assume that Pi-specific implementation changes can be merged unchanged.
 
 ## Distribution and identity
 
-- npm package and CLI command: `ompweb`.
+- npm package: `@kahme247/ompweb`; CLI command: `ompweb`.
 - Default server address: `http://127.0.0.1:30177`.
 - Existing `OMP_WEB_*` environment variables remain the configuration prefix
   for compatibility: `OMP_WEB_HOSTNAME`, `OMP_WEB_NO_OPEN`, and
@@ -50,12 +49,12 @@ do not assume that Pi-specific implementation changes can be merged unchanged.
 
 ```
 Browser
-  │ HTTP / Server-Sent Events
+  │ HTTP / WebSocket or Server-Sent Events
   ▼
-ompweb (Bun server, started by the Node launcher)
-  ├─ reads native OMP session files and selected configuration
-  ├─ serves allow-listed project files
-  └─ starts one `ompweb-omp --headless` child per active session
+ompweb (Bun web server)
+  ├─ serves allow-listed project files through the host link
+  └─ links to a separate Bun `ompweb host` daemon
+       └─ starts one `ompweb-omp --headless` child per active session
        │ ompweb channel, NDJSON over stdio
        ▼
      ompweb's own omp build (runner/) and the existing ~/.omp/agent state
@@ -143,7 +142,7 @@ the daemon requires `https://` except for loopback or an explicit
 
 ### Direct file access
 
-Session browsing is implemented in pure Node against OMP JSONL files. The
+Session browsing reads OMP JSONL files through the host daemon. The
 reader tolerates the fixed title slot and older session shapes, resolves blob
 references when needed, and builds the active branch context from the entry
 tree. The session and project routes run it in the daemon of the session's host
@@ -282,16 +281,16 @@ Deploy the frontend and API support together; no native OMP upgrade is required.
 
 `agegr/pi-web` is the historical source and a useful source of UI ideas,
 bug fixes, and tests. Before adopting an upstream change, verify that it does
-not depend on Pi runtime behavior or Bun-only APIs. Port the user-visible
+not depend on Pi runtime behavior. Port the user-visible
 behavior, not blindly the implementation.
 
 Releases are independent:
 
 1. Run typecheck, lint, relevant tests, and a production build.
-2. Confirm `npm pack --dry-run` contains the built `dist/` output and exposes
+2. Confirm `bun pm pack` contains the built `dist/` output and exposes
    the `ompweb` binary.
-3. Publish `ompweb@<version>` only from an npm account authorized for that
-   package.
+3. Publish `@kahme247/ompweb@<version>` to the npm registry through the
+   configured trusted publisher.
 4. Tag and release the repository that owns this downstream project.
 
 ## Non-goals

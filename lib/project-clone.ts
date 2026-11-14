@@ -109,15 +109,10 @@ function runGitClone(origin: string, target: string, signal?: AbortSignal, onOut
   const child = spawn("git", ["clone", "--progress", "--", origin, target], {
     stdio: ["ignore", "pipe", "pipe"],
     env: createGitEnvironment({ GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "", SSH_ASKPASS: "", GIT_ALLOW_PROTOCOL: "https:ssh" }),
-    detached: process.platform !== "win32",
-    windowsHide: true,
+    detached: true,
   });
   const kill = () => {
     if (!child.pid) return;
-    if (process.platform === "win32") {
-      spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
-      return;
-    }
     try {
       process.kill(-child.pid, "SIGTERM");
     } catch {

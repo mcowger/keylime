@@ -55,18 +55,14 @@ function createSecret(path: string): WebAuthSecret {
   // Atomic write, user-readable only: this file is the session-forging secret.
   const temporary = `${path}.${process.pid}.${Date.now()}.tmp`;
   writeFileSync(temporary, `${JSON.stringify(secret, null, 2)}\n`, { mode: 0o600 });
-  try {
-    chmodSync(temporary, 0o600);
-  } catch {
-    // Windows has no POSIX mode bits; the file is still user-scoped by ACL.
-  }
+  chmodSync(temporary, 0o600);
   renameSync(temporary, path);
   return secret;
 }
 
 /**
  * Read (or create) the installation's secret. The file is re-read whenever it
- * changes on disk: an installed server and `npm run dev` can share the agent
+ * changes on disk: an installed server and `bun run dev` can share the agent
  * directory, and the second one must not keep signing with a key the first
  * has replaced.
  */

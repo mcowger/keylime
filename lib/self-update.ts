@@ -16,9 +16,9 @@ import { execFile, spawn } from "child_process";
 import { createChildProcessEnvironment } from "./project-command-env";
 import { randomUUID } from "crypto";
 import { tmpdir } from "os";
-import { dirname, join, posix, resolve, win32 } from "path";
+import { dirname, join, resolve } from "path";
 import { promisify } from "util";
-import { checkNpmUpdate, detectInstallMethod } from "./npm-update";
+import { checkNpmUpdate } from "./npm-update";
 import { DISABLE_AUTOUPDATE_ENV_VAR, isUpdateDisabled } from "./update-policy";
 
 const LEASE_MS = 30 * 60 * 1000;
@@ -60,14 +60,8 @@ function assertUpdatesEnabled(): void {
   throw new SelfUpdateError("updates_disabled", `Updates are disabled by ${DISABLE_AUTOUPDATE_ENV_VAR}`, 403);
 }
 
-export function resolveSelfUpdateTempRoot(
-  platform: NodeJS.Platform = process.platform,
-  temporary = tmpdir(),
-  uid = typeof process.getuid === "function" ? process.getuid() : undefined,
-): string {
-  const pathApi = platform === "win32" ? win32 : posix;
-  const suffix = platform === "win32" ? "" : `-${uid ?? "user"}`;
-  return pathApi.join(temporary, `ompweb-self-update${suffix}`);
+export function resolveSelfUpdateTempRoot(temporary = tmpdir(), uid = typeof process.getuid === "function" ? process.getuid() : undefined): string {
+  return join(temporary, `ompweb-self-update-${uid ?? "user"}`);
 }
 
 function rootDir(): string {
@@ -90,7 +84,7 @@ function isBusy(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && "code" in error && ["EBUSY", "EPERM", "EACCES", "ENOTEMPTY"].includes(String((error as { code: string }).code)));
 }
 function ownedByCurrentUser(info: Stats): boolean {
-  return process.platform === "win32" || typeof process.getuid !== "function" || info.uid === process.getuid();
+  return typeof process.getuid !== "function" || info.uid === process.getuid();
 }
 function secureDirectory(path: string): Stats {
   const info = lstatSync(path);
@@ -143,11 +137,7 @@ function ensureSecureRoot(create: boolean): string | null {
     }
   }
   secureDirectory(root);
-  try {
-    chmodSync(root, 0o700);
-  } catch {
-    // Windows
-  }
+  chmodSync(root, 0o700);
   return root;
 }
 function attemptsDir(create: boolean): string | null {
@@ -354,15 +344,10 @@ export function getSelfUpdateSupport(): { supported: boolean; reason?: string; p
   }
 }
 
-function detectManager(packageDir: string): { manager: "npm" | "bun"; managerPath: string; prefix: string[] } {
-  const manager = detectInstallMethod(packageDir);
-  const managerPath = manager === "bun" ? "bun" : "npm";
-  return { manager, managerPath, prefix: [] };
-}
 
 export async function prepareSelfUpdate(): Promise<PrepareResult> {
   assertUpdatesEnabled();
-  // The compiled binary has no npm install to replace and no runtime for the worker: its updates run from a terminal.
+  // The compiled binary has no package installation to replace: its updates run from a terminal.
   if (Bun.isStandaloneExecutable) {
     throw new SelfUpdateError("self_update_unsupported", "In-app updates are not available in the ompweb binary: update from a terminal", 409);
   }
@@ -459,7 +444,7 @@ export async function commitSelfUpdate(attemptId: string): Promise<{ accepted: t
   const workerPath = attempts ? join(attempts, attemptId, "worker.js") : null;
   const root = rootDir();
   const packageDir = process.env.OMP_WEB_PACKAGE_DIR ?? process.cwd();
-  const { manager, managerPath, prefix } = detectManager(packageDir);
+  const managerPath = process.execPath;
   const fromVersion = status.fromVersion;
   const targetVersion = status.targetVersion;
   const launcherPid = Number(process.env.OMP_WEB_LAUNCHER_PID ?? process.pid);
@@ -469,15 +454,12 @@ export async function commitSelfUpdate(attemptId: string): Promise<{ accepted: t
     port: Number(process.env.OMP_WEB_PORT ?? process.env.PORT ?? 30178),
   };
   const args = [
-    workerPath ?? "",
     "--attempt",
     attemptId,
     "--root",
     root,
     "--package-dir",
     resolve(packageDir),
-    "--manager",
-    manager,
     "--manager-path",
     managerPath,
     "--target",
@@ -488,16 +470,14 @@ export async function commitSelfUpdate(attemptId: string): Promise<{ accepted: t
     String(launcherPid),
     "--server-pid",
     String(process.pid),
+    "--descriptor",
     JSON.stringify(descriptor),
-    "--manager-prefix",
-    JSON.stringify(prefix),
   ];
   try {
     const systemd = await detectSystemdService(launcherPid);
     if (systemd) args.push("--systemd-unit", systemd.unit, "--systemd-user", systemd.user ? "1" : "0");
     const workerArgs = workerPath ? [workerPath, ...args] : args;
-    // Windows locks a running bun.exe, and npm replaces the package's: the worker runs on the launcher's Node.
-    const runtime = process.env.OMP_WEB_NODE_BIN || process.execPath;
+    const runtime = process.execPath;
     let command = runtime;
     let commandArgs = workerArgs;
     if (systemd) {
@@ -517,7 +497,6 @@ export async function commitSelfUpdate(attemptId: string): Promise<{ accepted: t
     const child = spawn(command, commandArgs, {
       detached: true,
       stdio: "ignore",
-      windowsHide: true,
       // The worker and everything it runs inherit this environment, so the web
       // password hash must not be in it (issue #239).
       env: createChildProcessEnvironment(),

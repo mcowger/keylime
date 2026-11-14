@@ -10,7 +10,7 @@ const env = { PATH: "/usr/bin", PI_CODING_AGENT_DIR: "/Users/u/agent" };
 test("the host daemon plist runs `ompweb host`, restarts with KeepAlive, and is throttled", () => {
   const plist = buildPlist({
     label: HOST_LABEL,
-    args: ["/usr/local/bin/npx", "--yes", "@kahme247/ompweb@latest", "host"],
+    args: ["/usr/local/bin/bun", "x", "--bun", "@kahme247/ompweb@latest", "host"],
     env,
     logName: "ompweb-host",
     throttleInterval: 10,
@@ -25,7 +25,7 @@ test("the host daemon plist runs `ompweb host`, restarts with KeepAlive, and is 
 });
 
 test("the web plist keeps its arguments and has no throttle", () => {
-  const plist = buildPlist({ label: LABEL, args: ["/usr/local/bin/npx", "--yes", "pkg & co"], env, logName: "ompweb" });
+  const plist = buildPlist({ label: LABEL, args: ["/usr/local/bin/bun", "x", "--bun", "pkg & co"], env, logName: "ompweb" });
   assert.match(plist, /<string>pkg &amp; co<\/string>\n  <\/array>/);
   assert.match(plist, /<key>KeepAlive<\/key><true\/>/);
   assert.doesNotMatch(plist, /ThrottleInterval/);

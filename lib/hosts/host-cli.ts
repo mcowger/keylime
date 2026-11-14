@@ -2,7 +2,7 @@ import { createHostControlServer, requestHostControl } from "./host-control";
 import type { HostDaemon } from "./daemon";
 
 // `ompweb host`: link this machine to web servers through ./daemon.
-// Loaded by Node/jiti and the compiled binary: no `@/` imports.
+// Loaded by Bun's native TypeScript runtime and the compiled binary: no `@/` imports.
 // Tokens are read from stdin, never from argv.
 import { addHostLink, loginHost, readHostLinks, removeHostLink } from "./host-login";
 
@@ -68,7 +68,7 @@ async function main(argv: string[]): Promise<number> {
     console.error("This machine is not linked yet. Start ompweb on this machine (it writes the link), or run `ompweb host login --url <server url>`.");
     return 1;
   }
-  // Login/logout need none of the daemon, which jiti would otherwise transpile on every run.
+  // Login/logout need none of the daemon, which Bun would otherwise transpile on every run.
   const [{ runHostDaemon }, { hostSocketPath }, { ensureOmpRunner }] = await Promise.all([import("./daemon"), import("./omp-socket"), import("../omp/runner-fetch")]);
   // Sessions need the runner; until it is here they fail with OMP_NOT_FOUND and the next start retries.
   void ensureOmpRunner().catch((error: unknown) => console.error(`ompweb host: ${error instanceof Error ? error.message : String(error)}`));
@@ -78,8 +78,7 @@ async function main(argv: string[]): Promise<number> {
     return daemon.control(command);
   });
   try {
-    // Windows has no host socket yet (a current-user named pipe is open in the runner spec).
-    daemon = runHostDaemon({ allowHttp: argv.includes("--allow-http"), hostSocket: process.platform === "win32" ? undefined : hostSocketPath() });
+    daemon = runHostDaemon({ allowHttp: argv.includes("--allow-http"), hostSocket: hostSocketPath() });
     // Worker cutover starts fail-closed; ordinary hosts have no maintenance environment.
     if (process.env.OMP_WEB_HOST_DRAINED === "1") daemon.control("drain");
     const stop = () => void daemon!.stop();

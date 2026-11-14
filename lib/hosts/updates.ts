@@ -1,11 +1,11 @@
 import { execFile, spawn } from "node:child_process";
 import { chmodSync, constants, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import packageJson from "../../package.json";
-import { checkNpmUpdate, detectInstallMethod } from "../npm-update";
+import { checkNpmUpdate } from "../npm-update";
 import { getOmpVersion } from "../omp/omp-cli";
 import { createChildProcessEnvironment } from "../project-command-env";
 import { isUpdateDisabled } from "../update-policy";
@@ -82,38 +82,8 @@ function hostArguments(binary: boolean): string[] {
 }
 
 /**
- * A script that starts the host and starts it again when it exits (the README's Windows ompweb-host.ps1 scheduled task
- * does, after 10 seconds) would run a second daemon next to the updated one. Only a host whose parent is an interactive
- * shell or Explorer is a foreground host this update may restart; anything else is not guessed at.
- */
-export function windowsHostSupervisionReason(parent: { name: string; commandLine: string } | null): string | null {
-  const manual = "update it manually, or stop the supervisor first: a supervisor such as the README's ompweb-host.ps1 scheduled task restarts the host after it exits and would run a second daemon next to the updated one";
-  if (!parent) return `Cannot tell what started this host, so a supervisor cannot be ruled out; ${manual}`;
-  const scripted = /\.(ps1|bat|cmd)\b|(^|\s)-(file|command|c|encodedcommand|ec|noexit)\b|(^|\s)\/[ck]\b/i.test(parent.commandLine);
-  const interactive = ["powershell.exe", "pwsh.exe", "cmd.exe", "explorer.exe", "windowsterminal.exe", "conhost.exe", "openconsole.exe"].includes(parent.name.toLowerCase());
-  if (interactive && !scripted) return null;
-  return `This host was started by ${parent.name}${scripted ? " running a script" : ""}, which may supervise it; ${manual}`;
-}
-let windowsParentLookup: Promise<{ name: string; commandLine: string } | null> | undefined;
-function windowsParent(): Promise<{ name: string; commandLine: string } | null> {
-  windowsParentLookup ??= (async () => {
-    try {
-      // A cold CIM query can take over 10 s on a busy machine.
-      const { stdout } = await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `Get-CimInstance Win32_Process -Filter "ProcessId=${process.ppid}" | Select-Object Name,CommandLine | ConvertTo-Json -Compress`], { timeout: 20000, windowsHide: true });
-      const row = JSON.parse(stdout) as { Name?: unknown; CommandLine?: unknown } | null;
-      return typeof row?.Name === "string" ? { name: row.Name, commandLine: typeof row.CommandLine === "string" ? row.CommandLine : "" } : null;
-    } catch {
-      // Ask again next time: a slow or failed query must not block updates until the daemon restarts.
-      windowsParentLookup = undefined;
-      return null;
-    }
-  })();
-  return windowsParentLookup;
-}
-
-/**
  * macOS has no service the host can ask about, and the README runs it under a restart loop (`sh ompweb-host-run` in
- * tmux, like the Windows ps1) that would start a second daemon next to the updated one. Only a host whose parent is an
+ * tmux) that would start a second daemon next to the updated one. Only a host whose parent is an
  * interactive shell running nothing but login/interactive flags is a foreground host this update may restart; a script,
  * `-c`, tmux or anything unknown is blocked, and no supervisor is coordinated with. Linux outside systemd is not
  * classified here: a supervising script on a Linux host that is not a service is not detected.
@@ -145,24 +115,24 @@ export function runtimeInsideInstall(execPath: string, installDir: string): bool
   } catch { return false; }
 }
 
-function installSupport(method: "npm" | "bun" | "binary"): string | null {
+function installSupport(method: "bun" | "binary"): string | null {
   try {
     const directory = installDirectory();
     if (hostArguments(method === "binary").some((arg) => arg !== "--allow-http")) throw new Error("Unsupported host daemon arguments");
     if (process.platform === "darwin" && process.ppid === 1) throw new Error("A launchd-managed or orphaned host must be updated manually to avoid duplicate daemon starts");
     if (process.pid === 1) throw new Error("A host running as a container's init process cannot be restarted in place");
     const info = lstatSync(directory);
-    if (!info.isDirectory() || info.isSymbolicLink() || realpathSync(directory) !== directory || (process.getuid && info.uid !== process.getuid()) || (process.platform !== "win32" && (info.mode & 0o022))) throw new Error("Host install is not an owned, writable release directory");
+    if (!info.isDirectory() || info.isSymbolicLink() || realpathSync(directory) !== directory || (process.getuid && info.uid !== process.getuid()) || (info.mode & 0o022)) throw new Error("Host install is not an owned, writable release directory");
     if (method === "binary") {
       hostReleaseName();
-      if (realpathSync(process.execPath) !== join(directory, process.platform === "win32" ? "ompweb.exe" : "ompweb") || !existsSync(join(directory, "dist", "index.html"))) throw new Error("Binary updates require a complete owned host release directory");
-    } else if (basename(directory) !== "ompweb" || basename(dirname(directory)) !== "@kahme247" || basename(dirname(dirname(directory))) !== "node_modules") throw new Error("Host updates require an installed npm/bun package; source checkouts are manual-only");
+      if (realpathSync(process.execPath) !== join(directory, "ompweb") || !existsSync(join(directory, "dist", "index.html"))) throw new Error("Binary updates require a complete owned host release directory");
+    } else if (basename(directory) !== "ompweb" || basename(dirname(directory)) !== "@kahme247" || basename(dirname(dirname(directory))) !== "node_modules") throw new Error("Host updates require an installed Bun package; source checkouts are manual-only");
     if (!safetyGuard) throw new Error("Host daemon restart safety is not configured");
     return safetyGuard();
   } catch (error) { return messageOf(error); }
 }
 
-async function detectHostService(method: "npm" | "bun" | "binary"): Promise<HostUpdateDescriptor["systemd"]> {
+async function detectHostService(method: "bun" | "binary"): Promise<HostUpdateDescriptor["systemd"]> {
   if (process.platform !== "linux") return null;
   let service;
   try { service = parseSystemdServiceCgroup(readFileSync("/proc/self/cgroup", "utf8")); } catch { return null; }
@@ -182,13 +152,13 @@ interface HostRestartPlan {
   daemonIdentity: string | null;
 }
 /** Everything about how this host would be stopped and restarted, so the button is disabled with a reason instead of failing. */
-async function planHostUpdate(method: "npm" | "bun" | "binary", version: string): Promise<HostRestartPlan> {
+async function planHostUpdate(method: "bun" | "binary", version: string): Promise<HostRestartPlan> {
   const plan: HostRestartPlan = { blockedReason: null, restartOnly: false, systemd: null, daemonIdentity: null };
   const layout = installSupport(method);
   if (layout) return { ...plan, blockedReason: layout };
   try { plan.systemd = await detectHostService(method); } catch (error) { return { ...plan, blockedReason: messageOf(error) }; }
   if (!plan.systemd) {
-    const supervision = process.platform === "win32" ? windowsHostSupervisionReason(await windowsParent()) : process.platform === "darwin" ? macHostSupervisionReason(await macParentCommand()) : null;
+    const supervision = process.platform === "darwin" ? macHostSupervisionReason(await macParentCommand()) : null;
     if (supervision) return { ...plan, blockedReason: supervision };
     ownIdentity ??= processStartIdentity(process.pid);
     plan.daemonIdentity = await ownIdentity;
@@ -208,8 +178,8 @@ export async function checkHostUpdates(compatibility: HostUpdateCompatibility, f
   const disabled = isUpdateDisabled() ? "Updates are disabled by OMP_WEB_DISABLE_AUTOUPDATE" : null;
   const [npm, ompVersion] = await Promise.all([checkNpmUpdate(force).catch(() => null), getOmpVersion()]);
   const base: HostSoftwareUpdate = { currentVersion: null, availableVersion: null, updateAvailable: false, canUpdate: false, blockedReason: null, updateCommand: "" };
-  const installMethod = typeof Bun !== "undefined" && Bun.isStandaloneExecutable ? "binary" : detectInstallMethod(installDirectory());
-  const ompweb: HostUpdateInfo["ompweb"] = { ...base, ...npm, currentVersion: packageJson.version, installMethod, protocolVersion: null, updateCommand: installMethod === "binary" ? `https://github.com/${releaseRepo()}/releases/latest` : installMethod === "bun" ? "bun add -g @kahme247/ompweb" : "npm install -g @kahme247/ompweb" };
+  const installMethod = Bun.isStandaloneExecutable ? "binary" : "bun";
+  const ompweb: HostUpdateInfo["ompweb"] = { ...base, ...npm, currentVersion: packageJson.version, installMethod, protocolVersion: null, updateCommand: installMethod === "binary" ? `https://github.com/${releaseRepo()}/releases/latest` : "bun add -g @kahme247/ompweb" };
   // omp updates with ompweb (its runner ships inside each release): the row only reports the running version.
   const runtime: HostUpdateInfo["omp"] = { currentVersion: ompVersion?.replace(/^omp\//, "") ?? null };
   if (disabled) ompweb.blockedReason = disabled;
@@ -289,19 +259,14 @@ export async function startHostUpdate(target: HostUpdateTarget, version: string,
     mkdirSync(attempt, { mode: 0o700 });
     const binary = method === "binary";
     const descriptor: HostUpdateDescriptor = { id, target, version, fromVersion: packageJson.version, installMethod: method, installDir: installDirectory(), runtime: process.execPath, hostArgs: hostArguments(binary), cwd: process.cwd(), daemonPid: process.pid, daemonIdentity: plan.daemonIdentity, releaseRepo: releaseRepo(), restartOnly: plan.restartOnly || undefined, systemd: plan.systemd };
-    if (!binary && !descriptor.restartOnly) {
-      const names = process.platform === "win32" ? method === "npm" ? ["npm.cmd", "npm.exe"] : ["bun.exe"] : [method];
-      const manager = (process.env.PATH || "").split(delimiter).flatMap((directory) => names.map((name) => join(directory, name))).find((path) => existsSync(path));
-      if (!manager) throw new HostUpdateError("manager_missing", `${method} is not available on this host's PATH`);
-      descriptor.managerPath = resolve(manager);
-    }
+    if (!binary && !descriptor.restartOnly) descriptor.managerPath = Bun.which("bun") || process.execPath;
     const descriptorPath = join(attempt, "descriptor.json");
     writeHostUpdateJson(descriptorPath, descriptor);
     // The worker must outlive the swap: the compiled binary and a runtime inside the install run from a copy outside it,
-    // while a system runtime (Node, Homebrew, Nix) stays where its libraries are and only the worker script is copied.
+    // while a system Bun stays where its libraries are and only the worker script is copied.
     let command = process.execPath;
     if (binary || runtimeInsideInstall(process.execPath, installDirectory())) {
-      command = join(attempt, process.platform === "win32" ? "runtime.exe" : "runtime");
+      command = join(attempt, "runtime");
       copyFileSync(process.execPath, command, constants.COPYFILE_FICLONE);
       chmodSync(command, 0o700);
     }
@@ -319,7 +284,7 @@ export async function startHostUpdate(target: HostUpdateTarget, version: string,
       args = [...options, command, ...args];
       command = "systemd-run";
     }
-    const child = spawn(command, args, { detached: true, cwd: attempt, stdio: "ignore", windowsHide: true, env: createChildProcessEnvironment() });
+    const child = spawn(command, args, { detached: true, cwd: attempt, stdio: "ignore", env: createChildProcessEnvironment() });
     child.once("error", (error) => {
       try { finishHostUpdate(id, `Could not launch host update worker: ${error.message}`); }
       catch (stateError) { console.error("Could not persist host update worker launch failure:", stateError); }

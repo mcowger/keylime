@@ -1,6 +1,4 @@
-/* Keep Tailwind's content scan inside the omp-web package. This is important
-   on Windows, where a parent user-profile package can make the scanner walk
-   protected junctions such as "My Documents" during production builds. */
+/* Keep Tailwind's content scan inside the omp-web package. */
 @import "tailwindcss" source(none);
 
 /* Table charts use native text, not a scaled terminal bitmap. */

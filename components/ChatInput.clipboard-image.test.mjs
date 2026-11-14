@@ -107,9 +107,7 @@ async function pasteFromClipboard(
   await act(async () => { trigger.click(); });
   const item = screen.getByRole("menuitem", { name: PASTE_ITEM });
   await act(async () => { item.click(); });
-  // The modeled FileReader settles on a macrotask followed by an async blob
-  // read. The whole suite takes ~125s on the Windows runner, so a fixed sleep
-  // is only long enough on an idle machine; poll for the batch to land instead.
+  // The modeled FileReader settles asynchronously; wait for the batch to land.
   for (let attempt = 0; attempt < 400; attempt += 1) {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
     if (settled()) break;

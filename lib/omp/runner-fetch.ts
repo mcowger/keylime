@@ -7,7 +7,7 @@ import { fetchedOmpBin, OMP_RUNNER_ASSET, resolveOmpBin, sourceCheckoutOmpBin } 
 
 // Every install gets its omp runner (ompweb-omp) from its own version's GitHub release: the asset OMP_RUNNER_ASSET,
 // checked against that release's OMP_RUNNER_CHECKSUMS. Releases attach both (.github/workflows/publish.yml).
-// Loaded by Node/jiti and the compiled binary: no `@/` imports.
+// Loaded by Bun's native TypeScript runtime and the compiled binary: no `@/` imports.
 
 /** The `sha256sum` listing of every runner asset a release attaches. */
 export const OMP_RUNNER_CHECKSUMS = "ompweb-omp.sha256";

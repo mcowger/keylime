@@ -34,7 +34,7 @@ Options:
   -p, --port <port>        Server port (default 30177, env PORT)
   -H, --hostname <host>    Bind hostname (default 127.0.0.1, env OMP_WEB_HOSTNAME)
       --no-open            Do not open the browser automatically
-      --install-tray       Install system tray service & shortcuts (Windows tray / Linux SNI tray)
+      --install-tray       Install the Linux system tray
       --uninstall-tray     Uninstall system tray service & shortcuts
       --tray               Start background system tray manager
   -h, --help               Show this help
@@ -76,7 +76,6 @@ function parseLaunchOptions(args = process.argv.slice(2), env = process.env) {
       version:   { type: "boolean" },
       "no-open":         { type: "boolean" },
       "install-tray":    { type: "boolean" },
-      "install-service": { type: "boolean" },
       "uninstall-tray":  { type: "boolean" },
       tray:              { type: "boolean" },
     },
@@ -94,7 +93,7 @@ function parseLaunchOptions(args = process.argv.slice(2), env = process.env) {
     legacyPassword: legacy?.value,
     legacyPasswordSource: legacy?.source,
     openBrowser: !cliArgs["no-open"] && !isEnabled(env.OMP_WEB_NO_OPEN),
-    installTray: Boolean(cliArgs["install-tray"] || cliArgs["install-service"]),
+    installTray: Boolean(cliArgs["install-tray"]),
     uninstallTray: Boolean(cliArgs["uninstall-tray"]),
     tray: Boolean(cliArgs.tray),
     ...(/^\d{1,5}$/.test(port) && Number(port) <= 65535 ? {} : { error: `Invalid port: ${port}. Use an integer from 0 to 65535.` }),

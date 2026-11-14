@@ -3,7 +3,7 @@
 // `RemoteHost`. Everything a daemon sends is untrusted input.
 // No `next/*` or `@/` imports.
 import { randomUUID } from "node:crypto";
-import { posix, win32 } from "node:path";
+import { posix } from "node:path";
 import { readBodyWithinLimit } from "../bounded-form-data";
 import type { RpcTransport } from "../omp/rpc-transport";
 import type { ProjectRegistryEntry } from "../project-registry";
@@ -1065,8 +1065,7 @@ function validResult(op: keyof SessionOps, result: unknown, args: unknown[]): bo
 /** Paths belong to the daemon's OS, which need not be the web server's OS. */
 function preparedPath(value: unknown): boolean {
   if (typeof value !== "string" || value.includes("\0")) return false;
-  const path = value.startsWith("/") ? posix : win32;
-  return path.isAbsolute(value) && path.normalize(value) === value;
+  return posix.isAbsolute(value) && posix.normalize(value) === value;
 }
 
 const optionalString = (value: unknown) => value === undefined || typeof value === "string";
@@ -1583,7 +1582,7 @@ export async function getHostSoftwareUpdates(id: string, force = false): Promise
   requireUpdateHost(id);
   const result = await request(id, "checkUpdates", { compatibility: updateCompatibility(), force });
   if (!isRecord(result) || !softwareUpdate(result.ompweb) || !isRecord(result.omp) || !nullableString(result.omp.currentVersion)
-    || !["npm", "bun", "binary"].includes(String(result.ompweb.installMethod))
+    || !["bun", "binary"].includes(String(result.ompweb.installMethod))
     || !(result.ompweb.protocolVersion === null || (Number.isSafeInteger(result.ompweb.protocolVersion) && Number(result.ompweb.protocolVersion) > 0))
     || !(result.operation === null || updateOperation(result.operation))) {
     throw new HostOpError(502, "host_bad_result", "The host returned an invalid update status");
