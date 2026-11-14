@@ -48,10 +48,6 @@ function fixture() {
     },
     status: () => ({ status: "running", pid: 42 }),
     children: () => [],
-    backup: () => {
-      calls.push("backup");
-      return "backup";
-    },
     select: (target) => {
       calls.push(`select:${target}`);
       selected = target;
@@ -94,11 +90,10 @@ function fixture() {
 test("activation reports each mutation before it happens and checks both services", async () => {
   const f = fixture();
   const result = await activateRelease(f.options, f.deps);
-  expect(result).toEqual({ previous: "old", backup: "backup" });
+  expect(result).toEqual({ previous: "old" });
   expect(f.phases).toEqual([
     "stop-web",
     "stop-host",
-    "backup",
     "select",
     "start-web",
     "start-host",
@@ -110,7 +105,6 @@ test("activation reports each mutation before it happens and checks both service
     "drain-idle",
     "stop:global/ompweb",
     "stop:global/ompweb-host",
-    "backup",
     "select:new",
     "start:global/ompweb",
     "start:global/ompweb-host",

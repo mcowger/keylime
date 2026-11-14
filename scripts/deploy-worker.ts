@@ -114,7 +114,7 @@ try {
     if (values.activate) {
       candidate = realpathSync(path.resolve(values.activate));
       if (!existsSync(path.join(candidate, "keylime-release.json")))
-        throw new Error("Not a verified Keylime release directory");
+        throw new Error("Not a Keylime release directory");
     } else {
       const sha = text(["git", "-C", root, "rev-parse", "HEAD"]);
       const version = `${sha.slice(0, 12)}-${Date.now()}`;
@@ -174,13 +174,41 @@ try {
         selectFrontend(base, candidate);
         onPhase("complete", { candidate, previous, sha });
       } else {
-        bun("runner/scripts/use-omp-build.ts");
-        run(
-          ["mise", "exec", "--", "bun", "install", "--frozen-lockfile"],
-          path.join(scratch, "runner"),
-        );
-        bun("runner/scripts/build-binary.ts");
-        bun("run", "build:binary");
+        // Reuse the active release's runner when its complete source tree and
+        // pinned runtime are unchanged. Otherwise rebuild from the pin.
+        let reusedRunner = false;
+        try {
+          const active = realpathSync(path.join(base, "current"));
+          const metadata = JSON.parse(
+            readFileSync(path.join(active, "keylime-release.json"), "utf8"),
+          );
+          if (typeof metadata.sha === "string" && /^[0-9a-f]{40,64}$/.test(metadata.sha)) {
+            const same = ["runner", "mise.toml"].every(
+              (file) => text(["git", "-C", root, "rev-parse", `${metadata.sha}:${file}`]) ===
+                text(["git", "-C", root, "rev-parse", `${sha}:${file}`]),
+            );
+            const source = path.join(active, "ompweb-omp");
+            if (same && existsSync(source)) {
+              const destination = path.join(scratch, "runner", "release", `ompweb-omp-${process.platform}-${process.arch}`);
+              mkdirSync(path.dirname(destination), { recursive: true });
+              cpSync(source, destination);
+              reusedRunner = true;
+              console.log(`Reusing runner from ${active}`);
+            }
+          }
+        } catch {
+          // Missing metadata or unavailable git objects require a fresh build.
+        }
+        if (!reusedRunner) {
+          bun("runner/scripts/use-omp-build.ts");
+          run(
+            ["mise", "exec", "--", "bun", "install", "--frozen-lockfile"],
+            path.join(scratch, "runner"),
+          );
+          bun("runner/scripts/build-binary.ts");
+        }
+        bun("run", "build");
+        bun("scripts/build-binary.ts", "--no-archive");
         candidate = path.join(base, "releases", version);
         mkdirSync(path.dirname(candidate), { recursive: true });
         cpSync(
@@ -191,7 +219,6 @@ try {
           candidate,
           { recursive: true },
         );
-        bun("scripts/smoke.ts", "--binary", path.join(candidate, "ompweb"));
         writeFileSync(
           path.join(candidate, "keylime-release.json"),
           JSON.stringify({
@@ -200,7 +227,7 @@ try {
             frontendPointer,
           }) + "\n",
         );
-        console.log(`Verified release: ${candidate}`);
+        console.log(`Built release: ${candidate}`);
       }
     }
     if (!values.frontend)

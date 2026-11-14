@@ -11,7 +11,11 @@ import { bundledPackageDirs, writeLicenses } from "./licenses";
 const root = path.join(import.meta.dir, "..");
 const { values } = parseArgs({
   args: Bun.argv.slice(2),
-  options: { target: { type: "string" }, "no-runner": { type: "boolean" } },
+  options: {
+    target: { type: "string" },
+    "no-runner": { type: "boolean" },
+    "no-archive": { type: "boolean" },
+  },
 });
 const target = (values.target ??
   `bun-${process.platform}-${process.arch}`) as Bun.Build.CompileTarget;
@@ -109,17 +113,19 @@ writeLicenses(
   bunLicense,
 );
 
-// Bun.Archive writes every entry as 0644, so use tar to preserve the binary's execute bit.
-const archive = path.join(release, `${name}.tar.gz`);
-rmSync(archive, { force: true });
-const command = ["tar", "-czf", path.basename(archive), name];
-if (
-  Bun.spawnSync(command, {
-    cwd: release,
-    stdio: ["ignore", "inherit", "inherit"],
-  }).exitCode !== 0
-)
-  process.exit(1);
-console.log(
-  `built ${path.relative(root, out)} and ${path.relative(root, archive)}`,
-);
+if (!values["no-archive"]) {
+  // Bun.Archive writes every entry as 0644; tar preserves the binary's execute bit.
+  const archive = path.join(release, `${name}.tar.gz`);
+  rmSync(archive, { force: true });
+  const command = ["tar", "-czf", path.basename(archive), name];
+  if (
+    Bun.spawnSync(command, {
+      cwd: release,
+      stdio: ["ignore", "inherit", "inherit"],
+    }).exitCode !== 0
+  )
+    process.exit(1);
+  console.log(`built ${path.relative(root, out)} and ${path.relative(root, archive)}`);
+} else {
+  console.log(`built ${path.relative(root, out)}`);
+}

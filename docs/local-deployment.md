@@ -22,9 +22,14 @@ The launcher bundles a private snapshot of the worker before submission, so
 editing or updating the checkout cannot change an in-flight transaction.
 
 The command exports committed HEAD into a private build directory, installs the
-pinned dependencies, builds the runner and production binary, then smoke-tests
-that installed candidate with isolated data. It never serves this working tree.
-Verified releases stay in `~/.local/share/keylime/releases/`.
+pinned dependencies, and builds the runner and production binary. It never
+serves this working tree. Releases stay in `~/.local/share/keylime/releases/`.
+If the active release has the same committed runner tree and pinned runtime, its
+runner binary is reused; otherwise the runner is built from the pinned packages.
+Local builds skip the unused release tarball and smoke suite. Preflight still
+checks the candidate runner before activation, and activation verifies service
+readiness. Run `bun run smoke` separately when needed; deployment no longer checks
+the SPA, APIs, or event stream before switching.
 
 Activation gives active runs and protected host work up to 60 seconds to finish.
 Use `keylime-deploy --timeout 10` or `mise exec -- bun run deploy:local:fast`
@@ -39,11 +44,10 @@ interrupt it. `--wait` only observes that worker; it does not own deployment.
 Older daemons without maintenance controls use the full configured grace period,
 then the web service and host process group are stopped for the initial upgrade.
 
-Before switching, the command stops web admission and the host,
-and saves the agent directory plus service/tool config under
-`~/.local/share/keylime/backups/`. The directory symlink switches atomically;
-web and host restart as separate production processes. Other host daemons using
-the same agent directory must be stopped separately before cutover.
+Before switching, the command stops web admission and the host. The directory
+symlink switches atomically; web and host restart as separate production processes.
+Other host daemons using the same agent directory must be stopped separately before
+cutover. Deployment does not back up agent data or service configuration.
 
 Build failures never change the active version. Activation failures before
 admission reopens restore the previous selection. Once admission reopens there
@@ -67,20 +71,20 @@ are retained so tabs opened before a switch can still load them.
 
 ## Rollback
 
-Use the prior verified release path printed by deployment:
+Use the prior release path printed by deployment:
 
 ```bash
 mise exec -- bun run deploy:local --activate /absolute/path/to/previous-release --wait
 ```
 
-Rollback to earlier builds is not a data-compatibility promise. Inspect the saved
-backup before attempting it. Never restore a backup over a running agent.
+Rollback to earlier builds is not a data-compatibility promise. Maintain an
+independent backup before deploying if recovery of agent data is needed. Never
+restore a backup over a running agent.
 The initial upstream installation is retained at
 `~/.local/share/mise/installs/github-ompweb-dev-ompweb/0.7.0/`; original service
 and mise config are in the directory named by
 `~/.local/share/keylime/initial-backup`. Returning to upstream requires manually
-restoring those selections during a quiet window, not bypassing the verified
-release check.
+restoring those selections during a quiet window, not bypassing the release check.
 
 Inspect services with `pitchfork status global/ompweb --json` and
 `pitchfork status global/ompweb-host --json`; inspect logs with `pitchfork logs`.
@@ -91,4 +95,4 @@ If a worker itself crashes, inspect `--status` and its log, then run
 `keylime-deploy --recover --wait` to start both services at the selected release.
 New deployments refuse an unfinished transaction until explicit recovery.
 This is a recoverable service transaction, not zero-downtime or a power-loss
-atomicity guarantee. Builds and backups remain for manual disk management.
+atomicity guarantee. Builds remain for manual disk management.

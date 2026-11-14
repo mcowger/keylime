@@ -1,12 +1,9 @@
 import {
-  cpSync,
   existsSync,
-  mkdirSync,
   realpathSync,
   renameSync,
   rmSync,
   symlinkSync,
-  writeFileSync,
 } from "node:fs";
 import path from "node:path";
 import {
@@ -36,7 +33,6 @@ export type ActivationDependencies = {
   control: (command: HostControlCommand) => Promise<HostControlStatus>;
   status: (service: string) => ServiceStatus;
   children: (pid: number) => string[];
-  backup: (previous: string) => string;
   select: (target: string) => void;
   readiness: () => Promise<boolean>;
   now: () => number;
@@ -75,7 +71,7 @@ function defaults({
   return {
     preflight: () => {
       if (!existsSync(path.join(candidate, "keylime-release.json")))
-        throw new Error("Not a verified Keylime release directory");
+        throw new Error("Not a Keylime release directory");
       const result = Bun.spawnSync(
         [path.join(candidate, "ompweb"), "preflight"],
         {
@@ -100,28 +96,6 @@ function defaults({
       run(["ps", "-axo", "pid=,ppid=,command="], true)
         .split("\n")
         .filter((line) => Number(line.trim().split(/\s+/)[1]) === pid),
-    backup: (previous) => {
-      const backup = path.join(base, "backups", String(Date.now()));
-      mkdirSync(backup, { recursive: true, mode: 0o700 });
-      for (const file of [
-        ".config/pitchfork/config.toml",
-        ".config/mise/config.macmini.toml",
-      ])
-        cpSync(
-          path.join(home, file),
-          path.join(backup, path.basename(path.dirname(file)) + ".toml"),
-        );
-      run([
-        "tar",
-        "-czf",
-        path.join(backup, "agent.tar.gz"),
-        "-C",
-        path.dirname(agent),
-        path.basename(agent),
-      ]);
-      writeFileSync(path.join(backup, "previous-release.txt"), previous + "\n");
-      return backup;
-    },
     select: (target) => {
       const pointer = path.join(base, "frontend-current");
       const isCandidate = target === candidate;
@@ -160,7 +134,7 @@ function defaults({
 export async function activateRelease(
   options: Options,
   injected?: ActivationDependencies,
-): Promise<{ previous: string; backup: string }> {
+): Promise<{ previous: string }> {
   const { candidate, onPhase } = options;
   const d = injected ?? defaults(options);
   d.preflight(candidate);
@@ -174,7 +148,6 @@ export async function activateRelease(
   let hostStopped = false;
   let selected = false;
   let admitted = false;
-  let backup = "";
   const sameHost = () => {
     const current = d.status("ompweb-host");
     if (current.status !== "running" || current.pid !== hostPid)
@@ -229,9 +202,7 @@ export async function activateRelease(
     hostStopped = true;
     d.run(["pitchfork", "stop", "global/ompweb-host"]);
     drained = false;
-    onPhase("backup");
-    backup = d.backup(previous);
-    onPhase("select", { candidate, previous, backup });
+    onPhase("select", { candidate, previous });
     d.select(candidate);
     selected = true;
     onPhase("start-web");
@@ -273,8 +244,8 @@ export async function activateRelease(
       throw new Error(
         "Production readiness failed; inspect Pitchfork logs. No automatic rollback after admission reopens.",
       );
-    onPhase("complete", { candidate, previous, backup });
-    return { previous, backup };
+    onPhase("complete", { candidate, previous });
+    return { previous };
   } catch (error) {
     const failures: unknown[] = [];
     const attempt = async (action: () => unknown) => {

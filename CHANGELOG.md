@@ -21,6 +21,10 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Thinking supports paragraphs, bold, italics, lists, inline code and fenced code at a uniform font size. Unsupported Markdown stays literal, and diagram fences remain code rather than invoking rich renderers.
 - The context control shows model-request wait time, estimated streaming tokens/second, and tool execution status. Timing starts at actual main-agent model requests, not queued submission; the rate includes thinking and excludes subagents.
 - `bun run deploy:local` builds committed source into versioned production releases, smoke-tests before activation, waits for an empty host, and backs up production data before switching Pitchfork services. Verified older releases can be selected with `--activate`.
+- `bun run deploy:local` builds committed source into versioned production releases and supports activating older releases with `--activate`
+
+### Changed
+- Local deployment reuses an unchanged runner and skips archive creation to reduce build time. It no longer smoke-tests releases or backs up production data before activation
 
 ### Fixed
 - Ship uses a header button and an aligned dialog with distinct progress, error and file details.

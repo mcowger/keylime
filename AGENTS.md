@@ -69,7 +69,7 @@ The launcher is `scripts/dev-isolated.ts`; see `CONTRIBUTING.md` for usage.
 ### Local production deployment
 
 `bun run deploy:local` (or this Mac's `keylime-deploy`) builds committed HEAD in
-a separate directory and smoke-tests a versioned binary release. Activation waits
+a separate directory and preflights a versioned binary release. Activation waits
 at most 60 seconds for active work, then forces cutover, terminating remaining
 runs. Idle sessions close automatically. A detached, snapshotted worker owns
 deployment independently of the invoking terminal/session. `--wait` only observes;
@@ -77,7 +77,7 @@ deployment independently of the invoking terminal/session. `--wait` only observe
 SQLite provides exclusive process-owned deployment locking, never PID/time expiry.
 Production stays on port 8080 with its existing authentication and agent directory.
 Mise and both services follow `~/.local/share/keylime/current`; in-app updates are
-disabled. Every activation backs up the agent directory before switching. See
+disabled. Deployments do not back up the agent directory. See
 `docs/local-deployment.md` for deployment, rollback, and recovery limits.
 
 For frontend-only changes, use `bun run deploy:local:frontend` (or
