@@ -23,7 +23,7 @@ const settingsProps = {
   onToolCallsDefaultCollapsedChange: noop,
   hideToolActivity: false,
   onHideToolActivityChange: noop,
-  expandThinkingByDefault: false,
+  expandThinkingByDefault: "off",
   onExpandThinkingByDefaultChange: noop,
   onHideThinkingBlockChange: noop,
   providerUsageVisible: false,

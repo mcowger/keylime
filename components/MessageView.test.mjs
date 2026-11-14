@@ -1282,6 +1282,33 @@ test("an expanded thinking block collapses and re-expands by hand", async () => 
   assert.equal(output(), "weighing the options");
 });
 
+test("latest thinking advances without overriding manual toggles on updates", async () => {
+  const message = {
+    role: "assistant", provider: "t", model: "m",
+    content: [
+      { type: "thinking", thinking: "first" },
+      { type: "thinking", thinking: "second" },
+    ],
+  };
+  const element = (latest, msg = message) => React.createElement(MessageView, {
+    message: msg, isStreaming: true, latestThinkingBlockIndex: latest,
+  });
+  const view = render(element(0));
+  const outputs = () => [...view.container.querySelectorAll(".thinking-output")].map((el) => el.textContent);
+  assert.deepEqual(outputs(), ["first"]);
+  view.rerender(element(1));
+  assert.deepEqual(outputs(), ["second"]);
+  fireEvent.click(view.container.querySelectorAll(".activity-row-trigger")[1]);
+  view.rerender(element(1, { ...message }));
+  assert.deepEqual(outputs(), []);
+  fireEvent.click(view.container.querySelectorAll(".activity-row-trigger")[0]);
+  assert.deepEqual(outputs(), ["first"]);
+  view.rerender(element(0));
+  assert.deepEqual(outputs(), ["first"]);
+  view.rerender(element(null));
+  assert.deepEqual(outputs(), []);
+});
+
 test("a deferred thinking block auto-expanded by the preference loads its source block", async (t) => {
   const requested = [];
   const originalFetch = globalThis.fetch;

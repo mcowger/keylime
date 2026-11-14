@@ -63,6 +63,24 @@ export interface PlanOptions {
   neverFold?: boolean;
 }
 
+/** Find the last visible thinking block in transcript order. */
+export function findLatestThinking(
+  messages: readonly Partial<AgentMessage>[],
+  streaming = false,
+): { messageIndex: number; blockIndex: number } | null {
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex--) {
+    const message = messages[messageIndex];
+    if (message.role !== "assistant" || !Array.isArray(message.content)) continue;
+    for (let blockIndex = message.content.length - 1; blockIndex >= 0; blockIndex--) {
+      const block = message.content[blockIndex];
+      if (block.type === "thinking" && (streaming || block.deferred || block.thinking.trim())) {
+        return { messageIndex, blockIndex };
+      }
+    }
+  }
+  return null;
+}
+
 // A user message normally anchors a turn. When compaction fires mid-turn, pi
 // drops the original user prompt and inserts a compaction summary (role
 // "custom", customType "compaction") in its place; the agent then keeps

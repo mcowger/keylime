@@ -339,6 +339,8 @@ interface Props {
   toolCallsDefaultCollapsed?: boolean;
   /** Open thinking blocks on mount ("Expand thinking blocks by default" in Settings). */
   expandThinkingByDefault?: boolean;
+  /** Source index of the latest thinking block, or null when it is elsewhere. */
+  latestThinkingBlockIndex?: number | null;
   /** omp `hideThinkingBlock`: omit thinking blocks. */
   hideThinking?: boolean;
   /** Source `content` index of each block when `message` carries a subset of an entry's blocks, so deferred thinking loads the right block. */
@@ -414,6 +416,7 @@ export function areMessageViewPropsEqual(prev: Props, next: Props): boolean {
     Object.is(prev.sessionId, next.sessionId) &&
     Object.is(prev.toolCallsDefaultCollapsed, next.toolCallsDefaultCollapsed) &&
     Object.is(prev.expandThinkingByDefault, next.expandThinkingByDefault) &&
+    Object.is(prev.latestThinkingBlockIndex, next.latestThinkingBlockIndex) &&
     Object.is(prev.hideThinking, next.hideThinking) &&
     prev.sourceBlockIndices?.join() === next.sourceBlockIndices?.join() &&
     (!prev.isStreaming ||
@@ -442,6 +445,7 @@ export const MessageView = memo(function MessageView({
   sessionId,
   toolCallsDefaultCollapsed = true,
   expandThinkingByDefault = false,
+  latestThinkingBlockIndex,
   hideThinking = false,
   sourceBlockIndices,
   liveTokensPerSecond,
@@ -483,6 +487,7 @@ export const MessageView = memo(function MessageView({
         forkDisabled={forkDisabled}
         toolCallsDefaultCollapsed={toolCallsDefaultCollapsed}
         expandThinkingByDefault={expandThinkingByDefault}
+        latestThinkingBlockIndex={latestThinkingBlockIndex}
         hideThinking={hideThinking}
         sourceBlockIndices={sourceBlockIndices}
         liveTokensPerSecond={liveTokensPerSecond}
@@ -1190,6 +1195,7 @@ function AssistantMessageView({
   forkDisabled,
   toolCallsDefaultCollapsed,
   expandThinkingByDefault,
+  latestThinkingBlockIndex,
   hideThinking,
   sourceBlockIndices,
   liveTokensPerSecond,
@@ -1212,6 +1218,7 @@ function AssistantMessageView({
   forkDisabled?: boolean;
   toolCallsDefaultCollapsed: boolean;
   expandThinkingByDefault: boolean;
+  latestThinkingBlockIndex?: number | null;
   hideThinking: boolean;
   sourceBlockIndices?: number[];
   liveTokensPerSecond?: number | null;
@@ -1482,6 +1489,8 @@ function AssistantMessageView({
             blockIndex={originalIndex}
             toolCallsDefaultCollapsed={toolCallsDefaultCollapsed}
             expandThinkingByDefault={expandThinkingByDefault}
+            isLatestThinking={latestThinkingBlockIndex === originalIndex}
+            followLatestThinking={latestThinkingBlockIndex !== undefined}
           />
         ))}
         {errorMessage &&
@@ -1646,6 +1655,8 @@ function BlockView({
   blockIndex,
   toolCallsDefaultCollapsed,
   expandThinkingByDefault,
+  isLatestThinking,
+  followLatestThinking,
 }: {
   block: AssistantContentBlock;
   toolResults?: Map<string, ToolResultMessage>;
@@ -1659,6 +1670,8 @@ function BlockView({
   blockIndex: number;
   toolCallsDefaultCollapsed: boolean;
   expandThinkingByDefault: boolean;
+  isLatestThinking: boolean;
+  followLatestThinking: boolean;
 }) {
   if (block.type === "text") {
     return (
@@ -1681,6 +1694,8 @@ function BlockView({
         entryId={entryId}
         blockIndex={blockIndex}
         expandByDefault={expandThinkingByDefault}
+        followLatest={followLatestThinking}
+        isLatest={isLatestThinking}
       />
     );
   }
@@ -1757,6 +1772,8 @@ const ThinkingBlock = memo(
     entryId,
     blockIndex,
     expandByDefault,
+    followLatest,
+    isLatest,
   }: {
     block: ThinkingContent;
     duration?: number;
@@ -1764,16 +1781,17 @@ const ThinkingBlock = memo(
     entryId?: string;
     blockIndex: number;
     expandByDefault: boolean;
+    followLatest: boolean;
+    isLatest: boolean;
   }) {
     const { t } = useI18n();
-    // The preference only seeds the state: expanding/collapsing by hand keeps
-    // working per block. It deliberately applies to a streaming block too — the
-    // reasoning the user follows closely is exactly the one being written, a
-    // "completed only" rule would have to flip the state mid-stream (fighting a
-    // manual collapse), and remounts (reload, session switch) start from the
-    // preference again either way, so streaming and completed blocks stay
-    // consistent.
-    const [expanded, setExpanded] = useState(expandByDefault);
+    const [expanded, setExpanded] = useState(followLatest ? isLatest : expandByDefault);
+    const previousDefault = useRef(followLatest ? isLatest : expandByDefault);
+    const currentDefault = followLatest ? isLatest : expandByDefault;
+    useEffect(() => {
+      if (previousDefault.current !== currentDefault) setExpanded(currentDefault);
+      previousDefault.current = currentDefault;
+    }, [currentDefault]);
     const [content, setContent] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -1866,7 +1884,9 @@ const ThinkingBlock = memo(
     prev.sessionId === next.sessionId &&
     prev.entryId === next.entryId &&
     prev.blockIndex === next.blockIndex &&
-    prev.expandByDefault === next.expandByDefault,
+    prev.expandByDefault === next.expandByDefault &&
+    prev.followLatest === next.followLatest &&
+    prev.isLatest === next.isLatest,
 );
 
 // message_update frames re-parse toolCall blocks each frame, so input objects
