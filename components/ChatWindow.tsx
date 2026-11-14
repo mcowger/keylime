@@ -1842,7 +1842,7 @@ export function ChatWindow({
                   >
                     <div
                       className="w-full"
-                      style={{ maxWidth: CHAT_COLUMN_MAX_WIDTH }}
+                      style={{ maxWidth: 760 }}
                     >
                       <div
                         className="mb-3 empty-chat-brand"

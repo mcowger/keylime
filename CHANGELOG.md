@@ -25,6 +25,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Changed
 - Local deployment reuses an unchanged runner and skips archive creation to reduce build time. It no longer smoke-tests releases or backs up production data before activation
+- The new-session screen uses a narrower content column
 
 ### Fixed
 - Ship uses a header button and an aligned dialog with distinct progress, error and file details.
