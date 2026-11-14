@@ -70,6 +70,12 @@ import { resolveSessionLocalFile } from "../session-local-files";
 import { filePathApiSegments } from "../file-paths";
 import { hierarchyOperation } from "./project-hierarchy";
 import {
+  shipPreview,
+  startShip,
+  shipStatus,
+  shipFinish,
+} from "./workspace-ship";
+import {
   createWorkspace,
   workspaceCreationStatus,
   workspaceCreationSettings,
@@ -298,6 +304,10 @@ export function createWorkspaceService(
   const ops: WorkspaceOps = {
     terminals: async () => { throw new HostOpError(501, "workspace_unsupported", "Terminals require a host daemon"); },
     hierarchy: hierarchyOperation,
+    shipPreview: (input) => result(() => shipPreview(input)),
+    startShip: (input) => result(() => startShip(input)),
+    shipStatus: (id) => result(() => shipStatus(id)),
+    shipFinish: (input) => result(() => shipFinish(input)),
     createWorkspace: (input) => result(() => createWorkspace(input)),
     workspaceCreationStatus: (id) => result(() => workspaceCreationStatus(id)),
     workspaceCreationSettings: (input) =>

@@ -22,6 +22,7 @@ import type {
   WorkspaceDeleteResult,
   WorkspaceSettingsRequest,
 } from "./workspace-creation-types";
+import type { ShipJob, ShipPreview, ShipRequest } from "./workspace-ship-types";
 
 export interface WorkspaceFileSource {
   hostId: string;
@@ -122,6 +123,16 @@ export interface WorkspaceOps {
     }>
   >;
   hierarchy(input: HierarchyRequest): Promise<OpResult<HierarchySnapshot>>;
+  shipPreview(input: {
+    projectPath: string;
+    path: string;
+  }): Promise<OpResult<ShipPreview>>;
+  startShip(input: ShipRequest): Promise<OpResult<ShipJob>>;
+  shipStatus(id: string): Promise<OpResult<ShipJob>>;
+  shipFinish(input: {
+    projectPath: string;
+    path: string;
+  }): Promise<OpResult<ShipJob>>;
   createWorkspace(
     input: WorkspaceCreateRequest,
   ): Promise<OpResult<WorkspaceCreationJob>>;
@@ -257,6 +268,10 @@ export const WORKSPACE_OP_PARAMS: {
   listFilesInRoot: ["input", "root"],
   resolveLocalFile: ["id", "uri", "sessionFile"],
   gitOrigins: ["paths"],
+  shipPreview: ["input"],
+  startShip: ["input"],
+  shipStatus: ["id"],
+  shipFinish: ["input"],
 };
 
 export function isWorkspaceOp(value: string): value is keyof WorkspaceOps {

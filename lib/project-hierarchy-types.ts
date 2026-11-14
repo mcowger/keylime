@@ -1,4 +1,5 @@
 import type { ProjectLaunchConfig, SessionInfo } from "./types";
+import type { WorkspaceShipState } from "./workspace-ship-types";
 
 export interface HierarchyWorkspace {
   id: string;
@@ -9,6 +10,7 @@ export interface HierarchyWorkspace {
   branch?: string;
   sessionIds: string[];
   unavailable?: boolean;
+  ship?: WorkspaceShipState;
   setup?: {
     status: "running" | "failed" | "complete" | "interrupted";
     jobId: string;

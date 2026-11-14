@@ -13,6 +13,9 @@ import type { ManagedProject, SessionInfo } from "@/lib/types";
 import type { WorkspaceDeleteResult } from "@/lib/workspace-creation-types";
 import { WorktreesPanel } from "./WorktreesPanel";
 import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
+import { ShipDialog } from "./ShipDialog";
+import { ConfirmDialog } from "./ui/field";
+import { toast } from "./ui/toast";
 
 type Host = { id: string; label: string };
 type Props = {
@@ -94,6 +97,42 @@ export function HierarchySidebar({
     host: string;
     project: HierarchyProject;
   } | null>(null);
+  const [shipTarget, setShipTarget] = useState<{
+    host: string;
+    projectPath: string;
+    path: string;
+    sessionId: string;
+  } | null>(null);
+  const [finishTarget, setFinishTarget] = useState<{
+    host: string;
+    projectPath: string;
+    path: string;
+  } | null>(null);
+  const finishAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => finishAbort.current?.abort(), []);
+  const finishShip = async () => {
+    if (!finishTarget) return;
+    const abort = new AbortController();
+    finishAbort.current = abort;
+    try {
+      const response = await fetch("/api/ship/finish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(finishTarget),
+        signal: abort.signal,
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Cleanup failed");
+      setFinishTarget(null);
+      onChanged();
+    } catch (error) {
+      if (!abort.signal.aborted)
+        toast.error(
+          "Cleanup failed",
+          error instanceof Error ? error.message : String(error),
+        );
+    }
+  };
   useEffect(() => {
     onProjects(
       Object.entries(snapshots).flatMap(([hostId, snapshot]) =>
@@ -328,6 +367,30 @@ export function HierarchySidebar({
   } as const;
   return (
     <div ref={sidebarRef} style={{ fontSize: 12, color: "var(--text)" }}>
+      {shipTarget && (
+        <ShipDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setShipTarget(null);
+          }}
+          {...shipTarget}
+          onRemoved={() => {
+            onSelectWorkspace(shipTarget.projectPath, shipTarget.host);
+            onChanged();
+          }}
+        />
+      )}
+      <ConfirmDialog
+        open={finishTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setFinishTarget(null);
+        }}
+        title="Clean up merged workspace?"
+        description="Archive its sessions and delete the workspace and branch."
+        confirmLabel="Clean up"
+        cancelLabel="Cancel"
+        onConfirm={() => void finishShip()}
+      />
       {error && (
         <div role="alert" style={{ color: "var(--status-error)", padding: 8 }}>
           {error}
@@ -518,6 +581,17 @@ export function HierarchySidebar({
                     const runningCount = workspace.sessionIds.filter((id) =>
                       runningSessionIds.has(id),
                     ).length;
+                    const latestSession = sessions
+                      .filter(
+                        (item) =>
+                          workspace.sessionIds.includes(item.id) &&
+                          (item.hostId ?? "local") === host.id,
+                      )
+                      .sort((a, b) =>
+                        (b.lastMessageAt ?? b.modified).localeCompare(
+                          a.lastMessageAt ?? a.modified,
+                        ),
+                      )[0];
                     const needsAttention = workspace.sessionIds.some(
                       (id) =>
                         awaitingInputIds.has(id) ||
@@ -556,6 +630,71 @@ export function HierarchySidebar({
                             {workspace.name}
                             {workspace.unavailable ? " (unavailable)" : ""}
                           </button>
+                          {workspace.ship?.job?.status === "running" ? (
+                            <span
+                              title="Shipping"
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 3,
+                                fontSize: 11,
+                                flexShrink: 0,
+                              }}
+                            >
+                              <Loader2 size={12} className="animate-spin" />{" "}
+                              Shipping...
+                            </span>
+                          ) : workspace.ship?.pr?.state === "open" ? (
+                            <a
+                              href={workspace.ship.pr.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={`Checks: ${workspace.ship.pr.checks}`}
+                              style={{
+                                fontSize: 11,
+                                whiteSpace: "nowrap",
+                                color: "var(--text)",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  color:
+                                    workspace.ship.pr.checks === "passing"
+                                      ? "var(--status-success)"
+                                      : workspace.ship.pr.checks === "failing"
+                                        ? "var(--status-error)"
+                                        : "var(--status-warning)",
+                                }}
+                              >
+                                ●
+                              </span>{" "}
+                              PR #{workspace.ship.pr.number}
+                            </a>
+                          ) : workspace.ship?.pr?.state === "merged" ? (
+                            <span
+                              style={{ fontSize: 11, whiteSpace: "nowrap" }}
+                            >
+                              Merged{" "}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setFinishTarget({
+                                    host: host.id,
+                                    projectPath: project.path,
+                                    path: workspace.path,
+                                  })
+                                }
+                              >
+                                Clean up
+                              </button>
+                            </span>
+                          ) : workspace.ship?.pr?.state === "closed" ? (
+                            <span
+                              style={{ fontSize: 11, whiteSpace: "nowrap" }}
+                            >
+                              PR closed
+                            </span>
+                          ) : null}
                           {runningCount > 0 && (
                             <span
                               title={`${runningCount} running agents`}
@@ -611,6 +750,38 @@ export function HierarchySidebar({
                               <MoreHorizontal size={16} aria-hidden="true" />
                             </summary>
                             <div style={menu}>
+                              {!workspace.isDefault &&
+                                project.kind === "git" && (
+                                  <button
+                                    style={menuButton}
+                                    type="button"
+                                    disabled={
+                                      workspace.unavailable ||
+                                      !latestSession ||
+                                      runningSessionIds.has(latestSession.id)
+                                    }
+                                    title={
+                                      latestSession &&
+                                      runningSessionIds.has(latestSession.id)
+                                        ? "Wait for the session to finish"
+                                        : "Ship workspace"
+                                    }
+                                    onClick={(e) => {
+                                      e.currentTarget
+                                        .closest("details")
+                                        ?.removeAttribute("open");
+                                      if (latestSession)
+                                        setShipTarget({
+                                          host: host.id,
+                                          projectPath: project.path,
+                                          path: workspace.path,
+                                          sessionId: latestSession.id,
+                                        });
+                                    }}
+                                  >
+                                    Ship...
+                                  </button>
+                                )}
                               <button
                                 style={menuButton}
                                 type="button"

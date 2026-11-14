@@ -222,6 +222,9 @@ const PASSTHROUGH_COMMANDS = new Set([
   "get_login_providers",
   "login",
   "predict_word",
+  "commit_plan",
+  "commit_apply",
+  "generate_pr_description",
   "predict_word_feedback",
   "btw",
   "btw_cancel",
@@ -4065,9 +4068,13 @@ export class AgentSessionWrapper {
             command as { type: string },
             type === "predict_word"
               ? PREDICT_WORD_TIMEOUT_MS
-              : preserveUnknownDelivery && type === "set_thinking_level"
-                ? PROMPT_ACK_TIMEOUT_MS
-                : undefined,
+              : type === "commit_plan"
+                ? 300_000
+                : type === "commit_apply" || type === "generate_pr_description"
+                  ? 120_000
+                  : preserveUnknownDelivery && type === "set_thinking_level"
+                    ? PROMPT_ACK_TIMEOUT_MS
+                    : undefined,
             command,
           );
           if (type === "set_thinking_level") this.invalidateSessionLists();

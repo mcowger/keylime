@@ -71,6 +71,7 @@ import { UploadRetention } from "./upload-retention";
 import { StagedUploads, UPLOAD_SWEEP_INTERVAL_MS } from "./uploads";
 import { isWorkspaceOp, WORKSPACE_OP_PARAMS } from "../workspace-types";
 import { createWorkspaceService, type WorkspaceService } from "./workspace-ops";
+import { startShipWatcher, stopShipWatcher } from "./workspace-ship";
 import {
   grantWorkspaceRoot,
   invalidateWorkspaceRoots,
@@ -554,6 +555,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   }
   const capacityTimer = setInterval(reportCapacity, 5_000);
   capacityTimer.unref?.();
+  startShipWatcher(sessionsChanged);
 
   function sessionsChanged(): void {
     localHost.invalidateSessionLists();
@@ -1128,6 +1130,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     // The configuration first: its requests to a server are aborted at once, so no start waiting on them holds the stop.
     const configStopped = config.stop();
     stopping = (async () => {
+      stopShipWatcher();
       await stopWorkspaceCreation();
       await terminals.stop();
       await Promise.all([...links.values()].map((link) => link.stop()));

@@ -48,6 +48,7 @@ import { ChatLiveTail } from "./ChatWindow-live-tail";
 import { HeldMessageView, MessageView } from "./MessageView";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ExtensionDialog } from "./ExtensionDialog";
+import { ShipDialog } from "./ShipDialog";
 import { SubagentTranscriptDialog } from "./SubagentTranscriptDialog";
 import { ChatMinimap, useMessageRefs } from "./ChatMinimap";
 import { ActivityPanel, ComposerPanels } from "./ComposerPanels";
@@ -94,6 +95,12 @@ import { getFileName } from "@/lib/file-paths";
 
 interface Props {
   session: SessionInfo | null;
+  shipWorkspace?: {
+    host: string;
+    projectPath: string;
+    path: string;
+    onRemoved: () => void;
+  };
   newSessionCwd: string | null;
   newSessionDraftKey?: string;
   prepareNewWorkspace?: (prompt: string) => Promise<{ cwd: string; name: string }>;
@@ -577,6 +584,7 @@ const CommittedTranscript = memo(function CommittedTranscript({
 
 export function ChatWindow({
   session,
+  shipWorkspace,
   newSessionCwd,
   newSessionDraftKey,
   prepareNewWorkspace,
@@ -619,6 +627,7 @@ export function ChatWindow({
   onSearchTargetHandled,
 }: Props) {
   const { t, tn } = useI18n();
+  const [shipOpen, setShipOpen] = useState(false);
   const chatWidth = useChatWidth();
   const fileSource = useMemo<WorkspaceFileSource>(
     () => ({
@@ -1673,6 +1682,37 @@ export function ChatWindow({
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
             >
+              {session && shipWorkspace && (
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    padding: "4px 12px",
+                  }}
+                >
+                  <button
+                    type="button"
+                    disabled={sessionBusy || streamState.isStreaming}
+                    title={
+                      sessionBusy || streamState.isStreaming
+                        ? "Wait for the session to finish"
+                        : "Ship workspace"
+                    }
+                    onClick={() => setShipOpen(true)}
+                  >
+                    Ship
+                  </button>
+                  <ShipDialog
+                    open={shipOpen}
+                    onOpenChange={setShipOpen}
+                    host={shipWorkspace.host}
+                    projectPath={shipWorkspace.projectPath}
+                    path={shipWorkspace.path}
+                    sessionId={session.id}
+                    onRemoved={shipWorkspace.onRemoved}
+                  />
+                </div>
+              )}
               {isDragOver && (
                 <div className="drop-zone-overlay pointer-events-none absolute inset-0 z-50 flex items-center justify-center backdrop-blur-[1px]">
                   <div className="pointer-events-none absolute inset-0 flex items-center justify-center">

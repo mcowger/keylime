@@ -70,6 +70,9 @@ import * as skillsInstall from "@/app/api/skills/install/route";
 import * as skills from "@/app/api/skills/route";
 import * as skillsSearch from "@/app/api/skills/search/route";
 import * as skillsUpdate from "@/app/api/skills/update/route";
+import * as ship from "@/app/api/ship/route";
+import * as shipId from "@/app/api/ship/[id]/route";
+import * as shipFinish from "@/app/api/ship/finish/route";
 import * as sttJobIdAudio from "@/app/api/stt/[jobId]/audio/route";
 import * as sttJobId from "@/app/api/stt/[jobId]/route";
 import * as stt from "@/app/api/stt/route";
@@ -171,6 +174,9 @@ export const ROUTE_MODULES: Record<string, RouteModule> = {
   "sessions/import": sessionsImport,
   sessions: sessions,
   "sessions/search": sessionsSearch,
+  ship: ship,
+  "ship/[id]": shipId,
+  "ship/finish": shipFinish,
   "skills/check": skillsCheck,
   "skills/install": skillsInstall,
   skills: skills,

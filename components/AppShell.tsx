@@ -4192,6 +4192,51 @@ export function AppShell({ appName }: { appName: string }) {
                     <ChatWindow
                       key={sessionKey}
                       session={selectedSession}
+                      shipWorkspace={(() => {
+                        if (!selectedSession) return undefined;
+                        const host = selectedSession.hostId ?? LOCAL_HOST_ID;
+                        const cwd = comparableProjectPath(selectedSession.cwd);
+                        const workspace = workspaceOptions.projects
+                          .filter(
+                            (item) =>
+                              (item.hostId ?? LOCAL_HOST_ID) === host &&
+                              (cwd === comparableProjectPath(item.path) ||
+                                cwd.startsWith(
+                                  `${comparableProjectPath(item.path)}/`,
+                                )),
+                          )
+                          .sort((a, b) => b.path.length - a.path.length)[0];
+                        if (
+                          !workspace ||
+                          workspace.projectKind !== "git" ||
+                          workspace.isDefaultWorkspace ||
+                          !workspace.projectPath
+                        )
+                          return undefined;
+                        return {
+                          host,
+                          projectPath: workspace.projectPath,
+                          path: workspace.path,
+                          onRemoved: () => {
+                            updateChatTabs((tabs) =>
+                              tabs.filter(
+                                (tab) =>
+                                  !tabInWorkspace(
+                                    tab,
+                                    workspace.path,
+                                    host,
+                                    workspaceOptions.projects,
+                                  ),
+                              ),
+                            );
+                            activateChat(null);
+                            setActiveCwd(workspace.projectPath!);
+                            setActiveHostId(remoteHostId(host));
+                            router.replace("/");
+                            setRefreshKey((key) => key + 1);
+                          },
+                        };
+                      })()}
                       activityContainer={activityContainer}
                       sidebarActivityContainer={isMobile ? null : sidebarActivityContainer}
                       newSessionCwd={effectiveNewSessionCwd}

@@ -1678,7 +1678,8 @@ function remoteWorkspaceOps(hostId: string): WorkspaceOps {
         Object.fromEntries(params.map((name, i) => [name, args[i]])),
         op === "publishUpload" ||
           op === "workspaceBranches" ||
-          op === "removeRegisteredWorktree"
+          op === "removeRegisteredWorktree" ||
+          op === "shipPreview"
           ? UPLOAD_ATTACH_TIMEOUT_MS
           : linkTimings.opTimeoutMs,
       );

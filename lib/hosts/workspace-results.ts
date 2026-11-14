@@ -42,6 +42,21 @@ function terminal(value: unknown): boolean {
     value.rows <= 300
   );
 }
+function shipPr(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    count(value.number) &&
+    value.number > 0 &&
+    text(value.url) &&
+    ["open", "merged", "closed"].includes(value.state as string) &&
+    ["pending", "passing", "failing", "none"].includes(
+      value.checks as string,
+    ) &&
+    typeof value.autoMerge === "boolean" &&
+    typeof value.cleanup === "boolean" &&
+    text(value.checkedAt)
+  );
+}
 
 export function validWorkspaceResult(
   op: keyof WorkspaceOps,
@@ -98,7 +113,24 @@ export function validWorkspaceResult(
                 text(workspace.name) &&
                 typeof workspace.isDefault === "boolean" &&
                 Array.isArray(workspace.sessionIds) &&
-                workspace.sessionIds.every(text),
+                workspace.sessionIds.every(text) &&
+                (workspace.ship === undefined ||
+                  (isRecord(workspace.ship) &&
+                    (workspace.ship.pr === undefined ||
+                      shipPr(workspace.ship.pr)) &&
+                    (workspace.ship.job === undefined ||
+                      (isRecord(workspace.ship.job) &&
+                        text(workspace.ship.job.id) &&
+                        ["ship", "finish"].includes(
+                          workspace.ship.job.kind as string,
+                        ) &&
+                        [
+                          "running",
+                          "complete",
+                          "failed",
+                          "conflict",
+                          "interrupted",
+                        ].includes(workspace.ship.job.status as string))))),
             ),
         ) &&
         (value.workspaceCandidates === undefined ||
@@ -115,6 +147,65 @@ export function validWorkspaceResult(
               (session) =>
                 isRecord(session) && text(session.id) && text(session.cwd),
             )))
+      );
+    case "shipPreview":
+      return (
+        (value.branch === null || text(value.branch)) &&
+        text(value.base) &&
+        text(value.baseCheckout) &&
+        count(value.ahead) &&
+        count(value.behind) &&
+        typeof value.dirty === "boolean" &&
+        typeof value.baseDirty === "boolean" &&
+        isRecord(value.github) &&
+        (value.github.repo === null || text(value.github.repo)) &&
+        ["ok", "missing", "unauthenticated"].includes(
+          value.github.gh as string,
+        ) &&
+        (value.pr === null || shipPr(value.pr))
+      );
+    case "startShip":
+    case "shipStatus":
+    case "shipFinish":
+      return (
+        text(value.id) &&
+        ["ship", "finish"].includes(value.kind as string) &&
+        text(value.projectPath) &&
+        text(value.path) &&
+        (value.mode === undefined ||
+          ["local", "pr", "pr-auto"].includes(value.mode as string)) &&
+        ["running", "complete", "failed", "conflict", "interrupted"].includes(
+          value.status as string,
+        ) &&
+        Array.isArray(value.steps) &&
+        value.steps.length <= 8 &&
+        value.steps.every(
+          (step) =>
+            isRecord(step) &&
+            [
+              "rebase",
+              "fastForward",
+              "push",
+              "createPr",
+              "autoMerge",
+              "pullBase",
+              "archiveSessions",
+              "removeWorkspace",
+            ].includes(step.name as string) &&
+            ["pending", "running", "done", "skipped", "failed"].includes(
+              step.status as string,
+            ) &&
+            (step.detail === undefined || text(step.detail)),
+        ) &&
+        typeof value.logs === "string" &&
+        value.logs.length <= 100_000 &&
+        (value.error === undefined || text(value.error)) &&
+        (value.conflictFiles === undefined ||
+          (Array.isArray(value.conflictFiles) &&
+            value.conflictFiles.length <= 10000 &&
+            value.conflictFiles.every(text))) &&
+        (value.pr === undefined || shipPr(value.pr)) &&
+        (value.landedSha === undefined || text(value.landedSha))
       );
     case "workspaceBranches":
       return (

@@ -26,6 +26,7 @@ import type {
 import type { OpResult } from "./session-ops";
 import type { SessionInfo } from "../types";
 import { isValidSessionId } from "../session-file-references-core";
+import { workspaceShipState } from "./workspace-ship";
 
 function file(): string {
   return path.join(getAgentDir(), "hierarchy.json");
@@ -270,6 +271,11 @@ export async function hierarchyOperation(
     const snapshot = readHierarchy();
     switch (input.action) {
       case "list":
+        for (const project of snapshot.projects)
+          for (const workspace of project.workspaces) {
+            const ship = workspaceShipState(workspace.path);
+            if (ship) workspace.ship = ship;
+          }
         break;
       case "registerProject": {
         const requested = directory(input.path ?? input.cwd);

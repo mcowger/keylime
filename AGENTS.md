@@ -216,6 +216,9 @@ app/api/
   stt/[jobId]/audio/route.ts      GET the kept recording (audio/* only) for playback
   uploads/route.ts                POST { id, host, name, size, type } start/resume a composer upload (SSE-mode path of the browser link's `up_start`) → { received, done }
   uploads/[id]/route.ts           PUT ?offset=N raw body ≤ 1 MiB, answered once the host acked it (409 `upload_offset` with { received }) | DELETE abort
+  ship/route.ts                   GET ?host=&projectPath=&path= → `ShipPreview` | POST { host, input: ShipRequest } → `ShipJob` (host op `startShip`)
+  ship/[id]/route.ts              GET ?host= → the Ship job (`shipStatus`)
+  ship/finish/route.ts            POST { host, projectPath, path } → cleanup job for a merged PR (`shipFinish`)
   worktrees/route.ts              GET/POST/DELETE git worktrees
 
 lib/
@@ -246,6 +249,7 @@ lib/
     update-types.ts    shared per-host software status and operation contract
     updates.ts         daemon-side version checks, compatibility gate and durable update state
     update-worker.ts   host-only install/restart helper; never starts or stops the web-server service
+    workspace-ship.ts  daemon side of Ship (`docs/specs/2026-11-14-ship-workflow-design.md`): `shipPreview`, `startShip`/`shipStatus`/`shipFinish` jobs (`<agent dir>/omp-web/ship/jobs/`), the PR merge watcher (`prs.json`, `gh pr view` every 60 s, one automatic cleanup per merged PR); cleanup archives sessions inside `removeRegisteredWorktree`'s fence
   provider-accounts.ts distinct omp accounts per provider from `omp usage` reports (Models → provider detail)
   agent-client.ts      agent commands from the tab: POST /api/agent/[id], or the worker's browser link in the `ws` transport; records each command's `action` sample
   agent-command.ts     `runAgentCommand`: the one command path behind POST /api/agent/[id] and a browser link's `cmd`
@@ -297,6 +301,7 @@ lib/
   navigation-history.ts  pure back/forward view-history stack + shortcut matcher (⌘[/⌘], Alt+←/→)
   word-prediction.ts   pure ghost-text arithmetic (advance/accept) for composer word prediction
   worktree.ts          project/worktree resolution and git worktree operations
+  workspace-ship-types.ts  Ship contract shared by the runner commands (`commit_plan`, `commit_apply`, `generate_pr_description`, mirrored in `runner/src/commands/git.ts`), the host ops and the UI
 
 components/
   AppShell.tsx        layout + URL state + tab management
@@ -330,6 +335,7 @@ components/
   GhostMirror.tsx     textarea overlay painting ghost-text word completion
   TabBar.tsx          tab bar (Chat + open file tabs)
   WorktreesPanel.tsx  file-panel Worktrees tab: list/switch/create/remove the active repo's worktrees
+  ShipDialog.tsx      the Ship sheet (commit plan via the session's runner commands, land locally / PR / PR + auto-merge, step progress) and the sidebar PR pill's Clean up
   ui/                 shared primitives: Dialog/Tooltip/Collapsible, fields, toast
 
 hooks/

@@ -441,6 +441,7 @@ const deletionLeases = new Map<
 const deleting = new Set<string>();
 export async function removeRegisteredWorktree(
   input: WorkspaceDeleteRequest,
+  beforeRemove?: (workspacePath: string) => Promise<void>,
 ): Promise<WorkspaceDeleteResult> {
   recoverWorkspaceCreation();
   const owner = project(input.projectPath);
@@ -559,6 +560,7 @@ export async function removeRegisteredWorktree(
           "Invalid branch decision",
         );
     }
+    if (beforeRemove) await beforeRemove(workspace.path);
     await removeWorktree(
       input.projectPath,
       workspace.path,

@@ -8,6 +8,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Added
 
+- **Ship** finishes a linked workspace from its chat: omp's commit agent proposes the commit message(s) (split commits and changelog edits included) through the session, then Ship lands locally (rebase on local main, fast-forward, archive sessions, delete the workspace and branch) or opens a GitHub PR with a generated title and description, optionally with squash auto-merge. The sidebar shows each PR's state; once GitHub reports it merged, cleanup and a local main pull run automatically or from **Clean up**.
 - Project rows have a + button for prompt-first workspace creation. The first prompt supplies a display name and branch through the smol task model before setup and agent startup.
 - The desktop sidebar shows active agents and pending or in-progress tasks for the selected chat. Select an agent to open its details.
 - Removed the Workspaces right-panel tab. Create workspaces from the workspace picker; project actions open workspace management in a modal.
