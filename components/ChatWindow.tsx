@@ -1,6 +1,7 @@
 "use client";
 import { sendAgentCommand } from "@/lib/agent-client";
 import { registerAbortHandler } from "@/hooks/useKeyboardShortcuts";
+import { useChatWidth } from "@/hooks/useChatWidth";
 import {
   Fragment,
   memo,
@@ -11,6 +12,7 @@ import {
   useState,
   type ReactNode,
   type Ref,
+  type CSSProperties,
 } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -172,7 +174,7 @@ const CHAT_COLUMN_PADDING = 16;
 // Symmetric centering halves maxWidth reduction across both sides; compensate
 // so the right clearance (padding + half-reduction) equals the minimap width.
 const MINIMAP_CLEARANCE = 2 * (MINIMAP_WIDTH - CHAT_COLUMN_PADDING);
-const CHAT_COLUMN_MAX_WIDTH_DESKTOP = `min(${CHAT_COLUMN_MAX_WIDTH}px, calc(100% - ${MINIMAP_CLEARANCE}px))`;
+const CHAT_COLUMN_MAX_WIDTH_DESKTOP = `min(${CHAT_COLUMN_MAX_WIDTH}, calc(100% - ${MINIMAP_CLEARANCE}px))`;
 // Trigger the next history page while the sentinel is still this far below
 // the top edge, so a normal upward scroll seamlessly continues into the newly
 // loaded messages. Triggering only at the very top made the load invisible:
@@ -602,6 +604,7 @@ export function ChatWindow({
   onSearchTargetHandled,
 }: Props) {
   const { t, tn } = useI18n();
+  const chatWidth = useChatWidth();
   const fileSource = useMemo<WorkspaceFileSource>(
     () => ({
       hostId: session?.hostId ?? newSessionHostId ?? "local",
@@ -1630,6 +1633,7 @@ export function ChatWindow({
           <WorkspaceFileContext.Provider value={fileSource}>
             <div
               className="relative flex h-full flex-col overflow-hidden"
+              style={{ "--chat-column-width": chatWidth ? `${chatWidth}%` : "960px" } as CSSProperties}
               onDragEnter={handleDragEnter}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}

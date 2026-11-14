@@ -60,6 +60,7 @@ import { copyText } from "@/lib/clipboard";
 import type { AppUpdateInfo } from "./AppUpdateDialog";
 import { useFontSize, type FontSizePreference } from "@/hooks/useFontSize";
 import { useUiScale, type UiScalePreference } from "@/hooks/useUiScale";
+import { useChatWidth, setChatWidth } from "@/hooks/useChatWidth";
 import {
   useTouchTargets,
   type TouchTargetsPreference,
@@ -410,6 +411,17 @@ const SETTING_INDEX: SettingIndexEntry[] = [
     fallbackLabel: "Chat Font Size",
     fallbackDesc:
       "Adjust text size for conversation messages, code blocks, and markdown output.",
+    scope: "UI",
+  },
+  {
+    id: "chat-width",
+    tab: "general",
+    sectionKey: "settingsConfig.interfaceBehavior",
+    labelKey: "settingsConfig.chatWidth",
+    descKey: "settingsConfig.chatWidthDesc",
+    fallbackSection: "Interface & Behavior",
+    fallbackLabel: "Chat width",
+    fallbackDesc: "Set the maximum chat width as a percentage of the available space.",
     scope: "UI",
   },
   {
@@ -2090,6 +2102,7 @@ export function SettingsConfig({
   const panelSessionId = remoteHost ? null : sessionId;
   const { fontSize, setFontSize } = useFontSize();
   const { uiScale, setUiScale } = useUiScale();
+  const chatWidth = useChatWidth();
   const { touchTargets, setTouchTargets } = useTouchTargets();
   const {
     preset: recentRunsPreset,
@@ -2977,6 +2990,24 @@ export function SettingsConfig({
                               />
                             )}
                           </div>
+                        </NativeSetting>
+                        <NativeSetting
+                          searchId="chat-width"
+                          label={t("settingsConfig.chatWidth")}
+                          description={t("settingsConfig.chatWidthDesc")}
+                          scope="UI"
+                        >
+                          <select
+                            aria-label={t("settingsConfig.chatWidth")}
+                            style={nativeSelectStyle}
+                            value={chatWidth}
+                            onChange={(event) => setChatWidth(Number(event.target.value))}
+                          >
+                            <option value={0}>{t("settingsConfig.chatWidthDefault")}</option>
+                            {Array.from({ length: 15 }, (_, i) => 30 + i * 5).map((width) => (
+                              <option key={width} value={width}>{width}%</option>
+                            ))}
+                          </select>
                         </NativeSetting>
                         <NativeSetting
                           searchId="ui-scale"
