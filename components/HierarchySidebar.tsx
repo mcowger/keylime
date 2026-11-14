@@ -121,6 +121,43 @@ export function HierarchySidebar({
   } | null>(null);
   const finishAbort = useRef<AbortController | null>(null);
   useEffect(() => () => finishAbort.current?.abort(), []);
+  const [confirmation, setConfirmation] = useState<{
+    title: string;
+    description: string;
+    confirmLabel: string;
+    resolve: (confirmed: boolean) => void;
+  } | null>(null);
+  const confirmationRef = useRef<((confirmed: boolean) => void) | null>(null);
+  useEffect(() => () => confirmationRef.current?.(false), []);
+  const confirmAction = (title: string, description: string, confirmLabel: string) =>
+    new Promise<boolean>((resolve) => {
+      if (confirmationRef.current) return resolve(false);
+      confirmationRef.current = resolve;
+      setConfirmation({ title, description, confirmLabel, resolve });
+    });
+  const finishConfirmation = (confirmed: boolean) => {
+    if (!confirmation) return;
+    confirmationRef.current = null;
+    setConfirmation(null);
+    confirmation.resolve(confirmed);
+  };
+  const [branchChoice, setBranchChoice] = useState<{
+    branch: string | undefined;
+    resolve: (choice: boolean | null) => void;
+  } | null>(null);
+  const branchChoiceRef = useRef<((choice: boolean | null) => void) | null>(null);
+  useEffect(() => () => branchChoiceRef.current?.(null), []);
+  const chooseBranch = (branch: string | undefined) =>
+    new Promise<boolean | null>((resolve) => {
+      branchChoiceRef.current = resolve;
+      setBranchChoice({ branch, resolve });
+    });
+  const finishBranchChoice = (choice: boolean | null) => {
+    if (!branchChoice) return;
+    branchChoiceRef.current = null;
+    setBranchChoice(null);
+    branchChoice.resolve(choice);
+  };
   const finishShip = async () => {
     if (!finishTarget) return;
     const abort = new AbortController();
@@ -253,12 +290,11 @@ export function HierarchySidebar({
     projectPath: string,
     path: string,
   ) => {
-    if (
-      !window.confirm(
-        "Unregister this workspace and remove its checkout? Running processes and uncommitted changes require separate approval. Session history is kept.",
-      )
-    )
-      return;
+    if (!(await confirmAction(
+      "Delete workspace?",
+      "Unregister this workspace and remove its checkout? Running processes and uncommitted changes require separate approval. Session history is kept.",
+      "Delete workspace",
+    ))) return;
     setBusy(true);
     setError(null);
     let stopProcesses = false;
@@ -301,26 +337,23 @@ export function HierarchySidebar({
                   : `Unidentified session or terminal (ID: ${p.id})\n  Working directory: ${p.cwd}`;
               })
               .join("\n\n") ?? "";
-          stopProcesses = window.confirm(
+          stopProcesses = await confirmAction(
+            "Stop running processes?",
             `Deleting this workspace will stop these sessions or terminals:\n\n${processes}\n\nStop them and continue?`,
+            "Stop and continue",
           );
           cancel = !stopProcesses;
         } else if (result.status === "dirty") {
-          discardChanges = window.confirm(
-            "Discard uncommitted changes? Previously stopped sessions remain stopped if you cancel.",
+          discardChanges = await confirmAction(
+            "Discard uncommitted changes?",
+            "Previously stopped sessions remain stopped if you cancel.",
+            "Discard and continue",
           );
           cancel = !discardChanges;
         } else if (result.status === "branch") {
-          const choice = window
-            .prompt(
-              `Branch ${result.branch ?? "for this workspace"} is not merged. Type keep to keep it, delete to delete it, or cancel to stop.`,
-              "keep",
-            )
-            ?.trim()
-            .toLowerCase();
-          if (choice === "keep" || choice === "delete")
-            keepBranch = choice === "keep";
-          else cancel = true;
+          const choice = await chooseBranch(result.branch);
+          if (choice === null) cancel = true;
+          else keepBranch = choice;
         } else {
           await load();
           if (result.status === "deleted") {
@@ -337,9 +370,7 @@ export function HierarchySidebar({
     }
   };
   const confirmForget = (what: string) =>
-    window.confirm(
-      `Unregister ${what}? Files and processes will not be deleted.`,
-    );
+    confirmAction("Unregister?", `Unregister ${what}? Files and processes will not be deleted.`, "Unregister");
   const exitedIds = new Set(exitedSessionIds);
   const query = searchQuery.trim().toLowerCase();
   const button = {
@@ -576,15 +607,12 @@ export function HierarchySidebar({
                             e.currentTarget
                               .closest("details")
                               ?.removeAttribute("open");
-                            if (
-                              confirmForget(
-                                "this project and its registrations",
-                              )
-                            )
-                              void operate(host.id, {
+                            void confirmForget("this project and its registrations").then((confirmed) => {
+                              if (confirmed) void operate(host.id, {
                                 action: "unregisterProject",
                                 projectId: project.id,
                               });
+                            });
                           }}
                         >
                           <Trash2 size={16} aria-hidden="true" />
@@ -906,12 +934,13 @@ export function HierarchySidebar({
                                           e.currentTarget
                                             .closest("details")
                                             ?.removeAttribute("open");
-                                          if (confirmForget("this session"))
-                                            void operate(host.id, {
+                                          void confirmForget("this session").then((confirmed) => {
+                                            if (confirmed) void operate(host.id, {
                                               action: "unregisterSession",
                                               workspaceId: workspace.id,
                                               sessionId: id,
                                             });
+                                          });
                                         }}
                                       >
                                         <Trash2 size={16} aria-hidden="true" />
@@ -929,6 +958,31 @@ export function HierarchySidebar({
             })}
         </section>
       ))}
+      <ConfirmDialog
+        open={confirmation !== null}
+        onOpenChange={(open) => { if (!open) finishConfirmation(false); }}
+        title={confirmation?.title ?? ""}
+        description={confirmation?.description}
+        confirmLabel={confirmation?.confirmLabel ?? "Confirm"}
+        danger
+        onConfirm={() => finishConfirmation(true)}
+      />
+      <Dialog open={branchChoice !== null} onOpenChange={(open) => {
+        if (!open) finishBranchChoice(null);
+      }}>
+        <DialogContent style={{ width: 420, maxWidth: "min(92vw, 420px)", padding: 22 }}>
+          <DialogTitle>Keep or delete branch?</DialogTitle>
+          <p style={{ color: "var(--text-muted)", fontSize: 13, lineHeight: 1.55 }}>
+            Branch {branchChoice?.branch ?? "for this workspace"} is not confirmed merged.
+            Choose whether to keep it or delete it along with the workspace.
+          </p>
+          <div className="dialog-actions" style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <button type="button" className="dialog-action" style={{ padding: "6px 14px", background: "none", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", color: "var(--text-muted)", cursor: "pointer", fontSize: 13 }} onClick={() => finishBranchChoice(null)}>Cancel</button>
+            <button type="button" className="dialog-action" style={{ padding: "6px 14px", background: "var(--accent-strong)", border: "none", borderRadius: "var(--radius-control)", color: "var(--on-accent)", cursor: "pointer", fontSize: 13, fontWeight: 600 }} onClick={() => finishBranchChoice(true)}>Keep branch</button>
+            <button type="button" className="dialog-action" style={{ padding: "6px 14px", background: "var(--status-error)", border: "none", borderRadius: "var(--radius-control)", color: "var(--on-accent)", cursor: "pointer", fontSize: 13, fontWeight: 600 }} onClick={() => finishBranchChoice(false)}>Delete branch</button>
+          </div>
+        </DialogContent>
+      </Dialog>
       {managedProject && (
         <Dialog
           open

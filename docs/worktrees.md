@@ -32,7 +32,7 @@ The daemon records the captured pipeline, status, and command output. A browser 
 
 The default workspace cannot be deleted as a worktree. Deleting another workspace is blocked while setup runs. The daemon fences new session starts and finds all daemon-managed processes in that directory or its descendants, including unregistered sessions and processes shared with other servers. Confirm stopping them first; the daemon waits for exit and refuses deletion if a stop fails.
 
-If the worktree is dirty, a separate confirmation asks whether to discard its changes. Declining at this point leaves the processes stopped. A branch merged into the default workspace's HEAD is deleted. For an unmerged branch, choose whether to keep or delete it. After Git removes the worktree, the host unregisters it and its sessions for all linked servers. Session transcripts and artifacts are preserved.
+If the worktree is dirty, a separate confirmation asks whether to discard its changes. Declining at this point leaves the processes stopped. A branch merged into the default workspace's HEAD is deleted. A squash-integrated branch is also deleted when merging it into that HEAD would add no changes and produce no conflicts. For other branches, choose whether to keep or delete them. Detection uses the local default workspace's HEAD; update it first if it is behind the merge. After Git removes the worktree, the host unregisters it and its sessions for all linked servers. Session transcripts and artifacts are preserved.
 
 ## Interactive terminals
 

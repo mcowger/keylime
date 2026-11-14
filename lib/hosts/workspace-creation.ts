@@ -549,6 +549,58 @@ export async function removeRegisteredWorktree(
         )
           throw error;
       }
+      if (!merged) {
+        // A squash merge has different commit IDs. Only treat it as integrated
+        // when the branch changes are nonempty and a real merge adds nothing
+        // to the default workspace's tree, without conflicts.
+        let base = "";
+        try {
+          base = (await git(defaultWorkspace.path, [
+            "merge-base",
+            "HEAD",
+            `refs/heads/${branch}`,
+          ])).trim();
+        } catch (error) {
+          if (
+            !error ||
+            typeof error !== "object" ||
+            !("code" in error) ||
+            error.code !== 1
+          )
+            throw error;
+        }
+        const changes = base
+          ? await git(defaultWorkspace.path, [
+              "diff",
+              "--name-only",
+              base,
+              `refs/heads/${branch}`,
+            ])
+          : "";
+        if (changes.trim()) {
+          try {
+            const tree = (await git(defaultWorkspace.path, [
+              "merge-tree",
+              "--write-tree",
+              "HEAD",
+              `refs/heads/${branch}`,
+            ])).split("\n", 1)[0];
+            const headTree = (await git(defaultWorkspace.path, [
+              "rev-parse",
+              "HEAD^{tree}",
+            ])).trim();
+            merged = tree === headTree;
+          } catch (error) {
+            if (
+              !error ||
+              typeof error !== "object" ||
+              !("code" in error) ||
+              error.code !== 1
+            )
+              throw error;
+          }
+        }
+      }
       if (!merged && input.keepBranch === undefined) {
         hold();
         return { status: "branch", branch };
@@ -570,7 +622,7 @@ export async function removeRegisteredWorktree(
     if (branch && (merged || input.keepBranch === false))
       await git(input.projectPath, [
         "branch",
-        merged ? "-d" : "-D",
+        "-D",
         "--",
         branch,
       ]);

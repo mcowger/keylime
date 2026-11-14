@@ -7,7 +7,6 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 ## [Unreleased]
 
 ### Added
-
 - **Ship** finishes a linked workspace from its chat: omp's commit agent proposes the commit message(s) (split commits and changelog edits included) through the session, then Ship lands locally (rebase on local main, fast-forward, archive sessions, delete the workspace and branch) or opens a GitHub PR with a generated title and description, optionally with squash auto-merge. The sidebar shows each PR's state; once GitHub reports it merged, cleanup and a local main pull run automatically or from **Clean up**.
 - Project rows have a + button for prompt-first workspace creation. The first prompt supplies a display name and branch through the smol task model before setup and agent startup.
 - The desktop sidebar shows active agents and pending or in-progress tasks for the selected chat. Select an agent to open its details.
@@ -24,7 +23,8 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - `bun run deploy:local` builds committed source into versioned production releases, smoke-tests before activation, waits for an empty host, and backs up production data before switching Pitchfork services. Verified older releases can be selected with `--activate`.
 
 ### Fixed
-
+- Workspace deletion recognizes squash-integrated branches in the default workspace and offers a button-based dialog when integration cannot be confirmed.
+- Workspace deletion and project/session unregistration now use in-app confirmation dialogs instead of browser prompts.
 - Sidebar workspace switches no longer get swallowed by a stale initial-restore guard or confuse nested workspaces with their parent.
 - Starting a chat, including one that creates a workspace, and the new-chat host/project/workspace pickers no longer throw a `ReferenceError` that left the main panel out of sync with the sidebar.
 - Archiving a chat or removing its workspace clears the active chat instead of leaving its transcript open.
@@ -48,18 +48,8 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - New sessions select a project and then one of that project's registered workspaces, defaulting to its default workspace on project changes. Git projects offer Add workspace directly from the workspace selector.
 - Default workspaces use the main checkout's branch for Git projects and `default` for non-Git projects instead of repeating the project name.
 - Browser UUID generation now works on plain-HTTP LAN origins without `crypto.randomUUID`, using cryptographically random UUID v4 values instead.
-
-### Breaking changes
-
-- Projects, workspaces and sessions now use explicit host-owned registrations shared across linked servers. The hierarchy starts empty; add projects and selectively import existing worktrees and sessions. Cluster membership still shares credentials and configuration but no longer merges projects or places sessions on pooled hosts.
-- Git workspace creation uses daemon-owned pre/create/post jobs with configurable commands, status and logs. Deletion stops managed processes before a separate dirty-file confirmation; declining discard leaves those processes stopped. Branches and session history are preserved.
-- Bun is the sole runtime and package manager. Node/npm launchers are retired; install Bun and use `bun install`, `bun run` and `bunx --bun`. Native compiled distributions remain supported.
-- Runtime management uses mise with a pinned Bun version. Nix packaging and installation support are removed.
-- Windows support is removed, including services, installers, binaries and Windows-specific path handling. This hard fork supports macOS and Linux only; no compatibility or migration is provided.
-- Type checking uses `bun check` for both the root project and runner; formatting uses `bun fmt`. Linting, ESLint and `tsc` are removed because pinned Bun 1.4.4 has no built-in linter. Formatting is not a CI gate on the inherited unformatted baseline.
-- Password protection is optional when listening on network addresses, including `0.0.0.0`. Clearing a password preserves the bind address.
-- System tray integration is removed on all platforms. Linux systemd and macOS launchd still register separate web and host services.
-
+- Workspace deletion recognizes squash-integrated branches in the default workspace and offers a button-based dialog when integration cannot be confirmed
+- Workspace deletion and project/session unregistration now use in-app confirmation dialogs instead of browser prompts
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
