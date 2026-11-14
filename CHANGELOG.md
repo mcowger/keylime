@@ -19,6 +19,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Fixed
 
+- Workspace creation normalizes new branch names containing spaces or other invalid Git characters and previews the resulting branch and checkout directory. Existing branch and base refs remain unchanged.
 - Removed the redundant live-status popup above the expanded composer; activity remains visible in its toolbar and the minimized composer.
 - The composer model picker opens directly to models when only one provider is available. Removed its Add Providers action; provider management remains in Settings.
 - Reasoning effort is selected inside the model picker instead of a separate composer button, preserving provider-specific levels and disabling changes during streaming. The model trigger shows the current effort gauge instead of a chip icon, including on mobile.

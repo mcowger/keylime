@@ -17,6 +17,7 @@ import type {
   WorkspacePipeline,
   WorkspaceSettingsRequest,
 } from "../workspace-creation-types";
+import { sanitizeWorkspaceBranch } from "../workspace-branch";
 import {
   readHierarchy,
   registerCreatedWorkspace,
@@ -388,6 +389,8 @@ export async function createWorkspace(
 ): Promise<WorkspaceCreationJob> {
   recoverWorkspaceCreation();
   project(input.projectPath);
+  if (typeof input.branch === "string" && input.mode !== "local")
+    input = { ...input, branch: sanitizeWorkspaceBranch(input.branch) };
   if (
     typeof input.branch !== "string" ||
     !input.branch ||

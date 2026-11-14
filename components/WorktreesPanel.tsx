@@ -8,6 +8,7 @@ import type {
   WorkspaceCreationJob,
   WorkspaceDeleteResult,
 } from "@/lib/workspace-creation-types";
+import { sanitizeWorkspaceBranch } from "@/lib/workspace-branch";
 import type { HierarchySnapshot } from "@/lib/project-hierarchy-types";
 import { ConfirmDialog } from "./ui/field";
 
@@ -103,6 +104,8 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
   if (!ctx || ctx.error)
     return <div>{ctx?.error ?? "Select a project to manage workspaces."}</div>;
   const project = snapshot?.projects.find((p) => p.path === projectPath);
+  const creationBranch =
+    mode === "local" ? branch : sanitizeWorkspaceBranch(branch);
   async function create() {
     setBusy(true);
     setError("");
@@ -110,7 +113,7 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
       const selected = mode === "local" ? branch : baseRef;
       const next = await api("create", {
         projectPath,
-        branch,
+        branch: creationBranch,
         mode,
         baseRef: selected,
         name,
@@ -279,6 +282,7 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
                   }}
                 />
               </label>
+              <p>Git branch: {creationBranch || "Enter a branch name"}</p>
               <label>
                 {mode === "remote" ? "Remote branch" : "Base ref"}{" "}
                 <select
@@ -298,7 +302,7 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
           )}
           <p>
             Workspace directory: {projectPath}-worktrees/
-            {branch.replace(/[^a-zA-Z0-9._-]/g, "-")}
+            {creationBranch.replace(/[^a-zA-Z0-9._-]/g, "-")}
           </p>
           <label>
             Display name{" "}
@@ -306,7 +310,10 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
           </label>
           <button
             disabled={
-              busy || !branch || !name || (mode !== "local" && !baseRef)
+              busy ||
+              !creationBranch ||
+              !name.trim() ||
+              (mode !== "local" && !baseRef)
             }
             onClick={() => void create()}
           >

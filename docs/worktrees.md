@@ -16,6 +16,8 @@ Closing a chat tab closes only its view. It does not stop the agent, delete the 
 
 For a Git project, create a workspace from an existing local branch, a remote branch, or a new branch based on a selected ref. Listing branches fetches remote refs. Base ref initially selects the repository's advertised default branch (preferring origin), not the currently checked-out feature branch. Without a remote default, it uses main, master, then the current branch. Checkout paths are derived from the branch under the project's sibling worktrees directory; the display name is editable.
 
+New branch names, including local branches created from remote refs, are normalized before creation. For example, `option to Expand only latest thinking` becomes `option-to-Expand-only-latest-thinking`. The panel previews the Git branch and checkout directory; case and valid slash namespaces are preserved. Existing local branches and base refs are used unchanged. Empty normalized names are rejected, and Git validates the resulting branch name.
+
 Configure host creation commands in **Settings → Hosts**. **Settings → Projects** lists registered projects and edits their display names and optional whole-project command overrides. These settings live on the owning daemon and are shared with other linked web servers; the workspace creation panel only creates workspaces and displays job output.
 
 Each pipeline has ordered pre, create, and post stages. Commands have no interactive stdin or automatic retries. With no create command, Git creates the worktree. Pre and create commands run in the project directory; post commands run in the actual worktree.
