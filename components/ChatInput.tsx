@@ -24,7 +24,6 @@ import {
   Plus,
   RotateCw,
   Shrink,
-  Snail,
   Sparkles,
   Terminal,
   Wrench,
@@ -51,7 +50,6 @@ import { toastBtwError } from "@/hooks/useBtw";
 import type {
   GenerationSpeedInfo,
   SessionStatsInfo,
-  SlowModeScope,
   UsageLimitState,
 } from "@/lib/pi-types";
 import type { SttAfter } from "@/lib/stt";
@@ -326,12 +324,6 @@ interface Props {
   usageLimit?: UsageLimitState;
   fastModeSupported?: boolean;
   onFastModeChange?: (enabled: boolean) => void;
-  /** omp reports `/slow` applies to the active model (absent on older omp). */
-  slowModeSupported?: boolean;
-  slowModeEnabled?: boolean;
-  /** `global` = shared persisted omp setting; `session` = this session only. */
-  slowModeScope?: SlowModeScope;
-  onSlowModeChange?: (enabled: boolean) => void;
   onAbortCompaction?: () => void;
   isCompacting?: boolean;
   compactResult?: CompactResultInfo | null;
@@ -527,10 +519,6 @@ export const ChatInput = memo(
       usageLimit,
       fastModeSupported,
       onFastModeChange,
-      slowModeSupported,
-      slowModeEnabled,
-      slowModeScope,
-      onSlowModeChange,
       onAbortCompaction,
       isCompacting,
       compactResult,
@@ -5612,53 +5600,6 @@ export const ChatInput = memo(
                   </button>
                 )}
 
-                {/* Slow toggle — only when omp reports /slow applies to the
-                active model. A `global` scope is a persisted omp setting
-                shared by every session; `session` is this session's flex
-                tier — the tooltip says which. */}
-                {slowModeSupported && onSlowModeChange && (
-                  <button
-                    type="button"
-                    className="composer-slow-control"
-                    onClick={() => {
-                      if (isStreaming) return;
-                      onSlowModeChange(!slowModeEnabled);
-                    }}
-                    disabled={isStreaming}
-                    title={t(
-                      slowModeScope === "global"
-                        ? "chatInput.slowTitleGlobal"
-                        : "chatInput.slowTitleSession",
-                    )}
-                    aria-label={t("chatInput.slowLabel")}
-                    aria-pressed={slowModeEnabled}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 5,
-                      height: "var(--control-height-sm)",
-                      padding: "0 8px",
-                      background: slowModeEnabled
-                        ? "var(--bg-selected)"
-                        : "none",
-                      border: "none",
-                      borderRadius: 7,
-                      color: slowModeEnabled
-                        ? "var(--accent)"
-                        : "var(--text-muted)",
-                      cursor: isStreaming ? "not-allowed" : "pointer",
-                      opacity: isStreaming ? 0.5 : 1,
-                      fontSize: "var(--text-sm)",
-                      fontWeight: 600,
-                      transition:
-                        "background var(--dur-fast) var(--ease-out-warm), color var(--dur-fast) var(--ease-out-warm)",
-                    }}
-                  >
-                    <Snail size={11} aria-hidden="true" />
-                    <span>{t("chatInput.slowLabel")}</span>
-                  </button>
-                )}
-
                 {/* Provider usage-limit stage (wrap-up allowance or /slow low
                 priority), warning-colored like the TUI status line so
                 past-the-limit service is never mistaken for normal.
@@ -5710,6 +5651,24 @@ export const ChatInput = memo(
                   </span>
                 )}
 
+                <span
+                  title={t("modelActivity.estimateTooltip")}
+                  style={{
+                    whiteSpace: "nowrap",
+                    color: "var(--text-muted)",
+                    display: "inline-block",
+                    width: 80,
+                    flex: "0 0 80px",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    textAlign: "right",
+                    fontVariantNumeric: "tabular-nums",
+                    fontSize: 11,
+                    marginRight: 4,
+                  }}
+                >
+                  {activityLabel}
+                </span>
                 {/* Desktop keeps the control in the composer; mobile uses the header mount. */}
                 {onCompact && (
                   <div
@@ -5732,17 +5691,6 @@ export const ChatInput = memo(
                         alignItems: "center",
                       }}
                     >
-                      <span
-                        title={t("modelActivity.estimateTooltip")}
-                        style={{
-                          whiteSpace: "nowrap",
-                          color: "var(--text-muted)",
-                          fontSize: 11,
-                          marginRight: 4,
-                        }}
-                      >
-                        {activityLabel}
-                      </span>
                       <button
                         type="button"
                         onClick={() => setContextOpen((open) => !open)}

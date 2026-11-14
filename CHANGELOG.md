@@ -16,6 +16,8 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Fixed
 
+- Removed the composer's Slow button and snail icon. Native `/slow` commands and provider usage-limit warnings remain available.
+- Model activity stays visible in the mobile composer instead of moving into the header. A fixed-width readout prevents layout shifts, and tool execution uses the shorter `Tools…` label.
 - Workspace creation defaults its base ref to the repository default branch. Creation-command settings live in Settings → Hosts and Settings → Projects; project settings also edit registered project names.
 - New sessions select a project and then one of that project's registered workspaces, defaulting to its default workspace on project changes. Git projects offer Add workspace directly from the workspace selector.
 - Default workspaces use the main checkout's branch for Git projects and `default` for non-Git projects instead of repeating the project name.

@@ -688,9 +688,6 @@ export function ChatWindow({
     thinkingLevel,
     fastModeEnabled,
     fastModeActive,
-    slowModeSupported,
-    slowModeEnabled,
-    slowModeScope,
     usageLimit,
     externalRunActive,
     toolPreset,
@@ -754,7 +751,6 @@ export function ChatWindow({
     togglePreCompactionHistory,
     handleThinkingLevelChange,
     handleFastModeChange,
-    handleSlowModeChange,
     handleCycleModel,
     handleCycleThinkingLevel,
     handleAbortRetry,
@@ -1536,10 +1532,6 @@ export function ChatWindow({
         ),
       )}
       onFastModeChange={session || isNew ? handleFastModeChange : undefined}
-      slowModeSupported={slowModeSupported}
-      slowModeEnabled={slowModeEnabled}
-      slowModeScope={slowModeScope}
-      onSlowModeChange={session || isNew ? handleSlowModeChange : undefined}
       onAbortRetry={session ? handleAbortRetry : undefined}
       availableThinkingLevels={availableThinkingLevels}
       thinkingLevelMap={currentThinkingLevelMap}

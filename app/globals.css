@@ -2617,8 +2617,7 @@ html[data-touch-targets="accessible"]
 @container (max-width: 400px) {
   .composer-thinking-control > button > svg,
   .composer-thinking-glyph[data-level] + .composer-thinking-label,
-  .composer-fast-control > span,
-  .composer-slow-control > span {
+  .composer-fast-control > span {
     display: none;
   }
   /* Glyph-only trigger: size up to read level with the 14px lucide icons. */
@@ -2628,12 +2627,7 @@ html[data-touch-targets="accessible"]
   .picker-thinking-card > .composer-thinking-glyph {
     font-size: 16px;
   }
-  .composer-slow-control > svg {
-    width: 14px;
-    height: 14px;
-  }
-  .composer-fast-control,
-  .composer-slow-control {
+  .composer-fast-control {
     justify-content: center;
     width: 28px;
     padding-inline: 0 !important;
@@ -2675,10 +2669,6 @@ html[data-touch-targets="accessible"]
   }
   .picker-thinking-card > .composer-thinking-glyph {
     font-size: 16px;
-  }
-  .composer-slow-control > svg {
-    width: 14px;
-    height: 14px;
   }
 }
 .composer-control-shelf {
