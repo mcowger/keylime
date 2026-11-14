@@ -74,63 +74,62 @@ const plugins = [remarkGfm, remarkMath, remarkRestrictedThinking];
 
 export function ThinkingMarkdown({ children }: { children: string }) {
   return (
-    <ReactMarkdown
-      remarkPlugins={plugins}
-      components={{
-        span: ({ children }) => (
-          <span style={{ whiteSpace: "pre-wrap", fontSize: "inherit" }}>
-            {children}
-          </span>
-        ),
-        p: ({ children }) => (
-          <p style={{ margin: "0 0 0.6em", fontSize: "inherit" }}>{children}</p>
-        ),
-        ul: ({ children }) => (
-          <ul
-            style={{
-              margin: "0 0 0.6em",
-              paddingLeft: "1.5em",
-              listStyleType: "disc",
-              fontSize: "inherit",
-            }}
-          >
-            {children}
-          </ul>
-        ),
-        ol: ({ children, start }) => (
-          <ol
-            start={start}
-            style={{
-              margin: "0 0 0.6em",
-              paddingLeft: "1.5em",
-              listStyleType: "decimal",
-              fontSize: "inherit",
-            }}
-          >
-            {children}
-          </ol>
-        ),
-        li: ({ children }) => (
-          <li style={{ fontSize: "inherit" }}>{children}</li>
-        ),
-        pre: ({ children }) => (
-          <pre
-            style={{
-              margin: "0 0 0.6em",
-              fontSize: "inherit",
-              whiteSpace: "pre-wrap",
-              overflowWrap: "anywhere",
-            }}
-          >
-            {children}
-          </pre>
-        ),
-        code: ({ children }) => (
-          <code style={{ fontSize: "inherit" }}>{children}</code>
-        ),
-      }}
-    >
-      {children}
-    </ReactMarkdown>
+    <div className="thinking-markdown">
+      <ReactMarkdown
+        remarkPlugins={plugins}
+        components={{
+          span: ({ children }) => (
+            <span style={{ whiteSpace: "pre-wrap", fontSize: "inherit" }}>
+              {children}
+            </span>
+          ),
+          p: ({ children }) => (
+            <p style={{ fontSize: "inherit" }}>{children}</p>
+          ),
+          ul: ({ children }) => (
+            <ul
+              style={{
+                paddingLeft: "1.5em",
+                listStyleType: "disc",
+                fontSize: "inherit",
+              }}
+            >
+              {children}
+            </ul>
+          ),
+          ol: ({ children, start }) => (
+            <ol
+              start={start}
+              style={{
+                paddingLeft: "1.5em",
+                listStyleType: "decimal",
+                fontSize: "inherit",
+              }}
+            >
+              {children}
+            </ol>
+          ),
+          li: ({ children }) => (
+            <li style={{ fontSize: "inherit" }}>{children}</li>
+          ),
+          pre: ({ children }) => (
+            <pre
+              style={{
+                fontSize: "inherit",
+                whiteSpace: "pre-wrap",
+                overflowWrap: "anywhere",
+              }}
+            >
+              {children}
+            </pre>
+          ),
+          code: ({ children }) => (
+            <code style={{ fontSize: "inherit" }}>{children}</code>
+          ),
+        }}
+      >
+        {children}
+      </ReactMarkdown>
+    </div>
   );
 }

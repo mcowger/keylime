@@ -57,6 +57,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Browser UUID generation now works on plain-HTTP LAN origins without `crypto.randomUUID`, using cryptographically random UUID v4 values instead.
 - Workspace deletion recognizes squash-integrated branches in the default workspace and offers a button-based dialog when integration cannot be confirmed
 - Workspace deletion and project/session unregistration now use in-app confirmation dialogs instead of browser prompts
+- Thinking and wait-tool Markdown blocks have consistent spacing without extra space after the last block
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

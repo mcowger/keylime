@@ -4796,6 +4796,13 @@ html[data-touch-targets="accessible"] .right-panel-toolbar {
   white-space: normal;
   word-break: break-word;
 }
+.thinking-markdown :is(p, ul, ol, pre) {
+  margin: 0 0 0.6em;
+}
+.thinking-markdown > :is(p, ul, ol, pre):last-child {
+  margin-bottom: 0;
+}
+
 .thinking-output-error {
   color: var(--status-error);
   border-left-color: var(--status-error);

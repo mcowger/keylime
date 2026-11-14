@@ -3,6 +3,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { JSDOM } from "jsdom";
+import { readFileSync } from "node:fs";
 import { ThinkingMarkdown } from "./ThinkingMarkdown.tsx";
 
 function render(text) {
@@ -51,4 +52,22 @@ test("renders incomplete streaming syntax without losing visible content", () =>
     assert.equal(visible.replace(/\s+/g, " ").trim(), expected);
     assert.doesNotMatch(html, /<img\b|<svg\b/);
   }
+});
+
+test("wait output retains spacing between thinking blocks but not after the last", () => {
+  const css = readFileSync(
+    new URL("../app/globals.css", import.meta.url),
+    "utf8",
+  );
+  const dom = new JSDOM(
+    `<style>${css}</style><div class="tool-call-output-markdown">${render("First\n\nSecond")}</div>`,
+  );
+  const paragraphs = dom.window.document.querySelectorAll(
+    ".thinking-markdown > p",
+  );
+  assert.equal(
+    dom.window.getComputedStyle(paragraphs[0]).marginBottom,
+    "0.6em",
+  );
+  assert.equal(dom.window.getComputedStyle(paragraphs[1]).marginBottom, "0px");
 });
