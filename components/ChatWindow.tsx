@@ -51,6 +51,7 @@ import { ExtensionDialog } from "./ExtensionDialog";
 import { SubagentTranscriptDialog } from "./SubagentTranscriptDialog";
 import { ChatMinimap, useMessageRefs } from "./ChatMinimap";
 import { ActivityPanel, ComposerPanels } from "./ComposerPanels";
+import { SidebarActivity } from "./SidebarActivity";
 import { BtwHistoryDialog, type BtwPanelProps } from "./BtwPanel";
 import OmpWebLogo from "./OmpWebLogo";
 import { CHAT_COLUMN_MAX_WIDTH, MINIMAP_WIDTH } from "@/lib/chat-layout";
@@ -95,8 +96,8 @@ interface Props {
   session: SessionInfo | null;
   newSessionCwd: string | null;
   newSessionDraftKey?: string;
-  /** Host a fresh chat starts on (this machine when absent). */
   prepareNewWorkspace?: (prompt: string) => Promise<string>;
+  /** Host a fresh chat starts on (this machine when absent). */
   newSessionHostId?: string;
   onBackgroundSessionCreated?: (session: SessionInfo) => void;
   newSessionCreationId?: string;
@@ -128,6 +129,7 @@ interface Props {
   chatInputRef?: React.RefObject<ChatInputHandle | null>;
   sessionInfoContainer?: HTMLDivElement | null;
   activityContainer?: HTMLDivElement | null;
+  sidebarActivityContainer?: HTMLDivElement | null;
   onBranchDataChange?: (
     tree: SessionTreeNode[],
     activeLeafId: string | null,
@@ -457,7 +459,9 @@ const CommittedTranscript = memo(function CommittedTranscript({
         expandThinkingByDefault={expandThinkingByDefault === "always"}
         latestThinkingBlockIndex={
           expandThinkingByDefault === "latest"
-            ? latestThinking?.messageIndex === idx ? latestThinking.blockIndex : null
+            ? latestThinking?.messageIndex === idx
+              ? latestThinking.blockIndex
+              : null
             : undefined
         }
         hideThinking={hideThinkingBlock}
@@ -575,11 +579,11 @@ export function ChatWindow({
   session,
   newSessionCwd,
   newSessionDraftKey,
+  prepareNewWorkspace,
   newSessionHostId,
   onBackgroundSessionCreated,
   newSessionCreationId,
   newSessionPoolId,
-  prepareNewWorkspace,
   newSessionProjectId,
   newSessionInitialization,
   onNewSessionInitialization,
@@ -600,6 +604,7 @@ export function ChatWindow({
   chatInputRef,
   sessionInfoContainer,
   activityContainer,
+  sidebarActivityContainer,
   onBranchDataChange,
   onSystemPromptChange,
   onSystemPromptLoaderChange,
@@ -777,12 +782,12 @@ export function ChatWindow({
     session,
     newSessionCwd,
     newSessionDraftKey,
+    prepareNewWorkspace,
     newSessionHostId,
     onBackgroundSessionCreated,
     newSessionCreationId,
     newSessionPoolId,
     newSessionProjectId,
-    prepareNewWorkspace,
     newSessionInitialization,
     onNewSessionInitialization,
     onAgentEnd: wrappedOnAgentEnd,
@@ -982,9 +987,15 @@ export function ChatWindow({
   // scroller mounts after the first send without a remount or a load.
   const isEmptyNew =
     isNew && messages.length === 0 && !streamState.isStreaming && !sessionBusy;
-  const committedLatestThinking = useMemo(() => findLatestThinking(messages), [messages]);
+  const committedLatestThinking = useMemo(
+    () => findLatestThinking(messages),
+    [messages],
+  );
   const liveLatestThinking = streamState.streamingMessage
-    ? findLatestThinking([streamState.streamingMessage], streamState.isStreaming)
+    ? findLatestThinking(
+        [streamState.streamingMessage],
+        streamState.isStreaming,
+      )
     : null;
   const latestThinking = liveLatestThinking ? null : committedLatestThinking;
   // Widen the lazy render window until it includes the message's transcript row.
@@ -1652,7 +1663,11 @@ export function ChatWindow({
           <WorkspaceFileContext.Provider value={fileSource}>
             <div
               className="relative flex h-full flex-col overflow-hidden"
-              style={{ "--chat-column-width": chatWidth ? `${chatWidth}%` : "960px" } as CSSProperties}
+              style={
+                {
+                  "--chat-column-width": chatWidth ? `${chatWidth}%` : "960px",
+                } as CSSProperties
+              }
               onDragEnter={handleDragEnter}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -1731,6 +1746,15 @@ export function ChatWindow({
                     onSelectSubagent={setSelectedSubagent}
                   />,
                   activityContainer,
+                )}
+              {sidebarActivityContainer &&
+                createPortal(
+                  <SidebarActivity
+                    todoPhases={todoPhases}
+                    subagents={subagents}
+                    onSelectSubagent={setSelectedSubagent}
+                  />,
+                  sidebarActivityContainer,
                 )}
               <SubagentTranscriptDialog
                 subagent={selectedSubagent}
@@ -1840,9 +1864,6 @@ export function ChatWindow({
                         </div>
                       </div>
                       <div className="empty-session-intro">
-                        <h1 className="display-serif">
-                          {t("appShell.newSessionTitle")}
-                        </h1>
                         <p>{t("appShell.newSessionDescription")}</p>
                       </div>
                       {newSessionWorkspace}
@@ -2067,10 +2088,12 @@ export function ChatWindow({
                             toolCallsDefaultCollapsed={
                               toolCallsDefaultCollapsed
                             }
-                            expandThinkingByDefault={expandThinkingByDefault === "always"}
+                            expandThinkingByDefault={
+                              expandThinkingByDefault === "always"
+                            }
                             latestThinkingBlockIndex={
                               expandThinkingByDefault === "latest"
-                                ? liveLatestThinking?.blockIndex ?? null
+                                ? (liveLatestThinking?.blockIndex ?? null)
                                 : undefined
                             }
                             hideThinking={hideThinkingBlock}

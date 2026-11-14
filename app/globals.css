@@ -2287,6 +2287,17 @@ html[data-touch-targets="accessible"]
 .new-session-workspace:hover {
   border-color: color-mix(in srgb, var(--border) 72%, var(--accent));
 }
+.new-session-workspace-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+.new-session-workspace-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
 .new-session-workspace-label {
   color: var(--text-muted);
   font-size: 12px;
@@ -3958,16 +3969,9 @@ html[data-touch-targets="accessible"] .message-overflow-toggle {
   padding: 26px 8px 22px;
   border-top: 1px solid var(--border);
 }
-.empty-session-intro h1 {
-  max-width: 20ch;
-  margin: 0;
-  font-size: clamp(28px, 4vw, 38px);
-  line-height: 1.08;
-  letter-spacing: -0.025em;
-}
 .empty-session-intro p {
   max-width: 52ch;
-  margin: 10px 0 0;
+  margin: 0;
   color: var(--text-muted);
   font-size: 14px;
   line-height: 1.55;
@@ -3976,10 +3980,6 @@ html[data-touch-targets="accessible"] .message-overflow-toggle {
 @media (max-width: 640px) {
   .empty-session-intro {
     padding: 20px 0 18px;
-  }
-  .empty-session-intro h1 {
-    max-width: 16ch;
-    font-size: 28px;
   }
   .empty-session-intro p {
     max-width: 34ch;

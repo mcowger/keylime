@@ -8,7 +8,6 @@ import type { SessionInfo } from "@/lib/types";
 import { openEventStream } from "@/lib/event-stream";
 import {
   MessageSquarePlus,
-  Plus,
   Terminal as TerminalIcon,
   X,
 } from "lucide-react";
@@ -50,7 +49,7 @@ export function WorkspaceTerminalTabs({
   chatTabs: { id: string; title: string; sessionId?: string }[];
   activeChatId: string | null;
   onSelectChat: (id: string) => void;
-  onCloseChat: (id: string) => void;
+  onCloseChat: (id: string) => void | Promise<void>;
   onNewChat: () => void;
   mobile: boolean;
   headerTarget: HTMLElement | null;
@@ -74,6 +73,19 @@ export function WorkspaceTerminalTabs({
   const [renameValue, setRenameValue] = useState("");
   const [running, setRunning] = useState<Set<string>>(() => new Set());
   const [attention, setAttention] = useState<Set<string>>(() => new Set());
+  const closingChats = useRef(new Set<string>());
+  const [closingChatIds, setClosingChatIds] = useState(new Set<string>());
+  const closeChat = async (id: string) => {
+    if (closingChats.current.has(id)) return;
+    closingChats.current.add(id);
+    setClosingChatIds(new Set(closingChats.current));
+    try {
+      await onCloseChat(id);
+    } finally {
+      closingChats.current.delete(id);
+      setClosingChatIds(new Set(closingChats.current));
+    }
+  };
   useEffect(() => {
     const source = openEventStream({ kind: "running" });
     source.onmessage = (event) => {
@@ -177,9 +189,10 @@ export function WorkspaceTerminalTabs({
                 {tab.title}
               </button>
               <button
-                aria-label={`Close ${tab.title}`}
-                title="Close chat"
-                onClick={() => onCloseChat(tab.id)}
+                aria-label={`${tab.sessionId ? "Archive" : "Close"} ${tab.title}`}
+                title={tab.sessionId ? "Archive chat" : "Close chat"}
+                disabled={closingChatIds.has(tab.id)}
+                onClick={() => void closeChat(tab.id)}
               >
                 <X size={14} />
               </button>
@@ -216,7 +229,7 @@ export function WorkspaceTerminalTabs({
             title="New terminal"
             aria-label="New terminal"
           >
-            <Plus size={16} />
+            <TerminalIcon size={16} />
           </button>
           <button onClick={() => setPickerOpen(true)}>Chats</button>
         </div>
@@ -323,8 +336,10 @@ export function WorkspaceTerminalTabs({
                         </button>
                       )}
                     <button
-                      aria-label={`Close ${tab.title}`}
-                      onClick={() => onCloseChat(tab.id)}
+                      aria-label={`${tab.sessionId ? "Archive" : "Close"} ${tab.title}`}
+                      title={tab.sessionId ? "Archive chat" : "Close chat"}
+                      disabled={closingChatIds.has(tab.id)}
+                      onClick={() => void closeChat(tab.id)}
                     >
                       <X size={16} />
                     </button>

@@ -1480,6 +1480,8 @@ export function AppShell({ appName }: { appName: string }) {
   const [rightView, setRightView] = useState<RightPanelView>("explorer");
   const [activityContainer, setActivityContainer] =
     useState<HTMLDivElement | null>(null);
+  const [sidebarActivityContainer, setSidebarActivityContainer] =
+    useState<HTMLDivElement | null>(null);
   const connectionDiagnosticsOn = useConnectionDiagnosticsEnabled();
   // The Connection tab exists only while its setting is on; a selected one falls back to Explorer.
   useEffect(() => {
@@ -1919,8 +1921,6 @@ export function AppShell({ appName }: { appName: string }) {
     [router, isMobile, activateChat, updateChatTabs],
   );
 
-  // ---- In-app Navigate back / forward over visited chat views ----
-
   const handleNewWorkspace = useCallback((project: ManagedProject) => {
     if (project.projectKind !== "git") {
       handleNewSession(browserUUID(), project.path, project.hostId, project);
@@ -1981,6 +1981,8 @@ export function AppShell({ appName }: { appName: string }) {
       return pending;
     };
   }, [activeChatId, pendingWorkspace, updateChatTabs]);
+
+  // ---- In-app Navigate back / forward over visited chat views ----
 
   const [pendingSessionImport, setPendingSessionImport] = useState<{
     session: SessionInfo;
@@ -2295,11 +2297,11 @@ export function AppShell({ appName }: { appName: string }) {
         ),
       );
       if (activeChatIdRef.current === tabId) {
-        setNewSessionCwd(null);
-        setSelectedSession(session);
         suppressCwdRef.current = session.cwd;
         setActiveCwd(session.cwd);
         setActiveHostId(remoteHostId(session.hostId));
+        setNewSessionCwd(null);
+        setSelectedSession(session);
         hydrateSelectedSession(session.id);
         router.replace(`?session=${encodeURIComponent(session.id)}`);
       }
@@ -3107,9 +3109,9 @@ export function AppShell({ appName }: { appName: string }) {
       optimisticSession={selectedSession?.path === "" ? selectedSession : null}
       onSelectSession={handleSelectSession}
       onNewSession={handleNewSession}
+      onNewWorkspace={handleNewWorkspace}
       initialSessionId={null}
       skipInitialProjectSelection={initialNavigation.requestedCwd !== null}
-      onNewWorkspace={handleNewWorkspace}
       onInitialRestoreDone={handleInitialRestoreDone}
       refreshKey={refreshKey}
       onSessionDeleted={handleSessionDeleted}
@@ -3127,6 +3129,7 @@ export function AppShell({ appName }: { appName: string }) {
       addProjectHostId={addProjectHostId}
       setAddProjectOpen={openAddProject}
       usageVisible={providerUsageVisible}
+      activityTargetRef={isMobile ? undefined : setSidebarActivityContainer}
       settingsOpen={Boolean(settingsTab)}
       onOpenSettings={() => setSettingsTab((prev) => (prev ? null : "general"))}
       onOpenArchive={() => setArchiveBrowserOpen(true)}
@@ -3423,7 +3426,26 @@ export function AppShell({ appName }: { appName: string }) {
                     : "/",
                 );
               }}
-              onCloseChat={(id) => {
+              onCloseChat={async (id) => {
+                const closing = chatTabsRef.current.find(
+                  (tab) => tab.id === id,
+                );
+                if (!closing) return;
+                if (closing.session) {
+                  try {
+                    const response = await fetch(
+                      `/api/sessions/${encodeURIComponent(closing.session.id)}/archive`,
+                      { method: "POST" },
+                    );
+                    if (!response.ok) throw new Error("Session archive failed");
+                  } catch {
+                    toast.error(t("sessionSidebar.archiveFailed"));
+                    return;
+                  }
+                  clearDraft(closing.session.id);
+                  publishSessionsChanged([closing.session.id]);
+                  setRefreshKey((key) => key + 1);
+                }
                 const visible = chatTabsRef.current.filter(
                   (tab) =>
                     terminalWorkspace &&
@@ -4142,6 +4164,7 @@ export function AppShell({ appName }: { appName: string }) {
                       key={sessionKey}
                       session={selectedSession}
                       activityContainer={activityContainer}
+                      sidebarActivityContainer={isMobile ? null : sidebarActivityContainer}
                       newSessionCwd={effectiveNewSessionCwd}
                       newSessionHostId={newSessionHost}
                       prepareNewWorkspace={prepareNewWorkspace}
@@ -4232,145 +4255,158 @@ export function AppShell({ appName }: { appName: string }) {
                                 </div>
                               </>
                             )}
-                            <label
-                              htmlFor="new-session-project"
-                              className="new-session-workspace-label"
-                            >
-                              Project
-                            </label>
-                            <div className="new-session-workspace-control">
-                              <span
-                                className="new-session-workspace-icon"
-                                aria-hidden="true"
-                              >
-                                <Folder size={17} strokeWidth={1.8} />
-                              </span>
-                              <select
-                                id="new-session-project"
-                                value={selectedNewProjectId}
-                                onChange={(event) => {
-                                  if (!event.target.value) {
-                                    openAddProject(true, newSessionGroupKey);
-                                    return;
-                                  }
-                                  const workspace =
-                                    hostProjects.find(
-                                      (candidate) =>
-                                        candidate.projectId ===
-                                          event.target.value &&
-                                        candidate.isDefaultWorkspace,
-                                    ) ??
-                                    hostProjects.find(
-                                      (candidate) =>
-                                        candidate.projectId ===
-                                        event.target.value,
-                                    );
-                                  if (!workspace) return;
-                                  suppressCwdRef.current = workspace.path;
-                                  setActiveCwd(workspace.path);
-                                  setActiveHostId(
-                                    remoteHostId(workspace.hostId),
-                                  );
-                                  handleNewSession(
-                                    browserUUID(),
-                                    workspace.path,
-                                    workspace.hostId,
-                                    workspace,
-                                  );
-                                }}
-                              >
-                                {newSessionProjects.map((project) => (
-                                  <option
-                                    key={project.projectId}
-                                    value={project.projectId}
+                            <div className="new-session-workspace-fields">
+                              <div className="new-session-workspace-field">
+                                <label
+                                  htmlFor="new-session-project"
+                                  className="new-session-workspace-label"
+                                >
+                                  Project
+                                </label>
+                                <div className="new-session-workspace-control">
+                                  <span
+                                    className="new-session-workspace-icon"
+                                    aria-hidden="true"
                                   >
-                                    {project.projectName ??
-                                      projectLabel(
-                                        project.projectPath ?? project.path,
-                                      )}
-                                  </option>
-                                ))}
-                                <option value="">+ {t("projects.add")}</option>
-                              </select>
-                              <ChevronDown
-                                className="new-session-workspace-chevron"
-                                size={16}
-                                strokeWidth={1.8}
-                                aria-hidden="true"
-                              />
-                            </div>
-                            <label
-                              id="new-session-workspace-label"
-                              htmlFor="new-session-workspace"
-                              className="new-session-workspace-label"
-                            >
-                              {t("settingsConfig.chipWorkspace")}
-                            </label>
-                            <div className="new-session-workspace-control">
-                              <span
-                                className="new-session-workspace-icon"
-                                aria-hidden="true"
-                              >
-                                <Folder size={17} strokeWidth={1.8} />
-                              </span>
-                              <select
-                                id="new-session-workspace"
-                                aria-describedby="new-session-workspace-path"
-                                value={newSessionWorkspaceValue}
-                                onChange={(event) => {
-                                  const key = event.target.value;
-                                  if (key === "__add_workspace__") {
-                                    if (selectedNewWorkspace) handleNewWorkspace(selectedNewWorkspace);
-                                    return;
-                                  }
-                                  const project = projectWorkspaces.find(
-                                    (candidate) =>
-                                      hostProjectKey(
-                                        candidate.hostId,
-                                        candidate.path,
-                                      ) === key,
-                                  );
-                                  if (!project) return;
-                                  suppressCwdRef.current = project.path;
-                                  setActiveCwd(project.path);
-                                  setActiveHostId(remoteHostId(project.hostId));
-                                  handleNewSession(
-                                    browserUUID(),
-                                    project.path,
-                                    project.hostId,
-                                    project,
-                                  );
-                                }}
-                              >
-                                {projectWorkspaces.map((project) => (
-                                  <option
-                                    key={hostProjectKey(
-                                      project.hostId,
-                                      project.path,
-                                    )}
-                                    value={hostProjectKey(
-                                      project.hostId,
-                                      project.path,
-                                    )}
+                                    <Folder size={17} strokeWidth={1.8} />
+                                  </span>
+                                  <select
+                                    id="new-session-project"
+                                    value={selectedNewProjectId}
+                                    onChange={(event) => {
+                                      if (!event.target.value) {
+                                        openAddProject(
+                                          true,
+                                          newSessionGroupKey,
+                                        );
+                                        return;
+                                      }
+                                      const workspace =
+                                        hostProjects.find(
+                                          (candidate) =>
+                                            candidate.projectId ===
+                                              event.target.value &&
+                                            candidate.isDefaultWorkspace,
+                                        ) ??
+                                        hostProjects.find(
+                                          (candidate) =>
+                                            candidate.projectId ===
+                                            event.target.value,
+                                        );
+                                      if (!workspace) return;
+                                      suppressCwdRef.current = workspace.path;
+                                      setActiveCwd(workspace.path);
+                                      setActiveHostId(
+                                        remoteHostId(workspace.hostId),
+                                      );
+                                      handleNewSession(
+                                        browserUUID(),
+                                        workspace.path,
+                                        workspace.hostId,
+                                        workspace,
+                                      );
+                                    }}
                                   >
-                                    {project.alias ??
-                                      project.name ??
-                                      projectLabel(project.path)}
-                                  </option>
-                                ))}
-                                {selectedNewWorkspace?.projectKind ===
-                                  "git" && (
-                                  <option value="__add_workspace__">
-                                    + Add workspace
-                                  </option>
-                                )}
-                              </select>
-                              <ChevronDown
-                                className="new-session-workspace-chevron"
-                                size={16}
-                                strokeWidth={1.8}
-                                aria-hidden="true"
-                              />
+                                    {newSessionProjects.map((project) => (
+                                      <option
+                                        key={project.projectId}
+                                        value={project.projectId}
+                                      >
+                                        {project.projectName ??
+                                          projectLabel(
+                                            project.projectPath ?? project.path,
+                                          )}
+                                      </option>
+                                    ))}
+                                    <option value="">
+                                      + {t("projects.add")}
+                                    </option>
+                                  </select>
+                                  <ChevronDown
+                                    className="new-session-workspace-chevron"
+                                    size={16}
+                                    strokeWidth={1.8}
+                                    aria-hidden="true"
+                                  />
+                                </div>
+                              </div>
+                              <div className="new-session-workspace-field">
+                                <label
+                                  id="new-session-workspace-label"
+                                  htmlFor="new-session-workspace"
+                                  className="new-session-workspace-label"
+                                >
+                                  {t("settingsConfig.chipWorkspace")}
+                                </label>
+                                <div className="new-session-workspace-control">
+                                  <span
+                                    className="new-session-workspace-icon"
+                                    aria-hidden="true"
+                                  >
+                                    <Folder size={17} strokeWidth={1.8} />
+                                  </span>
+                                  <select
+                                    id="new-session-workspace"
+                                    aria-describedby="new-session-workspace-path"
+                                    value={newSessionWorkspaceValue}
+                                    onChange={(event) => {
+                                      const key = event.target.value;
+                                      if (key === "__add_workspace__") {
+                                        if (selectedNewWorkspace) handleNewWorkspace(selectedNewWorkspace);
+                                        return;
+                                      }
+                                      const project = projectWorkspaces.find(
+                                        (candidate) =>
+                                          hostProjectKey(
+                                            candidate.hostId,
+                                            candidate.path,
+                                          ) === key,
+                                      );
+                                      if (!project) return;
+                                      suppressCwdRef.current = project.path;
+                                      setActiveCwd(project.path);
+                                      setActiveHostId(
+                                        remoteHostId(project.hostId),
+                                      );
+                                      handleNewSession(
+                                        browserUUID(),
+                                        project.path,
+                                        project.hostId,
+                                        project,
+                                      );
+                                    }}
+                                  >
+                                    {projectWorkspaces.map((project) => (
+                                      <option
+                                        key={hostProjectKey(
+                                          project.hostId,
+                                          project.path,
+                                        )}
+                                        value={hostProjectKey(
+                                          project.hostId,
+                                          project.path,
+                                        )}
+                                      >
+                                        {project.alias ??
+                                          project.name ??
+                                          projectLabel(project.path)}
+                                      </option>
+                                    ))}
+                                    {selectedNewWorkspace?.projectKind ===
+                                      "git" && (
+                                      <option value="__add_workspace__">
+                                        + Add workspace
+                                      </option>
+                                    )}
+                                  </select>
+                                  <ChevronDown
+                                    className="new-session-workspace-chevron"
+                                    size={16}
+                                    strokeWidth={1.8}
+                                    aria-hidden="true"
+                                  />
+                                </div>
+                              </div>
                             </div>
                             <div
                               id="new-session-workspace-path"

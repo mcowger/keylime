@@ -12,7 +12,7 @@ Unregistering a project or workspace forgets its child registrations, but does n
 
 Each workspace can have multiple chat tabs alongside its terminals. Desktop shows open tabs and a **Chats** picker for saved conversations. Mobile uses a compact workspace/tab-count button in the header; tap it for open chats and terminals, creation actions and searchable saved chats. Selecting a saved conversation opens its existing tab or adds one. Unsent chats keep separate drafts, including when several belong to the same workspace.
 
-Closing a chat tab closes only its view. It does not stop the agent, delete the session, or unregister it from the sidebar. Open chat tabs are retained across reloads in the same browser tab; terminal processes remain owned by the host daemon.
+The X archives a saved chat, then removes its tab. Find it under **Archived Sessions** to restore it. If archiving fails, the tab stays open and an error is shown. Unsaved new-chat tabs simply close. Open chat tabs are retained across reloads in the same browser tab; terminal processes remain owned by the host daemon.
 
 ## Creating a workspace
 

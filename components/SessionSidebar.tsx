@@ -161,6 +161,7 @@ interface Props {
   setAddProjectOpen: (open: boolean, hostId?: string) => void;
   /** Shows the provider usage bar above Settings; toggle lives in Settings. */
   usageVisible?: boolean;
+  activityTargetRef?: (element: HTMLDivElement | null) => void;
   /** Opens the app settings (pinned sidebar footer row). */
   onOpenSettings?: () => void;
   /** True when an omp/ompweb update is available — shows a badge on the gear. */
@@ -217,8 +218,8 @@ export const SessionSidebar = memo(function SessionSidebar({
   optimisticSession,
   onSelectSession,
   onNewSession,
-  initialSessionId,
   onNewWorkspace,
+  initialSessionId,
   skipInitialProjectSelection,
   onInitialRestoreDone,
   refreshKey,
@@ -232,6 +233,7 @@ export const SessionSidebar = memo(function SessionSidebar({
   addProjectHostId = LOCAL_HOST_ID,
   setAddProjectOpen,
   usageVisible = true,
+  activityTargetRef,
   onOpenSettings,
   onOpenArchive,
   navigation,
@@ -2033,18 +2035,19 @@ export const SessionSidebar = memo(function SessionSidebar({
             setSelectedHostId(host);
           }}
           onSelectSession={handleSelectSessionFromList}
+          onNewWorkspace={(project) => onNewWorkspace?.(project)}
+          hostUnavailableReason={hostUnavailableReason}
           onAddProject={(host) => {
             setAddProjectOpen(true, host);
             setAddProjectError(null);
           }}
-          onNewWorkspace={(project) => onNewWorkspace?.(project)}
-          hostUnavailableReason={hostUnavailableReason}
           onChanged={() => {
             void loadProjects();
             void loadSessions();
           }}
         />
       </div>
+      {activityTargetRef && <div ref={activityTargetRef} style={{ flexShrink: 0, minHeight: 0, maxHeight: "35%", overflowY: "auto" }} />}
 
       {/* Provider usage bar — pinned above Settings */}
       {usageVisible && <ProviderUsageBar />}

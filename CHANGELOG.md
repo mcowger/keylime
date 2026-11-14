@@ -9,11 +9,12 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 ### Added
 
 - Project rows have a + button for prompt-first workspace creation. The first prompt supplies a display name and branch through the smol task model before setup and agent startup.
+- The desktop sidebar shows active agents and pending or in-progress tasks for the selected chat. Select an agent to open its details.
 - Removed the Workspaces right-panel tab. Create workspaces from the workspace picker; project actions open workspace management in a modal.
 - Chat width can be set to a percentage of the available space in Settings → Interface & Behavior.
 - Thinking blocks can expand only the latest block, all blocks, or none by default. Existing enabled preferences continue to expand all blocks.
 - Mobile workspace navigation uses a compact tab switcher and bottom sheet instead of a session-title pill. Saved chats remain searchable from workspace navigation; the sidebar focuses on projects and workspaces with contextual management actions.
-- Workspaces support multiple chat tabs alongside terminals, with independent unsent drafts, saved-session tabs, reload restoration and close-view actions that leave sessions running.
+- Workspaces support multiple chat tabs alongside terminals, with independent unsent drafts, saved-session tabs and reload restoration.
 - Workspaces support independent interactive terminal tabs on local and linked hosts, with daemon-owned PTY shells, resizing, full-screen applications, Unicode and bundled Nerd Font symbols. Reconnect restores retained screen state; browser disconnects and web restarts leave shells running.
 - `bun run dev:isolated` starts the hot-reloading web server and host daemon with a fresh temporary home/config, private socket, and random loopback port. `--port` selects a fixed port; shutdown retains the temporary files for inspection.
 - Todo and subagents now share the right sidepanel's Activity tab on desktop and mobile. Live updates, completed agents and transcript access remain available without opening the panel automatically; `/btw` stays above the composer.
@@ -23,6 +24,9 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Fixed
 
+- Workspace rows show agent counts and status with icons instead of status text.
+- New sessions omit the introductory heading and place project and workspace selectors side by side.
+- The chat-tab X archives saved chats on desktop and mobile. Failed archives keep the tab open; unsaved new chats still just close.
 - Subagent cards fill the Activity panel, show agent type with telemetry and display context usage as a percentage. Completed agents start collapsed.
 - Right-panel tabs no longer shift upward or clip on desktop when a horizontal scrollbar appears.
 - Workspace creation normalizes new branch names containing spaces or other invalid Git characters and previews the resulting branch and checkout directory. Existing branch and base refs remain unchanged.

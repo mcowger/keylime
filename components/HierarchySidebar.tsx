@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus } from "lucide-react";
+import { AlertCircle, Bot, Loader2, Plus, Wrench } from "lucide-react";
 import type {
   HierarchyProject,
   HierarchySnapshot,
@@ -453,8 +453,10 @@ export function HierarchySidebar({
                             <span
                               title={`${runningCount} running agents`}
                               aria-label={`${runningCount} running agents`}
+                              style={{ display: "inline-flex", alignItems: "center", gap: 3 }}
                             >
-                              {runningCount} running
+                              <Bot size={14} aria-hidden="true" />
+                              {runningCount}
                             </span>
                           )}
                           {needsAttention && (
@@ -466,13 +468,20 @@ export function HierarchySidebar({
                                 padding: "0 4px",
                               }}
                             >
-                              ●
+                              <AlertCircle size={14} aria-hidden="true" />
                             </span>
                           )}
                           {workspace.setup &&
                             workspace.setup.status !== "complete" && (
-                              <span title={workspace.setup.error}>
-                                Setup {workspace.setup.status}
+                              <span
+                                title={workspace.setup.error || `Setup ${workspace.setup.status}`}
+                                aria-label={`Setup ${workspace.setup.status}`}
+                              >
+                                {workspace.setup.status === "running" ? (
+                                  <Loader2 size={14} aria-hidden="true" />
+                                ) : (
+                                  <Wrench size={14} aria-hidden="true" />
+                                )}
                               </span>
                             )}
                           <details style={{ position: "relative" }}>
