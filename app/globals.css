@@ -4869,7 +4869,7 @@ html[data-touch-targets="accessible"] .right-panel-toolbar {
   border-left: 2px solid color-mix(in srgb, var(--accent) 40%, var(--border));
   background: var(--bg-subtle);
   border-radius: 0 var(--radius-control) var(--radius-control) 0;
-  white-space: pre-wrap;
+  white-space: normal;
   word-break: break-word;
 }
 .thinking-output-error {

@@ -2863,6 +2863,7 @@ export class AgentSessionWrapper {
         ? { supportsClientMessageIds: true }
         : {}),
       tokensPerSecond: state.tokensPerSecond ?? null,
+      modelActivity: state.modelActivity,
       contextUsage: state.contextUsage ?? null,
       systemPrompt: state.systemPrompt?.join("\n\n") ?? "",
       thinkingLevel: state.thinkingLevel ?? "off",

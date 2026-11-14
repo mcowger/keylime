@@ -12,6 +12,7 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowDown,
   ChevronDown,
@@ -46,7 +47,7 @@ import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ExtensionDialog } from "./ExtensionDialog";
 import { SubagentTranscriptDialog } from "./SubagentTranscriptDialog";
 import { ChatMinimap, useMessageRefs } from "./ChatMinimap";
-import { ComposerPanels } from "./ComposerPanels";
+import { ActivityPanel, ComposerPanels } from "./ComposerPanels";
 import { BtwHistoryDialog, type BtwPanelProps } from "./BtwPanel";
 import OmpWebLogo from "./OmpWebLogo";
 import { CHAT_COLUMN_MAX_WIDTH, MINIMAP_WIDTH } from "@/lib/chat-layout";
@@ -120,6 +121,7 @@ interface Props {
   modelsRefreshKey?: number;
   chatInputRef?: React.RefObject<ChatInputHandle | null>;
   sessionInfoContainer?: HTMLDivElement | null;
+  activityContainer?: HTMLDivElement | null;
   onBranchDataChange?: (
     tree: SessionTreeNode[],
     activeLeafId: string | null,
@@ -583,6 +585,7 @@ export function ChatWindow({
   modelsRefreshKey,
   chatInputRef,
   sessionInfoContainer,
+  activityContainer,
   onBranchDataChange,
   onSystemPromptChange,
   onSystemPromptLoaderChange,
@@ -717,6 +720,7 @@ export function ChatWindow({
     sendExtensionCustomInput,
     isAutoModelSelection,
     agentPhase,
+    modelActivity,
     activeGoal,
     activePlan,
     liveToolResults,
@@ -1488,17 +1492,12 @@ export function ChatWindow({
     )
       active.blur();
   }, [askOpen]);
-  // The live status is merged into a ComposerPanels header row (#245)
-  // whenever one exists (todo or subagent row); only then is the
-  // standalone ChatInput status bar suppressed. With no host row, or in
-  // the minimized pill bar (which keeps composerStatusText below), the
-  // bar stays so the status is never hidden.
-  const hasStatusHostRow = todoPhases.length > 0 || subagents.length > 0;
   const chatInputElement = (
     <ChatInput
       draftIdentityMove={composerIdentityMove}
       ref={composerRef}
       sessionInfoContainer={sessionInfoContainer}
+      modelActivity={modelActivity}
       onSend={handleSend}
       onPredictWord={handlePredictWord}
       onPredictWordFeedback={handlePredictWordFeedback}
@@ -1578,7 +1577,7 @@ export function ChatWindow({
          accept Escape-to-minimize in the fresh-chat branch where there is
          nothing to collapse. */
       onMinimize={isEmptyNew ? undefined : handleMinimize}
-      statusText={hasStatusHostRow ? null : composerStatusText}
+      statusText={composerStatusText}
       onOpenProviders={onOpenProviders}
     />
   );
@@ -1707,6 +1706,15 @@ export function ChatWindow({
                 </div>
               )}
 
+              {activityContainer &&
+                createPortal(
+                  <ActivityPanel
+                    todoPhases={todoPhases}
+                    subagents={subagents}
+                    onSelectSubagent={setSelectedSubagent}
+                  />,
+                  activityContainer,
+                )}
               <SubagentTranscriptDialog
                 subagent={selectedSubagent}
                 sessionId={session?.id ?? sessionIdRef.current ?? null}
@@ -1827,12 +1835,7 @@ export function ChatWindow({
                         onDismiss={dismissNotice}
                         align="right"
                       />
-                      <ComposerPanels
-                        todoPhases={[]}
-                        subagents={[]}
-                        onSelectSubagent={setSelectedSubagent}
-                        btw={btwPanel}
-                      />
+                      <ComposerPanels btw={btwPanel} />
                       {/* ChatInput insets itself by CHAT_COLUMN_PADDING; cancel this column's
                 padding so the composer matches its in-session width. */}
                       <div style={{ margin: `0 -${CHAT_COLUMN_PADDING}px` }}>
@@ -2218,13 +2221,7 @@ export function ChatWindow({
                             />
                           </div>
                         )}
-                        <ComposerPanels
-                          todoPhases={todoPhases}
-                          subagents={subagents}
-                          onSelectSubagent={setSelectedSubagent}
-                          btw={btwPanel}
-                          liveStatus={composerStatusText}
-                        />
+                        <ComposerPanels btw={btwPanel} />
                         <ExtensionWidgets widgets={belowEditorWidgets} />
                       </div>
                     </div>

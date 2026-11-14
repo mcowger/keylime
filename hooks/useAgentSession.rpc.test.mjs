@@ -665,6 +665,34 @@ async function mountSession(
     },
   };
 }
+test("model activity resets on completion and crash without reviving stale snapshots", async () => {
+  resetWorld();
+  primeSession("activity-terminal", [userMsg("u0", "q")]);
+  const w = await mountSession("activity-terminal");
+  const send = async (event) =>
+    act(async () => w.latest.handleAgentEventRef.current(event));
+  const activity = (version, kind) => ({
+    kind,
+    version,
+    epoch: 100,
+    startedAt: 1,
+    rate: 10,
+  });
+  await send({ type: "agent_start" });
+  await send({ type: "model_activity", activity: activity(1, "streaming") });
+  assert.equal(w.latest.modelActivity.kind, "streaming");
+  await send({ type: "agent_end", isTerminal: true });
+  assert.equal(w.latest.modelActivity.kind, "idle");
+  await send({ type: "model_activity", activity: activity(1, "streaming") });
+  assert.equal(w.latest.modelActivity.kind, "idle");
+  await send({ type: "agent_start" });
+  await send({ type: "model_activity", activity: activity(2, "waiting") });
+  assert.equal(w.latest.modelActivity.kind, "waiting");
+  await send({ type: "process_exit" });
+  assert.equal(w.latest.modelActivity.kind, "idle");
+  await send({ type: "model_activity", activity: activity(3, "waiting") });
+  assert.equal(w.latest.modelActivity.kind, "waiting");
+});
 
 function lastEs() {
   return world.esInstances[world.esInstances.length - 1];

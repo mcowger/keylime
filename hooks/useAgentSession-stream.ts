@@ -2,6 +2,7 @@
 // extracted from useAgentSession (no hook state; host tools may touch browser
 // notifications and the notification-center history).
 
+import type { ModelActivity } from "@/lib/model-activity";
 import type {
   AgentMessage,
   CustomMessage,
@@ -229,6 +230,7 @@ export type AgentStateResponse = {
   isCompacting?: boolean;
   responseObserved?: boolean;
   tokensPerSecond?: number | null;
+  modelActivity?: ModelActivity;
   extensionStatuses?: ExtensionStatusItem[];
   extensionWidgets?: ExtensionWidgetItem[];
   queuedMessages?: QueuedMessages;

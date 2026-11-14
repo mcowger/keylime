@@ -9,6 +9,9 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 ### Added
 
 - `bun run dev:isolated` starts the hot-reloading web server and host daemon with a fresh temporary home/config, private socket, and random loopback port. `--port` selects a fixed port; shutdown retains the temporary files for inspection.
+- Todo and subagents now share the right sidepanel's Activity tab on desktop and mobile. Live updates, completed agents and transcript access remain available without opening the panel automatically; `/btw` stays above the composer.
+- Thinking supports paragraphs, bold, italics, lists, inline code and fenced code at a uniform font size. Unsupported Markdown stays literal, and diagram fences remain code rather than invoking rich renderers.
+- The context control shows model-request wait time, estimated streaming tokens/second, and tool execution status. Timing starts at actual main-agent model requests, not queued submission; the rate includes thinking and excludes subagents.
 
 ### Fixed
 

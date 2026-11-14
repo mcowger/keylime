@@ -1,4 +1,5 @@
 import type { AgentMessage } from "./types";
+import type { ModelActivity } from "./model-activity";
 
 // Local mirrors of the omp shapes used by omp-web. omp's SDK packages are
 // Bun-only, so these types are hand-maintained against
@@ -120,6 +121,7 @@ export interface RpcSessionState {
   usageLimit?: UsageLimitState;
   /** omp's reported output throughput; null/undefined when not generating. */
   tokensPerSecond?: number | null;
+  modelActivity?: ModelActivity;
 }
 
 /**
@@ -160,6 +162,7 @@ export interface WebSessionState {
   usageLimit?: UsageLimitState;
   autoRetryEnabled?: boolean;
   tokensPerSecond?: number | null;
+  modelActivity?: ModelActivity;
   todoPhases: TodoPhase[];
   extensionStatuses: Array<{ key: string; text: string }>;
   extensionWidgets: Array<{

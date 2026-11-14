@@ -42,8 +42,6 @@ import { TodoList } from "./TodoList";
 import { SubagentStatusIcon } from "./SubagentStatusIcon";
 import { BtwPanel, type BtwPanelProps } from "./BtwPanel";
 
-// Panels unmount when their inputs are empty and remount when they fill
-const TODO_COLLAPSED_STORAGE_KEY = "omp-web:composer-todo-collapsed";
 const SUBAGENTS_COLLAPSED_STORAGE_KEY = "omp-web:composer-subagents-collapsed";
 
 function loadCollapsed(key: string, defaultExpanded: boolean): boolean {
@@ -242,15 +240,11 @@ function SubagentsPanel({
   subagents,
   onSelectSubagent,
   defaultExpanded = false,
-  liveStatus = null,
 }: {
   subagents: SubagentInfo[];
   onSelectSubagent: (subagent: SubagentInfo) => void;
   /** Initial expansion (default: collapsed — the header still shows the live summary). */
   defaultExpanded?: boolean;
-  /** Transient live-agent status merged into this header row when no todo
-   * row exists to host it (#245). See TodoList's liveStatus. */
-  liveStatus?: string | null;
 }) {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(() =>
@@ -409,41 +403,8 @@ function SubagentsPanel({
         <strong className="font-medium text-text">
           {t("chatWindow.subagentsPanel")}
         </strong>
-        {liveStatus ? (
-          <span
-            role="status"
-            aria-live="polite"
-            title={liveStatus}
-            style={{
-              flex: 1,
-              minWidth: 0,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              color: "var(--text-muted)",
-            }}
-          >
-            <span
-              aria-hidden
-              className="live-status-dot live-pulse inline-block h-2 w-2 shrink-0 rounded-full bg-accent"
-            />
-            <span
-              style={{
-                minWidth: 0,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {liveStatus}
-            </span>
-          </span>
-        ) : null}
         <span
-          className={`${liveStatus ? "" : "ml-auto "}inline-flex items-center gap-1.5`}
+          className="ml-auto inline-flex items-center gap-1.5"
           aria-label={t("chatWindow.subagentSummary", {
             running: runningCount,
             total: subagents.length,
@@ -471,7 +432,7 @@ function SubagentsPanel({
       {!collapsed && (
         <div
           className="grid grid-cols-1 gap-2 px-3 py-2.5 animate-slide-down"
-          style={{ maxHeight: "min(30vh, 240px)", overflowY: "auto" }}
+          style={{ overflowY: "auto" }}
         >
           {running.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
@@ -522,57 +483,42 @@ function SubagentsPanel({
   );
 }
 
-/** Session panels attached to the composer: the active side question (`/btw`),
- * live todo plan + running subagent roster. Each is independently collapsible
- * via its header row (`chevron`); todo/subagents start collapsed (headers
- * always show live progress / running-summary), a new side question starts
- * expanded. Rendered pinned above the chat input. */
-export function ComposerPanels({
+/** Activity for the selected session, rendered in the right panel. */
+export function ActivityPanel({
   todoPhases,
   subagents,
   onSelectSubagent,
-  btw = null,
-  defaultExpanded = false,
-  liveStatus = null,
 }: {
   todoPhases: TodoPhase[];
   subagents: SubagentInfo[];
   onSelectSubagent: (subagent: SubagentInfo) => void;
-  btw?: BtwPanelProps | null;
-  /** Initial expansion of both panels (default: collapsed). */
-  defaultExpanded?: boolean;
-  /** Transient live-agent status (the ChatInput status bar's text) to merge
-   * into an existing panel header row instead of mounting as its own line
-   * (#245). Hosted by the todo row when one exists, else by the subagent
-   * row; when neither exists the caller keeps the standalone bar so the
-   * status is never hidden. */
-  liveStatus?: string | null;
 }) {
-  const [todoCollapsed, setTodoCollapsed] = useState(() =>
-    loadCollapsed(TODO_COLLAPSED_STORAGE_KEY, defaultExpanded),
-  );
-  if (todoPhases.length === 0 && subagents.length === 0 && !btw) return null;
-  const todoHostsLiveStatus = todoPhases.length > 0;
+  const { t } = useI18n();
   return (
-    <div style={{ display: "grid", gap: 6, marginBottom: 8 }}>
-      {btw && <BtwPanel key={btw.record.id} {...btw} />}
-      <TodoList
-        phases={todoPhases}
-        liveStatus={todoHostsLiveStatus ? liveStatus : null}
-        collapsible
-        defaultExpanded={defaultExpanded}
-        collapsed={todoCollapsed}
-        onCollapsedChange={(collapsed) => {
-          saveCollapsed(TODO_COLLAPSED_STORAGE_KEY, collapsed);
-          setTodoCollapsed(collapsed);
-        }}
-      />
+    <div
+      style={{ display: "grid", gap: 8, padding: 12, alignContent: "start" }}
+    >
+      {todoPhases.length === 0 && subagents.length === 0 ? (
+        <span style={{ color: "var(--text-muted)", fontSize: 12 }}>
+          {t("tabBar.activityEmpty")}
+        </span>
+      ) : null}
+      <TodoList phases={todoPhases} />
       <SubagentsPanel
         subagents={subagents}
         onSelectSubagent={onSelectSubagent}
-        defaultExpanded={defaultExpanded}
-        liveStatus={todoHostsLiveStatus ? null : liveStatus}
+        defaultExpanded
       />
+    </div>
+  );
+}
+
+/** The active side question remains attached to the composer. */
+export function ComposerPanels({ btw = null }: { btw?: BtwPanelProps | null }) {
+  if (!btw) return null;
+  return (
+    <div style={{ display: "grid", gap: 6, marginBottom: 8 }}>
+      <BtwPanel key={btw.record.id} {...btw} />
     </div>
   );
 }

@@ -28,6 +28,11 @@ import type {
   UserMessage,
 } from "@/lib/types";
 import { normalizeToolCalls } from "@/lib/normalize";
+import {
+  IDLE_MODEL_ACTIVITY,
+  readModelActivity,
+  type ModelActivity,
+} from "@/lib/model-activity";
 import { hasVisibleAssistantContent } from "@/lib/assistant-response";
 import type { ThinkingModelMeta } from "@/lib/thinking-levels";
 import {
@@ -773,6 +778,28 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     null,
   );
   const [agentPhase, setAgentPhase] = useState<AgentPhase>(null);
+  const [modelActivity, setModelActivity] =
+    useState<ModelActivity>(IDLE_MODEL_ACTIVITY);
+  const activityVersionRef = useRef(-1);
+  const activityEpochRef = useRef(0);
+  const applyModelActivity = useCallback((value: unknown) => {
+    const activity = readModelActivity(value);
+    if (
+      !activity ||
+      activity.epoch < activityEpochRef.current ||
+      (activity.epoch === activityEpochRef.current &&
+        activity.version <= activityVersionRef.current)
+    )
+      return;
+    activityEpochRef.current = activity.epoch;
+    activityVersionRef.current = activity.version;
+    setModelActivity(activity);
+  }, []);
+  useEffect(() => {
+    activityVersionRef.current = -1;
+    activityEpochRef.current = 0;
+    setModelActivity(IDLE_MODEL_ACTIVITY);
+  }, [session?.id]);
   // In-flight tool executions, keyed by toolCallId: omp reports a tool's output
   // as it runs (`tool_execution_start` / `tool_execution_update` / `_end`), but
   // the matching `toolResult` message only lands when the tool finishes. Until
@@ -1861,6 +1888,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           }
 
           const liveState = agentState.state;
+          if (liveState?.modelActivity)
+            applyModelActivity(liveState.modelActivity);
+          else if (!agentState.running) setModelActivity(IDLE_MODEL_ACTIVITY);
           const modelApplied = applyAuthoritativeModel(
             toThinkingModelMeta(liveState?.model),
             token,
@@ -1932,6 +1962,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     },
     [
       catchUp,
+      applyModelActivity,
       refreshSubagentHistory,
       applyAuthoritativeModel,
       beginAuthoritativeModelSync,
@@ -3376,6 +3407,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         catchUp.invalidate();
         eventCoalescer.reset();
         agentRunningRef.current = false;
+        setModelActivity(IDLE_MODEL_ACTIVITY);
         setAgentRunning(false);
         setAgentPhase(null);
         clearLiveToolResults();
@@ -3523,6 +3555,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         )
           return;
         const state = data.state;
+        if (state?.modelActivity) applyModelActivity(state.modelActivity);
+        else if (!data.running) setModelActivity(IDLE_MODEL_ACTIVITY);
         if (!promptDispatchPendingRef.current && state?.responseObserved)
           runHadContentRef.current = true;
         // Manual compaction emits no completion event; native state releases
@@ -3577,6 +3611,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       }
     },
     [
+      applyModelActivity,
       applyNativeCompacting,
       applyQueueStateSnapshot,
       finishPromptWithoutStream,
@@ -3813,6 +3848,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
   const handleAgentEvent = useCallback(
     (event: AgentEvent) => {
+      if (event.type === "process_exit") setModelActivity(IDLE_MODEL_ACTIVITY);
       if (
         (event.type === "message_start" || event.type === "message_end") &&
         typeof event.clientMessageId === "string" &&
@@ -3828,6 +3864,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           return;
       }
       switch (event.type) {
+        case "model_activity":
+          applyModelActivity(event.activity);
+          break;
         case "session_history_changed": {
           const sid = sessionIdRef.current;
           if (!sid || !hookAliveRef.current) break;
@@ -3940,6 +3979,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
             interruptReplyPendingRef.current = false;
             break;
           }
+          setModelActivity(IDLE_MODEL_ACTIVITY);
           runsEndedRef.current += 1;
           clearTerminalReconcileTimer();
           catchUp.invalidate();
@@ -4118,6 +4158,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           );
           break;
         case "prompt_error": {
+          setModelActivity(IDLE_MODEL_ACTIVITY);
           const promptMsg =
             readAgentError(event.errorMessage) ??
             readAgentError(event.error) ??
@@ -4787,6 +4828,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       }
     },
     [
+      applyModelActivity,
       addNotice,
       addUnconfirmedRunErrorNotice,
       catchUp,
@@ -5235,6 +5277,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           catchUp.invalidate();
           eventCoalescer.reset();
           agentRunningRef.current = false;
+          setModelActivity(IDLE_MODEL_ACTIVITY);
           setAgentRunning(false);
           setAgentPhase(null);
           clearLiveToolResults();
@@ -5281,6 +5324,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         // The composer owns refused-send recovery (text, file contents and images)
         // using the draft key captured at submission, including after navigation.
         agentRunningRef.current = false;
+        setModelActivity(IDLE_MODEL_ACTIVITY);
         catchUp.invalidate();
         eventCoalescer.reset();
         setAgentRunning(false);
@@ -7331,6 +7375,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     showPreCompactionHistory,
     streamState,
     agentRunning,
+    modelActivity,
     modelNames,
     modelList,
     modelsLoading,

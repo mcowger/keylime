@@ -41,6 +41,7 @@ import {
   Paperclip,
 } from "lucide-react";
 import { MarkdownBody } from "./MarkdownBody";
+import { ThinkingMarkdown } from "./ThinkingMarkdown";
 import { WorkspaceFileContext } from "@/lib/workspace-file-context";
 import { AgentLinkContext, agentLinkIds } from "../lib/agent-links";
 import { MessageCopyActions } from "./MessageCopyActions";
@@ -1842,9 +1843,15 @@ const ThinkingBlock = memo(
               <div
                 className={`thinking-output${error ? " thinking-output-error" : ""}`}
               >
-                {loading
-                  ? t("messageView.loadingThinking")
-                  : (error ?? (block.deferred ? content : block.thinking))}
+                {loading ? (
+                  t("messageView.loadingThinking")
+                ) : error ? (
+                  error
+                ) : (
+                  <ThinkingMarkdown>
+                    {(block.deferred ? content : block.thinking) ?? ""}
+                  </ThinkingMarkdown>
+                )}
               </div>
             </div>
           )}

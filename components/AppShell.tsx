@@ -1341,6 +1341,8 @@ export function AppShell({ appName }: { appName: string }) {
   }, [isCompactOverlay]);
   const [rightPanelHasOpened, setRightPanelHasOpened] = useState(false);
   const [rightView, setRightView] = useState<RightPanelView>("explorer");
+  const [activityContainer, setActivityContainer] =
+    useState<HTMLDivElement | null>(null);
   const connectionDiagnosticsOn = useConnectionDiagnosticsEnabled();
   // The Connection tab exists only while its setting is on; a selected one falls back to Explorer.
   useEffect(() => {
@@ -3626,6 +3628,7 @@ export function AppShell({ appName }: { appName: string }) {
                     <ChatWindow
                       key={sessionKey}
                       session={selectedSession}
+                      activityContainer={activityContainer}
                       newSessionCwd={effectiveNewSessionCwd}
                       newSessionHostId={newSessionHost}
                       newSessionCreationId={newSessionCreationId}
@@ -4046,6 +4049,7 @@ export function AppShell({ appName }: { appName: string }) {
           )}
           {!settingsTab && rightPanelHasOpened && (
             <RightPanel
+              onActivityContainerChange={setActivityContainer}
               fileTabs={fileTabs}
               activeFileTabId={activeFileTabId}
               rightView={rightView}

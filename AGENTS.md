@@ -271,7 +271,7 @@ components/
   SessionSidebar.tsx  session tree + FileExplorer; with a linked host the workspaces group per host (`HostGroup`), keyed by `hostProjectKey` (`lib/project-ordering.ts`: bare path on this machine, `<hostId>:<path>` elsewhere)
   ChatWindow.tsx      chat composition + completion sound wrapper
   ChatInput.tsx       input bar + model/thinking/tools/compact controls
-  ComposerPanels.tsx  composer-attached /btw + todo + subagent panels (collapsible, live states)
+  ComposerPanels.tsx  composer /btw panel, right-side ActivityPanel (todo + subagents), context detail
   BtwPanel.tsx        /btw side-question panel (stream, cancel, copy, follow-up) + history dialog
   SessionSearchMatches.tsx  a search result's hits under its sidebar row (10 at a time + "Load more…")
   TodoList.tsx        todo phase grid with preview/show-all (used by ComposerPanels)
@@ -1080,6 +1080,21 @@ wait for that commit:
 - While the preference is on, thinking never folds into **Process details**:
   a streamed block mounts expanded, and folding it when the step commits would
   hide it in a closed row, which reads as the block collapsing on its own.
+- `ThinkingMarkdown` renders paragraphs, emphasis, lists, inline code and fenced
+  code at a uniform font size. Unsupported syntax stays literal, including
+  headings, tables, images and math; diagram fences remain code. It does not use
+  the chat's rich Markdown renderers or fetch external images. Streaming and
+  deferred historical thinking share this renderer.
+
+### Model activity indicator
+
+- The composer context control shows Idle, elapsed model-request wait, estimated
+  output tokens/second, or Running tools. Queue and composer submission time are
+  not model latency. Each main-agent model request starts a fresh wait timer.
+- The runner tracks actual stream-function calls and emits `model_activity`;
+  state snapshots restore it on reconnect. Output rate uses a short rolling
+  window of streamed text, thinking and tool-call arguments, estimated at four
+  characters/token. Subagent output is excluded. The tooltip explains the estimate.
 
 ### Tool-result images (`lib/media-cache.ts`, `/api/media/[hash]`)
 
@@ -1502,18 +1517,16 @@ dir>/omp-web/transport-metrics.jsonl` (`.jsonl.1` above 20 MiB). One worker-wide
 - `useAgentSession` still treats its `session` channel as primary for chat events, but while a run is active it periodically calls `GET /api/agent/[id]` and also reconciles on `visibilitychange`/`online`. This fixes missed `agent_end` events from background tabs or half-open connections.
 - Prompt runs use a monotonic run id; late SSE or slow reconciliation responses from an old run must be ignored so they cannot resurrect stale streaming bubbles.
 
-### Composer-attached panels (`components/ComposerPanels.tsx`)
+### Session Activity tab (`components/ComposerPanels.tsx`)
 
-- The live todo plan (`TodoList`) and the subagent roster live **pinned above
-  the chat input**, not inside the scrollable message list. `ComposerPanels`
-  renders both, each independently collapsible via its header row (`chevron`);
-  panels start collapsed (headers always show live progress / running-summary).
-  Non-running chips (terminal or history) nest under a `Completed (N)` toggle
-  inside the roster, collapsed on every mount (not persisted).
-  Subagent chips carry live state (pulsing dot while `started`, check/alert/ban
-  for terminal states) fed by the same `subagent_lifecycle`/`subagent_progress`
-  SSE frames; clicking a chip opens the transcript dialog. `TodoList` keeps a
-  non-collapsible default (`collapsible` prop) for SSR tests.
+- Todo and subagents live in the right sidepanel's Activity tab on desktop and
+  mobile, not above the composer. Opening a session does not open the sidepanel.
+- `ChatWindow` portals `ActivityPanel` into the container supplied by `RightPanel`
+  through `AppShell`, using the existing session hook. Closing the panel does not
+  stop live updates or create another session observer. Session changes unmount
+  the previous session's portal and transcript selection.
+- Preserve todo phases, task progress, live subagent telemetry, completed-agent
+  access, and chip-to-transcript opening. `/btw` stays attached to the composer.
 
 ### Side questions (`/btw`, `lib/btw.ts`, `hooks/useBtw.ts`, `components/BtwPanel.tsx`)
 
@@ -1576,7 +1589,7 @@ btw` → localized "requires a newer omp" toast (`toastBtwError`); background
   artifacts dir (`<session-dir>/<subagent-id>.jsonl`) and the parent file's
   task toolResults keep `progress[]`/`results[]` snapshots. omp-web recovers
   the roster from disk (`extractSubagentHistory`, result fields win over the
-  mid-run snapshot), so past/finished runs show in the composer panel after a
+  mid-run snapshot), so past/finished runs show in the Activity tab after a
   reload. The transcript route pages the sibling file byte-wise (mirroring
   `get_subagent_messages`, which is registry-gated and refuses files it
   doesn't know). The dialog reads only the final output — `<id>.md` via

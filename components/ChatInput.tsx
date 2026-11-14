@@ -12,6 +12,7 @@ import React, {
   KeyboardEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import type { ModelActivity } from "@/lib/model-activity";
 import {
   ChevronDown,
   ClipboardPaste,
@@ -359,6 +360,7 @@ interface Props {
   advisorModel?: { name: string; reasoning: string | null } | null;
   /** Compact the session context from the session information panel. */
   onCompact?: () => void;
+  modelActivity?: ModelActivity;
   /** Live context totals feeding the session information ring. */
   contextUsage?: {
     percent: number | null;
@@ -554,6 +556,7 @@ export const ChatInput = memo(
       advisorModel,
       onCompact,
       contextUsage,
+      modelActivity,
       sessionStats,
       sessionInfoContainer,
       modelCapacity,
@@ -576,6 +579,13 @@ export const ChatInput = memo(
     ref,
   ) {
     const isMobile = useIsMobile();
+    const [activityNow, setActivityNow] = useState(Date.now());
+    useEffect(() => {
+      if (modelActivity?.kind !== "waiting") return;
+      setActivityNow(Date.now());
+      const timer = setInterval(() => setActivityNow(Date.now()), 100);
+      return () => clearInterval(timer);
+    }, [modelActivity?.kind, modelActivity?.startedAt]);
     // Read per render so a Settings change applies on the next keystroke.
     const wordCompletionOn = isWordCompletionEnabled();
     const wordPrediction = useWordPrediction(
@@ -621,6 +631,14 @@ export const ChatInput = memo(
       [],
     );
     const { t, tn, locale } = useI18n();
+    const activityLabel =
+      modelActivity?.kind === "waiting"
+        ? `${(Math.max(0, activityNow - modelActivity.startedAt) / 1000).toFixed(1)}s`
+        : modelActivity?.kind === "streaming"
+          ? `${Math.round(modelActivity.rate)} tk/s`
+          : modelActivity?.kind === "tools"
+            ? t("modelActivity.runningTools")
+            : t("modelActivity.idle");
     const usageLimitLabel = usageLimit
       ? formatUsageLimitLabel(usageLimit, t)
       : undefined;
@@ -5707,8 +5725,24 @@ export const ChatInput = memo(
                   createPortal(
                     <div
                       ref={contextWrapRef}
-                      style={{ position: "relative", flexShrink: 0 }}
+                      style={{
+                        position: "relative",
+                        flexShrink: 0,
+                        display: "flex",
+                        alignItems: "center",
+                      }}
                     >
+                      <span
+                        title={t("modelActivity.estimateTooltip")}
+                        style={{
+                          whiteSpace: "nowrap",
+                          color: "var(--text-muted)",
+                          fontSize: 11,
+                          marginRight: 4,
+                        }}
+                      >
+                        {activityLabel}
+                      </span>
                       <button
                         type="button"
                         onClick={() => setContextOpen((open) => !open)}

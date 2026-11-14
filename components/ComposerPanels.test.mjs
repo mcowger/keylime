@@ -3,26 +3,17 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-const { ComposerPanels } = await import("./ComposerPanels.tsx");
+const { ActivityPanel, ComposerPanels } = await import("./ComposerPanels.tsx");
 
 const noop = () => {};
 
-test("renders nothing when there are no tasks or subagents", () => {
-  assert.equal(
-    renderToStaticMarkup(
-      React.createElement(ComposerPanels, {
-        todoPhases: [],
-        subagents: [],
-        onSelectSubagent: noop,
-      }),
-    ),
-    "",
-  );
+test("composer renders nothing without a side question", () => {
+  assert.equal(renderToStaticMarkup(React.createElement(ComposerPanels)), "");
 });
 
 test("attaches todo plan and subagent roster with live states", () => {
   const html = renderToStaticMarkup(
-    React.createElement(ComposerPanels, {
+    React.createElement(ActivityPanel, {
       todoPhases: [
         {
           name: "Implementation",
@@ -46,7 +37,6 @@ test("attaches todo plan and subagent roster with live states", () => {
         },
       ],
       onSelectSubagent: noop,
-      defaultExpanded: true,
     }),
   );
 
@@ -61,42 +51,9 @@ test("attaches todo plan and subagent roster with live states", () => {
   assert.doesNotMatch(html, />1 running · 2 total</);
 });
 
-test("panels start collapsed with live summary in their headers", () => {
-  const html = renderToStaticMarkup(
-    React.createElement(ComposerPanels, {
-      todoPhases: [
-        {
-          name: "Implementation",
-          tasks: [{ content: "Wire panels", status: "in_progress" }],
-        },
-      ],
-      subagents: [
-        {
-          id: "s1",
-          agent: "scout",
-          status: "started",
-          task: "Map the surface",
-          index: 0,
-        },
-      ],
-      onSelectSubagent: noop,
-    }),
-  );
-  // Headers (with live counts) are visible...
-  assert.match(html, /Tasks/);
-  assert.match(html, /0\/1 complete/);
-  assert.match(html, /Subagents/);
-  assert.match(html, /aria-label="1 running · 1 total"/);
-  assert.doesNotMatch(html, />1 running · 1 total</);
-  // ...but both panels start collapsed: toggle headers only, no content.
-  assert.match(html, /aria-expanded="false"/);
-  assert.doesNotMatch(html, /Wire panels/);
-  assert.doesNotMatch(html, /Map the surface/);
-});
-
 test("live chips show current tool, telemetry, and async marker", () => {
   const html = renderToStaticMarkup(
-    React.createElement(ComposerPanels, {
+    React.createElement(ActivityPanel, {
       todoPhases: [],
       subagents: [
         {
@@ -118,7 +75,6 @@ test("live chips show current tool, telemetry, and async marker", () => {
         },
       ],
       onSelectSubagent: noop,
-      defaultExpanded: true,
     }),
   );
 
@@ -134,7 +90,7 @@ test("live chips show current tool, telemetry, and async marker", () => {
 
 test("retrying chips surface retry state instead of the activity line", () => {
   const html = renderToStaticMarkup(
-    React.createElement(ComposerPanels, {
+    React.createElement(ActivityPanel, {
       todoPhases: [],
       subagents: [
         {
@@ -155,16 +111,15 @@ test("retrying chips surface retry state instead of the activity line", () => {
         },
       ],
       onSelectSubagent: noop,
-      defaultExpanded: true,
     }),
   );
   assert.match(html, /data-subagent-metric="retrying 2\/5"/);
   assert.doesNotMatch(html, />retrying 2\/5</);
 });
 
-test("coexists with composer layout and keeps todo progress summary accessible", () => {
+test("activity keeps todo progress summary accessible", () => {
   const html = renderToStaticMarkup(
-    React.createElement(ComposerPanels, {
+    React.createElement(ActivityPanel, {
       todoPhases: [
         {
           name: "Implementation",
@@ -184,7 +139,7 @@ test("coexists with composer layout and keeps todo progress summary accessible",
 
 test("history chips render terminal telemetry without pulsing state", () => {
   const html = renderToStaticMarkup(
-    React.createElement(ComposerPanels, {
+    React.createElement(ActivityPanel, {
       todoPhases: [],
       subagents: [
         {
@@ -204,7 +159,6 @@ test("history chips render terminal telemetry without pulsing state", () => {
         },
       ],
       onSelectSubagent: noop,
-      defaultExpanded: true,
     }),
   );
   assert.match(html, /Map the surface/);
@@ -216,7 +170,7 @@ test("history chips render terminal telemetry without pulsing state", () => {
 
 test("chips show agent source, nested count, and async marker", () => {
   const html = renderToStaticMarkup(
-    React.createElement(ComposerPanels, {
+    React.createElement(ActivityPanel, {
       todoPhases: [],
       subagents: [
         {
@@ -239,7 +193,6 @@ test("chips show agent source, nested count, and async marker", () => {
         },
       ],
       onSelectSubagent: noop,
-      defaultExpanded: true,
     }),
   );
   assert.match(html, /Inspect foo\.ts/);
@@ -250,7 +203,7 @@ test("chips show agent source, nested count, and async marker", () => {
 
 test("history chips mark detached async spawns", () => {
   const html = renderToStaticMarkup(
-    React.createElement(ComposerPanels, {
+    React.createElement(ActivityPanel, {
       todoPhases: [],
       subagents: [
         {
@@ -264,7 +217,6 @@ test("history chips mark detached async spawns", () => {
         },
       ],
       onSelectSubagent: noop,
-      defaultExpanded: true,
     }),
   );
   assert.match(html, /⤴/);
@@ -272,7 +224,7 @@ test("history chips mark detached async spawns", () => {
 
 test("zero context tokens never print a null gauge", () => {
   const html = renderToStaticMarkup(
-    React.createElement(ComposerPanels, {
+    React.createElement(ActivityPanel, {
       todoPhases: [],
       subagents: [
         {
@@ -289,66 +241,10 @@ test("zero context tokens never print a null gauge", () => {
         },
       ],
       onSelectSubagent: noop,
-      defaultExpanded: true,
     }),
   );
   assert.doesNotMatch(html, /null/);
   assert.match(html, /read/);
-});
-
-test("completed subagents nest under a collapsed Completed group", () => {
-  // Roster expanded from storage, as after a user opened it; the completed
-  // group itself must still start collapsed.
-  globalThis.window = {
-    localStorage: { getItem: () => "false", setItem: () => {} },
-  };
-  try {
-    const html = renderToStaticMarkup(
-      React.createElement(ComposerPanels, {
-        todoPhases: [],
-        subagents: [
-          {
-            id: "s1",
-            agent: "scout",
-            status: "started",
-            task: "Map the surface",
-            index: 0,
-          },
-          {
-            id: "s2",
-            agent: "worker",
-            status: "completed",
-            task: "Write the code",
-            index: 1,
-          },
-          {
-            id: "s3",
-            agent: "worker",
-            status: "failed",
-            task: "Break the build",
-            index: 2,
-          },
-          {
-            id: "s4",
-            agent: "scout",
-            status: "started",
-            task: "Old snapshot",
-            index: 3,
-            source: "history",
-          },
-        ],
-        onSelectSubagent: noop,
-      }),
-    );
-    assert.match(html, /Map the surface/);
-    assert.match(html, /Completed \(3\)/);
-    assert.match(html, /aria-expanded="false"/);
-    assert.doesNotMatch(html, /Write the code/);
-    assert.doesNotMatch(html, /Break the build/);
-    assert.doesNotMatch(html, /Old snapshot/);
-  } finally {
-    delete globalThis.window;
-  }
 });
 
 test("a side question keeps Copy for the earlier answer when its follow-up ended without text", () => {
@@ -372,9 +268,6 @@ test("a side question keeps Copy for the earlier answer when its follow-up ended
   };
   const html = renderToStaticMarkup(
     React.createElement(ComposerPanels, {
-      todoPhases: [],
-      subagents: [],
-      onSelectSubagent: noop,
       btw: {
         record,
         onCancel: noop,
@@ -386,71 +279,4 @@ test("a side question keeps Copy for the earlier answer when its follow-up ended
   assert.match(html, /It is 4\./);
   assert.match(html, /Cancelled/);
   assert.match(html, />Copy answer</);
-});
-
-test("merges live status into the todo header row when tasks exist (#245)", () => {
-  const html = renderToStaticMarkup(
-    React.createElement(ComposerPanels, {
-      todoPhases: [
-        {
-          name: "Implementation",
-          tasks: [{ content: "Wire panels", status: "in_progress" }],
-        },
-      ],
-      subagents: [
-        {
-          id: "s1",
-          agent: "scout",
-          status: "started",
-          task: "Map the surface",
-          index: 0,
-        },
-      ],
-      onSelectSubagent: noop,
-      liveStatus: "Waiting for model...",
-    }),
-  );
-  // Hosted exactly once: by the todo row, not duplicated in the subagent row.
-  // (The string itself appears twice in markup — text plus title — so count
-  // the role="status" host elements instead.)
-  assert.equal((html.match(/role="status"/g) || []).length, 1);
-  assert.match(html, /Tasks/);
-});
-
-test("merges live status into the subagent header row when no tasks exist (#245)", () => {
-  const html = renderToStaticMarkup(
-    React.createElement(ComposerPanels, {
-      todoPhases: [],
-      subagents: [
-        {
-          id: "s1",
-          agent: "scout",
-          status: "started",
-          task: "Map the surface",
-          index: 0,
-        },
-      ],
-      onSelectSubagent: noop,
-      liveStatus: "Waiting for model...",
-    }),
-  );
-  assert.match(html, /Waiting for model\.\.\./);
-  assert.match(html, /Subagents/);
-});
-
-test("keeps panels unchanged when no live status is present (#245)", () => {
-  const html = renderToStaticMarkup(
-    React.createElement(ComposerPanels, {
-      todoPhases: [
-        {
-          name: "Implementation",
-          tasks: [{ content: "Wire panels", status: "in_progress" }],
-        },
-      ],
-      subagents: [],
-      onSelectSubagent: noop,
-    }),
-  );
-  assert.match(html, /Tasks/);
-  assert.doesNotMatch(html, /Waiting for model/);
 });

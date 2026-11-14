@@ -1,4 +1,9 @@
 {
+  "tabBar.activity": "Activity",
+  "tabBar.activityEmpty": "No activity yet",
+  "modelActivity.idle": "Idle",
+  "modelActivity.runningTools": "Running tools",
+  "modelActivity.estimateTooltip": "Estimated tokens per second over a short rolling window of the main assistant's streamed output, including thinking and tool-call arguments. Uses roughly four characters per token; excludes subagents. Actual token counts may differ.",
   "login.title": "Welcome back",
   "login.description": "Enter the password for this omp web workspace.",
   "login.password": "Password",

@@ -37,10 +37,17 @@ import { getFileName } from "@/lib/file-paths";
 import type { WorkspaceFileSource } from "@/lib/workspace-types";
 
 export type RightPanelView =
-  "explorer" | "git" | "notifications" | "worktrees" | "connection" | "file";
+  | "explorer"
+  | "git"
+  | "notifications"
+  | "worktrees"
+  | "connection"
+  | "file"
+  | "activity";
 
 interface Props {
   fileTabs: Tab[];
+  onActivityContainerChange: (container: HTMLDivElement | null) => void;
   activeFileTabId: string | null;
   rightView: RightPanelView;
   onSelectView: (view: RightPanelView) => void;
@@ -105,6 +112,7 @@ interface Props {
 // (all callbacks are useCallback-stable in AppShell for the same reason).
 export const RightPanel = memo(function RightPanel({
   fileTabs,
+  onActivityContainerChange,
   activeFileTabId,
   rightView,
   onSelectView,
@@ -281,6 +289,8 @@ export const RightPanel = memo(function RightPanel({
               notificationsBadge={unreadNotifications}
               worktreesSelected={rightView === "worktrees"}
               onSelectWorktrees={() => onSelectView("worktrees")}
+              activitySelected={rightView === "activity"}
+              onSelectActivity={() => onSelectView("activity")}
               connectionSelected={rightView === "connection"}
               onSelectConnection={
                 connectionDiagnosticsOn
@@ -964,6 +974,19 @@ export const RightPanel = memo(function RightPanel({
               ctx={worktrees}
             />
           )}
+        </div>
+        <div
+          id="workspace-file-panel-activity"
+          role="tabpanel"
+          aria-label={t("tabBar.activity")}
+          style={{
+            display: rightView === "activity" ? "block" : "none",
+            flex: 1,
+            minHeight: 0,
+            overflow: "auto",
+          }}
+        >
+          <div ref={onActivityContainerChange} />
         </div>
         {connectionDiagnosticsOn && (
           <div

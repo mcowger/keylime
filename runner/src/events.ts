@@ -35,6 +35,7 @@ import { buildAvailableSlashCommands } from "@oh-my-pi/pi-coding-agent/slash-com
 import { logger } from "@oh-my-pi/pi-utils";
 import type { CommandContext, CommandTable } from "./commands/types";
 import { onClientQueueChange, stampClientMessageId } from "./correlation";
+import { resetActivity, trackActivity } from "./activity";
 
 type MessageUpdates = "full" | "delta";
 
@@ -284,6 +285,9 @@ export function subscribeHostEvents(
   bridges.set(session, { forwarder, settle, emitCommands });
 
   const unsubscribers = [
+    trackActivity(session, (activity) =>
+      event({ type: "model_activity", activity }),
+    ),
     session.subscribe((sessionEvent) => {
       // Synchronous: the stamp reads the live queues.
       forwarder.forward(stampClientMessageId(session, sessionEvent));
@@ -346,6 +350,7 @@ export function checkSettled(session: AgentSession): void {
 
 /** After new/switch/branch/fork/open session: the detached run sends no terminal `agent_end`, and the command catalog may differ. */
 export async function afterSessionChange(session: AgentSession): Promise<void> {
+  resetActivity(session);
   const bridge = bridges.get(session);
   if (!bridge) return;
   void bridge.settle.check();

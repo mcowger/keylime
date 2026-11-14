@@ -44,6 +44,8 @@ interface Props {
   /** Pinned Worktrees tab rendered after Git. */
   worktreesSelected?: boolean;
   onSelectWorktrees?: () => void;
+  activitySelected?: boolean;
+  onSelectActivity?: () => void;
   /** Pinned Connection tab rendered last (connection diagnostics on). */
   connectionSelected?: boolean;
   onSelectConnection?: () => void;
@@ -176,6 +178,8 @@ export function TabBar({
   notificationsBadge = 0,
   worktreesSelected = false,
   onSelectWorktrees,
+  activitySelected = false,
+  onSelectActivity,
   connectionSelected = false,
   onSelectConnection,
 }: Props) {
@@ -187,6 +191,7 @@ export function TabBar({
     ...(onSelectExplorer ? ["explorer"] : []),
     ...(onSelectGit ? ["git"] : []),
     ...(onSelectWorktrees ? ["worktrees"] : []),
+    ...(onSelectActivity ? ["activity"] : []),
     ...(onSelectConnection ? ["connection"] : []),
     ...tabs.map((tab) => tab.id),
   ];
@@ -196,6 +201,7 @@ export function TabBar({
     else if (id === "git") onSelectGit?.();
     else if (id === "notifications") onSelectNotifications?.();
     else if (id === "worktrees") onSelectWorktrees?.();
+    else if (id === "activity") onSelectActivity?.();
     else if (id === "connection") onSelectConnection?.();
     else {
       const tab = tabs.find((item) => item.id === id);
@@ -344,6 +350,20 @@ export function TabBar({
           badge={0}
           badgeColor="var(--accent)"
           onSelect={onSelectWorktrees}
+          onKeyDown={handleTabKeyDown}
+        />
+      )}
+      {onSelectActivity && (
+        <PinnedTab
+          id="activity"
+          panelId="workspace-file-panel-activity"
+          label={t("tabBar.activity")}
+          title={t("tabBar.activity")}
+          icon={<Activity size={13} strokeWidth={2} aria-hidden="true" />}
+          selected={activitySelected}
+          badge={0}
+          badgeColor="var(--accent)"
+          onSelect={onSelectActivity}
           onKeyDown={handleTabKeyDown}
         />
       )}

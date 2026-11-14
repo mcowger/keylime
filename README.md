@@ -728,7 +728,7 @@ inactivity or on sleep, SSH key passphrases and signing fail until you restart i
 - **Queue Deletion Confirmation**: Preview and confirm before cancelling queued follow-ups or steered messages in OMP. Requires native `remove_queued_message` support; already-delivered messages cannot be recalled.
 - **Session Management**: Browse past conversations by project, fork sessions, branch within a session, archive/restore, import session files, and deep-link via URL.
 - **Draft Recovery**: Unsent text stays scoped to its conversation or new-session workspace and is restored after Back/Forward navigation or reload in the same tab when browser storage is available (up to 50 drafts). Images and file attachments remain in memory only.
-- **Live Plans & Subagents**: Collapsible panels pinned above the composer track live todo phases and running subagents (status, tool, retries, tokens/cost, nested tasks) with transcript dialogs and history recovery.
+- **Live Plans & Subagents**: The right sidepanel's Activity tab tracks live todo phases and running subagents (status, tool, retries, tokens/cost, nested tasks), with transcript dialogs and history recovery on desktop and mobile.
 - **Tool Preset Picker**: Choose the toolset for new sessions in the composer — `none` / `default` (`read,bash,edit,write`) / `full` (all tools including subagents). Persists to localStorage.
 - **File Explorer & Previews**: Browse workspaces side-by-side with chat; preview code, markdown, Mermaid, images, audio, PDFs, and diffs with allow-listed access.
 - **Git Worktree Support**: Create, import, and manage workspaces under host-bound projects; sessions are registered within each workspace.
