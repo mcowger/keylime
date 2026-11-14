@@ -165,6 +165,25 @@ export class ChannelTable {
   get spawnsInFlight(): number {
     return this.spawningCount;
   }
+  get hasBusyChannels(): boolean {
+    if (this.spawningCount > 0 || this.mutating.size > 0) return true;
+    for (const channel of this.channels.values())
+      if (
+        !channel.lifecycle?.isIdle ||
+        channel.editor !== undefined ||
+        channel.commands.size > 0 ||
+        channel.internal.size > 0 ||
+        channel.resuming ||
+        channel.replacing ||
+        channel.sessionMovePending
+      )
+        return true;
+    return false;
+  }
+  stopForMaintenance(reason: "idle" | "asked"): void {
+    for (const channel of this.channels.values())
+      this.stopChannel(channel, reason);
+  }
   get activeTurns(): number {
     let active = 0;
     for (const channel of this.channels.values())
@@ -1065,7 +1084,7 @@ export class ChannelTable {
     return channel;
   }
 
-  stdin(link: DaemonLink, ch: string, line: string): void {
+  stdin(link: DaemonLink, ch: string, line: string, drained = false): void {
     const channel = this.member(link, ch);
     const frame = parseWire(line);
     if (!frame) throw invalid("Invalid channel frame");
@@ -1093,6 +1112,11 @@ export class ChannelTable {
           true,
         );
     };
+    if (drained)
+      return refuse(
+        "host_drained",
+        "This host is locally drained for maintenance",
+      );
     if (channel.replacing)
       return refuse(
         "session_restarting",

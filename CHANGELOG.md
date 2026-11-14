@@ -16,6 +16,8 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Fixed
 
+- Deployment closes confirmed-idle sessions, gives active work a 60-second grace period, then forces cutover and terminates remaining runs instead of waiting indefinitely.
+- Deployment runs in an independent, snapshotted worker with durable phase tracking and exclusive process-owned locking, so stopping its submitting agent cannot interrupt cutover. `--status` and `--recover` expose progress and interrupted-worker recovery.
 - Removed the composer's Slow button and snail icon. Native `/slow` commands and provider usage-limit warnings remain available.
 - Model activity stays visible in the mobile composer instead of moving into the header. A fixed-width readout prevents layout shifts, and tool execution uses the shorter `Tools…` label.
 - Workspace creation defaults its base ref to the repository default branch. Creation-command settings live in Settings → Hosts and Settings → Projects; project settings also edit registered project names.

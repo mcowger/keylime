@@ -439,10 +439,14 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   watcher.unref();
   watcher.on("error", (error) => log("host.json watch: " + reason(error)));
 
-  function busyReason(): string | null {
+  function busyReason(allowIdleChannels = false): string | null {
     if (workspaceCreationBusy())
       return "Wait for workspace creation/setup to finish.";
-    if (channels.size > 0 || channels.spawnsInFlight > 0)
+    if (
+      allowIdleChannels
+        ? channels.hasBusyChannels
+        : channels.size > 0 || channels.spawnsInFlight > 0
+    )
       return "Close this host's sessions before updating its daemon; sessions and subagents must not be interrupted.";
     if (uploads.busy() || uploadRetention.busy())
       return "Wait for this host's active uploads and control writes to finish.";
@@ -458,10 +462,16 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     return null;
   }
   function control(command: HostControlCommand): HostControlStatus {
-    if (command === "drain" && !drained) {
+    if (command === "drain-force") {
       if (stopped)
         throw new HostOpError(503, "host_stopping", "This host is stopping");
-      const busy = busyReason();
+      drained = true;
+      uploadRetention.stop();
+      channels.stopForMaintenance("asked");
+    } else if ((command === "drain" || command === "drain-idle") && !drained) {
+      if (stopped)
+        throw new HostOpError(503, "host_stopping", "This host is stopping");
+      const busy = busyReason(command === "drain-idle");
       if (busy) throw new HostOpError(409, "host_busy", busy);
       if (
         nativeUpdatesInFlight > 0 ||
@@ -474,6 +484,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         );
       drained = true;
       uploadRetention.stop();
+      if (command === "drain-idle") channels.stopForMaintenance("idle");
     } else if (command === "resume") {
       const wasDrained = drained;
       drained = false;
@@ -722,7 +733,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     try {
       switch (message.type) {
         case "stdin":
-          channels.stdin(link, message.ch, message.line);
+          channels.stdin(link, message.ch, message.line, drained);
           return;
         case "kill":
           channels.kill(link, message.ch, message.force);

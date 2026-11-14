@@ -14,7 +14,8 @@ import { createConnection, createServer, type Server } from "node:net";
 import { basename, dirname, join, resolve } from "node:path";
 import { getAgentDir } from "../omp/paths";
 
-export type HostControlCommand = "status" | "drain" | "resume";
+export type HostControlCommand =
+  "status" | "drain" | "drain-idle" | "drain-force" | "resume";
 export interface HostControlStatus {
   pid: number;
   version: string;
@@ -27,7 +28,11 @@ export interface HostControlStatus {
 const MAX_MESSAGE = 4096;
 const errno = (error: unknown) => (error as NodeJS.ErrnoException)?.code;
 const command = (value: unknown): value is HostControlCommand =>
-  value === "status" || value === "drain" || value === "resume";
+  value === "status" ||
+  value === "drain" ||
+  value === "drain-idle" ||
+  value === "drain-force" ||
+  value === "resume";
 
 /** Resolve existing prefixes so /var and /private/var name the same agent, even before it is created. */
 function canonical(path: string): string {

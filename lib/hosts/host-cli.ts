@@ -12,7 +12,7 @@ import {
 } from "./host-login";
 
 const USAGE =
-  "Usage: ompweb host login [--add] --url <server url>   (the host token is read from stdin)\n       ompweb host logout --url <server url>\n       ompweb host [--allow-http]\n       ompweb host status|drain|resume";
+  "Usage: ompweb host login [--add] --url <server url>   (the host token is read from stdin)\n       ompweb host logout --url <server url>\n       ompweb host [--allow-http]\n       ompweb host status|drain|drain-idle|drain-force|resume";
 
 /** A host token is 43 characters; anything this long is not one. */
 const MAX_TOKEN_LINE_BYTES = 4096;
@@ -72,7 +72,11 @@ async function main(argv: string[]): Promise<number> {
   }
   if (
     argv.length === 1 &&
-    (argv[0] === "status" || argv[0] === "drain" || argv[0] === "resume")
+    (argv[0] === "status" ||
+      argv[0] === "drain" ||
+      argv[0] === "drain-idle" ||
+      argv[0] === "drain-force" ||
+      argv[0] === "resume")
   ) {
     // Local controls never load or start a second daemon.
     console.log(JSON.stringify(await requestHostControl(argv[0])));

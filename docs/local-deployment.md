@@ -16,20 +16,28 @@ mise exec -- bun run deploy:local
 On this Mac, `keylime-deploy` runs that command from the checkout from any directory.
 Use `keylime-deploy --activate <release-directory> --wait` for a staged release.
 
+`keylime-deploy` returns after the independent worker accepts the job. Check
+`keylime-deploy --status` for the durable phase, result, candidate, and log path.
+The launcher bundles a private snapshot of the worker before submission, so
+editing or updating the checkout cannot change an in-flight transaction.
+
 The command exports committed HEAD into a private build directory, installs the
 pinned dependencies, builds the runner and production binary, then smoke-tests
 that installed candidate with isolated data. It never serves this working tree.
 Verified releases stay in `~/.local/share/keylime/releases/`.
 
-Activation requires the production host to own no session processes. An idle but
-still-open agent process counts as occupied too. If occupied, the command prints
-an activation command and exits 2 without stopping services. Close idle sessions
-or let their processes expire, then run the printed command. Add `--wait` to
-wait for the host to become empty. Run a waiting activation in a separate terminal,
-not inside a session it is waiting to end.
+Activation gives active runs and protected host work up to 60 seconds to finish.
+Confirmed-idle session processes close automatically. At the deadline deployment
+continues forcibly: remaining active runs and host operations are terminated.
+Deployment runs in a detached worker with file-backed logs, outside the agent's
+process group. Closing the terminal or terminating the submitting session cannot
+interrupt it. `--wait` only observes that worker; it does not own deployment.
 
-Before switching, it stops web admission, checks the host again, stops the empty
-host, and saves the agent directory plus service/tool config under
+Older daemons without maintenance controls use the full 60-second grace period,
+then the web service and host process group are stopped for the initial upgrade.
+
+Before switching, the command stops web admission and the host,
+and saves the agent directory plus service/tool config under
 `~/.local/share/keylime/backups/`. The directory symlink switches atomically;
 web and host restart as separate production processes. Other host daemons using
 the same agent directory must be stopped separately before cutover.
@@ -57,6 +65,11 @@ release check.
 
 Inspect services with `pitchfork status global/ompweb --json` and
 `pitchfork status global/ompweb-host --json`; inspect logs with `pitchfork logs`.
-An interrupted deploy may leave `~/.local/share/keylime/deploy.lock`. Verify no
-deploy is still running before removing that directory. Builds and backups are
-retained deliberately; review disk use and remove old ones manually.
+The worker holds a kernel-owned SQLite writer lock; concurrent deployments are
+refused and process death releases ownership without stale PID/time expiry.
+Each phase is recorded atomically with fsync before its service mutation.
+If a worker itself crashes, inspect `--status` and its log, then run
+`keylime-deploy --recover --wait` to start both services at the selected release.
+New deployments refuse an unfinished transaction until explicit recovery.
+This is a recoverable service transaction, not zero-downtime or a power-loss
+atomicity guarantee. Builds and backups remain for manual disk management.

@@ -69,10 +69,12 @@ The launcher is `scripts/dev-isolated.ts`; see `CONTRIBUTING.md` for usage.
 ### Local production deployment
 
 `bun run deploy:local` (or this Mac's `keylime-deploy`) builds committed HEAD in
-a separate directory, smoke-tests a versioned binary release, then switches
-Pitchfork's web and host services only when the host owns no session processes.
-An occupied host leaves the candidate staged and prints an activation command;
-`--activate <release-directory> --wait` waits for a quiet window.
+a separate directory and smoke-tests a versioned binary release. Activation waits
+at most 60 seconds for active work, then forces cutover, terminating remaining
+runs. Idle sessions close automatically. A detached, snapshotted worker owns
+deployment independently of the invoking terminal/session. `--wait` only observes;
+`--status` reads durable phases and `--recover` repairs interrupted service starts.
+SQLite provides exclusive process-owned deployment locking, never PID/time expiry.
 Production stays on port 8080 with its existing authentication and agent directory.
 Mise and both services follow `~/.local/share/keylime/current`; in-app updates are
 disabled. Every activation backs up the agent directory before switching. See
