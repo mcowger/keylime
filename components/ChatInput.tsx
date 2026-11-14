@@ -159,7 +159,7 @@ import {
   type SlashQueryMatch,
 } from "@/lib/slash-autocomplete";
 import { FolderIcon, getFileIcon } from "./FileIcons";
-import { useIsMobile } from "@/hooks/useIsMobile";
+import { matchMobileViewport, useIsMobile } from "@/hooks/useIsMobile";
 import {
   useWordPrediction,
   type PredictWord,
@@ -3189,7 +3189,9 @@ export const ChatInput = memo(
         return;
       }
       modelWasOpenRef.current = true;
-      requestAnimationFrame(() => modelSearchInputRef.current?.focus());
+      requestAnimationFrame(() => {
+        if (!matchMobileViewport()) modelSearchInputRef.current?.focus();
+      });
     }, [modelDropdownOpen]);
     useEffect(() => {
       if (!plusMenuOpen) return;
