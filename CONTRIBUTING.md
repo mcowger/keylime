@@ -23,6 +23,7 @@ speak ompweb's channel.
 ```bash
 bun run dev:isolated                # random free loopback port
 bun run dev:isolated --port 30278    # fixed loopback port
+bun run dev:ui                      # isolated server with UI fixtures; accepts --port
 ```
 
 Each invocation creates a randomly named temporary directory with its own home,
@@ -36,6 +37,11 @@ sessions, and stored logins aren't copied. Inherited `OMP_*`, `OMPWEB_*`, `PI_*`
 and XDG settings are cleared, and subprocesses don't load `.env` files. Other
 environment variables, including provider API keys, remain available. The runner
 uses this checkout's normal discovery; build it as described above for live sessions.
+
+`dev:ui` (or `dev:isolated --seed`) creates two sample projects, including a
+Git worktree with an untracked file, three saved conversations, and sample web
+settings in the temporary home. It never seeds the normal installation. Git is
+required; fixture changes are disposable and retained in the printed directory.
 
 The repository tracks a [graphify](https://github.com/Graphify-Labs/graphify) code
 graph in `graphify-out/graph.json`. To keep it current, install the graphify release

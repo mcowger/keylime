@@ -7,13 +7,14 @@ const { values } = parseArgs({
   args: Bun.argv.slice(2),
   options: {
     port: { type: "string" },
+    seed: { type: "boolean" },
     help: { type: "boolean", short: "h" },
   },
   strict: true,
 });
 if (values.help) {
   console.log(
-    "Usage: bun run dev:isolated [--port <port>]\nDefaults to a free loopback port. Each run keeps its temporary home/config after exit.",
+    "Usage: bun run dev:isolated [--port <port>] [--seed]\nDefaults to a free loopback port. Each run keeps its temporary home/config after exit.",
   );
   process.exit(0);
 }
@@ -118,6 +119,19 @@ try {
   const bootstrapExit = await bootstrap.exited;
   if (bootstrapExit !== 0)
     throw new Error("Could not configure isolated host link");
+  if (values.seed && !stopping) {
+    const seed = Bun.spawn(
+      [process.execPath, "--no-env-file", "scripts/seed-dev-ui.ts"],
+      {
+        cwd: root,
+        env: { ...env, KEYLIME_UI_FIXTURE_ROOT: directory },
+        stdout: "inherit",
+        stderr: "inherit",
+      },
+    );
+    if ((await seed.exited) !== 0)
+      throw new Error("Could not seed isolated UI fixtures");
+  }
   if (!stopping) {
     spawn([
       "--hot",
