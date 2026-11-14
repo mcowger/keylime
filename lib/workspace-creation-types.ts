@@ -41,9 +41,11 @@ export interface WorkspaceDeleteRequest {
   path: string;
   stopProcesses: boolean;
   discardChanges: boolean;
+  keepBranch?: boolean;
   cancel?: boolean;
 }
 export interface WorkspaceDeleteResult {
-  status: "deleted" | "processes" | "dirty" | "cancelled";
+  status: "deleted" | "processes" | "dirty" | "branch" | "cancelled";
   processes?: Array<{ id: string; cwd: string }>;
+  branch?: string;
 }

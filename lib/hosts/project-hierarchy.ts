@@ -365,15 +365,6 @@ export async function hierarchyOperation(
         save(snapshot);
         break;
       }
-      case "unregisterWorkspace": {
-        const workspace = workspaceById(snapshot, input.workspaceId);
-        if (workspace.isDefault)
-          throw new Error("Cannot unregister the default workspace");
-        const project = projectById(snapshot, workspace.projectId);
-        project.workspaces = project.workspaces.filter((w) => w !== workspace);
-        save(snapshot);
-        break;
-      }
       case "discoverSessions": {
         const workspace = workspaceById(snapshot, input.workspaceId);
         const registered = new Set(

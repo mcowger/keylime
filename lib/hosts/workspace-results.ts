@@ -29,9 +29,18 @@ function info(value: unknown): boolean {
 }
 
 function terminal(value: unknown): boolean {
-  return isRecord(value) && text(value.id) && text(value.cwd) && text(value.title) &&
-    count(value.cols) && value.cols >= 2 && value.cols <= 500 &&
-    count(value.rows) && value.rows >= 2 && value.rows <= 300;
+  return (
+    isRecord(value) &&
+    text(value.id) &&
+    text(value.cwd) &&
+    text(value.title) &&
+    count(value.cols) &&
+    value.cols >= 2 &&
+    value.cols <= 500 &&
+    count(value.rows) &&
+    value.rows >= 2 &&
+    value.rows <= 300
+  );
 }
 
 export function validWorkspaceResult(
@@ -58,10 +67,17 @@ export function validWorkspaceResult(
   if (!isRecord(value)) return false;
   switch (op) {
     case "terminals":
-      return (value.terminals === undefined || (Array.isArray(value.terminals) && value.terminals.length <= 32 && value.terminals.every(terminal))) &&
+      return (
+        (value.terminals === undefined ||
+          (Array.isArray(value.terminals) &&
+            value.terminals.length <= 32 &&
+            value.terminals.every(terminal))) &&
         (value.terminal === undefined || terminal(value.terminal)) &&
-        (value.snapshot === undefined || (typeof value.snapshot === "string" && value.snapshot.length <= 4_000_000)) &&
-        (value.cursor === undefined || count(value.cursor));
+        (value.snapshot === undefined ||
+          (typeof value.snapshot === "string" &&
+            value.snapshot.length <= 4_000_000)) &&
+        (value.cursor === undefined || count(value.cursor))
+      );
     case "hierarchy":
       return (
         Array.isArray(value.projects) &&
@@ -132,9 +148,10 @@ export function validWorkspaceResult(
       );
     case "removeRegisteredWorktree":
       return (
-        ["deleted", "processes", "dirty", "cancelled"].includes(
+        ["deleted", "processes", "dirty", "branch", "cancelled"].includes(
           value.status as string,
         ) &&
+        (value.status !== "branch" || text(value.branch)) &&
         (value.processes === undefined ||
           (Array.isArray(value.processes) &&
             value.processes.every(

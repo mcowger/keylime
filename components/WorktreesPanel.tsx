@@ -37,8 +37,12 @@ export function WorktreesPanel({
   const [snapshot, setSnapshot] = useState<HierarchySnapshot | null>(null);
   const [pending, setPending] = useState<{
     path: string;
-    status: "processes" | "dirty";
+    status: "processes" | "dirty" | "branch";
     processes?: Array<{ id: string; cwd: string }>;
+    branch?: string;
+    stopProcesses: boolean;
+    discardChanges: boolean;
+    keepBranch?: boolean;
   } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -144,6 +148,7 @@ export function WorktreesPanel({
     stopProcesses: boolean,
     discardChanges: boolean,
     cancel = false,
+    keepBranch?: boolean,
   ) {
     setBusy(true);
     setError("");
@@ -154,12 +159,21 @@ export function WorktreesPanel({
         stopProcesses,
         discardChanges,
         cancel,
+        keepBranch,
       });
-      if (result.status === "processes" || result.status === "dirty")
+      if (
+        result.status === "processes" ||
+        result.status === "dirty" ||
+        result.status === "branch"
+      )
         setPending({
           path,
           status: result.status,
           processes: result.processes,
+          branch: result.branch,
+          stopProcesses,
+          discardChanges,
+          keepBranch,
         });
       else {
         setPending(null);
@@ -233,22 +247,82 @@ export function WorktreesPanel({
                         </li>
                       ))}
                     </ul>
-                    <button onClick={() => void remove(w.path, true, false)}>
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        void remove(
+                          w.path,
+                          true,
+                          pending.discardChanges,
+                          false,
+                          pending.keepBranch,
+                        )
+                      }
+                    >
                       Stop and continue
                     </button>
                   </>
-                ) : (
+                ) : pending.status === "dirty" ? (
                   <>
                     <p>
                       Discard uncommitted changes? Previously stopped sessions
                       remain stopped if you cancel.
                     </p>
-                    <button onClick={() => void remove(w.path, true, true)}>
-                      Discard and delete
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        void remove(
+                          w.path,
+                          pending.stopProcesses,
+                          true,
+                          false,
+                          pending.keepBranch,
+                        )
+                      }
+                    >
+                      Discard and continue
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p>
+                      Branch {pending.branch ?? "for this workspace"} is not
+                      merged. Keep or delete it?
+                    </p>
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        void remove(
+                          w.path,
+                          pending.stopProcesses,
+                          pending.discardChanges,
+                          false,
+                          true,
+                        )
+                      }
+                    >
+                      Keep branch
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        void remove(
+                          w.path,
+                          pending.stopProcesses,
+                          pending.discardChanges,
+                          false,
+                          false,
+                        )
+                      }
+                    >
+                      Delete branch
                     </button>
                   </>
                 )}{" "}
-                <button onClick={() => void remove(w.path, false, false, true)}>
+                <button
+                  disabled={busy}
+                  onClick={() => void remove(w.path, false, false, true)}
+                >
                   Cancel
                 </button>
               </div>
@@ -273,14 +347,25 @@ export function WorktreesPanel({
               <Field label="Branch source">
                 <Select
                   value={
-                    { new: "New branch", local: "Existing local branch", remote: "Existing remote branch" }[mode]
+                    {
+                      new: "New branch",
+                      local: "Existing local branch",
+                      remote: "Existing remote branch",
+                    }[mode]
                   }
                   required
-                  options={["New branch", "Existing local branch", "Existing remote branch"]}
+                  options={[
+                    "New branch",
+                    "Existing local branch",
+                    "Existing remote branch",
+                  ]}
                   onChange={(value) => {
                     const nextMode: WorkspaceBranchMode =
-                      value === "Existing local branch" ? "local" :
-                      value === "Existing remote branch" ? "remote" : "new";
+                      value === "Existing local branch"
+                        ? "local"
+                        : value === "Existing remote branch"
+                          ? "remote"
+                          : "new";
                     setMode(nextMode);
                     setBranch("");
                     setBaseRef(nextMode === "new" ? branches.defaultRef : "");
@@ -313,31 +398,45 @@ export function WorktreesPanel({
                       }}
                     />
                   </Field>
-                  <Field label={mode === "remote" ? "Remote branch" : "Base ref"}>
+                  <Field
+                    label={mode === "remote" ? "Remote branch" : "Base ref"}
+                  >
                     <Select
                       value={baseRef}
                       onChange={setBaseRef}
                       placeholder="Select ref"
                       options={
-                        mode === "remote" ? branches.remote : [...branches.local, ...branches.remote]
+                        mode === "remote"
+                          ? branches.remote
+                          : [...branches.local, ...branches.remote]
                       }
                     />
                   </Field>
                 </>
               )}
-              <div style={{
-                fontSize: 12,
-                color: "var(--text-muted)",
-                lineHeight: 1.5,
-                overflowWrap: "anywhere",
-              }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "var(--text-muted)",
+                  lineHeight: 1.5,
+                  overflowWrap: "anywhere",
+                }}
+              >
                 Workspace directory: {projectPath}-worktrees/
                 {creationBranch.replace(/[^a-zA-Z0-9._-]/g, "-")}
               </div>
               <Field label="Display name">
                 <TextInput value={name} onChange={setName} />
               </Field>
-              <div className="dialog-actions" style={{ display: "flex", justifyContent: "flex-end", gap: 8, paddingTop: 4 }}>
+              <div
+                className="dialog-actions"
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 8,
+                  paddingTop: 4,
+                }}
+              >
                 <button
                   type="button"
                   className="dialog-action"
@@ -358,7 +457,10 @@ export function WorktreesPanel({
                   type="button"
                   className="dialog-action"
                   disabled={
-                    busy || !creationBranch || !name.trim() || (mode !== "local" && !baseRef)
+                    busy ||
+                    !creationBranch ||
+                    !name.trim() ||
+                    (mode !== "local" && !baseRef)
                   }
                   onClick={() => void create()}
                   style={{
@@ -370,7 +472,13 @@ export function WorktreesPanel({
                     cursor: "pointer",
                     fontSize: 13,
                     fontWeight: 600,
-                    opacity: busy || !creationBranch || !name.trim() || (mode !== "local" && !baseRef) ? 0.6 : 1,
+                    opacity:
+                      busy ||
+                      !creationBranch ||
+                      !name.trim() ||
+                      (mode !== "local" && !baseRef)
+                        ? 0.6
+                        : 1,
                   }}
                 >
                   Create
@@ -388,7 +496,11 @@ export function WorktreesPanel({
             </div>
           )}
           {error && (
-            <Alert variant="error" description={error} style={{ marginTop: 12 }} />
+            <Alert
+              variant="error"
+              description={error}
+              style={{ marginTop: 12 }}
+            />
           )}
         </DialogContent>
       </Dialog>
@@ -399,7 +511,7 @@ export function WorktreesPanel({
           if (!open) setDeleteTarget(null);
         }}
         title="Delete workspace?"
-        description="Remove this worktree and its registrations. The branch and session history are kept. Running processes and uncommitted changes require separate approval."
+        description="Remove this worktree and its registrations. Merged branches are deleted; unmerged branches require a choice. Session history is kept. Running processes and uncommitted changes require separate approval."
         confirmLabel="Delete workspace"
         danger
         onConfirm={() => {

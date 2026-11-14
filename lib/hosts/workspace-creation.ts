@@ -478,6 +478,15 @@ export async function removeRegisteredWorktree(
   }
   const release = previous?.release ?? deletionAdapter.fence(workspace.path);
   let held = false;
+  const hold = () => {
+    const timer = setTimeout(() => {
+      deletionLeases.delete(workspace.path);
+      release();
+    }, 120_000);
+    timer.unref();
+    deletionLeases.set(workspace.path, { release, timer });
+    held = true;
+  };
   try {
     if (input.cancel) return { status: "cancelled" };
     const processes = await deletionAdapter.inspect(workspace.path);
@@ -500,14 +509,55 @@ export async function removeRegisteredWorktree(
       ])
     ).trim();
     if (dirty && !input.discardChanges) {
-      const timer = setTimeout(() => {
-        deletionLeases.delete(workspace.path);
-        release();
-      }, 120_000);
-      timer.unref();
-      deletionLeases.set(workspace.path, { release, timer });
-      held = true;
+      hold();
       return { status: "dirty" };
+    }
+    const target = (await listWorktrees(input.projectPath)).find(
+      (worktree) => worktree.path === workspace.path,
+    );
+    if (!target || target.isMain)
+      throw new HostOpError(
+        404,
+        "workspace_not_found",
+        "Linked worktree not found",
+      );
+    const branch = target.branch;
+    let merged = false;
+    if (branch) {
+      const defaultWorkspace = owner.workspaces.find((w) => w.isDefault);
+      if (!defaultWorkspace)
+        throw new HostOpError(
+          409,
+          "default_workspace_not_found",
+          "Default workspace not found",
+        );
+      try {
+        await git(defaultWorkspace.path, [
+          "merge-base",
+          "--is-ancestor",
+          `refs/heads/${branch}`,
+          "HEAD",
+        ]);
+        merged = true;
+      } catch (error) {
+        if (
+          !error ||
+          typeof error !== "object" ||
+          !("code" in error) ||
+          error.code !== 1
+        )
+          throw error;
+      }
+      if (!merged && input.keepBranch === undefined) {
+        hold();
+        return { status: "branch", branch };
+      }
+      if (!merged && typeof input.keepBranch !== "boolean")
+        throw new HostOpError(
+          400,
+          "invalid_request",
+          "Invalid branch decision",
+        );
     }
     await removeWorktree(
       input.projectPath,
@@ -515,6 +565,13 @@ export async function removeRegisteredWorktree(
       input.discardChanges,
     );
     unregisterDeletedWorkspace(workspace.path);
+    if (branch && (merged || input.keepBranch === false))
+      await git(input.projectPath, [
+        "branch",
+        merged ? "-d" : "-D",
+        "--",
+        branch,
+      ]);
     return { status: "deleted" };
   } finally {
     deleting.delete(workspace.path);

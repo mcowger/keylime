@@ -47,7 +47,6 @@ export interface HierarchyRequest {
     | "updateProject"
     | "discoverWorkspaces"
     | "importWorkspaces"
-    | "unregisterWorkspace"
     | "discoverSessions"
     | "importSessions"
     | "unregisterSession"

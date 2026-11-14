@@ -10,6 +10,7 @@ import type {
   HierarchyRequest,
 } from "@/lib/project-hierarchy-types";
 import type { ManagedProject, SessionInfo } from "@/lib/types";
+import type { WorkspaceDeleteResult } from "@/lib/workspace-creation-types";
 import { WorktreesPanel } from "./WorktreesPanel";
 import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
 
@@ -195,6 +196,80 @@ export function HierarchySidebar({
       });
     }
   };
+  const unregisterWorkspace = async (
+    hostId: string,
+    projectPath: string,
+    path: string,
+  ) => {
+    if (
+      !window.confirm(
+        "Unregister this workspace and remove its checkout? Running processes and uncommitted changes require separate approval. Session history is kept.",
+      )
+    )
+      return;
+    setBusy(true);
+    setError(null);
+    let stopProcesses = false;
+    let discardChanges = false;
+    let keepBranch: boolean | undefined;
+    let cancel = false;
+    try {
+      while (true) {
+        const response = await fetch("/api/worktrees", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            hostId,
+            action: "delete",
+            input: {
+              projectPath,
+              path,
+              stopProcesses,
+              discardChanges,
+              keepBranch,
+              cancel,
+            },
+          }),
+        });
+        const result: WorkspaceDeleteResult & { error?: string } =
+          await response.json();
+        if (!response.ok)
+          throw new Error(result.error ?? `HTTP ${response.status}`);
+        if (result.status === "processes") {
+          const processes =
+            result.processes?.map((p) => `${p.id} — ${p.cwd}`).join("\n") ?? "";
+          stopProcesses = window.confirm(
+            `Stop these running processes before deletion?\n${processes}`,
+          );
+          cancel = !stopProcesses;
+        } else if (result.status === "dirty") {
+          discardChanges = window.confirm(
+            "Discard uncommitted changes? Previously stopped sessions remain stopped if you cancel.",
+          );
+          cancel = !discardChanges;
+        } else if (result.status === "branch") {
+          const choice = window
+            .prompt(
+              `Branch ${result.branch ?? "for this workspace"} is not merged. Type keep to keep it, delete to delete it, or cancel to stop.`,
+              "keep",
+            )
+            ?.trim()
+            .toLowerCase();
+          if (choice === "keep" || choice === "delete")
+            keepBranch = choice === "keep";
+          else cancel = true;
+        } else {
+          await load();
+          if (result.status === "deleted") onChanged();
+          break;
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   const confirmForget = (what: string) =>
     window.confirm(
       `Unregister ${what}? Files and processes will not be deleted.`,
@@ -303,8 +378,11 @@ export function HierarchySidebar({
                     )),
               );
               if (!workspaces.length) return null;
-              const defaultWorkspace = project.workspaces.find((workspace) => workspace.isDefault);
-              const unavailableReason = hostUnavailableReason?.(host.id) ?? null;
+              const defaultWorkspace = project.workspaces.find(
+                (workspace) => workspace.isDefault,
+              );
+              const unavailableReason =
+                hostUnavailableReason?.(host.id) ?? null;
               return (
                 <div key={project.id} style={{ marginBottom: 4 }}>
                   <div
@@ -328,7 +406,10 @@ export function HierarchySidebar({
                     <button
                       type="button"
                       aria-label={`New ${project.kind === "git" ? "workspace" : "session"} in ${project.alias || project.name}`}
-                      title={unavailableReason ?? `New ${project.kind === "git" ? "workspace" : "session"}`}
+                      title={
+                        unavailableReason ??
+                        `New ${project.kind === "git" ? "workspace" : "session"}`
+                      }
                       disabled={!defaultWorkspace || unavailableReason !== null}
                       style={{ ...button, padding: "3px 6px" }}
                       onClick={() => {
@@ -493,7 +574,10 @@ export function HierarchySidebar({
                           {workspace.setup &&
                             workspace.setup.status !== "complete" && (
                               <span
-                                title={workspace.setup.error || `Setup ${workspace.setup.status}`}
+                                title={
+                                  workspace.setup.error ||
+                                  `Setup ${workspace.setup.status}`
+                                }
                                 aria-label={`Setup ${workspace.setup.status}`}
                               >
                                 {workspace.setup.status === "running" ? (
@@ -541,15 +625,11 @@ export function HierarchySidebar({
                                     e.currentTarget
                                       .closest("details")
                                       ?.removeAttribute("open");
-                                    if (
-                                      confirmForget(
-                                        "this workspace and its sessions",
-                                      )
-                                    )
-                                      void operate(host.id, {
-                                        action: "unregisterWorkspace",
-                                        workspaceId: workspace.id,
-                                      });
+                                    void unregisterWorkspace(
+                                      host.id,
+                                      project.path,
+                                      workspace.path,
+                                    );
                                   }}
                                 >
                                   <Trash2 size={16} aria-hidden="true" />
