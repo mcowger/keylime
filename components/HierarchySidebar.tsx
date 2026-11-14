@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, Bot, Loader2, Plus, Wrench } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  AlertCircle, Bot, FolderCog, FolderInput, Loader2, MoreHorizontal, Plus, Trash2, Wrench,
+} from "lucide-react";
 import type {
   HierarchyProject,
   HierarchySnapshot,
@@ -70,6 +72,16 @@ export function HierarchySidebar({
   collapsedHosts,
   onToggleHost,
 }: Props) {
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const dismissMenus = (event: PointerEvent) => {
+      sidebarRef.current?.querySelectorAll<HTMLDetailsElement>("details[open]").forEach((menu) => {
+        if (event.target instanceof Node && !menu.contains(event.target)) menu.open = false;
+      });
+    };
+    document.addEventListener("pointerdown", dismissMenus);
+    return () => document.removeEventListener("pointerdown", dismissMenus);
+  }, []);
   const [snapshots, setSnapshots] = useState<Record<string, HierarchySnapshot>>(
     {},
   );
@@ -198,6 +210,25 @@ export function HierarchySidebar({
     cursor: "pointer",
     fontSize: 11,
   } as const;
+  const menu = {
+    position: "absolute",
+    right: 0,
+    zIndex: 10,
+    display: "flex",
+    gap: 4,
+    padding: 4,
+    background: "var(--bg-panel)",
+    border: "1px solid var(--border)",
+    borderRadius: "var(--radius-control)",
+    boxShadow: "var(--shadow-pop)",
+  } as const;
+  const menuButton = {
+    ...button,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 6,
+  } as const;
   const rowButton = {
     ...button,
     border: "none",
@@ -209,7 +240,7 @@ export function HierarchySidebar({
     flex: 1,
   } as const;
   return (
-    <div style={{ fontSize: 12, color: "var(--text)" }}>
+    <div ref={sidebarRef} style={{ fontSize: 12, color: "var(--text)" }}>
       {error && (
         <div role="alert" style={{ color: "var(--status-error)", padding: 8 }}>
           {error}
@@ -328,28 +359,15 @@ export function HierarchySidebar({
                           padding: "3px 6px",
                         }}
                       >
-                        ⋯
+                        <MoreHorizontal size={16} aria-hidden="true" />
                       </summary>
-                      <div
-                        style={{
-                          position: "absolute",
-                          right: 0,
-                          zIndex: 10,
-                          minWidth: 150,
-                          padding: 4,
-                          background: "var(--bg-panel)",
-                          border: "1px solid var(--border)",
-                          borderRadius: "var(--radius-control)",
-                        }}
-                      >
+                      <div style={menu}>
                         {project.kind === "git" && (
                           <button
-                            style={{
-                              ...button,
-                              display: "block",
-                              width: "100%",
-                            }}
+                            style={menuButton}
                             type="button"
+                            aria-label="Manage workspaces"
+                            title="Manage workspaces"
                             onClick={(e) => {
                               e.currentTarget
                                 .closest("details")
@@ -357,17 +375,15 @@ export function HierarchySidebar({
                               setManagedProject({ host: host.id, project });
                             }}
                           >
-                            Manage workspaces
+                            <FolderCog size={16} aria-hidden="true" />
                           </button>
                         )}
                         {project.kind === "git" && (
                           <button
-                            style={{
-                              ...button,
-                              display: "block",
-                              width: "100%",
-                            }}
+                            style={menuButton}
                             type="button"
+                            aria-label="Import workspaces"
+                            title="Import workspaces"
                             disabled={busy}
                             onClick={(e) => {
                               e.currentTarget
@@ -376,12 +392,14 @@ export function HierarchySidebar({
                               void discover(host.id, project);
                             }}
                           >
-                            Import workspaces
+                            <FolderInput size={16} aria-hidden="true" />
                           </button>
                         )}
                         <button
-                          style={{ ...button, display: "block", width: "100%" }}
+                          style={menuButton}
                           type="button"
+                          aria-label="Unregister project"
+                          title="Unregister project"
                           disabled={busy}
                           onClick={(e) => {
                             e.currentTarget
@@ -398,7 +416,7 @@ export function HierarchySidebar({
                               });
                           }}
                         >
-                          Unregister project
+                          <Trash2 size={16} aria-hidden="true" />
                         </button>
                       </div>
                     </details>
@@ -494,27 +512,14 @@ export function HierarchySidebar({
                                 padding: "3px 6px",
                               }}
                             >
-                              ⋯
+                              <MoreHorizontal size={16} aria-hidden="true" />
                             </summary>
-                            <div
-                              style={{
-                                position: "absolute",
-                                right: 0,
-                                zIndex: 10,
-                                minWidth: 150,
-                                padding: 4,
-                                background: "var(--bg-panel)",
-                                border: "1px solid var(--border)",
-                                borderRadius: "var(--radius-control)",
-                              }}
-                            >
+                            <div style={menu}>
                               <button
-                                style={{
-                                  ...button,
-                                  display: "block",
-                                  width: "100%",
-                                }}
+                                style={menuButton}
                                 type="button"
+                                aria-label="Import sessions"
+                                title="Import sessions"
                                 disabled={busy || workspace.unavailable}
                                 onClick={(e) => {
                                   e.currentTarget
@@ -523,16 +528,14 @@ export function HierarchySidebar({
                                   void discover(host.id, project, workspace.id);
                                 }}
                               >
-                                Import sessions
+                                <FolderInput size={16} aria-hidden="true" />
                               </button>
                               {!workspace.isDefault && (
                                 <button
-                                  style={{
-                                    ...button,
-                                    display: "block",
-                                    width: "100%",
-                                  }}
+                                  style={menuButton}
                                   type="button"
+                                  aria-label="Unregister workspace"
+                                  title="Unregister workspace"
                                   disabled={busy}
                                   onClick={(e) => {
                                     e.currentTarget
@@ -549,7 +552,7 @@ export function HierarchySidebar({
                                       });
                                   }}
                                 >
-                                  Unregister workspace
+                                  <Trash2 size={16} aria-hidden="true" />
                                 </button>
                               )}
                             </div>
@@ -609,32 +612,30 @@ export function HierarchySidebar({
                                         padding: "3px 6px",
                                       }}
                                     >
-                                      ⋯
+                                      <MoreHorizontal size={16} aria-hidden="true" />
                                     </summary>
-                                    <button
-                                      style={{
-                                        ...button,
-                                        position: "absolute",
-                                        right: 0,
-                                        zIndex: 10,
-                                        whiteSpace: "nowrap",
-                                      }}
-                                      type="button"
-                                      disabled={busy}
-                                      onClick={(e) => {
-                                        e.currentTarget
-                                          .closest("details")
-                                          ?.removeAttribute("open");
-                                        if (confirmForget("this session"))
-                                          void operate(host.id, {
-                                            action: "unregisterSession",
-                                            workspaceId: workspace.id,
-                                            sessionId: id,
-                                          });
-                                      }}
-                                    >
-                                      Unregister session
-                                    </button>
+                                    <div style={menu}>
+                                      <button
+                                        style={menuButton}
+                                        type="button"
+                                        aria-label="Unregister session"
+                                        title="Unregister session"
+                                        disabled={busy}
+                                        onClick={(e) => {
+                                          e.currentTarget
+                                            .closest("details")
+                                            ?.removeAttribute("open");
+                                          if (confirmForget("this session"))
+                                            void operate(host.id, {
+                                              action: "unregisterSession",
+                                              workspaceId: workspace.id,
+                                              sessionId: id,
+                                            });
+                                        }}
+                                      >
+                                        <Trash2 size={16} aria-hidden="true" />
+                                      </button>
+                                    </div>
                                   </details>
                                 </div>
                               );
