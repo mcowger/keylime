@@ -23,6 +23,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - `bun run deploy:local` builds committed source into versioned production releases, smoke-tests before activation, waits for an empty host, and backs up production data before switching Pitchfork services. Verified older releases can be selected with `--activate`.
 
 ### Fixed
+- Ship uses a header button and an aligned dialog with distinct progress, error and file details.
 - Workspace deletion recognizes squash-integrated branches in the default workspace and offers a button-based dialog when integration cannot be confirmed.
 - Workspace deletion and project/session unregistration now use in-app confirmation dialogs instead of browser prompts.
 - Sidebar workspace switches no longer get swallowed by a stale initial-restore guard or confuse nested workspaces with their parent.

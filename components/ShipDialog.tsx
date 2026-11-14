@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
 import { sendAgentCommand } from "@/lib/agent-client";
 import { recoverDraft } from "@/lib/draft-store";
@@ -13,7 +13,7 @@ import type {
   ShipPreview,
 } from "@/lib/workspace-ship-types";
 import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
-import { Check, Field, Select, TextInput } from "./ui/field";
+import { Alert, Check, Field, Select, TextInput } from "./ui/field";
 import { toast } from "./ui/toast";
 
 interface Props {
@@ -33,6 +33,38 @@ async function json<T>(url: string, init: RequestInit): Promise<T> {
     throw new Error(data.error || `Request failed (${response.status})`);
   return data as T;
 }
+
+const textareaStyle: CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "8px 9px",
+  resize: "vertical",
+  color: "var(--text)",
+  background: "var(--bg)",
+  border: "1px solid var(--border)",
+  borderRadius: "var(--radius-control)",
+  fontFamily: "var(--font-mono)",
+  fontSize: 12,
+  lineHeight: 1.5,
+};
+
+const pathStyle: CSSProperties = {
+  color: "var(--text-muted)",
+  fontFamily: "var(--font-mono)",
+  fontSize: 11,
+  lineHeight: 1.5,
+  overflowWrap: "anywhere",
+};
+
+const secondaryButtonStyle: CSSProperties = {
+  padding: "6px 14px",
+  background: "none",
+  border: "1px solid var(--border)",
+  borderRadius: "var(--radius-control)",
+  color: "var(--text-muted)",
+  cursor: "pointer",
+  fontSize: 13,
+};
 
 export function ShipDialog({
   open,
@@ -211,24 +243,21 @@ export function ShipDialog({
           width: 640,
           maxWidth: "95vw",
           maxHeight: "90vh",
+          padding: 22,
           overflowY: "auto",
         }}
       >
         <DialogTitle>Ship workspace</DialogTitle>
-        {error && (
-          <p role="alert" style={{ color: "var(--status-error)" }}>
-            {error}
-          </p>
-        )}
+        {error && <Alert variant="error" description={error} style={{ marginTop: 16 }} />}
         {plan === undefined && !error && (
-          <p>
-            <Loader2 size={16} /> Generating commit plan ({elapsed}s)
+          <p role="status" style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)", fontSize: 12 }}>
+            <Loader2 size={16} aria-hidden="true" /> Generating commit plan ({elapsed}s)
           </p>
         )}
-        {!preview && !error && <p>Loading workspace...</p>}
+        {!preview && !error && <p style={{ color: "var(--text-muted)", fontSize: 12 }}>Loading workspace...</p>}
         {preview && plan !== undefined && !job && (
-          <div style={{ display: "grid", gap: 12 }}>
-            {nothing && <p>Nothing to ship.</p>}
+          <div style={{ display: "grid", gap: 14, marginTop: 16 }}>
+            {nothing && <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 13 }}>Nothing to ship.</p>}
             {plan?.commits.map((commit, index) => (
               <Field
                 key={index}
@@ -238,8 +267,8 @@ export function ShipDialog({
                     : "Commit message"
                 }
               >
-                <div>
-                  <small>{commit.files.join(", ")}</small>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={pathStyle}>{commit.files.map((file, i) => <code key={i}>{i > 0 && ", "}{file}</code>)}</div>
                   <textarea
                     aria-label={`Commit ${index + 1} message`}
                     value={commit.message}
@@ -254,29 +283,21 @@ export function ShipDialog({
                       })
                     }
                     rows={5}
-                    style={{
-                      width: "100%",
-                      color: "var(--text)",
-                      background: "var(--bg-input)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 4,
-                    }}
+                    style={textareaStyle}
                   />
                 </div>
               </Field>
             ))}
             {plan?.changelog.length ? (
-              <p>
-                Changelog: {plan.changelog.map((item) => item.path).join(", ")}
-              </p>
+              <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
+                Changelog: <span style={pathStyle}>{plan.changelog.map((item, i) => <code key={i}>{i > 0 && ", "}{item.path}</code>)}</span>
+              </div>
             ) : null}
             {plan?.warnings.map((warning, i) => (
-              <p key={i}>{warning}</p>
+              <Alert key={i} variant="warning" description={warning} />
             ))}
             {plan?.usedFallback && (
-              <p>
-                Generated a fallback commit message. Review it before shipping.
-              </p>
+              <Alert variant="warning" description="Generated a fallback commit message. Review it before shipping." />
             )}
             <Check
               checked={rebase}
@@ -285,10 +306,11 @@ export function ShipDialog({
             />
             <fieldset
               disabled={working || !!nothing}
-              style={{ display: "grid", gap: 6 }}
+              style={{ display: "grid", gap: 8, margin: 0, padding: "10px 12px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", color: "var(--text-muted)", fontSize: 12 }}
             >
-              <legend>Path</legend>
+              <legend style={{ padding: "0 4px", color: "var(--text)", fontWeight: 600 }}>Path</legend>
               <label
+                style={{ display: "flex", alignItems: "center", gap: 8 }}
                 title={
                   preview.baseDirty
                     ? "The base workspace has uncommitted changes"
@@ -306,7 +328,7 @@ export function ShipDialog({
                   ? " (base workspace has uncommitted changes)"
                   : ""}
               </label>
-              <label title={githubReason ?? undefined}>
+              <label title={githubReason ?? undefined} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <input
                   type="radio"
                   checked={mode === "pr"}
@@ -315,7 +337,7 @@ export function ShipDialog({
                 />{" "}
                 Open PR{githubReason ? ` (${githubReason})` : ""}
               </label>
-              <label title={githubReason ?? undefined}>
+              <label title={githubReason ?? undefined} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <input
                   type="radio"
                   checked={mode === "pr-auto"}
@@ -327,7 +349,7 @@ export function ShipDialog({
             </fieldset>
             {mode !== "local" &&
               (prLoading ? (
-                <p>Generating PR description...</p>
+                <p role="status" style={{ margin: 0, color: "var(--text-muted)", fontSize: 12 }}>Generating PR description...</p>
               ) : (
                 pr && (
                   <>
@@ -343,12 +365,7 @@ export function ShipDialog({
                         value={pr.body}
                         onChange={(e) => setPr({ ...pr, body: e.target.value })}
                         rows={8}
-                        style={{
-                          width: "100%",
-                          color: "var(--text)",
-                          background: "var(--bg-input)",
-                          border: "1px solid var(--border)",
-                        }}
+                        style={textareaStyle}
                       />
                     </Field>
                   </>
@@ -371,28 +388,23 @@ export function ShipDialog({
           </div>
         )}
         {job && (
-          <div>
-            <ul>
+          <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
+            <ul style={{ display: "grid", gap: 8, margin: 0, padding: 0, listStyle: "none" }}>
               {job.steps.map((step) => (
-                <li key={step.name}>
-                  {step.status === "running" ? (
-                    <Loader2 size={14} />
-                  ) : step.status === "done" ? (
-                    <CheckCircle2 size={14} />
-                  ) : step.status === "failed" ? (
-                    <XCircle size={14} />
-                  ) : (
-                    <Circle size={14} />
-                  )}{" "}
-                  {step.name}: {step.status} {step.detail}
+                <li key={step.name} style={{ display: "flex", alignItems: "flex-start", gap: 8, color: step.status === "failed" ? "var(--status-error)" : "var(--text-muted)", fontSize: 12, lineHeight: 1.5 }}>
+                  <span aria-hidden="true" style={{ display: "flex", flexShrink: 0, marginTop: 2, color: step.status === "done" ? "var(--status-success)" : step.status === "failed" ? "var(--status-error)" : "var(--text-dim)" }}>
+                    {step.status === "running" ? <Loader2 size={14} /> : step.status === "done" ? <CheckCircle2 size={14} /> : step.status === "failed" ? <XCircle size={14} /> : <Circle size={14} />}
+                  </span>
+                  <span style={{ minWidth: 0, overflowWrap: "anywhere" }}><strong style={{ color: "var(--text)" }}>{step.name}</strong>: {step.status} {step.detail}</span>
                 </li>
               ))}
             </ul>
             {job.status === "conflict" && (
               <>
-                <p>Conflicts: {job.conflictFiles?.join(", ")}</p>
+                <div style={{ color: "var(--status-warning)", fontSize: 12 }}>Conflicts: <span style={pathStyle}>{job.conflictFiles?.map((file, i) => <code key={i}>{i > 0 && ", "}{file}</code>)}</span></div>
                 <button
                   type="button"
+                  style={{ ...secondaryButtonStyle, justifySelf: "start" }}
                   onClick={() => {
                     recoverDraft(sessionId, {
                       text: `Rebasing onto ${preview?.base} conflicts in: ${job.conflictFiles?.join(", ")}. Rebase this branch onto ${preview?.base} and resolve the conflicts, keeping both sides' intent.`,
@@ -406,10 +418,10 @@ export function ShipDialog({
             )}
             {(job.status === "failed" || job.status === "interrupted") && (
               <>
-                <p role="alert">{job.error || job.status}</p>
-                <details>
-                  <summary>Logs</summary>
-                  <pre style={{ whiteSpace: "pre-wrap" }}>{job.logs}</pre>
+                <Alert variant="error" description={job.error || job.status} />
+                <details style={{ color: "var(--text-muted)", fontSize: 12 }}>
+                  <summary style={{ cursor: "pointer" }}>Logs</summary>
+                  <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", padding: 10, background: "var(--bg-subtle)", borderRadius: "var(--radius-control)", fontFamily: "var(--font-mono)", fontSize: 11 }}>{job.logs}</pre>
                 </details>
               </>
             )}
@@ -423,12 +435,14 @@ export function ShipDialog({
             marginTop: 16,
           }}
         >
-          <button type="button" onClick={() => onOpenChange(false)}>
+          <button type="button" className="dialog-action" style={secondaryButtonStyle} onClick={() => onOpenChange(false)}>
             Cancel
           </button>
           {!job && (
             <button
               type="button"
+              className="dialog-action"
+              style={{ padding: "6px 14px", background: "var(--accent-strong)", border: "none", borderRadius: "var(--radius-control)", color: "var(--on-accent)", cursor: working ? "wait" : "pointer", fontSize: 13, fontWeight: 600 }}
               disabled={
                 working ||
                 !preview ||

@@ -1064,6 +1064,8 @@ export function AppShell({ appName }: { appName: string }) {
     useState<HTMLDivElement | null>(null);
   const [sessionInfoContainer, setSessionInfoContainer] =
     useState<HTMLDivElement | null>(null);
+  const [shipButtonContainer, setShipButtonContainer] =
+    useState<HTMLDivElement | null>(null);
 
   // Branch navigator state — populated by ChatWindow via onBranchDataChange
   const [branchTree, setBranchTree] = useState<SessionTreeNode[]>([]);
@@ -4182,6 +4184,7 @@ export function AppShell({ appName }: { appName: string }) {
                         }}
                       />
                     )}
+                    <div ref={setShipButtonContainer} style={{ flexShrink: 0 }} />
                     {!isMobile && (
                       <NotificationBell
                         open={notificationsOpen}
@@ -4235,6 +4238,7 @@ export function AppShell({ appName }: { appName: string }) {
                     <ChatWindow
                       key={sessionKey}
                       session={selectedSession}
+                      shipButtonContainer={activeTerminalId ? null : shipButtonContainer}
                       shipWorkspace={(() => {
                         if (!selectedSession) return undefined;
                         const host = selectedSession.hostId ?? LOCAL_HOST_ID;

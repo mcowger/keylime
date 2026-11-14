@@ -95,6 +95,7 @@ import { getFileName } from "@/lib/file-paths";
 
 interface Props {
   session: SessionInfo | null;
+  shipButtonContainer?: HTMLDivElement | null;
   shipWorkspace?: {
     host: string;
     projectPath: string;
@@ -586,6 +587,7 @@ const CommittedTranscript = memo(function CommittedTranscript({
 
 export function ChatWindow({
   session,
+  shipButtonContainer,
   shipWorkspace,
   newSessionCwd,
   newSessionDraftKey,
@@ -1685,25 +1687,23 @@ export function ChatWindow({
               onDrop={handleDrop}
             >
               {session && shipWorkspace && (
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "flex-end",
-                    padding: "4px 12px",
-                  }}
-                >
-                  <button
-                    type="button"
-                    disabled={sessionBusy || streamState.isStreaming}
-                    title={
-                      sessionBusy || streamState.isStreaming
-                        ? "Wait for the session to finish"
-                        : "Ship workspace"
-                    }
-                    onClick={() => setShipOpen(true)}
-                  >
-                    Ship
-                  </button>
+                <>
+                  {shipButtonContainer && createPortal(
+                    <button
+                      type="button"
+                      className="ui-focus-ring rounded-md border border-solid border-[var(--border)] bg-[var(--bg-panel)] px-3 py-1.5 text-sm font-semibold text-[var(--text)] hover:bg-[var(--bg-hover)] disabled:cursor-default disabled:opacity-50"
+                      disabled={sessionBusy || streamState.isStreaming}
+                      title={
+                        sessionBusy || streamState.isStreaming
+                          ? "Wait for the session to finish"
+                          : "Ship workspace"
+                      }
+                      onClick={() => setShipOpen(true)}
+                    >
+                      Ship
+                    </button>,
+                    shipButtonContainer,
+                  )}
                   <ShipDialog
                     open={shipOpen}
                     onOpenChange={setShipOpen}
@@ -1713,7 +1713,7 @@ export function ChatWindow({
                     sessionId={session.id}
                     onRemoved={shipWorkspace.onRemoved}
                   />
-                </div>
+                </>
               )}
               {isDragOver && (
                 <div className="drop-zone-overlay pointer-events-none absolute inset-0 z-50 flex items-center justify-center backdrop-blur-[1px]">
