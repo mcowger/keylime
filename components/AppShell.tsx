@@ -33,6 +33,7 @@ import {
 import { ConfirmDialog } from "./ui/field";
 import { ChatWindow } from "./ChatWindow";
 import { type Tab } from "./TabBar";
+import { WorkspaceTerminalTabs } from "./WorkspaceTerminalTabs";
 import { type FileExplorerHandle } from "./FileExplorer";
 import type { RightPanelView } from "./RightPanel";
 import { useConnectionDiagnosticsEnabled } from "@/lib/connection-diagnostics-prefs";
@@ -182,6 +183,7 @@ export function AppShell({ appName }: { appName: string }) {
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(
     null,
   );
+  const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
   // The transient identity belongs to one intentional new chat, not one request attempt.
   const [newSessionCwd, setNewSessionCwd] = useState<string | null>(null);
   // Host of newSessionCwd; undefined is this machine. Every host-aware state
@@ -1573,6 +1575,7 @@ export function AppShell({ appName }: { appName: string }) {
       hostId: string,
       _project?: ManagedProject,
     ) => {
+      setActiveTerminalId(null);
       setActiveCwd(cwd);
       setActiveHostId(remoteHostId(hostId));
       if (!cwd) return;
@@ -1613,6 +1616,7 @@ export function AppShell({ appName }: { appName: string }) {
   const sessionLookupVersion = useRef(0);
   const handleSelectSession = useCallback(
     (session: SessionInfo, isRestore = false) => {
+      setActiveTerminalId(null);
       sessionLookupVersion.current += 1;
       // Re-picking the already-open session (sidebar double-click, palette
       // re-select, notification click) must not bump sessionKey: that remounts
@@ -1655,6 +1659,7 @@ export function AppShell({ appName }: { appName: string }) {
       _project?: ManagedProject,
       initialization?: string,
     ) => {
+      setActiveTerminalId(null);
       sessionLookupVersion.current += 1;
       setSettingsTab(null);
       setSelectedSession(null);
@@ -2516,6 +2521,18 @@ export function AppShell({ appName }: { appName: string }) {
   )
     ? candidateCwd
     : null;
+  const terminalWorkspace = workspaceOptions.projects
+    .filter((workspace) => {
+      if (
+        (workspace.hostId ?? LOCAL_HOST_ID) !== workspaceHostId ||
+        !explorerCwd
+      )
+        return false;
+      const root = comparableProjectPath(workspace.path);
+      const path = comparableProjectPath(explorerCwd);
+      return path === root || path.startsWith(root === "/" ? "/" : `${root}/`);
+    })
+    .sort((a, b) => b.path.length - a.path.length)[0];
   const newSessionGroupKey = newSessionHostKey;
   const hostProjects = workspaceOptions.projects.filter(
     (project) => (project.hostId ?? LOCAL_HOST_ID) === newSessionGroupKey,
@@ -2963,6 +2980,13 @@ export function AppShell({ appName }: { appName: string }) {
               overflow: "hidden",
             }}
           >
+            <WorkspaceTerminalTabs
+              hostId={workspaceHostId}
+              cwd={terminalWorkspace?.path ?? null}
+              activeId={activeTerminalId}
+              onSelect={setActiveTerminalId}
+              enabled={!settingsTab}
+            />
             {settingsTab ? (
               <SettingsConfig
                 activeTab={settingsTab}
@@ -3622,7 +3646,12 @@ export function AppShell({ appName }: { appName: string }) {
 
                 {/* Chat content */}
                 <div
-                  style={{ flex: 1, overflow: "hidden", position: "relative" }}
+                  style={{
+                    flex: 1,
+                    overflow: "hidden",
+                    position: "relative",
+                    display: activeTerminalId ? "none" : undefined,
+                  }}
                 >
                   {showChat ? (
                     <ChatWindow

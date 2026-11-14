@@ -1,3 +1,4 @@
+import type { TerminalEvent } from "../terminal-types";
 // Main-server end of the host link (spec "Link protocol"): accepts `ompweb
 // host` daemons on /api/hosts/link and exposes each linked machine as a
 // `RemoteHost`. Everything a daemon sends is untrusted input.
@@ -231,6 +232,7 @@ interface HubState {
   /** lib/uploads.ts: each host's `upload_ack`, and null when its socket ended (upload bytes in flight are lost). */
   uploadListeners: Set<(hostId: string, ack: UploadAck | null) => void>;
   fileListeners: Map<string, (event: WorkspaceFileEvent) => void>;
+  terminalListeners: Map<string, Set<(event: TerminalEvent) => void>>;
   /** The master's configuration version as last computed (null after a failure), and that failure. */
   masterConfig: { version: string | null; error: MasterConfigError | null };
   /** startClusterConfigSync's 30 s timer. */
@@ -252,6 +254,7 @@ function hub(): HubState {
     linkSamples: { samples: [], file: "", timer: undefined },
     uploadListeners: new Set(),
     fileListeners: new Map(),
+    terminalListeners: new Map(),
     masterConfig: { version: null, error: null },
     configSync: undefined,
   };
@@ -263,6 +266,7 @@ function hub(): HubState {
   };
   globalThis.__ompHostHub.uploadListeners ??= new Set();
   globalThis.__ompHostHub.fileListeners ??= new Map();
+  globalThis.__ompHostHub.terminalListeners ??= new Map();
   globalThis.__ompHostHub.sessionChangeListeners ??= new Set();
   globalThis.__ompHostHub.masterConfig ??= { version: null, error: null };
   return globalThis.__ompHostHub;
@@ -276,6 +280,21 @@ export function onHostSessionsChanged(
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
+  };
+}
+
+export function onTerminalEvent(
+  hostId: string,
+  id: string,
+  listener: (event: TerminalEvent) => void,
+): () => void {
+  const key = JSON.stringify([hostId, id]);
+  const listeners = hub().terminalListeners.get(key) ?? new Set();
+  hub().terminalListeners.set(key, listeners);
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+    if (!listeners.size) hub().terminalListeners.delete(key);
   };
 }
 
@@ -295,6 +314,12 @@ export function onWorkspaceFile(
 }
 
 function endWorkspaceWatches(hostId: string): void {
+  const terminalPrefix = `${JSON.stringify([hostId]).slice(0, -1)},`;
+  for (const [key, listeners] of hub().terminalListeners) {
+    if (!key.startsWith(terminalPrefix)) continue;
+    hub().terminalListeners.delete(key);
+    for (const listener of listeners) listener({ type: "disconnected" });
+  }
   const prefix = `${JSON.stringify([hostId]).slice(0, -1)},`;
   for (const [key, listener] of hub().fileListeners) {
     if (!key.startsWith(prefix)) continue;
@@ -1192,6 +1217,12 @@ function applyUp(
       return;
     case "upload_ack":
       return notify(hub().uploadListeners, link.id, message);
+    case "terminal_event":
+      for (const listener of hub().terminalListeners.get(
+        JSON.stringify([link.id, message.id]),
+      ) ?? [])
+        listener(message.event);
+      return;
     case "workspace_file":
       return hub().fileListeners.get(
         JSON.stringify([link.id, message.id, message.epoch]),

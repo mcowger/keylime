@@ -8,6 +8,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Added
 
+- Workspaces support independent interactive terminal tabs on local and linked hosts, with daemon-owned PTY shells, resizing, full-screen applications, Unicode and bundled Nerd Font symbols. Reconnect restores retained screen state; browser disconnects and web restarts leave shells running.
 - `bun run dev:isolated` starts the hot-reloading web server and host daemon with a fresh temporary home/config, private socket, and random loopback port. `--port` selects a fixed port; shutdown retains the temporary files for inspection.
 - Todo and subagents now share the right sidepanel's Activity tab on desktop and mobile. Live updates, completed agents and transcript access remain available without opening the panel automatically; `/btw` stays above the composer.
 - Thinking supports paragraphs, bold, italics, lists, inline code and fenced code at a uniform font size. Unsupported Markdown stays literal, and diagram fences remain code rather than invoking rich renderers.

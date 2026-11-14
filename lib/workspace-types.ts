@@ -107,7 +107,20 @@ export type WorkspaceDirectoryBrowse =
       drives: BrowsableDirectory[];
     };
 
+import type { WorkspaceTerminal } from "./terminal-types";
+
 export interface WorkspaceOps {
+  terminals(
+    action: string,
+    input: Record<string, unknown>,
+  ): Promise<
+    OpResult<{
+      terminals?: WorkspaceTerminal[];
+      terminal?: WorkspaceTerminal;
+      snapshot?: string;
+      cursor?: number;
+    }>
+  >;
   hierarchy(input: HierarchyRequest): Promise<OpResult<HierarchySnapshot>>;
   createWorkspace(
     input: WorkspaceCreateRequest,
@@ -210,6 +223,7 @@ export interface WorkspaceOps {
 export const WORKSPACE_OP_PARAMS: {
   readonly [K in keyof WorkspaceOps]: readonly string[];
 } = {
+  terminals: ["action", "input"],
   hierarchy: ["input"],
   createWorkspace: ["input"],
   workspaceCreationStatus: ["id"],

@@ -285,6 +285,7 @@ export function useGlobalKeyboardShortcuts(
 
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
+      if (e.target instanceof Element && e.target.closest(".xterm")) return;
       // ---- Esc: stop agent ----
       if (e.key === "Escape") {
         if (!globalAbortHandler) return;

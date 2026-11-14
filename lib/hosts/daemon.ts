@@ -20,6 +20,7 @@ import type { HostControlCommand, HostControlStatus } from "./host-control";
 import { readHostLinks, readHostLogin, type HostLink } from "./host-login";
 import { DaemonLink, dialable, nextRedialDelay } from "./daemon-link";
 import { ChannelTable } from "./daemon-channels";
+import { TerminalManager } from "./terminals";
 import {
   readHierarchy,
   registerCreatedSession,
@@ -382,10 +383,46 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       }
     },
   });
+  const terminalOverflow = new Set<string>();
+  const terminals = new TerminalManager((id, event) => {
+    for (const link of links.values())
+      if (link.isUp()) {
+        const key = link.id + ":" + id;
+        if (
+          link.queue(
+            { type: "terminal_event", id, event },
+            "terminal:" + id,
+          ) === null
+        ) {
+          if (!terminalOverflow.has(key)) {
+            terminalOverflow.add(key);
+            link.queue(
+              { type: "terminal_event", id, event: { type: "disconnected" } },
+              "terminal:" + id,
+            );
+          }
+        } else terminalOverflow.delete(key);
+      }
+  });
   setWorkspaceDeletionAdapter({
-    fence: (directory) => channels.fenceWorkspace(directory),
-    inspect: (directory) => channels.inspectWorkspace(directory),
-    stop: (directory) => channels.stopWorkspace(directory),
+    fence: (directory) => {
+      const releaseChannels = channels.fenceWorkspace(directory);
+      const releaseTerminals = terminals.fence(directory);
+      return () => {
+        releaseTerminals();
+        releaseChannels();
+      };
+    },
+    inspect: async (directory) => [
+      ...(await channels.inspectWorkspace(directory)),
+      ...terminals.inspect(directory),
+    ],
+    stop: async (directory) => {
+      await Promise.all([
+        channels.stopWorkspace(directory),
+        terminals.stopWorkspace(directory),
+      ]);
+    },
   });
   const hostSocket: Promise<HostSocket | undefined> =
     options.hostSocket === undefined
@@ -847,6 +884,67 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       );
     }
     if (isWorkspaceOp(op)) {
+      if (op === "terminals") {
+        try {
+          const input = args.input;
+          if (!isRecord(input) || typeof args.action !== "string")
+            throw new HostOpError(
+              400,
+              "invalid_request",
+              "Invalid terminal request",
+            );
+          const id = input.id as string;
+          switch (args.action) {
+            case "list":
+              return {
+                ok: true,
+                value: { terminals: terminals.list(input.cwd as string) },
+              };
+            case "create":
+              return {
+                ok: true,
+                value: {
+                  terminal: terminals.create(
+                    input.cwd as string,
+                    input.cols as number,
+                    input.rows as number,
+                  ),
+                },
+              };
+            case "snapshot":
+              return { ok: true, value: await terminals.snapshot(id) };
+            case "input":
+              terminals.input(id, input.data as string);
+              break;
+            case "resize":
+              await terminals.resize(
+                id,
+                input.cols as number,
+                input.rows as number,
+              );
+              break;
+            case "close":
+              await terminals.close(id);
+              break;
+            default:
+              throw new HostOpError(
+                400,
+                "invalid_request",
+                "Invalid terminal action",
+              );
+          }
+          return { ok: true, value: {} };
+        } catch (error) {
+          if (error instanceof HostOpError)
+            return {
+              ok: false,
+              status: error.status,
+              code: error.code,
+              error: error.message,
+            };
+          throw error;
+        }
+      }
       if (op === "publishUpload") requireUploadOwner(link, args.id);
       const input = isRecord(args.input) ? args.input : null;
       const owner = isRecord(input?.owner)
@@ -1031,6 +1129,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     const configStopped = config.stop();
     stopping = (async () => {
       await stopWorkspaceCreation();
+      await terminals.stop();
       await Promise.all([...links.values()].map((link) => link.stop()));
       await Promise.all([
         ...stops,

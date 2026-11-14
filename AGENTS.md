@@ -1648,6 +1648,13 @@ btw` → localized "requires a newer omp" toast (`toastBtwError`); background
 - Deletion fences starts, stops all managed processes under the workspace after confirmation, then separately confirms dirty-file discard. Declining discard leaves processes stopped. Only successful Git removal unregisters the workspace and children; branches and history remain.
 - Explorer and Git pair `explorerCwd` with its owning host. Each file tab retains its source host/cwd/session.
 
+### Workspace terminals
+
+- `lib/hosts/terminals.ts` owns real Bun PTY shells and headless terminal state in the host daemon. Browser tabs and web servers never own shell lifetime. Explicit terminal close, workspace deletion and daemon shutdown stop them; switching tabs or disconnecting does not.
+- `/api/terminals` and `/api/terminals/[id]` use the owning host's workspace ops for local and remote hosts. Creation requires a registered workspace. Output uses the existing multiplexed `terminal` event channel, never a separate EventSource or browser socket.
+- `WorkspaceTerminalTabs` renders first-class workspace tabs; `WorkspaceTerminal` uses xterm, fit-to-container resizing and the bundled Nerd Font. Reconnect loads a cursor-stamped serialized screen and applies only later events; a cursor gap requires a fresh snapshot. Do not replay uncertain input automatically.
+- State is daemon-memory-only. A web restart preserves shells; a daemon restart does not. Terminal keyboard input must not trigger application navigation or agent abort shortcuts.
+
 ### Managed projects sidebar (`lib/hosts/project-hierarchy.ts`, `/api/hierarchy`)
 
 - Registrations are host-bound, canonical and exclusive to one parent. Duplicate imports are idempotent. Missing resources remain visible as unavailable.

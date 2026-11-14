@@ -23,3 +23,13 @@ The daemon records the captured pipeline, status, and command output. A browser 
 The default workspace cannot be deleted as a worktree. Deleting another workspace is blocked while setup runs. The daemon fences new session starts and finds all daemon-managed processes in that directory or its descendants, including unregistered sessions and processes shared with other servers. Confirm stopping them first; the daemon waits for exit and refuses deletion if a stop fails.
 
 If the worktree is dirty, a separate confirmation asks whether to discard its changes. Declining at this point leaves the processes stopped. After Git successfully removes the worktree, the host unregisters it and its sessions for all linked servers. The Git branch, session transcripts, and artifacts are preserved.
+
+## Interactive terminals
+
+Open terminals from a workspace. Each terminal has its own application tab and shell, starting in that workspace's directory on its owning host. Local and linked hosts use the same daemon-backed terminal path. Terminals share workspace files with its sessions and other terminals.
+
+Switching tabs, closing the browser, or restarting the web server leaves shells running. Reopening the workspace discovers its terminals and restores their retained display. Explicitly closing a terminal ends its shell; stopping the host daemon ends all its terminals. Terminal state is in daemon memory, not durable across daemon restarts.
+
+Workspace deletion includes terminals in its process confirmation and stops them before removing the worktree. Unregistering a workspace does not stop its processes or delete files.
+
+Each daemon allows 32 terminals and retains 2,000 scrollback lines per terminal. Screens resize up to 500 columns by 300 rows. A pathological output burst that leaves more than 16 MiB awaiting terminal parsing stops that terminal to bound daemon memory; ordinary browser or host-link backpressure instead reconnects the display without stopping its shell.

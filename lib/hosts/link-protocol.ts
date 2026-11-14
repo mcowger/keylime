@@ -1,3 +1,4 @@
+import type { TerminalEvent } from "../terminal-types";
 // Wire format between the main omp-web server and the `ompweb host` daemon.
 // Pure: no I/O and no Next or `@/` imports, so both sides share it. The browser link (lib/browser-link.ts and the
 // worker it talks to, lib/event-stream-worker.ts) reuses its transport pieces: LINK_LIMITS' piece, window and liveness
@@ -310,6 +311,7 @@ export type UpMessage =
       done: boolean;
       error?: { status: number; code: string; message: string };
     }
+  | { type: "terminal_event"; seq: number; id: string; event: TerminalEvent }
   | {
       type: "workspace_file";
       seq: number;
@@ -473,6 +475,7 @@ const UP_TYPES: readonly string[] = [
   "config_state",
   "res",
   "upload_ack",
+  "terminal_event",
   "workspace_file",
   "ping",
   "pong",
@@ -855,6 +858,57 @@ export function decodeUp(line: string): UpMessage | UnknownMessage {
       return o.error === undefined
         ? ack
         : { ...ack, error: errorBody(o.error) };
+    }
+    case "terminal_event": {
+      const event = o.event;
+      const terminalId = str(o, "id");
+      if (
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          terminalId,
+        )
+      )
+        fail("invalid terminal id");
+      if (!isObj(event)) fail("event must be an object");
+      if (event.type === "closed")
+        return {
+          type: "terminal_event",
+          seq: seqNum(o, "seq"),
+          id: str(o, "id"),
+          event: { type: "closed" },
+        };
+      if (event.type === "disconnected")
+        return {
+          type: "terminal_event",
+          seq: seqNum(o, "seq"),
+          id: str(o, "id"),
+          event: { type: "disconnected" },
+        };
+      if (event.type === "resize") {
+        const cols = seqNum(event, "cols"),
+          rows = seqNum(event, "rows");
+        if (cols < 2 || cols > 500 || rows < 2 || rows > 300)
+          fail("invalid terminal dimensions");
+        return {
+          type: "terminal_event",
+          seq: seqNum(o, "seq"),
+          id: terminalId,
+          event: {
+            type: "resize",
+            cols,
+            rows,
+            cursor: seqNum(event, "cursor"),
+          },
+        };
+      }
+      if (event.type !== "output") fail("invalid terminal event");
+      const data = str(event, "data");
+      if (data.length > 262144) fail("terminal output too large");
+      return {
+        type: "terminal_event",
+        seq: seqNum(o, "seq"),
+        id: terminalId,
+        event: { type: "output", data, cursor: seqNum(event, "cursor") },
+      };
     }
     case "workspace_file": {
       const event = o.event;

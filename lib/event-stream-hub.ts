@@ -1,6 +1,11 @@
 import { randomUUID } from "crypto";
 import { filePathApiSegments } from "./file-paths";
-import { hostsSnapshot, onHostsChange, onWorkspaceFile } from "./hosts/hub";
+import {
+  hostsSnapshot,
+  onHostsChange,
+  onWorkspaceFile,
+  onTerminalEvent,
+} from "./hosts/hub";
 import { resolveWorkspaceHost } from "./api-utils";
 import { isLinkUp } from "./hosts/host";
 import { HostOpError } from "./hosts/link-protocol";
@@ -55,6 +60,7 @@ class Subscription {
   constructor(
     readonly id: string,
     readonly coalescesMessageUpdates: boolean,
+    readonly terminal: boolean,
   ) {}
 }
 
@@ -238,7 +244,11 @@ export class EventStreamConnection {
         code: UNKNOWN_CONNECTION_CODE,
       };
     this.unsubscribe(id);
-    const subscription = new Subscription(id, channel.kind === "session");
+    const subscription = new Subscription(
+      id,
+      channel.kind === "session",
+      channel.kind === "terminal",
+    );
     this.subscriptions.set(id, subscription);
     const handle: SubscriptionHandle = {
       get active() {
@@ -351,6 +361,10 @@ export class EventStreamConnection {
 
   private deliver(subscription: Subscription, data: unknown): void {
     if (!subscription.active || this.closed) return;
+    if (subscription.terminal && this.sink.backpressured()) {
+      this.end(subscription);
+      return;
+    }
     if (
       subscription.coalescesMessageUpdates &&
       isRecord(data) &&
@@ -418,6 +432,36 @@ async function openChannel(
   handle: SubscriptionHandle,
 ): Promise<SubscribeResult> {
   switch (channel.kind) {
+    case "terminal": {
+      const resolved = await resolveWorkspaceHost(channel.hostId, null);
+      if ("response" in resolved)
+        return {
+          ok: false,
+          status: resolved.response.status,
+          error: "Host unavailable",
+          code: "host_unavailable",
+        };
+      const exists = await resolved.host.workspaceOps.terminals("snapshot", {
+        id: channel.terminalId,
+      });
+      if (!exists.ok)
+        return {
+          ok: false,
+          status: exists.status,
+          error: exists.error,
+          code: exists.code,
+        };
+      if (!handle.active) return SUBSCRIBED;
+      handle.open();
+      const detach = onTerminalEvent(
+        resolved.host.id,
+        channel.terminalId,
+        (event) =>
+          event.type === "disconnected" ? handle.end() : handle.send(event),
+      );
+      handle.setDetach(detach);
+      return SUBSCRIBED;
+    }
     case "running":
       return openRunningChannel(handle);
     case "notifications":

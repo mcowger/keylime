@@ -31,6 +31,7 @@ export const UNKNOWN_CONNECTION_CODE = "unknown_connection";
 
 export type EventStreamChannel =
   | { kind: "running" }
+  | { kind: "terminal"; hostId: string; terminalId: string }
   /** Notifications the server routes to the tab with this notification client id. */
   | { kind: "notifications"; clientId: string }
   | { kind: "session"; sessionId: string }
@@ -172,6 +173,15 @@ export function parseEventStreamChannel(
       return { kind: "host-tools" };
     case "hosts":
       return { kind: "hosts" };
+    case "terminal":
+      return isBoundedString(channel.hostId, MAX_ID_LENGTH) &&
+        isBoundedString(channel.terminalId, MAX_ID_LENGTH)
+        ? {
+            kind: "terminal",
+            hostId: channel.hostId,
+            terminalId: channel.terminalId,
+          }
+        : null;
     case "session":
       return isBoundedString(channel.sessionId, MAX_ID_LENGTH)
         ? { kind: "session", sessionId: channel.sessionId }
