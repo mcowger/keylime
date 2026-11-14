@@ -8,6 +8,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Fixed
 
+- Default workspaces use the main checkout's branch for Git projects and `default` for non-Git projects instead of repeating the project name.
 - Browser UUID generation now works on plain-HTTP LAN origins without `crypto.randomUUID`, using cryptographically random UUID v4 values instead.
 
 ### Breaking changes

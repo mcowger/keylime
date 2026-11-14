@@ -311,7 +311,10 @@ export function HierarchySidebar({
                           }}
                         >
                           {workspace.name}
-                          {workspace.branch ? ` (${workspace.branch})` : ""}
+                          {workspace.branch &&
+                          workspace.branch !== workspace.name
+                            ? ` (${workspace.branch})`
+                            : ""}
                           {workspace.unavailable ? " (unavailable)" : ""}
                         </button>{" "}
                         {workspace.setup &&

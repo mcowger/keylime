@@ -442,7 +442,14 @@ export async function hierarchyOperation(
     }
     for (const project of snapshot.projects)
       for (const workspace of project.workspaces) {
+        if (project.kind === "directory" && workspace.isDefault)
+          workspace.name = "default";
         try {
+          if (project.kind === "git" && workspace.isDefault) {
+            const branch = git(workspace.path, "branch", "--show-current");
+            workspace.name = branch || "Detached HEAD";
+            workspace.branch = branch || undefined;
+          }
           workspace.unavailable = !statSync(workspace.path).isDirectory();
         } catch {
           workspace.unavailable = true;
