@@ -2035,10 +2035,10 @@ export const SessionSidebar = memo(function SessionSidebar({
           onSelectSession={handleSelectSessionFromList}
           onAddProject={(host) => {
             setAddProjectOpen(true, host);
-          onNewWorkspace={(project) => onNewWorkspace?.(project)}
-          hostUnavailableReason={hostUnavailableReason}
             setAddProjectError(null);
           }}
+          onNewWorkspace={(project) => onNewWorkspace?.(project)}
+          hostUnavailableReason={hostUnavailableReason}
           onChanged={() => {
             void loadProjects();
             void loadSessions();

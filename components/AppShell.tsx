@@ -4144,6 +4144,7 @@ export function AppShell({ appName }: { appName: string }) {
                       activityContainer={activityContainer}
                       newSessionCwd={effectiveNewSessionCwd}
                       newSessionHostId={newSessionHost}
+                      prepareNewWorkspace={prepareNewWorkspace}
                       newSessionCreationId={undefined}
                       newSessionDraftKey={
                         activeChatId ? `new:tab:${activeChatId}` : undefined
