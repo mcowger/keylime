@@ -16,8 +16,6 @@
   },
   "bin": {
     "ompweb": "bin/omp-web.js",
-    "ompweb-tray": "bin/omp-web-tray.js",
-    "ompweb-tray-linux": "bin/linux-tray.js",
     "ompweb-launchd": "bin/omp-web-launchd.js",
     "ompweb-systemd": "bin/omp-web-systemd.js"
   },
@@ -47,10 +45,6 @@
     "typecheck": "bun check && bun check -p runner",
     "format": "bun fmt",
     "format:check": "bun fmt --check",
-    "tray:install": "bun bin/omp-web-tray.js --install",
-    "tray:uninstall": "bun bin/omp-web-tray.js --uninstall",
-    "tray:start": "bun bin/omp-web-tray.js --start",
-    "tray:status": "bun bin/omp-web-tray.js --status",
     "systemd:install": "bun bin/omp-web-systemd.js install",
     "systemd:uninstall": "bun bin/omp-web-systemd.js uninstall",
     "systemd:start": "bun bin/omp-web-systemd.js start",

@@ -6,7 +6,11 @@ This is Matt Cowger's hard fork. Upstream compatibility and migration paths are 
 
 Runtime management is exclusively mise. `mise.toml` pins Bun; use `mise trust && mise install` and `mise exec -- bun <args>` without shell activation. Nix packaging/support is removed; do not reintroduce it.
 
-Windows is permanently out of scope. Support only macOS and Linux; do not reintroduce Windows services, tray binaries, build targets, path/UNC/drive handling, or platform test accommodations. Keep native OMP profile validation restrictions, which OMP enforces on every platform.
+Windows is permanently out of scope. Support only macOS and Linux; do not reintroduce Windows services, build targets, path/UNC/drive handling, or platform test accommodations. Keep native OMP profile validation restrictions, which OMP enforces on every platform.
+
+System tray integration is removed on all platforms. Do not reintroduce tray processes, icons, desktop autostart, or desktop bus integration. Keep Linux systemd and macOS launchd service registration, with separate web and host processes.
+
+Password protection is optional on every bind address, including `0.0.0.0`. Do not require authentication to expose a server or force loopback when clearing a password. Users own network access policy; retain configured password validation, origin checks, and secret isolation.
 
 Use `bun run typecheck` for native Bun checks of both the root project and runner. Use `bun fmt` to format and `bun fmt --check` to check formatting. The user approved a full-repository reformat; CI and release checks enforce formatting. Linting is removed by explicit user choice: pinned Bun 1.4.4 has no built-in linter, and ESLint and `tsc` are not used.
 
@@ -16,7 +20,7 @@ After building the runner, the full smoke scenario passed with PATH restricted t
 
 ## Architecture to preserve
 
-- React SPA (`app/client.tsx`, `components/`, `hooks/`) served by Bun (`server/`). The launcher, host daemon, and tray also run on Bun. The web server and daemon remain separate processes.
+- React SPA (`app/client.tsx`, `components/`, `hooks/`) served by Bun (`server/`). The launcher and host daemon also run on Bun. The web server and daemon remain separate processes.
 - Live work follows browser → Bun web server → linked `ompweb host` daemon → `ompweb-omp --headless`. The daemon owns session processes. A web restart does not end runs; a daemon restart does. Even `local` uses the host link, not a direct web-server spawn/filesystem fallback.
 - `runner/` is the only OMP SDK integration boundary. Server/daemon code must not import `@oh-my-pi/*` or `@earendil-works/*`. A stock installed `omp` cannot replace `ompweb-omp`: there is no RPC fallback.
 - OMP owns sessions, native queues, agent behavior, provider credentials, and persisted history. Read JSONL through the existing readers; route live mutations through the runner. Never access OMP's auth database directly.
@@ -32,7 +36,7 @@ After building the runner, the full smoke scenario passed with PATH restricted t
 - Layout/navigation/tabs and preference plumbing: `components/AppShell.tsx`; project/session tree: `components/SessionSidebar.tsx`; file tree/viewer: `components/FileExplorer.tsx`, `components/FileViewer.tsx`.
 - Composer and controls: `components/ChatInput.tsx`; chat layout/transcript: `components/ChatWindow.tsx`, `components/MessageView.tsx`; lifecycle/reconciliation: `hooks/useAgentSession*`.
 - Composer-attached todo/subagent/side-question panels: `components/ComposerPanels.tsx`. Keep them separate from the scrolling transcript unless deliberately changing that contract.
-- User-facing strings need all four dictionaries: `lib/i18n/locales/{en,zh-CN,zh-TW,ja}.json`.
+- User-facing strings belong in the English dictionary: `lib/i18n/locales/en.json`.
 - Web preferences and native OMP settings are distinct. Reuse current storage conventions rather than introducing a second settings system.
 - Edit, fork, and historical branch viewing are different operations. Preserve drafts, attachments, pending transcription ownership, and native history identity when changing chat UX.
 
@@ -66,7 +70,6 @@ Use current source and newer specs to resolve contradictions:
 - Next.js/next-font guidance in the warm-UI design is historical. Current UI conventions are the React SPA, self-hosted fonts, Base UI, cmdk, and semantic CSS tokens.
 - The retired browser experiment's `ws-*` modes are superseded by `ws`/`sse`, default `ws`.
 - Notification JSON storage is superseded by SQLite. Current project guidance gives notifications their own multiplexed channel, not the old proposal to piggyback on running-session events.
-- English README already has authenticated PWA installation and notifications sections. Translations vary substantially in completeness; do not assume parity.
 - The changelog labels v0.7.0 with a future-relative date of 2026-11-14 at this review. Treat that as documentation metadata, not proof a release is published.
 
 Review date: 2026-11-13. Recheck changing versions and shipping behavior before relying on these notes for implementation.

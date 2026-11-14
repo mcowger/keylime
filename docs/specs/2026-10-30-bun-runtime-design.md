@@ -23,11 +23,11 @@ Non-goals: the WebSocket link itself; single-binary distribution (`bun build --c
   - **HTTP proxy:** `undici` and `lib/http-dispatcher.ts` are removed, because Bun's `fetch` honors `HTTP(S)_PROXY`/`NO_PROXY`.
   - **Cookies:** `Bun.Cookie`/`Bun.CookieMap` replace `NextRequest.cookies`/`NextResponse.cookies`.
   - **`fs.accessSync`:** it returns `null` on Bun, so the `=== undefined` executable checks become try/catch.
-  - **Kept:** `web-push`, `jsdom` and `node:child_process` (they work and no built-in replaces them). `jiti` also stays, for the Node-run `ompweb host` daemon and the tray; tests stop using it.
+  - **Kept:** `web-push`, `jsdom` and `node:child_process` (they work and no built-in replaces them).
 - **R6 Tests and checks.** Tests run under `bun test --parallel` with no jiti and no `--experimental-strip-types`. The full suite passes, as do `tsc --noEmit` (with `@types/bun`) and ESLint (typescript-eslint plus react-hooks, without the Next config).
 - **R7 Front end.** Fonts are self-hosted from `app/fonts` (Geist, JetBrains Mono, Noto Sans Mono, Source Serif 4 as variable woff2), and their license texts ship in the npm package (`package.json` `files`), as the OFL requires. KaTeX CSS leaves the entry chunk: it is linked on first math render from `/katex/`. `NEXT_PUBLIC_*` become build-time `OMP_WEB_PUBLIC_APP_VERSION` and `OMP_WEB_PUBLIC_EVENT_STREAM_WORKER_VERSION`. `next/dynamic` and `next/navigation` become local `lib/dynamic.tsx` and `lib/navigation.ts` with the same call-site API.
 - **R8 Dev and prod.** `npm run dev` runs `bun --hot server/dev.ts` on port 30178: API plus HMR SPA in one process, bundled in memory. `npm run build` writes the client to `dist/`, and `npm start` serves it on 30177. Dev never reads `dist/`, so building during dev is harmless.
-- **R9 Launchers, services and CI.** `bin/omp-web.js` spawns `<bun> server/main.ts -p <port> -H <host>` and keeps its restart and update protocol. The update worker runs on Node (`OMP_WEB_NODE_BIN`). systemd/launchd/tray keep starting the Node launcher. CI adds a smoke test of the built app and of a packed global install on Ubuntu.
+- **R9 Launchers and services.** `bin/omp-web.js` starts the Bun server and keeps its restart and update protocol. systemd and launchd register separate web and host services.
 - **R10 Package manager.** npm and `package-lock.json` stay; no `bun.lock`.
 - **R11 Static roots.** The server resolves `dist/`, `public/` and the KaTeX directory from one root, `OMP_WEB_PACKAGE_DIR ?? process.cwd()`, never from `import.meta`/`__dirname`. This keeps a later compiled-binary build possible.
 - **R12 Cleanup.** `spike/` is reference only. The plan's last task deletes it.
@@ -39,8 +39,8 @@ ompweb (Node ≥ 24: bin/omp-web.js) ── spawn + IPC ──▶ Bun: server/ma
   options, password hash, restart gate,              Bun.serve
   update arming, banner on "Ready"                    ├─ routes: server/routes.ts → app/api/**/route.ts
                                                       ├─ proxy.ts gate (before every route and file)
-ompweb host / tray / systemd / launchd: Node          ├─ server/http.ts: security headers, cache, gzip, static, SPA
-  (jiti loads lib/hosts/*)                           └─ register() from instrumentation.node.ts once
+ompweb host / systemd / launchd: Bun                   ├─ server/http.ts: security headers, cache, gzip, static, SPA
+                                                      └─ register() from instrumentation.node.ts once
 npm run build: scripts/build-client.ts → Bun.build(app/index.html) → dist/
 npm run dev:   bun --hot server/dev.ts (HTML import, HMR, no dist/)
 ```
@@ -106,7 +106,7 @@ Pre-checks by the planner (2026-10-30, Bun 1.4.4, Node 26.8.1, npm 11.19.0, Linu
 2. `npm ci && npm run typecheck && npm run lint && npm test && npm run build && npm run smoke` passes on Ubuntu CI. `npm test` has 0 failures and no test file was deleted, except `lib/security-headers.test.mjs`, which is ported to `server/http.test.ts`.
 3. The packed-install smoke (`npm pack`, global install into a temp prefix, `npm run smoke -- --package <dir>`) passes on Ubuntu CI and the user's Mac.
 4. The server tests pin invariants 1, 4, 5, 6 and 7. The store, media and update-worker tests pin 8 and 9, and the index-render test pins 10.
-5. `AGENTS.md` describes the Bun architecture, the route table and the new traps, and has no Next block or "never run next build" trap. README (en/ja/zh-CN), CONTRIBUTING, DESIGN and CHANGELOG are updated. `spike/` is gone.
+5. `AGENTS.md` describes the Bun architecture, the route table and the new traps, and has no Next block or "never run next build" trap. README, CONTRIBUTING, DESIGN and CHANGELOG are updated. `spike/` is gone.
 
 ## Future work (out of scope)
 

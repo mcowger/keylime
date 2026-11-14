@@ -115,4 +115,4 @@ The list is one constant, used by the master when it builds the bundle and by th
 
 ## Documentation
 
-`README.md`, `AGENTS.md`, `CHANGELOG.md`, the remote-hosts specification's version rule, and the Settings strings in English, Chinese and Japanese.
+`README.md`, `AGENTS.md`, `CHANGELOG.md`, the remote-hosts specification's version rule, and the English Settings strings.

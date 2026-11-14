@@ -13,9 +13,9 @@
 ## Global Constraints
 
 - Work only in `/root/git/.ompweb_worktrees/ws-link` on `feat/ws-link`. One commit per task with the message given. The worktree has no `node_modules`: Task 1 runs `npm ci` (never `bun install`, never a `bun.lock`).
-- Ports: 0 or 30300–30399 only. Never start, stop or restart a systemd/launchd/tray service, never run `ompweb-deploy`, never touch the real `~/.omp` (temp `HOME`/`PI_CODING_AGENT_DIR`, `OMP_WEB_OMP_BIN=/nonexistent/omp` for any server you start).
+- Ports: 0 or 30300–30399 only. Never start, stop or restart a systemd/launchd service, never run `ompweb-deploy`, never touch the real `~/.omp` (temp `HOME`/`PI_CODING_AGENT_DIR`, `OMP_WEB_OMP_BIN=/nonexistent/omp` for any server you start).
 - `lib/hosts/**` never references `Bun.*` or `bun:*`, types included (the daemon loads it through jiti). The hub types its socket structurally (`LinkSocket`).
-- The daemon stays on Node in npm installs: no change to `bin/omp-web-host.js`, `bin/omp-web.js`, the systemd/launchd helpers or the trays. No new dependency.
+- The daemon and service helpers run on Bun.
 - `lib/hosts/link-protocol.ts` keeps both constants as single literal lines, `export const LINK_PROTOCOL_VERSION = 5;` and `export const MIN_LINK_PROTOCOL_VERSION = 4;` (the deploy script parses them with `sed`).
 - Limits come from `LINK_LIMITS` (unchanged values): uplink text frame ≤ `uplinkBytes` (16 MiB), line ≤ `maxLineBytes` (8 MiB), result ≤ `blobBytes` (64 MiB); hub `maxPayloadLength = LINK_LIMITS.blobBytes + 256`, `backpressureLimit = LINK_LIMITS.uplinkBytes`, `closeOnBackpressureLimit: true`.
 - Close codes only from `LINK_CLOSE` (Task 2): `goingAway 1001`, `invalidData 1007`, `policy 1008`, `tooBig 1009`, `replaced 4409`, `versionMismatch 4426`; revoke uses a plain `close()` (1000).

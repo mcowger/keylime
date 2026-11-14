@@ -38,9 +38,6 @@ Options:
   -p, --port <port>        Server port (default 30177, env PORT)
   -H, --hostname <host>    Bind hostname (default 127.0.0.1, env OMP_WEB_HOSTNAME)
       --no-open            Do not open the browser automatically
-      --install-tray       Install the Linux system tray
-      --uninstall-tray     Uninstall system tray service & shortcuts
-      --tray               Start background system tray manager
   -h, --help               Show this help
       --version            Show version
 
@@ -68,7 +65,7 @@ non-loopback hostname, so the password and session cookie stay private.`);
  * password (env or `--password`) is reported instead of parsed: the caller
  * migrates or refuses it rather than passing it to the server. A bad port is
  * reported in `error`, which the caller prints before exiting with 2.
- * @returns {{ port: string, hostname: string, passwordHash?: string, legacyPassword?: string, legacyPasswordSource?: "env" | "flag", openBrowser: boolean, installTray: boolean, uninstallTray: boolean, tray: boolean, help?: boolean, version?: boolean, error?: string }}
+ * @returns {{ port: string, hostname: string, passwordHash?: string, legacyPassword?: string, legacyPasswordSource?: "env" | "flag", openBrowser: boolean, help?: boolean, version?: boolean, error?: string }}
  */
 function parseLaunchOptions(args = process.argv.slice(2), env = process.env) {
   const { values: cliArgs } = parseArgs({
@@ -79,9 +76,6 @@ function parseLaunchOptions(args = process.argv.slice(2), env = process.env) {
       help: { type: "boolean", short: "h" },
       version: { type: "boolean" },
       "no-open": { type: "boolean" },
-      "install-tray": { type: "boolean" },
-      "uninstall-tray": { type: "boolean" },
-      tray: { type: "boolean" },
     },
     strict: false,
   });
@@ -100,9 +94,6 @@ function parseLaunchOptions(args = process.argv.slice(2), env = process.env) {
     legacyPassword: legacy?.value,
     legacyPasswordSource: legacy?.source,
     openBrowser: !cliArgs["no-open"] && !isEnabled(env.OMP_WEB_NO_OPEN),
-    installTray: Boolean(cliArgs["install-tray"]),
-    uninstallTray: Boolean(cliArgs["uninstall-tray"]),
-    tray: Boolean(cliArgs.tray),
     ...(/^\d{1,5}$/.test(port) && Number(port) <= 65535
       ? {}
       : { error: `Invalid port: ${port}. Use an integer from 0 to 65535.` }),
@@ -128,10 +119,10 @@ function parseLaunchOptions(args = process.argv.slice(2), env = process.env) {
 }
 
 /**
- * The password and bind checks before a server starts (bin/omp-web.js, server/binary.ts). Only a password hash reaches
- * the server (issue #239): a plaintext OMP_WEB_PASSWORD alone is migrated, hashed into OMP_WEB_PASSWORD_HASH and
- * removed from process.env before any child can inherit it. The removed --password flag, a plaintext set next to a
- * hash, an invalid hash, or a non-loopback bind without a password print why and exit 1.
+ * Password validation before a server starts (bin/omp-web.js, server/binary.ts). Only a password hash reaches
+ * the server: a plaintext OMP_WEB_PASSWORD alone is hashed into OMP_WEB_PASSWORD_HASH and removed from process.env.
+ * The removed --password flag, a plaintext set next to a hash, or an invalid hash print why and exit 1.
+ * Authentication is optional on every bind address.
  * @returns {string | undefined} the password hash, if any
  */
 function checkLaunchSecurity(launchOptions) {
@@ -183,14 +174,10 @@ function checkLaunchSecurity(launchOptions) {
   }
   const { hostname } = launchOptions;
   if (!isLoopbackHost(hostname)) {
-    if (passwordHash === undefined) {
-      console.error(
-        `Refusing to listen on ${hostname} without a password hash. Run: ompweb hash-password, then set OMP_WEB_PASSWORD_HASH. Or bind to 127.0.0.1.`,
-      );
-      process.exit(1);
-    }
     console.warn(
-      `Warning: ompweb is listening on ${hostname} over HTTP. Use HTTPS or a trusted VPN to protect the password and session cookie in transit.`,
+      passwordHash === undefined
+        ? `Warning: ompweb is listening on ${hostname} without authentication. Anyone who can reach it can access its agent and file capabilities.`
+        : `Warning: ompweb is listening on ${hostname} over HTTP. Use HTTPS or a trusted VPN to protect the password and session cookie in transit.`,
     );
   }
   return passwordHash;

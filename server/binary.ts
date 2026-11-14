@@ -1,6 +1,6 @@
 // The compiled `ompweb` (scripts/build-binary.ts): the web server by default, with the npm launcher's flags and
 // password env, `ompweb host` (the session daemon) and `ompweb hash-password`. The server runs in this process: there
-// is no launcher, so no in-app update, tray or service installer. Static root: the directory the executable sits in
+// is no launcher, so no in-app update or service installer. Static root: the directory the executable sits in
 // (dist/, public/, node_modules/katex/, lib/omp/session-edit-extension.mjs), unless OMP_WEB_PACKAGE_DIR names another.
 import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
@@ -60,10 +60,6 @@ const options = parseLaunchOptions();
 if (options.help || options.version) process.exit(0);
 if (options.error) {
   console.error(options.error);
-  process.exit(2);
-}
-if (options.installTray || options.uninstallTray || options.tray) {
-  console.error(`The ompweb binary has no tray. ${SEE_README}`);
   process.exit(2);
 }
 const passwordHash = checkLaunchSecurity(options);

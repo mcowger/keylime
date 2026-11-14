@@ -1,8 +1,8 @@
-# omp-web - Development Notes
+# Keylime - Development Notes
 
 ## Hard fork policy
 
-This repository is a hard fork of ompweb for Matt Cowger's preferences, not a compatibility-preserving downstream. This policy takes precedence over inherited compatibility and migration requirements elsewhere in this file, `DESIGN.md`, and other upstream documentation.
+This repository is Keylime (`mcowger/keylime`), Matt Cowger's independent, intentionally breaking hard fork of `ompweb-dev/ompweb`, not a compatibility-preserving downstream. It is a standalone GitHub repository, outside any fork network. This policy takes precedence over inherited compatibility and migration requirements elsewhere in this file, `DESIGN.md`, and other upstream documentation. Internal ompweb package/CLI names and runner download sources remain unchanged unless a task explicitly changes them.
 
 - Do not preserve backward compatibility with upstream or earlier versions of this fork unless the user explicitly requests it for a specific change.
 - No migration paths are required for legacy data, schemas, configuration, APIs, protocols, CLI commands, or deployment workflows.
@@ -14,21 +14,30 @@ This repository is a hard fork of ompweb for Matt Cowger's preferences, not a co
 
 Use mise exclusively for runtime management. `mise.toml` pins Bun, the sole JavaScript/TypeScript runtime. Run `mise trust && mise install` before installing dependencies; use `mise exec -- bun <args>` when shell activation is unavailable. Do not add Node runtime requirements, Nix packaging, flakes, or alternate runtime managers. Bun's supported `node:*` APIs and compatibility types are allowed.
 
+Supported platforms are macOS and glibc Linux, on x64 and arm64. Windows support is permanently out of scope; do not restore its services, build targets, path handling, or test accommodations. Keep the web server and host daemon as separate Bun processes so web restarts do not end agent runs.
+
+Password authentication is optional on every bind address, including `0.0.0.0`. Do not require a password for network binding or change the bind address when a password is cleared. Preserve configured authentication, password validation, origin checks, and secret handling; deployment access controls are the user's choice.
+
+System tray integration is out of scope. Do not add tray processes, icons, desktop autostart, or desktop bus integration. Keep systemd and launchd service registration.
+
 ## Quick Start
 
 ```bash
+mise trust && mise install
 bun install     # install dependencies (Bun is required)
 bun run dev     # Bun server with hot reload (HMR for the SPA), port 30178
 bun run build   # bundle the SPA into dist/ (scripts/build-client.ts)
 bun run start   # serve dist/ + the API, port 30177
 bun run test    # bun test --parallel
 bun run smoke   # start the built server and `ompweb host` (or a packed install: -- --package <dir>; a binary: -- --binary <path>) and check them
-bun run build:binary [-- --target bun-<os>-<arch>]   # build, then compile release/ompweb-<os>-<arch>/ and its .tar.gz/.zip (scripts/build-binary.ts)
+bun run build:binary --target bun-<os>-<arch>   # compile release/ompweb-<os>-<arch>/ and its .tar.gz
 bun run typecheck  # bun check for the root project and runner
 bun fmt            # format files; bun fmt --check checks formatting
 ```
 
-Linting is removed: pinned Bun 1.4.4 has no built-in linter, and ESLint and `tsc` are not used. CI and release checks enforce `bun fmt --check` against the fully formatted baseline.
+Use native `bun check` for typechecking and `bun fmt` for formatting. `bun run typecheck` checks both the root project and runner; `bun run format:check` checks the fully formatted baseline. Linting is intentionally removed: pinned Bun 1.4.4 has no built-in linter. Do not reintroduce ESLint or standalone `tsc` tooling.
+
+GitHub Actions are disabled. All four workflow definitions are preserved as `.github/workflows/*.yml.disabled`; do not reactivate them or add active workflows without an explicit request. Run checks locally. `bun run release:check` runs formatting, typechecking, tests, build, and smoke verification; it does not publish.
 
 The dev server needs ompweb's omp build (`runner/`). Fetch the pinned omp packages first, then install
 (`bun run test` needs this too):
@@ -45,24 +54,16 @@ omp-web never imports `@oh-my-pi/*` or `@earendil-works/*` packages, even
 though the server now runs on Bun: live work goes through the `ompweb-omp`
 child (`runner/`, ompweb's own omp build). See `DESIGN.md` for the full porting contract.
 
-```
-Browser              Bun server (server/app.ts)          omp child process
-  │                        │                                    │
-  ├─ GET /api/sessions ────▶ reads ~/.omp/agent/sessions/       │
-  ├─ GET /api/sessions/[id] reads .jsonl file directly          │
-  ├─ SharedWorker ── GET /api/events ──▶ ONE multiplexed SSE per browser │
-  │   (all tabs)     POST /api/events ─▶ subscribe running/session/file  │
-  │                        │                                    │
-  ├─ send message ─────────▶ POST /api/agent/[id]               │
-  │                        │   startRpcSession() ── spawn ─────▶│ ompweb-omp --headless
-  │                        │   sendCommand({type:"prompt"}) ───▶│ (channel, NDJSON stdio)
-  │                        │                                    │
-  ├─ session subscription ─▶ event-stream-hub onEvent()            │
-  │                        │   onFrame() ◀── event frames ──────│
-  │◀── event: s<n> data: {...} ──│                               │
+```text
+Browser tabs
+  └─ SharedWorker: one WebSocket (SSE fallback) plus HTTP requests
+       └─ Bun web server: UI, auth, APIs, event routing
+            └─ host WebSocket link (local or remote)
+                 └─ Bun host daemon: session/file/Git operations and process ownership
+                      └─ ompweb-omp: native OMP session runtime, NDJSON channel
 ```
 
-The launcher (`bin/omp-web.js`), host daemon (`bin/omp-web-host.js`), tray,
+The launcher (`bin/omp-web.js`), host daemon (`bin/omp-web-host.js`),
 server and update workers run on Bun. Install Bun before running from source or
 a package; Node is not required. The server serves the SPA from `dist/`, the
 API routes and the password gate in one process. The compiled binary
@@ -106,7 +107,7 @@ Shared foundations in `lib/omp/`:
 ```
 server/
   main.ts             production entry: sets NODE_ENV, then `startProduction` (app.ts); prints the `Ready on` line the launcher waits for
-  binary.ts           the compiled `ompweb` (scripts/build-binary.ts): the launcher's checks (`checkLaunchSecurity`) and `startProduction` in-process, `host` (lib/hosts/host-cli.ts), `hash-password`; refuses tray/service commands
+  binary.ts           the compiled `ompweb` (scripts/build-binary.ts): the launcher's checks (`checkLaunchSecurity`) and `startProduction` in-process, `host` (lib/hosts/host-cli.ts), `hash-password`; refuses service commands
   dev.ts              dev entry (`bun --hot`): serves the HTML import with HMR; re-runs itself once with OMP_WEB_PUBLIC_* set so `bunfig.toml` can inline them
   app.ts              `startServer`: `Bun.serve` + route table + gate + SPA fallback; `startProduction` (listen, `register()`, Ready line); `parseListenArgs`
   routes.ts           the API route table (see "Adding an API route"); `routePattern`, `dispatch`

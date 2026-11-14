@@ -228,8 +228,8 @@ function validateHostname(value) {
   return hostname;
 }
 
-// Build the unit file text. Runtime settings belong in EnvironmentFile so the
-// tray or an editor can change them without reinstalling the unit. The web and
+// Build the unit file text. Runtime settings belong in EnvironmentFile so
+// an editor can change them without reinstalling the unit. The web and
 // host units share the env file: same user, same HOME and PI_CODING_AGENT_DIR,
 // so both read the same <agent dir>/omp-web/host.json.
 function buildUnitText({

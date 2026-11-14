@@ -227,7 +227,7 @@ Deploy the frontend and API support together; no native OMP upgrade is required.
 
 ## Security contract
 
-- Bind loopback-only by default. A non-loopback hostname is an explicit opt-in.
+- Bind loopback-only by default. A non-loopback hostname is an explicit opt-in. Password authentication is optional on every address, including `0.0.0.0`; deployment access controls are the user's decision. Without authentication, every reachable client can use the app's agent and file capabilities.
 - `OMP_WEB_PASSWORD_HASH` protects every route with a password-only sign-in
   screen. Only a scrypt hash reaches the server (`ompweb hash-password`),
   because every `omp` session inherits the server's environment and an agent

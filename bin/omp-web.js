@@ -199,33 +199,6 @@ function startLauncher() {
     process.exit(2);
   }
 
-  if (
-    launchOptions.installTray ||
-    launchOptions.uninstallTray ||
-    launchOptions.tray
-  ) {
-    const { runCli } = require("./omp-web-tray");
-    const trayArgs = [];
-    if (launchOptions.installTray) {
-      trayArgs.push("--install");
-      if (launchOptions.port) trayArgs.push("-p", String(launchOptions.port));
-      if (launchOptions.hostname) trayArgs.push("-H", launchOptions.hostname);
-    } else if (launchOptions.uninstallTray) {
-      trayArgs.push("--uninstall");
-    } else if (launchOptions.tray) {
-      trayArgs.push("--start");
-      if (launchOptions.openBrowser) trayArgs.push("--open");
-    }
-    runCli(trayArgs)
-      .then(({ exitCode = 0 }) => {
-        process.exit(exitCode);
-      })
-      .catch((err) => {
-        console.error("Error managing tray service:", err);
-        process.exit(1);
-      });
-    return;
-  }
   const port = launchOptions.port;
   const hostname = launchOptions.hostname;
   const openBrowser = launchOptions.openBrowser;

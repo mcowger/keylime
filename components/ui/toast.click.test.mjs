@@ -163,7 +163,6 @@ test("a session notification toast opens its session from a card click; one with
   renderHook(() =>
     useNotifications({
       sessionId: null,
-      locale: "en",
       onOpenSession: (id) => sessions.push(id),
     }),
   );
@@ -216,7 +215,6 @@ test("a notification the OS showed is listed in history", async () => {
     renderHook(() =>
       useNotifications({
         sessionId: null,
-        locale: "en",
         onOpenSession: () => {},
       }),
     );
@@ -271,7 +269,6 @@ test("a push the service worker showed reloads the list from the server; other m
     renderHook(() =>
       useNotifications({
         sessionId: null,
-        locale: "en",
         onOpenSession: () => {},
       }),
     );

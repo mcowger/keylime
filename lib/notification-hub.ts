@@ -1,9 +1,6 @@
 import webpush from "web-push";
 import { releaseRepo } from "./release-repo";
 import en from "./i18n/locales/en.json";
-import ja from "./i18n/locales/ja.json";
-import zhCN from "./i18n/locales/zh-CN.json";
-import zhTW from "./i18n/locales/zh-TW.json";
 import {
   renderNotification,
   type NotificationEvent,
@@ -162,22 +159,11 @@ export function routeNotification(
   return deliveries;
 }
 
-const dictionaries: Record<string, Record<string, string>> = {
-  en,
-  ja,
-  "zh-CN": zhCN,
-  "zh-TW": zhTW,
-};
+const dictionary: Record<string, string> = en;
 
-function renderFor(
-  event: NotificationEvent,
-  locale: string,
-): RenderedNotification {
-  const dictionary = Object.hasOwn(dictionaries, locale)
-    ? dictionaries[locale]
-    : dictionaries.en;
+function renderFor(event: NotificationEvent): RenderedNotification {
   return renderNotification(event, (key, vars) => {
-    const template = dictionary[key] ?? dictionaries.en[key] ?? key;
+    const template = dictionary[key] ?? key;
     return vars
       ? template.replace(/\{(\w+)\}/g, (match, name: string) =>
           name in vars ? String(vars[name]) : match,
@@ -222,7 +208,7 @@ async function sendPush(
       await webpush.sendNotification(
         subscription,
         JSON.stringify({
-          ...renderFor(event, device.prefs.locale),
+          ...renderFor(event),
           type: event.type,
         }),
         {

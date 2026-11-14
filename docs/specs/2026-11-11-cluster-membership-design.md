@@ -107,4 +107,4 @@ The project keeps the origin it was first registered with. The preparation check
 
 ## Documentation
 
-`README.md` ("Transparent host pools", which also says existing workspaces of members stay under their host), `AGENTS.md`, `CHANGELOG.md`, and the Settings strings in English, Chinese and Japanese.
+`README.md` ("Transparent host pools", which also says existing workspaces of members stay under their host), `AGENTS.md`, `CHANGELOG.md`, and the English Settings strings.

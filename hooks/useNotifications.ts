@@ -20,7 +20,6 @@ import {
   showSystemNotification,
   subscribeNotificationPrefs,
   syncNotificationDevice,
-  updateNotificationPrefs,
 } from "@/lib/notification-client";
 
 const PRESENCE_INTERVAL_MS = 30_000;
@@ -57,11 +56,9 @@ export function useNotificationPrefs() {
  */
 export function useNotifications({
   sessionId,
-  locale,
   onOpenSession,
 }: {
   sessionId: string | null;
-  locale: string;
   onOpenSession: (sessionId: string) => void;
 }) {
   const openRef = useRef(onOpenSession);
@@ -126,13 +123,6 @@ export function useNotifications({
       window.removeEventListener("pagehide", onPageHide);
     };
   }, [sessionId]);
-
-  // Pushes are written in the device's language.
-  useEffect(() => {
-    const prefs = getNotificationPrefs();
-    if (prefs.enabled && prefs.locale !== locale)
-      void updateNotificationPrefs({ locale }).catch(() => {});
-  }, [locale]);
 
   // Startup sync for any browser with saved settings: the server may have lost
   // its store, missed a save (including turning notifications off), or the

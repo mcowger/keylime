@@ -39,15 +39,12 @@ export interface NotificationPrefs {
   types: Record<NotificationType, boolean>;
   /** While the user is active in another omp-web tab: in-app toast or system notification. */
   whenActive: "toast" | "system";
-  /** UI locale, so pushes are written in the device's language. */
-  locale: string;
 }
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   enabled: false,
   types: { completed: true, input: true, error: true, modelSwitch: false },
   whenActive: "toast",
-  locale: "en",
 };
 
 /** Validate untrusted prefs (request bodies, localStorage); unknown fields fall back to defaults. */
@@ -69,10 +66,6 @@ export function parseNotificationPrefs(value: unknown): NotificationPrefs {
     enabled: raw.enabled === true,
     types,
     whenActive: raw.whenActive === "system" ? "system" : "toast",
-    locale:
-      typeof raw.locale === "string" && /^[A-Za-z-]{2,10}$/.test(raw.locale)
-        ? raw.locale
-        : "en",
   };
 }
 
@@ -98,7 +91,7 @@ function clip(text: string, max = MAX_DETAIL): string {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
-/** Title, body, click target, and replace-tag for one event in the caller's language. */
+/** Title, body, click target, and replace-tag for one event. */
 export function renderNotification(
   event: NotificationEvent,
   t: Translate,

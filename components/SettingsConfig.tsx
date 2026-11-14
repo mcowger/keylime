@@ -1629,7 +1629,7 @@ function NotificationSettingsPanel() {
         Notification.permission === "default"
       )
         await Notification.requestPermission();
-      await updateNotificationPrefs({ enabled, locale });
+      await updateNotificationPrefs({ enabled });
       if (enabled) setPushActive(await ensurePushSubscription());
     } catch (error) {
       toast.error(t("notifications.enableFailed", { error: errorText(error) }));

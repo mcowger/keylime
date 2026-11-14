@@ -1,31 +1,29 @@
 <div align="center">
 
-<img src="public/icon.svg" alt="ompweb logo" width="150">
+<img src="public/icon.svg" alt="Keylime logo (inherited from ompweb)" width="150">
 
-<h1>ompweb</h1>
+<h1>Keylime</h1>
 
-<p>
-  <a href="https://www.npmjs.com/package/@kahme247/ompweb"><img src="https://img.shields.io/npm/v/@kahme247/ompweb.svg?logo=npm&amp;color=e05d44" alt="npm version"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/github/license/ompweb-dev/ompweb.svg?color=44cc11" alt="license"></a>
-  <a href="https://www.npmjs.com/package/@kahme247/ompweb"><img src="https://img.shields.io/npm/dm/@kahme247/ompweb.svg?color=44cc11" alt="npm downloads"></a>
-  <a href="https://github.com/ompweb-dev/ompweb/stargazers"><img src="https://img.shields.io/github/stars/ompweb-dev/ompweb.svg?logo=github" alt="GitHub stars"></a>
-  <a href="https://github.com/ompweb-dev/ompweb/pulls"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome"></a>
-</p>
+<p>A personal, intentionally breaking OMP workspace.</p>
 
 </div>
 
-[English](./README.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md)
-
-Community: [Join the OMPWEB Discord](https://discord.gg/evqgGzRfM5)
-
-A clean, modern web UI for the [oh-my-pi (omp)](https://github.com/can1357/oh-my-pi) coding agent. It reads your local omp sessions and gives you a browser workspace to chat with the agent, browse projects, manage settings, and preview files.
+Keylime is Matt Cowger's independent, public continuation of [ompweb](https://github.com/ompweb-dev/ompweb), a browser workspace for the [oh-my-pi (OMP)](https://github.com/can1357/oh-my-pi) coding agent. It supports chatting with agents, browsing sessions and projects, configuring OMP, and inspecting files.
 
 ## Hard fork
 
-This repository is a hard fork of ompweb, maintained for Matt Cowger's preferences. Upstream compatibility is not a goal. Breaking changes are expected; there is no commitment to backward compatibility, migration paths, legacy data formats, APIs, configuration, or deployment workflows.
+This repository, [mcowger/keylime](https://github.com/mcowger/keylime), is an intentionally breaking hard fork, not a compatible replacement for upstream ompweb. It is maintained independently and is not part of GitHub's fork network. Upstream compatibility is not a goal. Breaking changes are expected; no backward compatibility or migration paths are promised for data formats, APIs, configuration, CLI commands, or deployments.
 
 Prefer a clean implementation over compatibility shims, deprecated aliases, fallbacks, or migration code. Upstream documentation below describes the inherited baseline; this fork's policy takes precedence where they conflict. This does not waive security, data-integrity, or license requirements.
 This fork supports macOS and Linux only. Windows support is removed, with no compatibility or migration path.
+
+### Fork status
+
+- Bun is the only JavaScript/TypeScript runtime, pinned to 1.4.4 through mise. The web server and host daemon remain separate processes.
+- Formatting uses `bun fmt`; typechecking uses `bun check`. ESLint and standalone TypeScript tooling are removed, with no lint gate.
+- The repository has been fully reformatted. Local release checks enforce formatting and typechecking.
+- All four GitHub Actions workflows are disabled, preserved as `.github/workflows/*.yml.disabled`. There are no automatic CI, builds, or releases.
+- Internal package names, CLI commands, and release URLs below still identify upstream. They do not install or publish Keylime's changes. Build this checkout using [Development](#development). Repository publication does not rename the runtime package or redirect runner downloads.
 
 ![ompweb — live session demo](docs/demo.gif)
 
@@ -41,7 +39,7 @@ This fork supports macOS and Linux only. Windows support is removed, with no com
 ## Requirements
 
 - Supported platforms are macOS and glibc Linux on x64 and arm64. ompweb downloads its matching `ompweb-omp` build from its GitHub release, verifies its SHA-256, and stores it beside the single binary or under `~/.omp/agent/omp-web/omp/<version>/`. Run `ompweb fetch-omp` to fetch it explicitly.
-- [mise](https://mise.jdx.dev) manages the Bun runtime. Run `mise trust && mise install` in this checkout to install the pinned Bun version, then use `mise exec -- bun` if mise is not activated in your shell. The launcher, web server, host daemon and tray all run on Bun; the native single binary embeds it.
+- [mise](https://mise.jdx.dev) manages the Bun runtime. Run `mise trust && mise install` in this checkout to install the pinned Bun version, then use `mise exec -- bun` if mise is not activated in your shell. The launcher, web server and host daemon all run on Bun; the native single binary embeds it.
 
 The **Steer**, **Delete** and **Edit** actions on a queued message are commands of the `ompweb-omp` channel (`promote_queued_message`, `remove_queued_message`). Deletion is confirmed by omp before the chip disappears; editing recalls text only after cancellation succeeds. A message that is no longer pending leaves the queue unchanged and displays a notice; ompweb does not send a duplicate steering message.
 
@@ -121,7 +119,6 @@ ompweb hash-password                       # Print the value for OMP_WEB_PASSWOR
 ompweb fetch-omp                           # Download this version's ompweb-omp from its GitHub release (SHA-256-checked) if it is missing
 ompweb preflight                           # Start the session omp once (as a new session would) and wait for its hello; exit 1 says why it failed
 ompweb --no-open                           # Don't auto-open the browser
-ompweb --tray                              # Start background System Tray manager
 ompweb systemd install                     # Install Linux systemd user services (web + ompweb-host daemon)
 ompweb launchd install                     # Install the macOS launchd agents (web + ompweb-host daemon)
 ompweb --help                              # Show help
@@ -133,6 +130,8 @@ ompweb --version                           # Show version
 omp-web **never passes a plaintext password to the server**, because every
 `omp` session inherits the server's environment: an agent running `env` would
 print the password into its session file and send it to the model provider.
+
+Password protection is optional on every bind address, including `0.0.0.0`. Without `OMP_WEB_PASSWORD_HASH`, anyone who can reach the server can access its agent and file capabilities. Choose authentication and network access controls for your deployment.
 `--password` stops `ompweb` at startup. An `OMP_WEB_PASSWORD` still works for
 now: `ompweb` hashes it at startup, keeps it out of the server's environment,
 and logs a warning with the hash to put in `OMP_WEB_PASSWORD_HASH` instead.
@@ -161,8 +160,7 @@ on first start in `~/.omp/agent/omp-web/web-auth-secret.json` (mode `0600`) and
 mixed with the hash, so changing the password still signs everyone out while the
 stored hash alone is never enough to forge a session.
 
-The service installers (`ompweb systemd install`, `ompweb-launchd install`, and
-the Linux tray) accept `OMP_WEB_PASSWORD` at install time and store only its hash.
+The service installers (`ompweb systemd install` and `ompweb launchd install`) accept `OMP_WEB_PASSWORD` at install time and store only its hash.
 
 ### Behind a reverse proxy
 
@@ -176,9 +174,8 @@ Cluster members also fetch this machine's omp configuration from `/api/hosts/clu
 
 ompweb runs the web server and `ompweb host` as separate Bun processes. The daemon
 runs this machine's `omp` sessions and links to the web server over loopback.
-The service installers (`ompweb systemd install`,
-`ompweb launchd install`, `ompweb --install-tray`) install both: the web
-service and `ompweb-host`. Uninstall removes both.
+The service installers (`ompweb systemd install` and `ompweb launchd install`)
+install both the web service and `ompweb-host`. Uninstall removes both.
 
 **Running ompweb in the foreground** (`ompweb` in a terminal, or
 `bunx --bun @kahme247/ompweb@latest`) installs no service, so keep
@@ -457,7 +454,7 @@ tar -xzf ompweb-linux-x64.tar.gz -C ~/.local/share   # unpacks ompweb-linux-x64/
   `curl` reaches it, allow your terminal (or `ompweb`) under System Settings →
   Privacy & Security → Local Network. A server reached over a VPN such as
   Tailscale, or a host started from an SSH session, is not affected.
-- **No tray, service installers or in-app update.** To update, stop `ompweb` and
+- **No service installers or in-app update.** To update, stop `ompweb` and
   `ompweb host`, replace the directory with the new release, and start both again;
   **Settings → System** links the release page when a new version is out.
   Your sessions and settings live in `~/.omp`, not in that directory.
@@ -538,10 +535,7 @@ OMP_WEB_PASSWORD=secret bunx --bun --package=@kahme247/ompweb@latest ompweb-laun
 the password. Pass `OMP_WEB_PASSWORD_HASH` to install a hash you generated with
 `ompweb hash-password`.
 
-When binding to a non-loopback host, require authentication (`OMP_WEB_PASSWORD_HASH`
-or equivalent access control) and HTTPS through a trusted reverse proxy or VPN.
-Never expose the unauthenticated web UI or send its password/session cookie over
-plaintext HTTP.
+Authentication is your choice on every bind address. For remote access, a password, trusted reverse proxy, or VPN can limit who reaches the app. Use HTTPS when sending a password or session cookie over an untrusted network.
 
 Logs go to `~/Library/Logs/ompweb/ompweb.log` (web) and
 `~/Library/Logs/ompweb/ompweb-host.log` (the
@@ -583,9 +577,8 @@ bunx --bun --package=@kahme247/ompweb@latest ompweb-systemd uninstall # Stop and
 
 The service runs the locally installed `ompweb` binary resolved at install time
 (override with `OMP_WEB_SYSTEMD_BIN`). Runtime configuration lives in
-`~/.omp/agent/web-service.env` — the tray (or any editor) can change the port,
-hostname, and password hash there and just restart the service; no reinstall
-needed.
+`~/.omp/agent/web-service.env`. Edit the port, hostname, or password hash there
+and restart the service; no reinstall needed.
 Install-time [environment variables](#environment-variables) are baked into
 that file. As a service, the browser is **not** auto-opened by default. The
 units live at `~/.config/systemd/user/ompweb.service` and
@@ -603,31 +596,6 @@ after the last login session ends:
 ```bash
 loginctl enable-linger "$USER"
 ```
-
-### Linux System Tray (KDE Plasma and compatible)
-
-On Linux, `ompweb-tray` registers a StatusNotifierItem tray icon with a context
-menu: open the web UI, copy its URL, start/stop/restart the systemd service,
-view logs, expose the web UI to the network, change the port, set the web
-password, toggle autostart, and quit the tray.
-
-```bash
-bunx --bun --package=@kahme247/ompweb@latest ompweb-tray --install      # Icons + autostart + start tray
-bunx --bun --package=@kahme247/ompweb@latest ompweb-tray --status       # Tray and service status
-bunx --bun --package=@kahme247/ompweb@latest ompweb-tray --uninstall    # Remove autostart, stop tray
-```
-
-**Expose to Network** rebinds the service from `127.0.0.1` to `0.0.0.0` so the
-web UI is reachable from your LAN or VPN (e.g. Tailscale). Leaving loopback
-requires a web password — the tray prompts for one via `kdialog`/`zenity` when
-needed, and stores its hash. **Change Port…** and **Set Web Password…** edit
-`~/.omp/agent/web-service.env` and restart the service. When binding to a
-non-loopback host, use HTTPS through a trusted reverse proxy or VPN for remote
-access.
-
-"Start with Plasma" in the tray menu toggles a desktop autostart entry at
-`~/.config/autostart/ompweb-tray.desktop`. Requires a running StatusNotifierItem
-host (KDE Plasma, and most Wayland/X11 desktops).
 
 ## Run sessions on another machine
 
@@ -867,11 +835,11 @@ inactivity or on sleep, SSH key passphrases and signing fail until you restart i
 - **Remote Hosts**: Link other machines (for example a MacBook) and run sessions there from one ompweb. The sidebar groups sessions by host. See [Run sessions on another machine](#run-sessions-on-another-machine).
 - **Usage & Analytics**: Dashboard in **Settings → Usage** for tokens, costs, cache savings, and breakdowns by provider / model / day / project with SQLite persistence.
 - **macOS launchd Service**: LaunchAgent that starts at login, restarts on crash, and logs under `~/Library/Logs/ompweb`.
-- **Linux systemd Service & Tray**: User service that starts at login and restarts on crash, plus a StatusNotifierItem tray icon with service controls (KDE Plasma and compatible desktops).
+- **Linux systemd Service**: User services that start at login and restart on crash.
 - **Notifications**: Desktop and mobile (PWA) notifications for finished tasks, questions waiting for an answer, failed runs, and automatic model switches, with Web Push when served over HTTPS. See [Notifications](#notifications).
 - **Web-based Settings** (11 tabs): Interface & Behavior, Safety & Approvals, AI Model Defaults, API Keys & Providers, Usage, Agent & Intelligence (advisor, memory, compaction), Agents, Extensions & Tools (MCP, skills, plugins), Hosts, Notifications, System.
 - **Slash Commands & Shortcuts**: Quick prompts (`/plan`, `/review`, `/fix`, `/test`, etc.), `⌘K` / `Ctrl+K` palette, and model/reasoning cycling.
-- **UI Themes & Localization**: Warm paper light/dark themes plus an omp.sh-inspired midnight (`omp`) theme, chat font size & interface scale, with full English, Chinese (简体中文), and Japanese (日本語) translations.
+- **UI Themes**: Warm paper light/dark themes plus an omp.sh-inspired midnight (`omp`) theme, chat font size and interface scale.
 
 ## Environment Variables
 
@@ -879,7 +847,7 @@ inactivity or on sleep, SSH key passphrases and signing fail until you restart i
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
 | `PORT`                          | Server port                                                                                                                                                                                                                                                                                                                                                                       | `30177`                               |
 | `OMP_WEB_HOSTNAME`              | Server bind host                                                                                                                                                                                                                                                                                                                                                                  | `127.0.0.1`                           |
-| `OMP_WEB_PASSWORD_HASH`         | Optional scrypt hash of the web login password, from `ompweb hash-password`. Required for a non-loopback bind                                                                                                                                                                                                                                                                     | _None (auth disabled)_                |
+| `OMP_WEB_PASSWORD_HASH`         | Optional scrypt hash of the web login password, from `ompweb hash-password`. Optional on every bind address, including `0.0.0.0`                                                                                                                                                                                                                                                  | _None (auth disabled)_                |
 | `OMP_WEB_TRUSTED_HEADER_SHA256` | SHA-256 hex digest of the secret a trusted reverse proxy sends in `X-Omp-Web-Auth` to skip the password for that request; see [Skipping the password on trusted networks](#skipping-the-password-on-trusted-networks)                                                                                                                                                             | _None (disabled)_                     |
 | `OMP_WEB_NO_OPEN`               | Set to `1` to prevent auto-opening browser                                                                                                                                                                                                                                                                                                                                        | `0`                                   |
 | `OMP_WEB_DISABLE_AUTOUPDATE`    | Set to `1` to disable update checks and in-app updates; restart after changing                                                                                                                                                                                                                                                                                                    | `0`                                   |
@@ -1002,9 +970,10 @@ addresses you list in `set_real_ip_from`:
 ## Development
 
 ```bash
-git clone https://github.com/ompweb-dev/ompweb.git
-cd ompweb
-bun install
+# From this fork's checkout:
+mise trust
+mise install
+bun install --frozen-lockfile
 bun runner/scripts/use-omp-build.ts && (cd runner && bun install --frozen-lockfile)
 bun runner/scripts/build-binary.ts   # ompweb's omp build for this machine: runner/release/ompweb-omp-<os>-<arch>
 bun run dev
@@ -1022,15 +991,16 @@ and the daemon stays linked to your installed ompweb.
 ### Checks
 
 ```bash
-bun run typecheck   # Bun type checks for the root project and runner
-bun fmt             # Format files
-bun fmt --check     # Check formatting
-bun run test        # Run test suite (bun test)
+bun run format:check # bun fmt --check
+bun run typecheck    # bun check for the root project and runner
+bun run test         # bun test --parallel
+bun run release:check # formatting, types, tests, build, and live-session smoke
 ```
 
-Linting has been removed: pinned Bun 1.4.4 has no built-in linter, and this project uses neither ESLint nor `tsc`. CI does not gate on formatting because the inherited baseline is not fully formatted.
+Run `bun fmt` to format files. Linting is intentionally removed: pinned Bun 1.4.4 has no built-in linter, and this project uses neither ESLint nor standalone `tsc`. GitHub Actions are disabled, so run checks locally. The workflow definitions remain in `.github/workflows/` with `.disabled` extensions; renaming them back to `.yml` would reactivate them after pushing.
 
 ## License & Credits
 
-- Forked from [agegr/pi-web](https://github.com/agegr/pi-web) (MIT) and adapted for [can1357/oh-my-pi](https://github.com/can1357/oh-my-pi).
-- Released under the [MIT License](./LICENSE).
+- Keylime is derived from [ompweb-dev/ompweb](https://github.com/ompweb-dev/ompweb), which originated from [agegr/pi-web](https://github.com/agegr/pi-web), and integrates [can1357/oh-my-pi](https://github.com/can1357/oh-my-pi).
+- Thanks to the upstream authors and contributors. Original Git history and the copyright notice in [LICENSE](./LICENSE) are retained.
+- Keylime remains [MIT-licensed](./LICENSE). It is an independent project, not an upstream release or an endorsement by its predecessors.

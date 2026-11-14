@@ -201,7 +201,7 @@ Before W3 the omp row ran `omp update` through `resolveOmpBin()`, i.e. `ompweb-o
 - `lib/self-update.ts`: `Kind` is `"app"` only.
 - `app/api/omp-update/route.ts`: only `restart` remains.
 - `lib/hosts/update-types.ts`/`updates.ts`/`daemon.ts`: `HostUpdateTarget` is `"ompweb"`; `HostUpdateInfo.omp` is `{ currentVersion }`; `startHostUpdate("omp")` is `invalid_target`.
-- `components/HostUpdates.tsx` and the Settings omp card: version plus "Updated with ompweb", no button; i18n en/ja/zh-CN/zh-TW.
+- `components/HostUpdates.tsx` and the Settings omp card: version plus "Updated with ompweb", no button; English copy.
 - Versions: `HOST_VERSION_PATTERN` and `lib/version-compare.ts` already accept `X.Y.Z-int.<stamp>.g<sha7>`; no validator of the old `-int.<sha7>` form exists. Tests: the omp row shows `18.20.0-int.202611130355.gd2c2eff`; `HOST_VERSION_PATTERN` and `ompSharesCredentials("omp/18.20.0-int.202611130355.gd2c2eff")` accept it.
 
 ## integration-ci cleanup

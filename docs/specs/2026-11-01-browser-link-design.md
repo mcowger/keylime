@@ -99,7 +99,7 @@ A dial whose socket closes before `open` is diagnosed with a plain `GET /api/eve
 
 ## What is deleted
 
-`lib/browser-socket.ts` (+ test), `app/api/events/ws/`, `public/event-stream-worker.js`, the `ws-*` values and pool settings (UI, route, locales en/ja/zh-CN), socket-key policy, moves, rendezvous pool, per-socket ack timers, `rebalance`/`pool` metrics and their summary rows, and their tests and docs (AGENTS.md "WebSocket transports (experiment)").
+`lib/browser-socket.ts` (+ test), `app/api/events/ws/`, `public/event-stream-worker.js`, the `ws-*` values and pool settings (UI, route, English copy), socket-key policy, moves, rendezvous pool, per-socket ack timers, `rebalance`/`pool` metrics and their summary rows, and their tests and docs (AGENTS.md "WebSocket transports (experiment)").
 
 ## Limitations
 

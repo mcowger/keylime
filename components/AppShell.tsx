@@ -37,7 +37,6 @@ import type { RightPanelView } from "./RightPanel";
 import { useConnectionDiagnosticsEnabled } from "@/lib/connection-diagnostics-prefs";
 import { NotificationBell } from "./NotificationBell";
 import { BranchNavigator } from "./BranchNavigator";
-import { LanguageSwitcher } from "./LanguageSwitcher";
 import { CommandPaletteMount } from "./CommandPaletteMount";
 import {
   Check,
@@ -1988,7 +1987,6 @@ export function AppShell({ appName }: { appName: string }) {
   // Full-page Settings hides the chat, so its session counts as not viewed.
   useNotifications({
     sessionId: settingsTab ? null : (selectedSession?.id ?? null),
-    locale,
     onOpenSession: openSessionById,
   });
 
@@ -3126,7 +3124,6 @@ export function AppShell({ appName }: { appName: string }) {
                         className="shell-topbar-overflow-content"
                       >
                         <ThemeSwitcher />
-                        <LanguageSwitcher />
                         <button
                           type="button"
                           onClick={() => {

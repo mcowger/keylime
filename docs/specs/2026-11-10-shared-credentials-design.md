@@ -114,4 +114,4 @@ Tests sit beside the code, as in the rest of the repository.
 - `AGENTS.md`: file map, "Remote hosts", "Auth and model config".
 - `DESIGN.md`: the paragraph that says each machine uses its own credentials.
 - `docs/specs/2026-10-28-remote-hosts-design.md`: the v9 line under "Rules".
-- `CHANGELOG.md`, and the Settings strings in English, Chinese and Japanese.
+- `CHANGELOG.md` and the English Settings strings.

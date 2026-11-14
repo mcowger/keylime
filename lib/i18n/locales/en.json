@@ -856,7 +856,6 @@
   "fileViewer.unchangedLines.one": "... {count} unchanged line ...",
   "fileViewer.unchangedLines.other": "... {count} unchanged lines ...",
   "fileViewer.viewMode": "File view mode",
-  "languageSwitcher.switchTo": "Switch language to {language}",
   "mermaidBlock.close": "Close",
   "mermaidBlock.diagramTitle": "Mermaid diagram",
   "mermaidBlock.fitToWidth": "Fit to width",

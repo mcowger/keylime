@@ -193,8 +193,7 @@ interface NotificationPrefs {
 
 Prefs live in `localStorage` and are sent to the server on every change, and
 on app load for browsers that ever saved them (so a missed save, such as turning notifications off, is repaired). Other tabs pick changes up through the
-`storage` event. Strings are in `lib/i18n` (English, Japanese, Simplified
-Chinese).
+`storage` event. Strings are in the English `lib/i18n` dictionary.
 
 ## In-app toast
 

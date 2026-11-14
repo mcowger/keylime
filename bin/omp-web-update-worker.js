@@ -113,16 +113,6 @@ function isLaunchdActive() {
     return false;
   }
 }
-function isTrayActive() {
-  try {
-    const svc = path.join(os.homedir(), ".omp", "agent", "web-service.json");
-    if (!fs.existsSync(svc)) return false;
-    const data = readJson(svc);
-    return Boolean(data && data.pid);
-  } catch {
-    return false;
-  }
-}
 function systemctl(action) {
   const result = cp.spawnSync(
     "systemctl",
@@ -148,11 +138,10 @@ async function stopOriginalProcesses() {
   updateStatus({ stage: "stopping" });
   if (systemdUnit) {
     systemctl("stop");
-    return { systemd: true, launchd: false, tray: false };
+    return { systemd: true, launchd: false };
   }
   // Detect services
   const launchd = isLaunchdActive();
-  const tray = isTrayActive();
   if (launchd) {
     try {
       const uid = typeof process.getuid === "function" ? process.getuid() : 501;
@@ -162,17 +151,8 @@ async function stopOriginalProcesses() {
     } catch {}
     await sleep(500);
   }
-  if (tray) {
-    try {
-      const trayBin = path.join(packageDir, "bin", "omp-web-tray.js");
-      if (fs.existsSync(trayBin)) {
-        cp.spawnSync(process.execPath, [trayBin, "--stop"], { timeout: 15000 });
-      }
-    } catch {}
-    await sleep(500);
-  }
-  // Plain next: try to kill launcher/server pids with SIGTERM 5s -> SIGKILL
-  if (!launchd && !tray) {
+  // Foreground launch: stop launcher/server pids with SIGTERM, then SIGKILL.
+  if (!launchd) {
     for (const pid of [launcherPid, serverPid]) {
       if (!Number.isInteger(pid) || pid <= 0) continue;
       try {
@@ -190,7 +170,7 @@ async function stopOriginalProcesses() {
     // waitForPort 90s simplified: sleep 1s (real impl would poll port)
     await sleep(1000);
   }
-  return { launchd, tray };
+  return { launchd };
 }
 
 // The candidate's `ompweb fetch-omp` (lib/omp/runner-fetch.ts: its version's omp runner, into the per-version cache the
@@ -341,19 +321,6 @@ async function restartServices(info) {
     await sleep(1000);
     return;
   }
-  if (info.tray) {
-    try {
-      const trayBin = path.join(packageDir, "bin", "omp-web-tray.js");
-      if (fs.existsSync(trayBin)) {
-        cp.spawn(process.execPath, [trayBin, "--start"], {
-          detached: true,
-          stdio: "ignore",
-        }).unref();
-      }
-    } catch {}
-    await sleep(1000);
-    return;
-  }
   // Plain next: ask launcher to restart via armed marker handshake
   try {
     const restartRequest = path.join(root, attemptId + ".restart-request.json");
@@ -407,7 +374,7 @@ async function main() {
   });
   await sleep(1000); // PREPARING_MIN 1s
 
-  let svcInfo = { launchd: false, tray: false };
+  let svcInfo = { launchd: false };
   try {
     preflightCandidate();
     svcInfo = await stopOriginalProcesses();

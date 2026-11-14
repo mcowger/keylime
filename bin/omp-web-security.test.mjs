@@ -40,7 +40,13 @@ async function launch(env, args = []) {
       process.execPath,
       [join(pkg, "bin", "omp-web.js"), "--no-open", "-p", "0", ...args],
       {
-        env: { ...process.env, HOME: pkg, ...env },
+        env: {
+          ...process.env,
+          HOME: pkg,
+          OMP_WEB_PASSWORD: undefined,
+          OMP_WEB_PASSWORD_HASH: undefined,
+          ...env,
+        },
         encoding: "utf8",
         timeout: 20_000,
       },
@@ -52,14 +58,12 @@ async function launch(env, args = []) {
   }
 }
 
-test("launcher refuses unauthenticated non-loopback binds", async () => {
-  const { status, stderr, serverEnv } = await launch({}, ["-H", "0.0.0.0"]);
-  assert.equal(status, 1);
-  assert.match(
-    stderr,
-    /Refusing to listen on 0\.0\.0\.0 without a password hash/,
-  );
-  assert.equal(serverEnv, null);
+test("launcher permits unauthenticated non-loopback binds", async () => {
+  const { status, serverEnv } = await launch({}, ["-H", "0.0.0.0"]);
+  assert.equal(status, 0);
+  assert.ok(serverEnv);
+  assert.equal(serverEnv.OMP_WEB_HOSTNAME, "0.0.0.0");
+  assert.equal(serverEnv.OMP_WEB_PASSWORD_HASH, undefined);
 });
 
 test("launcher hands the server a hash of a plaintext OMP_WEB_PASSWORD, never the plaintext", async () => {

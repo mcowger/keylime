@@ -163,12 +163,12 @@
 
 **Files:**
 
-- Modify: `bin/omp-web-systemd.js`, `bin/omp-web-launchd.js`, `bin/omp-web-tray.js`
+- Modify: `bin/omp-web-systemd.js`, `bin/omp-web-launchd.js`
 - Test: `bin/omp-web-systemd.test.mjs`, a launchd plist test
 
 **Interfaces:**
 
-- Produces: `install` writes and enables two units — the existing web unit and `ompweb-host` running `<ompweb bin> host` with `Restart=always` (systemd) / `KeepAlive` (launchd); `uninstall` removes both; `status` reports both. The tray shows the daemon state next to the web state.
+- Produces: `install` writes and enables two units — the existing web unit and `ompweb-host` running `<ompweb bin> host` with `Restart=always` (systemd) / `KeepAlive` (launchd); `uninstall` removes both; `status` reports both.
 - [ ] **Step 1: Failing tests** — generated systemd units: two files, the host unit's `ExecStart` ends with ` host`; launchd: two plists with `KeepAlive`.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → PASS.
 - [ ] **Step 5: Commit** `feat(service): install the ompweb-host daemon next to the web service`.
