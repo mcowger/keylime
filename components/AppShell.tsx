@@ -1946,7 +1946,7 @@ export function AppShell({ appName }: { appName: string }) {
   const prepareNewWorkspace = useMemo(() => {
     const tab = chatTabsRef.current.find((tab) => tab.id === activeChatId);
     if (!tab?.workspaceProject) return undefined;
-    let pending: Promise<string> | undefined;
+    let pending: Promise<{ cwd: string; name: string }> | undefined;
     return (prompt: string) => {
       if (pending) return pending;
       pending = (async () => {
@@ -1976,7 +1976,7 @@ export function AppShell({ appName }: { appName: string }) {
         }
         if (job.status !== "complete" || !job.workspacePath)
           throw new Error(job.error ?? "Workspace setup did not complete. Check Manage workspaces for logs.");
-        return job.workspacePath;
+        return { cwd: job.workspacePath, name: job.input.name };
       })().catch((error) => { pending = undefined; throw error; });
       return pending;
     };

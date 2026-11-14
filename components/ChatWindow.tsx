@@ -96,7 +96,7 @@ interface Props {
   session: SessionInfo | null;
   newSessionCwd: string | null;
   newSessionDraftKey?: string;
-  prepareNewWorkspace?: (prompt: string) => Promise<string>;
+  prepareNewWorkspace?: (prompt: string) => Promise<{ cwd: string; name: string }>;
   /** Host a fresh chat starts on (this machine when absent). */
   newSessionHostId?: string;
   onBackgroundSessionCreated?: (session: SessionInfo) => void;
