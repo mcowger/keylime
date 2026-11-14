@@ -2514,12 +2514,12 @@ export function AppShell({ appName }: { appName: string }) {
       updateChatTabs((tabs) =>
         tabs.filter((tab) => tab.session?.id !== sessionId),
       );
-      if (removed && activeChatIdRef.current === removed.id) {
+      if ((removed && activeChatIdRef.current === removed.id) || activeSessionIdRef.current === sessionId) {
         const next = chatTabsRef.current.find((tab) =>
           tabInWorkspace(
             tab,
-            activeCwd ?? removed.cwd,
-            removed.hostId,
+            activeCwd ?? removed?.cwd ?? "",
+            removed?.hostId,
             workspaceOptions.projects,
           ),
         );
@@ -3130,6 +3130,19 @@ export function AppShell({ appName }: { appName: string }) {
       onInitialRestoreDone={handleInitialRestoreDone}
       refreshKey={refreshKey}
       onSessionDeleted={handleSessionDeleted}
+      onWorkspaceRemoved={(path, host) => {
+        const removed = chatTabsRef.current.filter((tab) =>
+          tabInWorkspace(tab, path, host, workspaceOptions.projects),
+        );
+        updateChatTabs((tabs) => tabs.filter((tab) => !removed.includes(tab)));
+        if (removed.some((tab) => tab.id === activeChatIdRef.current) ||
+            (activeCwd === path && (remoteHostId(activeHostId) ?? LOCAL_HOST_ID) === host)) {
+          setActiveCwd(null);
+          setActiveHostId(undefined);
+          activateChat(null);
+          router.replace("/");
+        }
+      }}
       selectedCwd={selectedSession?.cwd ?? newSessionCwd ?? null}
       selectedHostId={
         selectedSession
@@ -3473,7 +3486,8 @@ export function AppShell({ appName }: { appName: string }) {
                 );
                 const index = visible.findIndex((tab) => tab.id === id);
                 updateChatTabs((tabs) => tabs.filter((tab) => tab.id !== id));
-                if (activeChatIdRef.current === id) {
+                if (activeChatIdRef.current === id ||
+                    (closing.session && activeSessionIdRef.current === closing.session.id)) {
                   const next = visible[index + 1] ?? visible[index - 1] ?? null;
                   if (!next && terminalWorkspace) {
                     try {

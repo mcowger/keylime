@@ -25,6 +25,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 ### Fixed
 
 - Sidebar workspace switches no longer get swallowed by a stale initial-restore guard or confuse nested workspaces with their parent.
+- Archiving a chat or removing its workspace clears the active chat instead of leaving its transcript open.
 - Wait tool output uses the same restricted Markdown rendering as thinking blocks.
 - The composer subagent preview shows live activity and telemetry, matching the Activity panel.
 - Workspace rows show agent counts and status with icons instead of status text.

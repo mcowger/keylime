@@ -136,6 +136,7 @@ interface Props {
   onInitialRestoreDone?: () => void;
   refreshKey?: number;
   onSessionDeleted?: (sessionId: string) => void;
+  onWorkspaceRemoved?: (path: string, host: string) => void;
   selectedCwd?: string | null;
   /** Host `selectedCwd` lives on (this machine when absent). */
   selectedHostId?: string | null;
@@ -224,6 +225,7 @@ export const SessionSidebar = memo(function SessionSidebar({
   onInitialRestoreDone,
   refreshKey,
   onSessionDeleted,
+  onWorkspaceRemoved,
   selectedCwd: selectedCwdProp,
   selectedHostId: selectedHostIdProp,
   onCwdChange,
@@ -2033,6 +2035,12 @@ export const SessionSidebar = memo(function SessionSidebar({
             provisionalSelectionRef.current = false;
             setSelectedCwd(path);
             setSelectedHostId(host);
+          }}
+          onWorkspaceRemoved={(path, host) => {
+            if (selectedCwd === path && selectedHostId === host) {
+              setSelectedCwd(null);
+            }
+            onWorkspaceRemoved?.(path, host);
           }}
           onSelectSession={handleSelectSessionFromList}
           onNewWorkspace={(project) => onNewWorkspace?.(project)}

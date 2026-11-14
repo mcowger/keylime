@@ -23,6 +23,7 @@ type Props = {
   selectedHostId: string;
   refreshKey?: number;
   onSelectWorkspace: (path: string, host: string) => void;
+  onWorkspaceRemoved: (path: string, host: string) => void;
   onProjects: (projects: ManagedProject[]) => void;
   onSnapshots: (snapshots: Record<string, HierarchySnapshot>) => void;
   searchQuery: string;
@@ -56,6 +57,7 @@ export function HierarchySidebar({
   selectedHostId,
   refreshKey,
   onSelectWorkspace,
+  onWorkspaceRemoved,
   onSelectSession,
   onAddProject,
   onNewWorkspace,
@@ -260,7 +262,10 @@ export function HierarchySidebar({
           else cancel = true;
         } else {
           await load();
-          if (result.status === "deleted") onChanged();
+          if (result.status === "deleted") {
+            onWorkspaceRemoved(path, hostId);
+            onChanged();
+          }
           break;
         }
       }
