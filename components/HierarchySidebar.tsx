@@ -647,18 +647,18 @@ export function HierarchySidebar({
                           style={{
                             display: "flex",
                             alignItems: "center",
-                            padding: "4px 0",
+                            gap: 8,
+                            padding: "4px 6px",
+                            borderRadius: "var(--radius-control)",
+                            background:
+                              selectedHostId === host.id &&
+                              selectedCwd === workspace.path
+                                ? "var(--bg-selected)"
+                                : "transparent",
                           }}
                         >
                           <button
-                            style={{
-                              ...rowButton,
-                              background:
-                                selectedHostId === host.id &&
-                                selectedCwd === workspace.path
-                                  ? "var(--bg-selected)"
-                                  : "transparent",
-                            }}
+                            style={rowButton}
                             type="button"
                             title={workspace.path}
                             disabled={workspace.unavailable}
