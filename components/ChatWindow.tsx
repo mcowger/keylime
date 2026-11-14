@@ -1510,6 +1510,9 @@ export function ChatWindow({
   }, [askOpen]);
   const chatInputElement = (
     <ChatInput
+      todoPhases={todoPhases}
+      subagents={subagents}
+      onSelectSubagent={setSelectedSubagent}
       draftIdentityMove={composerIdentityMove}
       ref={composerRef}
       sessionInfoContainer={sessionInfoContainer}

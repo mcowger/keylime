@@ -14,6 +14,7 @@ import React, {
 import { createPortal } from "react-dom";
 import type { ModelActivity } from "@/lib/model-activity";
 import { ModelActivityIndicator } from "./ModelActivityIndicator";
+import { ComposerActivityIndicators } from "./ComposerActivityIndicators";
 import { ReasoningEffortSlider } from "./ReasoningEffortSlider";
 import {
   ChevronDown,
@@ -42,6 +43,7 @@ import type {
   PromptSubmissionResult,
   QueuedMessages,
   SlashCommandInfo,
+  SubagentInfo,
 } from "@/hooks/useAgentSession";
 import type { ActiveGoal, ActivePlan } from "@/lib/web-mode-state";
 import { toast } from "@/components/ui/toast";
@@ -51,6 +53,7 @@ import { toastBtwError } from "@/hooks/useBtw";
 import type {
   GenerationSpeedInfo,
   SessionStatsInfo,
+  TodoPhase,
   UsageLimitState,
 } from "@/lib/pi-types";
 import type { SttAfter } from "@/lib/stt";
@@ -302,6 +305,9 @@ interface Props {
   isStreaming: boolean;
   /** Refuse submission without treating a pending history edit as a model run. */
   submissionBlocked?: boolean;
+  todoPhases?: TodoPhase[];
+  subagents?: SubagentInfo[];
+  onSelectSubagent?: (subagent: SubagentInfo) => void;
   model?: { provider: string; modelId: string } | null;
   isAutoModelSelection?: boolean;
   modelNames?: Record<string, string>;
@@ -499,6 +505,9 @@ export const ChatInput = memo(
       onSteer,
       onFollowUp,
       isStreaming,
+      todoPhases,
+      subagents,
+      onSelectSubagent,
       model,
       isAutoModelSelection,
       modelNames,
@@ -5243,6 +5252,14 @@ export const ChatInput = memo(
                       )}
                     </div>
                   )}
+
+                {todoPhases && subagents && onSelectSubagent && (
+                  <ComposerActivityIndicators
+                    todoPhases={todoPhases}
+                    subagents={subagents}
+                    onSelectSubagent={onSelectSubagent}
+                  />
+                )}
 
                 <div
                   className="composer-toolbar-spacer"
