@@ -80,6 +80,24 @@ Mise and both services follow `~/.local/share/keylime/current`; in-app updates a
 disabled. Every activation backs up the agent directory before switching. See
 `docs/local-deployment.md` for deployment, rollback, and recovery limits.
 
+For frontend-only changes, use `bun run deploy:local:frontend` (or
+`keylime-deploy --frontend`; add `--wait` to observe completion). It builds
+committed HEAD and switches browser assets without restarting the web server or
+host daemon; reload open tabs to use the new frontend. A full deployment of a
+release with frontend-pointer support is required first.
+
+Choose frontend-only deployment only when the entire diff from the active backend
+release to committed HEAD is confined to `components/`, `hooks/`, and `app/`
+outside `app/api/`. The deploy worker checks this against the active release's
+commit and refuses shared `lib/`, API, dependency, build, or other changes. Use
+a full deployment when the check fails or the active commit cannot be compared.
+Frontend-only mode cannot be combined with `--activate`, `--recover`, or
+`--timeout`. Previous hashed assets and worker versions are retained for open tabs.
+
+For a full deployment, `--timeout <seconds>` changes the 60-second drain deadline;
+`bun run deploy:local:fast` uses 10 seconds. At the deadline, remaining active
+runs and host work are terminated.
+
 ---
 
 ## Architecture
