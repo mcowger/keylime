@@ -2312,7 +2312,6 @@ export function AppShell({ appName }: { appName: string }) {
         ),
       );
       if (activeChatIdRef.current === tabId) {
-        suppressCwdRef.current = session.cwd;
         setActiveCwd(session.cwd);
         setActiveHostId(remoteHostId(session.hostId));
         setNewSessionCwd(null);
@@ -4289,7 +4288,6 @@ export function AppShell({ appName }: { appName: string }) {
                                           newSessionGroupKey
                                       )
                                         return;
-                                      suppressCwdRef.current = first.path;
                                       setActiveCwd(first.path);
                                       setActiveHostId(
                                         remoteHostId(first.hostId),
@@ -4366,7 +4364,6 @@ export function AppShell({ appName }: { appName: string }) {
                                             event.target.value,
                                         );
                                       if (!workspace) return;
-                                      suppressCwdRef.current = workspace.path;
                                       setActiveCwd(workspace.path);
                                       setActiveHostId(
                                         remoteHostId(workspace.hostId),
@@ -4435,7 +4432,6 @@ export function AppShell({ appName }: { appName: string }) {
                                           ) === key,
                                       );
                                       if (!project) return;
-                                      suppressCwdRef.current = project.path;
                                       setActiveCwd(project.path);
                                       setActiveHostId(
                                         remoteHostId(project.hostId),
