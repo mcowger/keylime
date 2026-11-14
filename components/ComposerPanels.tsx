@@ -147,13 +147,19 @@ function SubagentActivityLine({ subagent }: { subagent: SubagentInfo }) {
   const tokens = formatTokens(progress?.tokens);
   const cost = formatCost(progress?.cost);
   const ctxTokens = formatTokens(progress?.contextTokens);
-  const context = ctxTokens
-    ? `${ctxTokens}/${formatTokens(progress?.contextWindow) ?? "?"}`
-    : null;
+  const context =
+    progress?.contextTokens !== undefined &&
+    progress.contextWindow !== undefined &&
+    progress.contextWindow > 0
+      ? formatPercent((progress.contextTokens / progress.contextWindow) * 100)
+      : null;
   const model = shortModel(progress?.resolvedModel);
   const duration =
     subagent.source === "history" ? formatDuration(progress?.durationMs) : null;
   const meta: ReactNode[] = [
+    <SubagentMetric key="agent" icon={Bot} label={subagent.agent}>
+      {subagent.agent}
+    </SubagentMetric>,
     source ? (
       <SubagentMetric key="source" icon={UserRound} label={source}>
         {source === "user" ? null : source}
@@ -251,7 +257,7 @@ function SubagentsPanel({
     loadCollapsed(SUBAGENTS_COLLAPSED_STORAGE_KEY, defaultExpanded),
   );
   // Not persisted: finished runs pile up, so the group re-collapses on remount.
-  const [completedExpanded, setCompletedExpanded] = useState(defaultExpanded);
+  const [completedExpanded, setCompletedExpanded] = useState(false);
   const running: SubagentInfo[] = [];
   const completed: SubagentInfo[] = [];
   for (const subagent of subagents) {
@@ -283,7 +289,8 @@ function SubagentsPanel({
           flexDirection: "column",
           alignItems: "flex-start",
           gap: 1,
-          maxWidth: "min(320px, 100%)",
+          width: "100%",
+          minWidth: 0,
           padding: "5px 9px",
           border:
             "1px solid color-mix(in srgb, var(--border) 86%, transparent)",
@@ -317,7 +324,7 @@ function SubagentsPanel({
             alignItems: "center",
             gap: 6,
             minWidth: 0,
-            maxWidth: "100%",
+            width: "100%",
           }}
         >
           <SubagentStatusBadge subagent={subagent} />
@@ -338,21 +345,11 @@ function SubagentsPanel({
           </span>
           <span
             style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: 10,
-              color: "var(--text-dim)",
-              flexShrink: 0,
-            }}
-          >
-            {subagent.agent}
-          </span>
-          <span
-            style={{
               minWidth: 0,
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
-              maxWidth: 220,
+              flex: 1,
             }}
           >
             {subagent.task ?? subagent.description ?? stateLabel}
@@ -435,7 +432,7 @@ function SubagentsPanel({
           style={{ overflowY: "auto" }}
         >
           {running.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
+            <div className="grid grid-cols-1 gap-1.5">
               {running.map(renderChip)}
             </div>
           )}
@@ -471,7 +468,7 @@ function SubagentsPanel({
                 })}
               </button>
               {completedExpanded && (
-                <div className="flex flex-wrap gap-1.5">
+                <div className="grid grid-cols-1 gap-1.5">
                   {completed.map(renderChip)}
                 </div>
               )}

@@ -19,6 +19,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Fixed
 
+- Subagent cards fill the Activity panel, show agent type with telemetry and display context usage as a percentage. Completed agents start collapsed.
 - Workspace creation normalizes new branch names containing spaces or other invalid Git characters and previews the resulting branch and checkout directory. Existing branch and base refs remain unchanged.
 - Removed the redundant live-status popup above the expanded composer; activity remains visible in its toolbar and the minimized composer.
 - The composer model picker opens directly to models when only one provider is available. Removed its Add Providers action; provider management remains in Settings.
