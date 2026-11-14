@@ -18,6 +18,25 @@ For live sessions, build the runner for this machine with `bun runner/scripts/bu
 `runner/release/ompweb-omp-<os>-<arch>` by itself (`OMP_WEB_OMP_BIN` overrides it). A stock `omp` does not
 speak ompweb's channel.
 
+### Isolated development
+
+```bash
+bun run dev:isolated                # random free loopback port
+bun run dev:isolated --port 30278    # fixed loopback port
+```
+
+Each invocation creates a randomly named temporary directory with its own home,
+agent configuration, XDG directories, and host socket. The launcher prints its
+directory and URL, starts the web server with HMR and a separate hot-reloading
+host daemon, and stops both on Ctrl-C or if either exits. Files stay in the
+temporary directory after shutdown for inspection; remove it manually when done.
+
+The checkout stays in place so source edits reload normally. Existing projects,
+sessions, and stored logins aren't copied. Inherited `OMP_*`, `OMPWEB_*`, `PI_*`,
+and XDG settings are cleared, and subprocesses don't load `.env` files. Other
+environment variables, including provider API keys, remain available. The runner
+uses this checkout's normal discovery; build it as described above for live sessions.
+
 The repository tracks a [graphify](https://github.com/Graphify-Labs/graphify) code
 graph in `graphify-out/graph.json`. To keep it current, install the graphify release
 that built it (`uv tool install graphifyy==0.9.99`; releases build different graphs

@@ -6,6 +6,10 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ## [Unreleased]
 
+### Added
+
+- `bun run dev:isolated` starts the hot-reloading web server and host daemon with a fresh temporary home/config, private socket, and random loopback port. `--port` selects a fixed port; shutdown retains the temporary files for inspection.
+
 ### Fixed
 
 - Workspace creation defaults its base ref to the repository default branch. Creation-command settings live in Settings → Hosts and Settings → Projects; project settings also edit registered project names.

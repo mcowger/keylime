@@ -26,6 +26,7 @@ System tray integration is out of scope. Do not add tray processes, icons, deskt
 mise trust && mise install
 bun install     # install dependencies (Bun is required)
 bun run dev     # Bun server with hot reload (HMR for the SPA), port 30178
+bun run dev:isolated # web HMR + hot-reloading host, random port and temporary config
 bun run build   # bundle the SPA into dist/ (scripts/build-client.ts)
 bun run start   # serve dist/ + the API, port 30177
 bun run test    # bun test --parallel
@@ -45,6 +46,25 @@ The dev server needs ompweb's omp build (`runner/`). Fetch the pinned omp packag
 `runner/release/ompweb-omp-<os>-<arch>` (`bun runner/scripts/build-binary.ts`, this machine's target), which a source checkout
 finds by itself, or point `OMP_WEB_OMP_BIN` at it or at a wrapper running `bun runner/src/cli.ts`.
 All live-agent features go through it; session browsing works without it.
+
+### Isolated development and browser testing
+
+Use `bun run dev:isolated` for development/browser checks that must not touch the
+normal installation. `bun run dev:isolated --port 30278` selects a fixed loopback
+port; otherwise the launcher picks a free port. It prints the URL and randomly
+named temporary directory, then runs the web server with HMR and a separate
+hot-reloading host daemon. The source checkout stays in place.
+
+Each run gets a fresh HOME, agent directory, XDG directories, and private host
+socket. The launcher clears inherited `OMP_*`, `OMPWEB_*`, `PI_*`, and XDG settings
+and disables subprocess `.env` loading. It bootstraps only its isolated local
+host link; existing projects, sessions, and stored logins aren't copied. Other
+environment variables, including provider API keys, remain available. Build the
+checkout's runner first for live-agent checks; inherited `OMP_WEB_OMP_BIN` is cleared.
+
+Ctrl-C stops both services; either service exiting also stops its peer. Temporary
+files remain for inspection. Remove the printed directory manually when finished.
+The launcher is `scripts/dev-isolated.ts`; see `CONTRIBUTING.md` for usage.
 
 ---
 
