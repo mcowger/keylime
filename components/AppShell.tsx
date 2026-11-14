@@ -24,6 +24,7 @@ import { useMobileSidebarGestures } from "@/hooks/useMobileSidebarGestures";
 import { SessionSidebar } from "./SessionSidebar";
 import type { SearchMatchTarget } from "./SessionSearchMatches";
 import type { WorktreeContext } from "./SessionSidebar-helpers";
+import { WorktreesPanel } from "./WorktreesPanel";
 import { ToastProvider } from "./ui/toast";
 import { toast } from "./ui/toast";
 import {
@@ -428,11 +429,15 @@ export function AppShell({ appName }: { appName: string }) {
         window.localStorage.getItem(SHOW_TOOL_CALLS_UNFOLDED_STORAGE_KEY) ===
           "true",
       );
-      const expandThinking = window.localStorage.getItem(EXPAND_THINKING_STORAGE_KEY);
+      const expandThinking = window.localStorage.getItem(
+        EXPAND_THINKING_STORAGE_KEY,
+      );
       setExpandThinkingByDefault(
         expandThinking === "true" || expandThinking === "always"
           ? "always"
-          : expandThinking === "latest" ? "latest" : "off",
+          : expandThinking === "latest"
+            ? "latest"
+            : "off",
       );
       setProviderUsageVisible(
         window.localStorage.getItem(PROVIDER_USAGE_VISIBLE_STORAGE_KEY) !==
@@ -1634,6 +1639,7 @@ export function AppShell({ appName }: { appName: string }) {
   );
   // Owned by the sidebar; rendered by the file panel's Worktrees tab.
   const [worktreeCtx, setWorktreeCtx] = useState<WorktreeContext | null>(null);
+  const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
   // True once the initial ?session= URL param has been resolved (or confirmed absent)
   const [initialSessionRestored, setInitialSessionRestored] = useState<boolean>(
     () => !initialSessionId,
@@ -4245,9 +4251,7 @@ export function AppShell({ appName }: { appName: string }) {
                                 onChange={(event) => {
                                   const key = event.target.value;
                                   if (key === "__add_workspace__") {
-                                    setRightView("worktrees");
-                                    setRightPanelOpen(true);
-                                    setRightPanelHasOpened(true);
+                                    setCreateWorkspaceOpen(true);
                                     return;
                                   }
                                   const project = projectWorkspaces.find(
@@ -4495,6 +4499,21 @@ export function AppShell({ appName }: { appName: string }) {
               onClick={closeRightPanel}
             />
           )}
+          {createWorkspaceOpen && selectedNewWorkspace?.projectPath && (
+            <WorktreesPanel
+              ctx={{
+                hostId: selectedNewWorkspace.hostId ?? "local",
+                projectRoot: selectedNewWorkspace.projectPath,
+                currentPath: selectedNewWorkspace.path,
+                worktrees: [],
+                select: () => {},
+                refresh: () => worktreeCtx?.refresh(),
+              }}
+              createOnly
+              createOpen
+              onCreateOpenChange={setCreateWorkspaceOpen}
+            />
+          )}
           {!settingsTab && rightPanelHasOpened && (
             <RightPanel
               onActivityContainerChange={setActivityContainer}
@@ -4517,7 +4536,6 @@ export function AppShell({ appName }: { appName: string }) {
               explorerCwd={explorerCwd}
               sourceSessionId={selectedSession?.id ?? null}
               hostId={workspaceHostId}
-              worktrees={worktreeCtx}
               connectionDiagnosticsOn={connectionDiagnosticsOn}
               explorerRefreshKey={explorerRefreshKey}
               fileSearchOpen={fileSearchOpen}

@@ -11,8 +11,19 @@ import type {
 import { sanitizeWorkspaceBranch } from "@/lib/workspace-branch";
 import type { HierarchySnapshot } from "@/lib/project-hierarchy-types";
 import { ConfirmDialog } from "./ui/field";
+import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
 
-export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
+export function WorktreesPanel({
+  ctx,
+  createOpen,
+  onCreateOpenChange,
+  createOnly = false,
+}: {
+  ctx: WorktreeContext | null;
+  createOpen?: boolean;
+  onCreateOpenChange?: (open: boolean) => void;
+  createOnly?: boolean;
+}) {
   const [branches, setBranches] = useState<WorkspaceBranches>({
     local: [],
     remote: [],
@@ -32,6 +43,9 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [localCreateOpen, setLocalCreateOpen] = useState(false);
+  const modalOpen = createOpen ?? localCreateOpen;
+  const setModalOpen = onCreateOpenChange ?? setLocalCreateOpen;
   const hostId = ctx?.hostId;
   const projectPath = ctx?.projectRoot;
   async function api(action: string, input?: unknown) {
@@ -160,177 +174,199 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
   return (
     <div
       className="workspace-manager"
-      style={{ padding: 12, overflowY: "auto", height: "100%" }}
+      style={
+        createOnly
+          ? undefined
+          : { padding: 12, overflowY: "auto", height: "100%" }
+      }
     >
-      <h3>Workspaces</h3>
-      {project?.workspaces.map((w) => (
-        <div key={w.id} style={{ marginBottom: 8 }}>
-          {w.setup && (
-            <span>
-              {" "}
-              Setup: {w.setup.status}
-              {w.setup.error ? ` — ${w.setup.error}` : ""}{" "}
-              <button
-                onClick={() => {
-                  const params = new URLSearchParams({
-                    hostId: hostId ?? "",
-                    action: "status",
-                    id: w.setup!.jobId,
-                  });
-                  void fetch(`/api/worktrees?${params}`)
-                    .then((r) => r.json())
-                    .then(setJob)
-                    .catch((e) => setError(String(e)));
-                }}
-              >
-                View logs
-              </button>
-            </span>
-          )}
-          <button
-            onClick={() => ctx.select(w.path)}
-            aria-pressed={ctx.currentPath === w.path}
-          >
-            {w.name}
-            {w.isDefault ? " (default)" : ""}
-          </button>
-          {!w.isDefault && (
+      {!createOnly && <h3>Workspaces</h3>}
+      {!createOnly &&
+        project?.workspaces.map((w) => (
+          <div key={w.id} style={{ marginBottom: 8 }}>
+            {w.setup && (
+              <span>
+                {" "}
+                Setup: {w.setup.status}
+                {w.setup.error ? ` — ${w.setup.error}` : ""}{" "}
+                <button
+                  onClick={() => {
+                    const params = new URLSearchParams({
+                      hostId: hostId ?? "",
+                      action: "status",
+                      id: w.setup!.jobId,
+                    });
+                    void fetch(`/api/worktrees?${params}`)
+                      .then((r) => r.json())
+                      .then(setJob)
+                      .catch((e) => setError(String(e)));
+                  }}
+                >
+                  View logs
+                </button>
+              </span>
+            )}
             <button
-              disabled={busy || w.setup?.status === "running"}
-              onClick={() => setDeleteTarget(w.path)}
+              onClick={() => ctx.select(w.path)}
+              aria-pressed={ctx.currentPath === w.path}
             >
-              Delete
+              {w.name}
+              {w.isDefault ? " (default)" : ""}
             </button>
-          )}
-          {pending?.path === w.path && (
-            <div>
-              {pending.status === "processes" ? (
-                <>
-                  <p>Stop these running processes before deletion?</p>
-                  <ul>
-                    {pending.processes?.map((p) => (
-                      <li key={p.id}>
-                        {p.id} — {p.cwd}
-                      </li>
-                    ))}
-                  </ul>
-                  <button onClick={() => void remove(w.path, true, false)}>
-                    Stop and continue
-                  </button>
-                </>
-              ) : (
-                <>
-                  <p>
-                    Discard uncommitted changes? Previously stopped sessions
-                    remain stopped if you cancel.
-                  </p>
-                  <button onClick={() => void remove(w.path, true, true)}>
-                    Discard and delete
-                  </button>
-                </>
-              )}{" "}
-              <button onClick={() => void remove(w.path, false, false, true)}>
-                Cancel
+            {!w.isDefault && (
+              <button
+                disabled={busy || w.setup?.status === "running"}
+                onClick={() => setDeleteTarget(w.path)}
+              >
+                Delete
               </button>
-            </div>
-          )}
-        </div>
-      ))}
-      {project?.kind === "git" && (
-        <>
-          <h3>Create workspace</h3>
-          <label>
-            Branch source{" "}
-            <select
-              value={mode}
-              onChange={(e) => {
-                setMode(e.target.value as WorkspaceBranchMode);
-                setBranch("");
-                setBaseRef(e.target.value === "new" ? branches.defaultRef : "");
+            )}
+            {pending?.path === w.path && (
+              <div>
+                {pending.status === "processes" ? (
+                  <>
+                    <p>Stop these running processes before deletion?</p>
+                    <ul>
+                      {pending.processes?.map((p) => (
+                        <li key={p.id}>
+                          {p.id} — {p.cwd}
+                        </li>
+                      ))}
+                    </ul>
+                    <button onClick={() => void remove(w.path, true, false)}>
+                      Stop and continue
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p>
+                      Discard uncommitted changes? Previously stopped sessions
+                      remain stopped if you cancel.
+                    </p>
+                    <button onClick={() => void remove(w.path, true, true)}>
+                      Discard and delete
+                    </button>
+                  </>
+                )}{" "}
+                <button onClick={() => void remove(w.path, false, false, true)}>
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      {!createOnly && project?.kind === "git" && (
+        <button onClick={() => setModalOpen(true)}>Create workspace</button>
+      )}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent>
+          <DialogTitle>Create workspace</DialogTitle>
+          {project?.kind === "git" && (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+                marginTop: 16,
               }}
             >
-              <option value="new">New branch</option>
-              <option value="local">Existing local branch</option>
-              <option value="remote">Existing remote branch</option>
-            </select>
-          </label>
-          {mode === "local" ? (
-            <label>
-              Branch{" "}
-              <select
-                value={branch}
-                onChange={(e) => {
-                  setBranch(e.target.value);
-                  setName(e.target.value.replace(/[\\/]/g, "-"));
-                }}
-              >
-                <option value="">Select branch</option>
-                {branches.local.map((b) => (
-                  <option key={b}>{b}</option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <>
               <label>
-                Branch name{" "}
-                <input
-                  value={branch}
-                  onChange={(e) => {
-                    setBranch(e.target.value);
-                    setName(e.target.value.replace(/[\\/]/g, "-"));
-                  }}
-                />
-              </label>
-              <p>Git branch: {creationBranch || "Enter a branch name"}</p>
-              <label>
-                {mode === "remote" ? "Remote branch" : "Base ref"}{" "}
+                Branch source{" "}
                 <select
-                  value={baseRef}
-                  onChange={(e) => setBaseRef(e.target.value)}
+                  value={mode}
+                  onChange={(e) => {
+                    setMode(e.target.value as WorkspaceBranchMode);
+                    setBranch("");
+                    setBaseRef(
+                      e.target.value === "new" ? branches.defaultRef : "",
+                    );
+                  }}
                 >
-                  <option value="">Select ref</option>
-                  {(mode === "remote"
-                    ? branches.remote
-                    : [...branches.local, ...branches.remote]
-                  ).map((b) => (
-                    <option key={b}>{b}</option>
-                  ))}
+                  <option value="new">New branch</option>
+                  <option value="local">Existing local branch</option>
+                  <option value="remote">Existing remote branch</option>
                 </select>
               </label>
-            </>
-          )}
-          <p>
-            Workspace directory: {projectPath}-worktrees/
-            {creationBranch.replace(/[^a-zA-Z0-9._-]/g, "-")}
-          </p>
-          <label>
-            Display name{" "}
-            <input value={name} onChange={(e) => setName(e.target.value)} />
-          </label>
-          <button
-            disabled={
-              busy ||
-              !creationBranch ||
-              !name.trim() ||
-              (mode !== "local" && !baseRef)
-            }
-            onClick={() => void create()}
-          >
-            Create
-          </button>
-          {job && (
-            <div>
+              {mode === "local" ? (
+                <label>
+                  Branch{" "}
+                  <select
+                    value={branch}
+                    onChange={(e) => {
+                      setBranch(e.target.value);
+                      setName(e.target.value.replace(/[\\/]/g, "-"));
+                    }}
+                  >
+                    <option value="">Select branch</option>
+                    {branches.local.map((b) => (
+                      <option key={b}>{b}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <>
+                  <label>
+                    Branch name{" "}
+                    <input
+                      value={branch}
+                      onChange={(e) => {
+                        setBranch(e.target.value);
+                        setName(e.target.value.replace(/[\\/]/g, "-"));
+                      }}
+                    />
+                  </label>
+                  <p>Git branch: {creationBranch || "Enter a branch name"}</p>
+                  <label>
+                    {mode === "remote" ? "Remote branch" : "Base ref"}{" "}
+                    <select
+                      value={baseRef}
+                      onChange={(e) => setBaseRef(e.target.value)}
+                    >
+                      <option value="">Select ref</option>
+                      {(mode === "remote"
+                        ? branches.remote
+                        : [...branches.local, ...branches.remote]
+                      ).map((b) => (
+                        <option key={b}>{b}</option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              )}
               <p>
-                Setup: {job.status} / {job.stage}
-                {job.error ? ` — ${job.error}` : ""}
+                Workspace directory: {projectPath}-worktrees/
+                {creationBranch.replace(/[^a-zA-Z0-9._-]/g, "-")}
               </p>
-              <pre style={{ whiteSpace: "pre-wrap" }}>{job.logs}</pre>
+              <label>
+                Display name{" "}
+                <input value={name} onChange={(e) => setName(e.target.value)} />
+              </label>
+              <button
+                disabled={
+                  busy ||
+                  !creationBranch ||
+                  !name.trim() ||
+                  (mode !== "local" && !baseRef)
+                }
+                onClick={() => void create()}
+              >
+                Create
+              </button>
+              {job && (
+                <div>
+                  <p>
+                    Setup: {job.status} / {job.stage}
+                    {job.error ? ` — ${job.error}` : ""}
+                  </p>
+                  <pre style={{ whiteSpace: "pre-wrap" }}>{job.logs}</pre>
+                </div>
+              )}
             </div>
           )}
-        </>
-      )}
-      {error && <p role="alert">{error}</p>}
+          {error && <p role="alert">{error}</p>}
+        </DialogContent>
+      </Dialog>
+      {!modalOpen && error && <p role="alert">{error}</p>}
       <ConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => {

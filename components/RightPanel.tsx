@@ -29,21 +29,13 @@ import { GitChangesPanel } from "./GitChangesPanel";
 import { FileViewer } from "./FileViewer";
 import { NotificationActions, NotificationList } from "./NotificationList";
 import { useUnreadNotificationCount } from "@/lib/notification-history";
-import { WorktreesPanel } from "./WorktreesPanel";
 import { ConnectionDiagnosticsPanel } from "./ConnectionDiagnostics";
-import type { WorktreeContext } from "./SessionSidebar-helpers";
 import { useI18n } from "@/lib/i18n";
 import { getFileName } from "@/lib/file-paths";
 import type { WorkspaceFileSource } from "@/lib/workspace-types";
 
 export type RightPanelView =
-  | "explorer"
-  | "git"
-  | "notifications"
-  | "worktrees"
-  | "connection"
-  | "file"
-  | "activity";
+  "explorer" | "git" | "notifications" | "connection" | "file" | "activity";
 
 interface Props {
   fileTabs: Tab[];
@@ -62,8 +54,6 @@ interface Props {
   explorerCwd: string | null;
   sourceSessionId?: string | null;
   hostId: string;
-  /** Active Git workspace's worktrees (null when it is not a Git top-level repo). */
-  worktrees: WorktreeContext | null;
   /** Connection diagnostics are on in this browser: the Connection tab is shown. */
   connectionDiagnosticsOn: boolean;
   explorerRefreshKey: number;
@@ -127,7 +117,6 @@ export const RightPanel = memo(function RightPanel({
   explorerCwd,
   sourceSessionId,
   hostId,
-  worktrees,
   connectionDiagnosticsOn,
   explorerRefreshKey,
   fileSearchOpen,
@@ -287,8 +276,6 @@ export const RightPanel = memo(function RightPanel({
                 isMobile ? () => onSelectView("notifications") : undefined
               }
               notificationsBadge={unreadNotifications}
-              worktreesSelected={rightView === "worktrees"}
-              onSelectWorktrees={() => onSelectView("worktrees")}
               activitySelected={rightView === "activity"}
               onSelectActivity={() => onSelectView("activity")}
               connectionSelected={rightView === "connection"}
@@ -951,28 +938,6 @@ export const RightPanel = memo(function RightPanel({
         >
           {isMobile && visitedViews.has("notifications") && (
             <NotificationList />
-          )}
-        </div>
-        <div
-          id="workspace-file-panel-worktrees"
-          role="tabpanel"
-          aria-label={t("tabBar.worktrees")}
-          style={{
-            display: rightView === "worktrees" ? "flex" : "none",
-            flexDirection: "column",
-            flex: 1,
-            minHeight: 0,
-            overflow: "hidden",
-          }}
-        >
-          {/* Keyed by repository so a draft branch or pending confirmation never carries over to another repo. */}
-          {visitedViews.has("worktrees") && (
-            <WorktreesPanel
-              key={
-                worktrees ? `${worktrees.hostId}:${worktrees.projectRoot}` : ""
-              }
-              ctx={worktrees}
-            />
           )}
         </div>
         <div

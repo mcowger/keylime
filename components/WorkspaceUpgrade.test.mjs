@@ -5,7 +5,6 @@ import test, { afterEach } from "node:test";
 const { render, cleanup, waitFor } =
   await import("@testing-library/react/pure.js");
 const { GitChangesPanel } = await import("./GitChangesPanel.tsx");
-const { SessionSidebar } = await import("./SessionSidebar.tsx");
 const { WorktreesPanel } = await import("./WorktreesPanel.tsx");
 const original = {
   fetch: globalThis.fetch,
@@ -39,6 +38,10 @@ function setup() {
         { error: advice, code: "workspace_unsupported" },
         { status: 501 },
       );
+    if (url.pathname === "/api/hierarchy")
+      return Response.json({
+        projects: [{ path: "/same", kind: "git", workspaces: [] }],
+      });
     if (url.pathname === "/api/projects")
       return Response.json({ projects: [{ path: "/same", hostId: "remote" }] });
     if (url.pathname === "/api/sessions")
@@ -59,28 +62,27 @@ test("Git preserves an older daemon's actionable upgrade explanation", async () 
   await waitFor(() => assert.ok(view.container.textContent.includes(advice)));
 });
 
-test("sidebar worktree failure reaches the panel as an upgrade error, not a non-repository result", async () => {
+test("workspace creation shows an older daemon's upgrade explanation", async () => {
   setup();
-  function Surface() {
-    const [ctx, setCtx] = React.useState(null);
-    return React.createElement(
-      React.Fragment,
-      null,
-      React.createElement(SessionSidebar, {
-        selectedSessionId: null,
-        selectedCwd: "/same",
-        selectedHostId: "remote",
-        skipInitialProjectSelection: true,
-        onSelectSession() {},
-        addProjectOpen: false,
-        setAddProjectOpen() {},
-        usageVisible: false,
-        onWorktreeContextChange: setCtx,
-      }),
-      React.createElement(WorktreesPanel, { ctx }),
-    );
-  }
-  const view = render(React.createElement(Surface));
-  await waitFor(() => assert.ok(view.container.textContent.includes(advice)));
-  assert.equal(view.queryByRole("button", { name: "New worktree…" }), null);
+  const view = render(
+    React.createElement(WorktreesPanel, {
+      ctx: {
+        hostId: "remote",
+        projectRoot: "/same",
+        currentPath: "/same",
+        worktrees: [],
+        select() {},
+        refresh() {},
+      },
+      createOnly: true,
+      createOpen: true,
+      onCreateOpenChange() {},
+    }),
+  );
+  await waitFor(() => assert.ok(view.baseElement.textContent.includes(advice)));
+  assert.ok(
+    view
+      .getByRole("dialog", { name: "Create workspace" })
+      .textContent.includes(advice),
+  );
 });

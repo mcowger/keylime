@@ -7,6 +7,8 @@ import type {
   HierarchyRequest,
 } from "@/lib/project-hierarchy-types";
 import type { ManagedProject, SessionInfo } from "@/lib/types";
+import { WorktreesPanel } from "./WorktreesPanel";
+import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
 
 type Host = { id: string; label: string };
 type Props = {
@@ -68,6 +70,10 @@ export function HierarchySidebar({
   );
   const [error, setError] = useState<string | null>(null);
   const [discovery, setDiscovery] = useState<Discovery | null>(null);
+  const [managedProject, setManagedProject] = useState<{
+    host: string;
+    project: HierarchyProject;
+  } | null>(null);
   useEffect(() => {
     onProjects(
       Object.entries(snapshots).flatMap(([hostId, snapshot]) =>
@@ -304,6 +310,24 @@ export function HierarchySidebar({
                           borderRadius: "var(--radius-control)",
                         }}
                       >
+                        {project.kind === "git" && (
+                          <button
+                            style={{
+                              ...button,
+                              display: "block",
+                              width: "100%",
+                            }}
+                            type="button"
+                            onClick={(e) => {
+                              e.currentTarget
+                                .closest("details")
+                                ?.removeAttribute("open");
+                              setManagedProject({ host: host.id, project });
+                            }}
+                          >
+                            Manage workspaces
+                          </button>
+                        )}
                         {project.kind === "git" && (
                           <button
                             style={{
@@ -581,6 +605,34 @@ export function HierarchySidebar({
             })}
         </section>
       ))}
+      {managedProject && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setManagedProject(null);
+          }}
+        >
+          <DialogContent>
+            <DialogTitle>Manage workspaces</DialogTitle>
+            <WorktreesPanel
+              ctx={{
+                hostId: managedProject.host,
+                projectRoot: managedProject.project.path,
+                currentPath: selectedCwd ?? "",
+                worktrees: [],
+                select: (path) => {
+                  onSelectWorkspace(path, managedProject.host);
+                  setManagedProject(null);
+                },
+                refresh: () => {
+                  void load();
+                  onChanged();
+                },
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
       {discovery && (
         <div
           role="dialog"

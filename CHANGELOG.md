@@ -8,6 +8,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Added
 
+- Removed the Workspaces right-panel tab. Create workspaces from the workspace picker; project actions open workspace management in a modal.
 - Chat width can be set to a percentage of the available space in Settings → Interface & Behavior.
 - Thinking blocks can expand only the latest block, all blocks, or none by default. Existing enabled preferences continue to expand all blocks.
 - Mobile workspace navigation uses a compact tab switcher and bottom sheet instead of a session-title pill. Saved chats remain searchable from workspace navigation; the sidebar focuses on projects and workspaces with contextual management actions.

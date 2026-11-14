@@ -7,7 +7,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { Activity, Bell, Folder, GitBranch, GitFork, X } from "lucide-react";
+import { Activity, Bell, Folder, GitBranch, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { getFileIcon } from "./FileIcons";
 
@@ -41,9 +41,6 @@ interface Props {
   onSelectNotifications?: () => void;
   /** Unread-notification count badge on the Notifications tab. */
   notificationsBadge?: number;
-  /** Pinned Worktrees tab rendered after Git. */
-  worktreesSelected?: boolean;
-  onSelectWorktrees?: () => void;
   activitySelected?: boolean;
   onSelectActivity?: () => void;
   /** Pinned Connection tab rendered last (connection diagnostics on). */
@@ -176,8 +173,6 @@ export function TabBar({
   notificationsSelected = false,
   onSelectNotifications,
   notificationsBadge = 0,
-  worktreesSelected = false,
-  onSelectWorktrees,
   activitySelected = false,
   onSelectActivity,
   connectionSelected = false,
@@ -190,7 +185,6 @@ export function TabBar({
     ...(onSelectNotifications ? ["notifications"] : []),
     ...(onSelectExplorer ? ["explorer"] : []),
     ...(onSelectGit ? ["git"] : []),
-    ...(onSelectWorktrees ? ["worktrees"] : []),
     ...(onSelectActivity ? ["activity"] : []),
     ...(onSelectConnection ? ["connection"] : []),
     ...tabs.map((tab) => tab.id),
@@ -200,7 +194,6 @@ export function TabBar({
     if (id === "explorer") onSelectExplorer?.();
     else if (id === "git") onSelectGit?.();
     else if (id === "notifications") onSelectNotifications?.();
-    else if (id === "worktrees") onSelectWorktrees?.();
     else if (id === "activity") onSelectActivity?.();
     else if (id === "connection") onSelectConnection?.();
     else {
@@ -336,20 +329,6 @@ export function TabBar({
           badge={gitBadge}
           badgeColor="var(--status-modified)"
           onSelect={onSelectGit}
-          onKeyDown={handleTabKeyDown}
-        />
-      )}
-      {onSelectWorktrees && (
-        <PinnedTab
-          id="worktrees"
-          panelId="workspace-file-panel-worktrees"
-          label={t("tabBar.worktrees")}
-          title={t("tabBar.worktrees")}
-          icon={<GitFork size={13} strokeWidth={2} aria-hidden="true" />}
-          selected={worktreesSelected}
-          badge={0}
-          badgeColor="var(--accent)"
-          onSelect={onSelectWorktrees}
           onKeyDown={handleTabKeyDown}
         />
       )}
