@@ -1102,9 +1102,11 @@ wait for that commit:
 
 ### Model activity indicator
 
-- The composer context control shows Idle, elapsed model-request wait, estimated
-  output tokens/second, or Running tools. Queue and composer submission time are
-  not model latency. Each main-agent model request starts a fresh wait timer.
+- The composer activity readout uses a hollow circle for idle, spinner plus elapsed
+  seconds for model wait, lightning plus estimated output rate, and wrench plus
+  elapsed tool-batch time. Visible numbers omit units; tooltips and accessible
+  labels retain them. Queue/submission time is not model latency. Concurrent tools
+  share the first tool's start time; each new batch starts a fresh timer.
 - The runner tracks actual stream-function calls and emits `model_activity`;
   state snapshots restore it on reconnect. Output rate uses a short rolling
   window of streamed text, thinking and tool-call arguments, estimated at four

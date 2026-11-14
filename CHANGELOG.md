@@ -17,11 +17,11 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 ### Fixed
 
 - The composer model picker opens directly to models when only one provider is available. Removed its Add Providers action; provider management remains in Settings.
-- Reasoning effort is selected inside the model picker instead of a separate composer button, preserving provider-specific levels and disabling changes during streaming.
+- Reasoning effort is selected inside the model picker instead of a separate composer button, preserving provider-specific levels and disabling changes during streaming. The model trigger shows the current effort gauge instead of a chip icon, including on mobile.
 - Deployment closes confirmed-idle sessions, gives active work a 60-second grace period, then forces cutover and terminates remaining runs instead of waiting indefinitely.
 - Deployment runs in an independent, snapshotted worker with durable phase tracking and exclusive process-owned locking, so stopping its submitting agent cannot interrupt cutover. `--status` and `--recover` expose progress and interrupted-worker recovery.
 - Removed the composer's Slow button and snail icon. Native `/slow` commands and provider usage-limit warnings remain available.
-- Model activity stays visible in the mobile composer instead of moving into the header. A fixed-width readout prevents layout shifts, and tool execution uses the shorter `Tools…` label.
+- Model activity stays visible in a fixed-width mobile composer readout. Icons replace state words; waiting and streaming show unitless numbers, and tool execution shows elapsed time from the first tool in its batch.
 - Workspace creation defaults its base ref to the repository default branch. Creation-command settings live in Settings → Hosts and Settings → Projects; project settings also edit registered project names.
 - New sessions select a project and then one of that project's registered workspaces, defaulting to its default workspace on project changes. Git projects offer Add workspace directly from the workspace selector.
 - Default workspaces use the main checkout's branch for Git projects and `default` for non-Git projects instead of repeating the project name.

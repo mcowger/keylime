@@ -55,9 +55,10 @@ export class ActivityTracker {
     const seconds = Math.max(1, (at - this.samples[0].at) / 1000);
     this.update("streaming", this.state.startedAt, chars / 4 / seconds);
   }
-  toolStart(id: string) {
+  toolStart(id: string, at = Date.now()) {
+    const startedAt = this.state.kind === "tools" ? this.state.startedAt : at;
     this.tools.add(id);
-    this.update("tools");
+    this.update("tools", startedAt);
   }
   toolEnd(id: string) {
     if (!this.tools.delete(id)) return;

@@ -8,7 +8,11 @@ const { ChatInput } = await import("./ChatInput.tsx");
 afterEach(cleanup);
 
 test("reasoning effort lives in model picker, preserves mapped provider levels and locks during streaming", () => {
-  window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  window.matchMedia = () => ({
+    matches: false,
+    addEventListener() {},
+    removeEventListener() {},
+  });
   const changes = [];
   const props = {
     onSend: async () => ({ status: "accepted" }),
@@ -24,6 +28,12 @@ test("reasoning effort lives in model picker, preserves mapped provider levels a
   };
   const view = render(React.createElement(ChatInput, props));
   assert.equal(
+    screen
+      .getByRole("img", { name: "Reasoning: low" })
+      .getAttribute("data-level"),
+    "low",
+  );
+  assert.equal(
     screen.queryByRole("combobox", { name: "Change reasoning level" }),
     null,
   );
@@ -36,7 +46,17 @@ test("reasoning effort lives in model picker, preserves mapped provider levels a
   fireEvent.change(select, { target: { value: "ultra" } });
   assert.deepEqual(changes, ["ultra"]);
   view.rerender(
-    React.createElement(ChatInput, { ...props, isStreaming: true }),
+    React.createElement(ChatInput, {
+      ...props,
+      thinkingLevel: "ultra",
+      isStreaming: true,
+    }),
+  );
+  assert.equal(
+    screen
+      .getByRole("img", { name: "Reasoning: Provider maximum" })
+      .getAttribute("data-level"),
+    "ultra",
   );
   assert.equal(
     screen.getByRole("combobox", { name: "Change reasoning level" }).disabled,

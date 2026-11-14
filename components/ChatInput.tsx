@@ -13,6 +13,7 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import type { ModelActivity } from "@/lib/model-activity";
+import { ModelActivityIndicator } from "./ModelActivityIndicator";
 import {
   ChevronDown,
   ClipboardPaste,
@@ -168,6 +169,17 @@ import { GhostMirror } from "@/components/GhostMirror";
 import { useI18n } from "@/lib/i18n";
 import { selectableThinkingLevels } from "@/lib/thinking-levels";
 import type { ToolPreset } from "@/lib/tool-presets";
+
+const EFFORT_GAUGE_DEGREES: Readonly<Record<string, number>> = {
+  auto: 0,
+  off: 0,
+  minimal: 30,
+  low: 90,
+  medium: 180,
+  high: 240,
+  xhigh: 300,
+  max: 360,
+};
 
 const SLOW_MODE_SAME_DAY_MS = 20 * 3_600_000;
 
@@ -547,13 +559,6 @@ export const ChatInput = memo(
     ref,
   ) {
     const isMobile = useIsMobile();
-    const [activityNow, setActivityNow] = useState(Date.now());
-    useEffect(() => {
-      if (modelActivity?.kind !== "waiting") return;
-      setActivityNow(Date.now());
-      const timer = setInterval(() => setActivityNow(Date.now()), 100);
-      return () => clearInterval(timer);
-    }, [modelActivity?.kind, modelActivity?.startedAt]);
     // Read per render so a Settings change applies on the next keystroke.
     const wordCompletionOn = isWordCompletionEnabled();
     const wordPrediction = useWordPrediction(
@@ -598,14 +603,6 @@ export const ChatInput = memo(
       [],
     );
     const { t, tn, locale } = useI18n();
-    const activityLabel =
-      modelActivity?.kind === "waiting"
-        ? `${(Math.max(0, activityNow - modelActivity.startedAt) / 1000).toFixed(1)}s`
-        : modelActivity?.kind === "streaming"
-          ? `${Math.round(modelActivity.rate)} tk/s`
-          : modelActivity?.kind === "tools"
-            ? t("modelActivity.runningTools")
-            : t("modelActivity.idle");
     const usageLimitLabel = usageLimit
       ? formatUsageLimitLabel(usageLimit, t)
       : undefined;
@@ -5139,28 +5136,26 @@ export const ChatInput = memo(
                         aria-haspopup="dialog"
                         aria-controls={modelPickerId}
                       >
-                        <svg
-                          width="11"
-                          height="11"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          style={{ flexShrink: 0 }}
-                        >
-                          <rect x="4" y="4" width="16" height="16" rx="2" />
-                          <rect x="9" y="9" width="6" height="6" />
-                          <line x1="9" y1="1" x2="9" y2="4" />
-                          <line x1="15" y1="1" x2="15" y2="4" />
-                          <line x1="9" y1="20" x2="9" y2="23" />
-                          <line x1="15" y1="20" x2="15" y2="23" />
-                          <line x1="20" y1="9" x2="23" y2="9" />
-                          <line x1="20" y1="14" x2="23" y2="14" />
-                          <line x1="1" y1="9" x2="4" y2="9" />
-                          <line x1="1" y1="14" x2="4" y2="14" />
-                        </svg>
+                        <i
+                          className="composer-effort-gauge"
+                          role="img"
+                          aria-label={`${t("chatInput.reasoningLabel")}: ${thinkingLevelMap?.[thinkingLevel ?? "auto"] ?? thinkingLevel ?? "auto"}`}
+                          title={`${t("chatInput.reasoningLabel")}: ${thinkingLevelMap?.[thinkingLevel ?? "auto"] ?? thinkingLevel ?? "auto"}`}
+                          data-level={thinkingLevel ?? "auto"}
+                          style={{
+                            flexShrink: 0,
+                            display: "inline-block",
+                            width: 13,
+                            height: 13,
+                            border: "1.5px solid currentColor",
+                            borderRadius: "50%",
+                            background: `conic-gradient(currentColor ${EFFORT_GAUGE_DEGREES[thinkingLevel ?? "auto"] ?? 180}deg, transparent 0)`,
+                            borderStyle:
+                              !thinkingLevel || thinkingLevel === "auto"
+                                ? "dashed"
+                                : "solid",
+                          }}
+                        />
                         <span
                           style={{
                             overflow: "hidden",
@@ -5422,24 +5417,7 @@ export const ChatInput = memo(
                   </span>
                 )}
 
-                <span
-                  title={t("modelActivity.estimateTooltip")}
-                  style={{
-                    whiteSpace: "nowrap",
-                    color: "var(--text-muted)",
-                    display: "inline-block",
-                    width: 80,
-                    flex: "0 0 80px",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    textAlign: "right",
-                    fontVariantNumeric: "tabular-nums",
-                    fontSize: 11,
-                    marginRight: 4,
-                  }}
-                >
-                  {activityLabel}
-                </span>
+                <ModelActivityIndicator activity={modelActivity} />
                 {/* Desktop keeps the control in the composer; mobile uses the header mount. */}
                 {onCompact && (
                   <div

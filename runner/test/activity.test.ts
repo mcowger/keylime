@@ -32,6 +32,19 @@ it("measures output independently of request latency and ignores late tool ends"
   expect(tracker.snapshot().kind).toBe("idle");
 });
 
+it("times tools from the first tool in each batch, not the model request", () => {
+  const tracker = new ActivityTracker(() => {});
+  tracker.request(1000);
+  tracker.toolStart("first", 4000);
+  tracker.toolStart("second", 5000);
+  expect(tracker.snapshot()).toMatchObject({ kind: "tools", startedAt: 4000 });
+  tracker.toolEnd("first");
+  expect(tracker.snapshot()).toMatchObject({ kind: "tools", startedAt: 4000 });
+  tracker.toolEnd("second");
+  tracker.toolStart("next", 9000);
+  expect(tracker.snapshot()).toMatchObject({ kind: "tools", startedAt: 9000 });
+});
+
 it("observes real model calls before and after a tool", async () => {
   process.env.OMPWEB_HOST_SOCKET = path.join(
     os.tmpdir(),
