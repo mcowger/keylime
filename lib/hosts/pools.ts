@@ -15,17 +15,6 @@ import {
   type ProjectRegistryEntry,
 } from "../project-registry";
 import { isRecord } from "../type-guards";
-import type { ManagedProject } from "../types";
-import type { HostStatus } from "./host";
-import type { CapacitySnapshot } from "./hub";
-
-export interface PoolHostSnapshot {
-  status: HostStatus;
-  linkProtocol: number;
-  /** False for a cluster member that is not on the master's configuration (`isHostConfigCurrent`); it is never chosen. */
-  configCurrent: boolean;
-  capacity: CapacitySnapshot | null;
-}
 
 export interface PoolMember {
   hostId: string;
@@ -51,11 +40,8 @@ export interface HostPool {
 }
 
 const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
-const GiB = 1024 ** 3;
 const safeId = (value: unknown): value is string =>
   typeof value === "string" && SAFE_ID.test(value);
-const nonnegative = (value: unknown): value is number =>
-  typeof value === "number" && Number.isFinite(value) && value >= 0;
 const absoluteRoot = (value: unknown): value is string =>
   typeof value === "string" &&
   !value.includes("\0") &&
@@ -207,10 +193,6 @@ export function savePools(pools: HostPool[]): void {
   }
 }
 
-/** Domain-separated from physical path keys; pool/project IDs cannot contain colons. */
-export function poolProjectKey(poolId: string, projectId: string): string {
-  return `pool:${poolId}:${projectId}`;
-}
 
 /** Retained bindings, not current membership, determine an existing session's identity. */
 export function poolProjectBindings(
@@ -234,100 +216,3 @@ export function poolProjectBindings(
   return bindings;
 }
 
-/** The representative is diagnostic, never proof that a checkout has been prepared. */
-export function poolManagedProject(
-  pool: HostPool,
-  project: PoolProject,
-): ManagedProject {
-  const [hostId, path] = Object.entries(project.clonePaths)[0] ?? [];
-  return {
-    poolId: pool.id,
-    projectId: project.id,
-    projectKey: poolProjectKey(pool.id, project.id),
-    path: path ?? "",
-    hostId,
-    name: project.name,
-    origin: project.origin,
-    defaultRef: project.defaultRef,
-    addedAt: project.addedAt,
-    alias: project.alias,
-    sortOrder: project.sortOrder,
-    pinOrder: project.pinOrder,
-    launchConfig: project.launchConfig,
-  };
-}
-
-/** Only explicit, ready members compete; this does not collect or refresh trusted hub snapshots. */
-export function selectPoolHost(
-  pool: HostPool,
-  snapshots: ReadonlyMap<string, PoolHostSnapshot>,
-  pending: ReadonlyMap<string, number>,
-  now: number,
-): string | null {
-  if (!pool.enabled || !Number.isFinite(now)) return null;
-  let bestId: string | null = null;
-  let bestRank = Infinity;
-  let bestMemory = -1;
-  for (const member of pool.members) {
-    if (!member.provisioned || member.draining) continue;
-    const report = snapshots.get(member.hostId);
-    if (
-      !report ||
-      report.status !== "online" ||
-      !report.capacity ||
-      !report.configCurrent
-    )
-      continue;
-    const { sample, receivedAt } = report.capacity;
-    if (
-      !nonnegative(receivedAt) ||
-      receivedAt > now ||
-      now - receivedAt > 15_000
-    )
-      continue;
-    const {
-      effectiveCpus,
-      load1,
-      busyFraction,
-      stealFraction,
-      availableMemoryBytes,
-      activeSessions,
-    } = sample;
-    if (
-      !nonnegative(effectiveCpus) ||
-      effectiveCpus === 0 ||
-      !nonnegative(load1) ||
-      !nonnegative(busyFraction) ||
-      !nonnegative(stealFraction) ||
-      busyFraction + stealFraction > 1 ||
-      !nonnegative(availableMemoryBytes) ||
-      !Number.isSafeInteger(activeSessions) ||
-      activeSessions < 0
-    )
-      continue;
-    const pendingStarts = pending.get(member.hostId) ?? 0;
-    if (
-      !Number.isSafeInteger(pendingStarts) ||
-      pendingStarts < 0 ||
-      availableMemoryBytes - (pendingStarts + 1) * GiB < 2 * GiB
-    )
-      continue;
-    const rank = Math.max(
-      load1 / effectiveCpus,
-      busyFraction + stealFraction,
-      (activeSessions + pendingStarts) / effectiveCpus,
-    );
-    if (
-      bestId === null ||
-      rank < bestRank ||
-      (rank === bestRank &&
-        (availableMemoryBytes > bestMemory ||
-          (availableMemoryBytes === bestMemory && member.hostId < bestId)))
-    ) {
-      bestId = member.hostId;
-      bestRank = rank;
-      bestMemory = availableMemoryBytes;
-    }
-  }
-  return bestId;
-}

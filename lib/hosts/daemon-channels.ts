@@ -1,3 +1,5 @@
+import { realpathSync } from "node:fs";
+import { isAbsolute, relative, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { SpawnRequest, SpawnResult } from "./host";
 import type { RpcTransport } from "../omp/rpc-transport";
@@ -102,6 +104,13 @@ type ChannelDeps = {
   runningChanged?(): void;
   sessionsChanged?(): void;
   channelsChanged?(ch: string): void;
+  sessionCreated?(cwd: string, id: string): void;
+  sessionIdentityChanged?(
+    previous: string,
+    next: string,
+    moved: boolean,
+    cwd: string,
+  ): void;
 };
 const collision = () =>
   new HostOpError(
@@ -148,6 +157,7 @@ export class ChannelTable {
   private spawningCount = 0;
   private commandId = 0;
   private stopped = false;
+  private readonly workspaceFences = new Set<string>();
   constructor(private readonly deps: ChannelDeps) {}
   get size(): number {
     return this.channels.size;
@@ -165,6 +175,101 @@ export class ChannelTable {
     for (const channel of this.channels.values())
       if (channel.pending.sessionId === id) return channel.cwd;
     return undefined;
+  }
+
+  private workspaceContains(root: string, cwd: string): boolean {
+    const canonical = (value: string) => {
+      try {
+        return realpathSync(value);
+      } catch {
+        return resolve(value);
+      }
+    };
+    const suffix = relative(canonical(root), canonical(cwd));
+    return (
+      suffix === "" ||
+      (!isAbsolute(suffix) && suffix !== ".." && !suffix.startsWith("../"))
+    );
+  }
+
+  fenceWorkspace(directory: string): () => void {
+    if (
+      [...this.workspaceFences].some(
+        (root) =>
+          this.workspaceContains(root, directory) ||
+          this.workspaceContains(directory, root),
+      )
+    )
+      throw new HostOpError(
+        409,
+        "workspace_busy",
+        "This workspace is already being deleted",
+      );
+    this.workspaceFences.add(directory);
+    return () => this.workspaceFences.delete(directory);
+  }
+
+  async inspectWorkspace(
+    directory: string,
+  ): Promise<Array<{ id: string; cwd: string }>> {
+    await Promise.allSettled([...this.pendingSpawns]);
+    return [...this.channels.values()]
+      .filter(
+        (channel) =>
+          !channel.exited && this.workspaceContains(directory, channel.cwd),
+      )
+      .map((channel) => ({
+        id: channel.pending.sessionId ?? channel.ch,
+        cwd: channel.cwd,
+      }));
+  }
+
+  async stopWorkspace(directory: string): Promise<void> {
+    await Promise.allSettled([...this.pendingSpawns]);
+    await Promise.all(
+      [...this.channels.values()]
+        .filter(
+          (channel) =>
+            !channel.exited && this.workspaceContains(directory, channel.cwd),
+        )
+        .map(async (channel) => {
+          const {
+            promise,
+            resolve: resolveExit,
+            reject,
+          } = Promise.withResolvers<void>();
+          const timer = setTimeout(
+            () =>
+              reject(
+                new HostOpError(
+                  409,
+                  "workspace_process_stop_failed",
+                  "A workspace process did not exit; no files were deleted",
+                ),
+              ),
+            15000,
+          );
+          channel.transport.onExit(() => {
+            clearTimeout(timer);
+            resolveExit();
+          });
+          this.stopChannel(channel, "workspace deleted");
+          await promise;
+        }),
+    );
+  }
+
+  private assertWorkspaceAvailable(cwd: string): void {
+    if (
+      [...this.workspaceFences].some((root) =>
+        this.workspaceContains(root, cwd),
+      )
+    )
+      throw new HostOpError(
+        409,
+        "workspace_deleting",
+        "This workspace is being deleted",
+      );
   }
 
   private identity(launch: SpawnRequest): string | null {
@@ -520,6 +625,7 @@ export class ChannelTable {
     preparingLinkId?: string,
     adopted?: SpawnResult,
   ): Promise<Channel> {
+    this.assertWorkspaceAvailable(launch.cwd);
     this.spawningCount++;
     try {
       if (this.stopped) {
@@ -530,6 +636,12 @@ export class ChannelTable {
       if (this.stopped) {
         spawned.transport.killTree(true);
         throw new HostOpError(503, "host_stopping", "ompweb host is stopping");
+      }
+      try {
+        this.assertWorkspaceAvailable(spawned.cwd);
+      } catch (error) {
+        spawned.transport.killTree(true);
+        throw error;
       }
       const { promise: ready, resolve: noteReady } =
         Promise.withResolvers<WireFrame | null>();
@@ -710,6 +822,16 @@ export class ChannelTable {
       isValidSessionId(id) &&
       id !== channel.pending.sessionId
     ) {
+      const previous = channel.pending.sessionId;
+      if (previous)
+        this.deps.sessionIdentityChanged?.(
+          previous,
+          id,
+          channel.sessionMovePending === true,
+          channel.cwd,
+        );
+      else if (!channel.adopted && !channel.launch.sessionFile)
+        this.deps.sessionCreated?.(channel.cwd, id);
       if (channel.pending.sessionId && !channel.sessionMovePending) {
         channel.aliases.clear();
         channel.files.clear();

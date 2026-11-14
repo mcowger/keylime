@@ -3,7 +3,6 @@
 // `RemoteHost`. Everything a daemon sends is untrusted input.
 // No `next/*` or `@/` imports.
 import { randomUUID } from "node:crypto";
-import { posix } from "node:path";
 import { readBodyWithinLimit } from "../bounded-form-data";
 import type { RpcTransport } from "../omp/rpc-transport";
 import type { ProjectRegistryEntry } from "../project-registry";
@@ -67,7 +66,6 @@ import {
   type HostRecord,
 } from "./registry";
 import type { SessionOps } from "./session-ops";
-import { confirmPooledChild, pooledStartForChild } from "./pool-starts";
 import { loadPools, type HostPool } from "./pools";
 import { validateHostTools } from "./shared-requests";
 import type {
@@ -1008,7 +1006,6 @@ function reattach(
     const existing = link.channels.get(ch);
     if (existing) {
       existing.spawned = true;
-      existing.creationHello = hello.creationId ? hello : undefined;
       const identityChanged =
         sessionId !== null && existing.session !== sessionId;
       if (sessionId) existing.session = sessionId;
@@ -1023,18 +1020,8 @@ function reattach(
       continue;
     const child = new RemoteRpcTransport(link.id, ch, sessionId);
     child.spawned = true;
-    child.creationHello = hello.creationId ? hello : undefined;
     link.channels.set(ch, child);
-    let owned: { creationId: string; sessionId?: string; cwd: string } | null =
-      null;
-    if (hello.creationId) {
-      try {
-        owned = pooledStartForChild(link.id, hello);
-      } catch {
-        continue;
-      } // An unreadable journal cannot prove this creation is an orphan.
-    }
-    if (!sessionId && !owned) {
+    if (!sessionId) {
       child.close();
       continue;
     }
@@ -1046,7 +1033,6 @@ function reattach(
             recordedCwd: cwd,
             sessionFile: "",
             advisor: false,
-            ...(hello.creationId ? { creationId: hello.creationId } : {}),
           },
           sessionId,
           { expectedChannel: ch },
@@ -1056,17 +1042,16 @@ function reattach(
         return await adopt(
           link,
           child,
-          sessionId ?? owned?.sessionId ?? "",
+          sessionId,
           spawned.cwd,
           [
             ...(spawned.pending ?? []),
             ...(spawned.streaming ? [spawned.streaming] : []),
           ],
           spawned,
-          owned?.creationId,
         );
       } catch (error) {
-        if (!owned) child.close();
+        child.close();
         console.warn(
           `[omp-web] could not join session ${sessionId} on ${labelOf(link.id)}: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -1078,7 +1063,7 @@ function reattach(
 
 /** Spec "Adopting live children": a session wrapper takes the child over, by
  * the identity the child itself reports (a new session is in no list before
- * its first reply is written). Failed shared adoption leaves this link; pooled creations are retained. */
+ * its first reply is written). Failed shared adoption leaves this link. */
 async function adopt(
   link: Link,
   child: RemoteRpcTransport,
@@ -1086,31 +1071,21 @@ async function adopt(
   cwd: string,
   replay: string[],
   metadata?: Pick<SpawnResult, "advisorSpawned" | "launchAdvisor">,
-  creationId?: string,
 ): Promise<boolean> {
   try {
     // rpc-manager imports the hub: resolving adoption lazily avoids their initialization cycle.
     const { adoptRpcSession } = await import("../rpc-manager");
-    const session = await adoptRpcSession({
+    await adoptRpcSession({
       host: link.host,
       transport: child,
       sessionId,
       cwd,
       replay,
       ...metadata,
-      creationId,
     });
-    if (creationId !== undefined)
-      confirmPooledChild(creationId, link.id, cwd, session.sessionId);
     return true;
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    if (creationId !== undefined) {
-      console.warn(
-        `[omp-web] retained creation ${creationId} on ${labelOf(link.id)} for owner reconciliation: ${reason}`,
-      );
-      return false;
-    }
     child.close();
     console.warn(
       `[omp-web] left the shared omp child of session ${sessionId} on ${labelOf(link.id)} running: this server could not adopt it (${reason})`,
@@ -1383,14 +1358,6 @@ function validResult(
         typeof value.projectRoot === "string" &&
         (value.projectKey === undefined || typeof value.projectKey === "string")
       );
-    case "preparePoolProject":
-      return (
-        isRecord(value) &&
-        preparedPath(value.cwd) &&
-        preparedPath(value.projectRoot) &&
-        typeof value.baseCommit === "string" &&
-        /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value.baseCommit)
-      );
     case "exportSession":
       return (
         isRecord(value) &&
@@ -1447,12 +1414,6 @@ function validResult(
     default:
       return true;
   }
-}
-
-/** Paths belong to the daemon's OS, which need not be the web server's OS. */
-function preparedPath(value: unknown): boolean {
-  if (typeof value !== "string" || value.includes("\0")) return false;
-  return posix.isAbsolute(value) && posix.normalize(value) === value;
 }
 
 const optionalString = (value: unknown) =>
@@ -1609,9 +1570,6 @@ const ORPHAN_SENSITIVE_OPS: Partial<Record<keyof SessionOps, true>> = {
   renameSessionFile: true,
 };
 
-/** A clone/fetch may outlast ordinary operations, but preparation still has a bounded deadline. */
-const POOL_PREPARE_TIMEOUT_MS = 10 * 60_000;
-
 function remoteSessionOps(hostId: string): SessionOps {
   const ops: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
   for (const [op, params] of Object.entries(SESSION_OP_PARAMS) as [
@@ -1632,9 +1590,7 @@ function remoteSessionOps(hostId: string): SessionOps {
         hostId,
         op,
         Object.fromEntries(params.map((name, i) => [name, args[i]])),
-        op === "preparePoolProject"
-          ? POOL_PREPARE_TIMEOUT_MS
-          : linkTimings.opTimeoutMs,
+        linkTimings.opTimeoutMs,
       );
       if (op === "listSessionIdsForRestore") {
         if (
@@ -1689,7 +1645,9 @@ function remoteWorkspaceOps(hostId: string): WorkspaceOps {
         hostId,
         op,
         Object.fromEntries(params.map((name, i) => [name, args[i]])),
-        op === "publishUpload"
+        op === "publishUpload" ||
+          op === "workspaceBranches" ||
+          op === "removeRegisteredWorktree"
           ? UPLOAD_ATTACH_TIMEOUT_MS
           : linkTimings.opTimeoutMs,
       );
@@ -1729,8 +1687,6 @@ export class RemoteRpcTransport implements RpcTransport {
   lost = false;
   /** A listed child being taken over (see reattach): resolves true once adopted, false once killed instead. */
   adoption: Promise<boolean> | null = null;
-  /** A retained creation hello is also the authority for retrying adoption after journal recovery. */
-  creationHello?: HelloChannel;
   private readonly lineListeners: Array<(line: string) => void> = [];
   private readonly stderrListeners: Array<(chunk: string) => void> = [];
   private readonly exitListeners: Array<
@@ -2720,56 +2676,6 @@ export async function adoptedChild(
   return (await Promise.all(listed.map((child) => child.adoption))).includes(
     true,
   );
-}
-
-/** Revisit an owned hello retained while the journal was unreadable, using the native adoption path. */
-export async function reconcilePooledChild(
-  hostId: string,
-  creationId: string,
-): Promise<boolean> {
-  const link = hub().links.get(hostId);
-  if (!link || link.status !== "online") return false;
-  const children = [...link.channels.values()].filter(
-    (child) => child.creationHello?.creationId === creationId,
-  );
-  if (children.length > 1)
-    throw new HostOpError(
-      409,
-      "creation_conflict",
-      "Worker listed more than one child for a creation",
-    );
-  const child = children[0];
-  if (!child?.creationHello) return false;
-  const hello = child.creationHello;
-  const owned = pooledStartForChild(hostId, hello);
-  if (!owned) return false;
-  child.adoption ??= (async () => {
-    const sessionId = hello.sessionId ?? owned.sessionId ?? "";
-    const spawned = await link.host.spawnRpc(
-      {
-        cwd: hello.cwd,
-        recordedCwd: hello.cwd,
-        sessionFile: "",
-        advisor: false,
-        creationId,
-      },
-      hello.sessionId,
-      { expectedChannel: hello.ch },
-    );
-    return adopt(
-      link,
-      child,
-      sessionId,
-      spawned.cwd,
-      [
-        ...(spawned.pending ?? []),
-        ...(spawned.streaming ? [spawned.streaming] : []),
-      ],
-      spawned,
-      creationId,
-    );
-  })();
-  return child.adoption;
 }
 
 /** Whether a host still runs a child of `sessionId`, joined by this server or not (a failed join leaves it running). */

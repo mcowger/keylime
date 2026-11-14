@@ -135,7 +135,7 @@ app/api/
   hosts/broker/[...path]/route.ts allow-listed forwarding of an omp auth broker's endpoints for a host that shares credentials (`sharesCredentials`: its `shareCredentials` flag or cluster membership); authenticated by the host token, outside the password gate (`proxy.ts` `UNGATED`); see "Remote hosts → Shared credentials"
   hosts/cluster-config/manifest/route.ts GET the master's mirrored-configuration manifest (`{ version, files, agentEnv, plugins }`) for a cluster member; host token, members only (`admitClusterMember`: 401 unknown token, 403 `local`/not a member, 503 unreadable `hosts.json`/`pools.json`), 409 `{ error, code }` when the configuration cannot be built (`ClusterConfigError`); outside the password gate (`proxy.ts` `UNGATED`); see "Remote hosts → Cluster configuration"
   hosts/cluster-config/file/[hash]/route.ts GET one file of the current manifest by its sha256 (404 for any other hash, an older version's included); same admission and gate as the manifest
-  hosts/[id]/cluster/route.ts     PUT { projectsRoot } join the cluster (the host's Git projects bind to cluster projects by repository, `gitOrigins`; this machine is added too by any join while it is not a member; the host needs link protocol 10; 409 `host_in_other_cluster` when it holds another server's configuration), then sends the host its configuration (`clusterConfigOp` `apply`) | DELETE leave, then `restore` (none to a daemon below protocol 10, which never applied one); the body carries `restoreError` when the host could not put its own configuration back; 409 `{ error, code }` for offline/old daemon/`cluster_changed`, 503 if `pools.json` is unreadable
+  hosts/[id]/cluster/route.ts     PUT join the cluster and apply shared configuration | DELETE leave and restore the host's own configuration
   notifications/devices/route.ts  GET VAPID key + subscribed | PUT { deviceId, prefs, subscription? }
   notifications/presence/route.ts POST { clientId, deviceId, visible, sessionId, seq }
   notifications/test/route.ts     POST { deviceId } send a test push (502 on push-service refusal)
@@ -634,21 +634,9 @@ data}` messages (`PartJoiner` joins them, one partial line at a time, ≤ 512
   - **Membership, not the confirmation or `enabled`, grants sharing.** A host
     added to `pools[0]` through `PUT /api/hosts` (or a `pools.json` edit) shares
     without the join dialog, and so do members of a disabled first pool.
-  - **Placement skips members that cannot share.** `startPooledSession` leaves
-    out a member that `sharesCredentials` forces to share unless its link is
-    shared (`hostOwnsLifecycle`) at `SHARED_CREDENTIALS_SINCE_VERSION`, before
-    preparation; `spawnRpc`'s 426 stays the last guard. Other pools' members
-    keep their own eligibility.
-  - **Join keeps what the host showed.** A created cluster project takes the
-    host project's name, else its folder name (split on `/` and `\`), and its
-    alias; binding a visible checkout un-hides a hidden cluster project.
-    `POST /api/projects` pool registration matches by `repositoryKey` (or the
-    identical text) and keeps the stored origin.
   - **Mirrored to members:** this machine's omp configuration, see "Cluster
     configuration" below. Not mirrored: programs (an MCP command, a language server, a local
     model engine), `.omp/` in a repository, named omp profiles.
-  - **Only grouping passes `pools` to `projectTargetId`.** Selection, expand
-    keys, reorder, pin and drag use the project's own target.
 - **Cluster configuration** (`docs/specs/2026-11-11-cluster-configuration-design.md`).
   A member runs omp on this machine's configuration, and its daemon applies it, never omp.
   - **Master.** `buildManifest` (`lib/hosts/cluster-config.ts`) lists the `MIRRORED` files (from the
@@ -707,11 +695,7 @@ data}` messages (`PartJoiner` joins them, one partial line at a time, ≤ 512
     holds, such as a kept plugin list, waits for the next start), and a session start sent before that server's restore is refused
     after it (`left`), as is any start while the holder's restore runs. A link that ends `"revoked"` while its server
     `holds` the configuration awaits `restore` before the daemon shuts down: no other server could put it back.
-  - **Placement.** `isHostConfigCurrent`: `local` and hosts outside the cluster always; a member only when it reports
-    this server's version, `files` and `plugins` current. `selectPoolHost` skips a member that is not;
-    `startPooledSession` says why: "still receiving the configuration" or "Update
-    ompweb on the pool's workers". A start pinned to one member applies first and is refused with the reason; a
-    plugin difference does not refuse it.
+  - **Session starts.** A start on a member applies the shared configuration first and is refused if it cannot be applied. Projects and sessions stay on their owning host; there is no pool placement.
   - **Upgrade.** Every linked daemon speaks protocol 11 or newer (`MIN_LINK_PROTOCOL_VERSION`; an older one is refused
     at the link), so every member takes the configuration; joining also needs the `gitOrigins` op and an omp that
     shares credentials (`clusterJoinBlock`).
@@ -1610,46 +1594,16 @@ btw` → localized "requires a newer omp" toast (`toastBtwError`); background
 
 ### Worktrees and project grouping
 
-- `lib/worktree.ts` resolves linked worktree top-levels back to the main repo `projectRoot`; `listAllSessions()` attaches that to each `SessionInfo` so all worktrees for one repo are grouped together in the sidebar.
-- `/api/worktrees` delegates authorized operations and root grants to the owning daemon; only that host's session-list cache is invalidated on main.
-- New worktrees are created under `<repoRoot>-worktrees/<sanitized-branch>`. Existing branches are reused; otherwise `git worktree add -b` creates the branch.
-- Removing a dirty worktree returns `409` with `{ dirty: true }` so the UI can ask before retrying with `force`.
-- The file panel's **Worktrees** tab (`components/WorktreesPanel.tsx`) switches, creates, and removes worktrees; the new-session screen's worktree `<select>` (AppShell, shown when the selected workspace has 2+ worktrees) only switches. `SessionSidebar` owns the per-repo worktree cache and the actions and emits them as a `WorktreeContext` (`onWorktreeContextChange`, null unless the active workspace is a Git top-level repo); AppShell hands it to both. Switching moves the sidebar's effective cwd (where a new session starts), not the open session.
-- Explorer and Git pair `explorerCwd` with its owning host. Each file tab instead retains its source host/cwd/session; relative links and downloads use that source after chat switches. Worktree caches, contexts and pending actions also include host identity.
-- Sessions whose cwd points at a removed worktree are inferred back into the main project instead of becoming a phantom project row.
+- The daemon owns explicit project → workspace → session registrations shared by all linked servers. The hierarchy starts empty; adding a project registers its default workspace, while existing worktrees and sessions require selective import. Non-Git projects have one workspace. Raw session discovery remains available for lifecycle operations.
+- Workspace setup is a daemon-owned job with host defaults or a whole-project pipeline override. It captures pre/create/post commands, logs and status; a valid worktree registers before post. See `docs/worktrees.md` for the environment, result file and failure semantics.
+- Deletion fences starts, stops all managed processes under the workspace after confirmation, then separately confirms dirty-file discard. Declining discard leaves processes stopped. Only successful Git removal unregisters the workspace and children; branches and history remain.
+- Explorer and Git pair `explorerCwd` with its owning host. Each file tab retains its source host/cwd/session.
 
-### Managed projects sidebar (`lib/project-registry.ts`, `/api/projects`)
+### Managed projects sidebar (`lib/hosts/project-hierarchy.ts`, `/api/hierarchy`)
 
-- The sidebar lists **managed projects**: explicitly added directories (registered in
-  `~/.omp/agent/projects.json`, written atomically as temp-file + rename) plus
-  session-discovered ones — hidden entries excluded. Removing a project only
-  marks it hidden (reversible via re-adding); hidden entries suppress session
-  re-discovery.
-- Registry paths are canonical `projectRoot`s: `POST` resolves worktrees to
-  their main repo via `resolveProject`, and `resolveProject` returns the
-  symlink-free on-disk form for plain directories so registered and
-  session-discovered paths compare equal.
-- `GET /api/projects` re-authorizes registered roots with `allowFileRoot()` —
-  the in-memory browse allowlist does not survive restarts, and empty managed
-  projects derive no root from sessions.
-- By default (sort "None") the client orders the merged list manually
-  (`sortOrder`, set by drag/Move up/down), then most-recently-added, then by
-  path (`lib/project-ordering.ts`), so rows never jump while sessions refresh.
-  The header sort button (`omp-web:project-sort` in `localStorage`, per
-  browser) switches to Alphabetical (label A→Z) or Last updated (newest last
-  message first: `lastMessageAt` from the session tail scan, else the file
-  mtime) — the latter deliberately reorders on activity. While a
-  sort is active, rows get a pin toggle: pinned projects (`pinOrder` in the
-  registry, pinned to the end of the group) lead in their own manual order and
-  alone keep Move up/down and drag; pins are ignored under "None".
-  Expanded project paths live
-  in `localStorage` (`omp-web:expanded-projects`), defaulting to only the
-  active/restored project expanded, and stale keys are pruned against the
-  current project list (only after the first project fetch — an empty
-  still-loading list must never wipe storage).
-- Each project's session tree is capped at 5 roots with a show-more toggle;
-  project rows are cards matching the session items' height/margins/accent
-  treatment. Rows show no worktree/branch selector (see the Worktrees tab).
+- Registrations are host-bound, canonical and exclusive to one parent. Duplicate imports are idempotent. Missing resources remain visible as unavailable.
+- Unregistering a project or workspace forgets its children without deleting files or stopping processes. Re-registration starts fresh. The default workspace cannot be independently unregistered.
+- App-created sessions and forks register with their workspace. Selective session import uses cwd containment and excludes other workspace roots. Multiple agents may work in the same workspace and share files.
 
 ### Clone a repository as a new workspace (`/api/projects/clone`)
 

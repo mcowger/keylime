@@ -15,24 +15,9 @@ import {
 } from "@/lib/bounded-form-data";
 import { MAX_AGENT_COMMAND_REQUEST_BYTES } from "@/lib/image-attachments";
 import { validateAgentImages } from "@/lib/image-attachments";
-import { PoolStartError, startPooledSession } from "@/lib/hosts/pool-starts";
-import { HostOpError } from "@/lib/hosts/link-protocol";
 import { isRecord } from "@/lib/type-guards";
 
 function newSessionErrorResponse(error: unknown) {
-  if (error instanceof PoolStartError) {
-    return Response.json(
-      {
-        error: error.message,
-        code: error.code,
-        sessionId: error.sessionId,
-        hostId: error.hostId,
-        cwd: error.cwd,
-        delivery: error.delivery,
-      },
-      { status: error.status },
-    );
-  }
   if (error instanceof RequestBodyTooLargeError) {
     return Response.json(
       { error: "New session request is too large", code: "request_too_large" },
@@ -63,8 +48,6 @@ function newSessionErrorResponse(error: unknown) {
   }
   return apiErrorResponse(error);
 }
-// Pooled creation carries creationId/poolId/projectId, never physical host/cwd.
-// Standalone creation keeps its existing checked host-local cwd and cleanup.
 export async function POST(req: Request) {
   try {
     const body = await parseJsonWithinLimit<{
@@ -83,13 +66,22 @@ export async function POST(req: Request) {
     const {
       cwd: requestedCwd,
       hostId,
-      poolId,
+      workspaceId,
       projectId,
-      creationId,
-      ref,
       ...command
     } = body;
-    delete command.intentHash;
+    if (
+      body.poolId !== undefined ||
+      body.creationId !== undefined ||
+      body.ref !== undefined
+    )
+      return Response.json(
+        {
+          error: "Choose a registered workspace on a host",
+          code: "invalid_workspace_target",
+        },
+        { status: 400 },
+      );
     if (
       Object.hasOwn(command, "uploadProofs") ||
       Object.hasOwn(command, "uploads")
@@ -98,29 +90,6 @@ export async function POST(req: Request) {
         {
           error: "Files attach only to an existing session",
           code: "invalid_uploads",
-        },
-        { status: 400 },
-      );
-    }
-    const pooled =
-      poolId !== undefined ||
-      projectId !== undefined ||
-      creationId !== undefined ||
-      ref !== undefined;
-    if (
-      pooled &&
-      (hostId !== undefined ||
-        requestedCwd !== undefined ||
-        typeof poolId !== "string" ||
-        typeof projectId !== "string" ||
-        typeof creationId !== "string" ||
-        (ref !== undefined && typeof ref !== "string"))
-    ) {
-      return Response.json(
-        {
-          error:
-            "Pool creation requires creationId, poolId and projectId, without hostId or cwd",
-          code: "invalid_pool_target",
         },
         { status: 400 },
       );
@@ -207,50 +176,6 @@ export async function POST(req: Request) {
       !!(provider && modelId) ||
       !!thinkingLevel ||
       !!name;
-
-    if (pooled) {
-      // The hash is derived here from every effectful field, including unknown command options.
-      const intent = {
-        ...promptCommand,
-        provider,
-        modelId,
-        toolNames,
-        thinkingLevel,
-        advisor,
-        name,
-      };
-      const result = await startPooledSession(
-        {
-          creationId: creationId as string,
-          poolId: poolId as string,
-          projectId: projectId as string,
-          ...(ref === undefined ? {} : { ref: ref as string }),
-          intent,
-        },
-        async (host, prepared, id, onStarted) => {
-          const started = await startNewRpcSession(
-            host,
-            prepared.cwd,
-            toolNames,
-            advisor === true,
-            preparing,
-            id,
-          );
-          if (!started.ok)
-            throw new HostOpError(started.status, started.code, started.error);
-          const { session, realSessionId } = started.value;
-          await onStarted(realSessionId);
-          const run = () => initialize(session, true);
-          return {
-            sessionId: realSessionId,
-            data: await (preparing
-              ? session.withPendingCommand(run, true)
-              : run()),
-          };
-        },
-      );
-      return Response.json({ success: true, ...result });
-    }
 
     if (!requestedCwd || typeof requestedCwd !== "string") {
       return Response.json(

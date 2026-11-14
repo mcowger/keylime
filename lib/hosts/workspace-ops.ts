@@ -51,19 +51,13 @@ import { resolveGithubRepo } from "../github-repo";
 import { repositoryKey } from "../git-clone";
 import { createGitEnvironment } from "../project-command-env";
 import {
-  addWorktree,
   findCurrentWorktreePath,
   listWorktrees,
-  removeWorktree,
   resolveProject,
   type WorktreeInfo,
 } from "../worktree";
 import { projectIdentityKey } from "../paths";
-import { invalidateSessionListCache } from "../session-reader";
-import {
-  grantWorkspaceRoot,
-  invalidateWorkspaceRoots,
-} from "./workspace-roots";
+import { grantWorkspaceRoot } from "./workspace-roots";
 import {
   getBrowseStartDirectory,
   getParentDirectory,
@@ -74,6 +68,16 @@ import { WorkspaceClones } from "./workspace-clone";
 import { parseLocalUri } from "../local-uri";
 import { resolveSessionLocalFile } from "../session-local-files";
 import { filePathApiSegments } from "../file-paths";
+import { hierarchyOperation } from "./project-hierarchy";
+import {
+  createWorkspace,
+  workspaceCreationStatus,
+  workspaceCreationSettings,
+  workspaceBranches,
+  removeRegisteredWorktree,
+  workspaceCreationBusy,
+  recoverWorkspaceCreation,
+} from "./workspace-creation";
 
 const invalid = () =>
   new HostOpError(400, "invalid_request", "Invalid workspace request");
@@ -151,32 +155,6 @@ async function gitOrigin(requested: string): Promise<Omit<GitOrigin, "path">> {
   }
 }
 
-async function worktreeMutation<T>(action: () => Promise<T>): Promise<T> {
-  try {
-    return await action();
-  } catch (error) {
-    if (error instanceof HostOpError) throw error;
-    const message = error instanceof Error ? error.message : String(error);
-    const codes: Array<[string, string]> = [
-      ["Branch name is required", "branch_required"],
-      ["Invalid branch name", "invalid_branch_name"],
-      ["Directory already exists", "worktree_directory_exists"],
-      ["Not a worktree", "not_a_worktree"],
-      ["Cannot remove the main worktree", "cannot_remove_main_worktree"],
-    ];
-    const dirty = /contains modified or untracked files|is dirty/i.test(
-      message,
-    );
-    throw new HostOpError(
-      dirty ? 409 : 400,
-      dirty
-        ? "worktree_dirty"
-        : (codes.find(([prefix]) => message.startsWith(prefix))?.[1] ??
-            "worktree_failed"),
-      message,
-    );
-  }
-}
 function fileInfo(filePath: string, stat: fs.Stats): WorkspaceFileInfo {
   return {
     path: filePath,
@@ -309,6 +287,7 @@ export function createWorkspaceService(
   uploads: StagedUploads,
   emit: (id: string, epoch: string, event: WorkspaceFileEvent) => void,
 ): WorkspaceService {
+  recoverWorkspaceCreation();
   const reads = new WorkspaceReads();
   const clones = new WorkspaceClones();
   let epoch = 0;
@@ -317,6 +296,15 @@ export function createWorkspaceService(
     return fileInfo(checked.filePath, checked.stat);
   }, emit);
   const ops: WorkspaceOps = {
+    hierarchy: hierarchyOperation,
+    createWorkspace: (input) => result(() => createWorkspace(input)),
+    workspaceCreationStatus: (id) => result(() => workspaceCreationStatus(id)),
+    workspaceCreationSettings: (input) =>
+      result(() => workspaceCreationSettings(input)),
+    workspaceBranches: (projectPath) =>
+      result(() => workspaceBranches(projectPath)),
+    removeRegisteredWorktree: (input) =>
+      result(() => removeRegisteredWorktree(input)),
     home: () => result(async () => ({ home: homedir() })),
     browseDirectories: (requested) =>
       result(async () => {
@@ -465,44 +453,6 @@ export function createWorkspaceService(
           worktrees,
         };
       }),
-    addWorktree: (cwd, branch) =>
-      result(() =>
-        worktreeMutation(async () => {
-          const directory = await authorizeWorkspaceDirectory(cwd);
-          if (typeof branch !== "string") throw invalid();
-          const added = await addWorktree(directory, branch);
-          grantWorkspaceRoot(added.path);
-          invalidateSessionListCache();
-          invalidateWorkspaceRoots();
-          return added;
-        }),
-      ),
-    removeWorktree: (cwd, requested, force) =>
-      result(() =>
-        worktreeMutation(async () => {
-          const directory = await authorizeWorkspaceDirectory(cwd);
-          if (
-            typeof requested !== "string" ||
-            !path.isAbsolute(requested) ||
-            typeof force !== "boolean"
-          )
-            throw invalid();
-          const trees = await listWorktrees(directory);
-          const selected = trees.find(
-            (tree) => findCurrentWorktreePath([tree], requested) !== null,
-          );
-          if (!selected || fs.lstatSync(selected.path).isSymbolicLink())
-            throw new HostOpError(
-              400,
-              "not_a_worktree",
-              "Not a worktree of this repository",
-            );
-          await removeWorktree(directory, selected.path, force);
-          invalidateSessionListCache();
-          invalidateWorkspaceRoots();
-          return null;
-        }),
-      ),
     watchFile: (id, epoch, input) =>
       result(() => watches.watch(id, epoch, input)),
     unwatchFile: (id, epoch) =>
@@ -656,7 +606,7 @@ export function createWorkspaceService(
   };
   return {
     ops,
-    busy: () => reads.size > 0 || clones.busy(),
+    busy: () => reads.size > 0 || clones.busy() || workspaceCreationBusy(),
     onDisconnect: () => {
       epoch++;
       watches.closeAll();

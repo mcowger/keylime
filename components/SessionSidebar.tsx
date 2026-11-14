@@ -1,9 +1,9 @@
 "use client";
 
+import { browserUUID } from "@/lib/browser-uuid";
 import {
   memo,
   useEffect,
-  useLayoutEffect,
   useState,
   useCallback,
   useRef,
@@ -16,6 +16,7 @@ import type {
   ProjectLaunchConfig,
   SessionInfo,
 } from "@/lib/types";
+import type { HierarchySnapshot } from "@/lib/project-hierarchy-types";
 import { useI18n } from "@/lib/i18n";
 import { formatApiError } from "@/lib/i18n/api-error";
 import { DirectoryPicker } from "./DirectoryPicker";
@@ -35,8 +36,6 @@ import {
   groupSessionsByProject,
   hostProjectKey,
   projectIdentity,
-  projectTargetId,
-  nextPinOrder,
   orderProjects,
   projectActivityCounts,
   remoteHostId,
@@ -86,20 +85,16 @@ import {
   INITIAL_RESTORE_MAX_ATTEMPTS,
   INITIAL_RESTORE_RETRY_MS,
   MAX_PROJECT_SESSIONS,
-  buildSessionTree,
   livePlace,
   loadExpandedProjects,
   loadProjectSortMode,
   loadUnreadSessionIds,
-  normalizeProjectKey,
   projectLabel,
   saveExpandedProjects,
   saveProjectSortMode,
   saveUnreadSessionIds,
   type LivePlace,
   type WorktreeContext,
-  type WorktreeEntry,
-  type WorktreeState,
   hostsCameOnline,
 } from "./SessionSidebar-helpers";
 import {
@@ -108,7 +103,7 @@ import {
   SidebarIconButton,
   SidebarPortalMenu,
 } from "./SessionSidebar-chrome";
-import { HostGroup, ProjectRow } from "./SessionSidebar-rows";
+import { HierarchySidebar } from "./HierarchySidebar";
 
 /** Deadline for one /api/sessions fetch. A wedged-but-listening server never
  * answers; without this the initial spinner would pend forever. */
@@ -194,10 +189,10 @@ interface Props {
 /** The host a project or session belongs to: this machine unless it says otherwise. */
 const hostOf = (item: { hostId?: string }): string =>
   item.hostId ?? LOCAL_HOST_ID;
-const projectRequestTarget = (project: ManagedProject) =>
-  project.poolId && project.projectId
-    ? { poolId: project.poolId, projectId: project.projectId }
-    : { cwd: project.path, hostId: remoteHostId(project.hostId) };
+const projectRequestTarget = (project: ManagedProject) => ({
+  cwd: project.path,
+  hostId: remoteHostId(project.hostId),
+});
 const THIS_MACHINE = { id: LOCAL_HOST_ID, label: "" };
 const COLLAPSED_HOSTS_STORAGE_KEY = "omp-web:collapsed-hosts";
 
@@ -228,7 +223,6 @@ export const SessionSidebar = memo(function SessionSidebar({
   onSessionDeleted,
   selectedCwd: selectedCwdProp,
   selectedHostId: selectedHostIdProp,
-  selectedLogicalProjectKey,
   onCwdChange,
   onWorkspaceOptionsChange,
   onWorktreeContextChange,
@@ -252,20 +246,8 @@ export const SessionSidebar = memo(function SessionSidebar({
   const [selectedCwd, setSelectedCwd] = useState<string | null>(null);
   // Host of selectedCwd: the same path can be a workspace on several hosts.
   const [selectedHostId, setSelectedHostId] = useState<string>(LOCAL_HOST_ID);
-  const [selectedPoolKey, setSelectedPoolKey] = useState<string | null>(null);
-  const { hosts, pools, poolsLoaded, poolsFailed } = useHostRows();
-  const hostList = useMemo(() => {
-    // Physical groups keep existing owner-bound work visible; only creation controls filter members.
-    return [
-      ...(hosts ?? [THIS_MACHINE]),
-      ...pools.map((pool) => ({ id: `pool:${pool.id}`, label: pool.label })),
-    ];
-  }, [hosts, pools]);
-  const selectedWorkspaceRef = useRef("");
-  selectedWorkspaceRef.current = hostProjectKey(
-    selectedHostId,
-    selectedCwd ?? "",
-  );
+  const { hosts } = useHostRows();
+  const hostList = useMemo(() => hosts ?? [THIS_MACHINE], [hosts]);
   // Host group headers only exist once a remote host is linked.
   const showHostGroups = hostList.some((host) => host.id !== LOCAL_HOST_ID);
   // The server renders no groups; collapse state is read after mount.
@@ -302,12 +284,10 @@ export const SessionSidebar = memo(function SessionSidebar({
   );
   // Managed + session-discovered projects (server-merged, hidden excluded).
   const [projects, setProjects] = useState<ManagedProject[]>([]);
-  const selectedPoolProject = projects.find(
-    (project) => project.poolId && projectIdentity(project) === selectedPoolKey,
-  );
-  const [draggedProject, setDraggedProject] = useState<ManagedProject | null>(
-    null,
-  );
+  const [hierarchyRefresh, setHierarchyRefresh] = useState(0);
+  const [registeredWorkspaces, setRegisteredWorkspaces] = useState<
+    ManagedProject[]
+  >([]);
   const [projectsError, setProjectsError] = useState<string | null>(null);
   // Add-project picker state.
   const [addProjectBusy, setAddProjectBusy] = useState(false);
@@ -316,17 +296,10 @@ export const SessionSidebar = memo(function SessionSidebar({
   const [expandedProjects, setExpandedProjects] = useState<Set<string> | null>(
     () => loadExpandedProjects(),
   );
-  // Project currently being removed (hide) — serializes remove requests.
-  const [removeProjectKey, setRemoveProjectKey] = useState<string | null>(null);
   const [launchConfigProject, setLaunchConfigProject] =
     useState<ManagedProject | null>(null);
-  // Worktree/branch/Git state is scoped per repository. It is cached in a
-  // map keyed by the normalized repository root so switching workspaces never
-  // leaks one project's branch/worktree data into another's UI (each project
-  // keeps its own loaded Git state; a late async response for a previous repo
-  // only updates that repo's entry, never the active one).
-  const [worktreeStateByProject, setWorktreeStateByProject] = useState<
-    Record<string, WorktreeState>
+  const [hierarchySnapshots, setHierarchySnapshots] = useState<
+    Record<string, HierarchySnapshot>
   >({});
   const [sessionRefreshDone, setSessionRefreshDone] = useState(false);
   const [runningSessionIds, setRunningSessionIds] = useState<Set<string>>(
@@ -404,7 +377,6 @@ export const SessionSidebar = memo(function SessionSidebar({
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const sortButtonRef = useRef<HTMLButtonElement>(null);
   const closeSortMenu = useCallback(() => setSortMenuOpen(false), []);
-  const pinsActive = projectSortMode !== "none";
 
   // Once the SSE stream has delivered a frame it is the source of truth for
   // running state; late /api/sessions responses must not overwrite it.
@@ -521,6 +493,7 @@ export const SessionSidebar = memo(function SessionSidebar({
       // A newer request superseded this one — drop the stale response.
       if (seq !== projectsLoadSeqRef.current) return;
       setProjects(data.projects ?? []);
+      setHierarchyRefresh((value) => value + 1);
       setProjectsError(null);
       projectsLoadedRef.current = true;
     } catch (e) {
@@ -600,20 +573,6 @@ export const SessionSidebar = memo(function SessionSidebar({
     }
     if (hosts) prevHostsRef.current = hosts;
   }, [hosts, loadProjects, scheduleRefresh]);
-
-  // A join or leave changes which projects the server lists and which project its sessions belong to (it tags them
-  // with the bindings when they are fetched), not only their grouping. Frames repeat unchanged pools, and the first
-  // load fetches on its own: refetch both only when the loaded content changes.
-  const loadedPoolsRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!poolsLoaded) return;
-    const loaded = JSON.stringify(pools);
-    if (loadedPoolsRef.current !== null && loadedPoolsRef.current !== loaded) {
-      void loadSessions(false);
-      void loadProjects();
-    }
-    loadedPoolsRef.current = loaded;
-  }, [pools, poolsLoaded, loadProjects, loadSessions]);
 
   useEffect(() => {
     // Live running status and session-list invalidations arrive on the shared
@@ -748,40 +707,24 @@ export const SessionSidebar = memo(function SessionSidebar({
    *  prune against running on an empty (still-loading) project list. */
   const projectsLoadedRef = useRef(false);
 
-  /** Resolve the project root for a cwd from the freshest data available.
-   *  The worktree/branch cache is keyed per repository, so this lookup is
-   *  scoped: a worktree belongs to the repository whose cached GitState lists
-   *  it — never to a different repository's state. */
   const projectRootFor = useCallback(
     (cwd: string | null, hostId: string = LOCAL_HOST_ID): string | null => {
       if (!cwd) return null;
-      for (const state of Object.values(worktreeStateByProject)) {
-        if (
-          state.hostId === hostId &&
-          state.worktrees.some(
-            (w) => normalizeProjectKey(w.path) === normalizeProjectKey(cwd),
-          )
-        )
-          return state.projectRoot;
-      }
-      // Fall back to the project registry, then to session cwd→root matches, so
-      // a session whose projectKey was normalized server-side still resolves to
-      // the registry's case-preserved path — the caller gets a canonical value.
-      const registered = projects.find(
-        (p) =>
-          !p.poolId &&
-          hostOf(p) === hostId &&
-          comparableProjectPath(p.path) === comparableProjectPath(cwd),
+      const path = comparableProjectPath(cwd);
+      const workspaces =
+        hierarchySnapshots[hostId]?.projects.flatMap(
+          (project) => project.workspaces,
+        ) ?? [];
+      return (
+        workspaces
+          .filter((workspace) => {
+            const root = comparableProjectPath(workspace.path);
+            return path === root || path.startsWith(`${root}/`);
+          })
+          .sort((a, b) => b.path.length - a.path.length)[0]?.path ?? cwd
       );
-      if (registered) return registered.path;
-      const foldedCwd = comparableProjectPath(cwd);
-      const match = allSessions.find(
-        (s) =>
-          hostOf(s) === hostId && comparableProjectPath(s.cwd) === foldedCwd,
-      );
-      return match?.projectRoot ?? cwd;
     },
-    [worktreeStateByProject, allSessions, projects],
+    [hierarchySnapshots],
   );
 
   // ---- Expansion (used by the sync/notify effects below, so declared first) --
@@ -798,38 +741,14 @@ export const SessionSidebar = memo(function SessionSidebar({
     [],
   );
 
-  const collapseProject = useCallback(
-    (path: string, hostId: string = LOCAL_HOST_ID) => {
-      const key = foldedHostProjectKey(hostId, path);
-      setExpandedProjects((prev) => {
-        if (!prev?.has(key)) return prev;
-        const next = new Set(prev);
-        next.delete(key);
-        return next;
-      });
-    },
-    [],
-  );
-
-  const toggleProjectExpanded = useCallback((project: ManagedProject) => {
-    const key = foldedHostProjectKey(project.hostId, workspaceKeyOf(project));
-    setExpandedProjects((prev) => {
-      const next = new Set(prev ?? []);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, []);
-
   /** Activate a project (effective cwd = its root) and expand it, without
    *  opening a session. */
   const activateProject = useCallback(
     (project: ManagedProject) => {
       provisionalSelectionRef.current = false;
-      setSelectedPoolKey(project.poolId ? projectIdentity(project) : null);
-      setSelectedCwd(project.poolId ? null : project.path);
-      setSelectedHostId(projectTargetId(project));
-      expandProject(workspaceKeyOf(project), projectTargetId(project));
+      setSelectedCwd(project.path);
+      setSelectedHostId(hostOf(project));
+      expandProject(workspaceKeyOf(project), hostOf(project));
     },
     [expandProject],
   );
@@ -839,29 +758,15 @@ export const SessionSidebar = memo(function SessionSidebar({
   const lastNotifiedCwdRef = useRef<string | null>(null);
   useEffect(() => {
     const notifyKey =
-      selectedPoolKey ??
-      (selectedCwd === null
-        ? null
-        : hostProjectKey(selectedHostId, selectedCwd));
+      selectedCwd === null ? null : hostProjectKey(selectedHostId, selectedCwd);
     if (lastNotifiedCwdRef.current === notifyKey) return;
-    if (selectedPoolKey && !selectedPoolProject) return;
     lastNotifiedCwdRef.current = notifyKey;
     onCwdChange?.(
-      selectedPoolProject ? null : selectedCwd,
-      selectedPoolProject
-        ? selectedPoolKey
-        : projectRootFor(selectedCwd, selectedHostId),
+      selectedCwd,
+      projectRootFor(selectedCwd, selectedHostId),
       selectedHostId,
-      selectedPoolProject,
     );
-  }, [
-    selectedCwd,
-    selectedHostId,
-    selectedPoolKey,
-    selectedPoolProject,
-    onCwdChange,
-    projectRootFor,
-  ]);
+  }, [selectedCwd, selectedHostId, onCwdChange, projectRootFor]);
 
   // Sync the worktree switcher to the selected session's cwd. Sessions of all
   // worktrees in a project share one list, so clicking a session from another
@@ -871,16 +776,6 @@ export const SessionSidebar = memo(function SessionSidebar({
   // their containing project.
   const lastSyncedCwdPropRef = useRef<string | null>(null);
   useEffect(() => {
-    if (selectedLogicalProjectKey?.startsWith("pool:")) {
-      if (lastSyncedCwdPropRef.current !== selectedLogicalProjectKey) {
-        lastSyncedCwdPropRef.current = selectedLogicalProjectKey;
-        setSelectedPoolKey(selectedLogicalProjectKey);
-        if (selectedCwdProp) setSelectedCwd(selectedCwdProp);
-        setSelectedHostId(selectedHostIdProp ?? LOCAL_HOST_ID);
-        expandProject(selectedLogicalProjectKey);
-      }
-      return;
-    }
     // A withdrawn command must not swallow the next one: without this reset,
     // re-commanding a cwd the sidebar already synced (A -> sidebar B -> A)
     // stays stuck on B.
@@ -894,99 +789,11 @@ export const SessionSidebar = memo(function SessionSidebar({
       provisionalSelectionRef.current = false;
       lastSyncedCwdPropRef.current = syncKey;
       setSelectedCwd(selectedCwdProp);
-      setSelectedPoolKey(null);
       setSelectedHostId(hostId);
       const project = projectRootFor(selectedCwdProp, hostId);
       if (project) expandProject(project, hostId);
     }
-  }, [
-    selectedCwdProp,
-    selectedHostIdProp,
-    selectedLogicalProjectKey,
-    projectRootFor,
-    expandProject,
-  ]);
-
-  // Load worktrees/branch data for the repository containing the current
-  // effective cwd. Results are cached in worktreeStateByProject keyed by the
-  // normalized repository root, so each workspace keeps its own Git context:
-  //  • switching to another repo leaves this repo's cached state intact, and
-  //  • a late response for the previously-selected repo writes only that
-  //    repo's entry (never the active repo's, so it can't overwrite the UI).
-  const [wtRefreshKey, setWtRefreshKey] = useState(0);
-  const storeWorktreeState = useCallback(
-    (
-      requestedCwd: string,
-      hostId: string,
-      d: {
-        projectRoot?: string;
-        isGit?: boolean;
-        isTopLevel?: boolean;
-        worktrees?: WorktreeEntry[];
-        error?: string;
-        code?: string;
-      },
-    ) => {
-      if (!d.projectRoot && !d.error) return;
-      setWorktreeStateByProject((prev) => {
-        const prior = Object.values(prev).find(
-          (state) =>
-            state.hostId === hostId &&
-            (normalizeProjectKey(state.forCwd) ===
-              normalizeProjectKey(requestedCwd) ||
-              state.worktrees.some(
-                (tree) =>
-                  normalizeProjectKey(tree.path) ===
-                  normalizeProjectKey(requestedCwd),
-              )),
-        );
-        const projectRoot = d.projectRoot ?? prior?.projectRoot ?? requestedCwd;
-        const entry: WorktreeState = {
-          hostId,
-          forCwd: requestedCwd,
-          projectRoot,
-          isGit: d.isGit ?? prior?.isGit ?? false,
-          isTopLevel: d.isTopLevel ?? prior?.isTopLevel ?? false,
-          worktrees: d.worktrees ?? prior?.worktrees ?? [],
-          error: d.error ? formatApiError(d) : undefined,
-        };
-        return {
-          ...prev,
-          [hostProjectKey(hostId, normalizeProjectKey(projectRoot))]: entry,
-        };
-      });
-    },
-    [],
-  );
-  useLayoutEffect(() => {
-    if (!selectedCwd || selectedPoolKey) return;
-    let cancelled = false;
-    const requestedCwd = selectedCwd;
-    const requestedHost = selectedHostId;
-    fetch(
-      `/api/worktrees?${new URLSearchParams({ cwd: requestedCwd, hostId: requestedHost })}`,
-    )
-      .then((r) => r.json())
-      .then((d) => {
-        if (!cancelled) storeWorktreeState(requestedCwd, requestedHost, d);
-      })
-      .catch((error: unknown) => {
-        if (!cancelled)
-          storeWorktreeState(requestedCwd, requestedHost, {
-            error: error instanceof Error ? error.message : String(error),
-          });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    selectedCwd,
-    selectedHostId,
-    selectedPoolKey,
-    wtRefreshKey,
-    refreshKey,
-    storeWorktreeState,
-  ]);
+  }, [selectedCwdProp, selectedHostIdProp, projectRootFor, expandProject]);
 
   // Keep a just-created session and its project visible while omp is still
   // flushing the JSONL file. The server list remains authoritative once it
@@ -997,8 +804,7 @@ export const SessionSidebar = memo(function SessionSidebar({
   const optimisticProjectRoot = (() => {
     if (!optimisticSession) return null;
     if (optimisticSession.projectRoot) return optimisticSession.projectRoot;
-    if (optimisticSession.projectKey && !optimisticSession.poolId)
-      return optimisticSession.projectKey;
+    if (optimisticSession.projectKey) return optimisticSession.projectKey;
     const cw = optimisticSession.cwd ?? "";
     if (!cw) return null;
     const reg = projects.find(
@@ -1013,9 +819,8 @@ export const SessionSidebar = memo(function SessionSidebar({
   const placeholderTsRef = useRef<Map<string, string>>(new Map());
   useEffect(() => {
     if (optimisticSession?.id && optimisticSession.cwd) {
-      const { id, cwd, hostId, poolId, projectId, projectKey } =
-        optimisticSession;
-      const place = { cwd, hostId, poolId, projectId, projectKey };
+      const { id, cwd, hostId, projectId, projectKey } = optimisticSession;
+      const place = { cwd, hostId, projectId, projectKey };
       knownRunningPlacesRef.current.set(id, place);
       setRunningSessionPlaces((prev) => ({ ...prev, [id]: place }));
     }
@@ -1027,11 +832,9 @@ export const SessionSidebar = memo(function SessionSidebar({
       !base.some((session) => session.id === optimisticSession.id)
     ) {
       const stableRoot = optimisticProjectRoot ?? optimisticSession.cwd;
-      const stableKey = optimisticSession.poolId
-        ? workspaceKeyOf(optimisticSession)
-        : stableRoot
-          ? comparableProjectPath(stableRoot)
-          : undefined;
+      const stableKey = stableRoot
+        ? comparableProjectPath(stableRoot)
+        : undefined;
       base = [
         ...base,
         {
@@ -1082,15 +885,7 @@ export const SessionSidebar = memo(function SessionSidebar({
         messageCount: 1,
         firstMessage: "",
         projectRoot: phRoot,
-        ...(place.poolId && place.projectId
-          ? {
-              poolId: place.poolId,
-              projectId: place.projectId,
-              projectKey: workspaceKeyOf(place),
-            }
-          : phKey
-            ? { projectKey: phKey }
-            : {}),
+        ...(phKey ? { projectKey: phKey } : {}),
         ...(hostId ? { hostId } : {}),
       });
     }
@@ -1123,80 +918,12 @@ export const SessionSidebar = memo(function SessionSidebar({
     selectedCwd,
     selectedHostId,
   ]);
-  const visibleProjects = useMemo(() => {
-    let base = projects;
-    const hasOpt = optimisticSession
-      ? base.some(
-          (p) =>
-            projectIdentity(p) ===
-            hostProjectKey(
-              optimisticSession.hostId,
-              workspaceKeyOf(optimisticSession),
-            ),
-        )
-      : false;
-    if (optimisticProjectRoot && !hasOpt && !optimisticSession?.poolId) {
-      base = [
-        ...base,
-        {
-          path: optimisticProjectRoot,
-          ...(optimisticSession?.hostId
-            ? { hostId: optimisticSession.hostId }
-            : {}),
-        },
-      ];
-    }
-    // Running placeholders may belong to a project not yet in the managed list
-    // (new session's cwd wasn't registered as a project). Keep that workspace
-    // visible so the placeholder row has a bucket to render in.
-    const knownFolded = new Set(
-      base.map((p) => foldedHostProjectKey(p.hostId, workspaceKeyOf(p))),
-    );
-    const visibleLiveIds = new Set(runningSessionIds);
-    for (const id of exitedSessions.keys()) visibleLiveIds.add(id);
-    for (const id of visibleLiveIds) {
-      if (allSessions.some((s) => s.id === id)) continue;
-      const isOptimistic = optimisticSession?.id === id;
-      const place = livePlace(
-        id,
-        optimisticSession,
-        runningSessionPlaces,
-        exitedSessions,
-        knownRunningPlacesRef.current,
-        { cwd: selectedCwd ?? "", hostId: selectedHostId },
-      );
-      if (place.poolId) continue;
-      const hostId = remoteHostId(place.hostId);
-      const resolvedRoot = isOptimistic
-        ? (optimisticProjectRoot ??
-          optimisticSession.projectRoot ??
-          optimisticSession.cwd)
-        : (projectRootFor(place.cwd, hostOf(place)) ?? place.cwd);
-      const phPath = resolvedRoot ?? "";
-      // Only the running session's own cwd is known; it stays under its own host.
-      if (phPath && !knownFolded.has(foldedHostProjectKey(hostId, phPath))) {
-        base = [...base, { path: phPath, ...(hostId ? { hostId } : {}) }];
-        knownFolded.add(foldedHostProjectKey(hostId, phPath));
-      }
-    }
-    return base;
-  }, [
-    optimisticProjectRoot,
-    projects,
-    runningSessionIds,
-    runningSessionPlaces,
-    exitedSessions,
-    allSessions,
-    optimisticSession,
-    projectRootFor,
-    selectedCwd,
-    selectedHostId,
-  ]);
+  const visibleProjects = projects;
 
   // ---- Derived project list ---------------------------------------------------
   const selectedProject = useMemo(
-    () => selectedPoolKey ?? projectRootFor(selectedCwd, selectedHostId),
-    [selectedPoolKey, projectRootFor, selectedCwd, selectedHostId],
+    () => projectRootFor(selectedCwd, selectedHostId),
+    [projectRootFor, selectedCwd, selectedHostId],
   );
   // While a fresh optimistic/placeholder is pending (JSONL not yet on disk),
   // freeze ordering so the new project row does not flicker optimistic ->
@@ -1264,14 +991,14 @@ export const SessionSidebar = memo(function SessionSidebar({
   }, [hasPendingNewSession, orderingKey, sortedProjectsBase]);
   useEffect(() => {
     onWorkspaceOptionsChange?.(
-      sortedProjects,
+      registeredWorkspaces,
       selectedProject,
       selectedCwd,
       selectedHostId,
     );
   }, [
     onWorkspaceOptionsChange,
-    sortedProjects,
+    registeredWorkspaces,
     selectedProject,
     selectedCwd,
     selectedHostId,
@@ -1385,87 +1112,40 @@ export const SessionSidebar = memo(function SessionSidebar({
   useEffect(() => {
     onSearchQueryChange?.(trimmedSearchQuery);
   }, [trimmedSearchQuery, onSearchQueryChange]);
-  const visibleProjectEntries = useMemo(() => {
+  const matchedSessionIds = useMemo(() => {
+    if (!trimmedSearchQuery && !runningOnly) return null;
     const query = compileSearchQuery(trimmedSearchQuery);
-    const serverScores = currentTranscriptSearch?.scores;
-    const entries: {
-      project: ManagedProject;
-      hostId?: string;
-      sessions: SessionInfo[];
-      scores?: Map<string, number>;
-      rank: number;
-    }[] = [];
-    for (const project of sortedProjects) {
-      let list = sessionsByProject.get(projectIdentity(project)) ?? [];
-      if (runningOnly)
-        list = list.filter(
-          (s) =>
-            runningSessionIds.has(s.id) ||
-            effectiveRecentCompletedSet.has(s.id),
-        );
-      if (!query) {
-        if (list.length === 0 && runningOnly) continue;
-        entries.push({
-          project,
-          hostId: projectTargetId(project),
-          sessions: list,
-          rank: 0,
-        });
-        continue;
-      }
-      const scores = new Map<string, number>();
-      for (const s of list) {
-        // Server scores cover the same title fields plus the transcript; a
-        // session newer than the server's answer falls back to its title.
-        const score =
-          serverScores?.[s.id] ??
-          scoreSearchFields(
-            [
-              searchField(s.name ?? "", TITLE_WEIGHT),
-              searchField(s.firstMessage, FIRST_MESSAGE_WEIGHT),
-            ],
-            query,
+    return new Set(
+      allSessions
+        .filter((session) => {
+          if (
+            runningOnly &&
+            !runningSessionIds.has(session.id) &&
+            !effectiveRecentCompletedSet.has(session.id)
+          )
+            return false;
+          return (
+            !query ||
+            currentTranscriptSearch?.scores[session.id] !== undefined ||
+            scoreSearchFields(
+              [
+                searchField(session.name ?? "", TITLE_WEIGHT),
+                searchField(session.firstMessage, FIRST_MESSAGE_WEIGHT),
+              ],
+              query,
+            ) !== null
           );
-        if (score !== null) scores.set(s.id, score);
-      }
-      list = list.filter((s) => scores.has(s.id));
-      // Label/alias-only matches surface as empty workspaces; without this
-      // a custom workspace name would be unfindable by search.
-      const labelScore = scoreSearchFields(
-        [
-          searchField(project.name ?? projectLabel(project.path), TITLE_WEIGHT),
-          searchField(project.alias ?? "", TITLE_WEIGHT),
-        ],
-        query,
-      );
-      if (list.length === 0 && (runningOnly || labelScore === null)) continue;
-      entries.push({
-        project,
-        hostId: projectTargetId(project),
-        sessions: list,
-        scores,
-        rank: Math.max(labelScore ?? 0, ...scores.values()),
-      });
-    }
-    // Best match first; ties keep the workspace order (stable sort).
-    if (query) entries.sort((a, b) => b.rank - a.rank);
-    return entries;
+        })
+        .map((session) => session.id),
+    );
   }, [
-    sortedProjects,
-    sessionsByProject,
-    runningOnly,
+    allSessions,
     trimmedSearchQuery,
-    currentTranscriptSearch,
+    runningOnly,
     runningSessionIds,
     effectiveRecentCompletedSet,
+    currentTranscriptSearch,
   ]);
-
-  const treesByProject = useMemo(() => {
-    const m = new Map<string, ReturnType<typeof buildSessionTree>>();
-    for (const { project, sessions, scores } of visibleProjectEntries)
-      m.set(projectIdentity(project), buildSessionTree(sessions, scores));
-    return m;
-  }, [visibleProjectEntries]);
 
   // Drop persisted expansion keys whose project no longer exists (removed or
   // vanished), so the storage stays bounded to real projects. Only runs after
@@ -1478,10 +1158,7 @@ export const SessionSidebar = memo(function SessionSidebar({
       ),
     );
     const stale = [...expandedProjects].filter(
-      (path) =>
-        !known.has(
-          path.startsWith("pool:") ? path : comparableProjectPath(path),
-        ),
+      (path) => !known.has(comparableProjectPath(path)),
     );
     if (stale.length === 0) return;
     setExpandedProjects((prev) => {
@@ -1529,7 +1206,6 @@ export const SessionSidebar = memo(function SessionSidebar({
         restoreRetryRef.current = 0;
         restoredRef.current = true;
         setSelectedCwd(target.cwd);
-        setSelectedPoolKey(target.poolId ? workspaceKeyOf(target) : null);
         setSelectedHostId(hostOf(target));
         expandProject(workspaceKeyOf(target), hostOf(target));
         onSelectSession(target, true);
@@ -1556,25 +1232,19 @@ export const SessionSidebar = memo(function SessionSidebar({
     // Session and Explorer have a context. When projects have not loaded yet
     // the ordering is provisional — re-pick once they arrive, unless the user
     // already activated a project by hand.
-    if (
-      (selectedCwd !== null || selectedPoolKey !== null) &&
-      !provisionalSelectionRef.current
-    )
-      return;
+    if (selectedCwd !== null && !provisionalSelectionRef.current) return;
     // Only this machine's projects: a remote host may be offline.
     const top = sortedProjects.find(
-      (project) => project.poolId || hostOf(project) === LOCAL_HOST_ID,
+      (project) => hostOf(project) === LOCAL_HOST_ID,
     );
     if (!top) return;
-    setSelectedPoolKey(top.poolId ? projectIdentity(top) : null);
-    setSelectedCwd(top.poolId ? null : top.path);
-    setSelectedHostId(projectTargetId(top));
-    expandProject(workspaceKeyOf(top), projectTargetId(top));
+    setSelectedCwd(top.path);
+    setSelectedHostId(hostOf(top));
+    expandProject(workspaceKeyOf(top), hostOf(top));
     provisionalSelectionRef.current = allSessions.length === 0;
   }, [
     allSessions,
     selectedCwd,
-    selectedPoolKey,
     initialSessionId,
     skipInitialProjectSelection,
     onSelectSession,
@@ -1606,19 +1276,11 @@ export const SessionSidebar = memo(function SessionSidebar({
         const res = await fetch("/api/projects", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(
-            addProjectHostId.startsWith("pool:")
-              ? {
-                  poolId: addProjectHostId.slice(5),
-                  origin: path,
-                  launchConfig,
-                }
-              : {
-                  cwd: path,
-                  launchConfig,
-                  hostId: remoteHostId(addProjectHostId),
-                },
-          ),
+          body: JSON.stringify({
+            cwd: path,
+            launchConfig,
+            hostId: remoteHostId(addProjectHostId),
+          }),
         });
         const data = (await res.json().catch(() => ({}))) as {
           project?: ManagedProject;
@@ -1692,387 +1354,11 @@ export const SessionSidebar = memo(function SessionSidebar({
     [loadProjects, t],
   );
 
-  /** Projects of one sidebar group that Move up/down and drag can reorder: all
-   *  of them in manual mode, only the pinned ones while a sort is active (the
-   *  rest follow the sort). Order and pins are per group; the cluster is one
-   *  group, pool projects and its members' own projects together. */
-  const reorderableProjects = useCallback(
-    (targetId: string) =>
-      sortedProjects.filter(
-        (project) =>
-          projectTargetId(project, pools) === targetId &&
-          (!pinsActive || project.pinOrder !== undefined),
-      ),
-    [pinsActive, pools, sortedProjects],
-  );
-
-  // One ordering write (reorder or pin) at a time: each computes its payload
-  // from the list on screen, which is stale until the previous write reloads it.
-  const orderWriteBusyRef = useRef(false);
-
-  /** Persist one group's whole order: one batched PATCH per store (the pool
-   *  registry, or one host's registry), each project at its index in `next`. */
-  const persistProjectOrder = useCallback(
-    async (next: ManagedProject[]) => {
-      if (orderWriteBusyRef.current) return;
-      orderWriteBusyRef.current = true;
-      // A cluster group spans the pool's registry and each member host's.
-      const batches = new Map<
-        string,
-        {
-          target: Record<string, string | undefined>;
-          updates: Record<string, unknown>[];
-        }
-      >();
-      next.forEach((project, index) => {
-        // Only what moved: an unchanged store (an offline member's, say) gets no request it would have to answer.
-        if ((pinsActive ? project.pinOrder : project.sortOrder) === index)
-          return;
-        const store = project.poolId
-          ? `pool:${project.poolId}`
-          : hostOf(project);
-        const batch = batches.get(store) ?? {
-          target: project.poolId
-            ? { poolId: project.poolId }
-            : { hostId: remoteHostId(project.hostId) },
-          updates: [],
-        };
-        batch.updates.push({
-          ...(project.poolId
-            ? { projectId: project.projectId }
-            : { cwd: project.path }),
-          ...(pinsActive ? { pinOrder: index } : { sortOrder: index }),
-        });
-        batches.set(store, batch);
-      });
-      // A move that must change an offline member's positions is refused before anything is written.
-      const offline = [...batches.keys()]
-        .map((store) =>
-          store.startsWith("pool:") ? null : hostUnavailableReason(store),
-        )
-        .find((reason) => reason !== null);
-      if (offline) {
-        toast.error(offline);
-        orderWriteBusyRef.current = false;
-        return;
-      }
-      let failed = false;
-      try {
-        // shortcut: one request per store, not atomic across stores; a store that fails unexpectedly keeps its old indices until a later move reaches it.
-        for (const { target, updates } of batches.values()) {
-          // Within a store the server applies every entry in a single atomic
-          // registry save, so per-project writes can't interleave and lose
-          // updates. Discovered projects included here are registered server-side.
-          // Every store is tried: one that cannot answer must not hold back the others.
-          const response = await fetch("/api/projects", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...target, updates }),
-          }).catch(() => null);
-          if (!response?.ok) failed = true;
-        }
-        if (failed) toast.error(t("projects.reorderFailed"));
-        await loadProjects();
-      } finally {
-        orderWriteBusyRef.current = false;
-      }
-    },
-    [hostUnavailableReason, loadProjects, pinsActive, t],
-  );
-
-  const handleProjectDrop = useCallback(
-    async (target: ManagedProject) => {
-      const source = draggedProject;
-      setDraggedProject(null);
-      // Order is per host: a drop onto another host's project means nothing.
-      if (
-        !source ||
-        projectTargetId(source, pools) !== projectTargetId(target, pools)
-      )
-        return;
-      const next = [...reorderableProjects(projectTargetId(target, pools))];
-      const from = next.findIndex(
-        (project) => projectIdentity(project) === projectIdentity(source),
-      );
-      const to = next.findIndex(
-        (project) => projectIdentity(project) === projectIdentity(target),
-      );
-      if (from < 0 || to < 0 || from === to) return;
-      const [moved] = next.splice(from, 1);
-      if (!moved) return;
-      next.splice(to, 0, moved);
-      await persistProjectOrder(next);
-    },
-    [draggedProject, pools, reorderableProjects, persistProjectOrder],
-  );
-
-  /** Keyboard-accessible reorder: move one project up/down the list. */
-  const handleMoveProject = useCallback(
-    async (project: ManagedProject, delta: -1 | 1) => {
-      const next = [...reorderableProjects(projectTargetId(project, pools))];
-      const index = next.findIndex(
-        (candidate) => projectIdentity(candidate) === projectIdentity(project),
-      );
-      const target = index + delta;
-      if (index < 0 || target < 0 || target >= next.length) return;
-      const [moved] = next.splice(index, 1);
-      if (!moved) return;
-      next.splice(target, 0, moved);
-      await persistProjectOrder(next);
-    },
-    [pools, reorderableProjects, persistProjectOrder],
-  );
-
-  /** Pin to the end of the pinned group, or unpin. */
-  const handleTogglePin = useCallback(
-    async (project: ManagedProject) => {
-      if (orderWriteBusyRef.current) return;
-      orderWriteBusyRef.current = true;
-      const pinOrder =
-        project.pinOrder !== undefined
-          ? null
-          : nextPinOrder(
-              sortedProjects.filter(
-                (other) =>
-                  projectTargetId(other, pools) ===
-                  projectTargetId(project, pools),
-              ),
-            );
-      try {
-        await handleUpdateProjectPresentation(project, { pinOrder });
-      } catch {
-        // handleUpdateProjectPresentation already toasted the failure.
-      } finally {
-        orderWriteBusyRef.current = false;
-      }
-    },
-    [pools, sortedProjects, handleUpdateProjectPresentation],
-  );
-
   // The menu closes itself on a menu item click and returns focus to the trigger.
   const chooseProjectSortMode = useCallback((mode: ProjectSortMode) => {
     setProjectSortMode(mode);
     saveProjectSortMode(mode);
   }, []);
-
-  const handleRemoveProject = useCallback(
-    async (project: ManagedProject) => {
-      if (removeProjectKey) return;
-      const removedKey = projectIdentity(project);
-      setRemoveProjectKey(removedKey);
-      try {
-        const res = await fetch("/api/projects", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(projectRequestTarget(project)),
-        });
-        const data = (await res.json().catch(() => ({}))) as {
-          success?: boolean;
-          error?: string;
-          code?: string;
-        };
-        if (!res.ok || !data.success) {
-          toast.error(
-            formatApiError({
-              ...data,
-              error: data.error ?? `HTTP ${res.status}`,
-            }),
-          );
-          return;
-        }
-        // Hiding the active project leaves nothing selected; activate the next
-        // most-relevant project so New Session and Explorer stay usable.
-        if (
-          selectedProject !== null &&
-          (project.poolId
-            ? selectedProject === removedKey
-            : !selectedPoolKey &&
-              selectedHostId === hostOf(project) &&
-              comparableProjectPath(selectedProject) ===
-                comparableProjectPath(project.path))
-        ) {
-          const next = sortedProjects.find(
-            (p) =>
-              projectIdentity(p) !== removedKey &&
-              (p.poolId || !hostUnavailableReason(hostOf(p))),
-          );
-          if (next) activateProject(next);
-          else {
-            setSelectedCwd(null);
-            setSelectedPoolKey(null);
-          }
-        }
-        collapseProject(workspaceKeyOf(project), projectTargetId(project));
-        await loadProjects();
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : String(e));
-      } finally {
-        setRemoveProjectKey(null);
-      }
-    },
-    [
-      removeProjectKey,
-      selectedProject,
-      selectedHostId,
-      selectedPoolKey,
-      sortedProjects,
-      hostUnavailableReason,
-      activateProject,
-      collapseProject,
-      loadProjects,
-    ],
-  );
-
-  // Create/remove operate against the active repo's own cached Git state —
-  // never a globally stored path, so the branch lands in the correct repo.
-  // Failures reject with a user-facing message for the Worktrees tab to show.
-  const handleCreateWorktree = useCallback(
-    async (branch: string) => {
-      const activeState = selectedProject
-        ? worktreeStateByProject[
-            hostProjectKey(selectedHostId, normalizeProjectKey(selectedProject))
-          ]
-        : undefined;
-      if (!activeState) return;
-      const root = activeState.projectRoot;
-      const hostId = activeState.hostId;
-      const sourceKey = hostProjectKey(selectedHostId, selectedCwd ?? "");
-      if (selectedWorkspaceRef.current !== sourceKey)
-        throw new Error(t("errors.workspace_changed"));
-      const res = await fetch("/api/worktrees", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cwd: root, branch, hostId }),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        path?: string;
-        error?: string;
-        code?: string;
-      };
-      if (!res.ok || data.error || !data.path) {
-        throw new Error(
-          formatApiError({
-            ...data,
-            error: data.error ?? `HTTP ${res.status}`,
-          }),
-        );
-      }
-      const newWorktreePath: string = data.path;
-      // Optimistically register the new worktree against THIS repo's cached
-      // entry so projectRootFor() resolves it to the main repo before the
-      // refetch lands (keeps AppShell from treating the new cwd as a different
-      // project). Other repos' cached state is untouched.
-      setWorktreeStateByProject((prev) => {
-        const key = hostProjectKey(hostId, normalizeProjectKey(root));
-        const existing = prev[key];
-        if (!existing) return prev;
-        const newWt: WorktreeEntry = {
-          path: newWorktreePath,
-          branch,
-          isMain: false,
-        };
-        return {
-          ...prev,
-          [key]: {
-            ...existing,
-            forCwd: newWorktreePath,
-            worktrees: [...existing.worktrees, newWt],
-          },
-        };
-      });
-      if (selectedWorkspaceRef.current === sourceKey)
-        setSelectedCwd(newWorktreePath);
-      setWtRefreshKey((k) => k + 1);
-      loadSessions(false);
-      void loadProjects();
-    },
-    [
-      selectedProject,
-      selectedCwd,
-      selectedHostId,
-      worktreeStateByProject,
-      loadProjects,
-      loadSessions,
-      t,
-    ],
-  );
-
-  const handleRemoveWorktree = useCallback(
-    async (path: string, force: boolean): Promise<"removed" | "dirty"> => {
-      const activeState = selectedProject
-        ? worktreeStateByProject[
-            hostProjectKey(selectedHostId, normalizeProjectKey(selectedProject))
-          ]
-        : undefined;
-      if (!activeState) return "removed";
-      const root = activeState.projectRoot;
-      const hostId = activeState.hostId;
-      const sourceKey = hostProjectKey(selectedHostId, selectedCwd ?? "");
-      if (selectedWorkspaceRef.current !== sourceKey)
-        throw new Error(t("errors.workspace_changed"));
-      const res = await fetch("/api/worktrees", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cwd: root, path, force, hostId }),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        dirty?: boolean;
-        code?: string;
-      };
-      if (!res.ok) {
-        // Dirty worktree — the caller asks the user to confirm a force removal.
-        if (data.dirty && !force) return "dirty";
-        throw new Error(
-          formatApiError({
-            ...data,
-            error: data.error ?? `HTTP ${res.status}`,
-          }),
-        );
-      }
-      // Optimistically remove the deleted worktree from the active project's state
-      setWorktreeStateByProject((prev) => {
-        const key = hostProjectKey(hostId, normalizeProjectKey(root));
-        const existing = prev[key];
-        if (!existing) return prev;
-        const nextWorktrees = existing.worktrees.filter(
-          (w) => comparableProjectPath(w.path) !== comparableProjectPath(path),
-        );
-        return {
-          ...prev,
-          [key]: {
-            ...existing,
-            forCwd:
-              selectedCwd !== null &&
-              comparableProjectPath(selectedCwd) === comparableProjectPath(path)
-                ? root
-                : existing.forCwd,
-            worktrees: nextWorktrees,
-          },
-        };
-      });
-      if (
-        selectedWorkspaceRef.current === sourceKey &&
-        selectedCwd !== null &&
-        comparableProjectPath(selectedCwd) === comparableProjectPath(path)
-      ) {
-        setSelectedCwd(root);
-      }
-      setWtRefreshKey((k) => k + 1);
-      loadSessions(false);
-      void loadProjects();
-      return "removed";
-    },
-    [
-      selectedProject,
-      selectedHostId,
-      worktreeStateByProject,
-      selectedCwd,
-      loadProjects,
-      loadSessions,
-      t,
-    ],
-  );
 
   // Clicking a session moves the effective cwd to that session's worktree.
   // Done on the click path (not via the selectedCwd prop sync) so it also
@@ -2088,13 +1374,12 @@ export const SessionSidebar = memo(function SessionSidebar({
         return;
       }
       provisionalSelectionRef.current = false;
-      if (s.cwd) setSelectedCwd(s.cwd);
-      setSelectedPoolKey(s.poolId ? workspaceKeyOf(s) : null);
+      if (s.cwd) setSelectedCwd(projectRootFor(s.cwd, hostOf(s)));
       setSelectedHostId(hostOf(s));
       expandProject(workspaceKeyOf(s), hostOf(s));
       onSelectSession(s);
     },
-    [onSelectSession, expandProject, hostUnavailableReason],
+    [onSelectSession, expandProject, hostUnavailableReason, projectRootFor],
   );
   const handleOpenSearchMatch = useCallback(
     (s: SessionInfo, target: SearchMatchTarget) => {
@@ -2106,36 +1391,15 @@ export const SessionSidebar = memo(function SessionSidebar({
   );
 
   const handleNewSession = useCallback(() => {
-    if (
-      (!selectedCwd && !selectedPoolProject) ||
-      (!selectedPoolProject && hostUnavailableReason(selectedHostId))
-    )
-      return;
+    if (!selectedCwd || hostUnavailableReason(selectedHostId)) return;
     // Generate a temporary UUID client-side — no backend call needed.
     // Pi will be spawned lazily when the user sends the first message.
-    const tempId =
-      typeof crypto.randomUUID === "function"
-        ? crypto.randomUUID()
-        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
-    onNewSession?.(
-      tempId,
-      selectedPoolProject ? null : selectedCwd,
-      selectedPoolProject ? undefined : selectedHostId,
-      selectedPoolProject,
-    );
-  }, [
-    selectedCwd,
-    selectedHostId,
-    selectedPoolProject,
-    onNewSession,
-    hostUnavailableReason,
-  ]);
-  const newSessionBlockedReason = selectedPoolProject
-    ? null
-    : hostUnavailableReason(selectedHostId);
+    const tempId = browserUUID();
+    onNewSession?.(tempId, selectedCwd, selectedHostId);
+  }, [selectedCwd, selectedHostId, onNewSession, hostUnavailableReason]);
+  const newSessionBlockedReason = hostUnavailableReason(selectedHostId);
   const newSessionEnabled =
-    Boolean(selectedCwd || selectedPoolProject) &&
-    newSessionBlockedReason === null;
+    Boolean(selectedCwd) && newSessionBlockedReason === null;
 
   const [importing, setImporting] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -2177,58 +1441,34 @@ export const SessionSidebar = memo(function SessionSidebar({
   // the folded registry paths rows are checked against.
   const expandedProjectKeys = expandedProjects ?? EMPTY_PROJECT_SET;
 
-  // The active repo's own cached Git state, selected by repository root — never
-  // a single sidebar-wide variable, so it is always the state belonging to the
-  // repo the user currently has active.
-  const activeGitState =
-    selectedProject && !selectedPoolKey
-      ? worktreeStateByProject[
-          hostProjectKey(selectedHostId, normalizeProjectKey(selectedProject))
-        ]
-      : undefined;
-
-  const showWorktreeSwitcher = Boolean(
-    activeGitState?.isGit &&
-    activeGitState.isTopLevel &&
-    selectedCwd &&
-    selectedProject !== null &&
-    comparableProjectPath(selectedProject) ===
-      comparableProjectPath(activeGitState.projectRoot),
-  );
-  // The file panel's Worktrees tab renders the ACTIVE repo's own worktrees
-  // only; non-Git / subdirectory workspaces get null (no Git affordance).
   const worktreeContext = useMemo<WorktreeContext | null>(() => {
-    if (!activeGitState || (!showWorktreeSwitcher && !activeGitState.error))
-      return null;
-    const foldedCwd = comparableProjectPath(selectedCwd ?? "");
-    const current =
-      activeGitState.worktrees.find(
-        (w) => comparableProjectPath(w.path) === foldedCwd,
-      ) ?? activeGitState.worktrees.find((w) => w.isMain);
+    if (!selectedCwd) return null;
+    const project = hierarchySnapshots[selectedHostId]?.projects.find((p) =>
+      p.workspaces.some(
+        (w) =>
+          comparableProjectPath(w.path) ===
+          comparableProjectPath(
+            projectRootFor(selectedCwd, selectedHostId) ?? "",
+          ),
+      ),
+    );
+    if (!project || project.kind !== "git") return null;
     return {
       hostId: selectedHostId,
-      projectRoot: activeGitState.projectRoot,
-      worktrees: activeGitState.worktrees,
-      error: activeGitState.error,
-      currentPath: current?.path ?? activeGitState.projectRoot,
+      projectRoot: project.path,
+      worktrees: project.workspaces.map((w) => ({
+        path: w.path,
+        branch: w.branch ?? null,
+        isMain: w.isDefault,
+      })),
+      currentPath: projectRootFor(selectedCwd, selectedHostId) ?? selectedCwd,
       select: (path) => {
-        if (
-          selectedWorkspaceRef.current ===
-          hostProjectKey(selectedHostId, selectedCwd ?? "")
-        )
+        if (project.workspaces.some((w) => w.path === path))
           setSelectedCwd(path);
       },
-      create: handleCreateWorktree,
-      remove: handleRemoveWorktree,
+      refresh: () => setHierarchyRefresh((value) => value + 1),
     };
-  }, [
-    showWorktreeSwitcher,
-    activeGitState,
-    selectedCwd,
-    selectedHostId,
-    handleCreateWorktree,
-    handleRemoveWorktree,
-  ]);
+  }, [hierarchySnapshots, selectedCwd, selectedHostId, projectRootFor]);
   useEffect(() => {
     onWorktreeContextChange?.(worktreeContext);
   }, [onWorktreeContextChange, worktreeContext]);
@@ -2283,7 +1523,6 @@ export const SessionSidebar = memo(function SessionSidebar({
               },
             ),
           }}
-          pool={pools.find((pool) => `pool:${pool.id}` === addProjectHostId)}
           busy={addProjectBusy}
           error={addProjectError}
           onCancel={() => {
@@ -2297,11 +1536,7 @@ export const SessionSidebar = memo(function SessionSidebar({
       )}
       {launchConfigProject && (
         <ProjectLaunchConfigDialog
-          projectPath={
-            launchConfigProject.poolId
-              ? (launchConfigProject.name ?? launchConfigProject.origin ?? "")
-              : launchConfigProject.path
-          }
+          projectPath={launchConfigProject.path}
           initialConfig={launchConfigProject.launchConfig}
           onClose={() => setLaunchConfigProject(null)}
           onSave={async (launchConfig) => {
@@ -2437,7 +1672,7 @@ export const SessionSidebar = memo(function SessionSidebar({
         />
         <button
           onClick={handleNewSession}
-          disabled={!selectedCwd && !selectedPoolProject}
+          disabled={!selectedCwd}
           aria-disabled={newSessionEnabled ? undefined : true}
           aria-describedby={
             newSessionBlockedReason ? "sidebar-new-session-reason" : undefined
@@ -2445,17 +1680,9 @@ export const SessionSidebar = memo(function SessionSidebar({
           className="sidebar-new-session"
           title={
             newSessionBlockedReason ??
-            (selectedPoolProject
-              ? t("sessionSidebar.newSessionIn", {
-                  cwd:
-                    selectedPoolProject.alias ??
-                    selectedPoolProject.name ??
-                    selectedPoolProject.origin ??
-                    "",
-                })
-              : selectedCwd
-                ? t("sessionSidebar.newSessionIn", { cwd: selectedCwd })
-                : t("sessionSidebar.selectProjectFirst"))
+            (selectedCwd
+              ? t("sessionSidebar.newSessionIn", { cwd: selectedCwd })
+              : t("sessionSidebar.selectProjectFirst"))
           }
           style={{
             width: "100%",
@@ -2548,64 +1775,6 @@ export const SessionSidebar = memo(function SessionSidebar({
           <Search size={15} strokeWidth={1.9} aria-hidden="true" />
         </SidebarIconButton>
         <SidebarIconButton
-          ref={sortButtonRef}
-          label={t("projects.sort")}
-          active={pinsActive || sortMenuOpen}
-          menuExpanded={sortMenuOpen}
-          onClick={() => setSortMenuOpen((open) => !open)}
-        >
-          <ArrowDownUp size={15} strokeWidth={1.9} aria-hidden="true" />
-        </SidebarIconButton>
-        <SidebarPortalMenu
-          anchor={sortButtonRef}
-          open={sortMenuOpen}
-          onClose={closeSortMenu}
-          placement="below"
-          minWidth={150}
-        >
-          {(
-            [
-              ["none", t("projects.sortNone")],
-              ["alphabetical", t("projects.sortAlphabetical")],
-              ["updated", t("projects.sortUpdated")],
-            ] as const
-          ).map(([mode, label]) => (
-            <button
-              key={mode}
-              type="button"
-              role="menuitemradio"
-              aria-checked={projectSortMode === mode}
-              className="sidebar-menu-item"
-              onClick={() => chooseProjectSortMode(mode)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                width: "100%",
-                padding: "6px 9px",
-                border: "none",
-                borderRadius: 6,
-                background: "transparent",
-                color: "var(--text)",
-                cursor: "pointer",
-                textAlign: "left",
-                fontSize: 11,
-              }}
-            >
-              <Check
-                size={12}
-                strokeWidth={2}
-                aria-hidden="true"
-                style={{
-                  flexShrink: 0,
-                  visibility: projectSortMode === mode ? "visible" : "hidden",
-                }}
-              />
-              {label}
-            </button>
-          ))}
-        </SidebarPortalMenu>
-        <SidebarIconButton
           label={t("sessionSidebar.filterRunning")}
           title={t("sessionSidebar.filterRunningTitle", {
             count: recentRunsLimit,
@@ -2619,12 +1788,7 @@ export const SessionSidebar = memo(function SessionSidebar({
           label={t("projects.add")}
           title={t("projects.addTitle")}
           onClick={() => {
-            setAddProjectOpen(
-              true,
-              selectedPoolProject
-                ? projectTargetId(selectedPoolProject)
-                : LOCAL_HOST_ID,
-            );
+            setAddProjectOpen(true, selectedHostId);
             setAddProjectError(null);
           }}
         >
@@ -2759,18 +1923,6 @@ export const SessionSidebar = memo(function SessionSidebar({
             />
           </div>
         )}
-        {poolsFailed && (
-          <div
-            role="alert"
-            style={{
-              padding: "10px 4px",
-              color: "var(--status-error)",
-              fontSize: 12,
-            }}
-          >
-            {t("projects.poolConfigUnavailable")}
-          </div>
-        )}
         {projectsError && (
           <div
             role="alert"
@@ -2860,154 +2012,36 @@ export const SessionSidebar = memo(function SessionSidebar({
               {t("projects.noProjects")}
             </div>
           )}
-        {!loading &&
-          !projectsError &&
-          !error &&
-          sortedProjects.length > 0 &&
-          visibleProjectEntries.length === 0 && (
-            <div
-              style={{
-                padding: "14px 4px",
-                color: "var(--text-dim)",
-                fontSize: 11.5,
-                lineHeight: 1.5,
-              }}
-            >
-              {t("sessionSidebar.noMatches")}
-            </div>
-          )}
 
-        {groupProjectsByHost(visibleProjectEntries, hostList, pools).map(
-          ({ host, projects: entries }) => {
-            // A search or running filter hides hosts that have no match.
-            if (showHostGroups && filtersActive && entries.length === 0)
-              return null;
-            const rows = entries.map(({ project, sessions }) => {
-              const projectKey = projectIdentity(project);
-              // A member's own project listed in the cluster group: name its node.
-              const node =
-                project.poolId || host.id === hostOf(project)
-                  ? undefined
-                  : hosts?.find(
-                      (candidate) => candidate.id === hostOf(project),
-                    );
-              const unavailable = node ? hostUnavailableReason(node.id) : null;
-              const tree =
-                treesByProject.get(projectKey) ?? buildSessionTree(sessions);
-              const isActive =
-                selectedProject !== null &&
-                (project.poolId
-                  ? selectedProject === projectKey
-                  : !selectedPoolKey &&
-                    selectedHostId === hostOf(project) &&
-                    comparableProjectPath(selectedProject) ===
-                      comparableProjectPath(project.path));
-              return (
-                <ProjectRow
-                  key={projectKey}
-                  project={project}
-                  node={
-                    node
-                      ? {
-                          label: hostName(t, node),
-                          statusText: unavailable
-                            ? hostStatusText(t, node)
-                            : null,
-                          unavailableReason: unavailable,
-                        }
-                      : undefined
-                  }
-                  isActive={isActive}
-                  activity={projectActivity.get(
-                    foldedHostProjectKey(
-                      project.hostId,
-                      workspaceKeyOf(project),
-                    ),
-                  )}
-                  tree={tree}
-                  isExpanded={expandedProjectKeys.has(
-                    foldedHostProjectKey(
-                      project.hostId,
-                      workspaceKeyOf(project),
-                    ),
-                  )}
-                  hiddenCount={
-                    filtersActive
-                      ? 0
-                      : Math.max(0, tree.length - MAX_PROJECT_SESSIONS)
-                  }
-                  selectedSessionId={selectedSessionId}
-                  runningSessionIds={runningSessionIds}
-                  awaitingInputIds={awaitingInputIds}
-                  unreadSessionIds={unreadSessionIds}
-                  exitedSessions={exitedSessions}
-                  recentlyCompletedIds={effectiveRecentCompletedSet}
-                  relativeTimeNow={relativeTimeNow}
-                  onActivate={activateProject}
-                  onToggleExpand={toggleProjectExpanded}
-                  onRemoveProject={handleRemoveProject}
-                  onEditLaunchConfig={setLaunchConfigProject}
-                  onUpdatePresentation={handleUpdateProjectPresentation}
-                  onDragProjectChange={setDraggedProject}
-                  onDropProject={(target) => void handleProjectDrop(target)}
-                  onMoveProject={(target, delta) =>
-                    void handleMoveProject(target, delta)
-                  }
-                  pinnable={pinsActive}
-                  onTogglePin={handleTogglePin}
-                  isDragTarget={
-                    draggedProject !== null &&
-                    projectTargetId(draggedProject, pools) ===
-                      projectTargetId(project, pools) &&
-                    projectIdentity(draggedProject) !== projectKey &&
-                    (!pinsActive || project.pinOrder !== undefined)
-                  }
-                  removeBusy={removeProjectKey === projectKey}
-                  onSelectSession={handleSelectSessionFromList}
-                  searchQuery={trimmedSearchQuery || undefined}
-                  onOpenSearchMatch={
-                    onOpenSearchMatch ? handleOpenSearchMatch : undefined
-                  }
-                  onRenamed={loadSessions}
-                  onSessionDeleted={handleSessionDeleted}
-                />
-              );
-            });
-            if (!showHostGroups) return rows;
-            const row = hosts?.find((candidate) => candidate.id === host.id);
-            const member = pools.some((pool) =>
-              pool.members.some((member) => member.hostId === host.id),
-            );
-            if (member && entries.length === 0) return null;
-            const canAdd =
-              host.id.startsWith("pool:") ||
-              (!member && (host.id === LOCAL_HOST_ID || poolsLoaded));
-            return (
-              <HostGroup
-                key={host.id}
-                name={row ? hostName(t, row) : host.label}
-                color={row ? HOST_STATUS_COLOR[row.status] : undefined}
-                statusText={
-                  row && row.status !== "online" ? hostStatusText(t, row) : null
-                }
-                unavailableReason={hostUnavailableReason(host.id)}
-                collapsed={collapsedHosts.has(host.id)}
-                onToggle={() => toggleHostCollapsed(host.id)}
-                onAdd={
-                  canAdd
-                    ? () => {
-                        setAddProjectOpen(true, host.id);
-                        setAddProjectError(null);
-                      }
-                    : undefined
-                }
-                empty={entries.length === 0 ? t("projects.noProjects") : null}
-              >
-                {rows}
-              </HostGroup>
-            );
-          },
-        )}
+        <HierarchySidebar
+          hosts={hostList}
+          onProjects={setRegisteredWorkspaces}
+          collapsedHosts={collapsedHosts}
+          onToggleHost={toggleHostCollapsed}
+          onSnapshots={setHierarchySnapshots}
+          searchQuery={trimmedSearchQuery}
+          runningOnly={runningOnly}
+          matchedSessionIds={matchedSessionIds}
+          refreshKey={(refreshKey ?? 0) + hierarchyRefresh}
+          sessions={allSessions}
+          selectedSessionId={selectedSessionId}
+          selectedCwd={selectedCwd}
+          selectedHostId={selectedHostId}
+          onSelectWorkspace={(path, host) => {
+            provisionalSelectionRef.current = false;
+            setSelectedCwd(path);
+            setSelectedHostId(host);
+          }}
+          onSelectSession={handleSelectSessionFromList}
+          onAddProject={(host) => {
+            setAddProjectOpen(true, host);
+            setAddProjectError(null);
+          }}
+          onChanged={() => {
+            void loadProjects();
+            void loadSessions();
+          }}
+        />
       </div>
 
       {/* Provider usage bar — pinned above Settings */}

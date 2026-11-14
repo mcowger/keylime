@@ -9,6 +9,20 @@ import type { WorktreeInfo } from "./worktree";
 import type { BrowsableDirectory } from "./directory-browser";
 import type { CloneProgress } from "./git-clone";
 
+import type {
+  HierarchyRequest,
+  HierarchySnapshot,
+} from "./project-hierarchy-types";
+import type {
+  WorkspaceBranches,
+  WorkspaceCreateRequest,
+  WorkspaceCreationJob,
+  WorkspaceCreationSettings,
+  WorkspaceDeleteRequest,
+  WorkspaceDeleteResult,
+  WorkspaceSettingsRequest,
+} from "./workspace-creation-types";
+
 export interface WorkspaceFileSource {
   hostId: string;
   cwd: string | null;
@@ -94,6 +108,18 @@ export type WorkspaceDirectoryBrowse =
     };
 
 export interface WorkspaceOps {
+  hierarchy(input: HierarchyRequest): Promise<OpResult<HierarchySnapshot>>;
+  createWorkspace(
+    input: WorkspaceCreateRequest,
+  ): Promise<OpResult<WorkspaceCreationJob>>;
+  workspaceCreationStatus(id: string): Promise<OpResult<WorkspaceCreationJob>>;
+  workspaceCreationSettings(
+    input: WorkspaceSettingsRequest,
+  ): Promise<OpResult<WorkspaceCreationSettings>>;
+  workspaceBranches(projectPath: string): Promise<OpResult<WorkspaceBranches>>;
+  removeRegisteredWorktree(
+    input: WorkspaceDeleteRequest,
+  ): Promise<OpResult<WorkspaceDeleteResult>>;
   home(): Promise<OpResult<{ home: string }>>;
   listFiles(
     input: WorkspaceFileRequest,
@@ -159,15 +185,6 @@ export interface WorkspaceOps {
   ): Promise<OpResult<GitFileDiffResponse>>;
   githubRepo(cwd: string): Promise<OpResult<{ repo: string | null }>>;
   listWorktrees(cwd: string): Promise<OpResult<WorkspaceWorktrees>>;
-  addWorktree(
-    cwd: string,
-    branch: string,
-  ): Promise<OpResult<{ path: string; branch: string }>>;
-  removeWorktree(
-    cwd: string,
-    path: string,
-    force: boolean,
-  ): Promise<OpResult<null>>;
   browseDirectories(
     path: string | null,
   ): Promise<OpResult<WorkspaceDirectoryBrowse>>;
@@ -193,6 +210,12 @@ export interface WorkspaceOps {
 export const WORKSPACE_OP_PARAMS: {
   readonly [K in keyof WorkspaceOps]: readonly string[];
 } = {
+  hierarchy: ["input"],
+  createWorkspace: ["input"],
+  workspaceCreationStatus: ["id"],
+  workspaceCreationSettings: ["input"],
+  workspaceBranches: ["projectPath"],
+  removeRegisteredWorktree: ["input"],
   home: [],
   listFiles: ["input", "showHidden"],
   fileInfo: ["input"],
@@ -211,8 +234,6 @@ export const WORKSPACE_OP_PARAMS: {
   gitDiff: ["cwd", "path", "owner"],
   githubRepo: ["cwd"],
   listWorktrees: ["cwd"],
-  addWorktree: ["cwd", "branch"],
-  removeWorktree: ["cwd", "path", "force"],
   browseDirectories: ["path"],
   defaultCwd: [],
   startClone: ["id", "parent", "url"],

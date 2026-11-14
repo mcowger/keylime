@@ -146,10 +146,9 @@ export const SESSION_OP_PARAMS: {
   updateProject: ["updates"],
   hideProject: ["path"],
   validateCwd: ["path"],
-  preparePoolProject: ["input"],
 };
 
-/** Unknown additions are answered with 501; pool preparation needs a v8 peer. */
+/** Unknown additions are answered with 501. */
 export const HOST_OP_NAMES = [
   ...(Object.keys(SESSION_OP_PARAMS) as (keyof SessionOps)[]),
   ...(Object.keys(WORKSPACE_OP_PARAMS) as (keyof typeof WORKSPACE_OP_PARAMS)[]),

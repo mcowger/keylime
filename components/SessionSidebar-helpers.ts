@@ -8,18 +8,6 @@ interface WorktreeEntry {
   isMain: boolean;
 }
 
-interface WorktreeState {
-  hostId: string;
-  /** The cwd this data was fetched for — guards against stale responses */
-  forCwd: string;
-  projectRoot: string;
-  isGit: boolean;
-  /** False when forCwd is a repo subdirectory — the switcher is hidden there
-   *  because subdir sessions keep their own project identity */
-  isTopLevel: boolean;
-  worktrees: WorktreeEntry[];
-  error?: string;
-}
 /** The active Git workspace's worktrees plus the actions that change them
  *  (owned by SessionSidebar, rendered by the file panel's Worktrees tab). */
 interface WorktreeContext {
@@ -30,14 +18,7 @@ interface WorktreeContext {
   /** Path of the worktree the workspace currently points at. */
   currentPath: string;
   select(path: string): void;
-  /** Creates the branch's worktree and selects it; rejects with an Error whose message is user-facing. */
-  create(branch: string): Promise<void>;
-  /** Resolves "dirty" when the worktree has uncommitted changes and force was false; rejects with a user-facing Error otherwise. */
-  remove(path: string, force: boolean): Promise<"removed" | "dirty">;
-}
-/** Normalize a project path for use as a Git-state map key. */
-function normalizeProjectKey(value: string): string {
-  return value.replace(/\/+$/, "");
+  refresh(): void;
 }
 // Bounded retry window for restoring a brand-new session from its URL before
 // omp flushes the JSONL (typically appears within a second or two of the
@@ -291,7 +272,6 @@ export {
   loadExpandedProjects,
   loadProjectSortMode,
   loadUnreadSessionIds,
-  normalizeProjectKey,
   projectLabel,
   saveExpandedProjects,
   saveProjectSortMode,
@@ -300,5 +280,4 @@ export {
   type SessionTreeNode,
   type WorktreeContext,
   type WorktreeEntry,
-  type WorktreeState,
 };

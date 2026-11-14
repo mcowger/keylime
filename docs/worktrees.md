@@ -1,87 +1,23 @@
-# Worktrees in ompweb
+# Projects and workspaces
 
-ompweb can show all Git worktrees for one project in the sidebar. Use this when you want to keep separate checkouts for different branches, while keeping the project's sessions grouped together.
+Projects belong to a host. The sidebar shows explicitly registered projects, their workspaces, and registered sessions within each workspace. The hierarchy starts empty, even if older projects or session files exist. Add a project to register its default workspace, then selectively discover and import existing worktrees and sessions. A non-Git project has exactly one workspace.
 
-## When the Worktree Control Appears
+Importing sessions finds sessions whose working directory is inside the selected workspace, excluding other workspace roots. App-created sessions and forks register with their workspace. Multiple agents can use the same workspace and files at once; they are not isolated from one another. A missing project or workspace remains registered and visible as unavailable.
 
-The worktree switcher appears below the project picker when the selected directory is a Git repository root.
+Unregistering a project or workspace forgets its child registrations, but does not stop processes or delete files. Re-registering starts fresh; import any existing children again. The default workspace cannot be unregistered separately from its project. Duplicate imports of the same canonical resource are idempotent, and each resource has one parent.
 
-It is hidden when:
+## Creating a workspace
 
-- The selected directory is not a Git repository.
-- The selected directory is inside a repository, but not the repository root.
-- Git cannot read the repository's worktree list.
+For a Git project, create a workspace from an existing local branch, a remote branch, or a new branch based on a selected ref. Listing branches fetches remote refs. The suggested checkout path is a sibling of the project; edit its name if needed.
 
-If you are inside a repo subdirectory, open the repository root from the project picker to manage worktrees.
+The host owns creation settings: default shell commands and an optional whole-project override, each with ordered pre, create, and post stages. Commands have no interactive stdin or automatic retries. With no create command, Git creates the worktree. Pre and create commands run in the project directory; post commands run in the actual worktree.
 
-## Switching Worktrees
+Commands receive `OMP_PROJECT_PATH`, `OMP_WORKSPACE_PATH`, `OMP_BRANCH`, `OMP_BASE_REF`, `OMP_BRANCH_MODE`, and `OMP_CREATE_RESULT`. A create command may write JSON such as `{"path":"/absolute/path"}` to `OMP_CREATE_RESULT`; otherwise the requested path is used. The result must resolve to a linked worktree of the project. The host registers it before post commands run, so sessions can start while post setup is running.
 
-Use the worktree switcher to choose which checkout ompweb should use for new work in that project.
+The daemon records the captured pipeline, status, and command output. A browser or web server restart does not stop a job; a daemon restart marks it interrupted. A failed pre or create stage leaves any files in place without importing them. A failed post stage leaves the workspace registered and usable, with its failure and logs available; there is no automatic retry.
 
-Switching worktrees affects:
+## Deleting a workspace
 
-- New sessions started from the sidebar.
-- The file Explorer.
-- File mentions inserted from the Explorer.
+The default workspace cannot be deleted as a worktree. Deleting another workspace is blocked while setup runs. The daemon fences new session starts and finds all daemon-managed processes in that directory or its descendants, including unregistered sessions and processes shared with other servers. Confirm stopping them first; the daemon waits for exit and refuses deletion if a stop fails.
 
-Existing sessions stay grouped under the same project. Opening an existing session moves the effective working directory back to that session's checkout.
-
-## Creating a Worktree
-
-Choose `New worktree...` from the worktree menu and enter a branch name.
-
-ompweb creates the checkout at:
-
-```text
-<repo>-worktrees/<branch>
-```
-
-For example, if the main checkout is:
-
-```text
-/Users/alex/Documents/Workspace/my-project
-```
-
-and you create branch `codex/worktree-help`, the worktree is created under:
-
-```text
-/Users/alex/Documents/Workspace/my-project-worktrees/codex-worktree-help
-```
-
-If the branch already exists, ompweb adds a worktree for that branch. If it does not exist, ompweb creates the branch from the current `HEAD`.
-
-## Removing a Worktree
-
-Use the remove button next to a non-main worktree to remove that checkout.
-
-Removing a worktree does not delete:
-
-- The Git branch.
-- ompweb session history.
-- The main checkout.
-
-If the worktree has uncommitted or untracked files, Git refuses the removal. ompweb then offers a force remove action. Force removal discards the uncommitted files in that checkout, so use it only when you no longer need those changes.
-
-## Sessions and Worktrees
-
-ompweb groups sessions by project root, so sessions from the main checkout and linked worktrees appear together.
-
-Each session still remembers the working directory it was created with. That means:
-
-- A session started in a worktree continues to use that worktree path.
-- A session started in the main checkout continues to use the main checkout.
-- If a worktree has been removed, old sessions from it stay visible under the project so you can still find the history.
-
-## Troubleshooting
-
-**I do not see the worktree switcher.**
-Select a Git repository root. Non-Git directories and repo subdirectories show a small hint instead of the switcher.
-
-**A branch cannot be added as a worktree.**
-Git allows a branch to be checked out in only one worktree at a time. Switch to the existing worktree for that branch, or remove it first.
-
-**A removed worktree still shows up in Git.**
-Git can keep prunable worktree records after a checkout disappears. ompweb filters those out of the switcher.
-
-**The Explorer shows a different branch than the open chat.**
-The Explorer follows the selected worktree. The chat follows the opened session. Click the session again to move the sidebar back to that session's checkout.
+If the worktree is dirty, a separate confirmation asks whether to discard its changes. Declining at this point leaves the processes stopped. After Git successfully removes the worktree, the host unregisters it and its sessions for all linked servers. The Git branch, session transcripts, and artifacts are preserved.

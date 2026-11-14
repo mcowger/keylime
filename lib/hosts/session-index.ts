@@ -2,20 +2,14 @@
 // machine's lists (from its daemon) plus each linked host's, cached per host.
 // No `next/*` or `@/` imports.
 import { createHash } from "node:crypto";
-import { comparableProjectPath } from "../comparable-path";
-import { mergeProjects, type ProjectRegistryEntry } from "../project-registry";
+import type { HierarchySnapshot } from "../project-hierarchy-types";
 import { isValidSessionId } from "../session-file-references-core";
 import type { ManagedProject, SessionInfo } from "../types";
 import { isLinkUp, type Host } from "./host";
 import { HostOpError } from "./link-protocol";
 import { getHost, listHosts, onHostHello } from "./hub";
 import { LOCAL_HOST_ID } from "./registry";
-import {
-  loadPools,
-  poolManagedProject,
-  poolProjectBindings,
-  poolProjectKey,
-} from "./pools";
+import { getRpcSession } from "../rpc-manager";
 
 /** Same TTL as the daemon's own session-list cache. */
 const LIST_TTL_MS = 30_000;
@@ -27,7 +21,7 @@ interface HostLists {
   generation: number;
   loading: { generation: number; promise: Promise<SessionInfo[]> } | null;
   /** Last registry the host returned, shown while it is unreachable. */
-  projects: ProjectRegistryEntry[];
+  hierarchy: HierarchySnapshot;
   /** The latest requested list in this invalidation generation succeeded; cached entries survive failures. */
   loaded: boolean;
 }
@@ -50,7 +44,7 @@ function hostLists(hostId: string): HostLists {
       fetchedAt: 0,
       generation: 0,
       loading: null,
-      projects: [],
+      hierarchy: { projects: [] },
       loaded: false,
     };
     globalThis.__ompHostLists.set(hostId, lists);
@@ -111,28 +105,41 @@ export async function hostSessions(
 /** Every host's sessions, each with its `hostId`. An id on several hosts is
  * listed once: under this machine if it is here, else under the first host by label. */
 export async function listSessionsAllHosts(): Promise<SessionInfo[]> {
-  const bindings = poolProjectBindings(loadPools());
-  const lists = await Promise.all(hostIds().map((id) => hostSessions(id)));
+  const ids = hostIds();
+  const hierarchies = await Promise.all(ids.map(hostHierarchy));
+  const lists = await Promise.all(ids.map((id) => hostSessions(id)));
   const merged: SessionInfo[] = [];
   const seen = new Set<string>();
-  for (const sessions of lists) {
-    for (const session of sessions) {
-      if (seen.has(session.id)) continue;
+  for (let index = 0; index < lists.length; index++) {
+    const registered = new Set(
+      hierarchies[index].projects.flatMap((p) =>
+        p.workspaces.flatMap((w) => w.sessionIds),
+      ),
+    );
+    for (const session of lists[index]) {
+      if (!registered.has(session.id) || seen.has(session.id)) continue;
       seen.add(session.id);
-      const binding = bindings
-        .get(session.hostId!)
-        ?.get(comparableProjectPath(session.projectRoot ?? session.cwd));
-      merged.push(
-        binding
-          ? {
-              ...session,
-              poolId: binding.pool.id,
-              projectId: binding.project.id,
-              projectKey: poolProjectKey(binding.pool.id, binding.project.id),
-            }
-          : session,
-      );
+      merged.push(session);
     }
+    for (const project of hierarchies[index].projects)
+      for (const workspace of project.workspaces)
+        for (const id of workspace.sessionIds) {
+          if (seen.has(id)) continue;
+          const live = getRpcSession(id);
+          if (!live?.isAlive() || live.host.id !== ids[index]) continue;
+          seen.add(id);
+          merged.push({
+            id,
+            path: live.sessionFile,
+            cwd: workspace.path,
+            projectRoot: project.path,
+            hostId: ids[index],
+            created: "",
+            modified: "",
+            messageCount: 0,
+            firstMessage: "New session",
+          });
+        }
   }
   return merged;
 }
@@ -212,46 +219,35 @@ export function invalidateLocalSessionLists(sessionFile?: string): void {
   invalidateHostSessionList(LOCAL_HOST_ID);
 }
 
-/** Each host's projects (its registry plus session-discovered ones), this machine first, tagged with `hostId`. */
+async function hostHierarchy(id: string): Promise<HierarchySnapshot> {
+  const lists = hostLists(id);
+  const host = getHost(id);
+  if (host && isLinkUp(host.status())) {
+    try {
+      const result = await host.workspaceOps.hierarchy({ action: "list" });
+      if (result.ok) lists.hierarchy = result.value;
+    } catch {
+      // Keep the last hierarchy when the host is unavailable.
+    }
+  }
+  return lists.hierarchy;
+}
+
+/** Explicitly registered projects, this machine first, tagged with their host. */
 export async function listProjectsAllHosts(): Promise<ManagedProject[]> {
-  const pools = loadPools();
-  const bindings = poolProjectBindings(pools);
-  const perHost = await Promise.all(
-    hostIds().map(async (id) => {
-      const host = getHost(id);
-      const lists = hostLists(id);
-      if (host && isLinkUp(host.status())) {
-        try {
-          lists.projects = await host.sessionOps.listProjects();
-        } catch {
-          // Keep the last registry.
-        }
-      }
-      const discovered = (await hostSessions(id))
-        .map((session) => session.projectRoot ?? session.cwd)
-        .filter(Boolean);
-      // Only this machine's paths resolve here; another host's are never resolved on this machine.
-      return mergeProjects(
-        { version: 1, projects: lists.projects },
-        discovered,
-        id === LOCAL_HOST_ID ? undefined : (path) => path,
-      ).map((project) => ({ ...project, hostId: id }));
-    }),
+  const ids = hostIds();
+  const snapshots = await Promise.all(ids.map(hostHierarchy));
+  return snapshots.flatMap((snapshot, index) =>
+    snapshot.projects.map((project) => ({
+      path: project.path,
+      addedAt: project.addedAt,
+      alias: project.alias,
+      sortOrder: project.sortOrder,
+      pinOrder: project.pinOrder,
+      launchConfig: project.launchConfig,
+      hostId: ids[index],
+    })),
   );
-  const standalone = perHost
-    .flat()
-    .filter(
-      (project) =>
-        !bindings
-          .get(project.hostId!)
-          ?.has(comparableProjectPath(project.path)),
-    );
-  const logical = pools.flatMap((pool) =>
-    pool.projects
-      .filter((project) => !project.hidden)
-      .map((project) => poolManagedProject(pool, project)),
-  );
-  return [...standalone, ...logical];
 }
 
 /** An image from the first online host whose bytes hash to `hash`. */

@@ -555,6 +555,7 @@ export interface ManagedProject {
   /** Logical pool target; path/hostId, when present, are diagnostic only. */
   poolId?: string;
   projectId?: string;
+  workspaceId?: string;
   projectKey?: string;
   origin?: string;
   name?: string;

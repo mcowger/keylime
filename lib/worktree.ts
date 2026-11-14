@@ -1,8 +1,6 @@
 import { execFile } from "child_process";
 import {
   existsSync,
-  lstatSync,
-  mkdirSync,
   readdirSync,
   readFileSync,
   realpathSync,
@@ -306,89 +304,6 @@ export function findCurrentWorktreePath(
   return findWorktreeByPath(worktrees, realPathOrSelf(cwd))?.path ?? null;
 }
 
-function sanitizeBranchForDir(branch: string): string {
-  return branch.replace(/[\/\\:*?"<>|\s]+/g, "-").replace(/^-+|-+$/g, "");
-}
-
-export async function addWorktree(
-  cwd: string,
-  branch: string,
-): Promise<{ path: string; branch: string }> {
-  const trimmed = branch.trim();
-  if (!trimmed) throw new Error("Branch name is required");
-  // git-ref sanity: a bare positional like `--force` would be read as flags by
-  // `git worktree add -b`; whitespace, `..`, and leading/trailing dots are
-  // rejected by git's own ref rules (and `@{` is reflog syntax).
-  if (trimmed.startsWith("-"))
-    throw new Error(`Invalid branch name: ${branch}`);
-  if (/[\s\x00-\x1f\x7f~^:?*[\]\\]/.test(trimmed))
-    throw new Error(`Invalid branch name: ${branch}`);
-  if (
-    trimmed.includes("..") ||
-    trimmed.startsWith(".") ||
-    trimmed.endsWith(".") ||
-    trimmed.endsWith(".lock")
-  ) {
-    throw new Error(`Invalid branch name: ${branch}`);
-  }
-
-  const dirName = sanitizeBranchForDir(trimmed);
-  if (!dirName) throw new Error(`Invalid branch name: ${branch}`);
-
-  const repoRoot = await getRepoRoot(cwd);
-  const baseDir = `${resolve(repoRoot)}-worktrees`;
-  const worktreePath = join(baseDir, dirName);
-  if (existsSync(worktreePath)) {
-    throw new Error(`Directory already exists: ${worktreePath}`);
-  }
-  mkdirSync(baseDir, { recursive: true });
-  if (
-    lstatSync(baseDir).isSymbolicLink() ||
-    !samePath(realPathOrSelf(baseDir), baseDir)
-  )
-    throw new Error("Worktree directory must not be a symbolic link");
-
-  // Reuse the branch if it already exists, otherwise create it at HEAD.
-  let branchExists = false;
-  try {
-    await git(repoRoot, [
-      "rev-parse",
-      "--verify",
-      "--quiet",
-      `refs/heads/${trimmed}`,
-    ]);
-    branchExists = true;
-  } catch {
-    branchExists = false;
-  }
-
-  const posixWorktreePath = worktreePath.replace(/\\/g, "/");
-  try {
-    if (branchExists) {
-      await git(repoRoot, [
-        "worktree",
-        "add",
-        "--",
-        posixWorktreePath,
-        trimmed,
-      ]);
-    } else {
-      await git(repoRoot, [
-        "worktree",
-        "add",
-        "-b",
-        trimmed,
-        "--",
-        posixWorktreePath,
-      ]);
-    }
-  } catch (error) {
-    throw new Error(extractGitError(error));
-  }
-
-  invalidateProjectCache();
-  return { path: worktreePath, branch: trimmed };
-}
 
 export async function removeWorktree(
   cwd: string,

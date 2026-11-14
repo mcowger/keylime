@@ -6,6 +6,11 @@ import {
 import { invalidateHostSessionList } from "@/lib/hosts/session-index";
 import { parseJsonWithinLimit } from "@/lib/bounded-form-data";
 import { isRecord } from "@/lib/type-guards";
+import type {
+  WorkspaceCreateRequest,
+  WorkspaceDeleteRequest,
+  WorkspaceSettingsRequest,
+} from "@/lib/workspace-creation-types";
 
 export async function GET(request: Request) {
   try {
@@ -15,6 +20,21 @@ export async function GET(request: Request) {
       null,
     );
     if ("response" in resolved) return resolved.response;
+    const action = params.get("action");
+    if (action === "branches" || action === "settings" || action === "status") {
+      const projectPath = params.get("projectPath") ?? "";
+      const result =
+        action === "branches"
+          ? await resolved.host.workspaceOps.workspaceBranches(projectPath)
+          : action === "settings"
+            ? await resolved.host.workspaceOps.workspaceCreationSettings({
+                projectPath,
+              })
+            : await resolved.host.workspaceOps.workspaceCreationStatus(
+                params.get("id") ?? "",
+              );
+      return result.ok ? Response.json(result.value) : opErrorResponse(result);
+    }
     const result = await resolved.host.workspaceOps.listWorktrees(
       params.get("cwd") ?? "",
     );
@@ -28,61 +48,44 @@ export async function POST(request: Request) {
   try {
     const body: unknown = await parseJsonWithinLimit(request, 64 * 1024);
     if (
-      !isRecord(body) ||
-      typeof body.cwd !== "string" ||
-      typeof body.branch !== "string" ||
-      (body.hostId !== undefined && typeof body.hostId !== "string")
-    )
-      return Response.json(
-        { error: "Invalid worktree request", code: "invalid_request" },
-        { status: 400 },
+      isRecord(body) &&
+      (body.action === "create" ||
+        body.action === "settings" ||
+        body.action === "delete")
+    ) {
+      if (
+        !isRecord(body.input) ||
+        (body.hostId !== undefined && typeof body.hostId !== "string")
+      )
+        return Response.json(
+          { error: "Invalid request", code: "invalid_request" },
+          { status: 400 },
+        );
+      const resolved = await resolveWorkspaceHost(
+        body.hostId as string | undefined,
+        null,
       );
-    const resolved = await resolveWorkspaceHost(body.hostId, null);
-    if ("response" in resolved) return resolved.response;
-    const result = await resolved.host.workspaceOps.addWorktree(
-      body.cwd,
-      body.branch,
+      if ("response" in resolved) return resolved.response;
+      const result =
+        body.action === "create"
+          ? await resolved.host.workspaceOps.createWorkspace(
+              body.input as unknown as WorkspaceCreateRequest,
+            )
+          : body.action === "settings"
+            ? await resolved.host.workspaceOps.workspaceCreationSettings(
+                body.input as unknown as WorkspaceSettingsRequest,
+              )
+            : await resolved.host.workspaceOps.removeRegisteredWorktree(
+                body.input as unknown as WorkspaceDeleteRequest,
+              );
+      if (!result.ok) return opErrorResponse(result);
+      if (body.action === "delete") invalidateHostSessionList(resolved.host.id);
+      return Response.json(result.value);
+    }
+    return Response.json(
+      { error: "Invalid request", code: "invalid_request" },
+      { status: 400 },
     );
-    if (!result.ok) return opErrorResponse(result);
-    invalidateHostSessionList(resolved.host.id);
-    return Response.json(result.value);
-  } catch (error) {
-    return apiErrorResponse(error);
-  }
-}
-
-export async function DELETE(request: Request) {
-  try {
-    const body: unknown = await parseJsonWithinLimit(request, 64 * 1024);
-    if (
-      !isRecord(body) ||
-      typeof body.cwd !== "string" ||
-      typeof body.path !== "string" ||
-      (body.hostId !== undefined && typeof body.hostId !== "string") ||
-      (body.force !== undefined && typeof body.force !== "boolean")
-    )
-      return Response.json(
-        { error: "Invalid worktree request", code: "invalid_request" },
-        { status: 400 },
-      );
-    const resolved = await resolveWorkspaceHost(body.hostId, null);
-    if ("response" in resolved) return resolved.response;
-    const result = await resolved.host.workspaceOps.removeWorktree(
-      body.cwd,
-      body.path,
-      body.force === true,
-    );
-    if (!result.ok)
-      return Response.json(
-        {
-          error: result.error,
-          code: result.code,
-          dirty: result.code === "worktree_dirty",
-        },
-        { status: result.status },
-      );
-    invalidateHostSessionList(resolved.host.id);
-    return Response.json({ success: true });
   } catch (error) {
     return apiErrorResponse(error);
   }

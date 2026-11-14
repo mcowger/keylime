@@ -14,6 +14,7 @@ import { HostOpError } from "./link-protocol";
 import type { WorkspaceOwner } from "../workspace-types";
 import { resolveProject } from "../worktree";
 import { isValidSessionId } from "../session-file-references-core";
+import { readHierarchy } from "./project-hierarchy";
 
 const grants = new Set<string>();
 let cached: { roots: Set<string>; until: number } | null = null;
@@ -62,6 +63,8 @@ export async function getWorkspaceRoots(
   for (const project of loadProjectRegistry().projects) {
     if (!project.hidden) roots.add(project.path);
   }
+  for (const project of readHierarchy().projects)
+    for (const workspace of project.workspaces) roots.add(workspace.path);
   for (const grant of grants) roots.add(grant);
   try {
     for (const entry of readdirSync(homedir(), { withFileTypes: true })) {

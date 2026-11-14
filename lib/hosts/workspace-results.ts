@@ -44,14 +44,92 @@ export function validWorkspaceResult(
     );
   if (result.ok !== true || !("value" in result)) return false;
   const value = result.value;
-  if (op === "closeFile" || op === "unwatchFile" || op === "removeWorktree")
-    return value === null;
+  if (op === "closeFile" || op === "unwatchFile") return value === null;
   if (op === "readFileChunk")
     return (
       value instanceof Uint8Array && value.byteLength <= LINK_LIMITS.pieceBytes
     );
   if (!isRecord(value)) return false;
   switch (op) {
+    case "hierarchy":
+      return (
+        Array.isArray(value.projects) &&
+        value.projects.every(
+          (project) =>
+            isRecord(project) &&
+            text(project.id) &&
+            text(project.path) &&
+            text(project.name) &&
+            (project.kind === "git" || project.kind === "directory") &&
+            Array.isArray(project.workspaces) &&
+            project.workspaces.every(
+              (workspace) =>
+                isRecord(workspace) &&
+                text(workspace.id) &&
+                text(workspace.projectId) &&
+                text(workspace.path) &&
+                text(workspace.name) &&
+                typeof workspace.isDefault === "boolean" &&
+                Array.isArray(workspace.sessionIds) &&
+                workspace.sessionIds.every(text),
+            ),
+        ) &&
+        (value.workspaceCandidates === undefined ||
+          (Array.isArray(value.workspaceCandidates) &&
+            value.workspaceCandidates.every(
+              (candidate) =>
+                isRecord(candidate) &&
+                text(candidate.path) &&
+                text(candidate.name),
+            ))) &&
+        (value.sessionCandidates === undefined ||
+          (Array.isArray(value.sessionCandidates) &&
+            value.sessionCandidates.every(
+              (session) =>
+                isRecord(session) && text(session.id) && text(session.cwd),
+            )))
+      );
+    case "workspaceBranches":
+      return (
+        Array.isArray(value.local) &&
+        value.local.every(text) &&
+        Array.isArray(value.remote) &&
+        value.remote.every(text)
+      );
+    case "workspaceCreationSettings": {
+      const pipeline = (input: unknown) =>
+        isRecord(input) &&
+        [input.pre, input.create, input.post].every(
+          (commands) => Array.isArray(commands) && commands.every(text),
+        );
+      return (
+        pipeline(value.defaults) &&
+        (value.override === null || pipeline(value.override))
+      );
+    }
+    case "createWorkspace":
+    case "workspaceCreationStatus":
+      return (
+        text(value.id) &&
+        ["running", "complete", "failed", "interrupted"].includes(
+          value.status as string,
+        ) &&
+        ["pre", "create", "post"].includes(value.stage as string) &&
+        typeof value.logs === "string" &&
+        isRecord(value.input)
+      );
+    case "removeRegisteredWorktree":
+      return (
+        ["deleted", "processes", "dirty", "cancelled"].includes(
+          value.status as string,
+        ) &&
+        (value.processes === undefined ||
+          (Array.isArray(value.processes) &&
+            value.processes.every(
+              (process) =>
+                isRecord(process) && text(process.id) && text(process.cwd),
+            )))
+      );
     case "home":
       return text(value.home);
     case "defaultCwd":
@@ -106,8 +184,6 @@ export function validWorkspaceResult(
       );
     case "githubRepo":
       return value.repo === null || text(value.repo);
-    case "addWorktree":
-      return text(value.path) && text(value.branch);
     case "listWorktrees":
       return (
         text(value.projectRoot) &&

@@ -17,7 +17,10 @@ export async function GET(req: Request) {
     const filterId = new URL(req.url).searchParams.get("id");
 
     const sessions = await listSessionsAllHosts();
-    const runningSessions = getRunningRpcSessions();
+    const registered = new Set(sessions.map((session) => session.id));
+    const runningSessions = getRunningRpcSessions().filter((session) =>
+      registered.has(session.id),
+    );
     const runningSessionIds = runningSessions.map((s) => s.id);
 
     if (filterId) {

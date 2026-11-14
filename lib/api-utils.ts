@@ -1,4 +1,3 @@
-import { pooledWorkspaceForSession } from "./hosts/pool-starts";
 import { isValidSessionId } from "./session-file-references-core";
 import { isLinkUp, type Host } from "./hosts/host";
 import { getHost } from "./hosts/hub";
@@ -100,18 +99,9 @@ export async function resolveWorkspaceHost(
     return { response: Response.json(SESSION_NOT_FOUND, { status: 404 }) };
   const live = getRpcSession(sessionId);
   const running = live?.isAlive() ? live : undefined;
-  const retained =
-    running?.sessionId === sessionId
-      ? null
-      : pooledWorkspaceForSession(sessionId);
-  let session: { host: Host } | { response: Response };
-  if (running) session = { host: running.host };
-  else if (retained) {
-    const host = getHost(retained.hostId);
-    if (!host)
-      return { response: Response.json(SESSION_NOT_FOUND, { status: 404 }) };
-    session = { host };
-  } else session = await resolveSessionHostOr404(sessionId);
+  const session = running
+    ? { host: running.host }
+    : await resolveSessionHostOr404(sessionId);
   if ("response" in session) return session;
   const offline = hostOfflineResponse(session.host);
   if (offline) return { response: offline };
@@ -129,7 +119,6 @@ export async function resolveWorkspaceHost(
   const effectiveId = followAlias && running ? running.sessionId : sessionId;
   const cwd =
     (running?.sessionId === effectiveId ? running.cwd : undefined) ??
-    retained?.cwd ??
     (await hostSessions(session.host.id)).find(
       (entry) => entry.id === effectiveId,
     )?.cwd;

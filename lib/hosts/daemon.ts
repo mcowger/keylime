@@ -21,6 +21,16 @@ import { readHostLinks, readHostLogin, type HostLink } from "./host-login";
 import { DaemonLink, dialable, nextRedialDelay } from "./daemon-link";
 import { ChannelTable } from "./daemon-channels";
 import {
+  readHierarchy,
+  registerCreatedSession,
+  moveRegisteredSession,
+} from "./project-hierarchy";
+import {
+  setWorkspaceDeletionAdapter,
+  workspaceCreationBusy,
+  stopWorkspaceCreation,
+} from "./workspace-creation";
+import {
   credentialsEnv,
   serverFetch,
   startBrokerForwarder,
@@ -185,8 +195,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   let updateStateWarningLogged = false;
   let reloadTimer: NodeJS.Timeout | undefined;
   let drained = process.env.OMP_WEB_HOST_DRAINED === "1";
-  let preparationsInFlight = 0,
-    operationsInFlight = 0,
+  let operationsInFlight = 0,
     nativeUpdatesInFlight = 0;
   const executable = realpathSync(process.execPath);
   const entrypoint =
@@ -233,6 +242,25 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   });
   const channels = new ChannelTable({
     spawn: async (launch) => {
+      if (!launch.sessionFile) {
+        let cwd = resolve(launch.cwd);
+        try {
+          cwd = realpathSync(cwd);
+        } catch {}
+        if (
+          !readHierarchy().projects.some((project) =>
+            project.workspaces.some(
+              (workspace) =>
+                cwd === workspace.path || cwd.startsWith(workspace.path + sep),
+            ),
+          )
+        )
+          throw new HostOpError(
+            409,
+            "workspace_not_registered",
+            "Register a project and choose a workspace before creating a session",
+          );
+      }
       if (drained)
         throw new HostOpError(
           409,
@@ -336,6 +364,28 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     },
     sessionsChanged,
     channelsChanged,
+    sessionCreated: (cwd, id) => {
+      registerCreatedSession(cwd, id);
+      sessionsChanged();
+    },
+    sessionIdentityChanged: (previous, next, moved, cwd) => {
+      if (
+        readHierarchy().projects.some((project) =>
+          project.workspaces.some((workspace) =>
+            workspace.sessionIds.includes(previous),
+          ),
+        )
+      ) {
+        if (moved) moveRegisteredSession(previous, next);
+        else registerCreatedSession(cwd, next);
+        sessionsChanged();
+      }
+    },
+  });
+  setWorkspaceDeletionAdapter({
+    fence: (directory) => channels.fenceWorkspace(directory),
+    inspect: (directory) => channels.inspectWorkspace(directory),
+    stop: (directory) => channels.stopWorkspace(directory),
   });
   const hostSocket: Promise<HostSocket | undefined> =
     options.hostSocket === undefined
@@ -390,10 +440,10 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   watcher.on("error", (error) => log("host.json watch: " + reason(error)));
 
   function busyReason(): string | null {
+    if (workspaceCreationBusy())
+      return "Wait for workspace creation/setup to finish.";
     if (channels.size > 0 || channels.spawnsInFlight > 0)
       return "Close this host's sessions before updating its daemon; sessions and subagents must not be interrupted.";
-    if (preparationsInFlight > 0)
-      return "Wait for pooled project preparation to finish before updating this daemon.";
     if (uploads.busy() || uploadRetention.busy())
       return "Wait for this host's active uploads and control writes to finish.";
     if (stops.size > 0)
@@ -866,21 +916,6 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
           args.version,
           updateCompatibility(args.compatibility),
         );
-      case "preparePoolProject": {
-        if (getHostUpdateOperation()?.state === "running")
-          throw new HostUpdateError(
-            "host_updating",
-            "This host is updating; new project preparation must wait",
-          );
-        preparationsInFlight++;
-        try {
-          return await sessionOps.preparePoolProject(
-            args.input as Parameters<typeof sessionOps.preparePoolProject>[0],
-          );
-        } finally {
-          preparationsInFlight--;
-        }
-      }
       case "validateCwd": {
         if (typeof args.path !== "string")
           throw new HostOpError(
@@ -984,6 +1019,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     // The configuration first: its requests to a server are aborted at once, so no start waiting on them holds the stop.
     const configStopped = config.stop();
     stopping = (async () => {
+      await stopWorkspaceCreation();
       await Promise.all([...links.values()].map((link) => link.stop()));
       await Promise.all([
         ...stops,

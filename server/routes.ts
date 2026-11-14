@@ -18,6 +18,7 @@ import * as events from "@/app/api/events/route";
 import * as eventsLink from "@/app/api/events/link/route";
 import * as fileIndex from "@/app/api/file-index/route";
 import * as filesPath from "@/app/api/files/[...path]/route";
+import * as hierarchy from "@/app/api/hierarchy/route";
 import * as gitDiff from "@/app/api/git/diff/route";
 import * as gitStatus from "@/app/api/git/status/route";
 import * as githubRepo from "@/app/api/github-repo/route";
@@ -107,6 +108,7 @@ export const ROUTE_MODULES: Record<string, RouteModule> = {
   "agent/[id]": agentId,
   "agent/new": agentNew,
   agents: agents,
+  hierarchy,
   "app-update/notes": appUpdateNotes,
   "app-update": appUpdate,
   "auth/accounts/[provider]": authAccountsProvider,

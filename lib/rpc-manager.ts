@@ -1,6 +1,6 @@
 // The "rpc" in this file's name (and in RpcProcess/RpcTransport, lib/omp/rpc-*.ts) is a leftover: sessions no
 // longer use omp's RPC mode. They run on ompweb's own omp runner channel (docs/specs/2026-11-12-omp-runner-design.md).
-import { createHash, randomUUID } from "crypto";
+import { randomUUID } from "crypto";
 import { validateAgentImages } from "./image-attachments";
 import { hasVisibleAssistantContent } from "./assistant-response";
 import {
@@ -89,8 +89,6 @@ import {
   listSessionsAllHosts,
   sessionSpawnTarget,
 } from "./hosts/session-index";
-import { loadPools, poolProjectBindings } from "./hosts/pools";
-import { PoolStartError, startPooledSession } from "./hosts/pool-starts";
 import { comparableProjectPath } from "./comparable-path";
 import type {
   SessionLiveSnapshot,
@@ -2605,13 +2603,7 @@ export class AgentSessionWrapper {
         guard: getAgentToolGuard(),
         confirm: (title) => this.confirmFromServer(title),
       };
-      if (
-        this.replaying &&
-        toolName === "new_session" &&
-        (args.shareWorkspace === true ||
-          args.host != null ||
-          !poolProjectBindings(loadPools()).get(this.host.id)?.size)
-      )
+      if (this.replaying && toolName === "new_session")
         throw new Error(AGENT_TOOL_UNKNOWN_OUTCOME);
       const result = await executeAgentTool(
         toolName,
@@ -2621,24 +2613,7 @@ export class AgentSessionWrapper {
       );
       sendResult(typeof result === "string" ? result : JSON.stringify(result));
     } catch (error) {
-      if (error instanceof PoolStartError) {
-        sendResult(
-          JSON.stringify({
-            error: error.message.slice(0, 1024),
-            code: error.code.slice(0, 128),
-            sessionId: error.sessionId,
-            hostId: error.hostId,
-            cwd: error.cwd,
-            delivery: error.delivery,
-          }),
-          true,
-        );
-      } else {
-        sendResult(
-          error instanceof Error ? error.message : String(error),
-          true,
-        );
-      }
+      sendResult(error instanceof Error ? error.message : String(error), true);
     }
   }
 
@@ -4675,69 +4650,6 @@ function createAgentToolOps(
             { preserveUnknownDelivery },
           );
       };
-      if (
-        !input.shareWorkspace &&
-        !input.explicitHost &&
-        input.hostId === source.sourceHostId
-      ) {
-        const sessions = await listSessionsAllHosts();
-        const origin = sessions.find(
-          (session) =>
-            session.id === source.sourceSessionId &&
-            (session.hostId ?? LOCAL_HOST_ID) === source.sourceHostId,
-        );
-        const bindings = poolProjectBindings(loadPools()).get(
-          source.sourceHostId,
-        );
-        const binding = bindings?.get(
-          comparableProjectPath(
-            input.cwd === source.sourceCwd
-              ? (origin?.projectRoot ?? origin?.cwd ?? source.sourceCwd)
-              : input.cwd,
-          ),
-        );
-        if (binding) {
-          const creationId = createHash("sha256")
-            .update("ompweb:agent-creation:v1:")
-            .update(
-              JSON.stringify([source.sourceSessionId, source.sourceRequestId]),
-            )
-            .digest("hex");
-          const result = await startPooledSession(
-            {
-              creationId,
-              poolId: binding.pool.id,
-              projectId: binding.project.id,
-              intent: { ...input },
-            },
-            async (host, prepared, id, onStarted) => {
-              const started = await startNewRpcSession(
-                host,
-                prepared.cwd,
-                undefined,
-                false,
-                true,
-                id,
-              );
-              if (!started.ok)
-                throw new HostOpError(
-                  started.status,
-                  started.code,
-                  started.error,
-                );
-              const { session, realSessionId } = started.value;
-              await onStarted(realSessionId);
-              await session.withPendingCommand(
-                () => initialize(session, true),
-                true,
-              );
-              return { sessionId: realSessionId };
-            },
-            authorizeHost,
-          );
-          return { sessionId: result.sessionId };
-        }
-      }
       // Standalone/shared creations have no durable admission identity and cannot safely be replayed.
       if (replaying) throw new Error(AGENT_TOOL_UNKNOWN_OUTCOME);
       const host = getHost(input.hostId);

@@ -12,6 +12,8 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Breaking changes
 
+- Projects, workspaces and sessions now use explicit host-owned registrations shared across linked servers. The hierarchy starts empty; add projects and selectively import existing worktrees and sessions. Cluster membership still shares credentials and configuration but no longer merges projects or places sessions on pooled hosts.
+- Git workspace creation uses daemon-owned pre/create/post jobs with configurable commands, status and logs. Deletion stops managed processes before a separate dirty-file confirmation; declining discard leaves those processes stopped. Branches and session history are preserved.
 - Bun is the sole runtime and package manager. Node/npm launchers are retired; install Bun and use `bun install`, `bun run` and `bunx --bun`. Native compiled distributions remain supported.
 - Runtime management uses mise with a pinned Bun version. Nix packaging and installation support are removed.
 - Windows support is removed, including services, installers, binaries and Windows-specific path handling. This hard fork supports macOS and Linux only; no compatibility or migration is provided.

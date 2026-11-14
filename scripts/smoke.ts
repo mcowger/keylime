@@ -275,6 +275,64 @@ try {
       }
     });
 
+    await step(
+      "existing sessions stay hidden until explicit project registration and selective import",
+      async () => {
+        const initial = (await (
+          await fetch(`${base}/api/sessions`)
+        ).json()) as { sessions: { id: string }[] };
+        assert(initial.sessions.length === 0, "unregistered session appeared");
+        const hierarchy = async (input: object) => {
+          const response = await fetch(`${base}/api/hierarchy`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ host: "local", input }),
+          });
+          const result = (await response.json()) as {
+            projects: {
+              id: string;
+              workspaces: { id: string; sessionIds: string[] }[];
+            }[];
+            sessionCandidates?: { id: string }[];
+            error?: string;
+          };
+          assert(
+            response.ok,
+            result.error ?? `hierarchy status ${response.status}`,
+          );
+          return result;
+        };
+        const registered = await hierarchy({
+          action: "registerProject",
+          path: projectDir,
+        });
+        const workspace = registered.projects[0]?.workspaces[0];
+        assert(
+          workspace && workspace.sessionIds.length === 0,
+          "project registration imported a session",
+        );
+        const discovered = await hierarchy({
+          action: "discoverSessions",
+          workspaceId: workspace.id,
+        });
+        assert(
+          discovered.sessionCandidates?.some(
+            (session) => session.id === SESSION_ID,
+          ),
+          "manual discovery missed fixture",
+        );
+        assert(
+          discovered.projects[0].workspaces[0].sessionIds.length === 0,
+          "discovery mutated registration",
+        );
+        await hierarchy({
+          action: "importSessions",
+          workspaceId: workspace.id,
+          sessionIds: [SESSION_ID],
+        });
+      },
+    );
+
     // Sessions list only through the daemon, so this also proves the server ran as production: it wrote the link.
     await step(
       "GET /api/sessions lists the session through the daemon",

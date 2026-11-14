@@ -1,7 +1,6 @@
 "use client";
 
 import { browserUUID } from "@/lib/browser-uuid";
-
 import {
   useState,
   useCallback,
@@ -46,7 +45,6 @@ import {
   Command,
   Ellipsis,
   Folder,
-  GitBranch,
   History,
   Menu,
   PanelLeft,
@@ -79,12 +77,9 @@ import {
 import { getInitialNavigation } from "@/lib/initial-navigation";
 import { comparableProjectPath } from "@/lib/comparable-path";
 import {
-  foldedHostProjectKey,
   hostProjectKey,
   LOCAL_HOST_ID,
   remoteHostId,
-  projectIdentity,
-  projectTargetId,
 } from "@/lib/project-ordering";
 import { isClusterTarget } from "@/lib/hosts/cluster";
 import { useHostRows } from "@/hooks/useHostRows";
@@ -128,6 +123,7 @@ import type {
   SessionInfo,
   SessionTreeNode,
 } from "@/lib/types";
+import type { HierarchySnapshot } from "@/lib/project-hierarchy-types";
 import { runHostTool } from "@/hooks/useAgentSession-stream";
 import { sendAgentCommand } from "@/lib/agent-client";
 import { openEventStream } from "@/lib/event-stream";
@@ -209,8 +205,6 @@ export function AppShell({ appName }: { appName: string }) {
     },
     [newSessionCreationId],
   );
-  const [newSessionPoolProject, setNewSessionPoolProject] =
-    useState<ManagedProject | null>(null);
   const [workspaceOptions, setWorkspaceOptions] = useState<{
     projects: ManagedProject[];
     selectedProject: string | null;
@@ -227,7 +221,7 @@ export function AppShell({ appName }: { appName: string }) {
     },
     [],
   );
-  const { hosts, pools, poolsLoaded } = useHostRows();
+  const { hosts, pools } = useHostRows();
   const handleWorkspaceOptionsChange = useCallback(
     (
       projects: ManagedProject[],
@@ -1506,8 +1500,6 @@ export function AppShell({ appName }: { appName: string }) {
   const [activeHostId, setActiveHostId] = useState<string | undefined>(
     undefined,
   );
-  const [activePoolProject, setActivePoolProject] =
-    useState<ManagedProject | null>(null);
   // Owned by the sidebar; rendered by the file panel's Worktrees tab.
   const [worktreeCtx, setWorktreeCtx] = useState<WorktreeContext | null>(null);
   // True once the initial ?session= URL param has been resolved (or confirmed absent)
@@ -1575,68 +1567,34 @@ export function AppShell({ appName }: { appName: string }) {
   const handleCwdChange = useCallback(
     (
       cwd: string | null,
-      projectRoot: string | null,
+      _projectRoot: string | null,
       hostId: string,
-      project?: ManagedProject,
+      _project?: ManagedProject,
     ) => {
-      setActivePoolProject(project?.poolId ? project : null);
-      setActiveCwd(project?.poolId ? null : cwd);
-      setActiveHostId(project?.poolId ? undefined : remoteHostId(hostId));
-      if (project?.poolId) {
-        if (
-          selectedSession?.poolId === project.poolId &&
-          selectedSession.projectId === project.projectId
-        )
-          return;
-        if (
-          newSessionPoolProject?.poolId === project.poolId &&
-          newSessionPoolProject.projectId === project.projectId
-        )
-          return;
-        setNewSessionPoolProject(project);
-        setNewSessionCreation({ id: browserUUID() });
-        setNewSessionCwd(null);
-        setNewSessionHostId(undefined);
-        setSelectedSession(null);
-        setSessionKey((key) => key + 1);
-        setBranchTree([]);
-        setBranchActiveLeafId(null);
-        setSystemPrompt(null);
-        setSystemPromptLoading(false);
-        setActiveTopPanel(null);
-        router.replace("/");
-        return;
-      }
-      // A standalone path is never a fallback for a pending pool placement.
+      setActiveCwd(cwd);
+      setActiveHostId(remoteHostId(hostId));
       if (!cwd) return;
-      setNewSessionPoolProject(null);
       // Skip only when the notification matches the cwd we're suppressing for.
       if (suppressCwdRef.current !== null && suppressCwdRef.current === cwd) {
         suppressCwdRef.current = null;
         return;
       }
-      // Worktrees of one repo share a project root. Moving the effective cwd
-      // within the same project (e.g. switching worktree, or clicking a session
-      // that lives in another worktree) must not close the open session.
-      const newProject = projectRoot ?? cwd;
-      const sessionProject = selectedSession
-        ? (selectedSession.projectRoot ?? selectedSession.cwd)
-        : null;
       if (
-        sessionProject &&
-        remoteHostId(selectedSession?.hostId) === remoteHostId(hostId) &&
-        comparableProjectPath(sessionProject) ===
-          comparableProjectPath(newProject)
+        selectedSession &&
+        remoteHostId(selectedSession.hostId) === remoteHostId(hostId)
       ) {
-        return;
+        const sessionPath = comparableProjectPath(selectedSession.cwd);
+        const workspacePath = comparableProjectPath(cwd);
+        if (
+          sessionPath === workspacePath ||
+          sessionPath.startsWith(
+            workspacePath === "/" ? "/" : `${workspacePath}/`,
+          )
+        )
+          return;
       }
-      // Close any session that belongs to a different project — it no longer
-      // matches the selected project directory.
       setSelectedSession(null);
-      setNewSessionCwd((prev) => {
-        if (prev && prev !== cwd) return null;
-        return prev;
-      });
+      setNewSessionCwd(cwd);
       setNewSessionHostId(remoteHostId(hostId));
       setNewSessionCreation({ id: browserUUID() });
       setSessionKey((k) => k + 1);
@@ -1647,11 +1605,13 @@ export function AppShell({ appName }: { appName: string }) {
       setActiveTopPanel(null);
       router.replace("/");
     },
-    [router, selectedSession, newSessionPoolProject],
+    [router, selectedSession],
   );
 
+  const sessionLookupVersion = useRef(0);
   const handleSelectSession = useCallback(
     (session: SessionInfo, isRestore = false) => {
+      sessionLookupVersion.current += 1;
       // Re-picking the already-open session (sidebar double-click, palette
       // re-select, notification click) must not bump sessionKey: that remounts
       // ChatWindow, reconnects SSE, and drops the mid-run streaming view.
@@ -1664,7 +1624,6 @@ export function AppShell({ appName }: { appName: string }) {
       }
       if (!isRestore && session.id === selectedSession?.id) return;
       setNewSessionCwd(null);
-      setNewSessionPoolProject(null);
       setSelectedSession(session);
       setSessionKey((k) => k + 1);
       setSystemPrompt(null);
@@ -1691,19 +1650,18 @@ export function AppShell({ appName }: { appName: string }) {
       creationId: string,
       cwd: string | null,
       hostId?: string,
-      project?: ManagedProject,
+      _project?: ManagedProject,
       initialization?: string,
     ) => {
+      sessionLookupVersion.current += 1;
       setSettingsTab(null);
       setSelectedSession(null);
-      const target = project ?? (cwd === activeCwd ? activePoolProject : null);
       setNewSessionCreation({
         id: creationId || browserUUID(),
         initialization,
       });
-      setNewSessionPoolProject(target?.poolId ? target : null);
-      setNewSessionCwd(target?.poolId ? null : cwd);
-      setNewSessionHostId(target?.poolId ? undefined : remoteHostId(hostId));
+      setNewSessionCwd(cwd);
+      setNewSessionHostId(remoteHostId(hostId));
       setSessionKey((k) => k + 1);
       setBranchTree([]);
       setBranchActiveLeafId(null);
@@ -1716,10 +1674,119 @@ export function AppShell({ appName }: { appName: string }) {
       }
       router.replace("/");
     },
-    [router, isMobile, activeCwd, activePoolProject],
+    [router, isMobile],
   );
 
   // ---- In-app Navigate back / forward over visited chat views ----
+
+  const [pendingSessionImport, setPendingSessionImport] = useState<{
+    session: SessionInfo;
+    hostId: string;
+    workspaceId: string;
+    workspacePath: string;
+  } | null>(null);
+  const [importingSession, setImportingSession] = useState(false);
+  const openLinkedSession = useCallback(
+    async (id: string, restore = false) => {
+      setSelectedSession(null);
+      const version = ++sessionLookupVersion.current;
+      setPendingSessionImport(null);
+      try {
+        const response = await fetch(
+          `/api/sessions/${encodeURIComponent(id)}?deferThinking&deferMedia`,
+        );
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const detail = (await response.json()) as {
+          info: SessionInfo;
+          hostId: string;
+        };
+        if (!detail.info?.cwd || !detail.hostId)
+          throw new Error("Session location is unavailable");
+        const hierarchyResponse = await fetch(
+          `/api/hierarchy?host=${encodeURIComponent(detail.hostId)}`,
+        );
+        if (!hierarchyResponse.ok)
+          throw new Error(`HTTP ${hierarchyResponse.status}`);
+        const hierarchy = (await hierarchyResponse.json()) as HierarchySnapshot;
+        if (version !== sessionLookupVersion.current) return;
+        const cwd = comparableProjectPath(detail.info.cwd);
+        const workspaces = hierarchy.projects.flatMap(
+          (project) => project.workspaces,
+        );
+        const workspace = workspaces
+          .filter((item) => {
+            const path = comparableProjectPath(item.path);
+            return (
+              cwd === path || cwd.startsWith(path === "/" ? "/" : `${path}/`)
+            );
+          })
+          .sort((a, b) => b.path.length - a.path.length)[0];
+        if (!workspace)
+          throw new Error("No registered workspace contains this session");
+        const session = { ...detail.info, hostId: detail.hostId };
+        if (workspace.sessionIds.includes(id))
+          handleSelectSession(session, restore);
+        else
+          setPendingSessionImport({
+            session,
+            hostId: detail.hostId,
+            workspaceId: workspace.id,
+            workspacePath: workspace.path,
+          });
+      } catch (error) {
+        if (version === sessionLookupVersion.current)
+          toast.error(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (version === sessionLookupVersion.current && restore)
+          setInitialSessionRestored(true);
+      }
+    },
+    [handleSelectSession],
+  );
+  const restoredLinkedSession = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      initialSessionId &&
+      restoredLinkedSession.current !== initialSessionId
+    ) {
+      restoredLinkedSession.current = initialSessionId;
+      void openLinkedSession(initialSessionId, true);
+    }
+  }, [initialSessionId, openLinkedSession]);
+
+  const importLinkedSession = useCallback(async () => {
+    if (!pendingSessionImport || importingSession) return;
+    setImportingSession(true);
+    try {
+      const response = await fetch("/api/hierarchy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          host: pendingSessionImport.hostId,
+          input: {
+            action: "importSessions",
+            workspaceId: pendingSessionImport.workspaceId,
+            sessionIds: [pendingSessionImport.session.id],
+          },
+        }),
+      });
+      if (!response.ok) {
+        const error = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(error.error ?? `HTTP ${response.status}`);
+      }
+      const session = pendingSessionImport.session;
+      setPendingSessionImport(null);
+      setRefreshKey((key) => key + 1);
+      publishSessionsChanged([session.id]);
+      handleSelectSession(session);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setImportingSession(false);
+    }
+  }, [pendingSessionImport, importingSession, handleSelectSession]);
   // Own stack, not the browser History API (that one belongs to the mobile
   // back-gesture/exit-guard machinery — see lib/navigation-history.ts).
   const navigationHistory = useNavigationHistory();
@@ -1743,16 +1810,8 @@ export function AppShell({ appName }: { appName: string }) {
       ...(!navSessionId && newSessionHostId
         ? { hostId: newSessionHostId }
         : {}),
-      ...(!navSessionId && newSessionPoolProject
-        ? {
-            poolId: newSessionPoolProject.poolId,
-            projectId: newSessionPoolProject.projectId,
-          }
-        : {}),
       ...(!navSessionId ? { creationId: newSessionCreationId } : {}),
-      ...(!navSessionId &&
-      newSessionPoolProject &&
-      newSessionCreation.initialization
+      ...(!navSessionId && newSessionCreation.initialization
         ? { initialization: newSessionCreation.initialization }
         : {}),
     });
@@ -1761,7 +1820,6 @@ export function AppShell({ appName }: { appName: string }) {
     navSessionCwd,
     newSessionCwd,
     newSessionHostId,
-    newSessionPoolProject,
     newSessionCreation,
     newSessionCreationId,
     recordNavigationView,
@@ -1804,22 +1862,11 @@ export function AppShell({ appName }: { appName: string }) {
         if (entry.sessionId === null) {
           if (direction === -1) navigationHistory.commitBack();
           else navigationHistory.commitForward();
-          const project = entry.poolId
-            ? workspaceOptions.projects.find(
-                (candidate) =>
-                  candidate.poolId === entry.poolId &&
-                  candidate.projectId === entry.projectId,
-              )
-            : undefined;
-          if (entry.poolId && !project) {
-            toast.error(translate("errors.generic"));
-            return;
-          }
           handleNewSession(
             entry.creationId ?? browserUUID(),
             entry.cwd,
             entry.hostId,
-            project,
+            undefined,
             entry.initialization,
           );
           return;
@@ -1883,17 +1930,10 @@ export function AppShell({ appName }: { appName: string }) {
   // Global keyboard shortcuts (handles Esc, Ctrl+Alt+N etc.)
   useGlobalKeyboardShortcuts({
     onNewSession: (cwd: string) =>
-      handleNewSession(
-        browserUUID(),
-        activePoolProject ? null : cwd,
-        activeHostId,
-        activePoolProject ?? undefined,
-      ),
+      handleNewSession(browserUUID(), cwd, activeHostId),
     onNavigateBack: handleNavigateBack,
     onNavigateForward: handleNavigateForward,
-    activeCwd: activePoolProject
-      ? projectIdentity(activePoolProject)
-      : activeCwd,
+    activeCwd,
     scopeNativeSelectAll,
   });
 
@@ -1924,7 +1964,6 @@ export function AppShell({ appName }: { appName: string }) {
   const handleSessionCreated = useCallback(
     (session: SessionInfo) => {
       setNewSessionCwd(null);
-      setNewSessionPoolProject(null);
       setSelectedSession(session);
       setRefreshKey((k) => k + 1);
       hydrateSelectedSession(session.id);
@@ -1954,36 +1993,14 @@ export function AppShell({ appName }: { appName: string }) {
     setExplorerRefreshKey((k) => k + 1);
   }, []);
 
-  // Notification clicks name a session id; the session list carries its cwd
-  // and project, which selecting needs. When the list cannot be read (the
-  // sign-in expired), load the session URL: sign-in carries it through.
   const openSessionById = useCallback(
     (sessionId: string) => {
       window.focus();
       // On narrow screens the file panel covers the chat it is about to show.
       if (isCompactOverlay) setRightPanelOpen(false);
-      // A full load (not router navigation) so an expired sign-in reaches proxy.ts and the login page.
-      const sessionUrl = new URL(
-        `/?session=${encodeURIComponent(sessionId)}`,
-        window.location.origin,
-      ).href;
-      void fetch("/api/sessions")
-        .then((r) => {
-          if (!r.ok) {
-            window.location.assign(sessionUrl);
-            return;
-          }
-          return (r.json() as Promise<{ sessions: SessionInfo[] }>).then(
-            (d) => {
-              const session = d.sessions.find((s) => s.id === sessionId);
-              if (session) handleSelectSession(session);
-              else toast.error(translate("notifications.sessionNotFound"));
-            },
-          );
-        })
-        .catch(() => window.location.assign(sessionUrl));
+      void openLinkedSession(sessionId);
     },
-    [handleSelectSession, isCompactOverlay],
+    [openLinkedSession, isCompactOverlay],
   );
 
   // Full-page Settings hides the chat, so its session counts as not viewed.
@@ -2065,7 +2082,6 @@ export function AppShell({ appName }: { appName: string }) {
       setRefreshKey((k) => k + 1);
       setSessionKey((k) => k + 1);
       setNewSessionCwd(null);
-      setNewSessionPoolProject(null);
       setSelectedSession((prev) => ({
         ...(prev ?? {
           path: "",
@@ -2095,17 +2111,7 @@ export function AppShell({ appName }: { appName: string }) {
       if (selectedSession?.id === sessionId) {
         const cwd = selectedSession.cwd;
         setSelectedSession(null);
-        setNewSessionCwd(selectedSession.poolId ? null : (cwd ?? null));
-        setNewSessionCreation({ id: browserUUID() });
-        setNewSessionPoolProject(
-          selectedSession.poolId
-            ? (workspaceOptions.projects.find(
-                (project) =>
-                  project.poolId === selectedSession.poolId &&
-                  project.projectId === selectedSession.projectId,
-              ) ?? null)
-            : null,
-        );
+        setNewSessionCwd(activeCwd ?? cwd ?? null);
         setNewSessionHostId(remoteHostId(selectedSession.hostId));
         setSessionKey((k) => k + 1);
         setBranchTree([]);
@@ -2115,7 +2121,7 @@ export function AppShell({ appName }: { appName: string }) {
         router.replace("/");
       }
     },
-    [selectedSession, router, workspaceOptions.projects],
+    [selectedSession, router, activeCwd],
   );
   const handleInitialRestoreDone = useCallback(() => {
     setInitialSessionRestored(true);
@@ -2389,9 +2395,7 @@ export function AppShell({ appName }: { appName: string }) {
     ? sessionWorktreeRemoved
       ? sidebarCwd
       : sessionCwd
-    : newSessionPoolProject || activePoolProject
-      ? null
-      : (newSessionCwd ?? sidebarCwd);
+    : (newSessionCwd ?? sidebarCwd);
 
   // File-panel integrations: every action works on the active tab so the right
   // panel behaves like an editor toolbar, not just a tab strip.
@@ -2497,76 +2501,44 @@ export function AppShell({ appName }: { appName: string }) {
   }, [selectedSession]);
 
   // Show chat area if a session is selected, or if we have a cwd to start a new session in
-  const effectivePoolProject = selectedSession
-    ? null
-    : (newSessionPoolProject ?? activePoolProject);
-  const effectiveNewSessionCwd = effectivePoolProject
-    ? null
-    : (newSessionCwd ??
-      (selectedSession === null && activeCwd ? activeCwd : null));
-  const newSessionHost = effectivePoolProject
-    ? undefined
-    : newSessionCwd !== null
-      ? newSessionHostId
-      : activeHostId;
-  const newSessionHostKey = effectivePoolProject
-    ? projectTargetId(effectivePoolProject)
-    : (newSessionHost ?? LOCAL_HOST_ID);
-  const newSessionProject = effectivePoolProject
-    ? projectIdentity(effectivePoolProject)
-    : ((workspaceOptions.cwd === effectiveNewSessionCwd &&
-      workspaceOptions.hostId === newSessionHostKey
-        ? workspaceOptions.selectedProject
-        : null) ??
-      effectiveNewSessionCwd ??
-      "");
-  // The panel's target is the group the sidebar lists the project under: the cluster for a member's pinned project. The real host (above) is where the session runs.
-  const newSessionGroupKey = projectTargetId(
-    effectivePoolProject ?? { hostId: newSessionHostKey },
-    pools,
+  const candidateCwd =
+    newSessionCwd ?? (selectedSession === null ? activeCwd : null);
+  const newSessionHost =
+    newSessionCwd !== null ? newSessionHostId : activeHostId;
+  const newSessionHostKey = newSessionHost ?? LOCAL_HOST_ID;
+  const effectiveNewSessionCwd = workspaceOptions.projects.some(
+    (workspace) =>
+      (workspace.hostId ?? LOCAL_HOST_ID) === newSessionHostKey &&
+      comparableProjectPath(workspace.path) ===
+        comparableProjectPath(candidateCwd ?? ""),
+  )
+    ? candidateCwd
+    : null;
+  const newSessionGroupKey = newSessionHostKey;
+  const hostProjects = workspaceOptions.projects.filter(
+    (project) => (project.hostId ?? LOCAL_HOST_ID) === newSessionGroupKey,
   );
-  // Pool projects first (stable), as in the sidebar's cluster group.
-  const hostProjects = workspaceOptions.projects
-    .filter((project) => projectTargetId(project, pools) === newSessionGroupKey)
-    .sort((a, b) => Number(Boolean(b.poolId)) - Number(Boolean(a.poolId)));
-  // Two members' projects can share a path, so a non-pool option's value carries its host.
-  const newSessionWorkspaceValue = effectivePoolProject
-    ? projectIdentity(effectivePoolProject)
-    : effectiveNewSessionCwd
-      ? hostProjectKey(newSessionHost, effectiveNewSessionCwd)
-      : "";
-  const memberIds = new Set(
-    pools.flatMap((pool) => pool.members.map((member) => member.hostId)),
-  );
-  const creationTargets = [
-    ...(hosts ?? [])
-      .filter(
-        (host) =>
-          !memberIds.has(host.id) && (poolsLoaded || host.id === LOCAL_HOST_ID),
-      )
-      .map((host) => ({ id: host.id, label: hostName(t, host) })),
-    ...pools.map((pool) => ({ id: `pool:${pool.id}`, label: pool.label })),
-  ];
+  const newSessionWorkspaceValue = effectiveNewSessionCwd
+    ? hostProjectKey(newSessionHost, effectiveNewSessionCwd)
+    : "";
+  const creationTargets = (hosts ?? []).map((host) => ({
+    id: host.id,
+    label: hostName(t, host),
+  }));
   const chatHost = remoteHost
     ? hosts?.find((host) => host.id === currentHostId)
     : undefined;
   const settingsHostId = activeCwd ? activeHostId : currentHostId;
-  // What Settings act for, as settingsHostId picks it: the sidebar's project, else the open session, the new chat, the pool project.
   const settingsTarget = activeCwd
     ? { hostId: activeHostId }
     : (selectedSession ??
-      (newSessionCwd !== null
-        ? { hostId: newSessionHostId }
-        : effectivePoolProject));
+      (newSessionCwd !== null ? { hostId: newSessionHostId } : null));
   const clusterSettings = isClusterTarget(
     settingsTarget,
     settingsHostId,
     pools,
   );
-  const showChat =
-    selectedSession !== null ||
-    effectiveNewSessionCwd !== null ||
-    effectivePoolProject !== null;
+  const showChat = selectedSession !== null || effectiveNewSessionCwd !== null;
   const currentRate = generationSpeed?.current;
   const rate = currentRate ?? generationSpeed?.average;
   const speed = showChat ? formatGenerationSpeed(rate) : null;
@@ -2712,7 +2684,7 @@ export function AppShell({ appName }: { appName: string }) {
       optimisticSession={selectedSession?.path === "" ? selectedSession : null}
       onSelectSession={handleSelectSession}
       onNewSession={handleNewSession}
-      initialSessionId={initialSessionId}
+      initialSessionId={null}
       skipInitialProjectSelection={initialNavigation.requestedCwd !== null}
       onInitialRestoreDone={handleInitialRestoreDone}
       refreshKey={refreshKey}
@@ -2723,13 +2695,7 @@ export function AppShell({ appName }: { appName: string }) {
           ? (selectedSession.hostId ?? LOCAL_HOST_ID)
           : (newSessionHostId ?? LOCAL_HOST_ID)
       }
-      selectedLogicalProjectKey={
-        selectedSession?.poolId
-          ? selectedSession.projectKey
-          : effectivePoolProject
-            ? projectIdentity(effectivePoolProject)
-            : null
-      }
+      selectedLogicalProjectKey={null}
       onCwdChange={handleCwdChange}
       onWorkspaceOptionsChange={handleWorkspaceOptionsChange}
       onWorktreeContextChange={setWorktreeCtx}
@@ -2798,39 +2764,24 @@ export function AppShell({ appName }: { appName: string }) {
             dismissPendingOpen();
           }}
         />
+        <ConfirmDialog
+          open={pendingSessionImport !== null}
+          onOpenChange={(open) => {
+            if (!open && !importingSession) setPendingSessionImport(null);
+          }}
+          title="Import session?"
+          description={`This session is not registered. Import it into ${pendingSessionImport?.workspacePath ?? ""} to open it.`}
+          confirmLabel="Import session"
+          cancelLabel="Cancel"
+          busy={importingSession}
+          onConfirm={() => void importLinkedSession()}
+        />
         <CommandPaletteMount
           onSelectSession={handleSelectSession}
           onNewSession={() => {
-            // An empty cwd is truthy, so showChat would render the shell while
-            // useAgentSession refuses to start — every send a silent no-op.
-            // Fall back to the server's default cwd (~/omp-cwd-<date>) instead.
-            if (activeCwd || activePoolProject) {
-              handleNewSession(
-                browserUUID(),
-                activeCwd,
-                activeHostId,
-                activePoolProject ?? undefined,
-              );
-              return;
-            }
-            const targetHost = currentHostId ?? LOCAL_HOST_ID;
-            const sourceVersion = navViewVersionRef.current;
-            void fetch(
-              `/api/default-cwd?${new URLSearchParams({ hostId: targetHost })}`,
-              { method: "POST" },
-            )
-              .then(async (response) => {
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const data = (await response.json()) as { cwd?: string };
-                if (!data.cwd) throw new Error("Empty cwd returned");
-                return data;
-              })
-              .then((data) => {
-                if (!data.cwd) throw new Error("Empty cwd returned");
-                if (navViewVersionRef.current === sourceVersion)
-                  handleNewSession(browserUUID(), data.cwd, targetHost);
-              })
-              .catch(() => toast.error(translate("errors.generic")));
+            if (activeCwd)
+              handleNewSession(browserUUID(), activeCwd, activeHostId);
+            else openAddProject(true, currentHostId ?? LOCAL_HOST_ID);
           }}
           currentModel={null}
         />
@@ -3664,15 +3615,9 @@ export function AppShell({ appName }: { appName: string }) {
                       session={selectedSession}
                       newSessionCwd={effectiveNewSessionCwd}
                       newSessionHostId={newSessionHost}
-                      newSessionCreationId={
-                        effectivePoolProject ? newSessionCreationId : undefined
-                      }
-                      newSessionPoolId={effectivePoolProject?.poolId}
-                      newSessionProjectId={effectivePoolProject?.projectId}
+                      newSessionCreationId={newSessionCreationId}
                       newSessionInitialization={
-                        effectivePoolProject
-                          ? newSessionCreation.initialization
-                          : undefined
+                        newSessionCreation.initialization
                       }
                       onNewSessionInitialization={
                         handleNewSessionInitialization
@@ -3680,7 +3625,7 @@ export function AppShell({ appName }: { appName: string }) {
                       hostStatus={chatHost?.status}
                       hostLabel={chatHost ? hostName(t, chatHost) : undefined}
                       newSessionWorkspace={
-                        (effectiveNewSessionCwd || effectivePoolProject) && (
+                        effectiveNewSessionCwd && (
                           <div className="new-session-workspace">
                             {creationTargets.length > 1 && (
                               <>
@@ -3701,16 +3646,13 @@ export function AppShell({ appName }: { appName: string }) {
                                     id="new-session-host"
                                     value={newSessionGroupKey}
                                     onChange={(event) => {
-                                      const matches =
-                                        workspaceOptions.projects.filter(
+                                      const first =
+                                        workspaceOptions.projects.find(
                                           (project) =>
-                                            projectTargetId(project, pools) ===
+                                            (project.hostId ??
+                                              LOCAL_HOST_ID) ===
                                             event.target.value,
                                         );
-                                      const first =
-                                        matches.find(
-                                          (project) => project.poolId,
-                                        ) ?? matches[0];
                                       if (
                                         !first ||
                                         event.target.value ===
@@ -3718,20 +3660,13 @@ export function AppShell({ appName }: { appName: string }) {
                                       )
                                         return;
                                       suppressCwdRef.current = first.path;
-                                      setActivePoolProject(
-                                        first.poolId ? first : null,
-                                      );
-                                      setActiveCwd(
-                                        first.poolId ? null : first.path,
-                                      );
+                                      setActiveCwd(first.path);
                                       setActiveHostId(
-                                        first.poolId
-                                          ? undefined
-                                          : remoteHostId(first.hostId),
+                                        remoteHostId(first.hostId),
                                       );
                                       handleNewSession(
                                         browserUUID(),
-                                        first.poolId ? null : first.path,
+                                        first.path,
                                         first.hostId,
                                         first,
                                       );
@@ -3744,10 +3679,8 @@ export function AppShell({ appName }: { appName: string }) {
                                         disabled={
                                           !workspaceOptions.projects.some(
                                             (project) =>
-                                              projectTargetId(
-                                                project,
-                                                pools,
-                                              ) === target.id,
+                                              (project.hostId ??
+                                                LOCAL_HOST_ID) === target.id,
                                           )
                                         }
                                       >
@@ -3790,98 +3723,39 @@ export function AppShell({ appName }: { appName: string }) {
                                   }
                                   const project = hostProjects.find(
                                     (candidate) =>
-                                      projectIdentity(candidate) === key ||
-                                      (!candidate.poolId &&
-                                        hostProjectKey(
-                                          candidate.hostId,
-                                          candidate.path,
-                                        ) === key),
+                                      hostProjectKey(
+                                        candidate.hostId,
+                                        candidate.path,
+                                      ) === key,
                                   );
                                   if (!project) return;
                                   suppressCwdRef.current = project.path;
-                                  setActivePoolProject(
-                                    project.poolId ? project : null,
-                                  );
-                                  setActiveCwd(
-                                    project.poolId ? null : project.path,
-                                  );
-                                  setActiveHostId(
-                                    project.poolId
-                                      ? undefined
-                                      : remoteHostId(project.hostId),
-                                  );
+                                  setActiveCwd(project.path);
+                                  setActiveHostId(remoteHostId(project.hostId));
                                   handleNewSession(
                                     browserUUID(),
-                                    project.poolId ? null : project.path,
+                                    project.path,
                                     project.hostId,
                                     project,
                                   );
                                 }}
                               >
-                                {!effectivePoolProject &&
-                                  effectiveNewSessionCwd &&
-                                  !hostProjects.some(
-                                    (project) =>
-                                      foldedHostProjectKey(
-                                        project.hostId,
-                                        project.path,
-                                      ) ===
-                                      foldedHostProjectKey(
-                                        newSessionHost,
-                                        newSessionProject,
-                                      ),
-                                  ) && (
-                                    <option value={newSessionWorkspaceValue}>
-                                      {projectLabel(effectiveNewSessionCwd)}
-                                    </option>
-                                  )}
-                                {hostProjects.map((project) => {
-                                  const name =
-                                    project.alias ??
-                                    project.name ??
-                                    projectLabel(project.path);
-                                  // A member's pinned project: its option names the node.
-                                  const node =
-                                    !project.poolId &&
-                                    projectTargetId(project, pools) !==
-                                      (project.hostId ?? LOCAL_HOST_ID)
-                                      ? hosts?.find(
-                                          (host) =>
-                                            host.id ===
-                                            (project.hostId ?? LOCAL_HOST_ID),
-                                        )
-                                      : undefined;
-                                  return (
-                                    <option
-                                      key={projectIdentity(project)}
-                                      value={
-                                        project.poolId
-                                          ? projectIdentity(project)
-                                          : hostProjectKey(
-                                              project.hostId,
-                                              foldedHostProjectKey(
-                                                project.hostId,
-                                                project.path,
-                                              ) ===
-                                                foldedHostProjectKey(
-                                                  newSessionHost,
-                                                  newSessionProject,
-                                                )
-                                                ? (effectiveNewSessionCwd ??
-                                                    project.path)
-                                                : project.path,
-                                            )
-                                      }
-                                    >
-                                      {node
-                                        ? t("hosts.projectOnNode", {
-                                            name,
-                                            node: hostName(t, node),
-                                          })
-                                        : name}
-                                    </option>
-                                  );
-                                })}
+                                {hostProjects.map((project) => (
+                                  <option
+                                    key={hostProjectKey(
+                                      project.hostId,
+                                      project.path,
+                                    )}
+                                    value={hostProjectKey(
+                                      project.hostId,
+                                      project.path,
+                                    )}
+                                  >
+                                    {project.alias ??
+                                      project.name ??
+                                      projectLabel(project.path)}
+                                  </option>
+                                ))}
                                 <option value="">+ {t("projects.add")}</option>
                               </select>
                               <ChevronDown
@@ -3891,56 +3765,12 @@ export function AppShell({ appName }: { appName: string }) {
                                 aria-hidden="true"
                               />
                             </div>
-                            {/* The workspace's worktrees: picking one sets where the new
-                      session starts (same switch as the file panel's Worktrees tab). */}
-                            {worktreeCtx &&
-                              !worktreeCtx.error &&
-                              worktreeCtx.hostId === newSessionHostKey &&
-                              worktreeCtx.worktrees.length > 1 &&
-                              comparableProjectPath(worktreeCtx.projectRoot) ===
-                                comparableProjectPath(newSessionProject) && (
-                                <div className="new-session-workspace-control">
-                                  <span
-                                    className="new-session-workspace-icon"
-                                    aria-hidden="true"
-                                  >
-                                    <GitBranch size={17} strokeWidth={1.8} />
-                                  </span>
-                                  <select
-                                    aria-label={t(
-                                      "sessionSidebar.switchWorktree",
-                                    )}
-                                    aria-describedby="new-session-workspace-path"
-                                    value={worktreeCtx.currentPath}
-                                    onChange={(event) =>
-                                      worktreeCtx.select(event.target.value)
-                                    }
-                                  >
-                                    {worktreeCtx.worktrees.map((wt) => (
-                                      <option key={wt.path} value={wt.path}>
-                                        {wt.branch ?? getFileName(wt.path)}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <ChevronDown
-                                    className="new-session-workspace-chevron"
-                                    size={16}
-                                    strokeWidth={1.8}
-                                    aria-hidden="true"
-                                  />
-                                </div>
-                              )}
                             <div
                               id="new-session-workspace-path"
                               className="new-session-workspace-path"
-                              title={
-                                effectivePoolProject?.origin ??
-                                effectiveNewSessionCwd ??
-                                undefined
-                              }
+                              title={effectiveNewSessionCwd ?? undefined}
                             >
-                              {effectivePoolProject?.origin ??
-                                effectiveNewSessionCwd}
+                              {effectiveNewSessionCwd}
                             </div>
                           </div>
                         )
@@ -3951,11 +3781,7 @@ export function AppShell({ appName }: { appName: string }) {
                       onSessionMoved={handleSessionMoved}
                       modelsRefreshKey={modelsRefreshKey}
                       chatInputRef={chatInputRef}
-                      onOpenFile={
-                        selectedSession || !effectivePoolProject
-                          ? handleOpenFile
-                          : undefined
-                      }
+                      onOpenFile={handleOpenFile}
                       onOpenUrl={handleSessionOpenUrl}
                       onBranchDataChange={handleBranchDataChange}
                       onSystemPromptChange={handleSystemPromptChange}

@@ -42,10 +42,6 @@ import {
   setSessionTitle,
   writeSessionFileAtomicSync,
 } from "../omp/session-files";
-import {
-  preparePoolProject,
-  type PreparedPoolProject,
-} from "../pooled-projects";
 import { projectIdentityKey, sessionPathKey } from "../paths";
 import {
   hideProject,
@@ -204,10 +200,6 @@ export interface SessionOps {
     OpResult<{ projects: ProjectRegistryEntry[]; newRoots: string[] }>
   >;
   hideProject(path: string): Promise<OpResult<null>>;
-  /** Input origin and cloneRoot must come from the server's registered pool project. */
-  preparePoolProject(
-    input: Parameters<typeof preparePoolProject>[0],
-  ): Promise<OpResult<PreparedPoolProject>>;
   validateCwd(
     path: string,
   ): Promise<
@@ -1081,23 +1073,5 @@ export const sessionOps: SessionOps = {
       projectRoot: project.projectRoot,
       projectKey: projectIdentityKey(project.projectRoot),
     });
-  },
-
-  async preparePoolProject(input) {
-    if (
-      !isRecord(input) ||
-      typeof input.projectId !== "string" ||
-      typeof input.creationId !== "string" ||
-      typeof input.origin !== "string" ||
-      typeof input.cloneRoot !== "string" ||
-      (input.ref !== undefined && typeof input.ref !== "string")
-    ) {
-      return fail(
-        400,
-        "invalid_request",
-        "Invalid pool project preparation input",
-      );
-    }
-    return preparePoolProject(input);
   },
 };

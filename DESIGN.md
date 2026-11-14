@@ -158,6 +158,14 @@ Models and allow-listed OMP settings use surgical YAML updates that preserve
 unrelated content. Plugin operations run the installed `omp plugin` CLI. MCP
 configuration is project-local, validated before writing, and saved atomically.
 
+### Host-owned hierarchy
+
+Each daemon owns the explicit project → workspace → session registrations shared by its linked web servers. The hierarchy starts empty; adding a host-bound project registers only its default workspace. Existing worktrees and sessions are selectively imported, while app-created sessions and forks register in their workspace. A non-Git project has one workspace. Multiple agents can share a workspace and its files. Unavailable resources remain visible. Unregistering a project or workspace forgets children without deleting files or stopping processes; re-registration starts fresh.
+
+Workspace creation runs as a daemon-owned pre/create/post job with host settings, captured output and status. A validated worktree registers before post setup, so agents may start while post runs. Deletion fences starts and stops managed descendant processes before the separate dirty-file confirmation; declining that confirmation leaves them stopped. Successful deletion unregisters children but preserves branches and session history. See `docs/worktrees.md` for the command contract and failure behavior.
+
+Cluster membership retains credential and configuration sharing, not project merging or automatic host placement.
+
 ### Reconnect and foreground catch-up
 
 Completed conversation history is identified by persisted session entry IDs.

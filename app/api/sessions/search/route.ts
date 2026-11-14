@@ -1,4 +1,5 @@
 import { searchSessions } from "@/lib/session-content-search";
+import { listSessionsAllHosts } from "@/lib/hosts/session-index";
 
 const MAX_QUERY_LENGTH = 500;
 
@@ -16,6 +17,9 @@ export async function GET(
       { status: 400 },
     );
   }
+  const allowed = new Set(
+    (await listSessionsAllHosts()).map((session) => session.id),
+  );
   const batches = searchSessions(q);
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -25,7 +29,9 @@ export async function GET(
       if (next.done) controller.close();
       else
         controller.enqueue(
-          encoder.encode(`${JSON.stringify({ scores: next.value })}\n`),
+          encoder.encode(
+            `${JSON.stringify({ scores: Object.fromEntries(Object.entries(next.value).filter(([id]) => allowed.has(id))) })}\n`,
+          ),
         );
     },
     async cancel() {

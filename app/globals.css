@@ -5964,3 +5964,53 @@ html[data-touch-targets="accessible"] :is(.extension-choice, .extension-field) {
 .session-search-match:hover:not(:disabled) {
   background: var(--bg-hover);
 }
+
+.workspace-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text);
+}
+.workspace-manager h3 {
+  font-weight: 600;
+  margin-top: 8px;
+}
+.workspace-manager label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.workspace-manager button,
+.workspace-manager input,
+.workspace-manager select,
+.workspace-manager textarea {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-panel);
+  color: var(--text);
+  padding: 6px 8px;
+  max-width: 100%;
+}
+.workspace-manager button {
+  cursor: pointer;
+}
+.workspace-manager button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.workspace-manager button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.workspace-manager textarea,
+.workspace-manager pre {
+  font-family: var(--font-mono);
+}
+.workspace-manager textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+.workspace-manager p {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}

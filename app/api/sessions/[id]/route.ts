@@ -89,6 +89,7 @@ export async function GET(
     return Response.json({
       sessionId: id,
       ...read.value,
+      hostId: resolved.host.id,
       ...(agent ? { agent } : {}),
     });
   } catch (error) {
