@@ -10,7 +10,7 @@ import type {
 } from "@/lib/workspace-creation-types";
 import { sanitizeWorkspaceBranch } from "@/lib/workspace-branch";
 import type { HierarchySnapshot } from "@/lib/project-hierarchy-types";
-import { ConfirmDialog } from "./ui/field";
+import { Alert, ConfirmDialog, Field, Select, TextInput } from "./ui/field";
 import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
 
 export function WorktreesPanel({
@@ -259,7 +259,7 @@ export function WorktreesPanel({
         <button onClick={() => setModalOpen(true)}>Create workspace</button>
       )}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent>
+        <DialogContent style={{ width: 520 }}>
           <DialogTitle>Create workspace</DialogTitle>
           {project?.kind === "git" && (
             <div
@@ -270,88 +270,112 @@ export function WorktreesPanel({
                 marginTop: 16,
               }}
             >
-              <label>
-                Branch source{" "}
-                <select
-                  value={mode}
-                  onChange={(e) => {
-                    setMode(e.target.value as WorkspaceBranchMode);
+              <Field label="Branch source">
+                <Select
+                  value={
+                    { new: "New branch", local: "Existing local branch", remote: "Existing remote branch" }[mode]
+                  }
+                  required
+                  options={["New branch", "Existing local branch", "Existing remote branch"]}
+                  onChange={(value) => {
+                    const nextMode: WorkspaceBranchMode =
+                      value === "Existing local branch" ? "local" :
+                      value === "Existing remote branch" ? "remote" : "new";
+                    setMode(nextMode);
                     setBranch("");
-                    setBaseRef(
-                      e.target.value === "new" ? branches.defaultRef : "",
-                    );
+                    setBaseRef(nextMode === "new" ? branches.defaultRef : "");
                   }}
-                >
-                  <option value="new">New branch</option>
-                  <option value="local">Existing local branch</option>
-                  <option value="remote">Existing remote branch</option>
-                </select>
-              </label>
+                />
+              </Field>
               {mode === "local" ? (
-                <label>
-                  Branch{" "}
-                  <select
+                <Field label="Branch">
+                  <Select
                     value={branch}
-                    onChange={(e) => {
-                      setBranch(e.target.value);
-                      setName(e.target.value.replace(/[\\/]/g, "-"));
+                    placeholder="Select branch"
+                    options={branches.local}
+                    onChange={(value) => {
+                      setBranch(value);
+                      setName(value.replace(/[\\/]/g, "-"));
                     }}
-                  >
-                    <option value="">Select branch</option>
-                    {branches.local.map((b) => (
-                      <option key={b}>{b}</option>
-                    ))}
-                  </select>
-                </label>
+                  />
+                </Field>
               ) : (
                 <>
-                  <label>
-                    Branch name{" "}
-                    <input
+                  <Field
+                    label="Branch name"
+                    hint={`Git branch: ${creationBranch || "Enter a branch name"}`}
+                  >
+                    <TextInput
                       value={branch}
-                      onChange={(e) => {
-                        setBranch(e.target.value);
-                        setName(e.target.value.replace(/[\\/]/g, "-"));
+                      onChange={(value) => {
+                        setBranch(value);
+                        setName(value.replace(/[\\/]/g, "-"));
                       }}
                     />
-                  </label>
-                  <p>Git branch: {creationBranch || "Enter a branch name"}</p>
-                  <label>
-                    {mode === "remote" ? "Remote branch" : "Base ref"}{" "}
-                    <select
+                  </Field>
+                  <Field label={mode === "remote" ? "Remote branch" : "Base ref"}>
+                    <Select
                       value={baseRef}
-                      onChange={(e) => setBaseRef(e.target.value)}
-                    >
-                      <option value="">Select ref</option>
-                      {(mode === "remote"
-                        ? branches.remote
-                        : [...branches.local, ...branches.remote]
-                      ).map((b) => (
-                        <option key={b}>{b}</option>
-                      ))}
-                    </select>
-                  </label>
+                      onChange={setBaseRef}
+                      placeholder="Select ref"
+                      options={
+                        mode === "remote" ? branches.remote : [...branches.local, ...branches.remote]
+                      }
+                    />
+                  </Field>
                 </>
               )}
-              <p>
+              <div style={{
+                fontSize: 12,
+                color: "var(--text-muted)",
+                lineHeight: 1.5,
+                overflowWrap: "anywhere",
+              }}>
                 Workspace directory: {projectPath}-worktrees/
                 {creationBranch.replace(/[^a-zA-Z0-9._-]/g, "-")}
-              </p>
-              <label>
-                Display name{" "}
-                <input value={name} onChange={(e) => setName(e.target.value)} />
-              </label>
-              <button
-                disabled={
-                  busy ||
-                  !creationBranch ||
-                  !name.trim() ||
-                  (mode !== "local" && !baseRef)
-                }
-                onClick={() => void create()}
-              >
-                Create
-              </button>
+              </div>
+              <Field label="Display name">
+                <TextInput value={name} onChange={setName} />
+              </Field>
+              <div className="dialog-actions" style={{ display: "flex", justifyContent: "flex-end", gap: 8, paddingTop: 4 }}>
+                <button
+                  type="button"
+                  className="dialog-action"
+                  onClick={() => setModalOpen(false)}
+                  style={{
+                    padding: "6px 14px",
+                    background: "none",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-control)",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    fontSize: 13,
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="dialog-action"
+                  disabled={
+                    busy || !creationBranch || !name.trim() || (mode !== "local" && !baseRef)
+                  }
+                  onClick={() => void create()}
+                  style={{
+                    padding: "6px 14px",
+                    background: "var(--accent-strong)",
+                    border: "none",
+                    borderRadius: "var(--radius-control)",
+                    color: "var(--on-accent)",
+                    cursor: "pointer",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    opacity: busy || !creationBranch || !name.trim() || (mode !== "local" && !baseRef) ? 0.6 : 1,
+                  }}
+                >
+                  Create
+                </button>
+              </div>
               {job && (
                 <div>
                   <p>
@@ -363,7 +387,9 @@ export function WorktreesPanel({
               )}
             </div>
           )}
-          {error && <p role="alert">{error}</p>}
+          {error && (
+            <Alert variant="error" description={error} style={{ marginTop: 12 }} />
+          )}
         </DialogContent>
       </Dialog>
       {!modalOpen && error && <p role="alert">{error}</p>}
