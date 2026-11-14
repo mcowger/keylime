@@ -812,7 +812,7 @@ test("wait results render restricted markdown without changing other tool output
               content: [
                 {
                   type: "text",
-                  text: "## Still Running\n\n- `Worker` **active**",
+                  text: '## Still Running\n\n- `Worker` **active**\n\n<system-notice>\nWait carefully.\n</system-notice>\n\nAfterward.\n\n<system-reminder reason="rule_violation" note="a>b &gt; c">Keep working.</system-reminder>',
                 },
               ],
             },
@@ -821,12 +821,16 @@ test("wait results render restricted markdown without changing other tool output
       }),
     );
   const wait = output("wait");
-  assert.match(wait, /## Still Running/);
+  assert.match(wait, /<div class="tool-output-heading">Still Running<\/div>/);
   assert.match(
     wait,
     /<li[^>]*><code[^>]*>Worker<\/code> <strong>active<\/strong><\/li>/,
   );
   assert.doesNotMatch(wait, /<h2/);
+  assert.match(wait, /<details class="tool-output-notice"><summary>System notice<\/summary><div>Wait carefully\.<\/div><\/details>/);
+  assert.match(wait, /<p[^>]*>Afterward\.<\/p>/);
+  assert.match(wait, /<details class="tool-output-notice"><summary>System reminder<\/summary><div>reason=&quot;rule_violation&quot; note=&quot;a&gt;b &amp;gt; c&quot;\nKeep working\.<\/div><\/details>/);
+  assert.doesNotMatch(wait, /&lt;\/?system-(?:notice|reminder)&gt;/);
   assert.doesNotMatch(output("bash"), /<strong>active<\/strong>/);
 });
 

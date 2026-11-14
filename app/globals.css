@@ -4719,6 +4719,22 @@ html[data-touch-targets="accessible"] .right-panel-toolbar {
 .tool-call-output-markdown {
   white-space: normal;
 }
+.tool-call-output-markdown .tool-output-heading {
+  margin: 0 0 0.6em;
+  color: var(--text);
+  font-weight: 650;
+}
+.tool-output-notice {
+  margin: 0 0 0.6em;
+  color: var(--text-dim);
+}
+.tool-output-notice summary {
+  cursor: pointer;
+}
+.tool-output-notice div {
+  white-space: pre-wrap;
+  padding: 0.4em 0 0 1em;
+}
 .tool-call-output-error .tool-call-output-text {
   color: var(--status-error);
 }

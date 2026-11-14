@@ -1923,6 +1923,30 @@ function readTargetWebUrl(target: string): string | null {
   }
 }
 
+function WaitResult({ text }: { text: string }) {
+  const parts: React.ReactNode[] = [];
+  const notices = /<(system-notice|system-reminder)((?:\s+[\w-]+="[^"]*")*)\s*>([\s\S]*?)<\/\1>/g;
+  let offset = 0;
+  for (const match of text.matchAll(notices)) {
+    const before = text.slice(offset, match.index);
+    if (before.trim()) {
+      parts.push(<ThinkingMarkdown headings key={offset}>{before}</ThinkingMarkdown>);
+    }
+    parts.push(
+      <details className="tool-output-notice" key={match.index}>
+        <summary>{match[1] === "system-reminder" ? "System reminder" : "System notice"}</summary>
+        <div>{match[2].trim() && `${match[2].trim()}\n`}{match[3].trim()}</div>
+      </details>,
+    );
+    offset = match.index + match[0].length;
+  }
+  const remaining = text.slice(offset);
+  if (remaining.trim()) {
+    parts.push(<ThinkingMarkdown headings key={offset}>{remaining}</ThinkingMarkdown>);
+  }
+  return <>{parts}</>;
+}
+
 const ToolCallBlock = memo(
   function ToolCallBlock({
     block,
@@ -2289,9 +2313,7 @@ const ToolCallBlock = memo(
                             className="tool-call-output-text tool-call-output-markdown"
                             data-tool-output="true"
                           >
-                            <ThinkingMarkdown>
-                              {resultText ?? ""}
-                            </ThinkingMarkdown>
+                            <WaitResult text={resultText ?? ""} />
                           </div>
                         </div>
                       ) : (
