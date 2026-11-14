@@ -1888,6 +1888,7 @@ export function AppShell({ appName }: { appName: string }) {
       hostId?: string,
       _project?: ManagedProject,
       initialization?: string,
+      keepSidebarOpen = false,
     ) => {
       setActiveTerminalId(null);
       sessionLookupVersion.current += 1;
@@ -1912,7 +1913,7 @@ export function AppShell({ appName }: { appName: string }) {
       setSystemPrompt(null);
       setSystemPromptLoading(false);
       setActiveTopPanel(null);
-      if (isMobile) {
+      if (isMobile && !keepSidebarOpen) {
         setSidebarOpen(false);
         requestAnimationFrame(() => chatInputRef.current?.focus());
       }
@@ -1923,7 +1924,7 @@ export function AppShell({ appName }: { appName: string }) {
 
   const handleNewWorkspace = useCallback((project: ManagedProject) => {
     if (project.projectKind !== "git") {
-      handleNewSession(browserUUID(), project.path, project.hostId, project);
+      handleNewSession(browserUUID(), project.path, project.hostId, project, undefined, true);
       return;
     }
     const tab: ChatTab = {
@@ -1937,10 +1938,9 @@ export function AppShell({ appName }: { appName: string }) {
     updateChatTabs((tabs) => [...tabs, tab]);
     activateChat(tab);
     setSettingsTab(null);
-    setSidebarOpen(false);
     router.replace("/");
-    requestAnimationFrame(() => chatInputRef.current?.focus());
-  }, [handleNewSession, updateChatTabs, activateChat, router]);
+    if (!isMobile) requestAnimationFrame(() => chatInputRef.current?.focus());
+  }, [handleNewSession, updateChatTabs, activateChat, router, isMobile]);
 
   const pendingWorkspace = chatTabs.find((tab) => tab.id === activeChatId && !tab.session)?.workspaceProject;
   const prepareNewWorkspace = useMemo(() => {
@@ -4181,9 +4181,7 @@ export function AppShell({ appName }: { appName: string }) {
                       hostStatus={chatHost?.status}
                       hostLabel={chatHost ? hostName(t, chatHost) : undefined}
                       newSessionWorkspace={
-                        pendingWorkspace ? (
-                          <div className="new-session-workspace">New workspace. Send your first prompt to name it and run setup.</div>
-                        ) : effectiveNewSessionCwd && (
+                        !pendingWorkspace && effectiveNewSessionCwd && (
                           <div className="new-session-workspace">
                             {creationTargets.length > 1 && (
                               <>

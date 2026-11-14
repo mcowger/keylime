@@ -1863,9 +1863,6 @@ export function ChatWindow({
                           <OmpRuntimeVersion />
                         </div>
                       </div>
-                      <div className="empty-session-intro">
-                        <p>{t("appShell.newSessionDescription")}</p>
-                      </div>
                       {newSessionWorkspace}
                       {hostBanner}
                       <NoticeShelf
