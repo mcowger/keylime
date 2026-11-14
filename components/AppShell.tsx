@@ -1886,27 +1886,39 @@ export function AppShell({ appName }: { appName: string }) {
     [router, isMobile, activateChat, updateChatTabs],
   );
 
-  const handleNewWorkspace = useCallback((project: ManagedProject) => {
-    if (project.projectKind !== "git") {
-      handleNewSession(browserUUID(), project.path, project.hostId, project, undefined, true);
-      return;
-    }
-    const tab: ChatTab = {
-      id: browserUUID(),
-      cwd: project.path,
-      hostId: remoteHostId(project.hostId),
-      session: null,
-      creation: { id: browserUUID() },
-      workspaceProject: project.projectPath ?? project.path,
-    };
-    updateChatTabs((tabs) => [...tabs, tab]);
-    activateChat(tab);
-    setSettingsTab(null);
-    router.replace("/");
-    if (!isMobile) requestAnimationFrame(() => chatInputRef.current?.focus());
-  }, [handleNewSession, updateChatTabs, activateChat, router, isMobile]);
+  const handleNewWorkspace = useCallback(
+    (project: ManagedProject) => {
+      if (project.projectKind !== "git") {
+        handleNewSession(
+          browserUUID(),
+          project.path,
+          project.hostId,
+          project,
+          undefined,
+          true,
+        );
+        return;
+      }
+      const tab: ChatTab = {
+        id: browserUUID(),
+        cwd: project.path,
+        hostId: remoteHostId(project.hostId),
+        session: null,
+        creation: { id: browserUUID() },
+        workspaceProject: project.projectPath ?? project.path,
+      };
+      updateChatTabs((tabs) => [...tabs, tab]);
+      activateChat(tab);
+      setSettingsTab(null);
+      router.replace("/");
+      if (!isMobile) requestAnimationFrame(() => chatInputRef.current?.focus());
+    },
+    [handleNewSession, updateChatTabs, activateChat, router, isMobile],
+  );
 
-  const pendingWorkspace = chatTabs.find((tab) => tab.id === activeChatId && !tab.session)?.workspaceProject;
+  const pendingWorkspace = chatTabs.find(
+    (tab) => tab.id === activeChatId && !tab.session,
+  )?.workspaceProject;
   const prepareNewWorkspace = useMemo(() => {
     const tab = chatTabsRef.current.find((tab) => tab.id === activeChatId);
     if (!tab?.workspaceProject) return undefined;
@@ -1916,32 +1928,50 @@ export function AppShell({ appName }: { appName: string }) {
       pending = (async () => {
         const save = (job: WorkspaceCreationJob) => {
           tab.workspaceJob = job;
-          updateChatTabs((tabs) => tabs.map((item) => item.id === tab.id ? { ...item, workspaceJob: job } : item));
+          updateChatTabs((tabs) =>
+            tabs.map((item) =>
+              item.id === tab.id ? { ...item, workspaceJob: job } : item,
+            ),
+          );
         };
         let job = tab.workspaceJob;
         if (!job) {
           const response = await fetch("/api/worktrees", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "prepare", hostId: tab.hostId ?? "local", input: { projectPath: tab.workspaceProject, prompt } }),
+            body: JSON.stringify({
+              action: "prepare",
+              hostId: tab.hostId ?? "local",
+              input: { projectPath: tab.workspaceProject, prompt },
+            }),
           });
           const data = await response.json();
-          if (!response.ok) throw new Error(data.error ?? "Workspace creation failed");
+          if (!response.ok)
+            throw new Error(data.error ?? "Workspace creation failed");
           job = data as WorkspaceCreationJob;
           save(job);
         }
         while (job.status === "running") {
           await new Promise((resolve) => setTimeout(resolve, 500));
-          const response = await fetch(`/api/worktrees?${new URLSearchParams({ action: "status", hostId: tab.hostId ?? "local", id: job.id })}`);
+          const response = await fetch(
+            `/api/worktrees?${new URLSearchParams({ action: "status", hostId: tab.hostId ?? "local", id: job.id })}`,
+          );
           const data = await response.json();
-          if (!response.ok) throw new Error(data.error ?? "Workspace status unavailable");
+          if (!response.ok)
+            throw new Error(data.error ?? "Workspace status unavailable");
           job = data as WorkspaceCreationJob;
           save(job);
         }
         if (job.status !== "complete" || !job.workspacePath)
-          throw new Error(job.error ?? "Workspace setup did not complete. Check Manage workspaces for logs.");
+          throw new Error(
+            job.error ??
+              "Workspace setup did not complete. Check Manage workspaces for logs.",
+          );
         return { cwd: job.workspacePath, name: job.input.name };
-      })().catch((error) => { pending = undefined; throw error; });
+      })().catch((error) => {
+        pending = undefined;
+        throw error;
+      });
       return pending;
     };
   }, [activeChatId, pendingWorkspace, updateChatTabs]);
@@ -2262,16 +2292,22 @@ export function AppShell({ appName }: { appName: string }) {
           if (!response.ok) continue;
           const data = (await response.json()) as { sessions: SessionInfo[] };
           if (closed) return;
-          const names = new Map(data.sessions.map((session) => [session.id, session.name]));
-          updateChatTabs((tabs) => tabs.map((tab) => {
-            const name = tab.session && names.get(tab.session.id);
-            return name && name !== tab.session?.name
-              ? { ...tab, session: { ...tab.session!, name } }
-              : tab;
-          }));
+          const names = new Map(
+            data.sessions.map((session) => [session.id, session.name]),
+          );
+          updateChatTabs((tabs) =>
+            tabs.map((tab) => {
+              const name = tab.session && names.get(tab.session.id);
+              return name && name !== tab.session?.name
+                ? { ...tab, session: { ...tab.session!, name } }
+                : tab;
+            }),
+          );
           setSelectedSession((current) => {
             const name = current && names.get(current.id);
-            return current && name && name !== current.name ? { ...current, name } : current;
+            return current && name && name !== current.name
+              ? { ...current, name }
+              : current;
           });
         } catch {
           // The next list change or reconnect retries.
@@ -2292,7 +2328,6 @@ export function AppShell({ appName }: { appName: string }) {
       source.close();
     };
   }, [updateChatTabs]);
-
 
   // Called by ChatWindow when a new session gets its real id from pi
   const handleSessionCreated = useCallback(
@@ -2513,7 +2548,10 @@ export function AppShell({ appName }: { appName: string }) {
       updateChatTabs((tabs) =>
         tabs.filter((tab) => tab.session?.id !== sessionId),
       );
-      if ((removed && activeChatIdRef.current === removed.id) || activeSessionIdRef.current === sessionId) {
+      if (
+        (removed && activeChatIdRef.current === removed.id) ||
+        activeSessionIdRef.current === sessionId
+      ) {
         const next = chatTabsRef.current.find((tab) =>
           tabInWorkspace(
             tab,
@@ -3134,8 +3172,11 @@ export function AppShell({ appName }: { appName: string }) {
           tabInWorkspace(tab, path, host, workspaceOptions.projects),
         );
         updateChatTabs((tabs) => tabs.filter((tab) => !removed.includes(tab)));
-        if (removed.some((tab) => tab.id === activeChatIdRef.current) ||
-            (activeCwd === path && (remoteHostId(activeHostId) ?? LOCAL_HOST_ID) === host)) {
+        if (
+          removed.some((tab) => tab.id === activeChatIdRef.current) ||
+          (activeCwd === path &&
+            (remoteHostId(activeHostId) ?? LOCAL_HOST_ID) === host)
+        ) {
           setActiveCwd(null);
           setActiveHostId(undefined);
           activateChat(null);
@@ -3485,8 +3526,11 @@ export function AppShell({ appName }: { appName: string }) {
                 );
                 const index = visible.findIndex((tab) => tab.id === id);
                 updateChatTabs((tabs) => tabs.filter((tab) => tab.id !== id));
-                if (activeChatIdRef.current === id ||
-                    (closing.session && activeSessionIdRef.current === closing.session.id)) {
+                if (
+                  activeChatIdRef.current === id ||
+                  (closing.session &&
+                    activeSessionIdRef.current === closing.session.id)
+                ) {
                   const next = visible[index + 1] ?? visible[index - 1] ?? null;
                   if (!next && terminalWorkspace) {
                     try {
@@ -4237,7 +4281,9 @@ export function AppShell({ appName }: { appName: string }) {
                         };
                       })()}
                       activityContainer={activityContainer}
-                      sidebarActivityContainer={isMobile ? null : sidebarActivityContainer}
+                      sidebarActivityContainer={
+                        isMobile ? null : sidebarActivityContainer
+                      }
                       newSessionCwd={effectiveNewSessionCwd}
                       newSessionHostId={newSessionHost}
                       prepareNewWorkspace={prepareNewWorkspace}
@@ -4254,7 +4300,8 @@ export function AppShell({ appName }: { appName: string }) {
                       hostStatus={chatHost?.status}
                       hostLabel={chatHost ? hostName(t, chatHost) : undefined}
                       newSessionWorkspace={
-                        !pendingWorkspace && effectiveNewSessionCwd && (
+                        !pendingWorkspace &&
+                        effectiveNewSessionCwd && (
                           <div className="new-session-workspace">
                             {creationTargets.length > 1 && (
                               <>
@@ -4421,7 +4468,10 @@ export function AppShell({ appName }: { appName: string }) {
                                     onChange={(event) => {
                                       const key = event.target.value;
                                       if (key === "__add_workspace__") {
-                                        if (selectedNewWorkspace) handleNewWorkspace(selectedNewWorkspace);
+                                        if (selectedNewWorkspace)
+                                          handleNewWorkspace(
+                                            selectedNewWorkspace,
+                                          );
                                         return;
                                       }
                                       const project = projectWorkspaces.find(

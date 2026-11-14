@@ -294,7 +294,12 @@ function linkRuntime(owner: DaemonLink, deps: LinkDeps) {
       ahead?: number;
     } = {},
   ): number | null {
-    if (body.type === "terminal_event" && body.event.type === "output" && sender.queuedBytes + unackedBytes > LINK_LIMITS.uplinkBytes) return null;
+    if (
+      body.type === "terminal_event" &&
+      body.event.type === "output" &&
+      sender.queuedBytes + unackedBytes > LINK_LIMITS.uplinkBytes
+    )
+      return null;
     let line: string;
     try {
       line = encodeQueued(body);

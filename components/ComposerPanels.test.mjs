@@ -141,11 +141,22 @@ test("activity keeps todo progress summary accessible", () => {
 });
 
 test("completed chips are initially hidden", () => {
-  const html = renderToStaticMarkup(React.createElement(ActivityPanel, {
-    todoPhases: [],
-    subagents: [{ id: "s1", agent: "scout", status: "completed", task: "Finished task", index: 0, source: "history" }],
-    onSelectSubagent: noop,
-  }));
+  const html = renderToStaticMarkup(
+    React.createElement(ActivityPanel, {
+      todoPhases: [],
+      subagents: [
+        {
+          id: "s1",
+          agent: "scout",
+          status: "completed",
+          task: "Finished task",
+          index: 0,
+          source: "history",
+        },
+      ],
+      onSelectSubagent: noop,
+    }),
+  );
   assert.match(html, /Completed \(1\)/);
   assert.doesNotMatch(html, /Finished task/);
 });
@@ -182,7 +193,6 @@ test("chips show agent source, nested count, and async marker", () => {
   assert.match(html, /data-subagent-metric="2 nested"/);
   assert.match(html, /⤴/);
 });
-
 
 test("zero context tokens never print a null gauge", () => {
   const html = renderToStaticMarkup(

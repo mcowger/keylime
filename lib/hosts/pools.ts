@@ -193,7 +193,6 @@ export function savePools(pools: HostPool[]): void {
   }
 }
 
-
 /** Retained bindings, not current membership, determine an existing session's identity. */
 export function poolProjectBindings(
   pools: readonly HostPool[],
@@ -215,4 +214,3 @@ export function poolProjectBindings(
     }
   return bindings;
 }
-

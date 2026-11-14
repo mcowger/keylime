@@ -47,13 +47,17 @@ export function ComposerActivityIndicators({
   const tasks = todoPhases.flatMap((phase) => phase.tasks);
   const done = tasks.filter((task) => task.status === "completed").length;
   const activeAgents = subagents.filter(
-    (subagent) => subagent.status === "started" && subagent.source !== "history",
+    (subagent) =>
+      subagent.status === "started" && subagent.source !== "history",
   );
   const todoLabel = `${t("chatWindow.todoList")}: ${t("chatWindow.todoProgress", { done, total: tasks.length })}`;
-  const agentLabel = `${t("chatWindow.subagentsPanel")}: ${t("chatWindow.subagentSummary", {
-    running: activeAgents.length,
-    total: subagents.length,
-  })}`;
+  const agentLabel = `${t("chatWindow.subagentsPanel")}: ${t(
+    "chatWindow.subagentSummary",
+    {
+      running: activeAgents.length,
+      total: subagents.length,
+    },
+  )}`;
 
   useEffect(() => {
     if (!openPanel) return;
@@ -65,7 +69,10 @@ export function ComposerActivityIndicators({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setOpenPanel(null);
-      (openPanel === "todos" ? todoTriggerRef : agentsTriggerRef).current?.focus();
+      (openPanel === "todos"
+        ? todoTriggerRef
+        : agentsTriggerRef
+      ).current?.focus();
     };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -75,19 +82,23 @@ export function ComposerActivityIndicators({
     };
   }, [openPanel]);
 
-  const toggle = (panel: Panel) => (event: React.MouseEvent<HTMLButtonElement>) => {
-    if (openPanel === panel) {
-      setOpenPanel(null);
-      return;
-    }
-    const rect = event.currentTarget.getBoundingClientRect();
-    const width = Math.min(360, window.innerWidth - 16);
-    setAnchor({
-      bottom: Math.max(8, window.innerHeight - rect.top + 8),
-      left: Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - width - 8)),
-    });
-    setOpenPanel(panel);
-  };
+  const toggle =
+    (panel: Panel) => (event: React.MouseEvent<HTMLButtonElement>) => {
+      if (openPanel === panel) {
+        setOpenPanel(null);
+        return;
+      }
+      const rect = event.currentTarget.getBoundingClientRect();
+      const width = Math.min(360, window.innerWidth - 16);
+      setAnchor({
+        bottom: Math.max(8, window.innerHeight - rect.top + 8),
+        left: Math.min(
+          Math.max(8, rect.left),
+          Math.max(8, window.innerWidth - width - 8),
+        ),
+      });
+      setOpenPanel(panel);
+    };
 
   if (todoPhases.length === 0 && activeAgents.length === 0) return null;
 
@@ -179,12 +190,21 @@ export function ComposerActivityIndicators({
                   <span className="mt-1 shrink-0">
                     <SubagentStatusIcon status={subagent.status} live />
                   </span>
-                  <span className="min-w-0" style={{ overflowWrap: "anywhere" }}>
-                    <span className="font-medium text-accent">{subagent.id}</span>{" "}
+                  <span
+                    className="min-w-0"
+                    style={{ overflowWrap: "anywhere" }}
+                  >
+                    <span className="font-medium text-accent">
+                      {subagent.id}
+                    </span>{" "}
                     <span className="text-text-muted">({subagent.agent})</span>
-                    {(subagent.task || subagent.description || subagent.assignment) && (
+                    {(subagent.task ||
+                      subagent.description ||
+                      subagent.assignment) && (
                       <span className="mt-1 block">
-                        {subagent.task ?? subagent.description ?? subagent.assignment}
+                        {subagent.task ??
+                          subagent.description ??
+                          subagent.assignment}
                       </span>
                     )}
                     <SubagentActivityLine subagent={subagent} />

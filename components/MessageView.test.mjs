@@ -791,15 +791,41 @@ test("hub send renders as an IRC row with the steered message", () => {
 });
 
 test("wait results render restricted markdown without changing other tool output", () => {
-  const output = (toolName) => renderToStaticMarkup(React.createElement(MessageView, {
-    isStreaming: true,
-    toolCallsDefaultCollapsed: false,
-    message: { role: "assistant", content: [{ type: "toolCall", toolCallId: "call", toolName, input: {} }] },
-    toolResults: new Map([["call", { role: "toolResult", toolCallId: "call", toolName, content: [{ type: "text", text: "## Still Running\n\n- `Worker` **active**" }] }]]),
-  }));
+  const output = (toolName) =>
+    renderToStaticMarkup(
+      React.createElement(MessageView, {
+        isStreaming: true,
+        toolCallsDefaultCollapsed: false,
+        message: {
+          role: "assistant",
+          content: [
+            { type: "toolCall", toolCallId: "call", toolName, input: {} },
+          ],
+        },
+        toolResults: new Map([
+          [
+            "call",
+            {
+              role: "toolResult",
+              toolCallId: "call",
+              toolName,
+              content: [
+                {
+                  type: "text",
+                  text: "## Still Running\n\n- `Worker` **active**",
+                },
+              ],
+            },
+          ],
+        ]),
+      }),
+    );
   const wait = output("wait");
   assert.match(wait, /## Still Running/);
-  assert.match(wait, /<li[^>]*><code[^>]*>Worker<\/code> <strong>active<\/strong><\/li>/);
+  assert.match(
+    wait,
+    /<li[^>]*><code[^>]*>Worker<\/code> <strong>active<\/strong><\/li>/,
+  );
   assert.doesNotMatch(wait, /<h2/);
   assert.doesNotMatch(output("bash"), /<strong>active<\/strong>/);
 });
@@ -1298,17 +1324,25 @@ test("an expanded thinking block collapses and re-expands by hand", async () => 
 
 test("latest thinking advances without overriding manual toggles on updates", async () => {
   const message = {
-    role: "assistant", provider: "t", model: "m",
+    role: "assistant",
+    provider: "t",
+    model: "m",
     content: [
       { type: "thinking", thinking: "first" },
       { type: "thinking", thinking: "second" },
     ],
   };
-  const element = (latest, msg = message) => React.createElement(MessageView, {
-    message: msg, isStreaming: true, latestThinkingBlockIndex: latest,
-  });
+  const element = (latest, msg = message) =>
+    React.createElement(MessageView, {
+      message: msg,
+      isStreaming: true,
+      latestThinkingBlockIndex: latest,
+    });
   const view = render(element(0));
-  const outputs = () => [...view.container.querySelectorAll(".thinking-output")].map((el) => el.textContent);
+  const outputs = () =>
+    [...view.container.querySelectorAll(".thinking-output")].map(
+      (el) => el.textContent,
+    );
   assert.deepEqual(outputs(), ["first"]);
   view.rerender(element(1));
   assert.deepEqual(outputs(), ["second"]);

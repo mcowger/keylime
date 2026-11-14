@@ -182,9 +182,10 @@ export function startServer(options: {
   const { dev, root, html, worker } = options;
   const frontend = dev ? undefined : frontendRoot(root);
   // A configured frontend is read on each request; the normal package keeps its startup snapshot.
-  const index = dev || frontend
-    ? null
-    : readFileSync(path.join(root, "dist", "index.html"), "utf8");
+  const index =
+    dev || frontend
+      ? null
+      : readFileSync(path.join(root, "dist", "index.html"), "utf8");
 
   const routes: Record<
     string,
@@ -271,7 +272,12 @@ export function startServer(options: {
         }
         // Pin one release for this request even if the pointer changes while it is being served.
         const assets = frontend ? realpathSync(frontend) : root;
-        const file = await serveFile(request, root, dev, frontend ? assets : undefined);
+        const file = await serveFile(
+          request,
+          root,
+          dev,
+          frontend ? assets : undefined,
+        );
         if (file) return file;
         // Unknown extensionless page paths get the SPA too, but /api and its subpaths never do, and neither does a
         // miss under a gate-exempt path (only /login is public and a page).
@@ -285,7 +291,7 @@ export function startServer(options: {
         if (!isPage) return text("Not Found", 404);
         const shell = frontend
           ? readFileSync(path.join(assets, "dist", "index.html"), "utf8")
-          : index ?? (await devIndex(server));
+          : (index ?? (await devIndex(server)));
         return new Response(renderIndex(shell, request), {
           headers: {
             "content-type": "text/html; charset=utf-8",

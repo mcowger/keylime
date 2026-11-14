@@ -2055,7 +2055,17 @@ export const SessionSidebar = memo(function SessionSidebar({
           }}
         />
       </div>
-      {activityTargetRef && <div ref={activityTargetRef} style={{ flexShrink: 0, minHeight: 0, maxHeight: "35%", overflowY: "auto" }} />}
+      {activityTargetRef && (
+        <div
+          ref={activityTargetRef}
+          style={{
+            flexShrink: 0,
+            minHeight: 0,
+            maxHeight: "35%",
+            overflowY: "auto",
+          }}
+        />
+      )}
 
       {/* Provider usage bar — pinned above Settings */}
       {usageVisible && <ProviderUsageBar />}

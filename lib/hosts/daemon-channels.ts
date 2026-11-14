@@ -229,9 +229,15 @@ export class ChannelTable {
   }
 
   private workspaceChannelBusy(channel: Channel): boolean {
-    return !channel.lifecycle?.isIdle || channel.editor !== undefined ||
-      channel.commands.size > 0 || channel.internal.size > 0 ||
-      !!channel.resuming || !!channel.replacing || !!channel.sessionMovePending;
+    return (
+      !channel.lifecycle?.isIdle ||
+      channel.editor !== undefined ||
+      channel.commands.size > 0 ||
+      channel.internal.size > 0 ||
+      !!channel.resuming ||
+      !!channel.replacing ||
+      !!channel.sessionMovePending
+    );
   }
 
   async inspectWorkspace(
@@ -256,7 +262,8 @@ export class ChannelTable {
       [...this.channels.values()]
         .filter(
           (channel) =>
-            !channel.exited && this.workspaceContains(directory, channel.cwd) &&
+            !channel.exited &&
+            this.workspaceContains(directory, channel.cwd) &&
             (!idleOnly || !this.workspaceChannelBusy(channel)),
         )
         .map(async (channel) => {
@@ -1120,7 +1127,12 @@ export class ChannelTable {
           true,
         );
     };
-    if (op !== null && [...this.workspaceFences].some((root) => this.workspaceContains(root, channel.cwd)))
+    if (
+      op !== null &&
+      [...this.workspaceFences].some((root) =>
+        this.workspaceContains(root, channel.cwd),
+      )
+    )
       return refuse("workspace_deleting", "This workspace is being deleted");
     if (drained)
       return refuse(

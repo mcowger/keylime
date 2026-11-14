@@ -23,23 +23,37 @@ export async function workspacePromptNames(
     },
     signal,
   );
-  if (response.status < 200 || response.status >= 300 || !isRecord(response.body)) {
+  if (
+    response.status < 200 ||
+    response.status >= 300 ||
+    !isRecord(response.body)
+  ) {
     throw new Error("Workspace naming request failed");
   }
   const choices = response.body.choices;
-  const message = Array.isArray(choices) && isRecord(choices[0]) ? choices[0].message : null;
+  const message =
+    Array.isArray(choices) && isRecord(choices[0]) ? choices[0].message : null;
   const content = isRecord(message) ? message.content : null;
-  if (typeof content !== "string") throw new Error("Invalid workspace naming response");
+  if (typeof content !== "string")
+    throw new Error("Invalid workspace naming response");
   let parsed: unknown;
   try {
     parsed = JSON.parse(content);
   } catch {
     throw new Error("Invalid workspace naming response");
   }
-  if (!isRecord(parsed) || typeof parsed.name !== "string" || typeof parsed.branch !== "string") {
+  if (
+    !isRecord(parsed) ||
+    typeof parsed.name !== "string" ||
+    typeof parsed.branch !== "string"
+  ) {
     throw new Error("Invalid workspace naming response");
   }
-  const name = parsed.name.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 100).trim();
+  const name = parsed.name
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .trim()
+    .slice(0, 100)
+    .trim();
   const branch = sanitizeWorkspaceBranch(parsed.branch.trim().slice(0, 100));
   if (!name || !branch) throw new Error("Invalid workspace naming response");
   return { name, branch: `${branch}-${randomBytes(4).toString("hex")}` };

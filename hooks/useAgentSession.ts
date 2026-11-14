@@ -328,7 +328,9 @@ export interface UseAgentSessionOptions {
   session: SessionInfo | null;
   newSessionCwd: string | null;
   newSessionDraftKey?: string;
-  prepareNewWorkspace?: (prompt: string) => Promise<{ cwd: string; name: string }>;
+  prepareNewWorkspace?: (
+    prompt: string,
+  ) => Promise<{ cwd: string; name: string }>;
   /** Host a fresh chat is created on; a started session carries its own `hostId`. This machine when absent. */
   newSessionHostId?: string;
   onBackgroundSessionCreated?: (session: SessionInfo) => void;
@@ -2102,180 +2104,193 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   // observed (and its state snapshot recovered on stream open) right away.
   const observeCreatedSessionRef = useRef<((sid: string) => void) | null>(null);
 
-  const ensureNewSession = useCallback(async (firstPrompt?: string) => {
-    if (sessionIdRef.current) return sessionIdRef.current;
-    if (!isNew) return sessionIdRef.current;
-    if (
-      (newSessionCreationId || newSessionPoolId || newSessionProjectId) &&
-      !pooled
-    )
-      throw new Error(translate("agentSession.invalidPoolTarget"));
-    if (ensuringNewSessionRef.current) return ensuringNewSessionRef.current;
+  const ensureNewSession = useCallback(
+    async (firstPrompt?: string) => {
+      if (sessionIdRef.current) return sessionIdRef.current;
+      if (!isNew) return sessionIdRef.current;
+      if (
+        (newSessionCreationId || newSessionPoolId || newSessionProjectId) &&
+        !pooled
+      )
+        throw new Error(translate("agentSession.invalidPoolTarget"));
+      if (ensuringNewSessionRef.current) return ensuringNewSessionRef.current;
 
-    const promise = (async () => {
-      if (prepareNewWorkspace && !firstPrompt)
-        throw new Error("Send your first prompt to create this workspace.");
-      const workspace = prepareNewWorkspace
-        ? await prepareNewWorkspace(firstPrompt!)
-        : undefined;
-      const targetCwd = workspace?.cwd ?? newSessionCwd;
-      const selectedModel = newSessionModel ?? newSessionDefaultModel;
-      if (selectedModel) setPendingModel(selectedModel);
-      const toolNames = getToolNamesForPreset(toolPreset);
-      const request = {
-        ...(pooled
-          ? {
-              creationId: newSessionCreationId,
-              poolId: newSessionPoolId,
-              projectId: newSessionProjectId,
-            }
-          : {
-              cwd: targetCwd,
-              ...(newSessionHostId ? { hostId: newSessionHostId } : {}),
-            }),
-        type: "ensure_session",
-        ...(workspace ? { name: workspace.name } : {}),
-        toolNames,
-        ...(selectedModel
-          ? { provider: selectedModel.provider, modelId: selectedModel.modelId }
-          : {}),
-        ...(thinkingLevel !== "auto" ? { thinkingLevel } : {}),
-        ...(advisorEnabled ? { advisor: true } : {}),
-      };
-      // A journal ID describes one immutable initialization, even after a lost answer.
-      if (pooled && creationBodyRef.current === null) {
-        const initialization: unknown = newSessionInitialization
-          ? JSON.parse(newSessionInitialization)
-          : request;
-        if (
-          !isRecord(initialization) ||
-          initialization.type !== "ensure_session" ||
-          initialization.creationId !== newSessionCreationId ||
-          initialization.poolId !== newSessionPoolId ||
-          initialization.projectId !== newSessionProjectId ||
-          "cwd" in initialization ||
-          "hostId" in initialization ||
-          "message" in initialization
-        ) {
-          throw new Error(translate("agentSession.invalidPoolTarget"));
-        }
-        creationBodyRef.current = {
-          json: newSessionInitialization ?? JSON.stringify(request),
-          advisor: initialization.advisor === true,
+      const promise = (async () => {
+        if (prepareNewWorkspace && !firstPrompt)
+          throw new Error("Send your first prompt to create this workspace.");
+        const workspace = prepareNewWorkspace
+          ? await prepareNewWorkspace(firstPrompt!)
+          : undefined;
+        const targetCwd = workspace?.cwd ?? newSessionCwd;
+        const selectedModel = newSessionModel ?? newSessionDefaultModel;
+        if (selectedModel) setPendingModel(selectedModel);
+        const toolNames = getToolNamesForPreset(toolPreset);
+        const request = {
+          ...(pooled
+            ? {
+                creationId: newSessionCreationId,
+                poolId: newSessionPoolId,
+                projectId: newSessionProjectId,
+              }
+            : {
+                cwd: targetCwd,
+                ...(newSessionHostId ? { hostId: newSessionHostId } : {}),
+              }),
+          type: "ensure_session",
+          ...(workspace ? { name: workspace.name } : {}),
+          toolNames,
+          ...(selectedModel
+            ? {
+                provider: selectedModel.provider,
+                modelId: selectedModel.modelId,
+              }
+            : {}),
+          ...(thinkingLevel !== "auto" ? { thinkingLevel } : {}),
+          ...(advisorEnabled ? { advisor: true } : {}),
         };
-        onNewSessionInitialization?.(creationBodyRef.current.json);
-      }
-      const res = await fetch("/api/agent/new", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: pooled ? creationBodyRef.current!.json : JSON.stringify(request),
-      });
-      const body = (await res.json().catch(() => ({}))) as {
-        sessionId?: unknown;
-        hostId?: string;
-        cwd?: string;
-        error?: string;
-        code?: string;
-        hostOffline?: boolean;
-        delivery?: string;
-      };
-      const offline =
-        res.status === 503 &&
-        (body.hostOffline === true || typeof body.sessionId === "string");
-      if (!res.ok && !offline)
-        throw new Error(
-          formatApiError({
-            ...body,
-            error: body.error ?? `HTTP ${res.status}`,
-          }),
-        );
-      // A host that dropped after the spawn keeps the session (503 with its id):
-      // adopt it, so a retry sends there instead of starting a second session.
-      const realId =
-        typeof body.sessionId === "string" && body.sessionId
-          ? body.sessionId
-          : null;
-      if (!realId) {
-        if (offline)
+        // A journal ID describes one immutable initialization, even after a lost answer.
+        if (pooled && creationBodyRef.current === null) {
+          const initialization: unknown = newSessionInitialization
+            ? JSON.parse(newSessionInitialization)
+            : request;
+          if (
+            !isRecord(initialization) ||
+            initialization.type !== "ensure_session" ||
+            initialization.creationId !== newSessionCreationId ||
+            initialization.poolId !== newSessionPoolId ||
+            initialization.projectId !== newSessionProjectId ||
+            "cwd" in initialization ||
+            "hostId" in initialization ||
+            "message" in initialization
+          ) {
+            throw new Error(translate("agentSession.invalidPoolTarget"));
+          }
+          creationBodyRef.current = {
+            json: newSessionInitialization ?? JSON.stringify(request),
+            advisor: initialization.advisor === true,
+          };
+          onNewSessionInitialization?.(creationBodyRef.current.json);
+        }
+        const res = await fetch("/api/agent/new", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: pooled
+            ? creationBodyRef.current!.json
+            : JSON.stringify(request),
+        });
+        const body = (await res.json().catch(() => ({}))) as {
+          sessionId?: unknown;
+          hostId?: string;
+          cwd?: string;
+          error?: string;
+          code?: string;
+          hostOffline?: boolean;
+          delivery?: string;
+        };
+        const offline =
+          res.status === 503 &&
+          (body.hostOffline === true || typeof body.sessionId === "string");
+        if (!res.ok && !offline)
+          throw new Error(
+            formatApiError({
+              ...body,
+              error: body.error ?? `HTTP ${res.status}`,
+            }),
+          );
+        // A host that dropped after the spawn keeps the session (503 with its id):
+        // adopt it, so a retry sends there instead of starting a second session.
+        const realId =
+          typeof body.sessionId === "string" && body.sessionId
+            ? body.sessionId
+            : null;
+        if (!realId) {
+          if (offline)
+            throw new HostOfflineError(
+              formatApiError(body),
+              body.delivery === "unknown",
+            );
+          return null;
+        }
+        sessionIdRef.current = realId;
+        createdOwnerRef.current = {
+          cwd: body.cwd ?? (pooled ? "" : (targetCwd ?? "")),
+          hostId: body.hostId ?? (pooled ? undefined : newSessionHostId),
+        };
+        if (
+          pooled &&
+          (!createdOwnerRef.current.hostId || !createdOwnerRef.current.cwd)
+        )
+          throw new Error(translate("agentSession.uploadOwnerUnavailable"));
+        // The toggle handler could not persist while the chat had no id; carry
+        // the pre-prompt choice over so it survives a reload after this point.
+        if (pooled ? creationBodyRef.current!.advisor : advisorEnabled) {
+          setSessionAdvisorSpawn(realId, true);
+          try {
+            localStorage.setItem(`omp-advisor-enabled:${realId}`, "true");
+          } catch {
+            // Best-effort: the spawned process already has --advisor.
+          }
+        }
+        // A prompt or side question that created this runtime attaches its own stream,
+        // which would only replace an observer attached here.
+        if (
+          hookAliveRef.current &&
+          !promptDispatchPendingRef.current &&
+          !btwAskPendingRef.current
+        ) {
+          observeCreatedSessionRef.current?.(realId);
+        }
+        if (offline) {
+          if (hookAliveRef.current && !pooled) promoteNewSession();
+          if (
+            pooled &&
+            body.delivery === "unknown" &&
+            body.hostOffline !== true
+          )
+            throw new Error(formatApiError(body));
           throw new HostOfflineError(
             formatApiError(body),
             body.delivery === "unknown",
           );
-        return null;
-      }
-      sessionIdRef.current = realId;
-      createdOwnerRef.current = {
-        cwd: body.cwd ?? (pooled ? "" : (targetCwd ?? "")),
-        hostId: body.hostId ?? (pooled ? undefined : newSessionHostId),
-      };
-      if (
-        pooled &&
-        (!createdOwnerRef.current.hostId || !createdOwnerRef.current.cwd)
-      )
-        throw new Error(translate("agentSession.uploadOwnerUnavailable"));
-      // The toggle handler could not persist while the chat had no id; carry
-      // the pre-prompt choice over so it survives a reload after this point.
-      if (pooled ? creationBodyRef.current!.advisor : advisorEnabled) {
-        setSessionAdvisorSpawn(realId, true);
-        try {
-          localStorage.setItem(`omp-advisor-enabled:${realId}`, "true");
-        } catch {
-          // Best-effort: the spawned process already has --advisor.
         }
-      }
-      // A prompt or side question that created this runtime attaches its own stream,
-      // which would only replace an observer attached here.
-      if (
-        hookAliveRef.current &&
-        !promptDispatchPendingRef.current &&
-        !btwAskPendingRef.current
-      ) {
-        observeCreatedSessionRef.current?.(realId);
-      }
-      if (offline) {
-        if (hookAliveRef.current && !pooled) promoteNewSession();
-        if (pooled && body.delivery === "unknown" && body.hostOffline !== true)
-          throw new Error(formatApiError(body));
-        throw new HostOfflineError(
-          formatApiError(body),
-          body.delivery === "unknown",
-        );
-      }
-      return realId;
-    })().catch((error: unknown) => {
-      if (!pooled) throw error;
-      const failure = error instanceof Error ? error : new Error(String(error));
-      reportedCreationErrorsRef.current.add(failure);
-      if (hookAliveRef.current)
-        addNotice({ type: "error", message: failure.message });
-      throw failure;
-    });
+        return realId;
+      })().catch((error: unknown) => {
+        if (!pooled) throw error;
+        const failure =
+          error instanceof Error ? error : new Error(String(error));
+        reportedCreationErrorsRef.current.add(failure);
+        if (hookAliveRef.current)
+          addNotice({ type: "error", message: failure.message });
+        throw failure;
+      });
 
-    ensuringNewSessionRef.current = promise;
-    try {
-      return await promise;
-    } finally {
-      ensuringNewSessionRef.current = null;
-    }
-  }, [
-    advisorEnabled,
-    isNew,
-    pooled,
-    newSessionCwd,
-    prepareNewWorkspace,
-    newSessionHostId,
-    newSessionCreationId,
-    newSessionPoolId,
-    newSessionProjectId,
-    newSessionInitialization,
-    onNewSessionInitialization,
-    newSessionModel,
-    newSessionDefaultModel,
-    toolPreset,
-    thinkingLevel,
-    promoteNewSession,
-    addNotice,
-  ]);
+      ensuringNewSessionRef.current = promise;
+      try {
+        return await promise;
+      } finally {
+        ensuringNewSessionRef.current = null;
+      }
+    },
+    [
+      advisorEnabled,
+      isNew,
+      pooled,
+      newSessionCwd,
+      prepareNewWorkspace,
+      newSessionHostId,
+      newSessionCreationId,
+      newSessionPoolId,
+      newSessionProjectId,
+      newSessionInitialization,
+      onNewSessionInitialization,
+      newSessionModel,
+      newSessionDefaultModel,
+      toolPreset,
+      thinkingLevel,
+      promoteNewSession,
+      addNotice,
+    ],
+  );
 
   const resolveUploadHost = useCallback(async () => {
     if (prepareNewWorkspace && !sessionIdRef.current)
@@ -2286,7 +2301,13 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     if (pooled && !hostId)
       throw new Error(translate("agentSession.uploadOwnerUnavailable"));
     return hostId ?? "local";
-  }, [ensureNewSession, pooled, session?.hostId, prepareNewWorkspace, newSessionHostId]);
+  }, [
+    ensureNewSession,
+    pooled,
+    session?.hostId,
+    prepareNewWorkspace,
+    newSessionHostId,
+  ]);
 
   // The system panel may initialize a dormant session, but must not create a
   // prompt or model run just to inspect the resolved system prompt.

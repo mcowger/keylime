@@ -45,18 +45,25 @@ test("thinking expansion offers all modes and reports selection changes", async 
     globalThis.fetch = originalFetch;
   });
   const changes = [];
-  const { container } = render(createElement(SettingsConfig, {
-    ...settingsProps,
-    expandThinkingByDefault: "latest",
-    onExpandThinkingByDefaultChange: (value) => changes.push(value),
-  }));
+  const { container } = render(
+    createElement(SettingsConfig, {
+      ...settingsProps,
+      expandThinkingByDefault: "latest",
+      onExpandThinkingByDefaultChange: (value) => changes.push(value),
+    }),
+  );
   await settle();
-  const select = within(container).getByRole("combobox", { name: "Expand thinking blocks" });
-  assert.deepEqual([...select.options].map((option) => [option.value, option.textContent]), [
-    ["off", "Off"],
-    ["latest", "Latest"],
-    ["always", "Always"],
-  ]);
+  const select = within(container).getByRole("combobox", {
+    name: "Expand thinking blocks",
+  });
+  assert.deepEqual(
+    [...select.options].map((option) => [option.value, option.textContent]),
+    [
+      ["off", "Off"],
+      ["latest", "Latest"],
+      ["always", "Always"],
+    ],
+  );
   assert.equal(select.value, "latest");
   fireEvent.change(select, { target: { value: "always" } });
   fireEvent.change(select, { target: { value: "off" } });

@@ -1,10 +1,5 @@
 import { execFile } from "child_process";
-import {
-  existsSync,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-} from "fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "fs";
 import { basename, dirname, join, resolve } from "path";
 import { promisify } from "util";
 import { normalizeForComparison, samePath } from "./paths";
@@ -303,7 +298,6 @@ export function findCurrentWorktreePath(
 ): string | null {
   return findWorktreeByPath(worktrees, realPathOrSelf(cwd))?.path ?? null;
 }
-
 
 export async function removeWorktree(
   cwd: string,

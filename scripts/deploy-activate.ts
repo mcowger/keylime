@@ -59,7 +59,8 @@ function defaults({
       stderr: capture ? "pipe" : "inherit",
       timeout: 30_000,
     });
-    if (capture && (!result.stdout || !result.stderr)) throw new Error("Missing captured command output");
+    if (capture && (!result.stdout || !result.stderr))
+      throw new Error("Missing captured command output");
     if (result.exitCode !== 0 || result.signalCode)
       throw new Error(
         `Command failed: ${command.join(" ")}${capture ? `: ${result.stderr?.toString()}` : ""}`,
@@ -125,7 +126,9 @@ function defaults({
       const pointer = path.join(base, "frontend-current");
       const isCandidate = target === candidate;
       if (isCandidate) {
-        previousFrontend = existsSync(pointer) ? realpathSync(pointer) : realpathSync(path.join(base, "current"));
+        previousFrontend = existsSync(pointer)
+          ? realpathSync(pointer)
+          : realpathSync(path.join(base, "current"));
         prepareFrontend(candidate, previousFrontend);
       }
       const frontend = isCandidate ? candidate : previousFrontend;
@@ -135,7 +138,8 @@ function defaults({
         symlinkSync(target, tmp);
         renameSync(tmp, path.join(base, "current"));
       } catch (error) {
-        if (isCandidate && previousFrontend) selectFrontend(base, previousFrontend);
+        if (isCandidate && previousFrontend)
+          selectFrontend(base, previousFrontend);
         throw error;
       } finally {
         rmSync(tmp, { force: true });

@@ -26,7 +26,8 @@ function subscribe(callback: () => void): () => void {
 }
 
 export function setChatWidth(width: number): void {
-  if (!Number.isInteger(width) || (width !== 0 && (width < 30 || width > 100))) return;
+  if (!Number.isInteger(width) || (width !== 0 && (width < 30 || width > 100)))
+    return;
   try {
     if (width === 0) localStorage.removeItem(KEY);
     else localStorage.setItem(KEY, String(width));

@@ -2,7 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertCircle, Bot, FolderCog, FolderInput, Loader2, MoreHorizontal, Plus, Trash2, Wrench,
+  AlertCircle,
+  Bot,
+  FolderCog,
+  FolderInput,
+  Loader2,
+  MoreHorizontal,
+  Plus,
+  Trash2,
+  Wrench,
 } from "lucide-react";
 import type {
   HierarchyProject,
@@ -81,9 +89,12 @@ export function HierarchySidebar({
   const sidebarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const dismissMenus = (event: PointerEvent) => {
-      sidebarRef.current?.querySelectorAll<HTMLDetailsElement>("details[open]").forEach((menu) => {
-        if (event.target instanceof Node && !menu.contains(event.target)) menu.open = false;
-      });
+      sidebarRef.current
+        ?.querySelectorAll<HTMLDetailsElement>("details[open]")
+        .forEach((menu) => {
+          if (event.target instanceof Node && !menu.contains(event.target))
+            menu.open = false;
+        });
     };
     document.addEventListener("pointerdown", dismissMenus);
     return () => document.removeEventListener("pointerdown", dismissMenus);
@@ -277,15 +288,19 @@ export function HierarchySidebar({
         if (!response.ok)
           throw new Error(result.error ?? `HTTP ${response.status}`);
         if (result.status === "processes") {
-          const processes = result.processes?.map((p) => {
-            const session = sessions.find(
-              (s) => s.id === p.id && (s.hostId ?? "local") === hostId,
-            );
-            const title = session?.name?.trim() || session?.firstMessage?.trim();
-            return title
-              ? `Session: ${title.slice(0, 120)}\n  Working directory: ${p.cwd}`
-              : `Unidentified session or terminal (ID: ${p.id})\n  Working directory: ${p.cwd}`;
-          }).join("\n\n") ?? "";
+          const processes =
+            result.processes
+              ?.map((p) => {
+                const session = sessions.find(
+                  (s) => s.id === p.id && (s.hostId ?? "local") === hostId,
+                );
+                const title =
+                  session?.name?.trim() || session?.firstMessage?.trim();
+                return title
+                  ? `Session: ${title.slice(0, 120)}\n  Working directory: ${p.cwd}`
+                  : `Unidentified session or terminal (ID: ${p.id})\n  Working directory: ${p.cwd}`;
+              })
+              .join("\n\n") ?? "";
           stopProcesses = window.confirm(
             `Deleting this workspace will stop these sessions or terminals:\n\n${processes}\n\nStop them and continue?`,
           );
@@ -875,7 +890,10 @@ export function HierarchySidebar({
                                         padding: "3px 6px",
                                       }}
                                     >
-                                      <MoreHorizontal size={16} aria-hidden="true" />
+                                      <MoreHorizontal
+                                        size={16}
+                                        aria-hidden="true"
+                                      />
                                     </summary>
                                     <div style={menu}>
                                       <button

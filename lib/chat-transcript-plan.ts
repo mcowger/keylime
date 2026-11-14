@@ -68,12 +68,24 @@ export function findLatestThinking(
   messages: readonly Partial<AgentMessage>[],
   streaming = false,
 ): { messageIndex: number; blockIndex: number } | null {
-  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex--) {
+  for (
+    let messageIndex = messages.length - 1;
+    messageIndex >= 0;
+    messageIndex--
+  ) {
     const message = messages[messageIndex];
-    if (message.role !== "assistant" || !Array.isArray(message.content)) continue;
-    for (let blockIndex = message.content.length - 1; blockIndex >= 0; blockIndex--) {
+    if (message.role !== "assistant" || !Array.isArray(message.content))
+      continue;
+    for (
+      let blockIndex = message.content.length - 1;
+      blockIndex >= 0;
+      blockIndex--
+    ) {
       const block = message.content[blockIndex];
-      if (block.type === "thinking" && (streaming || block.deferred || block.thinking.trim())) {
+      if (
+        block.type === "thinking" &&
+        (streaming || block.deferred || block.thinking.trim())
+      ) {
         return { messageIndex, blockIndex };
       }
     }

@@ -31,8 +31,13 @@ if (
     Number(values.timeout) <= 0)
 )
   throw new Error("--timeout must be a positive whole number of seconds");
-if (values.frontend && (values.activate || values.recover || values.timeout !== undefined))
-  throw new Error("--frontend cannot be combined with --activate, --recover, or --timeout");
+if (
+  values.frontend &&
+  (values.activate || values.recover || values.timeout !== undefined)
+)
+  throw new Error(
+    "--frontend cannot be combined with --activate, --recover, or --timeout",
+  );
 mkdirSync(base, { recursive: true, mode: 0o700 });
 if (values.status) {
   console.log(JSON.stringify(readDeployState(base), null, 2));

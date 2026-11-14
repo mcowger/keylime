@@ -71,17 +71,23 @@ export async function POST(request: Request) {
       if (body.action === "prepare") {
         const { projectPath, prompt } = body.input;
         if (
-          typeof projectPath !== "string" || !projectPath ||
-          typeof prompt !== "string" || !prompt.trim()
+          typeof projectPath !== "string" ||
+          !projectPath ||
+          typeof prompt !== "string" ||
+          !prompt.trim()
         ) {
           return Response.json(
             { error: "Invalid request", code: "invalid_request" },
             { status: 400 },
           );
         }
-        const hierarchy = await resolved.host.workspaceOps.hierarchy({ action: "list" });
+        const hierarchy = await resolved.host.workspaceOps.hierarchy({
+          action: "list",
+        });
         if (!hierarchy.ok) return opErrorResponse(hierarchy);
-        const project = hierarchy.value.projects.find((item) => item.path === projectPath);
+        const project = hierarchy.value.projects.find(
+          (item) => item.path === projectPath,
+        );
         if (!project) {
           return Response.json(
             { error: "Project not found", code: "project_not_found" },
@@ -90,15 +96,22 @@ export async function POST(request: Request) {
         }
         if (project.kind !== "git") {
           return Response.json(
-            { error: "Workspace creation requires a Git project", code: "workspace_requires_git" },
+            {
+              error: "Workspace creation requires a Git project",
+              code: "workspace_requires_git",
+            },
             { status: 400 },
           );
         }
-        const branches = await resolved.host.workspaceOps.workspaceBranches(projectPath);
+        const branches =
+          await resolved.host.workspaceOps.workspaceBranches(projectPath);
         if (!branches.ok) return opErrorResponse(branches);
         if (!branches.value.defaultRef) {
           return Response.json(
-            { error: "No default base ref is available", code: "invalid_request" },
+            {
+              error: "No default base ref is available",
+              code: "invalid_request",
+            },
             { status: 400 },
           );
         }
@@ -107,7 +120,10 @@ export async function POST(request: Request) {
           names = await workspacePromptNames(prompt, request.signal);
         } catch {
           return Response.json(
-            { error: "Could not generate a workspace name", code: "workspace_naming_failed" },
+            {
+              error: "Could not generate a workspace name",
+              code: "workspace_naming_failed",
+            },
             { status: 502 },
           );
         }
@@ -117,7 +133,9 @@ export async function POST(request: Request) {
           mode: "new",
           baseRef: branches.value.defaultRef,
         });
-        return created.ok ? Response.json(created.value) : opErrorResponse(created);
+        return created.ok
+          ? Response.json(created.value)
+          : opErrorResponse(created);
       }
       const result =
         body.action === "create"

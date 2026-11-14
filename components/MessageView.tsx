@@ -1785,11 +1785,14 @@ const ThinkingBlock = memo(
     isLatest: boolean;
   }) {
     const { t } = useI18n();
-    const [expanded, setExpanded] = useState(followLatest ? isLatest : expandByDefault);
+    const [expanded, setExpanded] = useState(
+      followLatest ? isLatest : expandByDefault,
+    );
     const previousDefault = useRef(followLatest ? isLatest : expandByDefault);
     const currentDefault = followLatest ? isLatest : expandByDefault;
     useEffect(() => {
-      if (previousDefault.current !== currentDefault) setExpanded(currentDefault);
+      if (previousDefault.current !== currentDefault)
+        setExpanded(currentDefault);
       previousDefault.current = currentDefault;
     }, [currentDefault]);
     const [content, setContent] = useState<string | null>(null);
@@ -2277,21 +2280,30 @@ const ToolCallBlock = memo(
                       </div>
                     )}
                     {!(hubJobs || (hubSend && !isError)) &&
-                      !(resultIsEmpty && resultImages.length > 0) && (
-                        block.toolName === "wait" && !resultIsEmpty ? (
-                          <div className={`tool-call-output${isError ? " tool-call-output-error" : ""}`}>
-                            <div className="tool-call-output-text tool-call-output-markdown" data-tool-output="true">
-                              <ThinkingMarkdown>{resultText ?? ""}</ThinkingMarkdown>
-                            </div>
+                      !(resultIsEmpty && resultImages.length > 0) &&
+                      (block.toolName === "wait" && !resultIsEmpty ? (
+                        <div
+                          className={`tool-call-output${isError ? " tool-call-output-error" : ""}`}
+                        >
+                          <div
+                            className="tool-call-output-text tool-call-output-markdown"
+                            data-tool-output="true"
+                          >
+                            <ThinkingMarkdown>
+                              {resultText ?? ""}
+                            </ThinkingMarkdown>
                           </div>
-                        ) : (
-                          <PairedResult
-                            text={formatToolOutput(resultText ?? "", block.toolName)}
-                            isEmpty={resultIsEmpty}
-                            isError={isError}
-                          />
-                        )
-                      )}
+                        </div>
+                      ) : (
+                        <PairedResult
+                          text={formatToolOutput(
+                            resultText ?? "",
+                            block.toolName,
+                          )}
+                          isEmpty={resultIsEmpty}
+                          isError={isError}
+                        />
+                      ))}
                   </>
                 )
               ) : null}

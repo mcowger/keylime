@@ -6,11 +6,7 @@ import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
 import { WorkspaceChatPicker } from "./WorkspaceChatPicker";
 import type { SessionInfo } from "@/lib/types";
 import { openEventStream } from "@/lib/event-stream";
-import {
-  MessageSquarePlus,
-  Terminal as TerminalIcon,
-  X,
-} from "lucide-react";
+import { MessageSquarePlus, Terminal as TerminalIcon, X } from "lucide-react";
 import {
   closeTerminal,
   createTerminal,

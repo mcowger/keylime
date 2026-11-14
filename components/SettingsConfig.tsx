@@ -421,7 +421,8 @@ const SETTING_INDEX: SettingIndexEntry[] = [
     descKey: "settingsConfig.chatWidthDesc",
     fallbackSection: "Interface & Behavior",
     fallbackLabel: "Chat width",
-    fallbackDesc: "Set the maximum chat width as a percentage of the available space.",
+    fallbackDesc:
+      "Set the maximum chat width as a percentage of the available space.",
     scope: "UI",
   },
   {
@@ -2060,7 +2061,9 @@ export function SettingsConfig({
   showToolCallsUnfolded: boolean;
   onShowToolCallsUnfoldedChange: (show: boolean) => void;
   expandThinkingByDefault: "off" | "latest" | "always";
-  onExpandThinkingByDefaultChange: (expand: "off" | "latest" | "always") => void;
+  onExpandThinkingByDefaultChange: (
+    expand: "off" | "latest" | "always",
+  ) => void;
   onHideThinkingBlockChange?: (hide: boolean) => void;
   providerUsageVisible: boolean;
   onProviderUsageVisibleChange: (visible: boolean) => void;
@@ -2745,17 +2748,26 @@ export function SettingsConfig({
                         >
                           <select
                             style={nativeSelectStyle}
-                            aria-label={t("settingsConfig.expandThinkingByDefault")}
+                            aria-label={t(
+                              "settingsConfig.expandThinkingByDefault",
+                            )}
                             value={expandThinkingByDefault}
                             onChange={(event) =>
                               onExpandThinkingByDefaultChange(
-                                event.target.value as "off" | "latest" | "always",
+                                event.target.value as
+                                  "off" | "latest" | "always",
                               )
                             }
                           >
-                            <option value="off">{t("settingsConfig.expandThinkingOff")}</option>
-                            <option value="latest">{t("settingsConfig.expandThinkingLatest")}</option>
-                            <option value="always">{t("settingsConfig.expandThinkingAlways")}</option>
+                            <option value="off">
+                              {t("settingsConfig.expandThinkingOff")}
+                            </option>
+                            <option value="latest">
+                              {t("settingsConfig.expandThinkingLatest")}
+                            </option>
+                            <option value="always">
+                              {t("settingsConfig.expandThinkingAlways")}
+                            </option>
                           </select>
                         </NativeSetting>
                         <NativeSetting
@@ -3011,11 +3023,20 @@ export function SettingsConfig({
                             aria-label={t("settingsConfig.chatWidth")}
                             style={nativeSelectStyle}
                             value={chatWidth}
-                            onChange={(event) => setChatWidth(Number(event.target.value))}
+                            onChange={(event) =>
+                              setChatWidth(Number(event.target.value))
+                            }
                           >
-                            <option value={0}>{t("settingsConfig.chatWidthDefault")}</option>
-                            {Array.from({ length: 15 }, (_, i) => 30 + i * 5).map((width) => (
-                              <option key={width} value={width}>{width}%</option>
+                            <option value={0}>
+                              {t("settingsConfig.chatWidthDefault")}
+                            </option>
+                            {Array.from(
+                              { length: 15 },
+                              (_, i) => 30 + i * 5,
+                            ).map((width) => (
+                              <option key={width} value={width}>
+                                {width}%
+                              </option>
                             ))}
                           </select>
                         </NativeSetting>

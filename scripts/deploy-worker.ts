@@ -11,7 +11,11 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { activateRelease } from "./deploy-activate";
-import { assertFrontendCompatible, prepareFrontend, selectFrontend } from "./deploy-frontend";
+import {
+  assertFrontendCompatible,
+  prepareFrontend,
+  selectFrontend,
+} from "./deploy-frontend";
 import {
   acquireDeployLock,
   readDeployState,
@@ -127,8 +131,15 @@ try {
         stdin: archive.stdout,
       });
       if (unpack.exitCode) throw new Error("Source extraction failed");
-      const serverSource = readFileSync(path.join(scratch, "server/app.ts"), "utf8");
-      const frontendPointer = serverSource.includes("OMP_WEB_FRONTEND_ROOT") && serverSource.includes("frontend-current") ? 1 : 0;
+      const serverSource = readFileSync(
+        path.join(scratch, "server/app.ts"),
+        "utf8",
+      );
+      const frontendPointer =
+        serverSource.includes("OMP_WEB_FRONTEND_ROOT") &&
+        serverSource.includes("frontend-current")
+          ? 1
+          : 0;
       run(["mise", "trust"], scratch);
       run(["mise", "install"], scratch);
       const bun = (...args: string[]) =>
@@ -136,17 +147,27 @@ try {
       bun("install", "--frozen-lockfile");
       if (values.frontend) {
         const active = realpathSync(path.join(base, "current"));
-        const metadata = JSON.parse(readFileSync(path.join(active, "keylime-release.json"), "utf8"));
+        const metadata = JSON.parse(
+          readFileSync(path.join(active, "keylime-release.json"), "utf8"),
+        );
         if (metadata.frontendPointer !== 1)
-          throw new Error("Running release lacks frontend pointer support; deploy a full release first");
+          throw new Error(
+            "Running release lacks frontend pointer support; deploy a full release first",
+          );
         assertFrontendCompatible(root, metadata.sha, sha);
         if (!existsSync(path.join(base, "frontend-current")))
-          throw new Error("Frontend pointer is not initialized; deploy a full release first");
+          throw new Error(
+            "Frontend pointer is not initialized; deploy a full release first",
+          );
         bun("run", "build");
         candidate = path.join(base, "frontend-releases", version);
         mkdirSync(candidate, { recursive: true });
-        cpSync(path.join(scratch, "dist"), path.join(candidate, "dist"), { recursive: true });
-        cpSync(path.join(scratch, "public"), path.join(candidate, "public"), { recursive: true });
+        cpSync(path.join(scratch, "dist"), path.join(candidate, "dist"), {
+          recursive: true,
+        });
+        cpSync(path.join(scratch, "public"), path.join(candidate, "public"), {
+          recursive: true,
+        });
         const previous = realpathSync(path.join(base, "frontend-current"));
         prepareFrontend(candidate, previous);
         onPhase("select-frontend", { candidate, previous, sha });
@@ -163,27 +184,38 @@ try {
         candidate = path.join(base, "releases", version);
         mkdirSync(path.dirname(candidate), { recursive: true });
         cpSync(
-          path.join(scratch, `release/ompweb-${process.platform}-${process.arch}`),
+          path.join(
+            scratch,
+            `release/ompweb-${process.platform}-${process.arch}`,
+          ),
           candidate,
           { recursive: true },
         );
         bun("scripts/smoke.ts", "--binary", path.join(candidate, "ompweb"));
         writeFileSync(
           path.join(candidate, "keylime-release.json"),
-          JSON.stringify({ sha, builtAt: new Date().toISOString(), frontendPointer }) + "\n",
+          JSON.stringify({
+            sha,
+            builtAt: new Date().toISOString(),
+            frontendPointer,
+          }) + "\n",
         );
         console.log(`Verified release: ${candidate}`);
       }
     }
-    if (!values.frontend) await activateRelease({
-      candidate,
-      base,
-      agent,
-      home,
-      env,
-      onPhase,
-      timeoutMs: values.timeout === undefined ? undefined : Number(values.timeout) * 1000,
-    });
+    if (!values.frontend)
+      await activateRelease({
+        candidate,
+        base,
+        agent,
+        home,
+        env,
+        onPhase,
+        timeoutMs:
+          values.timeout === undefined
+            ? undefined
+            : Number(values.timeout) * 1000,
+      });
   }
 } catch (error) {
   onPhase("failed", {

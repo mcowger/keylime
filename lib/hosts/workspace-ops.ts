@@ -302,7 +302,13 @@ export function createWorkspaceService(
     return fileInfo(checked.filePath, checked.stat);
   }, emit);
   const ops: WorkspaceOps = {
-    terminals: async () => { throw new HostOpError(501, "workspace_unsupported", "Terminals require a host daemon"); },
+    terminals: async () => {
+      throw new HostOpError(
+        501,
+        "workspace_unsupported",
+        "Terminals require a host daemon",
+      );
+    },
     hierarchy: hierarchyOperation,
     shipPreview: (input) => result(() => shipPreview(input)),
     startShip: (input) => result(() => startShip(input)),

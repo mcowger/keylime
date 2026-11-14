@@ -121,23 +121,38 @@ test("production switches frontend releases without restarting and retains versi
     mkdirSync(path.join(release, "dist", "assets"), { recursive: true });
     mkdirSync(path.join(release, "dist", "workers"));
     mkdirSync(path.join(release, "public"));
-    writeFileSync(path.join(release, "dist", "index.html"), `<head></head><body>release ${i}</body>`);
+    writeFileSync(
+      path.join(release, "dist", "index.html"),
+      `<head></head><body>release ${i}</body>`,
+    );
     writeFileSync(path.join(release, "dist", "assets", "old.js"), "old asset");
-    writeFileSync(path.join(release, "dist", "workers", "123456789abc.js"), "old worker");
-    writeFileSync(path.join(release, "dist", "event-stream-worker.js"), `worker ${i}`);
+    writeFileSync(
+      path.join(release, "dist", "workers", "123456789abc.js"),
+      "old worker",
+    );
+    writeFileSync(
+      path.join(release, "dist", "event-stream-worker.js"),
+      `worker ${i}`,
+    );
     writeFileSync(path.join(release, "public", "probe.txt"), `public ${i}`);
   }
   symlinkSync(releases[0], pointer);
   const previous = process.env.OMP_WEB_FRONTEND_ROOT;
   process.env.OMP_WEB_FRONTEND_ROOT = pointer;
-  const switched = startServer({ port: 0, hostname: "127.0.0.1", dev: false, root });
+  const switched = startServer({
+    port: 0,
+    hostname: "127.0.0.1",
+    dev: false,
+    root,
+  });
   if (previous === undefined) delete process.env.OMP_WEB_FRONTEND_ROOT;
   else process.env.OMP_WEB_FRONTEND_ROOT = previous;
   t.after(async () => {
     await switched.stop(true);
     rmSync(dir, { recursive: true, force: true });
   });
-  const get = (name: string) => fetch(new URL(name, switched.url), { proxy: false });
+  const get = (name: string) =>
+    fetch(new URL(name, switched.url), { proxy: false });
   assert.match(await (await get("/")).text(), /release 0/);
   rmSync(pointer);
   symlinkSync(releases[1], pointer);
@@ -145,8 +160,14 @@ test("production switches frontend releases without restarting and retains versi
   assert.equal(await (await get("/public-probe-missing.txt")).status, 404);
   assert.equal(await (await get("/probe.txt")).text(), "public 1");
   assert.equal(await (await get("/assets/old.js")).text(), "old asset");
-  assert.equal(await (await get("/event-stream-worker.js?v=123456789abc")).text(), "old worker");
-  assert.equal((await get("/event-stream-worker.js?v=000000000000")).status, 404);
+  assert.equal(
+    await (await get("/event-stream-worker.js?v=123456789abc")).text(),
+    "old worker",
+  );
+  assert.equal(
+    (await get("/event-stream-worker.js?v=000000000000")).status,
+    404,
+  );
   assert.equal(await (await get("/event-stream-worker.js")).text(), "worker 1");
 });
 
@@ -156,18 +177,31 @@ test("local release marker enables the frontend pointer without changing other i
   const frontend = path.join(data, "frontend-test");
   mkdirSync(path.join(release, "dist"), { recursive: true });
   mkdirSync(path.join(frontend, "dist"), { recursive: true });
-  writeFileSync(path.join(release, "dist", "index.html"), "<head></head>package shell");
-  writeFileSync(path.join(frontend, "dist", "index.html"), "<head></head>switched shell");
+  writeFileSync(
+    path.join(release, "dist", "index.html"),
+    "<head></head>package shell",
+  );
+  writeFileSync(
+    path.join(frontend, "dist", "index.html"),
+    "<head></head>switched shell",
+  );
   symlinkSync(frontend, path.join(data, "frontend-current"));
   t.after(() => rmSync(data, { recursive: true, force: true }));
   const probe = () => {
-    const result = spawnSync(process.execPath, ["-e", `
+    const result = spawnSync(
+      process.execPath,
+      [
+        "-e",
+        `
       import { startServer } from "./server/app.ts";
       const server = startServer({ port: 0, hostname: "127.0.0.1", dev: false, root: ${JSON.stringify(release)} });
       const response = await fetch(server.url, { proxy: false });
       console.log(await response.text());
       await server.stop(true);
-    `], { cwd: repo, env: { ...process.env, HOME: home }, encoding: "utf8" });
+    `,
+      ],
+      { cwd: repo, env: { ...process.env, HOME: home }, encoding: "utf8" },
+    );
     assert.equal(result.status, 0, result.stderr);
     return result.stdout;
   };
