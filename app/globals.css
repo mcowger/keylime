@@ -4165,8 +4165,8 @@ html[data-touch-targets="accessible"] .right-panel-toolbar {
   }
   .right-panel-toolbar .tabbar-scroll {
     width: 100%;
+    min-height: 44px;
   }
-  .right-panel-toolbar .tabbar-scroll,
   .right-panel-toolbar .tabbar-tab {
     height: 44px !important;
   }

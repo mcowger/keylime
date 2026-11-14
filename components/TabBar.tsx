@@ -276,11 +276,11 @@ export function TabBar({
       className="tabbar-scroll"
       style={{
         display: "flex",
-        alignItems: "flex-end",
+        alignItems: "stretch",
         background: "var(--bg-panel)",
         overflowX: "auto",
         flexShrink: 0,
-        height: "var(--tab-height)",
+        minHeight: "var(--tab-height)",
       }}
     >
       {onSelectNotifications && (
