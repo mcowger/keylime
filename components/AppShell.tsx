@@ -3882,7 +3882,6 @@ export function AppShell({ appName }: { appName: string }) {
                       onSessionStatsPanelOpen={openSessionStatsPanel}
                       sessionInfoContainer={sessionInfoContainer}
                       onGenerationSpeedChange={handleGenerationSpeedChange}
-                      onOpenProviders={() => setSettingsTab("providers")}
                       toolCallsDefaultCollapsed={toolCallsDefaultCollapsed}
                       hideToolActivity={hideToolActivity}
                       neverFoldActivity={neverFoldActivity}

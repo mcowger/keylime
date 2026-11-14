@@ -8,33 +8,6 @@ const { ChatInput, ModelErrorBanner, filterModelOptions } =
   await import("./ChatInput.tsx");
 const { setDraft, clearDraft } = await import("@/lib/draft-store");
 
-test("provider-defined reasoning levels appear once in the trigger", () => {
-  for (const thinkingLevel of ["ultra", "ultrathink-extended", "constructor"]) {
-    const html = renderToStaticMarkup(
-      React.createElement(ChatInput, {
-        async onSend() {
-          return { status: "accepted" };
-        },
-        onThinkingLevelChange() {},
-        thinkingLevel,
-        isStreaming: false,
-      }),
-    );
-    const dom = new JSDOM(html);
-    try {
-      const trigger = dom.window.document.querySelector(
-        ".composer-thinking-control > button",
-      );
-      assert.equal(trigger.textContent, thinkingLevel);
-      assert.ok(
-        trigger.getAttribute("aria-label").endsWith(`: ${thinkingLevel}`),
-      );
-    } finally {
-      dom.window.close();
-    }
-  }
-});
-
 test("shows Queue instead of Stop for typed text during a run", () => {
   const draftKey = "chat-input-queue-action-test";
   setDraft(draftKey, {
@@ -422,7 +395,7 @@ test("nested model picker groups by provider and pins the current provider first
   );
 });
 
-test("model picker panel renders providers rail, models pane, and Add Providers", async () => {
+test("model picker retains provider navigation when multiple providers are available", async () => {
   const { ModelPickerPanel } = await import("./ChatInput-model-picker.tsx");
   const html = renderToStaticMarkup(
     React.createElement(ModelPickerPanel, {
@@ -441,7 +414,6 @@ test("model picker panel renders providers rail, models pane, and Add Providers"
       onSearchQueryChange() {},
       isMobile: false,
       onSelectModel() {},
-      onOpenProviders() {},
     }),
   );
 
@@ -451,7 +423,30 @@ test("model picker panel renders providers rail, models pane, and Add Providers"
   assert.match(html, /GPT-5\.6 Terra/);
   assert.match(html, />codex</);
   assert.match(html, />pi</);
-  assert.match(html, />(Add Providers|chatInput\.addProviders)</);
+});
+
+test("single-provider picker shows models directly on desktop and mobile without provider actions", async () => {
+  const { ModelPickerPanel } = await import("./ChatInput-model-picker.tsx");
+  const options = [
+    { provider: "only", modelId: "model-one", name: "Model One" },
+  ];
+  for (const isMobile of [false, true]) {
+    const html = renderToStaticMarkup(
+      React.createElement(ModelPickerPanel, {
+        modelOptions: options,
+        filteredModelOptions: options,
+        modelSearchQuery: "",
+        onSearchQueryChange() {},
+        onSelectModel() {},
+        isMobile,
+      }),
+    );
+    assert.match(html, /role="menuitemradio"[^>]*>[\s\S]*Model One/);
+    assert.doesNotMatch(
+      html,
+      /picker-provider-row|picker-nested-providers|Add Providers/,
+    );
+  }
 });
 
 test("exposes tool presets through the plus menu when a handler is provided", () => {

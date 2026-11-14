@@ -16,6 +16,8 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Fixed
 
+- The composer model picker opens directly to models when only one provider is available. Removed its Add Providers action; provider management remains in Settings.
+- Reasoning effort is selected inside the model picker instead of a separate composer button, preserving provider-specific levels and disabling changes during streaming.
 - Deployment closes confirmed-idle sessions, gives active work a 60-second grace period, then forces cutover and terminates remaining runs instead of waiting indefinitely.
 - Deployment runs in an independent, snapshotted worker with durable phase tracking and exclusive process-owned locking, so stopping its submitting agent cannot interrupt cutover. `--status` and `--recover` expose progress and interrupted-worker recovery.
 - Removed the composer's Slow button and snail icon. Native `/slow` commands and provider usage-limit warnings remain available.

@@ -140,8 +140,6 @@ interface Props {
   /** Handles the open_url host tool; returns the result text for the agent. */
   onOpenUrl?: (url: string) => string;
   onGenerationSpeedChange?: (speed: GenerationSpeedInfo | null) => void;
-  /** Open Settings → API Keys & Providers (from the model picker). */
-  onOpenProviders?: () => void;
   /** The sidebar search query: its hits are highlighted ("" for none). */
   searchQuery?: string;
   /** A hit picked in the sidebar for this session: scrolled to and marked current. */
@@ -595,7 +593,6 @@ export function ChatWindow({
   onGenerationSpeedChange,
   onOpenFile: onOpenWorkspaceFile,
   onOpenUrl,
-  onOpenProviders,
   searchQuery = "",
   searchTarget = null,
   onSearchTargetHandled,
@@ -1570,7 +1567,6 @@ export function ChatWindow({
          nothing to collapse. */
       onMinimize={isEmptyNew ? undefined : handleMinimize}
       statusText={composerStatusText}
-      onOpenProviders={onOpenProviders}
     />
   );
 

@@ -22,7 +22,6 @@ import {
   Mic,
   Paperclip,
   Plus,
-  RotateCw,
   Shrink,
   Sparkles,
   Terminal,
@@ -167,24 +166,8 @@ import {
 import { acceptGhost } from "@/lib/word-prediction";
 import { GhostMirror } from "@/components/GhostMirror";
 import { useI18n } from "@/lib/i18n";
-import {
-  selectableThinkingLevels,
-  DEFAULT_THINKING_LEVELS,
-} from "@/lib/thinking-levels";
+import { selectableThinkingLevels } from "@/lib/thinking-levels";
 import type { ToolPreset } from "@/lib/tool-presets";
-
-function ThinkingGlyph({ level }: { level: string }) {
-  if (!DEFAULT_THINKING_LEVELS.includes(level)) return null;
-  return (
-    <span
-      className="composer-thinking-glyph"
-      data-level={level}
-      aria-hidden="true"
-    >
-      {level === "auto" ? <RotateCw strokeWidth={2} /> : null}
-    </span>
-  );
-}
 
 const SLOW_MODE_SAME_DAY_MS = 20 * 3_600_000;
 
@@ -398,8 +381,6 @@ interface Props {
   onMinimize?: () => void;
   /** Active status label attached to the composer's top edge (e.g. "Waiting for model..."). */
   statusText?: string | null;
-  /** Open Settings → API Keys & Providers from the model picker footer. */
-  onOpenProviders?: () => void;
 }
 
 export interface ChatInputHandle {
@@ -562,7 +543,6 @@ export const ChatInput = memo(
       onAdvisorChange,
       onMinimize,
       statusText,
-      onOpenProviders,
     }: Props,
     ref,
   ) {
@@ -587,7 +567,6 @@ export const ChatInput = memo(
     const atListboxId = `${composerId}-at`;
     const plusMenuId = `${composerId}-plus-menu`;
     const modelPickerId = `${composerId}-model-picker`;
-    const thinkingMenuId = `${composerId}-thinking-menu`;
     const moveMenuFocus = useCallback(
       (event: React.KeyboardEvent<HTMLElement>) => {
         if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key))
@@ -652,7 +631,6 @@ export const ChatInput = memo(
       queue: Props["queuedMessages"];
     } | null>(null);
     const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
-    const [thinkingDropdownOpen, setThinkingDropdownOpen] = useState(false);
     const [contextOpen, setContextOpen] = useState(false);
     // Desktop context popover height cap: the room above its trigger, so it only
     // scrolls when the window is genuinely too short for it.
@@ -758,7 +736,6 @@ export const ChatInput = memo(
     const modelTriggerRef = useRef<HTMLButtonElement>(null);
     const modelWasOpenRef = useRef(false);
     const modelSearchInputRef = useRef<HTMLInputElement>(null);
-    const thinkingDropdownRef = useRef<HTMLDivElement>(null);
     const contextWrapRef = useRef<HTMLDivElement>(null);
     const contextReturnFocusRef = useRef<HTMLElement | null>(null);
     const plusMenuRef = useRef<HTMLDivElement>(null);
@@ -3194,21 +3171,10 @@ export const ChatInput = memo(
           .filter(Boolean)
           .join(" · ")
       : t("chatInput.compactContext");
-    const thinkingDisplayLabel = (() => {
-      const lvl = thinkingLevel ?? "auto";
-      if (lvl === "auto" || !thinkingLevelMap) return lvl;
-      return thinkingLevelMap[lvl] ?? lvl;
-    })();
     const thinkingLevelOptions = React.useMemo(
       () => selectableThinkingLevels(availableThinkingLevels),
       [availableThinkingLevels],
     );
-    // A run starting mid-interaction must not leave the reasoning menu
-    // open: the level only applies to the next prompt, and the trigger is
-    // disabled while streaming.
-    useEffect(() => {
-      if (isStreaming) setThinkingDropdownOpen(false);
-    }, [isStreaming]);
 
     useEffect(() => {
       if (!modelDropdownOpen) {
@@ -3240,16 +3206,6 @@ export const ChatInput = memo(
           ?.focus(),
       );
     }, [plusMenuOpen]);
-    useEffect(() => {
-      if (!thinkingDropdownOpen) return;
-      requestAnimationFrame(() =>
-        thinkingDropdownRef.current
-          ?.querySelector<HTMLButtonElement>(
-            '[role="menuitemradio"]:not([disabled])',
-          )
-          ?.focus(),
-      );
-    }, [thinkingDropdownOpen]);
     useLayoutEffect(() => {
       const wrap = contextWrapRef.current;
       if (!contextOpen || isMobile || !wrap) return;
@@ -3321,12 +3277,6 @@ export const ChatInput = memo(
           !modelDropdownPanelRef.current.contains(e.target as Node)
         ) {
           setModelDropdownOpen(false);
-        }
-        if (
-          thinkingDropdownRef.current &&
-          !thinkingDropdownRef.current.contains(e.target as Node)
-        ) {
-          setThinkingDropdownOpen(false);
         }
         if (
           plusMenuRef.current &&
@@ -5315,15 +5265,40 @@ export const ChatInput = memo(
                               }
                             }}
                             onClose={() => setModelDropdownOpen(false)}
-                            onOpenProviders={
-                              onOpenProviders
-                                ? () => {
-                                    setModelDropdownOpen(false);
-                                    onOpenProviders();
-                                  }
-                                : undefined
-                            }
                           />
+                          {onThinkingLevelChange && (
+                            <label
+                              className="picker-panel-footer"
+                              style={{ flexShrink: 0 }}
+                            >
+                              <span>{t("chatInput.reasoningLabel")}</span>
+                              <select
+                                aria-label={t("chatInput.changeReasoning")}
+                                value={thinkingLevel ?? "auto"}
+                                disabled={isStreaming}
+                                onChange={(event) => {
+                                  if (!isStreaming)
+                                    onThinkingLevelChange(event.target.value);
+                                }}
+                                style={{
+                                  background: "var(--bg-panel)",
+                                  color: "var(--text)",
+                                  border: "1px solid var(--border)",
+                                  borderRadius: "var(--radius-control)",
+                                  padding: "4px 8px",
+                                  textTransform: "capitalize",
+                                }}
+                              >
+                                {thinkingLevelOptions.map((level) => (
+                                  <option key={level} value={level}>
+                                    {level === "auto"
+                                      ? level
+                                      : (thinkingLevelMap?.[level] ?? level)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          )}
                         </div>
                       )}
                     </div>
@@ -5333,210 +5308,6 @@ export const ChatInput = memo(
                   className="composer-toolbar-spacer"
                   style={{ marginLeft: "auto" }}
                 />
-
-                {/* Thinking selector — compact, expressive, and consistent with models */}
-                {onThinkingLevelChange && (
-                  <div
-                    ref={thinkingDropdownRef}
-                    className="composer-thinking-control"
-                    style={{ position: "relative", minWidth: 0 }}
-                  >
-                    <button
-                      onClick={() => setThinkingDropdownOpen((v) => !v)}
-                      disabled={isStreaming}
-                      title={t("chatInput.changeReasoningTitle", {
-                        level: thinkingDisplayLabel,
-                      })}
-                      aria-controls={thinkingMenuId}
-                      aria-label={`${t("chatInput.changeReasoning")}: ${thinkingDisplayLabel}`}
-                      aria-expanded={thinkingDropdownOpen}
-                      aria-haspopup="menu"
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 5,
-                        height: "var(--control-height-sm)",
-                        width: "100%",
-                        padding: "0 4px",
-                        background: thinkingDropdownOpen
-                          ? "var(--bg-hover)"
-                          : "none",
-                        border: "none",
-                        borderRadius: 7,
-                        color: "var(--text-muted)",
-                        cursor: isStreaming ? "not-allowed" : "pointer",
-                        opacity: isStreaming ? 0.5 : 1,
-                        fontSize: "var(--text-sm)",
-                        transition:
-                          "background var(--dur-fast) var(--ease-out-warm), color var(--dur-fast) var(--ease-out-warm)",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isStreaming) {
-                          e.currentTarget.style.background = "var(--bg-hover)";
-                          e.currentTarget.style.color = "var(--text)";
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = thinkingDropdownOpen
-                          ? "var(--bg-hover)"
-                          : "none";
-                        e.currentTarget.style.color = "var(--text-muted)";
-                      }}
-                    >
-                      {/* TUI-style level glyph; wide toolbars also show the level
-                      name (label hidden by CSS on narrow toolbars) and the
-                      label always stays in title/aria. */}
-                      <ThinkingGlyph level={thinkingLevel ?? "auto"} />
-                      <span
-                        className="composer-thinking-label"
-                        style={{
-                          minWidth: 0,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                          textTransform: "capitalize",
-                        }}
-                      >
-                        {thinkingDisplayLabel}
-                      </span>
-                      <ChevronDown
-                        size={12}
-                        strokeWidth={1.8}
-                        style={{
-                          flexShrink: 0,
-                          opacity: 0.7,
-                          transform: thinkingDropdownOpen
-                            ? "rotate(180deg)"
-                            : "none",
-                          transition:
-                            "transform var(--dur-fast) var(--ease-out-warm)",
-                        }}
-                        aria-hidden="true"
-                      />
-                    </button>
-                    {thinkingDropdownOpen && (
-                      <div
-                        id={thinkingMenuId}
-                        aria-label={t("chatInput.reasoningLabel")}
-                        className="picker-panel"
-                        role="menu"
-                        onKeyDown={(event) => {
-                          if (event.key === "Escape") {
-                            event.stopPropagation();
-                            setThinkingDropdownOpen(false);
-                            requestAnimationFrame(() =>
-                              thinkingDropdownRef.current
-                                ?.querySelector<HTMLButtonElement>("button")
-                                ?.focus(),
-                            );
-                            return;
-                          }
-                          moveMenuFocus(event);
-                        }}
-                        style={{
-                          position: "absolute",
-                          bottom: "calc(100% + 6px)",
-                          left: 0,
-                          zIndex: 100,
-                          width: 190,
-                          maxWidth: "calc(100vw - 32px)",
-                        }}
-                      >
-                        <div className="picker-panel-header">
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            aria-hidden="true"
-                            style={{ color: "var(--text-muted)" }}
-                          >
-                            <path d="M9.5 2A5.5 5.5 0 0 0 4 7.5c0 1.7.78 3.21 2 4.21V14a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-2.29c1.22-1 2-2.51 2-4.21A5.5 5.5 0 0 0 9.5 2z" />
-                            <line x1="7" y1="18" x2="12" y2="18" />
-                          </svg>
-                          <span className="picker-panel-title">
-                            {t("chatInput.reasoningLabel")}
-                          </span>
-                          <span className="picker-panel-count">
-                            {thinkingLevelOptions.length}
-                          </span>
-                        </div>
-                        <div className="picker-thinking-cards">
-                          {thinkingLevelOptions.map((lvl) => {
-                            const isActive = (thinkingLevel ?? "auto") === lvl;
-                            const mappedVal =
-                              lvl !== "auto" && thinkingLevelMap
-                                ? thinkingLevelMap[lvl]
-                                : undefined;
-                            const displayLabel =
-                              mappedVal != null && mappedVal !== lvl
-                                ? mappedVal
-                                : lvl;
-                            return (
-                              <button
-                                className="picker-row picker-thinking-card"
-                                data-active={isActive}
-                                role="menuitemradio"
-                                aria-checked={isActive}
-                                key={lvl}
-                                onClick={() => {
-                                  setThinkingDropdownOpen(false);
-                                  if (!isActive && !isStreaming)
-                                    onThinkingLevelChange(lvl);
-                                }}
-                              >
-                                <span className="picker-check">
-                                  {isActive && (
-                                    <svg
-                                      width="11"
-                                      height="11"
-                                      viewBox="0 0 10 10"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                    >
-                                      <polyline points="1.5 5 4 7.5 8.5 2.5" />
-                                    </svg>
-                                  )}
-                                </span>
-                                <ThinkingGlyph level={lvl} />
-                                <span
-                                  style={{
-                                    minWidth: 0,
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                    textTransform: "capitalize",
-                                  }}
-                                >
-                                  {displayLabel}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <div className="picker-panel-footer">
-                          <span>{t("chatInput.appliesNextPrompt")}</span>
-                          <span
-                            style={{
-                              fontWeight: 600,
-                              color: "var(--text-muted)",
-                              textTransform: "capitalize",
-                            }}
-                          >
-                            {thinkingDisplayLabel}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 {/* Fast toggle — only for models that support fast mode. Stays
                 visible while the agent runs (disabled) so it does not look

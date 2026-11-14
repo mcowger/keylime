@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { providerInitials } from "./ModelsConfig-types";
 import type { ModelOption } from "./ChatInput-model-options";
@@ -84,7 +84,6 @@ export interface ModelPickerPanelProps {
   showModelsLoading?: boolean;
   isMobile?: boolean;
   onSelectModel: (provider: string, modelId: string) => void;
-  onOpenProviders?: () => void;
   onClose?: () => void;
 }
 
@@ -102,7 +101,6 @@ export function ModelPickerPanel({
   showModelsLoading,
   isMobile,
   onSelectModel,
-  onOpenProviders,
   onClose,
 }: ModelPickerPanelProps) {
   const { t } = useI18n();
@@ -145,9 +143,10 @@ export function ModelPickerPanel({
       []);
 
   const leftGroups = searching ? filteredGroups : null;
+  const multipleProviders = groups.length > 1;
   const showProviderRail =
-    !searching && (!isMobile || selectedProvider === null);
-  const showModelPane = searching || !isMobile || selectedProvider !== null;
+    multipleProviders && !searching && (!isMobile || selectedProvider === null);
+  const showModelPane = !showProviderRail || !isMobile;
 
   const selectModel = (opt: ModelOption) => {
     onSelectModel(opt.provider, opt.modelId);
@@ -221,6 +220,7 @@ export function ModelPickerPanel({
       <div
         className="picker-nested"
         data-searching={searching ? "true" : "false"}
+        data-provider-rail={showProviderRail ? "true" : "false"}
       >
         {showProviderRail && (
           <div
@@ -283,17 +283,20 @@ export function ModelPickerPanel({
             role="group"
             aria-label={t("chatInput.modelsLabel")}
           >
-            {isMobile && !searching && selectedProvider !== null && (
-              <button
-                type="button"
-                className="picker-row"
-                onClick={() => setSelectedProvider(null)}
-                style={{ color: "var(--text-muted)" }}
-              >
-                <ChevronLeft size={13} strokeWidth={1.8} aria-hidden="true" />
-                <span>{activeProvider}</span>
-              </button>
-            )}
+            {multipleProviders &&
+              isMobile &&
+              !searching &&
+              selectedProvider !== null && (
+                <button
+                  type="button"
+                  className="picker-row"
+                  onClick={() => setSelectedProvider(null)}
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  <ChevronLeft size={13} strokeWidth={1.8} aria-hidden="true" />
+                  <span>{activeProvider}</span>
+                </button>
+              )}
             {searching ? (
               leftGroups && leftGroups.length > 0 ? (
                 leftGroups.map((group) => (
@@ -321,19 +324,6 @@ export function ModelPickerPanel({
           </div>
         )}
       </div>
-
-      {onOpenProviders && (
-        <button
-          type="button"
-          className="picker-row picker-add-providers"
-          onClick={() => {
-            onOpenProviders();
-          }}
-        >
-          <Plus size={13} strokeWidth={1.8} aria-hidden="true" />
-          <span>{t("chatInput.addProviders")}</span>
-        </button>
-      )}
     </>
   );
 }
