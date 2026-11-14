@@ -46,7 +46,8 @@ test("attaches todo plan and subagent roster with live states", () => {
   assert.match(html, /scout/);
   assert.match(html, />SurfaceMap</);
   assert.match(html, /Map the surface/);
-  assert.match(html, /worker/);
+  assert.match(html, /Completed \(1\)/);
+  assert.doesNotMatch(html, /Write the code/);
   assert.match(html, /aria-label="1 running · 2 total"/);
   assert.doesNotMatch(html, />1 running · 2 total</);
 });
@@ -82,6 +83,8 @@ test("live chips show current tool, telemetry, and async marker", () => {
   assert.match(html, /read — Inspect foo\.ts/);
   assert.match(html, /data-subagent-metric="2\.2k tok"/);
   assert.match(html, /data-subagent-metric="8k\/32k ctx"/);
+  assert.match(html, />25\.0%</);
+  assert.match(html, /Map the surface[\s\S]*data-subagent-metric="scout"/);
   assert.match(html, /data-subagent-metric="gpt-x"/);
   assert.doesNotMatch(html, />2\.2k tok</);
   assert.doesNotMatch(html, />8k\/32k ctx</);
@@ -137,35 +140,14 @@ test("activity keeps todo progress summary accessible", () => {
   assert.match(html, /1\/2 complete/);
 });
 
-test("history chips render terminal telemetry without pulsing state", () => {
-  const html = renderToStaticMarkup(
-    React.createElement(ActivityPanel, {
-      todoPhases: [],
-      subagents: [
-        {
-          id: "s1",
-          agent: "scout",
-          status: "completed",
-          task: "Map the surface",
-          index: 0,
-          source: "history",
-          progress: {
-            status: "completed",
-            tokens: 999000,
-            cost: 1.23,
-            durationMs: 360000,
-            resolvedModel: "provider/gpt-5.6:medium",
-          },
-        },
-      ],
-      onSelectSubagent: noop,
-    }),
-  );
-  assert.match(html, /Map the surface/);
-  assert.match(html, /data-subagent-metric="999k tok"/);
-  assert.match(html, /data-subagent-metric="6m"/);
-  // History chips must not show the pulsing live dot.
-  assert.doesNotMatch(html, /live-pulse/);
+test("completed chips are initially hidden", () => {
+  const html = renderToStaticMarkup(React.createElement(ActivityPanel, {
+    todoPhases: [],
+    subagents: [{ id: "s1", agent: "scout", status: "completed", task: "Finished task", index: 0, source: "history" }],
+    onSelectSubagent: noop,
+  }));
+  assert.match(html, /Completed \(1\)/);
+  assert.doesNotMatch(html, /Finished task/);
 });
 
 test("chips show agent source, nested count, and async marker", () => {
@@ -201,26 +183,6 @@ test("chips show agent source, nested count, and async marker", () => {
   assert.match(html, /⤴/);
 });
 
-test("history chips mark detached async spawns", () => {
-  const html = renderToStaticMarkup(
-    React.createElement(ActivityPanel, {
-      todoPhases: [],
-      subagents: [
-        {
-          id: "s1",
-          agent: "scout",
-          status: "started",
-          task: "Async audit",
-          index: 0,
-          source: "history",
-          detached: true,
-        },
-      ],
-      onSelectSubagent: noop,
-    }),
-  );
-  assert.match(html, /⤴/);
-});
 
 test("zero context tokens never print a null gauge", () => {
   const html = renderToStaticMarkup(
@@ -244,6 +206,7 @@ test("zero context tokens never print a null gauge", () => {
     }),
   );
   assert.doesNotMatch(html, /null/);
+  assert.match(html, />0\.0%</);
   assert.match(html, /read/);
 });
 
