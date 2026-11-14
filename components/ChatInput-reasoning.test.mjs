@@ -34,16 +34,16 @@ test("reasoning effort lives in model picker, preserves mapped provider levels a
     "low",
   );
   assert.equal(
-    screen.queryByRole("combobox", { name: "Change reasoning level" }),
+    screen.queryByRole("slider", { name: "Change reasoning level" }),
     null,
   );
   fireEvent.click(screen.getByRole("button", { name: /^Change model:/ }));
-  const select = screen.getByRole("combobox", {
+  const select = screen.getByRole("slider", {
     name: "Change reasoning level",
   });
   assert.ok(select.closest('[role="dialog"]'));
-  assert.ok(screen.getByRole("option", { name: "Provider maximum" }));
-  fireEvent.change(select, { target: { value: "ultra" } });
+  assert.ok(screen.getByRole("button", { name: "Provider maximum" }));
+  fireEvent.change(select, { target: { value: "1" } });
   assert.deepEqual(changes, ["ultra"]);
   view.rerender(
     React.createElement(ChatInput, {
@@ -59,7 +59,7 @@ test("reasoning effort lives in model picker, preserves mapped provider levels a
     "ultra",
   );
   assert.equal(
-    screen.getByRole("combobox", { name: "Change reasoning level" }).disabled,
+    screen.getByRole("slider", { name: "Change reasoning level" }).disabled,
     true,
   );
 });

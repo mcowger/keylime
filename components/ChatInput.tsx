@@ -14,6 +14,7 @@ import React, {
 import { createPortal } from "react-dom";
 import type { ModelActivity } from "@/lib/model-activity";
 import { ModelActivityIndicator } from "./ModelActivityIndicator";
+import { ReasoningEffortSlider } from "./ReasoningEffortSlider";
 import {
   ChevronDown,
   ClipboardPaste,
@@ -5262,37 +5263,13 @@ export const ChatInput = memo(
                             onClose={() => setModelDropdownOpen(false)}
                           />
                           {onThinkingLevelChange && (
-                            <label
-                              className="picker-panel-footer"
-                              style={{ flexShrink: 0 }}
-                            >
-                              <span>{t("chatInput.reasoningLabel")}</span>
-                              <select
-                                aria-label={t("chatInput.changeReasoning")}
-                                value={thinkingLevel ?? "auto"}
-                                disabled={isStreaming}
-                                onChange={(event) => {
-                                  if (!isStreaming)
-                                    onThinkingLevelChange(event.target.value);
-                                }}
-                                style={{
-                                  background: "var(--bg-panel)",
-                                  color: "var(--text)",
-                                  border: "1px solid var(--border)",
-                                  borderRadius: "var(--radius-control)",
-                                  padding: "4px 8px",
-                                  textTransform: "capitalize",
-                                }}
-                              >
-                                {thinkingLevelOptions.map((level) => (
-                                  <option key={level} value={level}>
-                                    {level === "auto"
-                                      ? level
-                                      : (thinkingLevelMap?.[level] ?? level)}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
+                            <ReasoningEffortSlider
+                              levels={thinkingLevelOptions}
+                              value={thinkingLevel ?? "auto"}
+                              labels={thinkingLevelMap}
+                              disabled={isStreaming}
+                              onChange={onThinkingLevelChange}
+                            />
                           )}
                         </div>
                       )}
