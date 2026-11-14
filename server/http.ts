@@ -97,6 +97,7 @@ export async function serveFile(
   request: Request,
   root: string,
   dev: boolean,
+  frontendRoot?: string,
 ): Promise<Response | null> {
   let pathname: string;
   try {
@@ -112,7 +113,14 @@ export async function serveFile(
     return null;
   if (pathname === "/index.html") return null;
   const katex = pathname.startsWith("/katex/");
-  const relative = pathname.slice(katex ? "/katex/".length : 1);
+  let relative = pathname.slice(katex ? "/katex/".length : 1);
+  if (frontendRoot && pathname === "/event-stream-worker.js") {
+    const version = new URL(request.url).searchParams.get("v");
+    if (version !== null) {
+      if (!/^[0-9a-f]{12}$/.test(version)) return null;
+      relative = `workers/${version}.js`;
+    }
+  }
   const bases = katex
     ? [
         path.join(
@@ -121,8 +129,8 @@ export async function serveFile(
         ),
       ]
     : [
-        ...(dev ? [] : [path.resolve(root, "dist")]),
-        path.resolve(root, "public"),
+        ...(dev ? [] : [path.resolve(frontendRoot ?? root, "dist")]),
+        path.resolve(frontendRoot ?? root, "public"),
       ];
   for (const base of bases) {
     const file = path.resolve(base, relative);

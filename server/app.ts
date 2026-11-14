@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { browserLink, type BrowserLinkData } from "@/lib/browser-link";
@@ -151,6 +152,23 @@ async function devIndex(server: Bun.Server<ServerSocketData>): Promise<string> {
   // Never through HTTP(S)_PROXY: a proxy cannot reach this loopback server.
   return stylesheetFirst(await (await fetch(url, { proxy: false })).text());
 }
+function frontendRoot(root: string): string | undefined {
+  if (process.env.OMP_WEB_FRONTEND_ROOT)
+    return path.resolve(process.env.OMP_WEB_FRONTEND_ROOT);
+  const data = path.join(os.homedir(), ".local", "share", "keylime");
+  try {
+    const releases = realpathSync(path.join(data, "releases"));
+    const resolved = realpathSync(root);
+    if (
+      resolved.startsWith(releases + path.sep) &&
+      existsSync(path.join(resolved, "keylime-release.json"))
+    )
+      return path.join(data, "frontend-current");
+  } catch {
+    // Non-deployment installations need no release directory.
+  }
+  return undefined;
+}
 
 /** `worker`: the event-stream worker bundle (server/client-env.ts) dev serves from memory; prod serves dist/'s copy. */
 export function startServer(options: {
@@ -162,8 +180,9 @@ export function startServer(options: {
   worker?: string;
 }): Bun.Server<ServerSocketData> {
   const { dev, root, html, worker } = options;
-  // Dev serves the SPA from the HTML import (`html`) and never reads dist/.
-  const index = dev
+  const frontend = dev ? undefined : frontendRoot(root);
+  // A configured frontend is read on each request; the normal package keeps its startup snapshot.
+  const index = dev || frontend
     ? null
     : readFileSync(path.join(root, "dist", "index.html"), "utf8");
 
@@ -250,7 +269,9 @@ export function startServer(options: {
             },
           });
         }
-        const file = await serveFile(request, root, dev);
+        // Pin one release for this request even if the pointer changes while it is being served.
+        const assets = frontend ? realpathSync(frontend) : root;
+        const file = await serveFile(request, root, dev, frontend ? assets : undefined);
         if (file) return file;
         // Unknown extensionless page paths get the SPA too, but /api and its subpaths never do, and neither does a
         // miss under a gate-exempt path (only /login is public and a page).
@@ -262,7 +283,9 @@ export function startServer(options: {
             !/^\/api(\/|$)/.test(pathname) &&
             !pathname.slice(pathname.lastIndexOf("/") + 1).includes("."));
         if (!isPage) return text("Not Found", 404);
-        const shell = index ?? (await devIndex(server));
+        const shell = frontend
+          ? readFileSync(path.join(assets, "dist", "index.html"), "utf8")
+          : index ?? (await devIndex(server));
         return new Response(renderIndex(shell, request), {
           headers: {
             "content-type": "text/html; charset=utf-8",

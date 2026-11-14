@@ -27,13 +27,16 @@ that installed candidate with isolated data. It never serves this working tree.
 Verified releases stay in `~/.local/share/keylime/releases/`.
 
 Activation gives active runs and protected host work up to 60 seconds to finish.
+Use `keylime-deploy --timeout 10` or `mise exec -- bun run deploy:local:fast`
+to shorten that grace period to 10 seconds. `--timeout` takes positive whole
+seconds and applies to staged-release activation too.
 Confirmed-idle session processes close automatically. At the deadline deployment
 continues forcibly: remaining active runs and host operations are terminated.
 Deployment runs in a detached worker with file-backed logs, outside the agent's
 process group. Closing the terminal or terminating the submitting session cannot
 interrupt it. `--wait` only observes that worker; it does not own deployment.
 
-Older daemons without maintenance controls use the full 60-second grace period,
+Older daemons without maintenance controls use the full configured grace period,
 then the web service and host process group are stopped for the initial upgrade.
 
 Before switching, the command stops web admission and the host,
@@ -45,6 +48,22 @@ the same agent directory must be stopped separately before cutover.
 Build failures never change the active version. Activation failures before
 admission reopens restore the previous selection. Once admission reopens there
 is no automatic rollback: new writes may already exist.
+
+## Frontend-only deployment
+
+A frontend-only deployment switches the browser assets without restarting the
+web server or host daemon. Open tabs continue running their loaded code; reload
+to use the new frontend. The running backend must support the frontend-only
+deployment mechanism first, so activate this change once with a normal deployment.
+
+```bash
+mise exec -- bun run deploy:local:frontend
+```
+
+Frontend-only deployment accepts changes limited to browser components, hooks,
+and app files outside `app/api`. Changes to shared code, dependencies, or the
+backend require a normal deployment. Existing hashed assets and worker versions
+are retained so tabs opened before a switch can still load them.
 
 ## Rollback
 

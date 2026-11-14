@@ -7,11 +7,12 @@ export async function waitForIdleDrain(
     now?: () => number;
     sleep?: (ms: number) => Promise<void>;
     onBusy?: () => void;
+    timeoutMs?: number;
   } = {},
 ): Promise<boolean> {
   const now = options.now ?? (() => performance.now());
   const sleep = options.sleep ?? ((ms) => Bun.sleep(ms));
-  const deadline = now() + ACTIVATION_WAIT_MS;
+  const deadline = now() + (options.timeoutMs ?? ACTIVATION_WAIT_MS);
   do {
     try {
       await drain(deadline);

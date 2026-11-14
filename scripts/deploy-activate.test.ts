@@ -147,6 +147,14 @@ test("a failed host stop still attempts to restart both services", async () => {
   ]);
 });
 
+test("configured grace forces cutover after ten seconds", async () => {
+  const f = fixture();
+  f.setBusy();
+  await activateRelease({ ...f.options, timeoutMs: 10_000 }, f.deps);
+  expect(f.clock()).toBe(10_000);
+  expect(f.calls).toContain("drain-force");
+});
+
 test("busy and legacy daemons receive the full grace before forced cutover", async () => {
   for (const legacy of [false, true]) {
     const f = fixture();

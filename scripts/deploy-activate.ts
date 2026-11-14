@@ -15,6 +15,7 @@ import {
   type HostControlStatus,
 } from "../lib/hosts/host-control";
 import { waitForIdleDrain } from "./deploy-wait";
+import { prepareFrontend, selectFrontend } from "./deploy-frontend";
 
 type ServiceStatus = { status: string; pid?: number };
 type Options = {
@@ -23,6 +24,7 @@ type Options = {
   agent: string;
   home: string;
   env: NodeJS.ProcessEnv;
+  timeoutMs?: number;
   onPhase: (phase: string, details?: Record<string, unknown>) => void;
 };
 
@@ -68,6 +70,7 @@ function defaults({
     JSON.parse(
       run(["pitchfork", "status", `global/${service}`, "--json"], true),
     );
+  let previousFrontend: string | undefined;
   return {
     preflight: () => {
       if (!existsSync(path.join(candidate, "keylime-release.json")))
@@ -119,10 +122,21 @@ function defaults({
       return backup;
     },
     select: (target) => {
+      const pointer = path.join(base, "frontend-current");
+      const isCandidate = target === candidate;
+      if (isCandidate) {
+        previousFrontend = existsSync(pointer) ? realpathSync(pointer) : realpathSync(path.join(base, "current"));
+        prepareFrontend(candidate, previousFrontend);
+      }
+      const frontend = isCandidate ? candidate : previousFrontend;
       const tmp = path.join(base, `current-${process.pid}`);
       try {
+        if (frontend) selectFrontend(base, frontend);
         symlinkSync(target, tmp);
         renameSync(tmp, path.join(base, "current"));
+      } catch (error) {
+        if (isCandidate && previousFrontend) selectFrontend(base, previousFrontend);
+        throw error;
       } finally {
         rmSync(tmp, { force: true });
       }
@@ -191,7 +205,7 @@ export async function activateRelease(
           await d.sleep(Math.min(100, deadline - d.now()));
         }
       },
-      { now: d.now, sleep: d.sleep },
+      { now: d.now, sleep: d.sleep, timeoutMs: options.timeoutMs },
     );
     onPhase("stop-web", { forced: !idle });
     webStopped = true;

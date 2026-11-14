@@ -9,19 +9,30 @@ const { values } = parseArgs({
   args: Bun.argv.slice(2),
   options: {
     activate: { type: "string" },
+    frontend: { type: "boolean" },
     wait: { type: "boolean" },
     status: { type: "boolean" },
     recover: { type: "boolean" },
+    timeout: { type: "string" },
     help: { type: "boolean" },
   },
 });
 const base = path.join(homedir(), ".local/share/keylime");
 if (values.help) {
   console.log(
-    "keylime-deploy [--activate <release>] [--wait]\n  Submit an independent deployment; active work gets 60 seconds before forced cutover.\nkeylime-deploy --status\n  Show durable phase/result and log path.\nkeylime-deploy --recover\n  Restart services at the currently selected release after an interrupted worker.\n--wait observes completion but disconnecting never cancels deployment.",
+    "keylime-deploy [--frontend] [--activate <release>] [--timeout <seconds>] [--wait]\n  Submit an independent deployment; --frontend builds and switches compatible frontend assets without restarting services.\n  Full deployments give active work 60 seconds by default before forced cutover.\nkeylime-deploy --status\n  Show durable phase/result and log path.\nkeylime-deploy --recover\n  Restart services at the currently selected release after an interrupted worker.\n--wait observes completion but disconnecting never cancels deployment.",
   );
   process.exit(0);
 }
+if (
+  values.timeout !== undefined &&
+  (!/^\d+$/.test(values.timeout) ||
+    !Number.isSafeInteger(Number(values.timeout) * 1000) ||
+    Number(values.timeout) <= 0)
+)
+  throw new Error("--timeout must be a positive whole number of seconds");
+if (values.frontend && (values.activate || values.recover || values.timeout !== undefined))
+  throw new Error("--frontend cannot be combined with --activate, --recover, or --timeout");
 mkdirSync(base, { recursive: true, mode: 0o700 });
 if (values.status) {
   console.log(JSON.stringify(readDeployState(base), null, 2));
@@ -51,6 +62,8 @@ const child = detachDeployWorker(
     path.resolve(import.meta.dir, ".."),
     ...(values.activate ? ["--activate", path.resolve(values.activate)] : []),
     ...(values.recover ? ["--recover"] : []),
+    ...(values.frontend ? ["--frontend"] : []),
+    ...(values.timeout !== undefined ? ["--timeout", values.timeout] : []),
   ],
   logPath,
   homedir(),
