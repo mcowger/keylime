@@ -1,4 +1,7 @@
-import { type OmpLoginProvider, runUtilityCommand } from "@/lib/omp/rpc-utility";
+import {
+  type OmpLoginProvider,
+  runUtilityCommand,
+} from "@/lib/omp/rpc-utility";
 
 // Login-capable providers via the omp RPC get_login_providers command. This is
 // omp's own /login list (OAuth subscriptions plus key-creation flows), so no
@@ -10,12 +13,14 @@ export async function GET() {
       30_000,
     );
     const providers = Array.isArray(response.providers)
-      ? response.providers.filter((provider): provider is OmpLoginProvider => (
-        typeof provider === "object" && provider !== null
-        && typeof (provider as OmpLoginProvider).id === "string"
-        && typeof (provider as OmpLoginProvider).name === "string"
-        && typeof (provider as OmpLoginProvider).authenticated === "boolean"
-      ))
+      ? response.providers.filter(
+          (provider): provider is OmpLoginProvider =>
+            typeof provider === "object" &&
+            provider !== null &&
+            typeof (provider as OmpLoginProvider).id === "string" &&
+            typeof (provider as OmpLoginProvider).name === "string" &&
+            typeof (provider as OmpLoginProvider).authenticated === "boolean",
+        )
       : [];
     const result = providers
       .filter((p) => p.available !== false)

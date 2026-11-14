@@ -1,6 +1,10 @@
 "use client";
 
-import type { AgentMessage, BashExecutionMessage, ToolResultMessage } from "@/lib/types";
+import type {
+  AgentMessage,
+  BashExecutionMessage,
+  ToolResultMessage,
+} from "@/lib/types";
 import { useI18n } from "@/lib/i18n";
 import { MessageView } from "./MessageView";
 
@@ -29,8 +33,20 @@ export interface ChatLiveTailProps {
 
 /** The running turn's live end after the committed transcript: streaming reply, pending tool rows, `!command` output. */
 export function ChatLiveTail({
-  streamingMessage, isStreaming, liveTokensPerSecond, pendingToolHeaders, deferredBash, pendingBash, toolResults, modelNames, cwd, onOpenFile, sessionId,
-  toolCallsDefaultCollapsed, expandThinkingByDefault, hideThinking,
+  streamingMessage,
+  isStreaming,
+  liveTokensPerSecond,
+  pendingToolHeaders,
+  deferredBash,
+  pendingBash,
+  toolResults,
+  modelNames,
+  cwd,
+  onOpenFile,
+  sessionId,
+  toolCallsDefaultCollapsed,
+  expandThinkingByDefault,
+  hideThinking,
 }: ChatLiveTailProps) {
   const { t } = useI18n();
   return (
@@ -53,41 +69,58 @@ export function ChatLiveTail({
         />
       )}
 
-      {toolCallsDefaultCollapsed && pendingToolHeaders.map((tool) => (
-        <div
-          key={tool.id}
-          role="status"
-          aria-label={t("chatWindow.runningNamed", { names: tool.name })}
-          style={{
-            display: "flex", alignItems: "center", gap: 7,
-            marginBottom: 8, padding: "6px 10px",
-            border: "1px solid color-mix(in srgb, var(--status-success) 25%, transparent)",
-            borderRadius: "var(--radius-control)",
-            background: "color-mix(in srgb, var(--status-success) 4%, transparent)",
-            color: "var(--text-muted)", fontSize: 12,
-          }}
-        >
-          <span aria-hidden className="live-status-dot live-pulse inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-          <span style={{ color: "var(--status-success)", fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: 11 }}>{tool.name}</span>
-        </div>
-      ))}
+      {toolCallsDefaultCollapsed &&
+        pendingToolHeaders.map((tool) => (
+          <div
+            key={tool.id}
+            role="status"
+            aria-label={t("chatWindow.runningNamed", { names: tool.name })}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 7,
+              marginBottom: 8,
+              padding: "6px 10px",
+              border:
+                "1px solid color-mix(in srgb, var(--status-success) 25%, transparent)",
+              borderRadius: "var(--radius-control)",
+              background:
+                "color-mix(in srgb, var(--status-success) 4%, transparent)",
+              color: "var(--text-muted)",
+              fontSize: 12,
+            }}
+          >
+            <span
+              aria-hidden
+              className="live-status-dot live-pulse inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
+            />
+            <span
+              style={{
+                color: "var(--status-success)",
+                fontFamily: "var(--font-mono)",
+                fontWeight: 600,
+                fontSize: 11,
+              }}
+            >
+              {tool.name}
+            </span>
+          </div>
+        ))}
 
       {deferredBash.map((message, index) => (
-        <MessageView
-          key={index}
-          message={message}
-          sessionId={sessionId}
-        />
+        <MessageView key={index} message={message} sessionId={sessionId} />
       ))}
 
       {pendingBash && (
         <MessageView
-          message={{
-            role: "bashExecution",
-            command: pendingBash.command,
-            output: "",
-            excludeFromContext: pendingBash.excludeFromContext,
-          } as BashExecutionMessage}
+          message={
+            {
+              role: "bashExecution",
+              command: pendingBash.command,
+              output: "",
+              excludeFromContext: pendingBash.excludeFromContext,
+            } as BashExecutionMessage
+          }
           sessionId={sessionId}
         />
       )}

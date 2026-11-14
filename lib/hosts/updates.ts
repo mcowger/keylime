@@ -1,6 +1,25 @@
 import { execFile, spawn } from "node:child_process";
-import { chmodSync, constants, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  chmodSync,
+  constants,
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
@@ -11,26 +30,70 @@ import { createChildProcessEnvironment } from "../project-command-env";
 import { isUpdateDisabled } from "../update-policy";
 import { releaseRepo } from "../release-repo";
 import { parseSystemdServiceCgroup } from "../self-update";
-import type { HostSoftwareUpdate, HostUpdateCompatibility, HostUpdateInfo, HostUpdateOperation, HostUpdateTarget } from "./update-types";
-import { assertOwnedPath, ensureHostUpdateRoot, fetchHostUpdateBytes, finishHostUpdate, HOST_VERSION_PATTERN, hostReleaseName, hostUpdateRoot, installedHostVersionMatches, isHostUpdateProcessAlive, processStartIdentity, pruneHostUpdateArtifacts, readHostUpdateState, sharedHostInstallReason, verifyHostServiceInstall, writeHostUpdateJson, type HostUpdateDescriptor } from "./update-worker";
+import type {
+  HostSoftwareUpdate,
+  HostUpdateCompatibility,
+  HostUpdateInfo,
+  HostUpdateOperation,
+  HostUpdateTarget,
+} from "./update-types";
+import {
+  assertOwnedPath,
+  ensureHostUpdateRoot,
+  fetchHostUpdateBytes,
+  finishHostUpdate,
+  HOST_VERSION_PATTERN,
+  hostReleaseName,
+  hostUpdateRoot,
+  installedHostVersionMatches,
+  isHostUpdateProcessAlive,
+  processStartIdentity,
+  pruneHostUpdateArtifacts,
+  readHostUpdateState,
+  sharedHostInstallReason,
+  verifyHostServiceInstall,
+  writeHostUpdateJson,
+  type HostUpdateDescriptor,
+} from "./update-worker";
 
 const exec = promisify(execFile);
 // Covers a 15 min release download (update-worker.ts DOWNLOAD_TIMEOUT_MS) plus preflight, stop and restart.
 const LEASE_MS = 30 * 60 * 1000;
 let safetyGuard: (() => string | null) | null = null;
-const protocolCache = new Map<string, { value: number | null; checkedAt: number }>();
+const protocolCache = new Map<
+  string,
+  { value: number | null; checkedAt: number }
+>();
 
 export class HostUpdateError extends Error {
-  constructor(public readonly code: string, message: string, public readonly httpStatus = 409) { super(message); this.name = "HostUpdateError"; }
+  constructor(
+    public readonly code: string,
+    message: string,
+    public readonly httpStatus = 409,
+  ) {
+    super(message);
+    this.name = "HostUpdateError";
+  }
 }
-const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
-export function configureHostUpdateSafety(guard: () => string | null): void { safetyGuard = guard; }
+export function configureHostUpdateSafety(guard: () => string | null): void {
+  safetyGuard = guard;
+}
 export function getHostUpdateOperation(): HostUpdateOperation | null {
   const state = readHostUpdateState();
   if (!state) return null;
-  if (state.operation.state === "running" && (Date.now() - state.startedAt > LEASE_MS || (Date.now() - state.startedAt > 30000 && !isHostUpdateProcessAlive(state.workerPid ?? state.daemonPid)))) {
-    finishHostUpdate(state.operation.id, "Host update was interrupted before completion");
+  if (
+    state.operation.state === "running" &&
+    (Date.now() - state.startedAt > LEASE_MS ||
+      (Date.now() - state.startedAt > 30000 &&
+        !isHostUpdateProcessAlive(state.workerPid ?? state.daemonPid)))
+  ) {
+    finishHostUpdate(
+      state.operation.id,
+      "Host update was interrupted before completion",
+    );
     return readHostUpdateState()!.operation;
   }
   return state.operation;
@@ -40,29 +103,87 @@ export function getHostUpdateOperation(): HostUpdateOperation | null {
 export function acknowledgeHostUpdateHealth(): void {
   try {
     const state = readHostUpdateState();
-    if (state?.operation.state !== "running" || state.operation.target !== "ompweb" || state.daemonPid === process.pid) return;
+    if (
+      state?.operation.state !== "running" ||
+      state.operation.target !== "ompweb" ||
+      state.daemonPid === process.pid
+    )
+      return;
     const attempt = join(hostUpdateRoot(), state.operation.id);
     assertOwnedPath(attempt, true);
     const path = join(attempt, "descriptor.json");
     assertOwnedPath(path);
-    const descriptor = JSON.parse(readFileSync(path, "utf8")) as HostUpdateDescriptor;
-    if (descriptor.id !== state.operation.id || ![descriptor.version, descriptor.fromVersion].includes(packageJson.version)) return;
-    writeHostUpdateJson(join(attempt, "health.json"), { id: state.operation.id, version: packageJson.version, pid: process.pid });
-  } catch (error) { console.error("Could not acknowledge host update health:", messageOf(error)); }
+    const descriptor = JSON.parse(
+      readFileSync(path, "utf8"),
+    ) as HostUpdateDescriptor;
+    if (
+      descriptor.id !== state.operation.id ||
+      ![descriptor.version, descriptor.fromVersion].includes(
+        packageJson.version,
+      )
+    )
+      return;
+    writeHostUpdateJson(join(attempt, "health.json"), {
+      id: state.operation.id,
+      version: packageJson.version,
+      pid: process.pid,
+    });
+  } catch (error) {
+    console.error(
+      "Could not acknowledge host update health:",
+      messageOf(error),
+    );
+  }
 }
 
 function assertCompatibility(compatibility: HostUpdateCompatibility): void {
-  if (!compatibility || !Number.isSafeInteger(compatibility.min) || !Number.isSafeInteger(compatibility.max) || compatibility.min < 1 || compatibility.max < compatibility.min) throw new HostUpdateError("invalid_compatibility", "Invalid server link protocol range", 400);
+  if (
+    !compatibility ||
+    !Number.isSafeInteger(compatibility.min) ||
+    !Number.isSafeInteger(compatibility.max) ||
+    compatibility.min < 1 ||
+    compatibility.max < compatibility.min
+  )
+    throw new HostUpdateError(
+      "invalid_compatibility",
+      "Invalid server link protocol range",
+      400,
+    );
 }
-async function candidateProtocol(version: string, force: boolean): Promise<number | null> {
+async function candidateProtocol(
+  version: string,
+  force: boolean,
+): Promise<number | null> {
   if (!HOST_VERSION_PATTERN.test(version) || version.length > 100) return null;
   const cached = protocolCache.get(version);
-  if (!force && cached && Date.now() - cached.checkedAt < (cached.value === null ? 30000 : 5 * 60 * 1000)) return cached.value;
+  if (
+    !force &&
+    cached &&
+    Date.now() - cached.checkedAt <
+      (cached.value === null ? 30000 : 5 * 60 * 1000)
+  )
+    return cached.value;
   let value: number | null = null;
   try {
-    const source = (await fetchHostUpdateBytes(`https://raw.githubusercontent.com/${releaseRepo()}/v${version}/lib/hosts/link-protocol.ts`, 128 * 1024)).toString("utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
-    const declarations = [...source.matchAll(/^export const LINK_PROTOCOL_VERSION\s*=\s*([1-9]\d*)\s*;\s*$/gm)];
-    if (declarations.length === 1 && [...source.matchAll(/export\s+const\s+LINK_PROTOCOL_VERSION\b/g)].length === 1) {
+    const source = (
+      await fetchHostUpdateBytes(
+        `https://raw.githubusercontent.com/${releaseRepo()}/v${version}/lib/hosts/link-protocol.ts`,
+        128 * 1024,
+      )
+    )
+      .toString("utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/[^\n]*/g, "");
+    const declarations = [
+      ...source.matchAll(
+        /^export const LINK_PROTOCOL_VERSION\s*=\s*([1-9]\d*)\s*;\s*$/gm,
+      ),
+    ];
+    if (
+      declarations.length === 1 &&
+      [...source.matchAll(/export\s+const\s+LINK_PROTOCOL_VERSION\b/g)]
+        .length === 1
+    ) {
       const parsed = Number(declarations[0][1]);
       if (Number.isSafeInteger(parsed)) value = parsed;
     }
@@ -71,14 +192,26 @@ async function candidateProtocol(version: string, force: boolean): Promise<numbe
   return value;
 }
 function installDirectory(): string {
-  return resolve(process.env.OMP_WEB_PACKAGE_DIR || fileURLToPath(new URL("../../", import.meta.url)));
+  return resolve(
+    process.env.OMP_WEB_PACKAGE_DIR ||
+      fileURLToPath(new URL("../../", import.meta.url)),
+  );
 }
 function hostArguments(binary: boolean): string[] {
   if (binary && process.argv[2] === "host") return process.argv.slice(3);
-  if (!binary && ["omp-web.js", "omp-web-host.js"].includes(basename(realpathSync(process.argv[1] || "")))) {
-    return process.argv[2] === "host" ? process.argv.slice(3) : process.argv.slice(2);
+  if (
+    !binary &&
+    ["omp-web.js", "omp-web-host.js"].includes(
+      basename(realpathSync(process.argv[1] || "")),
+    )
+  ) {
+    return process.argv[2] === "host"
+      ? process.argv.slice(3)
+      : process.argv.slice(2);
   }
-  throw new Error("Host updates require the standalone ompweb host daemon, not the web server or a development process");
+  throw new Error(
+    "Host updates require the standalone ompweb host daemon, not the web server or a development process",
+  );
 }
 
 /**
@@ -88,59 +221,150 @@ function hostArguments(binary: boolean): string[] {
  * `-c`, tmux or anything unknown is blocked, and no supervisor is coordinated with. Linux outside systemd is not
  * classified here: a supervising script on a Linux host that is not a service is not detected.
  */
-export function macHostSupervisionReason(parentCommand: string | null): string | null {
-  const manual = "update it manually, or stop the supervisor first: a restart loop such as the README's ompweb-host-run script starts the host again after it exits and would run a second daemon next to the updated one";
+export function macHostSupervisionReason(
+  parentCommand: string | null,
+): string | null {
+  const manual =
+    "update it manually, or stop the supervisor first: a restart loop such as the README's ompweb-host-run script starts the host again after it exits and would run a second daemon next to the updated one";
   const [program = "", ...flags] = (parentCommand ?? "").trim().split(/\s+/);
-  const shell = /^(?:sh|bash|zsh|dash|ksh|fish|tcsh|csh)$/.test(basename(program.replace(/^-/, "")));
-  if (shell && flags.every((flag) => ["-l", "-i", "-il", "-li", "--login", "--interactive"].includes(flag))) return null;
+  const shell = /^(?:sh|bash|zsh|dash|ksh|fish|tcsh|csh)$/.test(
+    basename(program.replace(/^-/, "")),
+  );
+  if (
+    shell &&
+    flags.every((flag) =>
+      ["-l", "-i", "-il", "-li", "--login", "--interactive"].includes(flag),
+    )
+  )
+    return null;
   return `This host was started by \`${parentCommand?.trim().slice(0, 120) || "an unknown process"}\`, which may supervise it; ${manual}`;
 }
 let macParentLookup: Promise<string | null> | undefined;
 function macParentCommand(): Promise<string | null> {
   macParentLookup ??= (async () => {
     try {
-      const { stdout } = await exec("ps", ["-o", "command=", "-p", String(process.ppid)], { timeout: 5000, env: { ...process.env, LC_ALL: "C" } });
+      const { stdout } = await exec(
+        "ps",
+        ["-o", "command=", "-p", String(process.ppid)],
+        { timeout: 5000, env: { ...process.env, LC_ALL: "C" } },
+      );
       return stdout.trim() || null;
-    } catch { macParentLookup = undefined; return null; }
+    } catch {
+      macParentLookup = undefined;
+      return null;
+    }
   })();
   return macParentLookup;
 }
 let ownIdentity: Promise<string | null> | undefined;
 
 /** `execPath` lies physically inside `installDir` (a bundled Bun the swap replaces), as opposed to a system or Homebrew runtime. */
-export function runtimeInsideInstall(execPath: string, installDir: string): boolean {
+export function runtimeInsideInstall(
+  execPath: string,
+  installDir: string,
+): boolean {
   try {
     const location = relative(realpathSync(installDir), realpathSync(execPath));
-    return location !== "" && location !== ".." && !location.startsWith(`..${sep}`) && !isAbsolute(location);
-  } catch { return false; }
+    return (
+      location !== "" &&
+      location !== ".." &&
+      !location.startsWith(`..${sep}`) &&
+      !isAbsolute(location)
+    );
+  } catch {
+    return false;
+  }
 }
 
 function installSupport(method: "bun" | "binary"): string | null {
   try {
     const directory = installDirectory();
-    if (hostArguments(method === "binary").some((arg) => arg !== "--allow-http")) throw new Error("Unsupported host daemon arguments");
-    if (process.platform === "darwin" && process.ppid === 1) throw new Error("A launchd-managed or orphaned host must be updated manually to avoid duplicate daemon starts");
-    if (process.pid === 1) throw new Error("A host running as a container's init process cannot be restarted in place");
+    if (
+      hostArguments(method === "binary").some((arg) => arg !== "--allow-http")
+    )
+      throw new Error("Unsupported host daemon arguments");
+    if (process.platform === "darwin" && process.ppid === 1)
+      throw new Error(
+        "A launchd-managed or orphaned host must be updated manually to avoid duplicate daemon starts",
+      );
+    if (process.pid === 1)
+      throw new Error(
+        "A host running as a container's init process cannot be restarted in place",
+      );
     const info = lstatSync(directory);
-    if (!info.isDirectory() || info.isSymbolicLink() || realpathSync(directory) !== directory || (process.getuid && info.uid !== process.getuid()) || (info.mode & 0o022)) throw new Error("Host install is not an owned, writable release directory");
+    if (
+      !info.isDirectory() ||
+      info.isSymbolicLink() ||
+      realpathSync(directory) !== directory ||
+      (process.getuid && info.uid !== process.getuid()) ||
+      info.mode & 0o022
+    )
+      throw new Error(
+        "Host install is not an owned, writable release directory",
+      );
     if (method === "binary") {
       hostReleaseName();
-      if (realpathSync(process.execPath) !== join(directory, "ompweb") || !existsSync(join(directory, "dist", "index.html"))) throw new Error("Binary updates require a complete owned host release directory");
-    } else if (basename(directory) !== "ompweb" || basename(dirname(directory)) !== "@kahme247" || basename(dirname(dirname(directory))) !== "node_modules") throw new Error("Host updates require an installed Bun package; source checkouts are manual-only");
-    if (!safetyGuard) throw new Error("Host daemon restart safety is not configured");
+      if (
+        realpathSync(process.execPath) !== join(directory, "ompweb") ||
+        !existsSync(join(directory, "dist", "index.html"))
+      )
+        throw new Error(
+          "Binary updates require a complete owned host release directory",
+        );
+    } else if (
+      basename(directory) !== "ompweb" ||
+      basename(dirname(directory)) !== "@kahme247" ||
+      basename(dirname(dirname(directory))) !== "node_modules"
+    )
+      throw new Error(
+        "Host updates require an installed Bun package; source checkouts are manual-only",
+      );
+    if (!safetyGuard)
+      throw new Error("Host daemon restart safety is not configured");
     return safetyGuard();
-  } catch (error) { return messageOf(error); }
+  } catch (error) {
+    return messageOf(error);
+  }
 }
 
-async function detectHostService(method: "bun" | "binary"): Promise<HostUpdateDescriptor["systemd"]> {
+async function detectHostService(
+  method: "bun" | "binary",
+): Promise<HostUpdateDescriptor["systemd"]> {
   if (process.platform !== "linux") return null;
   let service;
-  try { service = parseSystemdServiceCgroup(readFileSync("/proc/self/cgroup", "utf8")); } catch { return null; }
+  try {
+    service = parseSystemdServiceCgroup(
+      readFileSync("/proc/self/cgroup", "utf8"),
+    );
+  } catch {
+    return null;
+  }
   if (!service) return null;
-  if (/^ompweb-api(?:[.@-]|$)/i.test(service.unit)) throw new Error("Refusing to stop the web-server service; the host daemon needs its own service");
-  const { stdout } = await exec("systemctl", [...(service.user ? ["--user"] : []), "show", "--property=MainPID", "--value", service.unit], { timeout: 2000, encoding: "utf8", env: createChildProcessEnvironment() });
-  if (Number(stdout.trim()) !== process.pid) throw new Error("Host daemon is not the service's main process; restart this service manually");
-  await verifyHostServiceInstall(service, installDirectory(), method === "binary", process.execPath);
+  if (/^ompweb-api(?:[.@-]|$)/i.test(service.unit))
+    throw new Error(
+      "Refusing to stop the web-server service; the host daemon needs its own service",
+    );
+  const { stdout } = await exec(
+    "systemctl",
+    [
+      ...(service.user ? ["--user"] : []),
+      "show",
+      "--property=MainPID",
+      "--value",
+      service.unit,
+    ],
+    { timeout: 2000, encoding: "utf8", env: createChildProcessEnvironment() },
+  );
+  if (Number(stdout.trim()) !== process.pid)
+    throw new Error(
+      "Host daemon is not the service's main process; restart this service manually",
+    );
+  await verifyHostServiceInstall(
+    service,
+    installDirectory(),
+    method === "binary",
+    process.execPath,
+  );
   return service;
 }
 
@@ -152,44 +376,113 @@ interface HostRestartPlan {
   daemonIdentity: string | null;
 }
 /** Everything about how this host would be stopped and restarted, so the button is disabled with a reason instead of failing. */
-async function planHostUpdate(method: "bun" | "binary", version: string): Promise<HostRestartPlan> {
-  const plan: HostRestartPlan = { blockedReason: null, restartOnly: false, systemd: null, daemonIdentity: null };
+async function planHostUpdate(
+  method: "bun" | "binary",
+  version: string,
+): Promise<HostRestartPlan> {
+  const plan: HostRestartPlan = {
+    blockedReason: null,
+    restartOnly: false,
+    systemd: null,
+    daemonIdentity: null,
+  };
   const layout = installSupport(method);
   if (layout) return { ...plan, blockedReason: layout };
-  try { plan.systemd = await detectHostService(method); } catch (error) { return { ...plan, blockedReason: messageOf(error) }; }
+  try {
+    plan.systemd = await detectHostService(method);
+  } catch (error) {
+    return { ...plan, blockedReason: messageOf(error) };
+  }
   if (!plan.systemd) {
-    const supervision = process.platform === "darwin" ? macHostSupervisionReason(await macParentCommand()) : null;
+    const supervision =
+      process.platform === "darwin"
+        ? macHostSupervisionReason(await macParentCommand())
+        : null;
     if (supervision) return { ...plan, blockedReason: supervision };
     ownIdentity ??= processStartIdentity(process.pid);
     plan.daemonIdentity = await ownIdentity;
-    if (!plan.daemonIdentity) return { ...plan, blockedReason: "This host's process identity cannot be read, so it cannot be stopped and restarted safely; update it manually" };
+    if (!plan.daemonIdentity)
+      return {
+        ...plan,
+        blockedReason:
+          "This host's process identity cannot be read, so it cannot be stopped and restarted safely; update it manually",
+      };
   }
-  plan.restartOnly = await installedHostVersionMatches(method, installDirectory(), version);
+  plan.restartOnly = await installedHostVersionMatches(
+    method,
+    installDirectory(),
+    version,
+  );
   if (!plan.restartOnly) {
     const sharing = await sharedHostInstallReason(installDirectory());
-    if (sharing) plan.blockedReason = `Update the web server first because this installation is shared. ${sharing}`;
+    if (sharing)
+      plan.blockedReason = `Update the web server first because this installation is shared. ${sharing}`;
   }
   return plan;
 }
 
-export async function checkHostUpdates(compatibility: HostUpdateCompatibility, force = false): Promise<HostUpdateInfo> {
+export async function checkHostUpdates(
+  compatibility: HostUpdateCompatibility,
+  force = false,
+): Promise<HostUpdateInfo> {
   assertCompatibility(compatibility);
   const operation = getHostUpdateOperation();
-  const disabled = isUpdateDisabled() ? "Updates are disabled by OMP_WEB_DISABLE_AUTOUPDATE" : null;
-  const [npm, ompVersion] = await Promise.all([checkNpmUpdate(force).catch(() => null), getOmpVersion()]);
-  const base: HostSoftwareUpdate = { currentVersion: null, availableVersion: null, updateAvailable: false, canUpdate: false, blockedReason: null, updateCommand: "" };
+  const disabled = isUpdateDisabled()
+    ? "Updates are disabled by OMP_WEB_DISABLE_AUTOUPDATE"
+    : null;
+  const [npm, ompVersion] = await Promise.all([
+    checkNpmUpdate(force).catch(() => null),
+    getOmpVersion(),
+  ]);
+  const base: HostSoftwareUpdate = {
+    currentVersion: null,
+    availableVersion: null,
+    updateAvailable: false,
+    canUpdate: false,
+    blockedReason: null,
+    updateCommand: "",
+  };
   const installMethod = Bun.isStandaloneExecutable ? "binary" : "bun";
-  const ompweb: HostUpdateInfo["ompweb"] = { ...base, ...npm, currentVersion: packageJson.version, installMethod, protocolVersion: null, updateCommand: installMethod === "binary" ? `https://github.com/${releaseRepo()}/releases/latest` : "bun add -g @kahme247/ompweb" };
+  const ompweb: HostUpdateInfo["ompweb"] = {
+    ...base,
+    ...npm,
+    currentVersion: packageJson.version,
+    installMethod,
+    protocolVersion: null,
+    updateCommand:
+      installMethod === "binary"
+        ? `https://github.com/${releaseRepo()}/releases/latest`
+        : "bun add -g @kahme247/ompweb",
+  };
   // omp updates with ompweb (its runner ships inside each release): the row only reports the running version.
-  const runtime: HostUpdateInfo["omp"] = { currentVersion: ompVersion?.replace(/^omp\//, "") ?? null };
+  const runtime: HostUpdateInfo["omp"] = {
+    currentVersion: ompVersion?.replace(/^omp\//, "") ?? null,
+  };
   if (disabled) ompweb.blockedReason = disabled;
   else {
-    if (!npm || !npm.availableVersion || !HOST_VERSION_PATTERN.test(npm.availableVersion)) ompweb.blockedReason = "Could not check the host's ompweb update version";
+    if (
+      !npm ||
+      !npm.availableVersion ||
+      !HOST_VERSION_PATTERN.test(npm.availableVersion)
+    )
+      ompweb.blockedReason = "Could not check the host's ompweb update version";
     else if (npm.updateAvailable) {
-      ompweb.protocolVersion = await candidateProtocol(npm.availableVersion, force);
-      if (ompweb.protocolVersion === null) ompweb.blockedReason = "The candidate's daemon link protocol could not be verified; update is blocked";
-      else if (ompweb.protocolVersion < compatibility.min || ompweb.protocolVersion > compatibility.max) ompweb.blockedReason = `Update the web server first: this release uses daemon protocol ${ompweb.protocolVersion}, but the server supports ${compatibility.min}–${compatibility.max}`;
-      else if (operation?.state !== "running") ompweb.blockedReason = (await planHostUpdate(installMethod, npm.availableVersion)).blockedReason;
+      ompweb.protocolVersion = await candidateProtocol(
+        npm.availableVersion,
+        force,
+      );
+      if (ompweb.protocolVersion === null)
+        ompweb.blockedReason =
+          "The candidate's daemon link protocol could not be verified; update is blocked";
+      else if (
+        ompweb.protocolVersion < compatibility.min ||
+        ompweb.protocolVersion > compatibility.max
+      )
+        ompweb.blockedReason = `Update the web server first: this release uses daemon protocol ${ompweb.protocolVersion}, but the server supports ${compatibility.min}–${compatibility.max}`;
+      else if (operation?.state !== "running")
+        ompweb.blockedReason = (
+          await planHostUpdate(installMethod, npm.availableVersion)
+        ).blockedReason;
       ompweb.canUpdate = ompweb.blockedReason === null;
     }
   }
@@ -200,7 +493,11 @@ export async function checkHostUpdates(compatibility: HostUpdateCompatibility, f
   return { ompweb, omp: runtime, operation };
 }
 
-const inProgress = () => new HostUpdateError("update_in_progress", "Another host update is in progress");
+const inProgress = () =>
+  new HostUpdateError(
+    "update_in_progress",
+    "Another host update is in progress",
+  );
 /** The lock file is the one atomic gate: `wx` creation lets exactly one concurrent start through. */
 function claimUpdate(id: string): string {
   const root = ensureHostUpdateRoot();
@@ -212,15 +509,34 @@ function claimUpdate(id: string): string {
       writeFileSync(lock, lease, { flag: "wx", mode: 0o600 });
       break;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST" || reclaimed) throw (error as NodeJS.ErrnoException).code === "EEXIST" ? inProgress() : error;
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST" || reclaimed)
+        throw (error as NodeJS.ErrnoException).code === "EEXIST"
+          ? inProgress()
+          : error;
     }
     assertOwnedPath(lock);
     let held: { pid?: number; at?: number } = {};
-    try { held = JSON.parse(readFileSync(lock, "utf8")); } catch { /* unreadable: treated as expired */ }
-    if (isHostUpdateProcessAlive(held.pid) && typeof held.at === "number" && Date.now() - held.at < LEASE_MS) throw inProgress();
+    try {
+      held = JSON.parse(readFileSync(lock, "utf8"));
+    } catch {
+      /* unreadable: treated as expired */
+    }
+    if (
+      isHostUpdateProcessAlive(held.pid) &&
+      typeof held.at === "number" &&
+      Date.now() - held.at < LEASE_MS
+    )
+      throw inProgress();
     rmSync(lock, { force: true });
   }
-  try { pruneHostUpdateArtifacts(installDirectory()); } catch (error) { console.error("Could not prune old host update artifacts:", messageOf(error)); }
+  try {
+    pruneHostUpdateArtifacts(installDirectory());
+  } catch (error) {
+    console.error(
+      "Could not prune old host update artifacts:",
+      messageOf(error),
+    );
+  }
   return root;
 }
 /** Releases the claim only while it is still this attempt's: an expired attempt must never erase a newer claim. */
@@ -229,37 +545,103 @@ function releaseClaim(root: string, id: string): void {
     const lock = join(root, "lock.json");
     assertOwnedPath(lock);
     if (JSON.parse(readFileSync(lock, "utf8")).id === id) rmSync(lock);
-  } catch { /* already released */ }
+  } catch {
+    /* already released */
+  }
 }
 
-export async function startHostUpdate(target: HostUpdateTarget, version: string, compatibility: HostUpdateCompatibility): Promise<{ accepted: true; operation: HostUpdateOperation }> {
+export async function startHostUpdate(
+  target: HostUpdateTarget,
+  version: string,
+  compatibility: HostUpdateCompatibility,
+): Promise<{ accepted: true; operation: HostUpdateOperation }> {
   assertCompatibility(compatibility);
-  if (target !== "ompweb") throw new HostUpdateError("invalid_target", "Invalid host software target", 400);
-  if (typeof version !== "string" || version.length > 100 || !HOST_VERSION_PATTERN.test(version)) throw new HostUpdateError("invalid_version", "Invalid host update version", 400);
-  if (isUpdateDisabled()) throw new HostUpdateError("updates_disabled", "Updates are disabled by OMP_WEB_DISABLE_AUTOUPDATE", 403);
+  if (target !== "ompweb")
+    throw new HostUpdateError(
+      "invalid_target",
+      "Invalid host software target",
+      400,
+    );
+  if (
+    typeof version !== "string" ||
+    version.length > 100 ||
+    !HOST_VERSION_PATTERN.test(version)
+  )
+    throw new HostUpdateError(
+      "invalid_version",
+      "Invalid host update version",
+      400,
+    );
+  if (isUpdateDisabled())
+    throw new HostUpdateError(
+      "updates_disabled",
+      "Updates are disabled by OMP_WEB_DISABLE_AUTOUPDATE",
+      403,
+    );
   const id = randomUUID();
   const root = claimUpdate(id);
   let claimed = false;
   try {
     const info = await checkHostUpdates(compatibility, true);
     const software = info[target];
-    if (!software.updateAvailable || software.availableVersion !== version) throw new HostUpdateError("candidate_changed", "The available update candidate changed; refresh host updates");
-    if (!software.canUpdate) throw new HostUpdateError("update_blocked", software.blockedReason || "This host update is blocked");
+    if (!software.updateAvailable || software.availableVersion !== version)
+      throw new HostUpdateError(
+        "candidate_changed",
+        "The available update candidate changed; refresh host updates",
+      );
+    if (!software.canUpdate)
+      throw new HostUpdateError(
+        "update_blocked",
+        software.blockedReason || "This host update is blocked",
+      );
     const method = info.ompweb.installMethod;
     const plan = await planHostUpdate(method, version);
-    if (plan.blockedReason) throw new HostUpdateError("update_blocked", plan.blockedReason);
-    if (isUpdateDisabled()) throw new HostUpdateError("updates_disabled", "Updates are disabled by OMP_WEB_DISABLE_AUTOUPDATE", 403);
-    const operation: HostUpdateOperation = { id, target, version, state: "running" };
-    writeHostUpdateJson(join(root, "status.json"), { operation, startedAt: Date.now(), daemonPid: process.pid });
+    if (plan.blockedReason)
+      throw new HostUpdateError("update_blocked", plan.blockedReason);
+    if (isUpdateDisabled())
+      throw new HostUpdateError(
+        "updates_disabled",
+        "Updates are disabled by OMP_WEB_DISABLE_AUTOUPDATE",
+        403,
+      );
+    const operation: HostUpdateOperation = {
+      id,
+      target,
+      version,
+      state: "running",
+    };
+    writeHostUpdateJson(join(root, "status.json"), {
+      operation,
+      startedAt: Date.now(),
+      daemonPid: process.pid,
+    });
     claimed = true;
     // The guard is read once more immediately before anything is staged or stopped.
-    const busy = safetyGuard?.() ?? (safetyGuard ? null : "Host restart safety is not configured");
+    const busy =
+      safetyGuard?.() ??
+      (safetyGuard ? null : "Host restart safety is not configured");
     if (busy) throw new HostUpdateError("host_busy", busy);
     const attempt = join(root, id);
     mkdirSync(attempt, { mode: 0o700 });
     const binary = method === "binary";
-    const descriptor: HostUpdateDescriptor = { id, target, version, fromVersion: packageJson.version, installMethod: method, installDir: installDirectory(), runtime: process.execPath, hostArgs: hostArguments(binary), cwd: process.cwd(), daemonPid: process.pid, daemonIdentity: plan.daemonIdentity, releaseRepo: releaseRepo(), restartOnly: plan.restartOnly || undefined, systemd: plan.systemd };
-    if (!binary && !descriptor.restartOnly) descriptor.managerPath = Bun.which("bun") || process.execPath;
+    const descriptor: HostUpdateDescriptor = {
+      id,
+      target,
+      version,
+      fromVersion: packageJson.version,
+      installMethod: method,
+      installDir: installDirectory(),
+      runtime: process.execPath,
+      hostArgs: hostArguments(binary),
+      cwd: process.cwd(),
+      daemonPid: process.pid,
+      daemonIdentity: plan.daemonIdentity,
+      releaseRepo: releaseRepo(),
+      restartOnly: plan.restartOnly || undefined,
+      systemd: plan.systemd,
+    };
+    if (!binary && !descriptor.restartOnly)
+      descriptor.managerPath = Bun.which("bun") || process.execPath;
     const descriptorPath = join(attempt, "descriptor.json");
     writeHostUpdateJson(descriptorPath, descriptor);
     // The worker must outlive the swap: the compiled binary and a runtime inside the install run from a copy outside it,
@@ -274,24 +656,53 @@ export async function startHostUpdate(target: HostUpdateTarget, version: string,
     if (binary) args = ["host-update-worker", descriptorPath];
     else {
       const copiedWorker = join(attempt, "worker.mts");
-      copyFileSync(fileURLToPath(new URL("./update-worker.ts", import.meta.url)), copiedWorker);
+      copyFileSync(
+        fileURLToPath(new URL("./update-worker.ts", import.meta.url)),
+        copiedWorker,
+      );
       chmodSync(copiedWorker, 0o600);
       args = [copiedWorker, "--host-update-descriptor", descriptorPath];
     }
     if (plan.systemd) {
-      const options = [...(plan.systemd.user ? ["--user"] : []), "--scope", "--quiet", "--collect", "--no-ask-password"];
-      await exec("systemd-run", [...options, "true"], { timeout: 2000, env: createChildProcessEnvironment() });
+      const options = [
+        ...(plan.systemd.user ? ["--user"] : []),
+        "--scope",
+        "--quiet",
+        "--collect",
+        "--no-ask-password",
+      ];
+      await exec("systemd-run", [...options, "true"], {
+        timeout: 2000,
+        env: createChildProcessEnvironment(),
+      });
       args = [...options, command, ...args];
       command = "systemd-run";
     }
-    const child = spawn(command, args, { detached: true, cwd: attempt, stdio: "ignore", env: createChildProcessEnvironment() });
+    const child = spawn(command, args, {
+      detached: true,
+      cwd: attempt,
+      stdio: "ignore",
+      env: createChildProcessEnvironment(),
+    });
     child.once("error", (error) => {
-      try { finishHostUpdate(id, `Could not launch host update worker: ${error.message}`); }
-      catch (stateError) { console.error("Could not persist host update worker launch failure:", stateError); }
+      try {
+        finishHostUpdate(
+          id,
+          `Could not launch host update worker: ${error.message}`,
+        );
+      } catch (stateError) {
+        console.error(
+          "Could not persist host update worker launch failure:",
+          stateError,
+        );
+      }
     });
     child.unref();
     const current = readHostUpdateState()!;
-    writeHostUpdateJson(join(root, "status.json"), { ...current, workerPid: child.pid });
+    writeHostUpdateJson(join(root, "status.json"), {
+      ...current,
+      workerPid: child.pid,
+    });
     return { accepted: true, operation };
   } catch (error) {
     if (claimed) finishHostUpdate(id, messageOf(error));

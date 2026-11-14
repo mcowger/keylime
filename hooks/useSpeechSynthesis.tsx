@@ -1,6 +1,14 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { sanitizeTextForSpeech } from "@/lib/speech-sanitizer";
 
 export const TTS_AUTOPLAY_PREF_KEY = "omp-tts-autoplay";
@@ -34,24 +42,30 @@ function broadcastState(speakingId: string | null, isSpeaking: boolean) {
   currentSpeakingId = speakingId;
   if (typeof window !== "undefined") {
     window.dispatchEvent(
-      new CustomEvent(TTS_STATE_EVENT, { detail: { speakingId, isSpeaking } })
+      new CustomEvent(TTS_STATE_EVENT, { detail: { speakingId, isSpeaking } }),
     );
   }
 }
 
 export function useSpeechSynthesis(): SpeechSynthesisState {
   const [isSupported, setIsSupported] = useState<boolean>(false);
-  const [isSpeaking, setIsSpeaking] = useState<boolean>(() => currentSpeakingId !== null);
-  const [speakingId, setSpeakingId] = useState<string | null>(() => currentSpeakingId);
+  const [isSpeaking, setIsSpeaking] = useState<boolean>(
+    () => currentSpeakingId !== null,
+  );
+  const [speakingId, setSpeakingId] = useState<string | null>(
+    () => currentSpeakingId,
+  );
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [selectedVoiceURI, setSelectedVoiceURIState] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      return localStorage.getItem(TTS_VOICE_PREF_KEY) || null;
-    } catch {
-      return null;
-    }
-  });
+  const [selectedVoiceURI, setSelectedVoiceURIState] = useState<string | null>(
+    () => {
+      if (typeof window === "undefined") return null;
+      try {
+        return localStorage.getItem(TTS_VOICE_PREF_KEY) || null;
+      } catch {
+        return null;
+      }
+    },
+  );
   const [autoPlayEnabled, setAutoPlayEnabledState] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -96,7 +110,10 @@ export function useSpeechSynthesis(): SpeechSynthesisState {
 
     return () => {
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.removeEventListener("voiceschanged", updateVoices);
+        window.speechSynthesis.removeEventListener(
+          "voiceschanged",
+          updateVoices,
+        );
       }
     };
   }, []);
@@ -106,7 +123,9 @@ export function useSpeechSynthesis(): SpeechSynthesisState {
     if (typeof window === "undefined") return;
 
     const handleStateChange = (e: Event) => {
-      const detail = (e as CustomEvent<{ speakingId: string | null; isSpeaking: boolean }>).detail;
+      const detail = (
+        e as CustomEvent<{ speakingId: string | null; isSpeaking: boolean }>
+      ).detail;
       if (!detail) return;
       setSpeakingId(detail.speakingId);
       setIsSpeaking(detail.isSpeaking);
@@ -121,7 +140,9 @@ export function useSpeechSynthesis(): SpeechSynthesisState {
     if (typeof window === "undefined") return;
 
     const handlePrefChange = (e: Event) => {
-      const detail = (e as CustomEvent<{ autoPlay?: boolean; voiceURI?: string | null }>).detail;
+      const detail = (
+        e as CustomEvent<{ autoPlay?: boolean; voiceURI?: string | null }>
+      ).detail;
       if (!detail) return;
       if (typeof detail.autoPlay === "boolean") {
         setAutoPlayEnabledState(detail.autoPlay);
@@ -160,59 +181,58 @@ export function useSpeechSynthesis(): SpeechSynthesisState {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [stop]);
 
-  const speak = useCallback(
-    (id: string, text: string) => {
-      if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  const speak = useCallback((id: string, text: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
 
-      const cleanText = sanitizeTextForSpeech(text);
-      if (!cleanText) return;
+    const cleanText = sanitizeTextForSpeech(text);
+    if (!cleanText) return;
 
-      try {
-        window.speechSynthesis.cancel();
-      } catch {
-        // ignore
+    try {
+      window.speechSynthesis.cancel();
+    } catch {
+      // ignore
+    }
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    activeGlobalUtterance = utterance;
+
+    const voice = voicesRef.current.find(
+      (v) => v.voiceURI === selectedVoiceURIRef.current,
+    );
+    if (voice) {
+      utterance.voice = voice;
+    }
+
+    // A cancelled utterance can still fire a late callback after `speak`
+    // installed its replacement — identity-check before touching state.
+    utterance.onstart = () => {
+      if (activeGlobalUtterance !== utterance) return;
+      broadcastState(id, true);
+    };
+
+    utterance.onend = () => {
+      if (activeGlobalUtterance !== utterance) return;
+      activeGlobalUtterance = null;
+      broadcastState(null, false);
+    };
+
+    utterance.onerror = (e) => {
+      if (e.error !== "canceled" && e.error !== "interrupted") {
+        console.warn("SpeechSynthesis error:", e.error);
       }
+      if (activeGlobalUtterance !== utterance) return;
+      activeGlobalUtterance = null;
+      broadcastState(null, false);
+    };
 
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      activeGlobalUtterance = utterance;
-
-      const voice = voicesRef.current.find((v) => v.voiceURI === selectedVoiceURIRef.current);
-      if (voice) {
-        utterance.voice = voice;
-      }
-
-      // A cancelled utterance can still fire a late callback after `speak`
-      // installed its replacement — identity-check before touching state.
-      utterance.onstart = () => {
-        if (activeGlobalUtterance !== utterance) return;
-        broadcastState(id, true);
-      };
-
-      utterance.onend = () => {
-        if (activeGlobalUtterance !== utterance) return;
-        activeGlobalUtterance = null;
-        broadcastState(null, false);
-      };
-
-      utterance.onerror = (e) => {
-        if (e.error !== "canceled" && e.error !== "interrupted") {
-          console.warn("SpeechSynthesis error:", e.error);
-        }
-        if (activeGlobalUtterance !== utterance) return;
-        activeGlobalUtterance = null;
-        broadcastState(null, false);
-      };
-
-      try {
-        window.speechSynthesis.speak(utterance);
-      } catch (err) {
-        console.warn("Failed to speak utterance:", err);
-        activeGlobalUtterance = null;
-        broadcastState(null, false);
-      }
-    },
-    []
-  );
+    try {
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.warn("Failed to speak utterance:", err);
+      activeGlobalUtterance = null;
+      broadcastState(null, false);
+    }
+  }, []);
 
   const toggle = useCallback(
     (id: string, text: string) => {
@@ -222,7 +242,7 @@ export function useSpeechSynthesis(): SpeechSynthesisState {
         speak(id, text);
       }
     },
-    [speak, stop]
+    [speak, stop],
   );
 
   const setAutoPlay = useCallback((enabled: boolean) => {
@@ -234,7 +254,7 @@ export function useSpeechSynthesis(): SpeechSynthesisState {
         // ignore
       }
       window.dispatchEvent(
-        new CustomEvent(TTS_PREF_EVENT, { detail: { autoPlay: enabled } })
+        new CustomEvent(TTS_PREF_EVENT, { detail: { autoPlay: enabled } }),
       );
     }
   }, []);
@@ -252,7 +272,7 @@ export function useSpeechSynthesis(): SpeechSynthesisState {
         // ignore
       }
       window.dispatchEvent(
-        new CustomEvent(TTS_PREF_EVENT, { detail: { voiceURI: uri } })
+        new CustomEvent(TTS_PREF_EVENT, { detail: { voiceURI: uri } }),
       );
     }
   }, []);
@@ -274,7 +294,13 @@ export function useSpeechSynthesis(): SpeechSynthesisState {
 
 const SpeechSynthesisContext = createContext<SpeechSynthesisState | null>(null);
 
-export function SpeechSynthesisProvider({ value, children }: { value: SpeechSynthesisState; children: ReactNode }) {
+export function SpeechSynthesisProvider({
+  value,
+  children,
+}: {
+  value: SpeechSynthesisState;
+  children: ReactNode;
+}) {
   return (
     <SpeechSynthesisContext.Provider value={value}>
       {children}

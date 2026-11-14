@@ -13,7 +13,10 @@ function declaredContentLength(request: Request): number | null {
 
 /** Read the complete wire body, bounding chunked requests too, where
  * Content-Length is unavailable or false. */
-export async function readBodyWithinLimit(request: Request, maxBytes: number): Promise<Uint8Array<ArrayBuffer>> {
+export async function readBodyWithinLimit(
+  request: Request,
+  maxBytes: number,
+): Promise<Uint8Array<ArrayBuffer>> {
   const declared = declaredContentLength(request);
   if (declared !== null && declared > maxBytes) {
     throw new RequestBodyTooLargeError();
@@ -51,13 +54,21 @@ export async function readBodyWithinLimit(request: Request, maxBytes: number): P
 }
 
 /** Read UTF-8 JSON input without allowing chunked bodies to bypass the limit. */
-export async function parseJsonWithinLimit<T>(request: Request, maxBytes: number): Promise<T> {
+export async function parseJsonWithinLimit<T>(
+  request: Request,
+  maxBytes: number,
+): Promise<T> {
   const bytes = await readBodyWithinLimit(request, maxBytes);
-  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as T;
+  return JSON.parse(
+    new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+  ) as T;
 }
 
 /** Parse multipart data only after constraining the complete wire body. */
-export async function parseFormDataWithinLimit(request: Request, maxBytes: number): Promise<FormData> {
+export async function parseFormDataWithinLimit(
+  request: Request,
+  maxBytes: number,
+): Promise<FormData> {
   if (!request.body) return request.formData();
   const bytes = await readBodyWithinLimit(request, maxBytes);
   const contentType = request.headers.get("content-type");

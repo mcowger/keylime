@@ -31,11 +31,22 @@ export function GET(request: Request) {
   // theme_color colors the installed app's system bars; background_color is
   // its window background, which shows through the navigation bar on
   // edge-to-edge Android (and on the splash screen).
-  const color = parseThemeColor(new URL(request.url).searchParams.get("theme")) ?? manifest.theme_color;
-  return Response.json({ ...manifest, theme_color: color, background_color: color, name, short_name: name }, {
-    headers: {
-      "Content-Type": "application/manifest+json",
-      "Cache-Control": "private, no-cache, max-age=0, must-revalidate",
+  const color =
+    parseThemeColor(new URL(request.url).searchParams.get("theme")) ??
+    manifest.theme_color;
+  return Response.json(
+    {
+      ...manifest,
+      theme_color: color,
+      background_color: color,
+      name,
+      short_name: name,
     },
-  });
+    {
+      headers: {
+        "Content-Type": "application/manifest+json",
+        "Cache-Control": "private, no-cache, max-age=0, must-revalidate",
+      },
+    },
+  );
 }

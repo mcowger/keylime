@@ -2,7 +2,8 @@ import "../tests/setup-dom.mjs";
 import assert from "node:assert/strict";
 import test, { afterEach, beforeEach } from "node:test";
 import React from "react";
-const { cleanup, fireEvent, render, screen } = await import("@testing-library/react/pure.js");
+const { cleanup, fireEvent, render, screen } =
+  await import("@testing-library/react/pure.js");
 
 const { TabBar } = await import("./TabBar.tsx");
 
@@ -12,7 +13,8 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+const nextFrame = () =>
+  new Promise((resolve) => requestAnimationFrame(resolve));
 
 test("right-panel tabs support roving arrows, Home/End, and keyboard close", async () => {
   const selected = [];
@@ -22,19 +24,21 @@ test("right-panel tabs support roving arrows, Home/End, and keyboard close", asy
     { id: "beta", label: "beta.ts", filePath: "/workspace/beta.ts" },
   ];
 
-  render(React.createElement(TabBar, {
-    tabs,
-    activeTabId: "alpha",
-    onSelectTab: (id) => selected.push(id),
-    onCloseTab: (id) => closed.push(id),
-    explorerSelected: true,
-    onSelectExplorer: () => selected.push("explorer"),
-    gitSelected: false,
-    onSelectGit: () => selected.push("git"),
-    onSelectNotifications: () => selected.push("notifications"),
-    worktreesSelected: false,
-    onSelectWorktrees: () => selected.push("worktrees"),
-  }));
+  render(
+    React.createElement(TabBar, {
+      tabs,
+      activeTabId: "alpha",
+      onSelectTab: (id) => selected.push(id),
+      onCloseTab: (id) => closed.push(id),
+      explorerSelected: true,
+      onSelectExplorer: () => selected.push("explorer"),
+      gitSelected: false,
+      onSelectGit: () => selected.push("git"),
+      onSelectNotifications: () => selected.push("notifications"),
+      worktreesSelected: false,
+      onSelectWorktrees: () => selected.push("worktrees"),
+    }),
+  );
 
   // Notifications is the first pinned tab, so Home lands there.
   const notifications = screen.getByRole("tab", { name: "Notifications" });
@@ -43,7 +47,10 @@ test("right-panel tabs support roving arrows, Home/End, and keyboard close", asy
   const alpha = screen.getByRole("tab", { name: "/workspace/alpha.ts" });
   const beta = screen.getByRole("tab", { name: "/workspace/beta.ts" });
   assert.equal(alpha.tabIndex, 0);
-  assert.equal(screen.getByRole("button", { name: "Close alpha.ts" }).tabIndex, 0);
+  assert.equal(
+    screen.getByRole("button", { name: "Close alpha.ts" }).tabIndex,
+    0,
+  );
 
   alpha.focus();
   fireEvent.keyDown(alpha, { key: "ArrowRight" });
@@ -71,6 +78,15 @@ test("right-panel tabs support roving arrows, Home/End, and keyboard close", asy
 
   fireEvent.keyDown(alpha, { key: "ArrowLeft" });
   await nextFrame();
-  assert.equal(document.activeElement, screen.getByRole("tab", { name: "Worktrees" }));
-  assert.deepEqual(selected, ["beta", "notifications", "explorer", "beta", "worktrees"]);
+  assert.equal(
+    document.activeElement,
+    screen.getByRole("tab", { name: "Worktrees" }),
+  );
+  assert.deepEqual(selected, [
+    "beta",
+    "notifications",
+    "explorer",
+    "beta",
+    "worktrees",
+  ]);
 });

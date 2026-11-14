@@ -1,4 +1,11 @@
-import { chmodSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { createHmac, randomBytes } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { getAgentDir } from "./omp/paths";
@@ -26,11 +33,16 @@ export function webAuthSecretPath(): string {
   return resolve(getAgentDir(), "omp-web", "web-auth-secret.json");
 }
 
-let cached: { path: string; mtimeMs: number; secret: WebAuthSecret } | null = null;
+let cached: { path: string; mtimeMs: number; secret: WebAuthSecret } | null =
+  null;
 let cachedFresh: { path: string; secret: WebAuthSecret } | null = null;
 
 function isBase64Url(value: unknown, bytes: number): value is string {
-  return typeof value === "string" && /^[A-Za-z0-9_-]+$/.test(value) && Buffer.from(value, "base64url").length === bytes;
+  return (
+    typeof value === "string" &&
+    /^[A-Za-z0-9_-]+$/.test(value) &&
+    Buffer.from(value, "base64url").length === bytes
+  );
 }
 
 function parseSecret(raw: string): WebAuthSecret | null {
@@ -54,7 +66,9 @@ function createSecret(path: string): WebAuthSecret {
   mkdirSync(dirname(path), { recursive: true });
   // Atomic write, user-readable only: this file is the session-forging secret.
   const temporary = `${path}.${process.pid}.${Date.now()}.tmp`;
-  writeFileSync(temporary, `${JSON.stringify(secret, null, 2)}\n`, { mode: 0o600 });
+  writeFileSync(temporary, `${JSON.stringify(secret, null, 2)}\n`, {
+    mode: 0o600,
+  });
   chmodSync(temporary, 0o600);
   renameSync(temporary, path);
   return secret;
@@ -66,7 +80,9 @@ function createSecret(path: string): WebAuthSecret {
  * directory, and the second one must not keep signing with a key the first
  * has replaced.
  */
-export function resolveWebAuthSecret(path = webAuthSecretPath()): WebAuthSecret {
+export function resolveWebAuthSecret(
+  path = webAuthSecretPath(),
+): WebAuthSecret {
   if (cachedFresh && cachedFresh.path === path) return cachedFresh.secret;
   let mtimeMs = 0;
   try {
@@ -74,7 +90,8 @@ export function resolveWebAuthSecret(path = webAuthSecretPath()): WebAuthSecret 
   } catch {
     mtimeMs = 0;
   }
-  if (cached && cached.path === path && cached.mtimeMs === mtimeMs) return cached.secret;
+  if (cached && cached.path === path && cached.mtimeMs === mtimeMs)
+    return cached.secret;
 
   if (mtimeMs > 0) {
     try {
@@ -103,7 +120,10 @@ export function resolveWebAuthSecret(path = webAuthSecretPath()): WebAuthSecret 
  * Derive the cookie-signing key from the installation secret and the
  * configured password hash; both must change for the key to stay the same.
  */
-export function deriveSessionSigningKey(passwordHash: string, secret = resolveWebAuthSecret()): string {
+export function deriveSessionSigningKey(
+  passwordHash: string,
+  secret = resolveWebAuthSecret(),
+): string {
   return createHmac("sha256", Buffer.from(secret.key, "base64url"))
     .update(`omp-web-session-v1\0${secret.salt}\0${passwordHash}`, "utf8")
     .digest("base64url");

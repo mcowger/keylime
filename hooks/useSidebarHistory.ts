@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { hasUnsentDrafts, subscribeDrafts } from "@/lib/draft-store";
 
 const HISTORY_KEY = "__ompSidebarHistory";
@@ -10,9 +17,21 @@ type SidebarEntry = {
   previous: boolean;
   sidebarOpen: boolean;
 };
-type HistorySnapshot = { marker: SidebarEntry; state: Record<string, unknown>; href: string };
+type HistorySnapshot = {
+  marker: SidebarEntry;
+  state: Record<string, unknown>;
+  href: string;
+};
 
-export function useSidebarHistory({ active, ready, sidebarOpen, setSidebarOpen, panelOpen, closePanel, url }: {
+export function useSidebarHistory({
+  active,
+  ready,
+  sidebarOpen,
+  setSidebarOpen,
+  panelOpen,
+  closePanel,
+  url,
+}: {
   active: boolean;
   ready: boolean;
   sidebarOpen: boolean;
@@ -26,32 +45,57 @@ export function useSidebarHistory({ active, ready, sidebarOpen, setSidebarOpen, 
   const [exitNeedsNativeBack, setExitNeedsNativeBack] = useState(false);
   const [restoreVersion, setRestoreVersion] = useState(0);
   const snapshot = useRef<HistorySnapshot | null>(null);
-  const pending = useRef<"collapse" | "leave" | { sidebarOpen: boolean } | null>(null);
+  const pending = useRef<
+    "collapse" | "leave" | { sidebarOpen: boolean } | null
+  >(null);
   const leaveAllowed = useRef(false);
-  const latest = useRef({ active, sidebarOpen, setSidebarOpen, panelOpen, closePanel });
-  latest.current = { active, sidebarOpen, setSidebarOpen, panelOpen, closePanel };
+  const latest = useRef({
+    active,
+    sidebarOpen,
+    setSidebarOpen,
+    panelOpen,
+    closePanel,
+  });
+  latest.current = {
+    active,
+    sidebarOpen,
+    setSidebarOpen,
+    panelOpen,
+    closePanel,
+  };
 
-  const subscribe = useCallback((onChange: () => void) => subscribeDrafts(() => {
-    // A new edit invalidates an earlier authorization to discard, including
-    // when an installed shell could not close itself after Leave.
-    if (leaveAllowed.current) {
-      leaveAllowed.current = false;
-      setExitNeedsNativeBack(false);
-    }
-    onChange();
-  }), []);
+  const subscribe = useCallback(
+    (onChange: () => void) =>
+      subscribeDrafts(() => {
+        // A new edit invalidates an earlier authorization to discard, including
+        // when an installed shell could not close itself after Leave.
+        if (leaveAllowed.current) {
+          leaveAllowed.current = false;
+          setExitNeedsNativeBack(false);
+        }
+        onChange();
+      }),
+    [],
+  );
   const dirty = useSyncExternalStore(subscribe, hasUnsentDrafts, () => false);
 
-  const writeEntry = useCallback((entry: SidebarEntry["entry"], open: boolean, push = false) => {
-    const current = snapshot.current;
-    if (!current) return;
-    const marker = { ...current.marker, entry, sidebarOpen: open };
-    const state = { ...current.state, [HISTORY_KEY]: marker };
-    // Keep unrelated history state. Sidebar traversal changes neither route
-    // nor session, so the entry keeps the current URL.
-    window.history[push ? "pushState" : "replaceState"](state, "", current.href);
-    snapshot.current = { ...current, state, marker };
-  }, []);
+  const writeEntry = useCallback(
+    (entry: SidebarEntry["entry"], open: boolean, push = false) => {
+      const current = snapshot.current;
+      if (!current) return;
+      const marker = { ...current.marker, entry, sidebarOpen: open };
+      const state = { ...current.state, [HISTORY_KEY]: marker };
+      // Keep unrelated history state. Sidebar traversal changes neither route
+      // nor session, so the entry keeps the current URL.
+      window.history[push ? "pushState" : "replaceState"](
+        state,
+        "",
+        current.href,
+      );
+      snapshot.current = { ...current, state, marker };
+    },
+    [],
+  );
 
   const leaveFromBase = useCallback(() => {
     if (snapshot.current?.marker.previous) {
@@ -82,7 +126,11 @@ export function useSidebarHistory({ active, ready, sidebarOpen, setSidebarOpen, 
           writeEntry("top", action.sidebarOpen);
         } else if (action === "leave") {
           leaveFromBase();
-        } else if ((latest.current.active && !latest.current.sidebarOpen) || latest.current.panelOpen || hasUnsentDrafts()) {
+        } else if (
+          (latest.current.active && !latest.current.sidebarOpen) ||
+          latest.current.panelOpen ||
+          hasUnsentDrafts()
+        ) {
           pending.current = { sidebarOpen: latest.current.sidebarOpen };
           window.history.forward();
         }
@@ -93,14 +141,18 @@ export function useSidebarHistory({ active, ready, sidebarOpen, setSidebarOpen, 
         // The panel covers the whole screen: Back closes it and nothing else.
         latest.current.closePanel();
         // `latest` still reports the panel open until the next render.
-        if ((latest.current.active && !latest.current.sidebarOpen) || hasUnsentDrafts()) {
+        if (
+          (latest.current.active && !latest.current.sidebarOpen) ||
+          hasUnsentDrafts()
+        ) {
           pending.current = { sidebarOpen: latest.current.sidebarOpen };
           window.history.forward();
         }
         return;
       }
       if (marker.entry === "top") {
-        if (latest.current.active) latest.current.setSidebarOpen(marker.sidebarOpen);
+        if (latest.current.active)
+          latest.current.setSidebarOpen(marker.sidebarOpen);
       } else if (latest.current.active && !latest.current.sidebarOpen) {
         latest.current.setSidebarOpen(true);
         writeEntry("base", true);
@@ -123,7 +175,8 @@ export function useSidebarHistory({ active, ready, sidebarOpen, setSidebarOpen, 
       setExitNeedsNativeBack(false);
       setRestoreVersion((version) => version + 1);
     };
-    const onSidebarPopState = (event: Event) => onPopState((event as CustomEvent<PopStateEvent>).detail);
+    const onSidebarPopState = (event: Event) =>
+      onPopState((event as CustomEvent<PopStateEvent>).detail);
     window.addEventListener("omp:sidebar-popstate", onSidebarPopState);
     window.addEventListener("pageshow", onPageShow);
     return () => {
@@ -134,24 +187,31 @@ export function useSidebarHistory({ active, ready, sidebarOpen, setSidebarOpen, 
 
   useLayoutEffect(() => {
     if (!ready) return;
-    if (leaveAllowed.current && (!sidebarOpen || snapshot.current?.href !== window.location.href)) {
+    if (
+      leaveAllowed.current &&
+      (!sidebarOpen || snapshot.current?.href !== window.location.href)
+    ) {
       leaveAllowed.current = false;
       setExitNeedsNativeBack(false);
     }
     const state = window.history.state ?? {};
     // router.replace can replace custom state. Retain our pair across URL
     // commits; a real reload recovers it from history.state instead.
-    const marker: SidebarEntry = state[HISTORY_KEY] ?? snapshot.current?.marker ?? {
-      // `crypto.randomUUID` is secure-context only, so plain-HTTP LAN origins
-      // (e.g. http://<lan-ip>:30177) need a fallback.
-      id: typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      entry: "base",
-      previous: (window as Window & { navigation?: { canGoBack: boolean } }).navigation?.canGoBack
-        ?? window.history.length > 1,
-      sidebarOpen: true,
-    };
+    const marker: SidebarEntry = state[HISTORY_KEY] ??
+      snapshot.current?.marker ?? {
+        // `crypto.randomUUID` is secure-context only, so plain-HTTP LAN origins
+        // (e.g. http://<lan-ip>:30177) need a fallback.
+        id:
+          typeof crypto !== "undefined" &&
+          typeof crypto.randomUUID === "function"
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        entry: "base",
+        previous:
+          (window as Window & { navigation?: { canGoBack: boolean } })
+            .navigation?.canGoBack ?? window.history.length > 1,
+        sidebarOpen: true,
+      };
     snapshot.current = { marker, state, href: window.location.href };
     if (leaveAllowed.current) return;
     // A route commit can strip our marker while a traversal is pending.
@@ -170,7 +230,17 @@ export function useSidebarHistory({ active, ready, sidebarOpen, setSidebarOpen, 
     } else {
       writeEntry(marker.entry, sidebarOpen);
     }
-  }, [active, ready, sidebarOpen, panelOpen, dirty, url, exitNeedsNativeBack, restoreVersion, writeEntry]);
+  }, [
+    active,
+    ready,
+    sidebarOpen,
+    panelOpen,
+    dirty,
+    url,
+    exitNeedsNativeBack,
+    restoreVersion,
+    writeEntry,
+  ]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -183,7 +253,9 @@ export function useSidebarHistory({ active, ready, sidebarOpen, setSidebarOpen, 
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [dirty]);
 
-  const cancelExit = useCallback(() => { setExitConfirmationOpen(false); }, []);
+  const cancelExit = useCallback(() => {
+    setExitConfirmationOpen(false);
+  }, []);
   const leave = useCallback(() => {
     leaveAllowed.current = true;
     setExitConfirmationOpen(false);

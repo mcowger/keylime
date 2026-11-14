@@ -6,8 +6,19 @@ import { isLinkUp } from "./hosts/host";
 import { HostOpError } from "./hosts/link-protocol";
 import type { WorkspaceFileEvent } from "./workspace-types";
 import { attachNotificationClient } from "./notification-hub";
-import { getExitedRpcSessions, getRpcSession, getRunningRpcSessions, subscribeHostToolCalls, subscribeRunningSessions, type AgentSessionWrapper } from "./rpc-manager";
-import { onOutboxChange, outboxEntries, outboxSnapshot } from "./message-outbox";
+import {
+  getExitedRpcSessions,
+  getRpcSession,
+  getRunningRpcSessions,
+  subscribeHostToolCalls,
+  subscribeRunningSessions,
+  type AgentSessionWrapper,
+} from "./rpc-manager";
+import {
+  onOutboxChange,
+  outboxEntries,
+  outboxSnapshot,
+} from "./message-outbox";
 import { subscribeSessionFileChanges } from "./session-watcher";
 import {
   MUX_CONTROL_EVENT,
@@ -30,8 +41,7 @@ const HEARTBEAT_MS = 30_000;
 const encoder = new TextEncoder();
 
 export type SubscribeResult =
-  | { ok: true }
-  | { ok: false; status: number; error: string; code: string };
+  { ok: true } | { ok: false; status: number; error: string; code: string };
 
 const SUBSCRIBED: SubscribeResult = { ok: true };
 
@@ -42,7 +52,10 @@ class Subscription {
   // snapshots replace each other. Other frames flush it first to preserve order.
   pendingUpdates: QueuedUpdate[] = [];
 
-  constructor(readonly id: string, readonly coalescesMessageUpdates: boolean) {}
+  constructor(
+    readonly id: string,
+    readonly coalescesMessageUpdates: boolean,
+  ) {}
 }
 
 /** What a channel opener may do with its subscription. */
@@ -58,7 +71,8 @@ interface SubscriptionHandle {
 }
 
 declare global {
-  var __ompEventStreamConnections: Map<string, EventStreamConnection> | undefined;
+  var __ompEventStreamConnections:
+    Map<string, EventStreamConnection> | undefined;
   var __ompServerId: string | undefined;
 }
 
@@ -69,7 +83,8 @@ export function serverId(): string {
 
 /** Tell every open connection the browser transport setting changed. */
 export function broadcastBrowserTransport(state: BrowserTransportState): void {
-  for (const connection of connections().values()) connection.control({ type: "transport", ...state });
+  for (const connection of connections().values())
+    connection.control({ type: "transport", ...state });
 }
 
 /** Where a connection's frames go: an SSE response body or a WebSocket. */
@@ -91,7 +106,9 @@ class SseSink implements FrameSink {
 
   constructor(onPull: () => void, onCancel: () => void) {
     this.stream = new ReadableStream<Uint8Array>({
-      start: (controller) => { this.controller = controller; },
+      start: (controller) => {
+        this.controller = controller;
+      },
       // A slow consumer resumed reading: deliver coalesced updates now rather
       // than waiting for the next event or heartbeat.
       pull: onPull,
@@ -113,7 +130,11 @@ class SseSink implements FrameSink {
   }
 
   close(): void {
-    try { this.controller.close(); } catch { /* already closed */ }
+    try {
+      this.controller.close();
+    } catch {
+      /* already closed */
+    }
   }
 
   private enqueue(text: string): boolean {
@@ -130,13 +151,19 @@ function connections(): Map<string, EventStreamConnection> {
   return (globalThis.__ompEventStreamConnections ??= new Map());
 }
 
-export function getEventStreamConnection(connectionId: string): EventStreamConnection | undefined {
+export function getEventStreamConnection(
+  connectionId: string,
+): EventStreamConnection | undefined {
   return connections().get(connectionId);
 }
 
 function runDetach(detach: (() => void) | null): void {
   if (!detach) return;
-  try { detach(); } catch { /* a failing unsubscribe must not block teardown */ }
+  try {
+    detach();
+  } catch {
+    /* a failing unsubscribe must not block teardown */
+  }
 }
 
 export class EventStreamConnection {
@@ -155,12 +182,20 @@ export class EventStreamConnection {
       this.sink = sink;
       this.stream = null;
     } else {
-      const sse = new SseSink(() => this.resume(), () => this.close());
+      const sse = new SseSink(
+        () => this.resume(),
+        () => this.close(),
+      );
       this.sink = sse;
       this.stream = sse.stream;
     }
     connections().set(this.id, this);
-    this.control({ type: "hello", connectionId: this.id, serverId: serverId(), ...browserTransportState() });
+    this.control({
+      type: "hello",
+      connectionId: this.id,
+      serverId: serverId(),
+      ...browserTransportState(),
+    });
     if (!this.closed) {
       this.heartbeat = setInterval(() => {
         if (this.flushAll() && !this.sink.heartbeat()) this.close();
@@ -175,7 +210,8 @@ export class EventStreamConnection {
     this.closed = true;
     clearInterval(this.heartbeat);
     this.heartbeat = undefined;
-    for (const subscription of this.subscriptions.values()) this.release(subscription);
+    for (const subscription of this.subscriptions.values())
+      this.release(subscription);
     this.subscriptions.clear();
     connections().delete(this.id);
     this.signal?.removeEventListener("abort", this.close);
@@ -190,14 +226,27 @@ export class EventStreamConnection {
     return this.subscriptions.size;
   }
 
-  async subscribe(id: string, channel: EventStreamChannel): Promise<SubscribeResult> {
-    if (this.closed) return { ok: false, status: 404, error: "Unknown event stream connection", code: UNKNOWN_CONNECTION_CODE };
+  async subscribe(
+    id: string,
+    channel: EventStreamChannel,
+  ): Promise<SubscribeResult> {
+    if (this.closed)
+      return {
+        ok: false,
+        status: 404,
+        error: "Unknown event stream connection",
+        code: UNKNOWN_CONNECTION_CODE,
+      };
     this.unsubscribe(id);
     const subscription = new Subscription(id, channel.kind === "session");
     this.subscriptions.set(id, subscription);
     const handle: SubscriptionHandle = {
-      get active() { return subscription.active; },
-      open: () => { this.control({ type: "open", sub: id }); },
+      get active() {
+        return subscription.active;
+      },
+      open: () => {
+        this.control({ type: "open", sub: id });
+      },
       send: (data) => this.deliver(subscription, data),
       end: () => this.end(subscription),
       setDetach: (detach) => {
@@ -209,7 +258,12 @@ export class EventStreamConnection {
     try {
       result = await openChannel(channel, handle);
     } catch (error) {
-      result = { ok: false, status: 500, error: String(error), code: "subscribe_failed" };
+      result = {
+        ok: false,
+        status: 500,
+        error: String(error),
+        code: "subscribe_failed",
+      };
     }
     if (!result.ok && this.subscriptions.get(id) === subscription) {
       this.subscriptions.delete(id);
@@ -235,7 +289,8 @@ export class EventStreamConnection {
 
   private end(subscription: Subscription): void {
     if (!subscription.active) return;
-    if (this.subscriptions.get(subscription.id) === subscription) this.subscriptions.delete(subscription.id);
+    if (this.subscriptions.get(subscription.id) === subscription)
+      this.subscriptions.delete(subscription.id);
     this.release(subscription);
     this.control({ type: "end", sub: subscription.id });
   }
@@ -251,7 +306,11 @@ export class EventStreamConnection {
     this.write(MUX_CONTROL_EVENT, JSON.stringify(frame));
   }
 
-  private writeFrame(subscription: Subscription, data: unknown, at?: number): boolean {
+  private writeFrame(
+    subscription: Subscription,
+    data: unknown,
+    at?: number,
+  ): boolean {
     let text: string;
     try {
       text = JSON.stringify(data);
@@ -285,16 +344,18 @@ export class EventStreamConnection {
   }
 
   private flushAll(): boolean {
-    for (const subscription of this.subscriptions.values()) this.flush(subscription);
+    for (const subscription of this.subscriptions.values())
+      this.flush(subscription);
     return !this.closed;
   }
 
   private deliver(subscription: Subscription, data: unknown): void {
     if (!subscription.active || this.closed) return;
     if (
-      subscription.coalescesMessageUpdates
-      && isRecord(data)
-      && (data.type === "outbox_update" || (data.type === "message_update" && this.sink.backpressured()))
+      subscription.coalescesMessageUpdates &&
+      isRecord(data) &&
+      (data.type === "outbox_update" ||
+        (data.type === "message_update" && this.sink.backpressured()))
     ) {
       queueUpdate(subscription.pendingUpdates, data, Date.now());
       if (data.type === "outbox_update") this.flush(subscription);
@@ -316,7 +377,11 @@ type QueuedUpdate = { data: Record<string, unknown>; at: number };
  * joining a delta to an earlier entry would put it before frames it follows
  * and break the sequence fence the browser relies on.
  */
-function queueUpdate(queue: QueuedUpdate[], data: Record<string, unknown>, at: number): void {
+function queueUpdate(
+  queue: QueuedUpdate[],
+  data: Record<string, unknown>,
+  at: number,
+): void {
   if (data.type === "outbox_update") {
     const last = queue.at(-1);
     if (last?.data.type === "outbox_update") {
@@ -336,7 +401,10 @@ function queueUpdate(queue: QueuedUpdate[], data: Record<string, unknown>, at: n
     return;
   }
   const last = queue.at(-1);
-  const merged = last && isDeltaUpdate(last.data) ? mergeDeltaUpdates(last.data, data) : null;
+  const merged =
+    last && isDeltaUpdate(last.data)
+      ? mergeDeltaUpdates(last.data, data)
+      : null;
   if (last && merged) {
     last.data = merged;
     last.at = at;
@@ -345,7 +413,10 @@ function queueUpdate(queue: QueuedUpdate[], data: Record<string, unknown>, at: n
   }
 }
 
-async function openChannel(channel: EventStreamChannel, handle: SubscriptionHandle): Promise<SubscribeResult> {
+async function openChannel(
+  channel: EventStreamChannel,
+  handle: SubscriptionHandle,
+): Promise<SubscribeResult> {
   switch (channel.kind) {
     case "running":
       return openRunningChannel(handle);
@@ -354,7 +425,12 @@ async function openChannel(channel: EventStreamChannel, handle: SubscriptionHand
     case "session":
       return openSessionChannel(channel.sessionId, handle);
     case "file":
-      return openFileChannel(channel.path, channel.sessionId, channel.hostId, handle);
+      return openFileChannel(
+        channel.path,
+        channel.sessionId,
+        channel.hostId,
+        handle,
+      );
     case "host-tools":
       return openHostToolsChannel(handle);
     case "hosts":
@@ -367,17 +443,23 @@ function openRunningChannel(handle: SubscriptionHandle): SubscribeResult {
   handle.open();
   // Subscribe BEFORE taking the initial snapshot so no state change can slip
   // through the gap between snapshot and subscription.
-  const unsubscribeRunning = subscribeRunningSessions(({ ids, runningSessions, exitedSessions, refreshSessionList }) => {
-    handle.send({
-      type: "running",
-      runningSessionIds: ids,
-      runningSessions,
-      exitedSessions,
-      ...(refreshSessionList ? { refreshSessionList: true } : {}),
-    });
-  });
+  const unsubscribeRunning = subscribeRunningSessions(
+    ({ ids, runningSessions, exitedSessions, refreshSessionList }) => {
+      handle.send({
+        type: "running",
+        runningSessionIds: ids,
+        runningSessions,
+        exitedSessions,
+        ...(refreshSessionList ? { refreshSessionList: true } : {}),
+      });
+    },
+  );
   const unsubscribeFiles = subscribeSessionFileChanges((sessionIds) => {
-    handle.send({ type: "sessions-changed", sessionIds, refreshSessionList: true });
+    handle.send({
+      type: "sessions-changed",
+      sessionIds,
+      refreshSessionList: true,
+    });
   });
   handle.setDetach(() => {
     unsubscribeRunning();
@@ -395,9 +477,16 @@ function openRunningChannel(handle: SubscriptionHandle): SubscribeResult {
 
 // The notifications the server routes to one tab (`clientId`). The tab counts
 // as reachable for toasts and in-page system notifications while this is open.
-function openNotificationsChannel(clientId: string, handle: SubscriptionHandle): SubscribeResult {
+function openNotificationsChannel(
+  clientId: string,
+  handle: SubscriptionHandle,
+): SubscribeResult {
   handle.open();
-  handle.setDetach(attachNotificationClient(clientId, (message) => handle.send({ type: "notification", ...message })));
+  handle.setDetach(
+    attachNotificationClient(clientId, (message) =>
+      handle.send({ type: "notification", ...message }),
+    ),
+  );
   return SUBSCRIBED;
 }
 
@@ -405,7 +494,11 @@ function openNotificationsChannel(clientId: string, handle: SubscriptionHandle):
 // session keeps its host tools while the user views another.
 function openHostToolsChannel(handle: SubscriptionHandle): SubscribeResult {
   handle.open();
-  handle.setDetach(subscribeHostToolCalls((call) => handle.send({ type: "host_tool_call", ...call })));
+  handle.setDetach(
+    subscribeHostToolCalls((call) =>
+      handle.send({ type: "host_tool_call", ...call }),
+    ),
+  );
   return SUBSCRIBED;
 }
 
@@ -428,7 +521,10 @@ function openHostsChannel(handle: SubscriptionHandle): SubscribeResult {
 }
 
 // Agent events of one live omp wrapper, and the session's held messages (`outbox_update`, lib/message-outbox.ts).
-function openSessionChannel(sessionId: string, handle: SubscriptionHandle): SubscribeResult {
+function openSessionChannel(
+  sessionId: string,
+  handle: SubscriptionHandle,
+): SubscribeResult {
   // Observer-only: opening a saved session must not create another omp
   // process for a terminal-owned session. Explicit commands use
   // POST /api/agent/[id], which starts the wrapper before this attaches.
@@ -436,7 +532,12 @@ function openSessionChannel(sessionId: string, handle: SubscriptionHandle): Subs
   let session = existing?.isAlive() ? existing : undefined;
   // Held messages show before omp runs (a host offline): the channel attaches to the wrapper the dispatcher starts.
   if (!session && outboxEntries(sessionId).length === 0) {
-    return { ok: false, status: 409, error: "Session is not managed by omp-web", code: "session_not_managed" };
+    return {
+      ok: false,
+      status: 409,
+      error: "Session is not managed by omp-web",
+      code: "session_not_managed",
+    };
   }
 
   handle.open();
@@ -445,7 +546,11 @@ function openSessionChannel(sessionId: string, handle: SubscriptionHandle): Subs
     // onEvent can synchronously replay pending UI requests. Subscribe before
     // sampling the cursor/announcing readiness so catch-up has no event gap.
     detachSession = live.onEvent((event) => handle.send(event));
-    handle.send({ type: "connected", sessionId, web: live.getStreamSnapshot().cursor });
+    handle.send({
+      type: "connected",
+      sessionId,
+      web: live.getStreamSnapshot().cursor,
+    });
   };
   if (session) attach(session);
   const rebind = () => {
@@ -469,47 +574,91 @@ function openSessionChannel(sessionId: string, handle: SubscriptionHandle): Subs
     detachRunning();
     detachSession();
   });
-  if (handle.active) handle.send({ type: "outbox_update", ...outboxSnapshot(sessionId) });
+  if (handle.active)
+    handle.send({ type: "outbox_update", ...outboxSnapshot(sessionId) });
   return SUBSCRIBED;
 }
 
 // Change notifications for one file open in the viewer.
-async function openFileChannel(rawPath: string, sessionId: string | null, hostId: string | undefined, handle: SubscriptionHandle): Promise<SubscribeResult> {
+async function openFileChannel(
+  rawPath: string,
+  sessionId: string | null,
+  hostId: string | undefined,
+  handle: SubscriptionHandle,
+): Promise<SubscribeResult> {
   const resolved = await resolveWorkspaceHost(hostId, sessionId);
   if ("response" in resolved) {
     const body = await resolved.response.json();
-    return { ok: false, status: resolved.response.status, error: body.error, code: body.code };
+    return {
+      ok: false,
+      status: resolved.response.status,
+      error: body.error,
+      code: body.code,
+    };
   }
   const { host } = resolved;
-  const id = randomUUID(), epoch = randomUUID();
+  const id = randomUUID(),
+    epoch = randomUUID();
   let opened = false;
   const pending: WorkspaceFileEvent[] = [];
   const detachEvent = onWorkspaceFile(host.id, id, epoch, (event) => {
     if (!handle.active) return;
-    if (!opened) { pending.push(event); return; }
+    if (!opened) {
+      pending.push(event);
+      return;
+    }
     handle.send(event);
     if (event.type === "error") handle.end();
   });
-  const detachStatus = host.onStatus((status) => { if (!isLinkUp(status)) handle.end(); });
+  const detachStatus = host.onStatus((status) => {
+    if (!isLinkUp(status)) handle.end();
+  });
   handle.setDetach(() => {
-    detachEvent(); detachStatus();
+    detachEvent();
+    detachStatus();
     void host.workspaceOps.unwatchFile(id, epoch).catch(() => {});
   });
   try {
-    const result = await host.workspaceOps.watchFile(id, epoch, { segments: filePathApiSegments(rawPath), sessionId: resolved.sessionId, sessionFile: resolved.sessionFile, owner: resolved.owner });
-    if (!result.ok) { detachEvent(); detachStatus(); return result; }
-    if (!handle.active) { void host.workspaceOps.unwatchFile(id, epoch).catch(() => {}); return SUBSCRIBED; }
+    const result = await host.workspaceOps.watchFile(id, epoch, {
+      segments: filePathApiSegments(rawPath),
+      sessionId: resolved.sessionId,
+      sessionFile: resolved.sessionFile,
+      owner: resolved.owner,
+    });
+    if (!result.ok) {
+      detachEvent();
+      detachStatus();
+      return result;
+    }
+    if (!handle.active) {
+      void host.workspaceOps.unwatchFile(id, epoch).catch(() => {});
+      return SUBSCRIBED;
+    }
     const info = result.value;
     handle.open();
     // A new watch epoch always refreshes bytes missed during the disconnected interval.
-    handle.send({ type: "change", mtime: new Date(info.mtimeMs).toISOString(), size: info.size });
+    handle.send({
+      type: "change",
+      mtime: new Date(info.mtimeMs).toISOString(),
+      size: info.size,
+    });
     handle.send({ type: "connected", filePath: info.path });
     opened = true;
-    for (const event of pending) { handle.send(event); if (event.type === "error") handle.end(); }
+    for (const event of pending) {
+      handle.send(event);
+      if (event.type === "error") handle.end();
+    }
     return SUBSCRIBED;
   } catch (error) {
-    detachEvent(); detachStatus();
-    if (error instanceof HostOpError) return { ok: false, status: error.status, code: error.code, error: error.message };
+    detachEvent();
+    detachStatus();
+    if (error instanceof HostOpError)
+      return {
+        ok: false,
+        status: error.status,
+        code: error.code,
+        error: error.message,
+      };
     throw error;
   }
 }

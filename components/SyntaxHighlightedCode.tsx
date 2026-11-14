@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ensureLanguageRegistered, isLanguageRegistered, SyntaxHighlighter, vs, vscDarkPlus } from "@/lib/syntax-highlight";
+import {
+  ensureLanguageRegistered,
+  isLanguageRegistered,
+  SyntaxHighlighter,
+  vs,
+  vscDarkPlus,
+} from "@/lib/syntax-highlight";
 import { useTheme } from "@/hooks/useTheme";
 
 interface Props {
@@ -38,9 +44,13 @@ export function SyntaxHighlightedCode({ code, lang }: Props) {
     setReady(isLanguageRegistered(lang));
     const promise = ensureLanguageRegistered(lang);
     if (promise) {
-      promise.then(() => { if (!cancelled) setReady(true); });
+      promise.then(() => {
+        if (!cancelled) setReady(true);
+      });
     }
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [lang]);
 
   if (!ready) {

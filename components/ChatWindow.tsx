@@ -1,14 +1,45 @@
 "use client";
 import { sendAgentCommand } from "@/lib/agent-client";
 import { registerAbortHandler } from "@/hooks/useKeyboardShortcuts";
-import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { ArrowDown, ChevronDown, ChevronUp, Paperclip, Square } from "lucide-react";
-import type { AgentMessage, AssistantMessage, SessionInfo, SessionTreeNode, ToolResultMessage, UiCustomFrame } from "@/lib/types";
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
+import {
+  ArrowDown,
+  ChevronDown,
+  ChevronUp,
+  Paperclip,
+  Square,
+} from "lucide-react";
+import type {
+  AgentMessage,
+  AssistantMessage,
+  SessionInfo,
+  SessionTreeNode,
+  ToolResultMessage,
+  UiCustomFrame,
+} from "@/lib/types";
 import { translate, useI18n } from "@/lib/i18n";
-import { collectToolResults, isGroupAnchor, planTranscriptRows, type TranscriptRow } from "@/lib/chat-transcript-plan";
+import {
+  collectToolResults,
+  isGroupAnchor,
+  planTranscriptRows,
+  type TranscriptRow,
+} from "@/lib/chat-transcript-plan";
 import { isReplyBlock } from "@/lib/message-display";
 import { resolveForkTargets } from "@/lib/chat-fork";
-import { renderTranscriptGroupRow, type RenderMessage } from "./ChatWindow-transcript-group-row";
+import {
+  renderTranscriptGroupRow,
+  type RenderMessage,
+} from "./ChatWindow-transcript-group-row";
 import { ChatLiveTail } from "./ChatWindow-live-tail";
 import { HeldMessageView, MessageView } from "./MessageView";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
@@ -20,11 +51,19 @@ import { BtwHistoryDialog, type BtwPanelProps } from "./BtwPanel";
 import OmpWebLogo from "./OmpWebLogo";
 import { CHAT_COLUMN_MAX_WIDTH, MINIMAP_WIDTH } from "@/lib/chat-layout";
 import { WorkspaceState } from "./AppShell-layout";
-import { useAgentSession, type AgentPhase, type NoticeItem, type SubagentInfo } from "@/hooks/useAgentSession";
+import {
+  useAgentSession,
+  type AgentPhase,
+  type NoticeItem,
+  type SubagentInfo,
+} from "@/hooks/useAgentSession";
 import { useAudio } from "@/hooks/useAudio";
 import { useChatSearchHighlights } from "@/hooks/useChatSearchHighlights";
 import type { SearchMatchTarget } from "./SessionSearchMatches";
-import { useSpeechSynthesis, SpeechSynthesisProvider } from "@/hooks/useSpeechSynthesis";
+import {
+  useSpeechSynthesis,
+  SpeechSynthesisProvider,
+} from "@/hooks/useSpeechSynthesis";
 import { GithubRepoContext } from "@/lib/github-refs";
 import { useDragDrop } from "@/hooks/useDragDrop";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -81,13 +120,21 @@ interface Props {
   modelsRefreshKey?: number;
   chatInputRef?: React.RefObject<ChatInputHandle | null>;
   sessionInfoContainer?: HTMLDivElement | null;
-  onBranchDataChange?: (tree: SessionTreeNode[], activeLeafId: string | null, onLeafChange: (leafId: string | null) => void) => void;
+  onBranchDataChange?: (
+    tree: SessionTreeNode[],
+    activeLeafId: string | null,
+    onLeafChange: (leafId: string | null) => void,
+  ) => void;
   onSystemPromptChange?: (prompt: string | null) => void;
   onSystemPromptLoaderChange?: (loader: (() => Promise<void>) | null) => void;
   onSessionStatsChange?: (stats: SessionStatsInfo | null) => void;
   onSessionStatsPanelOpen?: () => void;
   onProviderUsageContextChange?: (context: ProviderUsageContext | null) => void;
-  onOpenFile?: (filePath: string, name: string, source: WorkspaceFileSource) => void;
+  onOpenFile?: (
+    filePath: string,
+    name: string,
+    source: WorkspaceFileSource,
+  ) => void;
   /** Handles the open_url host tool; returns the result text for the agent. */
   onOpenUrl?: (url: string) => string;
   onGenerationSpeedChange?: (speed: GenerationSpeedInfo | null) => void;
@@ -105,11 +152,17 @@ function phaseLabel(phase: AgentPhase): string {
   if (phase?.kind === "running_tools") {
     const names = phase.tools.map((tool) => tool.name);
     if (names.length === 0) return translate("chatWindow.runningTool");
-    if (names.length <= 3) return translate("chatWindow.runningNamed", { names: names.join(", ") });
-    return translate("chatWindow.runningNamedMore", { names: names.slice(0, 2).join(", "), more: names.length - 2 });
+    if (names.length <= 3)
+      return translate("chatWindow.runningNamed", { names: names.join(", ") });
+    return translate("chatWindow.runningNamedMore", {
+      names: names.slice(0, 2).join(", "),
+      more: names.length - 2,
+    });
   }
-  if (phase?.kind === "waiting_model") return translate("chatWindow.waitingModel");
-  if (phase?.kind === "running_command") return translate("chatWindow.runningCommand");
+  if (phase?.kind === "waiting_model")
+    return translate("chatWindow.waitingModel");
+  if (phase?.kind === "running_command")
+    return translate("chatWindow.runningCommand");
   return translate("chatWindow.thinking");
 }
 
@@ -164,7 +217,10 @@ function assistantSpeech(
   if (streaming && streaming.role === "assistant") {
     const text = textOf(streaming.content);
     if (text.trim()) {
-      return { id: streaming.timestamp ? String(streaming.timestamp) : "msg", text };
+      return {
+        id: streaming.timestamp ? String(streaming.timestamp) : "msg",
+        text,
+      };
     }
   }
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -172,7 +228,11 @@ function assistantSpeech(
     if (message.role !== "assistant") continue;
     const text = textOf(message.content);
     if (!text.trim()) break;
-    return { id: entryIds[i] ?? (message.timestamp ? String(message.timestamp) : "msg"), text };
+    return {
+      id:
+        entryIds[i] ?? (message.timestamp ? String(message.timestamp) : "msg"),
+      text,
+    };
   }
   return null;
 }
@@ -182,18 +242,24 @@ let lastKnownOmpVersion: string | undefined;
 
 export function OmpRuntimeVersion() {
   const { t } = useI18n();
-  const [version, setVersion] = useState<string | null | undefined>(lastKnownOmpVersion);
+  const [version, setVersion] = useState<string | null | undefined>(
+    lastKnownOmpVersion,
+  );
   useEffect(() => {
     let cancelled = false;
     fetch("/api/omp-version")
       .then((res) => {
-        if (!res.ok) throw new Error(`Version lookup failed: HTTP ${res.status}`);
+        if (!res.ok)
+          throw new Error(`Version lookup failed: HTTP ${res.status}`);
         return res.json();
       })
       .then((data: { version: string | null } | null) => {
         if (cancelled) return;
         // omp reports "omp/17.1.3"; show just the number next to the label.
-        const nextVersion = typeof data?.version === "string" ? data.version.trim().replace(/^omp\//, "") : "";
+        const nextVersion =
+          typeof data?.version === "string"
+            ? data.version.trim().replace(/^omp\//, "")
+            : "";
         lastKnownOmpVersion = nextVersion || undefined;
         setVersion(nextVersion || null);
       })
@@ -206,8 +272,18 @@ export function OmpRuntimeVersion() {
     };
   }, []);
   return (
-    <span aria-busy={version === undefined} style={{ fontSize: 11, color: "var(--text-muted)" }}>
-      omp <span style={{ color: "var(--text)" }}>{version === undefined ? t("appShell.loading") : version ? `v${version}` : t("chatWindow.versionNotFound")}</span>
+    <span
+      aria-busy={version === undefined}
+      style={{ fontSize: 11, color: "var(--text-muted)" }}
+    >
+      omp{" "}
+      <span style={{ color: "var(--text)" }}>
+        {version === undefined
+          ? t("appShell.loading")
+          : version
+            ? `v${version}`
+            : t("chatWindow.versionNotFound")}
+      </span>
     </span>
   );
 }
@@ -215,7 +291,11 @@ export function OmpRuntimeVersion() {
 interface CommittedTranscriptProps {
   messages: AgentMessage[];
   entryIds: string[];
-  conversationMeta: { toolResultsMap: Map<string, ToolResultMessage>; lastAnchorIdx: number; visibleRefIndexByMessage: Map<number, number> };
+  conversationMeta: {
+    toolResultsMap: Map<string, ToolResultMessage>;
+    lastAnchorIdx: number;
+    visibleRefIndexByMessage: Map<number, number>;
+  };
   messageRefs: React.RefObject<(HTMLDivElement | null)[]>;
   isStreaming: boolean;
   sessionBusy: boolean;
@@ -258,18 +338,47 @@ interface CommittedTranscriptProps {
  * grouping/splitting work at display-frame cadence.
  */
 const CommittedTranscript = memo(function CommittedTranscript({
-  messages, entryIds, conversationMeta, messageRefs, isStreaming, sessionBusy, isCompacting, externalRunActive, isNew, forkingEntryId, editingEntryId,
-  handleFork, handleEdit, modelNames, messageCwd, onOpenFile, sessionId,
-  toolCallsDefaultCollapsed, hideToolActivity, neverFoldActivity, showToolCallsUnfolded, expandThinkingByDefault, hideThinkingBlock, visibleCount, nearBottom, sentinelRef, handleLoadMoreClick,
+  messages,
+  entryIds,
+  conversationMeta,
+  messageRefs,
+  isStreaming,
+  sessionBusy,
+  isCompacting,
+  externalRunActive,
+  isNew,
+  forkingEntryId,
+  editingEntryId,
+  handleFork,
+  handleEdit,
+  modelNames,
+  messageCwd,
+  onOpenFile,
+  sessionId,
+  toolCallsDefaultCollapsed,
+  hideToolActivity,
+  neverFoldActivity,
+  showToolCallsUnfolded,
+  expandThinkingByDefault,
+  hideThinkingBlock,
+  visibleCount,
+  nearBottom,
+  sentinelRef,
+  handleLoadMoreClick,
 }: CommittedTranscriptProps) {
   const { t } = useI18n();
-  const { toolResultsMap, lastAnchorIdx, visibleRefIndexByMessage } = conversationMeta;
+  const { toolResultsMap, lastAnchorIdx, visibleRefIndexByMessage } =
+    conversationMeta;
   // omp's `branch` command accepts a user entry only; see lib/chat-fork.ts.
-  const forkTargets = useMemo(() => resolveForkTargets(messages, entryIds), [messages, entryIds]);
+  const forkTargets = useMemo(
+    () => resolveForkTargets(messages, entryIds),
+    [messages, entryIds],
+  );
 
-  const attachVisibleRef = (idx: number, refIndex: number) => (el: HTMLDivElement | null) => {
-    messageRefs.current[refIndex] = el;
-  };
+  const attachVisibleRef =
+    (idx: number, refIndex: number) => (el: HTMLDivElement | null) => {
+      messageRefs.current[refIndex] = el;
+    };
 
   const renderMessage: RenderMessage = (idx, options = {}) => {
     const msg = options.messageOverride ?? messages[idx];
@@ -282,21 +391,35 @@ const CommittedTranscript = memo(function CommittedTranscript({
       for (let j = idx + 1; j < messages.length; j++) {
         const r = messages[j].role;
         if (r === "user") break;
-        if (r === "assistant") { showTimestamp = false; break; }
+        if (r === "assistant") {
+          showTimestamp = false;
+          break;
+        }
       }
       // Hide on the currently-streaming tail (the streaming bubble owns the live timestamp)
       if (showTimestamp && isStreaming && idx === messages.length - 1) {
         showTimestamp = false;
       }
     }
-    if (options.showTimestamp !== undefined) showTimestamp = options.showTimestamp;
+    if (options.showTimestamp !== undefined)
+      showTimestamp = options.showTimestamp;
     const forkTarget = forkTargets[idx];
     // Assistant rows fork from reply text or a visible error, not from each thinking/tool step:
     // every row of a turn forks at the same prompt, so the extra buttons were only clutter.
-    const forkableRow = msg.role !== "assistant" || !!msg.errorMessage?.trim() || (Array.isArray(msg.content) && msg.content.some(isReplyBlock));
+    const forkableRow =
+      msg.role !== "assistant" ||
+      !!msg.errorMessage?.trim() ||
+      (Array.isArray(msg.content) && msg.content.some(isReplyBlock));
     const canOfferFork = !sessionBusy && !isNew && !!forkTarget && forkableRow;
-    const canOfferEdit = !sessionBusy && !isCompacting && !isNew && msg.role === "user" && !msg.branchSummary && !!entryIds[idx];
-    const historyMutationPending = forkingEntryId !== null || editingEntryId !== null;
+    const canOfferEdit =
+      !sessionBusy &&
+      !isCompacting &&
+      !isNew &&
+      msg.role === "user" &&
+      !msg.branchSummary &&
+      !!entryIds[idx];
+    const historyMutationPending =
+      forkingEntryId !== null || editingEntryId !== null;
     const view = (
       <MessageView
         key={`${keyPrefix}-view-${idx}`}
@@ -315,7 +438,12 @@ const CommittedTranscript = memo(function CommittedTranscript({
         editing={editingEntryId === entryIds[idx]}
         editDisabled={historyMutationPending}
         showTimestamp={showTimestamp}
-        prevTimestamp={idx > 0 ? (messages[idx - 1] as AgentMessage & { timestamp?: number }).timestamp : undefined}
+        prevTimestamp={
+          idx > 0
+            ? (messages[idx - 1] as AgentMessage & { timestamp?: number })
+                .timestamp
+            : undefined
+        }
         sessionId={sessionId}
         toolCallsDefaultCollapsed={toolCallsDefaultCollapsed}
         expandThinkingByDefault={expandThinkingByDefault}
@@ -323,9 +451,18 @@ const CommittedTranscript = memo(function CommittedTranscript({
         sourceBlockIndices={options.sourceBlockIndices}
       />
     );
-    if (!isVisible || options.attachRef === false || currentRefIdx === undefined) return view;
+    if (
+      !isVisible ||
+      options.attachRef === false ||
+      currentRefIdx === undefined
+    )
+      return view;
     return (
-      <div key={`${keyPrefix}-${idx}`} data-message-index={idx} ref={attachVisibleRef(idx, currentRefIdx)}>
+      <div
+        key={`${keyPrefix}-${idx}`}
+        data-message-index={idx}
+        ref={attachVisibleRef(idx, currentRefIdx)}
+      >
         {view}
       </div>
     );
@@ -338,8 +475,20 @@ const CommittedTranscript = memo(function CommittedTranscript({
   // Expanded-by-default thinking, and tool calls when asked, stay out of the
   // fold: folding on commit would hide the block the preference just opened.
   const rows = useMemo<TranscriptRow[]>(
-    () => planTranscriptRows(messages, { hideThinking: hideThinkingBlock, showThinking: expandThinkingByDefault, showToolCalls: showToolCallsUnfolded, neverFold: neverFoldActivity }),
-    [messages, hideThinkingBlock, expandThinkingByDefault, showToolCallsUnfolded, neverFoldActivity],
+    () =>
+      planTranscriptRows(messages, {
+        hideThinking: hideThinkingBlock,
+        showThinking: expandThinkingByDefault,
+        showToolCalls: showToolCallsUnfolded,
+        neverFold: neverFoldActivity,
+      }),
+    [
+      messages,
+      hideThinkingBlock,
+      expandThinkingByDefault,
+      showToolCallsUnfolded,
+      neverFoldActivity,
+    ],
   );
   const rendersFlat = (row: TranscriptRow): boolean => {
     if (row.kind !== "group") return false;
@@ -349,7 +498,11 @@ const CommittedTranscript = memo(function CommittedTranscript({
     // `sessionBusy` only goes true for a run omp-web owns, so a session driven
     // by another `omp` process would never get a live tail; the transcript-tail
     // heuristic supplies that missing case.
-    return (sessionBusy || externalRunActive || isStreaming) && row.endIndex === messages.length && row.userIndex === lastAnchorIdx;
+    return (
+      (sessionBusy || externalRunActive || isStreaming) &&
+      row.endIndex === messages.length &&
+      row.userIndex === lastAnchorIdx
+    );
   };
 
   // Anchor the render window while the user is reading history: the plain
@@ -378,7 +531,15 @@ const CommittedTranscript = memo(function CommittedTranscript({
       rendered.push(renderMessage(row.index));
       continue;
     }
-    rendered.push(...renderTranscriptGroupRow(row, { messages, renderMessage, flat: rendersFlat(row), messageRefs, visibleRefIndexByMessage }));
+    rendered.push(
+      ...renderTranscriptGroupRow(row, {
+        messages,
+        renderMessage,
+        flat: rendersFlat(row),
+        messageRefs,
+        visibleRefIndexByMessage,
+      }),
+    );
   }
   return (
     <>
@@ -397,29 +558,89 @@ const CommittedTranscript = memo(function CommittedTranscript({
   );
 });
 
-export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessionCreationId, newSessionPoolId, newSessionProjectId, newSessionInitialization, onNewSessionInitialization, hostStatus: channelHostStatus, hostLabel, newSessionWorkspace, toolCallsDefaultCollapsed = true, hideToolActivity = true, neverFoldActivity = false, showToolCallsUnfolded = false, expandThinkingByDefault = false, hideThinkingBlock = false, onAgentEnd, onSessionCreated, onSessionForked, onSessionMoved, modelsRefreshKey, chatInputRef, sessionInfoContainer, onBranchDataChange, onSystemPromptChange, onSystemPromptLoaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onProviderUsageContextChange, onGenerationSpeedChange, onOpenFile: onOpenWorkspaceFile, onOpenUrl, onOpenProviders, searchQuery = "", searchTarget = null, onSearchTargetHandled }: Props) {
+export function ChatWindow({
+  session,
+  newSessionCwd,
+  newSessionHostId,
+  newSessionCreationId,
+  newSessionPoolId,
+  newSessionProjectId,
+  newSessionInitialization,
+  onNewSessionInitialization,
+  hostStatus: channelHostStatus,
+  hostLabel,
+  newSessionWorkspace,
+  toolCallsDefaultCollapsed = true,
+  hideToolActivity = true,
+  neverFoldActivity = false,
+  showToolCallsUnfolded = false,
+  expandThinkingByDefault = false,
+  hideThinkingBlock = false,
+  onAgentEnd,
+  onSessionCreated,
+  onSessionForked,
+  onSessionMoved,
+  modelsRefreshKey,
+  chatInputRef,
+  sessionInfoContainer,
+  onBranchDataChange,
+  onSystemPromptChange,
+  onSystemPromptLoaderChange,
+  onSessionStatsChange,
+  onSessionStatsPanelOpen,
+  onProviderUsageContextChange,
+  onGenerationSpeedChange,
+  onOpenFile: onOpenWorkspaceFile,
+  onOpenUrl,
+  onOpenProviders,
+  searchQuery = "",
+  searchTarget = null,
+  onSearchTargetHandled,
+}: Props) {
   const { t, tn } = useI18n();
-  const fileSource = useMemo<WorkspaceFileSource>(() => ({
-    hostId: session?.hostId ?? newSessionHostId ?? "local",
-    cwd: session?.cwd ?? newSessionCwd, sessionId: session?.id ?? null,
-  }), [session?.hostId, session?.cwd, session?.id, newSessionHostId, newSessionCwd]);
-  const onOpenFile = useMemo(() => onOpenWorkspaceFile
-    ? (filePath: string) => onOpenWorkspaceFile(filePath, getFileName(filePath), fileSource)
-    : undefined, [onOpenWorkspaceFile, fileSource]);
+  const fileSource = useMemo<WorkspaceFileSource>(
+    () => ({
+      hostId: session?.hostId ?? newSessionHostId ?? "local",
+      cwd: session?.cwd ?? newSessionCwd,
+      sessionId: session?.id ?? null,
+    }),
+    [
+      session?.hostId,
+      session?.cwd,
+      session?.id,
+      newSessionHostId,
+      newSessionCwd,
+    ],
+  );
+  const onOpenFile = useMemo(
+    () =>
+      onOpenWorkspaceFile
+        ? (filePath: string) =>
+            onOpenWorkspaceFile(filePath, getFileName(filePath), fileSource)
+        : undefined,
+    [onOpenWorkspaceFile, fileSource],
+  );
   const { playDoneSound, unlockAudio } = useAudio();
   const isMobile = useIsMobile();
   const internalChatInputRef = useRef<ChatInputHandle | null>(null);
   const composerRef = chatInputRef ?? internalChatInputRef;
-  const [composerIdentityMove, setComposerIdentityMove] = useState<{ from: string; to: string; sourceDraft?: ChatDraft }>();
-  const handleSessionMoved = useCallback((oldId: string, newId: string, sourceDraft?: ChatDraft) => {
-    if (!onSessionMoved) return;
-    // A confirmed Edit changes this conversation's owner, not its composer.
-    // Keep pending reads, capture and transcription alive while rekeying drafts.
-    // Queue HTTP responses can settle before React commits the new draft key.
-    composerRef.current?.retargetPendingRecovery(oldId, newId);
-    setComposerIdentityMove({ from: oldId, to: newId, sourceDraft });
-    onSessionMoved(oldId, newId);
-  }, [composerRef, onSessionMoved]);
+  const [composerIdentityMove, setComposerIdentityMove] = useState<{
+    from: string;
+    to: string;
+    sourceDraft?: ChatDraft;
+  }>();
+  const handleSessionMoved = useCallback(
+    (oldId: string, newId: string, sourceDraft?: ChatDraft) => {
+      if (!onSessionMoved) return;
+      // A confirmed Edit changes this conversation's owner, not its composer.
+      // Keep pending reads, capture and transcription alive while rekeying drafts.
+      // Queue HTTP responses can settle before React commits the new draft key.
+      composerRef.current?.retargetPendingRecovery(oldId, newId);
+      setComposerIdentityMove({ from: oldId, to: newId, sourceDraft });
+      onSessionMoved(oldId, newId);
+    },
+    [composerRef, onSessionMoved],
+  );
 
   // Wrap onAgentEnd to play the completion sound. This is more reliable than
   // wrapping handleAgentEventRef because useAgentSession overwrites that ref
@@ -445,34 +666,120 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
   }, [onAgentEnd]);
 
   const {
-    loading, error, messages, entryIds, showPreCompactionHistory, streamState,
-    agentRunning, bashRunning, pendingBash, deferredBash, modelNames, modelList, modelsLoading, modelError, modelThinkingLevels, modelThinkingLevelMaps, thinkingLevel, fastModeEnabled, fastModeActive, slowModeSupported, slowModeEnabled, slowModeScope, usageLimit,
+    loading,
+    error,
+    messages,
+    entryIds,
+    showPreCompactionHistory,
+    streamState,
+    agentRunning,
+    bashRunning,
+    pendingBash,
+    deferredBash,
+    modelNames,
+    modelList,
+    modelsLoading,
+    modelError,
+    modelThinkingLevels,
+    modelThinkingLevelMaps,
+    thinkingLevel,
+    fastModeEnabled,
+    fastModeActive,
+    slowModeSupported,
+    slowModeEnabled,
+    slowModeScope,
+    usageLimit,
     externalRunActive,
     toolPreset,
     liveModelMeta,
-    retryInfo, contextUsage, forkingEntryId, editingEntryId,
-    isCompacting, compactResult, tokensPerSecond, displayModel: displayModelValue, sessionStats,
-    slashCommands, slashCommandsLoading, queuedMessages, advisorActive, advisorEnabled, handleAdvisorChange,
-    notices, dismissNotice, extensionDialog, extensionCustomUi, extensionStatuses, extensionWidgets, respondToExtensionUi, sendExtensionCustomInput,
+    retryInfo,
+    contextUsage,
+    forkingEntryId,
+    editingEntryId,
+    isCompacting,
+    compactResult,
+    tokensPerSecond,
+    displayModel: displayModelValue,
+    sessionStats,
+    slashCommands,
+    slashCommandsLoading,
+    queuedMessages,
+    advisorActive,
+    advisorEnabled,
+    handleAdvisorChange,
+    notices,
+    dismissNotice,
+    extensionDialog,
+    extensionCustomUi,
+    extensionStatuses,
+    extensionWidgets,
+    respondToExtensionUi,
+    sendExtensionCustomInput,
     isAutoModelSelection,
-    agentPhase, activeGoal, activePlan,
+    agentPhase,
+    activeGoal,
+    activePlan,
     liveToolResults,
-    subagents, subagentEvents, subagentTranscriptVersions, activeSubagentCount, currentTodoPhase, todoPhases,
-    isNew, hostStatus: frameHostStatus,
-    sessionIdRef, messagesEndRef, scrollContainerRef, holdScrollPosition,
-    handleSend, handleAbort, handleFork, handleEdit, handleModelChange, retrySession,
-    handleSteer, handleFollowUp, handleAbortCompaction, handleCompact,
-    heldMessages, deleteHeldMessage,
-    removeQueuedMessage, promoteQueuedToSteer,
-    handleBuiltinSlashCommand, togglePreCompactionHistory,
-    handleThinkingLevelChange, handleFastModeChange, handleSlowModeChange, handleCycleModel, handleCycleThinkingLevel, handleAbortRetry, loadSlashCommands,
+    subagents,
+    subagentEvents,
+    subagentTranscriptVersions,
+    activeSubagentCount,
+    currentTodoPhase,
+    todoPhases,
+    isNew,
+    hostStatus: frameHostStatus,
+    sessionIdRef,
+    messagesEndRef,
+    scrollContainerRef,
+    holdScrollPosition,
+    handleSend,
+    handleAbort,
+    handleFork,
+    handleEdit,
+    handleModelChange,
+    retrySession,
+    handleSteer,
+    handleFollowUp,
+    handleAbortCompaction,
+    handleCompact,
+    heldMessages,
+    deleteHeldMessage,
+    removeQueuedMessage,
+    promoteQueuedToSteer,
+    handleBuiltinSlashCommand,
+    togglePreCompactionHistory,
+    handleThinkingLevelChange,
+    handleFastModeChange,
+    handleSlowModeChange,
+    handleCycleModel,
+    handleCycleThinkingLevel,
+    handleAbortRetry,
+    loadSlashCommands,
     handleToolPresetChange,
-    btw, askBtw,
+    btw,
+    askBtw,
     resolveUploadHost,
   } = useAgentSession({
-    session, newSessionCwd, newSessionHostId, newSessionCreationId, newSessionPoolId, newSessionProjectId, newSessionInitialization, onNewSessionInitialization, onAgentEnd: wrappedOnAgentEnd, onSessionCreated, onSessionForked, onSessionMoved: handleSessionMoved,
-    modelsRefreshKey, chatInputRef: composerRef, onBranchDataChange, onSystemPromptChange, onSystemPromptLoaderChange, onSessionStatsPanelOpen,
-    onOpenFile: onOpenWorkspaceFile, onOpenUrl,
+    session,
+    newSessionCwd,
+    newSessionHostId,
+    newSessionCreationId,
+    newSessionPoolId,
+    newSessionProjectId,
+    newSessionInitialization,
+    onNewSessionInitialization,
+    onAgentEnd: wrappedOnAgentEnd,
+    onSessionCreated,
+    onSessionForked,
+    onSessionMoved: handleSessionMoved,
+    modelsRefreshKey,
+    chatInputRef: composerRef,
+    onBranchDataChange,
+    onSystemPromptChange,
+    onSystemPromptLoaderChange,
+    onSessionStatsPanelOpen,
+    onOpenFile: onOpenWorkspaceFile,
+    onOpenUrl,
   });
   useEffect(() => {
     if (!autoplayPendingRef.current) return;
@@ -480,40 +787,60 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
     // row's own speaker button shows it playing and can stop it.
     if (!streamState.isStreaming && streamState.streamingMessage) return;
     autoplayPendingRef.current = false;
-    const speech = assistantSpeech(messages, entryIds, streamState.streamingMessage);
+    const speech = assistantSpeech(
+      messages,
+      entryIds,
+      streamState.streamingMessage,
+    );
     if (speech) ttsRef.current.speak(speech.id, speech.text);
   }, [messages, entryIds, streamState, agentRunning]);
   const sessionBusy = agentRunning || bashRunning;
   const modelCapacity = useMemo(() => {
     if (!displayModelValue) return null;
-    const model = modelList.find((entry) => entry.provider === displayModelValue.provider && entry.id === displayModelValue.modelId);
+    const model = modelList.find(
+      (entry) =>
+        entry.provider === displayModelValue.provider &&
+        entry.id === displayModelValue.modelId,
+    );
     if (!model || (!model.contextWindow && !model.maxTokens)) return null;
     return { contextWindow: model.contextWindow, maxTokens: model.maxTokens };
   }, [displayModelValue, modelList]);
 
   const providerUsageContext = useMemo<ProviderUsageContext | null>(
-    () => displayModelValue ? { provider: displayModelValue.provider, modelId: displayModelValue.modelId } : null,
+    () =>
+      displayModelValue
+        ? {
+            provider: displayModelValue.provider,
+            modelId: displayModelValue.modelId,
+          }
+        : null,
     // Deps are the primitive identity of the model — a new wrapper object
     // per streaming frame must not re-create the context.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [displayModelValue?.provider, displayModelValue?.modelId],
   );
   useEffect(() => {
     onProviderUsageContextChange?.(providerUsageContext);
     return () => onProviderUsageContextChange?.(null);
   }, [onProviderUsageContextChange, providerUsageContext]);
-  const [generationSpeed, setGenerationSpeed] = useState<GenerationSpeedInfo | null>(null);
+  const [generationSpeed, setGenerationSpeed] =
+    useState<GenerationSpeedInfo | null>(null);
   const speedSamplesRef = useRef<number[]>([]);
   // Source of truth is omp's own get_state.tokensPerSecond (polled by the
   // session hook), not a client-side char-count estimate. Distinct reported
   // values feed the rolling AVG; repeated polls of the same value are ignored.
   const lastPublishedSpeedRef = useRef<number | null>(null);
   useEffect(() => {
-    if (tokensPerSecond === null || !Number.isFinite(tokensPerSecond) || tokensPerSecond <= 0) {
+    if (
+      tokensPerSecond === null ||
+      !Number.isFinite(tokensPerSecond) ||
+      tokensPerSecond <= 0
+    ) {
       // Clear the live value; the session average remains visible.
       if (lastPublishedSpeedRef.current !== null) {
         lastPublishedSpeedRef.current = null;
-        setGenerationSpeed((previous) => previous ? { ...previous, current: null } : previous);
+        setGenerationSpeed((previous) =>
+          previous ? { ...previous, current: null } : previous,
+        );
       }
       return;
     }
@@ -524,7 +851,8 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
     speedSamplesRef.current = samples;
     setGenerationSpeed({
       current: quantized,
-      average: samples.reduce((sum, sample) => sum + sample, 0) / samples.length,
+      average:
+        samples.reduce((sum, sample) => sum + sample, 0) / samples.length,
     });
   }, [tokensPerSecond]);
   // Rehydrate the session average from on-disk history after a reload: the
@@ -555,7 +883,8 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
         // only plausible text-generation rates.
         if (secs > 1) {
           const sample = msg.usage.output / secs;
-          if (Number.isFinite(sample) && sample > 0.5 && sample <= 500) samples.push(sample);
+          if (Number.isFinite(sample) && sample > 0.5 && sample <= 500)
+            samples.push(sample);
         }
       }
       prevTs = ts;
@@ -568,7 +897,6 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
       average: recent.reduce((sum, sample) => sum + sample, 0) / recent.length,
     }));
   }, [messages, sessionBusy, session?.id, newSessionCwd]);
-
 
   // Register the abort handler for the global Esc shortcut. The cleanup
   // matters: unmounting mid-run must not leave the module-global handler
@@ -603,7 +931,13 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
   // top, load another page while keeping the scroll position stable.
   const [visibleCount, setVisibleCount] = useState(VISIBLE_PAGE_SIZE);
   const prevSessionKeyForPagingRef = useRef<string | null>(null);
-  const draftKey = session?.id ?? (newSessionPoolId && newSessionProjectId ? `new:pool:${newSessionPoolId}:${newSessionProjectId}` : newSessionCwd ? newChatDraftKey(newSessionCwd, newSessionHostId) : undefined);
+  const draftKey =
+    session?.id ??
+    (newSessionPoolId && newSessionProjectId
+      ? `new:pool:${newSessionPoolId}:${newSessionProjectId}`
+      : newSessionCwd
+        ? newChatDraftKey(newSessionCwd, newSessionHostId)
+        : undefined);
   const sessionKeyForPaging = draftKey ?? "empty";
   useEffect(() => {
     if (prevSessionKeyForPagingRef.current !== sessionKeyForPaging) {
@@ -611,7 +945,9 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
       setVisibleCount(VISIBLE_PAGE_SIZE);
     }
   }, [sessionKeyForPaging]);
-  const [selectedSubagent, setSelectedSubagent] = useState<SubagentInfo | null>(null);
+  const [selectedSubagent, setSelectedSubagent] = useState<SubagentInfo | null>(
+    null,
+  );
   // Ref keeps the link handler stable so roster updates do not re-render every
   // MarkdownBody through the context.
   const subagentsRef = useRef(subagents);
@@ -626,16 +962,36 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
   const [nearBottom, setNearBottom] = useState(true);
   // The empty new-session screen has its own scroller, so the conversation's
   // scroller mounts after the first send without a remount or a load.
-  const isEmptyNew = isNew && messages.length === 0 && !streamState.isStreaming && !sessionBusy;
+  const isEmptyNew =
+    isNew && messages.length === 0 && !streamState.isStreaming && !sessionBusy;
   // Widen the lazy render window until it includes the message's transcript row.
-  const revealMessage = useCallback((messageIndex: number) => {
-    const rows = planTranscriptRows(messages, { hideThinking: hideThinkingBlock, showThinking: expandThinkingByDefault, showToolCalls: showToolCallsUnfolded, neverFold: neverFoldActivity });
-    const rowIndex = rows.findIndex((row) => (row.kind === "message" ? row.index === messageIndex : messageIndex >= row.userIndex && messageIndex < row.endIndex));
-    const needed = rows.length - Math.max(0, rowIndex);
-    if (needed <= visibleCount) return true;
-    setVisibleCount(needed);
-    return false;
-  }, [messages, hideThinkingBlock, expandThinkingByDefault, showToolCallsUnfolded, neverFoldActivity, visibleCount]);
+  const revealMessage = useCallback(
+    (messageIndex: number) => {
+      const rows = planTranscriptRows(messages, {
+        hideThinking: hideThinkingBlock,
+        showThinking: expandThinkingByDefault,
+        showToolCalls: showToolCallsUnfolded,
+        neverFold: neverFoldActivity,
+      });
+      const rowIndex = rows.findIndex((row) =>
+        row.kind === "message"
+          ? row.index === messageIndex
+          : messageIndex >= row.userIndex && messageIndex < row.endIndex,
+      );
+      const needed = rows.length - Math.max(0, rowIndex);
+      if (needed <= visibleCount) return true;
+      setVisibleCount(needed);
+      return false;
+    },
+    [
+      messages,
+      hideThinkingBlock,
+      expandThinkingByDefault,
+      showToolCallsUnfolded,
+      neverFoldActivity,
+      visibleCount,
+    ],
+  );
   useChatSearchHighlights({
     container: scrollContainerRef,
     query: searchQuery,
@@ -648,7 +1004,10 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
   });
   // The hosts channel is the source of truth; a frame only speaks before its first snapshot.
   const currentHostStatus = channelHostStatus ?? frameHostStatus;
-  const hostBanner = currentHostStatus && !isLinkUp(currentHostStatus) ? <HostOfflineBanner host={hostLabel ?? ""} /> : null;
+  const hostBanner =
+    currentHostStatus && !isLinkUp(currentHostStatus) ? (
+      <HostOfflineBanner host={hostLabel ?? ""} />
+    ) : null;
   useEffect(() => {
     if (loading || isEmptyNew) return;
     const el = scrollContainerRef.current;
@@ -683,8 +1042,13 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
   const scrollToBottom = useCallback(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    el.scrollTo({ top: el.scrollHeight, behavior: reduceMotion ? "auto" : "smooth" });
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    el.scrollTo({
+      top: el.scrollHeight,
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
     setNearBottom(true);
   }, [scrollContainerRef]);
   const sentinelRef = useRef<HTMLButtonElement>(null);
@@ -710,7 +1074,10 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
         // viewport to the top of the last page until every page is loaded).
         if (entries[0]?.isIntersecting && container.scrollTop > 0) {
           // Save distance from top before prepending to restore scroll later
-          prevScrollDistanceRef.current = captureScrollDistance(container.scrollHeight, container.scrollTop);
+          prevScrollDistanceRef.current = captureScrollDistance(
+            container.scrollHeight,
+            container.scrollTop,
+          );
           loadMoreModeRef.current = "auto";
           setVisibleCount((prev) => getNextVisibleCount(prev));
         }
@@ -718,7 +1085,7 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
       // Expand the root upward so the page loads while the banner is still
       // below the top edge — by the time the user reaches the top, the loaded
       // messages are already there and the scroll continues into them.
-      { root: container, rootMargin: LOAD_MORE_ROOT_MARGIN, threshold: 0 }
+      { root: container, rootMargin: LOAD_MORE_ROOT_MARGIN, threshold: 0 },
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
@@ -740,13 +1107,17 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
         // viewport so the newest loaded message is at the top.
         const containerRect = container.getBoundingClientRect();
         const sentinelRect = sentinel.getBoundingClientRect();
-        container.scrollTop = container.scrollTop + (sentinelRect.bottom - containerRect.top) + 1;
+        container.scrollTop =
+          container.scrollTop + (sentinelRect.bottom - containerRect.top) + 1;
       } else {
         // Everything loaded — the banner unmounted; show the top of the session.
         container.scrollTop = 0;
       }
     } else {
-      container.scrollTop = restoreScrollTop(container.scrollHeight, prevScrollDistanceRef.current);
+      container.scrollTop = restoreScrollTop(
+        container.scrollHeight,
+        prevScrollDistanceRef.current,
+      );
     }
     loadMoreModeRef.current = "auto";
     prevScrollDistanceRef.current = null;
@@ -756,7 +1127,10 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
     const container = scrollContainerRef.current;
     if (container) {
       // Sentinel value so the restore effect above runs and reveals the loaded messages.
-      prevScrollDistanceRef.current = captureScrollDistance(container.scrollHeight, container.scrollTop);
+      prevScrollDistanceRef.current = captureScrollDistance(
+        container.scrollHeight,
+        container.scrollTop,
+      );
     }
     loadMoreModeRef.current = "click";
     setVisibleCount((prev) => getNextVisibleCount(prev));
@@ -770,41 +1144,59 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
   useEffect(() => {
     onGenerationSpeedChange?.(generationSpeedRef.current);
   }, [generationSpeedKey, onGenerationSpeedChange]);
-  useEffect(() => () => { onGenerationSpeedChange?.(null); }, [onGenerationSpeedChange]);
+  useEffect(
+    () => () => {
+      onGenerationSpeedChange?.(null);
+    },
+    [onGenerationSpeedChange],
+  );
 
   // Push session stats up to AppShell for the top bar.
   // Compare scalar fields to avoid loops from new object identity each render.
   const statsKey = sessionStats
     ? [
-      sessionStats.sessionId,
-      sessionStats.sessionFile ?? "",
-      sessionStats.sessionName ?? "",
-      sessionStats.userMessages,
-      sessionStats.assistantMessages,
-      sessionStats.toolCalls,
-      sessionStats.toolResults,
-      sessionStats.totalMessages,
-      sessionStats.tokens.input,
-      sessionStats.tokens.output,
-      sessionStats.tokens.cacheRead,
-      sessionStats.tokens.cacheWrite,
-      sessionStats.tokens.total,
-      sessionStats.cost ?? 0,
-    ].join("|")
+        sessionStats.sessionId,
+        sessionStats.sessionFile ?? "",
+        sessionStats.sessionName ?? "",
+        sessionStats.userMessages,
+        sessionStats.assistantMessages,
+        sessionStats.toolCalls,
+        sessionStats.toolResults,
+        sessionStats.totalMessages,
+        sessionStats.tokens.input,
+        sessionStats.tokens.output,
+        sessionStats.tokens.cacheRead,
+        sessionStats.tokens.cacheWrite,
+        sessionStats.tokens.total,
+        sessionStats.cost ?? 0,
+      ].join("|")
     : null;
   const sessionStatsRef = useRef(sessionStats);
   sessionStatsRef.current = sessionStats;
   useEffect(() => {
     onSessionStatsChange?.(sessionStatsRef.current);
   }, [statsKey, onSessionStatsChange]);
-  useEffect(() => () => { onSessionStatsChange?.(null); }, [onSessionStatsChange]);
+  useEffect(
+    () => () => {
+      onSessionStatsChange?.(null);
+    },
+    [onSessionStatsChange],
+  );
 
+  const onDrop = useCallback(
+    (files: File[]) => {
+      composerRef.current?.addFiles(files);
+    },
+    [composerRef],
+  );
 
-  const onDrop = useCallback((files: File[]) => {
-    composerRef.current?.addFiles(files);
-  }, [composerRef]);
-
-  const { isDragOver, handleDragEnter, handleDragOver, handleDragLeave, handleDrop } = useDragDrop(onDrop);
+  const {
+    isDragOver,
+    handleDragEnter,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+  } = useDragDrop(onDrop);
 
   const inputHistory = useMemo(() => {
     const seen = new Set<string>();
@@ -826,11 +1218,18 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
     let refIdx = 0;
 
     messages.forEach((message, index) => {
-      if (message.role === "custom" && message.customType === "compaction") hasCompaction = true;
+      if (message.role === "custom" && message.customType === "compaction")
+        hasCompaction = true;
       if (isGroupAnchor(message)) lastAnchorIdx = index;
-      if (message.role === "user" || message.role === "assistant") visibleRefIndexByMessage.set(index, refIdx++);
+      if (message.role === "user" || message.role === "assistant")
+        visibleRefIndexByMessage.set(index, refIdx++);
     });
-    return { toolResultsMap, lastAnchorIdx, hasCompaction, visibleRefIndexByMessage };
+    return {
+      toolResultsMap,
+      lastAnchorIdx,
+      hasCompaction,
+      visibleRefIndexByMessage,
+    };
   }, [messages]);
   // Runtime tool results span committed messages plus the tool calls omp is
   // still executing. A committed result always wins; the live snapshot only
@@ -840,26 +1239,31 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
   const toolResultsWithLive = useMemo<Map<string, ToolResultMessage>>(() => {
     if (liveToolResults.size === 0) return conversationMeta.toolResultsMap;
     const merged = new Map(liveToolResults);
-    for (const [toolCallId, result] of conversationMeta.toolResultsMap) merged.set(toolCallId, result);
+    for (const [toolCallId, result] of conversationMeta.toolResultsMap)
+      merged.set(toolCallId, result);
     return merged;
   }, [liveToolResults, conversationMeta]);
   const conversationMetaWithLive = useMemo(
-    () => (toolResultsWithLive === conversationMeta.toolResultsMap
-      ? conversationMeta
-      : { ...conversationMeta, toolResultsMap: toolResultsWithLive }),
+    () =>
+      toolResultsWithLive === conversationMeta.toolResultsMap
+        ? conversationMeta
+        : { ...conversationMeta, toolResultsMap: toolResultsWithLive },
     [conversationMeta, toolResultsWithLive],
   );
   // The ref array is sized by the count of user/assistant messages — exactly
   // what conversationMeta's visibleRefIndexByMessage already tallies, so no
   // separate filter pass (which would re-run on every streaming frame).
-  const messageRefs = useMessageRefs(conversationMeta.visibleRefIndexByMessage.size);
+  const messageRefs = useMessageRefs(
+    conversationMeta.visibleRefIndexByMessage.size,
+  );
   // Tool-call ids already rendered by COMMITTED messages — memoized away from
   // the streaming path so a per-token update only re-scans the live bubble.
   const committedToolCallIds = useMemo(() => {
     const renderedIds = new Set<string>();
     for (const message of messages) {
       if (message?.role !== "assistant") continue;
-      for (const block of (message as Partial<AssistantMessage>).content ?? []) {
+      for (const block of (message as Partial<AssistantMessage>).content ??
+        []) {
         if (block.type === "toolCall") renderedIds.add(block.toolCallId);
       }
     }
@@ -870,7 +1274,8 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
     const renderedIds = new Set(committedToolCallIds);
     const streaming = streamState.streamingMessage;
     if (streaming?.role === "assistant") {
-      for (const block of (streaming as Partial<AssistantMessage>).content ?? []) {
+      for (const block of (streaming as Partial<AssistantMessage>).content ??
+        []) {
         if (block.type === "toolCall") renderedIds.add(block.toolCallId);
       }
     }
@@ -878,23 +1283,33 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
   }, [agentPhase, committedToolCallIds, streamState.streamingMessage]);
 
   // Reset minimized state on session switch (session-scoped)
-  useEffect(() => { setComposerMinimized(false); }, [sessionKeyForPaging]);
+  useEffect(() => {
+    setComposerMinimized(false);
+  }, [sessionKeyForPaging]);
   // The extension dialog renders inside the collapsible composer wrapper;
   // never let a pending approval prompt sit hidden behind the minimized pill.
-  useEffect(() => { if (extensionDialog) setComposerMinimized(false); }, [extensionDialog]);
+  useEffect(() => {
+    if (extensionDialog) setComposerMinimized(false);
+  }, [extensionDialog]);
   const messageCwd = session?.cwd ?? newSessionCwd ?? undefined;
-  const activeBtwRecord = btw.records.find((record) => record.id === btw.activeId);
-  const btwPanel: BtwPanelProps | null = activeBtwRecord ? {
-    record: activeBtwRecord,
-    onCancel: () => void btw.cancel(activeBtwRecord.id),
-    onFollowUp: (question) => askBtw(question, activeBtwRecord.id),
-    onClose: () => btw.setActiveId(null),
-    cwd: messageCwd,
-    sourceSessionId: session?.id ?? sessionIdRef.current,
-    onOpenFile,
-  } : null;
+  const activeBtwRecord = btw.records.find(
+    (record) => record.id === btw.activeId,
+  );
+  const btwPanel: BtwPanelProps | null = activeBtwRecord
+    ? {
+        record: activeBtwRecord,
+        onCancel: () => void btw.cancel(activeBtwRecord.id),
+        onFollowUp: (question) => askBtw(question, activeBtwRecord.id),
+        onClose: () => btw.setActiveId(null),
+        cwd: messageCwd,
+        sourceSessionId: session?.id ?? sessionIdRef.current,
+        onOpenFile,
+      }
+    : null;
 
-  const displayModelKey = displayModelValue ? `${displayModelValue.provider}:${displayModelValue.modelId}` : "";
+  const displayModelKey = displayModelValue
+    ? `${displayModelValue.provider}:${displayModelValue.modelId}`
+    : "";
   const availableThinkingLevels = useMemo(
     () =>
       displayModelValue
@@ -908,13 +1323,17 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
   );
 
   const currentThinkingLevelMap = displayModelValue
-    ? (modelThinkingLevelMaps[`${displayModelValue.provider}:${displayModelValue.modelId}`] ?? null)
+    ? (modelThinkingLevelMaps[
+        `${displayModelValue.provider}:${displayModelValue.modelId}`
+      ] ?? null)
     : null;
 
   // Resolve the advisor role's display model + reasoning effort for the
   // composer tooltips. The raw selector is "provider/id[:effort]" from
   // ~/.omp/agent/config.yml.
-  const [advisorRoleSelector, setAdvisorRoleSelector] = useState<string | null>(null);
+  const [advisorRoleSelector, setAdvisorRoleSelector] = useState<string | null>(
+    null,
+  );
   useEffect(() => {
     if (!advisorEnabled) {
       setAdvisorRoleSelector(null);
@@ -922,7 +1341,11 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
     }
     const controller = new AbortController();
     fetch("/api/model-roles", { signal: controller.signal })
-      .then((response) => response.ok ? response.json() as Promise<{ roles?: Record<string, string> }> : null)
+      .then((response) =>
+        response.ok
+          ? (response.json() as Promise<{ roles?: Record<string, string> }>)
+          : null,
+      )
       .then((data) => setAdvisorRoleSelector(data?.roles?.advisor ?? null))
       .catch(() => {});
     return () => controller.abort();
@@ -934,9 +1357,18 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
     setGithubRepo(null);
     if (!messageCwd) return;
     const controller = new AbortController();
-    fetch(`/api/github-repo?${new URLSearchParams({ cwd: messageCwd, hostId: fileSource.hostId })}`, { signal: controller.signal })
-      .then((response) => response.ok ? response.json() as Promise<{ repo?: string | null }> : null)
-      .then((data) => { if (!controller.signal.aborted) setGithubRepo(data?.repo ?? null); })
+    fetch(
+      `/api/github-repo?${new URLSearchParams({ cwd: messageCwd, hostId: fileSource.hostId })}`,
+      { signal: controller.signal },
+    )
+      .then((response) =>
+        response.ok
+          ? (response.json() as Promise<{ repo?: string | null }>)
+          : null,
+      )
+      .then((data) => {
+        if (!controller.signal.aborted) setGithubRepo(data?.repo ?? null);
+      })
       .catch(() => {});
     return () => controller.abort();
   }, [messageCwd, fileSource.hostId]);
@@ -948,24 +1380,42 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
     const provider = separator === -1 ? "" : qualified.slice(0, separator);
     const id = separator === -1 ? qualified : qualified.slice(separator + 1);
     return {
-      name: modelList.find((entry) => entry.provider === provider && entry.id === id)?.name ?? advisorRoleSelector,
+      name:
+        modelList.find(
+          (entry) => entry.provider === provider && entry.id === id,
+        )?.name ?? advisorRoleSelector,
       reasoning: effort || null,
     };
   }, [advisorRoleSelector, modelList]);
 
   // Ghost-text word completion rides the session's live omp process (the route
   // never spawns one for a keystroke); before the first send there is none.
-  const handlePredictWord = useCallback(async (text: string, cursor: number) => {
-    const sid = session?.id ?? sessionIdRef.current;
-    if (!sid) return null;
-    const data = await sendAgentCommand<{ suffix: string | null } | null>(sid, { type: "predict_word", text, cursor });
-    return data?.suffix ?? null;
-  }, [session?.id, sessionIdRef]);
-  const handlePredictWordFeedback = useCallback((text: string, cursor: number, suggestion: string, accepted: boolean) => {
-    const sid = session?.id ?? sessionIdRef.current;
-    if (!sid) return;
-    sendAgentCommand(sid, { type: "predict_word_feedback", text, cursor, suggestion, accepted }).catch(() => {});
-  }, [session?.id, sessionIdRef]);
+  const handlePredictWord = useCallback(
+    async (text: string, cursor: number) => {
+      const sid = session?.id ?? sessionIdRef.current;
+      if (!sid) return null;
+      const data = await sendAgentCommand<{ suffix: string | null } | null>(
+        sid,
+        { type: "predict_word", text, cursor },
+      );
+      return data?.suffix ?? null;
+    },
+    [session?.id, sessionIdRef],
+  );
+  const handlePredictWordFeedback = useCallback(
+    (text: string, cursor: number, suggestion: string, accepted: boolean) => {
+      const sid = session?.id ?? sessionIdRef.current;
+      if (!sid) return;
+      sendAgentCommand(sid, {
+        type: "predict_word_feedback",
+        text,
+        cursor,
+        suggestion,
+        accepted,
+      }).catch(() => {});
+    },
+    [session?.id, sessionIdRef],
+  );
 
   const handleMinimize = useCallback(() => {
     setComposerMinimized(true);
@@ -981,10 +1431,17 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
     if (bashRunning && !pendingBash) {
       return t("chatWindow.runningCommand");
     }
-    if (isCompacting || (agentRunning && !streamState.streamingMessage && pendingToolHeaders.length === 0)) {
+    if (
+      isCompacting ||
+      (agentRunning &&
+        !streamState.streamingMessage &&
+        pendingToolHeaders.length === 0)
+    ) {
       return [
         phaseLabel(agentPhase),
-        activeSubagentCount > 0 ? tn("chatWindow.subagentCount", activeSubagentCount) : null,
+        activeSubagentCount > 0
+          ? tn("chatWindow.subagentCount", activeSubagentCount)
+          : null,
         isCompacting ? t("chatWindow.compactingContext") : null,
         currentTodoPhase
           ? t("chatWindow.todoPhaseStatus", {
@@ -993,22 +1450,43 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
               total: currentTodoPhase.total,
             })
           : null,
-      ].filter(Boolean).join(" · ");
+      ]
+        .filter(Boolean)
+        .join(" · ");
     }
     return null;
-  }, [bashRunning, pendingBash, isCompacting, agentRunning, streamState.streamingMessage, pendingToolHeaders.length, agentPhase, activeSubagentCount, currentTodoPhase, t, tn]);
+  }, [
+    bashRunning,
+    pendingBash,
+    isCompacting,
+    agentRunning,
+    streamState.streamingMessage,
+    pendingToolHeaders.length,
+    agentPhase,
+    activeSubagentCount,
+    currentTodoPhase,
+    t,
+    tn,
+  ]);
 
   // omp's ask tool uses formDialog whenever the UI has one; askDialog is its per-question fallback.
   // Like omp's TUI, which swaps its editor for the ask, nothing is sent while either is open:
   // a steer would interrupt the ask ("Ask interrupted by message").
-  const askOpen = extensionDialog?.method === "askDialog" || extensionDialog?.method === "formDialog";
+  const askOpen =
+    extensionDialog?.method === "askDialog" ||
+    extensionDialog?.method === "formDialog";
   const hiddenComposerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // A hidden composer that keeps focus keeps the phone keyboard up: the
     // first tap in the ask panel would then close it, resize the panel and
     // miss its target. Let the keyboard go when the composer hides.
     const active = document.activeElement;
-    if (askOpen && active instanceof HTMLElement && hiddenComposerRef.current?.contains(active)) active.blur();
+    if (
+      askOpen &&
+      active instanceof HTMLElement &&
+      hiddenComposerRef.current?.contains(active)
+    )
+      active.blur();
   }, [askOpen]);
   // The live status is merged into a ComposerPanels header row (#245)
   // whenever one exists (todo or subagent row); only then is the
@@ -1041,13 +1519,23 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
       isCompacting={isCompacting}
       compactResult={compactResult}
       thinkingLevel={thinkingLevel}
-      onThinkingLevelChange={session || isNew ? handleThinkingLevelChange : undefined}
+      onThinkingLevelChange={
+        session || isNew ? handleThinkingLevelChange : undefined
+      }
       toolPreset={toolPreset}
       onToolPresetChange={handleToolPresetChange}
       fastModeEnabled={fastModeEnabled}
       fastModeActive={fastModeActive}
       usageLimit={usageLimit}
-      fastModeSupported={Boolean(displayModelValue && modelList.some((entry) => entry.provider === displayModelValue.provider && entry.id === displayModelValue.modelId && entry.supportsFastMode))}
+      fastModeSupported={Boolean(
+        displayModelValue &&
+        modelList.some(
+          (entry) =>
+            entry.provider === displayModelValue.provider &&
+            entry.id === displayModelValue.modelId &&
+            entry.supportsFastMode,
+        ),
+      )}
       onFastModeChange={session || isNew ? handleFastModeChange : undefined}
       slowModeSupported={slowModeSupported}
       slowModeEnabled={slowModeEnabled}
@@ -1080,8 +1568,12 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
       onAudioUnlock={unlockAudio}
       draftKey={draftKey}
       uploadHostId={session ? session.hostId : newSessionHostId}
-      resolveUploadHost={!session && newSessionPoolId ? resolveUploadHost : undefined}
-      cwd={!session && newSessionPoolId ? null : session?.cwd ?? newSessionCwd}
+      resolveUploadHost={
+        !session && newSessionPoolId ? resolveUploadHost : undefined
+      }
+      cwd={
+        !session && newSessionPoolId ? null : (session?.cwd ?? newSessionCwd)
+      }
       /* The pill bar and chevron only render in the non-empty layout; don't
          accept Escape-to-minimize in the fresh-chat branch where there is
          nothing to collapse. */
@@ -1091,373 +1583,676 @@ export function ChatWindow({ session, newSessionCwd, newSessionHostId, newSessio
     />
   );
 
-  const aboveEditorWidgets = extensionWidgets.filter((widget) => widget.placement !== "belowEditor");
-  const belowEditorWidgets = extensionWidgets.filter((widget) => widget.placement === "belowEditor");
+  const aboveEditorWidgets = extensionWidgets.filter(
+    (widget) => widget.placement !== "belowEditor",
+  );
+  const belowEditorWidgets = extensionWidgets.filter(
+    (widget) => widget.placement === "belowEditor",
+  );
 
   if (loading) {
-    return <WorkspaceState kind="loading" title={t("chatWindow.loadingSession")} />;
+    return (
+      <WorkspaceState kind="loading" title={t("chatWindow.loadingSession")} />
+    );
   }
 
-  if (error && heldMessages.length === 0 && !(currentHostStatus && !isLinkUp(currentHostStatus))) {
+  if (
+    error &&
+    heldMessages.length === 0 &&
+    !(currentHostStatus && !isLinkUp(currentHostStatus))
+  ) {
     return (
       <WorkspaceState
         kind="error"
         title={error}
-        detail={(
+        detail={
           <button
             className="load-retry-button"
             type="button"
             onClick={retrySession}
-            style={{ justifySelf: "start", minHeight: 36, padding: "6px 14px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg-panel)", color: "var(--text)", cursor: "pointer", fontWeight: 600, transition: "background var(--dur-fast) var(--ease-out-warm), transform var(--dur-fast) var(--ease-out-warm)" }}
+            style={{
+              justifySelf: "start",
+              minHeight: 36,
+              padding: "6px 14px",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-control)",
+              background: "var(--bg-panel)",
+              color: "var(--text)",
+              cursor: "pointer",
+              fontWeight: 600,
+              transition:
+                "background var(--dur-fast) var(--ease-out-warm), transform var(--dur-fast) var(--ease-out-warm)",
+            }}
           >
             {t("chatWindow.retry")}
           </button>
-        )}
+        }
       />
     );
   }
   return (
     <SpeechSynthesisProvider value={tts}>
-    <GithubRepoContext.Provider value={githubRepo}>
-    <AgentLinkContext.Provider value={openAgentLink}>
-    <WorkspaceFileContext.Provider value={fileSource}>
-    <div
-      className="relative flex h-full flex-col overflow-hidden"
-      onDragEnter={handleDragEnter}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
-      {isDragOver && (
-        <div className="drop-zone-overlay pointer-events-none absolute inset-0 z-50 flex items-center justify-center backdrop-blur-[1px]">
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            {[0, 0.8, 1.6].map((delay) => (
-              <div
-                key={delay}
-                className="drop-ripple-ring absolute h-180 w-180 rounded-full border-[1.5px] border-solid"
-                style={{ transformOrigin: "center", animationDelay: `${delay}s` }}
-              />
-            ))}
-          </div>
-          <svg
-            width="280" height="280" viewBox="0 0 140 140" fill="none" xmlns="http://www.w3.org/2000/svg"
-            className="drop-zone-illustration"
-          >
-            <rect x="28" y="44" width="84" height="60" rx="8" fill="color-mix(in srgb, var(--accent) 8%, transparent)" stroke="color-mix(in srgb, var(--accent) 50%, transparent)" strokeWidth="1.8"/>
-            <path d="M36 100 L54 72 L68 88 L80 74 L104 100Z" fill="color-mix(in srgb, var(--accent) 16%, transparent)" stroke="color-mix(in srgb, var(--accent) 40%, transparent)" strokeWidth="1.4" strokeLinejoin="round"/>
-            <circle cx="96" cy="58" r="8" fill="color-mix(in srgb, var(--accent) 22%, transparent)" stroke="color-mix(in srgb, var(--accent) 55%, transparent)" strokeWidth="1.6"/>
-            <g stroke="color-mix(in srgb, var(--accent) 45%, transparent)" strokeWidth="1.4" strokeLinecap="round">
-              <line x1="96" y1="46" x2="96" y2="43"/>
-              <line x1="96" y1="70" x2="96" y2="73"/>
-              <line x1="84" y1="58" x2="81" y2="58"/>
-              <line x1="108" y1="58" x2="111" y2="58"/>
-              <line x1="87.5" y1="49.5" x2="85.4" y2="47.4"/>
-              <line x1="104.5" y1="66.5" x2="106.6" y2="68.6"/>
-              <line x1="104.5" y1="49.5" x2="106.6" y2="47.4"/>
-              <line x1="87.5" y1="66.5" x2="85.4" y2="68.6"/>
-            </g>
-          </svg>
-        </div>
-      )}
-
-      <SubagentTranscriptDialog
-        subagent={selectedSubagent}
-        sessionId={session?.id ?? sessionIdRef.current ?? null}
-        transcriptVersion={selectedSubagent ? (subagentTranscriptVersions[selectedSubagent.id] ?? 0) : 0}
-        events={selectedSubagent ? (subagentEvents[selectedSubagent.id] ?? []) : undefined}
-        onClose={() => setSelectedSubagent(null)}
-      />
-
-      <BtwHistoryDialog
-        open={btw.historyOpen}
-        onOpenChange={btw.setHistoryOpen}
-        records={btw.records}
-        onFollowUp={(recordId) => { btw.setActiveId(recordId); btw.setHistoryOpen(false); }}
-        cwd={messageCwd}
-        sourceSessionId={session?.id ?? sessionIdRef.current}
-        onOpenFile={onOpenFile}
-      />
-
-      {extensionCustomUi && (
-        <ExtensionCustomPanel
-          request={extensionCustomUi}
-          onInput={sendExtensionCustomInput}
-        />
-      )}
-
-      {isEmptyNew ? (
-        <div className="relative flex flex-1 flex-col overflow-hidden">
-          <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto py-8" style={{ minHeight: 0, paddingInline: CHAT_COLUMN_PADDING }}>
-          <div className="w-full" style={{ maxWidth: CHAT_COLUMN_MAX_WIDTH }}>
+      <GithubRepoContext.Provider value={githubRepo}>
+        <AgentLinkContext.Provider value={openAgentLink}>
+          <WorkspaceFileContext.Provider value={fileSource}>
             <div
-               className="mb-3 empty-chat-brand"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                marginLeft: 8,
-                marginRight: 8,
-                fontFamily: "var(--font-mono)",
-              }}
+              className="relative flex h-full flex-col overflow-hidden"
+              onDragEnter={handleDragEnter}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1, lineHeight: 1.4, overflow: "hidden" }}>
-                <OmpWebLogo size={26} />
-                <span className="omp-wordmark" style={{ fontSize: 18, color: "var(--text)", fontWeight: 600, letterSpacing: "0.02em", flexShrink: 0, whiteSpace: "nowrap", fontFamily: "var(--font-mono)" }}>omp web</span>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
-                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                  web <span style={{ color: "var(--text)" }}>v{process.env.OMP_WEB_PUBLIC_APP_VERSION ?? "0.0.0"}</span>
-                </span>
-                <OmpRuntimeVersion />
-              </div>
-            </div>
-            <div className="empty-session-intro">
-              <h1 className="display-serif">{t("appShell.newSessionTitle")}</h1>
-              <p>{t("appShell.newSessionDescription")}</p>
-            </div>
-            {newSessionWorkspace}
-            {hostBanner}
-            <NoticeShelf notices={notices} onDismiss={dismissNotice} align="right" />
-            <ComposerPanels todoPhases={[]} subagents={[]} onSelectSubagent={setSelectedSubagent} btw={btwPanel} />
-            {/* ChatInput insets itself by CHAT_COLUMN_PADDING; cancel this column's
-                padding so the composer matches its in-session width. */}
-            <div style={{ margin: `0 -${CHAT_COLUMN_PADDING}px` }}>{chatInputElement}</div>
-          </div>
-        </div>
-        </div>
-      ) : (
-      <>
-      {hostBanner}
-      {/* clip, not just hidden: scrollIntoView (scroll to bottom, search jumps) also
-          scrolls a hidden-overflow box, which shifted the transcript up and left a blank
-          band above the composer. The class stays as the fallback where clip is unknown. */}
-      <div className="relative flex flex-1 overflow-hidden" style={{ minHeight: 0, overflow: "clip" }}>
-        <div
-          style={{
-            position: "absolute",
-            top: 12,
-            left: 0,
-            right: 0,
-            zIndex: 40,
-            // Scrolls inside the clipped area, so a focused dismiss button below a short chat area stays reachable.
-            maxHeight: "calc(100% - 12px)",
-            overflowY: "auto",
-            padding: `0 ${CHAT_COLUMN_PADDING}px`,
-            pointerEvents: "none",
-          }}
-        >
-          <div style={{ maxWidth: isMobile ? CHAT_COLUMN_MAX_WIDTH : CHAT_COLUMN_MAX_WIDTH_DESKTOP, margin: "0 auto" }}>
-            <NoticeShelf notices={notices} onDismiss={dismissNotice} floating align="right" />
-          </div>
-        </div>
-        {/* Hide the Firefox scrollbar on desktop only: ChatMinimap provides the
-            position indicator there, but on mobile there is no minimap and
-            users need the scrollbar (Chrome's overlay scrollbar still shows). */}
-        <div ref={scrollContainerRef} data-selection-scope="chat" tabIndex={-1} role="log" aria-live={streamState.isStreaming ? "off" : "polite"} aria-busy={streamState.isStreaming || undefined} aria-relevant="additions text" aria-label={t("chatWindow.conversation")} className={`flex-1 overflow-y-auto pt-6` + (isMobile ? "" : " scrollbar-none [&::-webkit-scrollbar]:hidden")} style={{ minHeight: 0 }}>
-          <div style={{ padding: `0 ${CHAT_COLUMN_PADDING}px` }}>
-            <div style={{ maxWidth: isMobile ? CHAT_COLUMN_MAX_WIDTH : CHAT_COLUMN_MAX_WIDTH_DESKTOP, margin: "0 auto" }}>
-              <ExtensionStatusBar statuses={extensionStatuses} />
-              <ExtensionWidgets widgets={aboveEditorWidgets} />
-              {error && (
-                <div role="alert" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12, padding: "8px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", color: "var(--status-error)" }}>
-                  <span>{error}</span>
-                  <button type="button" className="load-retry-button" onClick={retrySession} style={{ flexShrink: 0, padding: "4px 8px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg-panel)", color: "var(--text)", cursor: "pointer" }}>
-                    {t("chatWindow.retry")}
-                  </button>
+              {isDragOver && (
+                <div className="drop-zone-overlay pointer-events-none absolute inset-0 z-50 flex items-center justify-center backdrop-blur-[1px]">
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    {[0, 0.8, 1.6].map((delay) => (
+                      <div
+                        key={delay}
+                        className="drop-ripple-ring absolute h-180 w-180 rounded-full border-[1.5px] border-solid"
+                        style={{
+                          transformOrigin: "center",
+                          animationDelay: `${delay}s`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <svg
+                    width="280"
+                    height="280"
+                    viewBox="0 0 140 140"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="drop-zone-illustration"
+                  >
+                    <rect
+                      x="28"
+                      y="44"
+                      width="84"
+                      height="60"
+                      rx="8"
+                      fill="color-mix(in srgb, var(--accent) 8%, transparent)"
+                      stroke="color-mix(in srgb, var(--accent) 50%, transparent)"
+                      strokeWidth="1.8"
+                    />
+                    <path
+                      d="M36 100 L54 72 L68 88 L80 74 L104 100Z"
+                      fill="color-mix(in srgb, var(--accent) 16%, transparent)"
+                      stroke="color-mix(in srgb, var(--accent) 40%, transparent)"
+                      strokeWidth="1.4"
+                      strokeLinejoin="round"
+                    />
+                    <circle
+                      cx="96"
+                      cy="58"
+                      r="8"
+                      fill="color-mix(in srgb, var(--accent) 22%, transparent)"
+                      stroke="color-mix(in srgb, var(--accent) 55%, transparent)"
+                      strokeWidth="1.6"
+                    />
+                    <g
+                      stroke="color-mix(in srgb, var(--accent) 45%, transparent)"
+                      strokeWidth="1.4"
+                      strokeLinecap="round"
+                    >
+                      <line x1="96" y1="46" x2="96" y2="43" />
+                      <line x1="96" y1="70" x2="96" y2="73" />
+                      <line x1="84" y1="58" x2="81" y2="58" />
+                      <line x1="108" y1="58" x2="111" y2="58" />
+                      <line x1="87.5" y1="49.5" x2="85.4" y2="47.4" />
+                      <line x1="104.5" y1="66.5" x2="106.6" y2="68.6" />
+                      <line x1="104.5" y1="49.5" x2="106.6" y2="47.4" />
+                      <line x1="87.5" y1="66.5" x2="85.4" y2="68.6" />
+                    </g>
+                  </svg>
                 </div>
               )}
 
-            {conversationMeta.hasCompaction && (
-              <div
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
-                  marginBottom: 8, padding: "7px 10px", border: "1px solid var(--border)",
-                  borderRadius: "var(--radius-control)", background: "var(--bg-subtle)",
+              <SubagentTranscriptDialog
+                subagent={selectedSubagent}
+                sessionId={session?.id ?? sessionIdRef.current ?? null}
+                transcriptVersion={
+                  selectedSubagent
+                    ? (subagentTranscriptVersions[selectedSubagent.id] ?? 0)
+                    : 0
+                }
+                events={
+                  selectedSubagent
+                    ? (subagentEvents[selectedSubagent.id] ?? [])
+                    : undefined
+                }
+                onClose={() => setSelectedSubagent(null)}
+              />
+
+              <BtwHistoryDialog
+                open={btw.historyOpen}
+                onOpenChange={btw.setHistoryOpen}
+                records={btw.records}
+                onFollowUp={(recordId) => {
+                  btw.setActiveId(recordId);
+                  btw.setHistoryOpen(false);
                 }}
-              >
-                <span style={{ color: "var(--text-muted)", fontSize: 12 }}>
-                  {showPreCompactionHistory ? t("chatWindow.fullHistoryVisible") : t("chatWindow.compactedHistoryNotice")}
-                </span>
-                <button
-                  type="button"
-                  onClick={togglePreCompactionHistory}
-                  disabled={editingEntryId !== null}
-                  style={{
-                    flexShrink: 0, padding: "4px 8px", borderRadius: 6, border: "1px solid var(--border)",
-                    background: "var(--bg)", color: "var(--text)", cursor: "pointer", fontSize: 12,
-                  }}
-                >
-                  {showPreCompactionHistory ? t("chatWindow.returnToCompactHistory") : t("chatWindow.viewPreCompactionHistory")}
-                </button>
-              </div>
-            )}
-            <CommittedTranscript
-              messages={messages}
-              entryIds={entryIds}
-              conversationMeta={conversationMetaWithLive}
-              messageRefs={messageRefs}
-              isStreaming={streamState.isStreaming}
-              sessionBusy={sessionBusy}
-              isCompacting={isCompacting}
-              externalRunActive={externalRunActive}
-              isNew={isNew}
-              forkingEntryId={forkingEntryId}
-              editingEntryId={editingEntryId}
-              handleFork={handleFork}
-              handleEdit={handleEdit}
-              modelNames={modelNames}
-              messageCwd={messageCwd}
-              onOpenFile={onOpenFile}
-              sessionId={session?.id ?? sessionIdRef.current ?? undefined}
-              toolCallsDefaultCollapsed={toolCallsDefaultCollapsed}
-              hideToolActivity={hideToolActivity}
-              neverFoldActivity={neverFoldActivity}
-              showToolCallsUnfolded={showToolCallsUnfolded}
-              expandThinkingByDefault={expandThinkingByDefault}
-              hideThinkingBlock={hideThinkingBlock}
-              visibleCount={visibleCount}
-              nearBottom={nearBottom}
-              sentinelRef={sentinelRef}
-              handleLoadMoreClick={handleLoadMoreClick}
-            />
-            <ChatLiveTail
-              streamingMessage={streamState.streamingMessage}
-              isStreaming={streamState.isStreaming}
-              liveTokensPerSecond={streamState.isStreaming ? tokensPerSecond : undefined}
-              pendingToolHeaders={pendingToolHeaders}
-              deferredBash={deferredBash}
-              pendingBash={pendingBash}
-              toolResults={toolResultsWithLive}
-              modelNames={modelNames}
-              cwd={messageCwd}
-              onOpenFile={onOpenFile}
-              sessionId={session?.id ?? sessionIdRef.current ?? undefined}
-              toolCallsDefaultCollapsed={toolCallsDefaultCollapsed}
-              expandThinkingByDefault={expandThinkingByDefault}
-              hideThinking={hideThinkingBlock}
-            />
+                cwd={messageCwd}
+                sourceSessionId={session?.id ?? sessionIdRef.current}
+                onOpenFile={onOpenFile}
+              />
 
-            {/* After the live turn, in submission order: what omp does not have yet. */}
-            {heldMessages.map((held) => (
-              <HeldMessageView key={held.id} held={held} hostLabel={hostLabel} onDelete={deleteHeldMessage} />
-            ))}
+              {extensionCustomUi && (
+                <ExtensionCustomPanel
+                  request={extensionCustomUi}
+                  onInput={sendExtensionCustomInput}
+                />
+              )}
 
-            <div ref={messagesEndRef} />
-            </div>
-          </div>
-        </div>
-        {!nearBottom && (
-          <button
-            type="button"
-            onClick={scrollToBottom}
-            title={t("chatWindow.scrollToBottom")}
-            aria-label={t("chatWindow.scrollToBottom")}
-            className="chat-scroll-bottom ui-focus-ring"
-            style={{ position: "absolute", right: isMobile ? 16 : 48, bottom: 16, zIndex: 35, display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, padding: 0, border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg-panel)", color: "var(--text-muted)", cursor: "pointer", boxShadow: "var(--shadow-pop)" }}
-          >
-            <ArrowDown size={15} strokeWidth={1.8} aria-hidden="true" />
-          </button>
-        )}
-        {isMobile ? null : (
-          <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, zIndex: 30, display: "flex", alignItems: "center", pointerEvents: "none" }}>
-            <ChatMinimap
-              messages={messages}
-              scrollContainer={scrollContainerRef}
-              messageRefs={messageRefs}
-            />
-          </div>
-        )}
-      </div>
+              {isEmptyNew ? (
+                <div className="relative flex flex-1 flex-col overflow-hidden">
+                  <div
+                    className="flex flex-1 flex-col items-center justify-center overflow-y-auto py-8"
+                    style={{ minHeight: 0, paddingInline: CHAT_COLUMN_PADDING }}
+                  >
+                    <div
+                      className="w-full"
+                      style={{ maxWidth: CHAT_COLUMN_MAX_WIDTH }}
+                    >
+                      <div
+                        className="mb-3 empty-chat-brand"
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 12,
+                          marginLeft: 8,
+                          marginRight: 8,
+                          fontFamily: "var(--font-mono)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            minWidth: 0,
+                            flex: 1,
+                            lineHeight: 1.4,
+                            overflow: "hidden",
+                          }}
+                        >
+                          <OmpWebLogo size={26} />
+                          <span
+                            className="omp-wordmark"
+                            style={{
+                              fontSize: 18,
+                              color: "var(--text)",
+                              fontWeight: 600,
+                              letterSpacing: "0.02em",
+                              flexShrink: 0,
+                              whiteSpace: "nowrap",
+                              fontFamily: "var(--font-mono)",
+                            }}
+                          >
+                            omp web
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "flex-end",
+                            gap: 2,
+                            flexShrink: 0,
+                          }}
+                        >
+                          <span
+                            style={{ fontSize: 11, color: "var(--text-muted)" }}
+                          >
+                            web{" "}
+                            <span style={{ color: "var(--text)" }}>
+                              v
+                              {process.env.OMP_WEB_PUBLIC_APP_VERSION ??
+                                "0.0.0"}
+                            </span>
+                          </span>
+                          <OmpRuntimeVersion />
+                        </div>
+                      </div>
+                      <div className="empty-session-intro">
+                        <h1 className="display-serif">
+                          {t("appShell.newSessionTitle")}
+                        </h1>
+                        <p>{t("appShell.newSessionDescription")}</p>
+                      </div>
+                      {newSessionWorkspace}
+                      {hostBanner}
+                      <NoticeShelf
+                        notices={notices}
+                        onDismiss={dismissNotice}
+                        align="right"
+                      />
+                      <ComposerPanels
+                        todoPhases={[]}
+                        subagents={[]}
+                        onSelectSubagent={setSelectedSubagent}
+                        btw={btwPanel}
+                      />
+                      {/* ChatInput insets itself by CHAT_COLUMN_PADDING; cancel this column's
+                padding so the composer matches its in-session width. */}
+                      <div style={{ margin: `0 -${CHAT_COLUMN_PADDING}px` }}>
+                        {chatInputElement}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {hostBanner}
+                  {/* clip, not just hidden: scrollIntoView (scroll to bottom, search jumps) also
+          scrolls a hidden-overflow box, which shifted the transcript up and left a blank
+          band above the composer. The class stays as the fallback where clip is unknown. */}
+                  <div
+                    className="relative flex flex-1 overflow-hidden"
+                    style={{ minHeight: 0, overflow: "clip" }}
+                  >
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 12,
+                        left: 0,
+                        right: 0,
+                        zIndex: 40,
+                        // Scrolls inside the clipped area, so a focused dismiss button below a short chat area stays reachable.
+                        maxHeight: "calc(100% - 12px)",
+                        overflowY: "auto",
+                        padding: `0 ${CHAT_COLUMN_PADDING}px`,
+                        pointerEvents: "none",
+                      }}
+                    >
+                      <div
+                        style={{
+                          maxWidth: isMobile
+                            ? CHAT_COLUMN_MAX_WIDTH
+                            : CHAT_COLUMN_MAX_WIDTH_DESKTOP,
+                          margin: "0 auto",
+                        }}
+                      >
+                        <NoticeShelf
+                          notices={notices}
+                          onDismiss={dismissNotice}
+                          floating
+                          align="right"
+                        />
+                      </div>
+                    </div>
+                    {/* Hide the Firefox scrollbar on desktop only: ChatMinimap provides the
+            position indicator there, but on mobile there is no minimap and
+            users need the scrollbar (Chrome's overlay scrollbar still shows). */}
+                    <div
+                      ref={scrollContainerRef}
+                      data-selection-scope="chat"
+                      tabIndex={-1}
+                      role="log"
+                      aria-live={streamState.isStreaming ? "off" : "polite"}
+                      aria-busy={streamState.isStreaming || undefined}
+                      aria-relevant="additions text"
+                      aria-label={t("chatWindow.conversation")}
+                      className={
+                        `flex-1 overflow-y-auto pt-6` +
+                        (isMobile
+                          ? ""
+                          : " scrollbar-none [&::-webkit-scrollbar]:hidden")
+                      }
+                      style={{ minHeight: 0 }}
+                    >
+                      <div style={{ padding: `0 ${CHAT_COLUMN_PADDING}px` }}>
+                        <div
+                          style={{
+                            maxWidth: isMobile
+                              ? CHAT_COLUMN_MAX_WIDTH
+                              : CHAT_COLUMN_MAX_WIDTH_DESKTOP,
+                            margin: "0 auto",
+                          }}
+                        >
+                          <ExtensionStatusBar statuses={extensionStatuses} />
+                          <ExtensionWidgets widgets={aboveEditorWidgets} />
+                          {error && (
+                            <div
+                              role="alert"
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                gap: 12,
+                                marginBottom: 12,
+                                padding: "8px 12px",
+                                border: "1px solid var(--border)",
+                                borderRadius: "var(--radius-control)",
+                                color: "var(--status-error)",
+                              }}
+                            >
+                              <span>{error}</span>
+                              <button
+                                type="button"
+                                className="load-retry-button"
+                                onClick={retrySession}
+                                style={{
+                                  flexShrink: 0,
+                                  padding: "4px 8px",
+                                  border: "1px solid var(--border)",
+                                  borderRadius: "var(--radius-control)",
+                                  background: "var(--bg-panel)",
+                                  color: "var(--text)",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                {t("chatWindow.retry")}
+                              </button>
+                            </div>
+                          )}
 
-      {/* Minimized pill bar - shown when composer is collapsed */}
-      {composerMinimized && (
-        <MinimizedComposerBar
-          draftKey={draftKey}
-          isStreaming={sessionBusy}
-          isCompacting={isCompacting}
-          statusText={composerStatusText}
-          expandRef={minimizedExpandRef}
-          onExpand={handleExpand}
-          onAbort={handleAbort}
-          onAbortCompaction={handleAbortCompaction}
-        />
-      )}
+                          {conversationMeta.hasCompaction && (
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                gap: 12,
+                                marginBottom: 8,
+                                padding: "7px 10px",
+                                border: "1px solid var(--border)",
+                                borderRadius: "var(--radius-control)",
+                                background: "var(--bg-subtle)",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  color: "var(--text-muted)",
+                                  fontSize: 12,
+                                }}
+                              >
+                                {showPreCompactionHistory
+                                  ? t("chatWindow.fullHistoryVisible")
+                                  : t("chatWindow.compactedHistoryNotice")}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={togglePreCompactionHistory}
+                                disabled={editingEntryId !== null}
+                                style={{
+                                  flexShrink: 0,
+                                  padding: "4px 8px",
+                                  borderRadius: 6,
+                                  border: "1px solid var(--border)",
+                                  background: "var(--bg)",
+                                  color: "var(--text)",
+                                  cursor: "pointer",
+                                  fontSize: 12,
+                                }}
+                              >
+                                {showPreCompactionHistory
+                                  ? t("chatWindow.returnToCompactHistory")
+                                  : t("chatWindow.viewPreCompactionHistory")}
+                              </button>
+                            </div>
+                          )}
+                          <CommittedTranscript
+                            messages={messages}
+                            entryIds={entryIds}
+                            conversationMeta={conversationMetaWithLive}
+                            messageRefs={messageRefs}
+                            isStreaming={streamState.isStreaming}
+                            sessionBusy={sessionBusy}
+                            isCompacting={isCompacting}
+                            externalRunActive={externalRunActive}
+                            isNew={isNew}
+                            forkingEntryId={forkingEntryId}
+                            editingEntryId={editingEntryId}
+                            handleFork={handleFork}
+                            handleEdit={handleEdit}
+                            modelNames={modelNames}
+                            messageCwd={messageCwd}
+                            onOpenFile={onOpenFile}
+                            sessionId={
+                              session?.id ?? sessionIdRef.current ?? undefined
+                            }
+                            toolCallsDefaultCollapsed={
+                              toolCallsDefaultCollapsed
+                            }
+                            hideToolActivity={hideToolActivity}
+                            neverFoldActivity={neverFoldActivity}
+                            showToolCallsUnfolded={showToolCallsUnfolded}
+                            expandThinkingByDefault={expandThinkingByDefault}
+                            hideThinkingBlock={hideThinkingBlock}
+                            visibleCount={visibleCount}
+                            nearBottom={nearBottom}
+                            sentinelRef={sentinelRef}
+                            handleLoadMoreClick={handleLoadMoreClick}
+                          />
+                          <ChatLiveTail
+                            streamingMessage={streamState.streamingMessage}
+                            isStreaming={streamState.isStreaming}
+                            liveTokensPerSecond={
+                              streamState.isStreaming
+                                ? tokensPerSecond
+                                : undefined
+                            }
+                            pendingToolHeaders={pendingToolHeaders}
+                            deferredBash={deferredBash}
+                            pendingBash={pendingBash}
+                            toolResults={toolResultsWithLive}
+                            modelNames={modelNames}
+                            cwd={messageCwd}
+                            onOpenFile={onOpenFile}
+                            sessionId={
+                              session?.id ?? sessionIdRef.current ?? undefined
+                            }
+                            toolCallsDefaultCollapsed={
+                              toolCallsDefaultCollapsed
+                            }
+                            expandThinkingByDefault={expandThinkingByDefault}
+                            hideThinking={hideThinkingBlock}
+                          />
 
-      {/* Full composer - always mounted; hidden when minimized to preserve ref + state.
+                          {/* After the live turn, in submission order: what omp does not have yet. */}
+                          {heldMessages.map((held) => (
+                            <HeldMessageView
+                              key={held.id}
+                              held={held}
+                              hostLabel={hostLabel}
+                              onDelete={deleteHeldMessage}
+                            />
+                          ))}
+
+                          <div ref={messagesEndRef} />
+                        </div>
+                      </div>
+                    </div>
+                    {!nearBottom && (
+                      <button
+                        type="button"
+                        onClick={scrollToBottom}
+                        title={t("chatWindow.scrollToBottom")}
+                        aria-label={t("chatWindow.scrollToBottom")}
+                        className="chat-scroll-bottom ui-focus-ring"
+                        style={{
+                          position: "absolute",
+                          right: isMobile ? 16 : 48,
+                          bottom: 16,
+                          zIndex: 35,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: 36,
+                          height: 36,
+                          padding: 0,
+                          border: "1px solid var(--border)",
+                          borderRadius: "var(--radius-control)",
+                          background: "var(--bg-panel)",
+                          color: "var(--text-muted)",
+                          cursor: "pointer",
+                          boxShadow: "var(--shadow-pop)",
+                        }}
+                      >
+                        <ArrowDown
+                          size={15}
+                          strokeWidth={1.8}
+                          aria-hidden="true"
+                        />
+                      </button>
+                    )}
+                    {isMobile ? null : (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          bottom: 0,
+                          right: 0,
+                          zIndex: 30,
+                          display: "flex",
+                          alignItems: "center",
+                          pointerEvents: "none",
+                        }}
+                      >
+                        <ChatMinimap
+                          messages={messages}
+                          scrollContainer={scrollContainerRef}
+                          messageRefs={messageRefs}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Minimized pill bar - shown when composer is collapsed */}
+                  {composerMinimized && (
+                    <MinimizedComposerBar
+                      draftKey={draftKey}
+                      isStreaming={sessionBusy}
+                      isCompacting={isCompacting}
+                      statusText={composerStatusText}
+                      expandRef={minimizedExpandRef}
+                      onExpand={handleExpand}
+                      onAbort={handleAbort}
+                      onAbortCompaction={handleAbortCompaction}
+                    />
+                  )}
+
+                  {/* Full composer - always mounted; hidden when minimized to preserve ref + state.
           A flex column that may shrink: when the panels + widgets + input are
           taller than the viewport (soft keyboard up, Tasks expanded), the
           panels block below scrolls and the input stays reachable instead of
           being clipped off the bottom. */}
-      <div className="relative" style={{ display: composerMinimized ? "none" : "flex", flexDirection: "column", minHeight: 0 }}>
-        {/* Minimize chevron above the composer area */}
-        <div style={{ padding: `0 ${CHAT_COLUMN_PADDING}px`, flexShrink: 0 }}>
-          <div style={{ maxWidth: CHAT_COLUMN_MAX_WIDTH, margin: "0 auto", display: "flex", justifyContent: "center" }}>
-            <button
-              type="button"
-              onClick={handleMinimize}
-              title={t("chatWindow.minimizeComposer")}
-              aria-label={t("chatWindow.minimizeComposer")}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                width: 44, height: 24,
-                background: "none", border: "none",
-                color: "var(--text-dim)",
-                cursor: "pointer", padding: 0,
-                borderRadius: 4,
-                transition: "color var(--dur-fast) var(--ease-out-warm), background var(--dur-fast) var(--ease-out-warm)",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-muted)"; e.currentTarget.style.background = "var(--bg-hover)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-dim)"; e.currentTarget.style.background = "none"; }}
-            >
-              <ChevronDown size={14} strokeWidth={1.8} />
-            </button>
-          </div>
-        </div>
-        <div
-          style={{
-            padding: `0 ${CHAT_COLUMN_PADDING}px`,
-            minHeight: 0,
-            overflowY: "auto",
-          }}
-        >
-          <div style={{ maxWidth: CHAT_COLUMN_MAX_WIDTH, margin: "0 auto" }}>
-            {extensionDialog && (
-              <div style={{ marginBottom: 8 }}>
-                <ExtensionDialog
-                  key={extensionDialog.id}
-                  request={extensionDialog}
-                  onRespond={respondToExtensionUi}
-                  attached
-                />
-              </div>
-            )}
-            <ComposerPanels
-              todoPhases={todoPhases}
-              subagents={subagents}
-              onSelectSubagent={setSelectedSubagent}
-              btw={btwPanel}
-              liveStatus={composerStatusText}
-            />
-            <ExtensionWidgets widgets={belowEditorWidgets} />
-          </div>
-        </div>
-        {/* An open ask is answered (or cancelled) in its panel; hiding the
+                  <div
+                    className="relative"
+                    style={{
+                      display: composerMinimized ? "none" : "flex",
+                      flexDirection: "column",
+                      minHeight: 0,
+                    }}
+                  >
+                    {/* Minimize chevron above the composer area */}
+                    <div
+                      style={{
+                        padding: `0 ${CHAT_COLUMN_PADDING}px`,
+                        flexShrink: 0,
+                      }}
+                    >
+                      <div
+                        style={{
+                          maxWidth: CHAT_COLUMN_MAX_WIDTH,
+                          margin: "0 auto",
+                          display: "flex",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={handleMinimize}
+                          title={t("chatWindow.minimizeComposer")}
+                          aria-label={t("chatWindow.minimizeComposer")}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: 44,
+                            height: 24,
+                            background: "none",
+                            border: "none",
+                            color: "var(--text-dim)",
+                            cursor: "pointer",
+                            padding: 0,
+                            borderRadius: 4,
+                            transition:
+                              "color var(--dur-fast) var(--ease-out-warm), background var(--dur-fast) var(--ease-out-warm)",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = "var(--text-muted)";
+                            e.currentTarget.style.background =
+                              "var(--bg-hover)";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = "var(--text-dim)";
+                            e.currentTarget.style.background = "none";
+                          }}
+                        >
+                          <ChevronDown size={14} strokeWidth={1.8} />
+                        </button>
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: `0 ${CHAT_COLUMN_PADDING}px`,
+                        minHeight: 0,
+                        overflowY: "auto",
+                      }}
+                    >
+                      <div
+                        style={{
+                          maxWidth: CHAT_COLUMN_MAX_WIDTH,
+                          margin: "0 auto",
+                        }}
+                      >
+                        {extensionDialog && (
+                          <div style={{ marginBottom: 8 }}>
+                            <ExtensionDialog
+                              key={extensionDialog.id}
+                              request={extensionDialog}
+                              onRespond={respondToExtensionUi}
+                              attached
+                            />
+                          </div>
+                        )}
+                        <ComposerPanels
+                          todoPhases={todoPhases}
+                          subagents={subagents}
+                          onSelectSubagent={setSelectedSubagent}
+                          btw={btwPanel}
+                          liveStatus={composerStatusText}
+                        />
+                        <ExtensionWidgets widgets={belowEditorWidgets} />
+                      </div>
+                    </div>
+                    {/* An open ask is answered (or cancelled) in its panel; hiding the
             composer leaves no doubt where to type. Kept mounted so the
             draft, attachments and a recording survive. */}
-        <div ref={hiddenComposerRef} style={{ display: askOpen ? "none" : "contents" }}>{chatInputElement}</div>
-      </div>
-      </>
-      )}
-      </div>
-    </WorkspaceFileContext.Provider>
-    </AgentLinkContext.Provider>
-    </GithubRepoContext.Provider>
+                    <div
+                      ref={hiddenComposerRef}
+                      style={{ display: askOpen ? "none" : "contents" }}
+                    >
+                      {chatInputElement}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </WorkspaceFileContext.Provider>
+        </AgentLinkContext.Provider>
+      </GithubRepoContext.Provider>
     </SpeechSynthesisProvider>
   );
 }
 
-function ExtensionStatusBar({ statuses }: { statuses: Array<{ key: string; text: string }> }) {
+function ExtensionStatusBar({
+  statuses,
+}: {
+  statuses: Array<{ key: string; text: string }>;
+}) {
   if (statuses.length === 0) return null;
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
@@ -1471,25 +2266,54 @@ function ExtensionStatusBar({ statuses }: { statuses: Array<{ key: string; text:
             gap: 6,
             maxWidth: "100%",
             padding: "4px 8px",
-            border: "1px solid color-mix(in srgb, var(--accent) 24%, var(--border))",
+            border:
+              "1px solid color-mix(in srgb, var(--accent) 24%, var(--border))",
             borderRadius: "var(--radius-control)",
             background: "color-mix(in srgb, var(--accent) 7%, var(--bg))",
             color: "var(--text-muted)",
             fontSize: 12,
           }}
         >
-          <span style={{ color: "var(--accent)", fontFamily: "var(--font-mono)", fontSize: 11 }}>{status.key}</span>
-          <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{renderAnsiLine(status.text, status.key)}</span>
+          <span
+            style={{
+              color: "var(--accent)",
+              fontFamily: "var(--font-mono)",
+              fontSize: 11,
+            }}
+          >
+            {status.key}
+          </span>
+          <span
+            style={{
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {renderAnsiLine(status.text, status.key)}
+          </span>
         </div>
       ))}
     </div>
   );
 }
 
-function ExtensionWidgets({ widgets }: { widgets: Array<{ key: string; lines: string[] }> }) {
+function ExtensionWidgets({
+  widgets,
+}: {
+  widgets: Array<{ key: string; lines: string[] }>;
+}) {
   if (widgets.length === 0) return null;
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        marginBottom: 8,
+      }}
+    >
       {widgets.map((widget) => (
         <pre
           key={widget.key}
@@ -1497,7 +2321,15 @@ function ExtensionWidgets({ widgets }: { widgets: Array<{ key: string; lines: st
           role="group"
           aria-label={widget.key}
           title={widget.key}
-          style={{ margin: 0, padding: "8px 9px", fontSize: 12, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "var(--font-mono)" }}
+          style={{
+            margin: 0,
+            padding: "8px 9px",
+            fontSize: 12,
+            lineHeight: 1.5,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            fontFamily: "var(--font-mono)",
+          }}
         >
           {widget.lines.map((line, index, allLines) => (
             <Fragment key={index}>
@@ -1516,14 +2348,35 @@ function HostOfflineBanner({ host }: { host: string }) {
   return (
     <div
       role="status"
-      style={{ flexShrink: 0, margin: `0 ${CHAT_COLUMN_PADDING}px 8px`, padding: "7px 10px", border: "1px solid color-mix(in srgb, var(--status-warning) 40%, var(--border))", borderRadius: "var(--radius-control)", background: "color-mix(in srgb, var(--status-warning) 8%, var(--bg))", color: "var(--text)", fontSize: 12, lineHeight: 1.4 }}
+      style={{
+        flexShrink: 0,
+        margin: `0 ${CHAT_COLUMN_PADDING}px 8px`,
+        padding: "7px 10px",
+        border:
+          "1px solid color-mix(in srgb, var(--status-warning) 40%, var(--border))",
+        borderRadius: "var(--radius-control)",
+        background: "color-mix(in srgb, var(--status-warning) 8%, var(--bg))",
+        color: "var(--text)",
+        fontSize: 12,
+        lineHeight: 1.4,
+      }}
     >
       {t("hosts.offlineBanner", { host })}
     </div>
   );
 }
 
-function NoticeShelf({ notices, onDismiss, floating = false, align = "left" }: { notices: NoticeItem[]; onDismiss?: (id: string) => void; floating?: boolean; align?: "left" | "right" }) {
+function NoticeShelf({
+  notices,
+  onDismiss,
+  floating = false,
+  align = "left",
+}: {
+  notices: NoticeItem[];
+  onDismiss?: (id: string) => void;
+  floating?: boolean;
+  align?: "left" | "right";
+}) {
   if (notices.length === 0) return null;
   return (
     <div
@@ -1538,13 +2391,14 @@ function NoticeShelf({ notices, onDismiss, floating = false, align = "left" }: {
       }}
     >
       {notices.map((notice, index) => {
-        const color = notice.type === "error"
-          ? "var(--status-error)"
-          : notice.type === "warning"
-            ? "var(--status-warning)"
-            : notice.type === "success"
-              ? "var(--status-success)"
-              : "var(--accent)";
+        const color =
+          notice.type === "error"
+            ? "var(--status-error)"
+            : notice.type === "warning"
+              ? "var(--status-warning)"
+              : notice.type === "success"
+                ? "var(--status-success)"
+                : "var(--accent)";
         const isError = notice.type === "error";
         return (
           <div
@@ -1561,7 +2415,9 @@ function NoticeShelf({ notices, onDismiss, floating = false, align = "left" }: {
               overflow: "hidden",
               borderRadius: "var(--radius-control)",
               border: `1px solid ${isError ? "color-mix(in srgb, var(--status-error) 35%, var(--border))" : "color-mix(in srgb, var(--border) 70%, transparent)"}`,
-              background: isError ? "color-mix(in srgb, var(--status-error) 7%, var(--bg))" : "var(--bg)",
+              background: isError
+                ? "color-mix(in srgb, var(--status-error) 7%, var(--bg))"
+                : "var(--bg)",
               color: isError ? "var(--text)" : "var(--text-muted)",
               width: "fit-content",
               maxWidth: "min(100%, 640px)",
@@ -1593,7 +2449,7 @@ function NoticeShelf({ notices, onDismiss, floating = false, align = "left" }: {
                 overflow: "hidden",
                 display: isError ? "-webkit-box" : "block",
                 WebkitLineClamp: isError ? 3 : undefined,
-                WebkitBoxOrient: isError ? "vertical" as const : undefined,
+                WebkitBoxOrient: isError ? ("vertical" as const) : undefined,
                 overflowWrap: "anywhere",
                 whiteSpace: isError ? "normal" : "nowrap",
                 textOverflow: isError ? "clip" : "ellipsis",
@@ -1624,7 +2480,9 @@ function NoticeShelf({ notices, onDismiss, floating = false, align = "left" }: {
                   marginTop: isError ? 1 : 0,
                 }}
               >
-                <span aria-hidden style={{ fontSize: 12, lineHeight: 1 }}>×</span>
+                <span aria-hidden style={{ fontSize: 12, lineHeight: 1 }}>
+                  ×
+                </span>
               </button>
             )}
           </div>
@@ -1635,11 +2493,15 @@ function NoticeShelf({ notices, onDismiss, floating = false, align = "left" }: {
 }
 
 function renderAnsiLine(line: string, keyPrefix: string): ReactNode[] {
-  return parseAnsiLine(line).map((segment, index) => (
-    Object.keys(segment.style).length > 0
-      ? <span key={`${keyPrefix}-${index}`} style={segment.style}>{segment.text}</span>
-      : segment.text
-  ));
+  return parseAnsiLine(line).map((segment, index) =>
+    Object.keys(segment.style).length > 0 ? (
+      <span key={`${keyPrefix}-${index}`} style={segment.style}>
+        {segment.text}
+      </span>
+    ) : (
+      segment.text
+    ),
+  );
 }
 
 function ExtensionCustomPanel({
@@ -1681,7 +2543,8 @@ function ExtensionCustomPanel({
         role="dialog"
         aria-modal="true"
         onClick={(event) => {
-          if (!(event.target as HTMLElement).closest("button")) inputRef.current?.focus();
+          if (!(event.target as HTMLElement).closest("button"))
+            inputRef.current?.focus();
         }}
         style={{
           position: "relative",
@@ -1743,8 +2606,19 @@ function ExtensionCustomPanel({
             pointerEvents: "none",
           }}
         />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 12px", borderBottom: "1px solid var(--border)" }}>
-          <div style={{ color: "var(--text)", fontSize: 13, fontWeight: 650 }}>{t("chatWindow.extensionPanel")}</div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            padding: "10px 12px",
+            borderBottom: "1px solid var(--border)",
+          }}
+        >
+          <div style={{ color: "var(--text)", fontSize: 13, fontWeight: 650 }}>
+            {t("chatWindow.extensionPanel")}
+          </div>
           <button
             onClick={() => onInput(request, "\x03")}
             style={{
@@ -1774,12 +2648,14 @@ function ExtensionCustomPanel({
             whiteSpace: "pre",
           }}
         >
-          {(displayLines.length ? displayLines : [""]).map((line, index, allLines) => (
-            <Fragment key={index}>
-              {renderAnsiLine(line, `line-${index}`)}
-              {index < allLines.length - 1 ? "\n" : null}
-            </Fragment>
-          ))}
+          {(displayLines.length ? displayLines : [""]).map(
+            (line, index, allLines) => (
+              <Fragment key={index}>
+                {renderAnsiLine(line, `line-${index}`)}
+                {index < allLines.length - 1 ? "\n" : null}
+              </Fragment>
+            ),
+          )}
         </pre>
       </div>
     </div>
@@ -1787,7 +2663,16 @@ function ExtensionCustomPanel({
 }
 
 /** Slim pill bar replacing the full composer when minimized. */
-const MinimizedComposerBar = memo(function MinimizedComposerBar({ draftKey, isStreaming, isCompacting, statusText, expandRef, onExpand, onAbort, onAbortCompaction }: {
+const MinimizedComposerBar = memo(function MinimizedComposerBar({
+  draftKey,
+  isStreaming,
+  isCompacting,
+  statusText,
+  expandRef,
+  onExpand,
+  onAbort,
+  onAbortCompaction,
+}: {
   draftKey?: string;
   isStreaming: boolean;
   isCompacting?: boolean;
@@ -1804,7 +2689,12 @@ const MinimizedComposerBar = memo(function MinimizedComposerBar({ draftKey, isSt
   const draftText = summary?.text?.trim() || null;
   const hasAttachments = summary?.hasAttachments ?? false;
   return (
-    <div style={{ flexShrink: 0, padding: "4px 16px calc(6px + env(safe-area-inset-bottom))" }}>
+    <div
+      style={{
+        flexShrink: 0,
+        padding: "4px 16px calc(6px + env(safe-area-inset-bottom))",
+      }}
+    >
       <div style={{ maxWidth: CHAT_COLUMN_MAX_WIDTH, margin: "0 auto" }}>
         <div
           style={{
@@ -1813,7 +2703,8 @@ const MinimizedComposerBar = memo(function MinimizedComposerBar({ draftKey, isSt
             gap: 0,
             height: 36,
             background: "var(--bg)",
-            border: "1px solid color-mix(in srgb, var(--border) 70%, transparent)",
+            border:
+              "1px solid color-mix(in srgb, var(--border) 70%, transparent)",
             borderRadius: "var(--radius-card)",
             boxShadow: "var(--shadow-card)",
             overflow: "hidden",
@@ -1840,35 +2731,56 @@ const MinimizedComposerBar = memo(function MinimizedComposerBar({ draftKey, isSt
               textAlign: "left",
             }}
           >
-            <ChevronUp size={14} strokeWidth={1.8} style={{ flexShrink: 0, color: "var(--text-dim)" }} />
+            <ChevronUp
+              size={14}
+              strokeWidth={1.8}
+              style={{ flexShrink: 0, color: "var(--text-dim)" }}
+            />
             {hasAttachments && (
-              <Paperclip size={13} strokeWidth={1.8} style={{ flexShrink: 0, color: "var(--text-muted)" }} />
+              <Paperclip
+                size={13}
+                strokeWidth={1.8}
+                style={{ flexShrink: 0, color: "var(--text-muted)" }}
+              />
             )}
             {statusText ? (
-              <span style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 7,
-                flex: 1,
-                minWidth: 0,
-                fontSize: 13,
-                color: "var(--text-muted)",
-              }}>
-                <span aria-hidden className="live-status-dot live-pulse inline-block h-2 w-2 shrink-0 rounded-full bg-accent" />
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 7,
+                  flex: 1,
+                  minWidth: 0,
+                  fontSize: 13,
+                  color: "var(--text-muted)",
+                }}
+              >
+                <span
+                  aria-hidden
+                  className="live-status-dot live-pulse inline-block h-2 w-2 shrink-0 rounded-full bg-accent"
+                />
+                <span
+                  style={{
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   {statusText}
                 </span>
               </span>
             ) : (
-              <span style={{
-                flex: 1,
-                minWidth: 0,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                fontSize: 14,
-                color: draftText ? "var(--text)" : "var(--text-dim)",
-              }}>
+              <span
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  fontSize: 14,
+                  color: draftText ? "var(--text)" : "var(--text-dim)",
+                }}
+              >
                 {draftText ?? t("chatInput.placeholder")}
               </span>
             )}
@@ -1885,7 +2797,9 @@ const MinimizedComposerBar = memo(function MinimizedComposerBar({ draftKey, isSt
               title={t("chatInput.stopAgent")}
               aria-label={t("chatInput.stopAgent")}
               style={{
-                display: "flex", alignItems: "center", gap: 5,
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
                 height: 26,
                 padding: "0 12px",
                 marginRight: 5,
@@ -1899,7 +2813,12 @@ const MinimizedComposerBar = memo(function MinimizedComposerBar({ draftKey, isSt
                 flexShrink: 0,
               }}
             >
-              <Square size={9} strokeWidth={0} fill="currentColor" aria-hidden="true" />
+              <Square
+                size={9}
+                strokeWidth={0}
+                fill="currentColor"
+                aria-hidden="true"
+              />
               {t("chatInput.stop")}
             </button>
           )}

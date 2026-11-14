@@ -24,7 +24,10 @@ export function taskResultRetryFailure(
   const attempt = asNumber(value.attempt);
   const errorMessage = asString(value.errorMessage);
   if (attempt === undefined || errorMessage === undefined) return undefined;
-  return { attempt, errorMessage: truncate ? truncate(errorMessage) : errorMessage };
+  return {
+    attempt,
+    errorMessage: truncate ? truncate(errorMessage) : errorMessage,
+  };
 }
 
 /** Project a `structuredOutput` payload to its documented UI fields only —

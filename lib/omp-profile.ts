@@ -13,11 +13,13 @@ const PROFILE_NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}(?![\s\S])/;
 
 // omp rejects these names on every platform.
 const RESERVED_PROFILE_BASE = new Set([
-  "con", "prn", "aux", "nul",
+  "con",
+  "prn",
+  "aux",
+  "nul",
   ...Array.from({ length: 10 }, (_, i) => `com${i}`),
   ...Array.from({ length: 10 }, (_, i) => `lpt${i}`),
 ]);
-
 
 /** True when `name` is a profile name omp will accept (empty input is "no profile" and valid). */
 export function isValidOmpProfile(name: string): boolean {

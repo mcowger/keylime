@@ -1,5 +1,14 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { getBlobsDir, getDiagnosticsDir } from "./omp/paths";
 import { isRecord } from "./type-guards";
@@ -59,7 +68,9 @@ function sweepMediaCache(): void {
     const file = path.join(mediaDir(), name);
     try {
       const stat = statSync(file);
-      const hasBlob = HASH_RE.test(name) && fileSize(path.join(getBlobsDir(), name)) === stat.size;
+      const hasBlob =
+        HASH_RE.test(name) &&
+        fileSize(path.join(getBlobsDir(), name)) === stat.size;
       if (hasBlob || now - stat.mtimeMs > MAX_AGE_MS) unlinkSync(file);
     } catch {
       // Removed concurrently or unreadable: the next sweep retries.
@@ -80,7 +91,9 @@ export function storeInlineImage(base64: string): string {
   // time, because the sweep may have removed the copy since.
   let hash = recentHashes.get(base64);
   if (!hash) {
-    hash = createHash("sha256").update(Buffer.from(base64, "base64")).digest("hex");
+    hash = createHash("sha256")
+      .update(Buffer.from(base64, "base64"))
+      .digest("hex");
     if (base64.length <= RECENT_MAX_CHARS) {
       recentHashes.set(base64, hash);
       recentChars += base64.length;
@@ -94,7 +107,11 @@ export function storeInlineImage(base64: string): string {
   const size = Buffer.byteLength(base64, "base64");
   const copy = path.join(mediaDir(), hash);
   // omp writes blobs in place: keep our own copy unless its blob is already complete.
-  if (fileSize(path.join(getBlobsDir(), hash)) !== size && fileSize(copy) !== size) writeAtomic(copy, Buffer.from(base64, "base64"));
+  if (
+    fileSize(path.join(getBlobsDir(), hash)) !== size &&
+    fileSize(copy) !== size
+  )
+    writeAtomic(copy, Buffer.from(base64, "base64"));
   return hash;
 }
 
@@ -119,8 +136,14 @@ function imageBlockAsUrl(block: unknown): unknown {
   if (data.startsWith(BLOB_PREFIX)) {
     hash = data.slice(BLOB_PREFIX.length);
     if (!HASH_RE.test(hash)) return block;
-    if (!existsSync(path.join(getBlobsDir(), hash)) && !existsSync(path.join(mediaDir(), hash))) {
-      return { type: "text", text: `[image unavailable: blob ${hash.slice(0, 12)}… not found]` };
+    if (
+      !existsSync(path.join(getBlobsDir(), hash)) &&
+      !existsSync(path.join(mediaDir(), hash))
+    ) {
+      return {
+        type: "text",
+        text: `[image unavailable: blob ${hash.slice(0, 12)}… not found]`,
+      };
     }
   } else {
     try {
@@ -129,12 +152,20 @@ function imageBlockAsUrl(block: unknown): unknown {
       return block; // Disk trouble: keep showing the inline image.
     }
   }
-  return { type: "image", ...(typeof mimeType === "string" ? { mimeType } : {}), url: `/api/media/${hash}` };
+  return {
+    type: "image",
+    ...(typeof mimeType === "string" ? { mimeType } : {}),
+    url: `/api/media/${hash}`,
+  };
 }
 
 /** Tool-result content with every image replaced by a media URL. */
 export function toolResultContentAsUrls<T>(content: T): T {
-  if (!Array.isArray(content) || !content.some((block) => isRecord(block) && block.type === "image")) return content;
+  if (
+    !Array.isArray(content) ||
+    !content.some((block) => isRecord(block) && block.type === "image")
+  )
+    return content;
   return content.map(imageBlockAsUrl) as T;
 }
 
@@ -145,7 +176,9 @@ function withContentAsUrls(value: unknown): unknown {
 }
 
 function toolResultMessageAsUrls(message: unknown): unknown {
-  return isRecord(message) && message.role === "toolResult" ? withContentAsUrls(message) : message;
+  return isRecord(message) && message.role === "toolResult"
+    ? withContentAsUrls(message)
+    : message;
 }
 
 function mapMessages(value: unknown): unknown {
@@ -155,23 +188,41 @@ function mapMessages(value: unknown): unknown {
 }
 
 /** An omp agent event with its tool-result images as media URLs (same object when it has none). */
-export function eventWithToolResultImageUrls<E extends { type: string; [key: string]: unknown }>(event: E): E {
-  const swap = (key: string, value: unknown): E => (value === event[key] ? event : { ...event, [key]: value });
+export function eventWithToolResultImageUrls<
+  E extends { type: string; [key: string]: unknown },
+>(event: E): E {
+  const swap = (key: string, value: unknown): E =>
+    value === event[key] ? event : { ...event, [key]: value };
   switch (event.type) {
-    case "tool_execution_update": return swap("partialResult", withContentAsUrls(event.partialResult));
-    case "tool_execution_end": return swap("result", withContentAsUrls(event.result));
+    case "tool_execution_update":
+      return swap("partialResult", withContentAsUrls(event.partialResult));
+    case "tool_execution_end":
+      return swap("result", withContentAsUrls(event.result));
     case "message_start":
-    case "message_end": return swap("message", toolResultMessageAsUrls(event.message));
-    case "turn_end": return swap("toolResults", mapMessages(event.toolResults));
-    case "agent_end": return swap("messages", mapMessages(event.messages));
+    case "message_end":
+      return swap("message", toolResultMessageAsUrls(event.message));
+    case "turn_end":
+      return swap("toolResults", mapMessages(event.toolResults));
+    case "agent_end":
+      return swap("messages", mapMessages(event.messages));
     case "subagent_event": {
       // The child's raw event rides in `payload.event`.
       const payload = event.payload;
-      if (!isRecord(payload) || !isRecord(payload.event) || typeof payload.event.type !== "string") return event;
-      const inner = eventWithToolResultImageUrls(payload.event as { type: string });
-      return inner === payload.event ? event : swap("payload", { ...payload, event: inner });
+      if (
+        !isRecord(payload) ||
+        !isRecord(payload.event) ||
+        typeof payload.event.type !== "string"
+      )
+        return event;
+      const inner = eventWithToolResultImageUrls(
+        payload.event as { type: string },
+      );
+      return inner === payload.event
+        ? event
+        : swap("payload", { ...payload, event: inner });
     }
-    default: return event;
+    default:
+      return event;
   }
 }
 
@@ -186,16 +237,30 @@ export function mediaFilePath(hash: string): string | null {
   const copy = path.join(mediaDir(), hash);
   const blobSize = fileSize(blob);
   const copySize = fileSize(copy);
-  if (blobSize !== undefined && (copySize === undefined || blobSize === copySize)) return blob;
+  if (
+    blobSize !== undefined &&
+    (copySize === undefined || blobSize === copySize)
+  )
+    return blob;
   return copySize === undefined ? null : copy;
 }
 
 /** Raster image type from magic bytes; null for anything else (the blob store also holds non-images). */
 export function imageMimeType(bytes: Buffer): string | null {
-  if (bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (
+    bytes
+      .subarray(0, 8)
+      .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  )
+    return "image/png";
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)
+    return "image/jpeg";
   if (bytes.subarray(0, 4).toString("latin1") === "GIF8") return "image/gif";
-  if (bytes.subarray(0, 4).toString("latin1") === "RIFF" && bytes.subarray(8, 12).toString("latin1") === "WEBP") return "image/webp";
+  if (
+    bytes.subarray(0, 4).toString("latin1") === "RIFF" &&
+    bytes.subarray(8, 12).toString("latin1") === "WEBP"
+  )
+    return "image/webp";
   return null;
 }
 
@@ -206,10 +271,16 @@ export function existingThumbnail(hash: string): string | null {
 }
 
 /** Generate and cache a small WebP preview (Bun.Image applies EXIF orientation); null when the bytes are not a decodable image. */
-export async function createThumbnail(hash: string, image: Buffer): Promise<Uint8Array | null> {
+export async function createThumbnail(
+  hash: string,
+  image: Buffer,
+): Promise<Uint8Array | null> {
   let thumb: Uint8Array;
   try {
-    thumb = await new Bun.Image(image).resize(THUMB_PX, THUMB_PX, { fit: "inside", withoutEnlargement: true }).webp({ quality: 80 }).bytes();
+    thumb = await new Bun.Image(image)
+      .resize(THUMB_PX, THUMB_PX, { fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .bytes();
   } catch {
     return null;
   }

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
-export type UiScalePreference = "compact" | "standard" | "comfortable" | "large";
+export type UiScalePreference =
+  "compact" | "standard" | "comfortable" | "large";
 
 export const STORAGE_KEY = "omp-ui-scale";
 export const DEFAULT_UI_SCALE: UiScalePreference = "standard";
@@ -30,7 +31,9 @@ export function storedUiScalePreference(): UiScalePreference {
   if (typeof window === "undefined") return DEFAULT_UI_SCALE;
   try {
     const value = localStorage.getItem(STORAGE_KEY);
-    return value && VALID_UI_SCALES.has(value) ? (value as UiScalePreference) : DEFAULT_UI_SCALE;
+    return value && VALID_UI_SCALES.has(value)
+      ? (value as UiScalePreference)
+      : DEFAULT_UI_SCALE;
   } catch {
     return DEFAULT_UI_SCALE;
   }
@@ -66,7 +69,9 @@ export function resolveUiScalePercent(preference: UiScalePreference): number {
   }
 }
 
-export function nextUiScalePreference(current: UiScalePreference): UiScalePreference {
+export function nextUiScalePreference(
+  current: UiScalePreference,
+): UiScalePreference {
   switch (current) {
     case "compact":
       return "standard";
@@ -91,7 +96,9 @@ export function applyUiScale(preference: UiScalePreference): void {
     } catch {
       // Storage selection remains usable when localStorage is unavailable.
     }
-    window.dispatchEvent(new CustomEvent(UI_SCALE_CHANGE_EVENT, { detail: preference }));
+    window.dispatchEvent(
+      new CustomEvent(UI_SCALE_CHANGE_EVENT, { detail: preference }),
+    );
   }
   notifyListeners();
 }
@@ -101,7 +108,11 @@ function getServerSnapshot(): UiScalePreference {
 }
 
 export function useUiScale() {
-  const uiScale = useSyncExternalStore(subscribe, storedUiScalePreference, getServerSnapshot);
+  const uiScale = useSyncExternalStore(
+    subscribe,
+    storedUiScalePreference,
+    getServerSnapshot,
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;

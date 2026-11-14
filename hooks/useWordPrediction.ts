@@ -1,8 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { advanceGhost, atLineEnd, type WordGhost } from "@/lib/word-prediction";
 
-export type PredictWord = (text: string, cursor: number) => Promise<string | null>;
-export type PredictWordFeedback = (text: string, cursor: number, suggestion: string, accepted: boolean) => void;
+export type PredictWord = (
+  text: string,
+  cursor: number,
+) => Promise<string | null>;
+export type PredictWordFeedback = (
+  text: string,
+  cursor: number,
+  suggestion: string,
+  accepted: boolean,
+) => void;
 
 /** Wait this long after the last keystroke before asking omp; a burst of typing sends one request. */
 const DEBOUNCE_MS = 60;
@@ -26,7 +34,10 @@ export interface WordPrediction {
   subscribe(listener: () => void): () => void;
 }
 
-export function useWordPrediction(predict: PredictWord | undefined, feedback: PredictWordFeedback | undefined): WordPrediction {
+export function useWordPrediction(
+  predict: PredictWord | undefined,
+  feedback: PredictWordFeedback | undefined,
+): WordPrediction {
   // Latest callbacks without re-creating the controller.
   const deps = useRef({ predict, feedback });
   useEffect(() => {
@@ -53,14 +64,26 @@ export function useWordPrediction(predict: PredictWord | undefined, feedback: Pr
     return {
       update(text, start, end) {
         // onChange and onSelect both report a keystroke; handle it once.
-        if (last && last.text === text && last.start === start && last.end === end) return;
+        if (
+          last &&
+          last.text === text &&
+          last.start === start &&
+          last.end === end
+        )
+          return;
         last = { text, start, end };
         cancel();
         const mySeq = seq;
         let carried: WordGhost | null = null;
         if (ghost) {
           const advanced = advanceGhost(ghost, text, start);
-          if (advanced.typedPast) deps.current.feedback?.(ghost.text, ghost.cursor, ghost.suffix, false);
+          if (advanced.typedPast)
+            deps.current.feedback?.(
+              ghost.text,
+              ghost.cursor,
+              ghost.suffix,
+              false,
+            );
           carried = advanced.ghost;
         }
         const { predict } = deps.current;
@@ -69,7 +92,8 @@ export function useWordPrediction(predict: PredictWord | undefined, feedback: Pr
           return;
         }
         set(carried);
-        if (text.length > MAX_DRAFT_LENGTH || Date.now() < unsupportedUntil) return;
+        if (text.length > MAX_DRAFT_LENGTH || Date.now() < unsupportedUntil)
+          return;
         timer = window.setTimeout(() => {
           predict(text, start).then(
             (suffix) => {
@@ -77,7 +101,10 @@ export function useWordPrediction(predict: PredictWord | undefined, feedback: Pr
               if (mySeq === seq && suffix) set({ text, cursor: start, suffix });
             },
             (error: unknown) => {
-              if (error instanceof Error && error.message.includes("Unknown command")) {
+              if (
+                error instanceof Error &&
+                error.message.includes("Unknown command")
+              ) {
                 unsupportedUntil = Date.now() + UNSUPPORTED_RETRY_MS;
               }
             },
@@ -90,7 +117,12 @@ export function useWordPrediction(predict: PredictWord | undefined, feedback: Pr
         if (!current) return null;
         cancel();
         set(null);
-        deps.current.feedback?.(current.text, current.cursor, current.suffix, true);
+        deps.current.feedback?.(
+          current.text,
+          current.cursor,
+          current.suffix,
+          true,
+        );
         return current;
       },
       subscribe(listener) {

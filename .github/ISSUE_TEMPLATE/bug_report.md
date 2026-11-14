@@ -10,6 +10,7 @@ A clear description of what went wrong.
 
 **To reproduce**
 Steps to reproduce the behavior:
+
 1. ...
 2. ...
 
@@ -20,6 +21,7 @@ What you expected to happen.
 If applicable, add screenshots (light/dark theme noted).
 
 **Environment**
+
 - OS: [e.g. macOS 15.5]
 - Node.js version: [`node --version`]
 - omp version: [`omp --version`]

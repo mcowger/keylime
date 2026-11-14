@@ -8,7 +8,8 @@ export type SubmitDuringRunBehavior = "steer" | "queue";
 const SUBMIT_DURING_RUN_KEY = "omp-web:submit-during-run";
 
 /** The default, applied when nothing was ever stored under the key. */
-export const DEFAULT_SUBMIT_DURING_RUN_BEHAVIOR: SubmitDuringRunBehavior = "queue";
+export const DEFAULT_SUBMIT_DURING_RUN_BEHAVIOR: SubmitDuringRunBehavior =
+  "queue";
 
 /**
  * How a composer submit during a run is delivered. Defaults to `queue`:
@@ -31,7 +32,9 @@ export function getSubmitDuringRunBehavior(): SubmitDuringRunBehavior {
   return DEFAULT_SUBMIT_DURING_RUN_BEHAVIOR;
 }
 
-export function setSubmitDuringRunBehavior(behavior: SubmitDuringRunBehavior): void {
+export function setSubmitDuringRunBehavior(
+  behavior: SubmitDuringRunBehavior,
+): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(SUBMIT_DURING_RUN_KEY, behavior);
@@ -71,7 +74,12 @@ export function setWordCompletionMode(mode: WordCompletionMode): void {
  * means a physical keyboard is likely; touch devices bring their own
  * keyboard suggestions and have no Tab key.
  */
-export function isWordCompletionEnabled(mode: WordCompletionMode = getWordCompletionMode()): boolean {
+export function isWordCompletionEnabled(
+  mode: WordCompletionMode = getWordCompletionMode(),
+): boolean {
   if (mode !== "auto") return mode === "on";
-  return typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches;
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia("(pointer: fine)").matches
+  );
 }

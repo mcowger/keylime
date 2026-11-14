@@ -13,7 +13,9 @@ export interface RpcTransport {
   onLine(listener: (line: string) => void): void;
   onStderr(listener: (chunk: string) => void): void;
   /** Fires once; a spawn error fires (null, null) after an onStderr("\nspawn error: …"). */
-  onExit(listener: (code: number | null, signal: NodeJS.Signals | null) => void): void;
+  onExit(
+    listener: (code: number | null, signal: NodeJS.Signals | null) => void,
+  ): void;
   endInput(): void;
   /** force=false → SIGTERM the tree, true → SIGKILL. */
   killTree(force: boolean): void;
@@ -31,7 +33,10 @@ export interface RpcTransport {
   setPreparing?(on: boolean, takeOver?: boolean): void;
   /** Acquire (rejects while another server edits) or release the host's history-edit lease. */
   setEditing?(on: boolean): Promise<void>;
-  setHostTools?(tools: unknown[], schemes: { scheme: string; writable: boolean }[]): Promise<void>;
+  setHostTools?(
+    tools: unknown[],
+    schemes: { scheme: string; writable: boolean }[],
+  ): Promise<void>;
   /** Leave the shared channel without terminating its process. */
   close?(): void;
   /** Correlates log lines: the child's pid here, the channel id on a linked host. */
@@ -46,13 +51,17 @@ export function spawnLocalRpcTransport(options: {
   spawn?: typeof spawn;
 }): RpcTransport {
   const spawnProcess = options.spawn ?? spawn;
-  const child: ChildProcessWithoutNullStreams = spawnProcess(options.bin, options.args, {
-    cwd: options.cwd,
-    env: options.env,
-    stdio: ["pipe", "pipe", "pipe"],
-    // Give omp its own process group so killTree() also stops its grandchildren.
-    detached: true,
-  });
+  const child: ChildProcessWithoutNullStreams = spawnProcess(
+    options.bin,
+    options.args,
+    {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: ["pipe", "pipe", "pipe"],
+      // Give omp its own process group so killTree() also stops its grandchildren.
+      detached: true,
+    },
+  );
 
   // A write queued when the child dies fails both the write callback and an
   // 'error' event on the pipe. Without a listener that event becomes an
@@ -62,7 +71,9 @@ export function spawnLocalRpcTransport(options: {
 
   const lineListeners: Array<(line: string) => void> = [];
   const stderrListeners: Array<(chunk: string) => void> = [];
-  const exitListeners: Array<(code: number | null, signal: NodeJS.Signals | null) => void> = [];
+  const exitListeners: Array<
+    (code: number | null, signal: NodeJS.Signals | null) => void
+  > = [];
   // Host.spawnRpc hands the transport over asynchronously, so output can
   // arrive before RpcProcess subscribes: hold it for the first listener.
   const pendingLines: string[] = [];
@@ -82,7 +93,9 @@ export function spawnLocalRpcTransport(options: {
     if (lineListeners.length === 0) pendingLines.push(line);
     for (const listener of lineListeners) listener(line);
   });
-  child.stderr.on("data", (chunk: Buffer) => emitStderr(chunk.toString("utf8")));
+  child.stderr.on("data", (chunk: Buffer) =>
+    emitStderr(chunk.toString("utf8")),
+  );
   child.on("exit", emitExit);
   child.on("error", (error) => {
     emitStderr(`\nspawn error: ${error.message}`);
@@ -96,7 +109,9 @@ export function spawnLocalRpcTransport(options: {
     try {
       process.kill(-pid, signal);
     } catch {
-      try { child.kill(signal); } catch {}
+      try {
+        child.kill(signal);
+      } catch {}
     }
   };
 
@@ -124,7 +139,9 @@ export function spawnLocalRpcTransport(options: {
       if (info) queueMicrotask(() => listener(info[0], info[1]));
     },
     endInput() {
-      try { child.stdin.end(); } catch {}
+      try {
+        child.stdin.end();
+      } catch {}
     },
     killTree,
   };

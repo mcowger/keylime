@@ -2,7 +2,8 @@ import "../tests/setup-dom.mjs";
 import assert from "node:assert/strict";
 import test, { afterEach } from "node:test";
 import React from "react";
-const { act, cleanup, renderHook } = await import("@testing-library/react/pure.js");
+const { act, cleanup, renderHook } =
+  await import("@testing-library/react/pure.js");
 
 const { useSidebarHistory } = await import("./useSidebarHistory.ts");
 const { setDraft, getDraft, clearDraft } = await import("@/lib/draft-store");
@@ -30,7 +31,11 @@ function browserHistory({ prior = true, standalone = false } = {}) {
     originals.push([target, key, Object.getOwnPropertyDescriptor(target, key)]);
     Object.defineProperty(target, key, { configurable: true, ...descriptor });
   };
-  const nextState = { __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: { tree: "chat" }, other: "retained" };
+  const nextState = {
+    __NA: true,
+    __PRIVATE_NEXTJS_INTERNALS_TREE: { tree: "chat" },
+    other: "retained",
+  };
   const entries = prior ? [{ url: "https://previous.test/", state: null }] : [];
   entries.push({ url: "https://omp.test/?session=first", state: nextState });
   let index = entries.length - 1;
@@ -38,40 +43,73 @@ function browserHistory({ prior = true, standalone = false } = {}) {
   let activated = false;
   let skippable = false;
   const result = { entries, departed: false, closeAttempts: 0 };
-  const syncLocation = () => replaceUrl(entries[index].state, "", entries[index].url);
+  const syncLocation = () =>
+    replaceUrl(entries[index].state, "", entries[index].url);
   function fire(type, extra = {}) {
-    const event = type === "popstate"
-      ? new win.PopStateEvent(type, { state: extra.state })
-      : new win.Event(type, { cancelable: true });
+    const event =
+      type === "popstate"
+        ? new win.PopStateEvent(type, { state: extra.state })
+        : new win.Event(type, { cancelable: true });
     win.dispatchEvent(event);
     return event;
   }
   const history = {
-    get state() { return entries[index].state; },
-    get length() { return entries.length; },
+    get state() {
+      return entries[index].state;
+    },
+    get length() {
+      return entries.length;
+    },
     replaceState(state, _, url) {
-      entries[index] = { state: structuredClone(state), url: new URL(url ?? win.location.href, win.location.href).href };
+      entries[index] = {
+        state: structuredClone(state),
+        url: new URL(url ?? win.location.href, win.location.href).href,
+      };
       syncLocation();
     },
     pushState(state, _, url) {
       if (!activated) skippable = true;
       entries.splice(index + 1);
-      entries.push({ state: structuredClone(state), url: new URL(url ?? win.location.href, win.location.href).href });
+      entries.push({
+        state: structuredClone(state),
+        url: new URL(url ?? win.location.href, win.location.href).href,
+      });
       index += 1;
       syncLocation();
     },
-    go(delta) { pending.push(delta); },
-    back() { this.go(-1); },
-    forward() { this.go(1); },
+    go(delta) {
+      pending.push(delta);
+    },
+    back() {
+      this.go(-1);
+    },
+    forward() {
+      this.go(1);
+    },
   };
-  for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(history))) {
+  for (const [key, descriptor] of Object.entries(
+    Object.getOwnPropertyDescriptors(history),
+  )) {
     stub(win.history, key, descriptor);
   }
-  stub(win, "navigation", { value: { get canGoBack() { return index > 0; } } });
+  stub(win, "navigation", {
+    value: {
+      get canGoBack() {
+        return index > 0;
+      },
+    },
+  });
   stub(win, "matchMedia", { value: () => ({ matches: standalone }) });
-  stub(win, "close", { value: () => { result.closeAttempts += 1; } });
+  stub(win, "close", {
+    value: () => {
+      result.closeAttempts += 1;
+    },
+  });
   // The root layout installs this bridge before Next's popstate listener.
-  const bridge = (event) => win.dispatchEvent(new win.CustomEvent("omp:sidebar-popstate", { detail: event }));
+  const bridge = (event) =>
+    win.dispatchEvent(
+      new win.CustomEvent("omp:sidebar-popstate", { detail: event }),
+    );
   win.addEventListener("popstate", bridge);
   restoreHistory = () => {
     win.removeEventListener("popstate", bridge);
@@ -84,7 +122,10 @@ function browserHistory({ prior = true, standalone = false } = {}) {
   syncLocation();
   result.window = win;
   result.fire = fire;
-  result.activate = () => { activated = true; skippable = false; };
+  result.activate = () => {
+    activated = true;
+    skippable = false;
+  };
   result.nativeBack = () => {
     if (skippable) result.departed = true;
     else win.history.back();
@@ -112,21 +153,49 @@ function browserHistory({ prior = true, standalone = false } = {}) {
   return result;
 }
 
-async function mount({ open = false, strict = false, active = true, panel = false } = {}) {
-  const hook = renderHook(({ url }) => {
-    const [sidebarOpen, setSidebarOpen] = React.useState(open);
-    const [panelOpen, setPanelOpen] = React.useState(panel);
-    const closePanel = React.useCallback(() => setPanelOpen(false), []);
-    const navigation = useSidebarHistory({ active, ready: true, sidebarOpen, setSidebarOpen, panelOpen, closePanel, url });
-    return { ...navigation, sidebarOpen, setSidebarOpen, panelOpen, setPanelOpen };
-  }, {
-    initialProps: { url: "first" },
-    wrapper: strict ? React.StrictMode : undefined,
-  });
+async function mount({
+  open = false,
+  strict = false,
+  active = true,
+  panel = false,
+} = {}) {
+  const hook = renderHook(
+    ({ url }) => {
+      const [sidebarOpen, setSidebarOpen] = React.useState(open);
+      const [panelOpen, setPanelOpen] = React.useState(panel);
+      const closePanel = React.useCallback(() => setPanelOpen(false), []);
+      const navigation = useSidebarHistory({
+        active,
+        ready: true,
+        sidebarOpen,
+        setSidebarOpen,
+        panelOpen,
+        closePanel,
+        url,
+      });
+      return {
+        ...navigation,
+        sidebarOpen,
+        setSidebarOpen,
+        panelOpen,
+        setPanelOpen,
+      };
+    },
+    {
+      initialProps: { url: "first" },
+      wrapper: strict ? React.StrictMode : undefined,
+    },
+  );
   return {
-    get api() { return hook.result.current; },
-    async update(url) { hook.rerender({ url }); },
-    async unmount() { hook.unmount(); },
+    get api() {
+      return hook.result.current;
+    },
+    async update(url) {
+      hook.rerender({ url });
+    },
+    async unmount() {
+      hook.unmount();
+    },
   };
 }
 
@@ -149,7 +218,9 @@ test("closed conversation Back opens the sidebar, Forward recloses it, second cl
     world.window.history.back();
     await world.flush();
     assert.equal(world.departed, true);
-  } finally { await shell.unmount(); }
+  } finally {
+    await shell.unmount();
+  }
 });
 
 test("Back closes an open full-screen panel first and keeps the conversation and sidebar as they were", async () => {
@@ -167,7 +238,9 @@ test("Back closes an open full-screen panel first and keeps the conversation and
     await world.flush();
     assert.equal(shell.api.sidebarOpen, true);
     assert.equal(world.departed, false);
-  } finally { await shell.unmount(); }
+  } finally {
+    await shell.unmount();
+  }
 });
 
 test("without a conversation, Back closes the panel instead of leaving; the next Back leaves", async () => {
@@ -181,7 +254,9 @@ test("without a conversation, Back closes the panel instead of leaving; the next
     world.window.history.back();
     await world.flush();
     assert.equal(world.departed, true);
-  } finally { await shell.unmount(); }
+  } finally {
+    await shell.unmount();
+  }
 });
 
 test("a panel opened while a sidebar collapse traversal is pending still gets its Back step", async () => {
@@ -195,14 +270,18 @@ test("a panel opened while a sidebar collapse traversal is pending still gets it
     await world.flush();
     assert.equal(shell.api.panelOpen, false);
     assert.equal(world.departed, false);
-  } finally { await shell.unmount(); }
+  } finally {
+    await shell.unmount();
+  }
 });
 
 test("dirty second Back cancels without losing content and Leave exits without a duplicate unload prompt", async () => {
   const world = browserHistory();
   const shell = await mount();
   try {
-    await act(() => setDraft(draftKey, { value: "keep my draft", images: [], files: [] }));
+    await act(() =>
+      setDraft(draftKey, { value: "keep my draft", images: [], files: [] }),
+    );
     world.window.history.back();
     await world.flush();
     assert.equal(shell.api.sidebarOpen, true);
@@ -229,7 +308,9 @@ test("native Back keeps a dirty conversation guarded without another tap between
   const world = browserHistory();
   const shell = await mount();
   try {
-    await act(() => setDraft(draftKey, { value: "do not discard", images: [], files: [] }));
+    await act(() =>
+      setDraft(draftKey, { value: "do not discard", images: [], files: [] }),
+    );
     world.activate();
     world.nativeBack();
     await world.flush();
@@ -251,14 +332,28 @@ test("session replacement, repeated close/Back, StrictMode and reload retain one
   try {
     // router.replace may replace custom state; the URL commit must retain the
     // existing pair rather than adding a second sentinel.
-    world.window.history.replaceState({ __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: { tree: "new-session" }, other: "retained" }, "", "?session=second");
+    world.window.history.replaceState(
+      {
+        __NA: true,
+        __PRIVATE_NEXTJS_INTERNALS_TREE: { tree: "new-session" },
+        other: "retained",
+      },
+      "",
+      "?session=second",
+    );
     await shell.update("second");
     for (let i = 0; i < 4; i += 1) {
       world.window.history.back();
       await world.flush();
       assert.equal(shell.api.sidebarOpen, true);
-      assert.equal(world.window.location.href, "https://omp.test/?session=second");
-      assert.deepEqual(world.window.history.state.__PRIVATE_NEXTJS_INTERNALS_TREE, { tree: "new-session" });
+      assert.equal(
+        world.window.location.href,
+        "https://omp.test/?session=second",
+      );
+      assert.deepEqual(
+        world.window.history.state.__PRIVATE_NEXTJS_INTERNALS_TREE,
+        { tree: "new-session" },
+      );
       assert.equal(world.window.history.state.other, "retained");
       await act(() => shell.api.setSidebarOpen(false));
     }
@@ -270,7 +365,9 @@ test("session replacement, repeated close/Back, StrictMode and reload retain one
     world.window.history.back();
     await world.flush();
     assert.equal(world.departed, true);
-  } finally { await shell.unmount(); }
+  } finally {
+    await shell.unmount();
+  }
 });
 
 test("a new-session URL committed during sidebar collapse survives the pending traversal", async () => {
@@ -278,10 +375,16 @@ test("a new-session URL committed during sidebar collapse survives the pending t
   const shell = await mount();
   try {
     await act(() => shell.api.setSidebarOpen(true));
-    world.window.history.replaceState({ __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: { tree: "new-session" } }, "", "/");
+    world.window.history.replaceState(
+      { __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: { tree: "new-session" } },
+      "",
+      "/",
+    );
     await shell.update("new");
     await act(() => shell.api.setSidebarOpen(false));
-    await act(() => setDraft(draftKey, { value: "new draft", images: [], files: [] }));
+    await act(() =>
+      setDraft(draftKey, { value: "new draft", images: [], files: [] }),
+    );
     world.activate();
     await world.flush();
     assert.equal(world.window.location.href, "https://omp.test/");
@@ -305,7 +408,13 @@ test("desktop open sidebar has no clean interception; attachment-only stored dra
   try {
     assert.equal(world.entries.length, 2);
     assert.equal(world.fire("beforeunload").defaultPrevented, false);
-    await act(() => setDraft(draftKey, { value: "", images: [{ data: "AA==", mimeType: "image/png" }], files: [] }));
+    await act(() =>
+      setDraft(draftKey, {
+        value: "",
+        images: [{ data: "AA==", mimeType: "image/png" }],
+        files: [],
+      }),
+    );
     assert.equal(world.fire("beforeunload").defaultPrevented, true);
     world.window.history.back();
     await world.flush();
@@ -328,7 +437,9 @@ test("wide layouts keep a collapsed sidebar unchanged while protecting drafts on
   const shell = await mount({ active: false });
   try {
     assert.equal(world.entries.length, 2);
-    await act(() => setDraft(draftKey, { value: "desktop draft", images: [], files: [] }));
+    await act(() =>
+      setDraft(draftKey, { value: "desktop draft", images: [], files: [] }),
+    );
     world.activate();
     world.nativeBack();
     await world.flush();
@@ -358,32 +469,47 @@ test("wide layouts do not restore sidebar state from a previous mobile history e
     world.window.history.forward();
     await world.flush();
     assert.equal(shell.api.sidebarOpen, true);
-  } finally { await shell.unmount(); }
-});
-
-for (const standalone of [false, true]) {
-test(`direct ${standalone ? "standalone" : "browser"} launch confirms dirty Back and limits app-close guidance to standalone`, async () => {
-  const world = browserHistory({ prior: false, standalone });
-  const shell = await mount();
-  try {
-    await act(() => setDraft(draftKey, { value: "", images: [], files: [{ name: "draft.txt", content: "draft", mimeType: "text/plain", size: 5 }] }));
-    world.window.history.back();
-    await world.flush();
-    world.window.history.back();
-    await world.flush();
-    assert.equal(shell.api.exitConfirmationOpen, true);
-    await act(() => shell.api.leave());
-    await world.flush();
-    assert.equal(world.closeAttempts, standalone ? 1 : 0);
-    assert.equal(shell.api.exitNeedsNativeBack, standalone);
-    assert.equal(world.entries.length, 2);
-    assert.equal(world.fire("beforeunload").defaultPrevented, false);
-    world.window.history.back();
-    await world.flush();
-    assert.equal(shell.api.exitConfirmationOpen, false);
   } finally {
-    await act(() => clearDraft(draftKey));
     await shell.unmount();
   }
 });
+
+for (const standalone of [false, true]) {
+  test(`direct ${standalone ? "standalone" : "browser"} launch confirms dirty Back and limits app-close guidance to standalone`, async () => {
+    const world = browserHistory({ prior: false, standalone });
+    const shell = await mount();
+    try {
+      await act(() =>
+        setDraft(draftKey, {
+          value: "",
+          images: [],
+          files: [
+            {
+              name: "draft.txt",
+              content: "draft",
+              mimeType: "text/plain",
+              size: 5,
+            },
+          ],
+        }),
+      );
+      world.window.history.back();
+      await world.flush();
+      world.window.history.back();
+      await world.flush();
+      assert.equal(shell.api.exitConfirmationOpen, true);
+      await act(() => shell.api.leave());
+      await world.flush();
+      assert.equal(world.closeAttempts, standalone ? 1 : 0);
+      assert.equal(shell.api.exitNeedsNativeBack, standalone);
+      assert.equal(world.entries.length, 2);
+      assert.equal(world.fire("beforeunload").defaultPrevented, false);
+      world.window.history.back();
+      await world.flush();
+      assert.equal(shell.api.exitConfirmationOpen, false);
+    } finally {
+      await act(() => clearDraft(draftKey));
+      await shell.unmount();
+    }
+  });
 }

@@ -9,13 +9,20 @@ afterEach(cleanup);
 
 test("version survives refresh errors but confirmed unavailability invalidates it", async (t) => {
   const pending = [];
-  t.mock.method(globalThis, "fetch", () => new Promise((resolve, reject) => {
-    pending.push({ resolve, reject });
-  }));
+  t.mock.method(
+    globalThis,
+    "fetch",
+    () =>
+      new Promise((resolve, reject) => {
+        pending.push({ resolve, reject });
+      }),
+  );
   const mount = () => render(React.createElement(OmpRuntimeVersion));
   const respond = async (version, status = 200) => {
     await act(async () => {
-      pending.shift().resolve(new Response(JSON.stringify({ version }), { status }));
+      pending
+        .shift()
+        .resolve(new Response(JSON.stringify({ version }), { status }));
     });
   };
 

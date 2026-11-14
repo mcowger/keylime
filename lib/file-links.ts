@@ -37,7 +37,10 @@ export function normalizeLocalPath(filePath: string): string {
 function isPathInside(candidate: string, root: string): boolean {
   const normalizedCandidate = normalizeLocalPath(candidate).replace(/\/+$/, "");
   const normalizedRoot = normalizeLocalPath(root).replace(/\/+$/, "");
-  return normalizedCandidate === normalizedRoot || normalizedCandidate.startsWith(`${normalizedRoot}/`);
+  return (
+    normalizedCandidate === normalizedRoot ||
+    normalizedCandidate.startsWith(`${normalizedRoot}/`)
+  );
 }
 
 function looksLikeRelativeFileHref(href: string): boolean {
@@ -77,7 +80,10 @@ export function resolveLocalFileHref(
 
   if (lowerHref.startsWith("/api/")) return null;
   if (normalizedHref.startsWith("//")) return null;
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/i.test(normalizedHref) && !lowerHref.startsWith("file:")) {
+  if (
+    /^[a-zA-Z][a-zA-Z0-9+.-]*:/i.test(normalizedHref) &&
+    !lowerHref.startsWith("file:")
+  ) {
     return null;
   }
 
@@ -99,9 +105,15 @@ export function resolveLocalFileHref(
   if (!candidate) return null;
 
   const filePath = stripLineSuffix(normalizeLocalPath(candidate));
-  if (candidateKind === "relative" && relativeRoot && !isPathInside(filePath, relativeRoot)) return null;
+  if (
+    candidateKind === "relative" &&
+    relativeRoot &&
+    !isPathInside(filePath, relativeRoot)
+  )
+    return null;
   // `~/../x` normalizes out of the home dir; it no longer names a home path.
-  if (normalizedHref.startsWith("~/") && !filePath.startsWith("~/")) return null;
+  if (normalizedHref.startsWith("~/") && !filePath.startsWith("~/"))
+    return null;
   return filePath;
 }
 
@@ -117,11 +129,11 @@ const PATH_SEGMENT = String.raw`[\w.@+~\[\]-]+`;
  * ponytail: `a/b.length` still reads as a path; clicking it shows "not found".
  */
 const INLINE_CODE_PATH_RE = new RegExp(
-  "^(?:"
-    + `/${PATH_SEGMENT}(?:/${PATH_SEGMENT})+`
-    + `|~/${PATH_SEGMENT}(?:/${PATH_SEGMENT})*`
-    + `|(?:${PATH_SEGMENT}/)+[\\w.@+~\\[\\]-]*\\.[A-Za-z][A-Za-z0-9]*`
-    + String.raw`)(?::\d+(?::\d+)?)?$`,
+  "^(?:" +
+    `/${PATH_SEGMENT}(?:/${PATH_SEGMENT})+` +
+    `|~/${PATH_SEGMENT}(?:/${PATH_SEGMENT})*` +
+    `|(?:${PATH_SEGMENT}/)+[\\w.@+~\\[\\]-]*\\.[A-Za-z][A-Za-z0-9]*` +
+    String.raw`)(?::\d+(?::\d+)?)?$`,
 );
 
 /**
@@ -131,13 +143,26 @@ const INLINE_CODE_PATH_RE = new RegExp(
  */
 export function remarkInlineCodeFileLinks({ cwd }: { cwd?: string } = {}) {
   const linkInlineCode = (node: Nodes): void => {
-    if (!("children" in node) || node.type === "link" || node.type === "linkReference") return;
+    if (
+      !("children" in node) ||
+      node.type === "link" ||
+      node.type === "linkReference"
+    )
+      return;
     const children = node.children as Nodes[];
     children.forEach((child, index) => {
-      if (child.type === "inlineCode" && INLINE_CODE_PATH_RE.test(child.value) && resolveLocalFileHref(child.value, cwd)) {
+      if (
+        child.type === "inlineCode" &&
+        INLINE_CODE_PATH_RE.test(child.value) &&
+        resolveLocalFileHref(child.value, cwd)
+      ) {
         // react-markdown's URL sanitizer reads a colon before any `/` (`C:\`, or
         // `b.txt:3` once `\` is %-encoded) as a scheme; the resolver decodes `%3A`.
-        children[index] = { type: "link", url: child.value.replaceAll(":", "%3A"), children: [child] } satisfies Link;
+        children[index] = {
+          type: "link",
+          url: child.value.replaceAll(":", "%3A"),
+          children: [child],
+        } satisfies Link;
       } else {
         linkInlineCode(child);
       }

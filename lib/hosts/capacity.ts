@@ -11,8 +11,15 @@ export interface HostCapacity {
   activeSessions: number;
 }
 
-interface CpuCounters { busy: number; idle: number; steal: number }
-interface EffectiveResources { effectiveCpus: number; availableMemoryBytes: number }
+interface CpuCounters {
+  busy: number;
+  idle: number;
+  steal: number;
+}
+interface EffectiveResources {
+  effectiveCpus: number;
+  availableMemoryBytes: number;
+}
 interface ResourceInputs {
   osCpus: number;
   osAvailableMemoryBytes: number;
@@ -61,11 +68,18 @@ function cpusetSize(text: string): number | null {
   return Number.isSafeInteger(count) && count > 0 ? count : null;
 }
 
-export function parseEffectiveResources(input: ResourceInputs): EffectiveResources | null {
+export function parseEffectiveResources(
+  input: ResourceInputs,
+): EffectiveResources | null {
   let effectiveCpus = input.osCpus;
   let availableMemoryBytes = input.osAvailableMemoryBytes;
-  if (!Number.isSafeInteger(effectiveCpus) || effectiveCpus <= 0
-    || !Number.isSafeInteger(availableMemoryBytes) || availableMemoryBytes < 0) return null;
+  if (
+    !Number.isSafeInteger(effectiveCpus) ||
+    effectiveCpus <= 0 ||
+    !Number.isSafeInteger(availableMemoryBytes) ||
+    availableMemoryBytes < 0
+  )
+    return null;
 
   if (input.cpuMax !== undefined) {
     const fields = input.cpuMax.trim().split(/\s+/);
@@ -83,12 +97,18 @@ export function parseEffectiveResources(input: ResourceInputs): EffectiveResourc
     if (count === null) return null;
     effectiveCpus = Math.min(effectiveCpus, count);
   }
-  const current = input.memoryCurrent === undefined ? undefined : counter(input.memoryCurrent.trim());
+  const current =
+    input.memoryCurrent === undefined
+      ? undefined
+      : counter(input.memoryCurrent.trim());
   if (current === null) return null;
   if (input.memoryMax !== undefined && input.memoryMax.trim() !== "max") {
     const limit = counter(input.memoryMax.trim());
     if (limit === null || current === undefined) return null;
-    availableMemoryBytes = Math.min(availableMemoryBytes, Math.max(0, limit - current));
+    availableMemoryBytes = Math.min(
+      availableMemoryBytes,
+      Math.max(0, limit - current),
+    );
   }
   return { effectiveCpus, availableMemoryBytes };
 }
@@ -100,14 +120,26 @@ export function capacityFromInterval(
   load1: number,
   activeSessions: number,
 ): HostCapacity | null {
-  if (!previous || !Number.isFinite(load1) || load1 < 0
-    || !Number.isSafeInteger(activeSessions) || activeSessions < 0) return null;
+  if (
+    !previous ||
+    !Number.isFinite(load1) ||
+    load1 < 0 ||
+    !Number.isSafeInteger(activeSessions) ||
+    activeSessions < 0
+  )
+    return null;
   const busy = current.busy - previous.busy;
   const idle = current.idle - previous.idle;
   const steal = current.steal - previous.steal;
   const total = busy + idle + steal;
-  if (![busy, idle, steal].every((value) => Number.isSafeInteger(value) && value >= 0)
-    || !Number.isSafeInteger(total) || total <= 0) return null;
+  if (
+    ![busy, idle, steal].every(
+      (value) => Number.isSafeInteger(value) && value >= 0,
+    ) ||
+    !Number.isSafeInteger(total) ||
+    total <= 0
+  )
+    return null;
   return {
     effectiveCpus: resources.effectiveCpus,
     load1,
@@ -119,14 +151,20 @@ export function capacityFromInterval(
 }
 
 function mountPath(text: string): string {
-  return text.replace(/\\([0-7]{3})/g, (_, octal: string) => String.fromCharCode(parseInt(octal, 8)));
+  return text.replace(/\\([0-7]{3})/g, (_, octal: string) =>
+    String.fromCharCode(parseInt(octal, 8)),
+  );
 }
 
-export function resolveCgroupDirectories(cgroup: string, mountInfo: string): string[] | null {
+export function resolveCgroupDirectories(
+  cgroup: string,
+  mountInfo: string,
+): string[] | null {
   const membership = cgroup.split("\n").find((line) => line.startsWith("0::/"));
   if (!membership) return null;
   const path = membership.slice(3);
-  if (path.split("/").some((part) => part === "." || part === "..")) return null;
+  if (path.split("/").some((part) => part === "." || part === ".."))
+    return null;
   let mount: { root: string; point: string } | null = null;
   for (const line of mountInfo.split("\n")) {
     const [left, right] = line.split(" - ");
@@ -164,26 +202,36 @@ function readOptional(path: string): string | undefined {
 let previousCounters: CpuCounters | null = null;
 
 /** Samples shared host counters; callers supply active turns, not saved sessions. */
-export function sampleHostCapacity(activeSessions: number): HostCapacity | null {
+export function sampleHostCapacity(
+  activeSessions: number,
+): HostCapacity | null {
   if (process.platform !== "linux") return null;
   try {
     const current = parseProcStat(readFileSync("/proc/stat", "utf8"));
-    const available = /^MemAvailable:\s+(\d+)\s+kB$/m.exec(readFileSync("/proc/meminfo", "utf8"));
+    const available = /^MemAvailable:\s+(\d+)\s+kB$/m.exec(
+      readFileSync("/proc/meminfo", "utf8"),
+    );
     const directories = resolveCgroupDirectories(
       readFileSync("/proc/self/cgroup", "utf8"),
       readFileSync("/proc/self/mountinfo", "utf8"),
     );
-    if (!current || !available || !directories) throw new Error("Capacity counters unavailable");
+    if (!current || !available || !directories)
+      throw new Error("Capacity counters unavailable");
     const memoryKiB = counter(available[1]);
     if (memoryKiB === null) throw new Error("Invalid available memory counter");
     const osCpus = availableParallelism();
-    let resources: EffectiveResources = { effectiveCpus: osCpus, availableMemoryBytes: memoryKiB * 1024 };
+    let resources: EffectiveResources = {
+      effectiveCpus: osCpus,
+      availableMemoryBytes: memoryKiB * 1024,
+    };
     for (const directory of directories) {
       const limits = parseEffectiveResources({
         osCpus,
         osAvailableMemoryBytes: resources.availableMemoryBytes,
         cpuMax: readOptional(posix.join(directory, "cpu.max")),
-        cpusetCpus: readOptional(posix.join(directory, "cpuset.cpus.effective")),
+        cpusetCpus: readOptional(
+          posix.join(directory, "cpuset.cpus.effective"),
+        ),
         memoryMax: readOptional(posix.join(directory, "memory.max")),
         memoryCurrent: readOptional(posix.join(directory, "memory.current")),
       });
@@ -193,7 +241,13 @@ export function sampleHostCapacity(activeSessions: number): HostCapacity | null 
         availableMemoryBytes: limits.availableMemoryBytes,
       };
     }
-    const sample = capacityFromInterval(previousCounters, current, resources, loadavg()[0], activeSessions);
+    const sample = capacityFromInterval(
+      previousCounters,
+      current,
+      resources,
+      loadavg()[0],
+      activeSessions,
+    );
     previousCounters = current;
     return sample;
   } catch {

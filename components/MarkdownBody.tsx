@@ -1,19 +1,47 @@
 "use client";
 
-import { Children, cloneElement, isValidElement, useContext, useMemo, type ComponentProps, type MouseEvent, type ReactElement, type ReactNode } from "react";
-import ReactMarkdown, { type Components, type UrlTransform } from "react-markdown";
-import { remarkInlineCodeFileLinks, resolveLocalFileHref } from "@/lib/file-links";
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  useContext,
+  useMemo,
+  type ComponentProps,
+  type MouseEvent,
+  type ReactElement,
+  type ReactNode,
+} from "react";
+import ReactMarkdown, {
+  type Components,
+  type UrlTransform,
+} from "react-markdown";
+import {
+  remarkInlineCodeFileLinks,
+  resolveLocalFileHref,
+} from "@/lib/file-links";
 import { getFileApiUrl } from "@/lib/file-paths";
 import { WorkspaceFileContext } from "@/lib/workspace-file-context";
-import { AgentLinkContext, agentAwareUrlTransform, agentLinkIds, remarkAgentLinks } from "../lib/agent-links";
+import {
+  AgentLinkContext,
+  agentAwareUrlTransform,
+  agentLinkIds,
+  remarkAgentLinks,
+} from "../lib/agent-links";
 import { GithubRepoContext, remarkGithubRefs } from "../lib/github-refs";
-import { normalizeDisplayMath, useMarkdownPlugins, type MarkdownPlugins } from "../lib/markdown";
+import {
+  normalizeDisplayMath,
+  useMarkdownPlugins,
+  type MarkdownPlugins,
+} from "../lib/markdown";
 import { markdownCodeRenderer } from "./MarkdownCode";
 import { ClickableImage } from "./ImageLightbox";
 import { TableChart } from "./TableChart";
 
 // The default sanitizer reads `C:` as a scheme; a drive path (`\` arrives as `%5C`) is a local file the `a` renderer opens.
-const urlTransform: UrlTransform = (url, key, node) => (/^[A-Za-z]:(?:\/|%5C)/i.test(url) ? url : agentAwareUrlTransform(url, key, node));
+const urlTransform: UrlTransform = (url, key, node) =>
+  /^[A-Za-z]:(?:\/|%5C)/i.test(url)
+    ? url
+    : agentAwareUrlTransform(url, key, node);
 
 /** Props accepted by `MarkdownBody`. */
 export interface MarkdownBodyProps {
@@ -37,34 +65,66 @@ export interface MarkdownBodyRendering {
 }
 
 /** Builds omp-web's markdown rendering setup (links, images, tables, code) so any renderer can reuse it. */
-export function useMarkdownBodyRendering({ children, isStreaming, cwd, sourceSessionId, onOpenFile, suppressImages = false, autoCharts = false }: Omit<MarkdownBodyProps, "className">): MarkdownBodyRendering {
-  const normalizedMarkdown = useMemo(() => normalizeDisplayMath(children), [children]);
+export function useMarkdownBodyRendering({
+  children,
+  isStreaming,
+  cwd,
+  sourceSessionId,
+  onOpenFile,
+  suppressImages = false,
+  autoCharts = false,
+}: Omit<MarkdownBodyProps, "className">): MarkdownBodyRendering {
+  const normalizedMarkdown = useMemo(
+    () => normalizeDisplayMath(children),
+    [children],
+  );
   const fileSource = useContext(WorkspaceFileContext);
-  const { remarkPlugins: baseRemarkPlugins, rehypePlugins } = useMarkdownPlugins(normalizedMarkdown);
+  const { remarkPlugins: baseRemarkPlugins, rehypePlugins } =
+    useMarkdownPlugins(normalizedMarkdown);
   const githubRepo = useContext(GithubRepoContext);
   // GitHub refs run first: `agent://Foo#12` must not become an issue link.
   // Inline-code paths link only where a click can open them.
-  const remarkPlugins = useMemo<MarkdownPlugins["remarkPlugins"]>(
-    () => {
-      const plugins: MarkdownPlugins["remarkPlugins"] = [...baseRemarkPlugins, [remarkGithubRefs, { repo: githubRepo }], remarkAgentLinks];
-      return onOpenFile ? [...plugins, [remarkInlineCodeFileLinks, { cwd }]] : plugins;
-    },
-    [baseRemarkPlugins, githubRepo, onOpenFile, cwd],
-  );
+  const remarkPlugins = useMemo<MarkdownPlugins["remarkPlugins"]>(() => {
+    const plugins: MarkdownPlugins["remarkPlugins"] = [
+      ...baseRemarkPlugins,
+      [remarkGithubRefs, { repo: githubRepo }],
+      remarkAgentLinks,
+    ];
+    return onOpenFile
+      ? [...plugins, [remarkInlineCodeFileLinks, { cwd }]]
+      : plugins;
+  }, [baseRemarkPlugins, githubRepo, onOpenFile, cwd]);
   const openAgentLink = useContext(AgentLinkContext);
 
   // Rebuilt only when its captured props change, not on every render.
   const components = useMemo<Components>(() => {
-    const imgComponent = ({ src, alt, ...imgProps }: ComponentProps<"img"> & { node?: unknown }) => {
+    const imgComponent = ({
+      src,
+      alt,
+      ...imgProps
+    }: ComponentProps<"img"> & { node?: unknown }) => {
       // `node` is react-markdown metadata, not a DOM attribute.
       delete (imgProps as { node?: unknown }).node;
       if (suppressImages) return alt ?? null;
-      const filePath = typeof src === "string" ? resolveLocalFileHref(src, cwd) : null;
+      const filePath =
+        typeof src === "string" ? resolveLocalFileHref(src, cwd) : null;
       const imageSrc = filePath
-        ? getFileApiUrl(filePath, "read", fileSource?.hostId ?? (sourceSessionId ? undefined : "local"), sourceSessionId ?? fileSource?.sessionId)
+        ? getFileApiUrl(
+            filePath,
+            "read",
+            fileSource?.hostId ?? (sourceSessionId ? undefined : "local"),
+            sourceSessionId ?? fileSource?.sessionId,
+          )
         : src;
       // Dynamic local paths are served directly by the file API.
-      return <ClickableImage src={imageSrc} alt={alt ?? ""} loading="lazy" {...imgProps} />;
+      return (
+        <ClickableImage
+          src={imageSrc}
+          alt={alt ?? ""}
+          loading="lazy"
+          {...imgProps}
+        />
+      );
     };
 
     /**
@@ -73,8 +133,12 @@ export function useMarkdownBodyRendering({ children, isStreaming, cwd, sourceSes
      * <button> can never nest inside an <a>, so image content is extracted
      * while text (with its formatting) stays linked.
      */
-    const isElementWithChildren = (value: unknown): value is ReactElement<{ children?: ReactNode }> => isValidElement(value);
-    const partitionLinkContent = (node: ReactNode): { textParts: ReactNode[]; imageParts: ReactNode[] } => {
+    const isElementWithChildren = (
+      value: unknown,
+    ): value is ReactElement<{ children?: ReactNode }> => isValidElement(value);
+    const partitionLinkContent = (
+      node: ReactNode,
+    ): { textParts: ReactNode[]; imageParts: ReactNode[] } => {
       const textParts: ReactNode[] = [];
       const imageParts: ReactNode[] = [];
       for (const child of Children.toArray(node)) {
@@ -105,77 +169,147 @@ export function useMarkdownBodyRendering({ children, isStreaming, cwd, sourceSes
       parts.some((part) => {
         if (typeof part === "string") return part.trim().length > 0;
         if (typeof part === "number") return true;
-        if (isElementWithChildren(part)) return hasMeaningfulText(Children.toArray(part.props.children));
+        if (isElementWithChildren(part))
+          return hasMeaningfulText(Children.toArray(part.props.children));
         return false;
       });
 
     return {
-    code: markdownCodeRenderer({ isStreaming, inlineClassName: "markdown-inline-code" }),
-    pre({ children }) {
-      return <>{children}</>;
-    },
-    a({ href, children, ...props }) {
-      // `node` is react-markdown metadata, not a DOM attribute.
-      delete props.node;
-      const { textParts, imageParts } = partitionLinkContent(children);
-      // A <button> cannot nest inside an <a>. Pure image links (direct or
-      // wrapped in formatting, possibly with surrounding whitespace) render
-      // only the previews — the lightbox supersedes the link. Mixed links
-      // keep their text linked and render image previews beside the anchor.
-      if (imageParts.length > 0 && !hasMeaningfulText(textParts)) {
+      code: markdownCodeRenderer({
+        isStreaming,
+        inlineClassName: "markdown-inline-code",
+      }),
+      pre({ children }) {
         return <>{children}</>;
-      }
-      const agentIds = agentLinkIds(href);
-      if (agentIds.length > 0) {
-        // Outside a chat view there is nothing to open: render the handle as text.
-        if (!openAgentLink) return <>{textParts}{imageParts}</>;
-        const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
-          if (event.defaultPrevented || event.button !== 0) return;
-          event.preventDefault();
-          openAgentLink(agentIds);
-        };
-        // Middle-click never fires `click`; stop it opening the unnavigable href.
-        const anchor = <a href={href} {...props} onClick={handleClick} onAuxClick={(event) => event.preventDefault()}>{textParts}</a>;
-        return imageParts.length > 0 ? <>{anchor}{imageParts}</> : anchor;
-      }
-      const filePath = resolveLocalFileHref(href, cwd);
-      if (filePath) {
-        // Without a file panel (a remote host's session, a dialog) a path link has nowhere to go: show its text.
-        if (!onOpenFile) return <>{textParts}{imageParts}</>;
-        const openFile = onOpenFile;
-        const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
-          // No modifier escape hatch: the href is a filesystem path, which the browser cannot open in a new tab.
-          if (event.defaultPrevented || event.button !== 0) return;
-          const target = event.currentTarget.getAttribute("target");
-          if (target && target !== "_self") return;
-          event.preventDefault();
-          openFile(filePath);
-        };
-        const anchor = <a href={href} {...props} onClick={handleClick} onAuxClick={(event) => event.preventDefault()}>{textParts}</a>;
-        return imageParts.length > 0 ? <>{anchor}{imageParts}</> : anchor;
-      }
+      },
+      a({ href, children, ...props }) {
+        // `node` is react-markdown metadata, not a DOM attribute.
+        delete props.node;
+        const { textParts, imageParts } = partitionLinkContent(children);
+        // A <button> cannot nest inside an <a>. Pure image links (direct or
+        // wrapped in formatting, possibly with surrounding whitespace) render
+        // only the previews — the lightbox supersedes the link. Mixed links
+        // keep their text linked and render image previews beside the anchor.
+        if (imageParts.length > 0 && !hasMeaningfulText(textParts)) {
+          return <>{children}</>;
+        }
+        const agentIds = agentLinkIds(href);
+        if (agentIds.length > 0) {
+          // Outside a chat view there is nothing to open: render the handle as text.
+          if (!openAgentLink)
+            return (
+              <>
+                {textParts}
+                {imageParts}
+              </>
+            );
+          const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+            if (event.defaultPrevented || event.button !== 0) return;
+            event.preventDefault();
+            openAgentLink(agentIds);
+          };
+          // Middle-click never fires `click`; stop it opening the unnavigable href.
+          const anchor = (
+            <a
+              href={href}
+              {...props}
+              onClick={handleClick}
+              onAuxClick={(event) => event.preventDefault()}
+            >
+              {textParts}
+            </a>
+          );
+          return imageParts.length > 0 ? (
+            <>
+              {anchor}
+              {imageParts}
+            </>
+          ) : (
+            anchor
+          );
+        }
+        const filePath = resolveLocalFileHref(href, cwd);
+        if (filePath) {
+          // Without a file panel (a remote host's session, a dialog) a path link has nowhere to go: show its text.
+          if (!onOpenFile)
+            return (
+              <>
+                {textParts}
+                {imageParts}
+              </>
+            );
+          const openFile = onOpenFile;
+          const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+            // No modifier escape hatch: the href is a filesystem path, which the browser cannot open in a new tab.
+            if (event.defaultPrevented || event.button !== 0) return;
+            const target = event.currentTarget.getAttribute("target");
+            if (target && target !== "_self") return;
+            event.preventDefault();
+            openFile(filePath);
+          };
+          const anchor = (
+            <a
+              href={href}
+              {...props}
+              onClick={handleClick}
+              onAuxClick={(event) => event.preventDefault()}
+            >
+              {textParts}
+            </a>
+          );
+          return imageParts.length > 0 ? (
+            <>
+              {anchor}
+              {imageParts}
+            </>
+          ) : (
+            anchor
+          );
+        }
 
-      const anchor = (
-        <a href={href} {...props} target="_blank" rel="noopener noreferrer">
-          {textParts}
-        </a>
-      );
-      return imageParts.length > 0 ? <>{anchor}{imageParts}</> : anchor;
-    },
-    img: imgComponent,
-    table({ children, node }) {
-      return (
-        <TableChart node={node} enabled={autoCharts && !isStreaming}>
-        <div className="markdown-table-wrap">
-          <table>{children}</table>
-        </div>
-        </TableChart>
-      );
-    },
+        const anchor = (
+          <a href={href} {...props} target="_blank" rel="noopener noreferrer">
+            {textParts}
+          </a>
+        );
+        return imageParts.length > 0 ? (
+          <>
+            {anchor}
+            {imageParts}
+          </>
+        ) : (
+          anchor
+        );
+      },
+      img: imgComponent,
+      table({ children, node }) {
+        return (
+          <TableChart node={node} enabled={autoCharts && !isStreaming}>
+            <div className="markdown-table-wrap">
+              <table>{children}</table>
+            </div>
+          </TableChart>
+        );
+      },
     };
-  }, [isStreaming, cwd, sourceSessionId, onOpenFile, suppressImages, openAgentLink, autoCharts, fileSource]);
+  }, [
+    isStreaming,
+    cwd,
+    sourceSessionId,
+    onOpenFile,
+    suppressImages,
+    openAgentLink,
+    autoCharts,
+    fileSource,
+  ]);
 
-  return { markdown: normalizedMarkdown, remarkPlugins, rehypePlugins, components, urlTransform };
+  return {
+    markdown: normalizedMarkdown,
+    remarkPlugins,
+    rehypePlugins,
+    components,
+    urlTransform,
+  };
 }
 
 /** Render agent markdown with `useMarkdownBodyRendering`'s setup. */

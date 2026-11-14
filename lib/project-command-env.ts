@@ -35,7 +35,6 @@ export const OMP_WEB_SECRET_ENV_VARS: readonly string[] = [
   "OMP_WEB_STT_KEY",
 ];
 
-
 /** True when the variable belongs to the omp-web host rather than the child. */
 export function isHostRuntimeVariable(name: string): boolean {
   return HOST_RUNTIME_NAMES.includes(name);
@@ -72,7 +71,10 @@ export function createChildProcessEnvironment(
   additions: Readonly<Record<string, string | undefined>> = {},
   baseEnvironment: NodeJS.ProcessEnv = process.env,
 ): NodeJS.ProcessEnv {
-  return sanitizeProjectCommandEnvironment({ ...baseEnvironment, ...additions });
+  return sanitizeProjectCommandEnvironment({
+    ...baseEnvironment,
+    ...additions,
+  });
 }
 
 /**
@@ -83,9 +85,17 @@ export function createChildProcessEnvironment(
  * GIT_CONFIG_GLOBAL and GIT_CONFIG_NOSYSTEM stay: they select config files, not a repository.
  */
 const GIT_REPOSITORY_NAMES: readonly string[] = [
-  "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
-  "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE", "GIT_PREFIX",
-  "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT",
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_COMMON_DIR",
+  "GIT_INDEX_FILE",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_NAMESPACE",
+  "GIT_PREFIX",
+  "GIT_CONFIG",
+  "GIT_CONFIG_PARAMETERS",
+  "GIT_CONFIG_COUNT",
 ];
 const GIT_CONFIG_ENTRY = /^GIT_CONFIG_(KEY|VALUE)_\d+$/i;
 
@@ -96,7 +106,8 @@ export function createGitEnvironment(
 ): NodeJS.ProcessEnv {
   const environment = createChildProcessEnvironment(additions, baseEnvironment);
   for (const name of Object.keys(environment)) {
-    if (GIT_REPOSITORY_NAMES.includes(name) || GIT_CONFIG_ENTRY.test(name)) delete environment[name];
+    if (GIT_REPOSITORY_NAMES.includes(name) || GIT_CONFIG_ENTRY.test(name))
+      delete environment[name];
   }
   return environment;
 }

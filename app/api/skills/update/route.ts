@@ -2,50 +2,82 @@ import { runBunx } from "@/lib/bunx";
 import { createChildProcessEnvironment } from "@/lib/project-command-env";
 import type { SkillInstallScope } from "@/lib/api-types";
 import { buildSkillUpdateArgs } from "@/lib/skill-updates";
-import { loadSkillsWithInstallInfo, loadUserSkillsWithInstallInfo } from "@/lib/skills-service";
-import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
+import {
+  loadSkillsWithInstallInfo,
+  loadUserSkillsWithInstallInfo,
+} from "@/lib/skills-service";
+import {
+  getAllowedFileRoots,
+  isExistingFilePathAllowed,
+} from "@/lib/file-access";
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json() as {
+    const body = (await req.json()) as {
       cwd?: unknown;
       package?: unknown;
       scope?: unknown;
     };
     const cwd = typeof body.cwd === "string" ? body.cwd : "";
     const pkg = typeof body.package === "string" ? body.package : "";
-    const scope = body.scope === "global" || body.scope === "project"
-      ? body.scope as SkillInstallScope
-      : undefined;
+    const scope =
+      body.scope === "global" || body.scope === "project"
+        ? (body.scope as SkillInstallScope)
+        : undefined;
     // Without a cwd: the user level only; a project install needs its project.
     if (!pkg || !scope || (!cwd && scope === "project")) {
-      return Response.json({ error: "cwd, package, and scope are required", code: "cwd_package_scope_required" }, { status: 400 });
+      return Response.json(
+        {
+          error: "cwd, package, and scope are required",
+          code: "cwd_package_scope_required",
+        },
+        { status: 400 },
+      );
     }
     if (cwd) {
       const allowedRoots = await getAllowedFileRoots();
       if (!isExistingFilePathAllowed(cwd, allowedRoots)) {
-        return Response.json({ error: "Access denied", code: "access_denied" }, { status: 403 });
+        return Response.json(
+          { error: "Access denied", code: "access_denied" },
+          { status: 403 },
+        );
       }
     }
 
-    const { skills } = await (cwd ? loadSkillsWithInstallInfo(cwd) : loadUserSkillsWithInstallInfo());
+    const { skills } = await (cwd
+      ? loadSkillsWithInstallInfo(cwd)
+      : loadUserSkillsWithInstallInfo());
     const skill = skills.find(
       (item) => item.install?.package === pkg && item.install.scope === scope,
     );
     if (!skill?.install) {
-      return Response.json({ error: "Installed skill not found", code: "skill_not_installed" }, { status: 404 });
+      return Response.json(
+        { error: "Installed skill not found", code: "skill_not_installed" },
+        { status: 404 },
+      );
     }
     if (!skill.install.canCheckForUpdates) {
-      return Response.json({ error: "This skill cannot be updated automatically", code: "skill_update_unsupported" }, { status: 400 });
+      return Response.json(
+        {
+          error: "This skill cannot be updated automatically",
+          code: "skill_update_unsupported",
+        },
+        { status: 400 },
+      );
     }
 
-    const { stdout, stderr } = await runBunx(buildSkillUpdateArgs(skill.install), {
-      timeout: 60_000,
-      cwd: scope === "project" ? cwd : undefined,
-      env: createChildProcessEnvironment({ FORCE_COLOR: "0" }),
-    });
+    const { stdout, stderr } = await runBunx(
+      buildSkillUpdateArgs(skill.install),
+      {
+        timeout: 60_000,
+        cwd: scope === "project" ? cwd : undefined,
+        env: createChildProcessEnvironment({ FORCE_COLOR: "0" }),
+      },
+    );
 
-    const refreshed = await (cwd ? loadSkillsWithInstallInfo(cwd) : loadUserSkillsWithInstallInfo());
+    const refreshed = await (cwd
+      ? loadSkillsWithInstallInfo(cwd)
+      : loadUserSkillsWithInstallInfo());
     const updatedSkill = refreshed.skills.find(
       (item) => item.install?.package === pkg && item.install.scope === scope,
     );
@@ -55,7 +87,11 @@ export async function POST(req: Request) {
       output: `${stdout}${stderr}`.slice(-500),
     });
   } catch (error: unknown) {
-    const detail = error as { stdout?: string; stderr?: string; message?: string };
+    const detail = error as {
+      stdout?: string;
+      stderr?: string;
+      message?: string;
+    };
     const output = `${detail.stdout ?? ""}${detail.stderr ?? ""}`;
     return Response.json(
       { error: output || detail.message || String(error) },

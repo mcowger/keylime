@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import "../tests/setup-dom.mjs";
 import test, { afterEach } from "node:test";
 import React from "react";
-const { cleanup, fireEvent, render, waitFor } = await import("@testing-library/react/pure.js");
+const { cleanup, fireEvent, render, waitFor } =
+  await import("@testing-library/react/pure.js");
 
 const { FileExplorer } = await import("./FileExplorer.tsx");
 const { translate } = await import("../lib/i18n/index.tsx");
@@ -13,9 +14,13 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-const gitStatus = { ok: true, json: async () => ({ isGitRepository: false, files: [] }) };
+const gitStatus = {
+  ok: true,
+  json: async () => ({ isGitRepository: false, files: [] }),
+};
 const listing = (entries) => ({ ok: true, json: async () => ({ entries }) });
-const hasChevron = (row) => row.querySelector("svg.lucide-chevron-right") !== null;
+const hasChevron = (row) =>
+  row.querySelector("svg.lucide-chevron-right") !== null;
 
 test("a link out of the workspace shows its target and neither expands nor opens", async () => {
   const lists = [];
@@ -24,14 +29,40 @@ test("a link out of the workspace shows its target and neither expands nor opens
     if (href.startsWith("/api/git/")) return gitStatus;
     lists.push(href);
     return listing([
-      { name: "escape", isDir: true, size: 0, modified: "", linkTarget: "../shared/build", outsideRoot: true },
-      { name: "shared", isDir: true, size: 0, modified: "", linkTarget: "real" },
-      { name: "gone.txt", isDir: false, size: 0, modified: "", linkTarget: "../missing", outsideRoot: true },
+      {
+        name: "escape",
+        isDir: true,
+        size: 0,
+        modified: "",
+        linkTarget: "../shared/build",
+        outsideRoot: true,
+      },
+      {
+        name: "shared",
+        isDir: true,
+        size: 0,
+        modified: "",
+        linkTarget: "real",
+      },
+      {
+        name: "gone.txt",
+        isDir: false,
+        size: 0,
+        modified: "",
+        linkTarget: "../missing",
+        outsideRoot: true,
+      },
       { name: "notes.txt", isDir: false, size: 0, modified: "" },
     ]);
   };
   const opened = [];
-  const { container } = render(React.createElement(FileExplorer, { cwd: "/ws", hostId: "local", onOpenFile: (file) => opened.push(file) }));
+  const { container } = render(
+    React.createElement(FileExplorer, {
+      cwd: "/ws",
+      hostId: "local",
+      onOpenFile: (file) => opened.push(file),
+    }),
+  );
   const row = (path) => container.querySelector(`[data-file-path="${path}"]`);
   await waitFor(() => assert.ok(row("/ws/escape")));
 
@@ -42,7 +73,11 @@ test("a link out of the workspace shows its target and neither expands nor opens
   assert.equal(listParams.get("hostId"), "local");
 
   const outsideLabel = translate("fileExplorer.outsideRoot");
-  assert.notEqual(outsideLabel, "fileExplorer.outsideRoot", "the string exists in the locale files");
+  assert.notEqual(
+    outsideLabel,
+    "fileExplorer.outsideRoot",
+    "the string exists in the locale files",
+  );
   const escape = row("/ws/escape");
   assert.equal(escape.getAttribute("aria-disabled"), "true");
   assert.equal(escape.getAttribute("title"), outsideLabel);
@@ -52,7 +87,11 @@ test("a link out of the workspace shows its target and neither expands nor opens
   assert.ok(escape.textContent.includes("→ ../shared/build"));
   // Every symlink shows where it leads, inside the root or not; plain entries do not.
   assert.equal(row("/ws/shared").style.opacity, "1");
-  assert.equal(hasChevron(row("/ws/shared")), true, "an in-root link still expands");
+  assert.equal(
+    hasChevron(row("/ws/shared")),
+    true,
+    "an in-root link still expands",
+  );
   assert.ok(row("/ws/shared").textContent.includes("→ real"));
   assert.equal(row("/ws/notes.txt").textContent.includes("→"), false);
 
@@ -87,16 +126,31 @@ test("a folder that becomes a link out of the workspace drops its stale children
     if (href.startsWith("/api/git/")) return gitStatus;
     if (href.startsWith("/api/files/ws/sub?")) {
       return flagged
-        ? { ok: false, status: 403, json: async () => ({ error: "Outside the explorer root" }) }
+        ? {
+            ok: false,
+            status: 403,
+            json: async () => ({ error: "Outside the explorer root" }),
+          }
         : listing([{ name: "child.txt", isDir: false, size: 0, modified: "" }]);
     }
-    return listing([flagged
-      ? { name: "sub", isDir: true, size: 0, modified: "", linkTarget: "/elsewhere", outsideRoot: true }
-      : { name: "sub", isDir: true, size: 0, modified: "" }]);
+    return listing([
+      flagged
+        ? {
+            name: "sub",
+            isDir: true,
+            size: 0,
+            modified: "",
+            linkTarget: "/elsewhere",
+            outsideRoot: true,
+          }
+        : { name: "sub", isDir: true, size: 0, modified: "" },
+    ]);
   };
   const opened = [];
   const props = { cwd: "/ws", onOpenFile: (file) => opened.push(file) };
-  const { container, rerender } = render(React.createElement(FileExplorer, props));
+  const { container, rerender } = render(
+    React.createElement(FileExplorer, props),
+  );
   const row = (path) => container.querySelector(`[data-file-path="${path}"]`);
   await waitFor(() => assert.ok(row("/ws/sub")));
   fireEvent.click(row("/ws/sub"));
@@ -105,7 +159,9 @@ test("a folder that becomes a link out of the workspace drops its stale children
   // A refresh re-reads the root and every expanded folder; sub is a link out now.
   flagged = true;
   rerender(React.createElement(FileExplorer, { ...props, refreshKey: 1 }));
-  await waitFor(() => assert.equal(row("/ws/sub").getAttribute("aria-disabled"), "true"));
+  await waitFor(() =>
+    assert.equal(row("/ws/sub").getAttribute("aria-disabled"), "true"),
+  );
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(row("/ws/sub/child.txt"), null, "the old listing is not shown");
   fireEvent.click(row("/ws/sub"));

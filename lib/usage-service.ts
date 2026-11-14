@@ -1,7 +1,11 @@
 import { statSync } from "fs";
 import { basename, join } from "path";
 import { readModelsConfig } from "./omp/models-config";
-import { forEachFileLineSync, invalidateSessionFileListCache, readSessionHeaderSync } from "./omp/session-files";
+import {
+  forEachFileLineSync,
+  invalidateSessionFileListCache,
+  readSessionHeaderSync,
+} from "./omp/session-files";
 import { SUBAGENT_ID_RE } from "./subagent-types";
 import { isRecord } from "./type-guards";
 import {
@@ -58,7 +62,10 @@ function estimateUsageEntryBytes(entry: SessionUsageCacheEntry): number {
   return entry.records.length * 200 + 128;
 }
 
-function setUsageCacheEntry(filePath: string, entry: SessionUsageCacheEntry): void {
+function setUsageCacheEntry(
+  filePath: string,
+  entry: SessionUsageCacheEntry,
+): void {
   const cache = getUsageCache();
   const existing = cache.get(filePath);
   if (existing) {
@@ -68,7 +75,10 @@ function setUsageCacheEntry(filePath: string, entry: SessionUsageCacheEntry): vo
   cache.set(filePath, entry);
   usageCacheApproxBytes += entryBytes;
 
-  while (cache.size > MAX_USAGE_CACHE_ENTRIES || usageCacheApproxBytes > MAX_USAGE_CACHE_BYTES) {
+  while (
+    cache.size > MAX_USAGE_CACHE_ENTRIES ||
+    usageCacheApproxBytes > MAX_USAGE_CACHE_BYTES
+  ) {
     const oldestKey = cache.keys().next().value;
     if (!oldestKey) break;
     const old = cache.get(oldestKey);
@@ -102,12 +112,28 @@ export function toLocalMonthString(date: Date): string {
   return `${y}-${m}`;
 }
 
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
 
 /**
  * Format date for short chart axis label: e.g. "Aug 3" or "2026-08".
  */
-export function formatChartDateLabel(dateStr: string, isMonthly: boolean): string {
+export function formatChartDateLabel(
+  dateStr: string,
+  isMonthly: boolean,
+): string {
   if (isMonthly) {
     const parts = dateStr.split("-");
     if (parts.length >= 2) {
@@ -150,7 +176,11 @@ export function computeTimeRangeBounds(
 
   switch (range) {
     case "today": {
-      const todayStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate()).getTime();
+      const todayStart = new Date(
+        nowDate.getFullYear(),
+        nowDate.getMonth(),
+        nowDate.getDate(),
+      ).getTime();
       return { startMs: todayStart, endMs };
     }
     case "7d": {
@@ -163,7 +193,11 @@ export function computeTimeRangeBounds(
       return { startMs: now - 90 * 86400 * 1000, endMs };
     }
     case "month": {
-      const monthStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1).getTime();
+      const monthStart = new Date(
+        nowDate.getFullYear(),
+        nowDate.getMonth(),
+        1,
+      ).getTime();
       return { startMs: monthStart, endMs };
     }
     case "all": {
@@ -198,7 +232,12 @@ export function parseSessionUsage(
 
   const cache = getUsageCache();
   const cached = cache.get(filePath);
-  if (cached && cached.parserVersion === USAGE_PARSER_VERSION && cached.mtimeMs === stats.mtimeMs && cached.size === stats.size) {
+  if (
+    cached &&
+    cached.parserVersion === USAGE_PARSER_VERSION &&
+    cached.mtimeMs === stats.mtimeMs &&
+    cached.size === stats.size
+  ) {
     return cached.records;
   }
 
@@ -208,7 +247,9 @@ export function parseSessionUsage(
   let sessionCwd = owner?.cwd ?? "";
   let sessionTimestamp = stats.mtimeMs;
   const ownerStarted = owner ? Date.parse(owner.timestamp) : NaN;
-  let sessionStarted = Number.isFinite(ownerStarted) ? ownerStarted : stats.mtimeMs;
+  let sessionStarted = Number.isFinite(ownerStarted)
+    ? ownerStarted
+    : stats.mtimeMs;
   let activeProvider = "";
   let activeModel = "";
   const records: UsageRecord[] = [];
@@ -216,7 +257,12 @@ export function parseSessionUsage(
   try {
     forEachFileLineSync(filePath, (rawLine) => {
       if (!rawLine || rawLine.length < 5) return;
-      if (!rawLine.includes('"usage"') && !rawLine.includes('"session"') && !rawLine.includes('"model_change"')) return;
+      if (
+        !rawLine.includes('"usage"') &&
+        !rawLine.includes('"session"') &&
+        !rawLine.includes('"model_change"')
+      )
+        return;
       let parsed: Record<string, unknown>;
       try {
         parsed = JSON.parse(rawLine);
@@ -229,7 +275,8 @@ export function parseSessionUsage(
 
       if (type === "session") {
         if (!isArtifact && typeof parsed.id === "string") sessionId = parsed.id;
-        if (!isArtifact && typeof parsed.cwd === "string") sessionCwd = parsed.cwd;
+        if (!isArtifact && typeof parsed.cwd === "string")
+          sessionCwd = parsed.cwd;
         if (typeof parsed.timestamp === "string") {
           const t = new Date(parsed.timestamp).getTime();
           if (!isNaN(t)) {
@@ -241,7 +288,8 @@ export function parseSessionUsage(
       }
 
       if (type === "model_change") {
-        if (typeof parsed.provider === "string") activeProvider = parsed.provider;
+        if (typeof parsed.provider === "string")
+          activeProvider = parsed.provider;
         if (typeof parsed.modelId === "string") activeModel = parsed.modelId;
         if (typeof parsed.model === "string") {
           if (parsed.model.includes("/")) {
@@ -260,25 +308,37 @@ export function parseSessionUsage(
         const role = msg.role;
 
         if (role === "assistant") {
-          const provider = (typeof msg.provider === "string" && msg.provider) ? msg.provider : (activeProvider || "unknown");
-          const model = (typeof msg.model === "string" && msg.model) ? msg.model : (activeModel || "unknown");
+          const provider =
+            typeof msg.provider === "string" && msg.provider
+              ? msg.provider
+              : activeProvider || "unknown";
+          const model =
+            typeof msg.model === "string" && msg.model
+              ? msg.model
+              : activeModel || "unknown";
           const rawUsage = isRecord(msg.usage) ? msg.usage : undefined;
 
           if (rawUsage) {
-            const input = typeof rawUsage.input === "number" ? rawUsage.input : 0;
-            const output = typeof rawUsage.output === "number" ? rawUsage.output : 0;
-            const reasoning = typeof rawUsage.reasoning === "number"
-              ? rawUsage.reasoning
-              : typeof rawUsage.reasoningTokens === "number"
-                ? rawUsage.reasoningTokens
-                : typeof rawUsage.thoughtTokens === "number"
-                  ? rawUsage.thoughtTokens
-                  : 0;
-            const cacheRead = typeof rawUsage.cacheRead === "number" ? rawUsage.cacheRead : 0;
-            const cacheWrite = typeof rawUsage.cacheWrite === "number" ? rawUsage.cacheWrite : 0;
-            const totalTokens = typeof rawUsage.totalTokens === "number"
-              ? rawUsage.totalTokens
-              : input + output + cacheRead + cacheWrite;
+            const input =
+              typeof rawUsage.input === "number" ? rawUsage.input : 0;
+            const output =
+              typeof rawUsage.output === "number" ? rawUsage.output : 0;
+            const reasoning =
+              typeof rawUsage.reasoning === "number"
+                ? rawUsage.reasoning
+                : typeof rawUsage.reasoningTokens === "number"
+                  ? rawUsage.reasoningTokens
+                  : typeof rawUsage.thoughtTokens === "number"
+                    ? rawUsage.thoughtTokens
+                    : 0;
+            const cacheRead =
+              typeof rawUsage.cacheRead === "number" ? rawUsage.cacheRead : 0;
+            const cacheWrite =
+              typeof rawUsage.cacheWrite === "number" ? rawUsage.cacheWrite : 0;
+            const totalTokens =
+              typeof rawUsage.totalTokens === "number"
+                ? rawUsage.totalTokens
+                : input + output + cacheRead + cacheWrite;
 
             let timestamp = sessionTimestamp;
             if (typeof msg.timestamp === "number" && !isNaN(msg.timestamp)) {
@@ -288,7 +348,11 @@ export function parseSessionUsage(
               if (!isNaN(parsedTime)) timestamp = parsedTime;
             }
 
-            const rates = resolveModelRates(provider, model, customModelsConfig);
+            const rates = resolveModelRates(
+              provider,
+              model,
+              customModelsConfig,
+            );
             const { cost, quality } = calculateUsageCost(rawUsage, rates);
             const cacheSavings = calculateCacheSavings(rawUsage, rates);
 
@@ -313,7 +377,11 @@ export function parseSessionUsage(
               });
             }
           }
-        } else if (role === "toolResult" && msg.toolName === "task" && isRecord(msg.details)) {
+        } else if (
+          role === "toolResult" &&
+          msg.toolName === "task" &&
+          isRecord(msg.details)
+        ) {
           // A subagent that keeps its own transcript in the artifacts directory
           // is counted from that transcript, so the summary names the file it
           // duplicates and counts only while no copy of it has that transcript.
@@ -328,36 +396,47 @@ export function parseSessionUsage(
           // is the file this result is in, not the top-level owning session. So a
           // nested spawn `Parent.Child` whose result is in `<session>/Parent.jsonl`
           // lives at `<session>/Parent/Parent.Child.jsonl`.
-          const results = Array.isArray(msg.details.results) ? msg.details.results : [];
+          const results = Array.isArray(msg.details.results)
+            ? msg.details.results
+            : [];
           for (const [index, res] of results.entries()) {
             if (isRecord(res) && isRecord(res.usage)) {
-              const subagentFile = typeof res.id === "string" && SUBAGENT_ID_RE.test(res.id)
-                ? join(filePath.slice(0, -".jsonl".length), `${res.id}.jsonl`)
-                : undefined;
+              const subagentFile =
+                typeof res.id === "string" && SUBAGENT_ID_RE.test(res.id)
+                  ? join(filePath.slice(0, -".jsonl".length), `${res.id}.jsonl`)
+                  : undefined;
               const u = res.usage;
-              const subModel = typeof res.resolvedModel === "string"
-                ? res.resolvedModel
-                : typeof res.model === "string"
-                  ? res.model
-                  : activeModel || "unknown";
-              const subProvider = typeof res.provider === "string" && res.provider
-                ? res.provider
-                : subModel.includes("/")
-                  ? subModel.split("/")[0]
-                  : activeProvider || "unknown";
+              const subModel =
+                typeof res.resolvedModel === "string"
+                  ? res.resolvedModel
+                  : typeof res.model === "string"
+                    ? res.model
+                    : activeModel || "unknown";
+              const subProvider =
+                typeof res.provider === "string" && res.provider
+                  ? res.provider
+                  : subModel.includes("/")
+                    ? subModel.split("/")[0]
+                    : activeProvider || "unknown";
 
               const input = typeof u.input === "number" ? u.input : 0;
               const output = typeof u.output === "number" ? u.output : 0;
-              const reasoning = typeof u.reasoning === "number"
-                ? u.reasoning
-                : typeof u.reasoningTokens === "number"
-                  ? u.reasoningTokens
-                  : typeof u.thoughtTokens === "number"
-                    ? u.thoughtTokens
-                    : 0;
-              const cacheRead = typeof u.cacheRead === "number" ? u.cacheRead : 0;
-              const cacheWrite = typeof u.cacheWrite === "number" ? u.cacheWrite : 0;
-              const totalTokens = typeof u.totalTokens === "number" ? u.totalTokens : input + output + cacheRead + cacheWrite;
+              const reasoning =
+                typeof u.reasoning === "number"
+                  ? u.reasoning
+                  : typeof u.reasoningTokens === "number"
+                    ? u.reasoningTokens
+                    : typeof u.thoughtTokens === "number"
+                      ? u.thoughtTokens
+                      : 0;
+              const cacheRead =
+                typeof u.cacheRead === "number" ? u.cacheRead : 0;
+              const cacheWrite =
+                typeof u.cacheWrite === "number" ? u.cacheWrite : 0;
+              const totalTokens =
+                typeof u.totalTokens === "number"
+                  ? u.totalTokens
+                  : input + output + cacheRead + cacheWrite;
 
               let timestamp = sessionTimestamp;
               if (typeof msg.timestamp === "number" && !isNaN(msg.timestamp)) {
@@ -367,7 +446,11 @@ export function parseSessionUsage(
                 if (!isNaN(parsedTime)) timestamp = parsedTime;
               }
 
-              const rates = resolveModelRates(subProvider, subModel, customModelsConfig);
+              const rates = resolveModelRates(
+                subProvider,
+                subModel,
+                customModelsConfig,
+              );
               const { cost, quality } = calculateUsageCost(u, rates);
               const cacheSavings = calculateCacheSavings(u, rates);
 
@@ -387,9 +470,10 @@ export function parseSessionUsage(
                   cost,
                   cacheSavings,
                   costQuality: quality,
-                  entryId: typeof parsed.id === "string"
-                    ? `${parsed.id}#${typeof res.id === "string" ? res.id : index}`
-                    : undefined,
+                  entryId:
+                    typeof parsed.id === "string"
+                      ? `${parsed.id}#${typeof res.id === "string" ? res.id : index}`
+                      : undefined,
                   subagentFile,
                   sessionStarted,
                 });
@@ -418,7 +502,9 @@ export function parseSessionUsage(
  * Generate full usage report over all sessions according to query options.
  * Backed by the persistent local SQLite usage database.
  */
-export async function getUsageReport(options: UsageQueryOptions = {}): Promise<UsageReport> {
+export async function getUsageReport(
+  options: UsageQueryOptions = {},
+): Promise<UsageReport> {
   if (options.forceRefresh) {
     invalidateUsageCache();
     invalidateSessionFileListCache();

@@ -58,7 +58,15 @@ import {
   type EventStreamChannel,
 } from "./event-stream-protocol";
 import type { LocalOutboxEntry } from "./event-stream";
-import { LINK_LIMITS, LinkSender, Outbox, PartJoiner, queuedLine, SeqWindow, type Part } from "./hosts/link-protocol";
+import {
+  LINK_LIMITS,
+  LinkSender,
+  Outbox,
+  PartJoiner,
+  queuedLine,
+  SeqWindow,
+  type Part,
+} from "./hosts/link-protocol";
 import { MAX_AGENT_COMMAND_REQUEST_BYTES } from "./image-attachments";
 import { diagnosticStats } from "./transport-stats";
 import { isRecord } from "./type-guards";
@@ -101,8 +109,15 @@ const ABORT_RETRY_MS = [5_000, 15_000, 60_000];
 const ABORT_DELETE_TIMEOUT_MS = 40_000;
 /** Marks an up_abort's line in the sender (a command's `rid` is the tab's request id). */
 const ABORT_RID = "abort:";
-const TRANSPORT_UNAVAILABLE = { error: "Not sent: no connection to omp-web.", code: "transport_unavailable" };
-const TRANSPORT_LOST = { error: "The connection to omp-web dropped before the answer arrived; the command may have run.", code: "transport_lost" };
+const TRANSPORT_UNAVAILABLE = {
+  error: "Not sent: no connection to omp-web.",
+  code: "transport_unavailable",
+};
+const TRANSPORT_LOST = {
+  error:
+    "The connection to omp-web dropped before the answer arrived; the command may have run.",
+  code: "transport_lost",
+};
 // Transport samples (spec D6 of the experiment): POSTed in batches to the metrics route, whose GET is the SSE clock probe.
 const METRICS_PATH = "/api/transport-metrics";
 const METRICS_FLUSH_MS = 30000;
@@ -139,7 +154,9 @@ interface Port {
 interface WorkerScope extends Port {
   onconnect?: ((event: { ports: Port[] }) => void) | null;
   navigator: {
-    locks?: { request(name: string, callback: () => unknown): Promise<unknown> };
+    locks?: {
+      request(name: string, callback: () => unknown): Promise<unknown>;
+    };
     connection?: { effectiveType?: string };
     onLine?: boolean;
   };
@@ -235,7 +252,9 @@ interface Clock {
 }
 
 /** A line the link's sender queues (`rid` marks an agent command's), or an upload's chunk (a binary unit). */
-type UpItem = { line: string; size: number; rid?: string } | { id: string; blob: Uint8Array };
+type UpItem =
+  | { line: string; size: number; rid?: string }
+  | { id: string; blob: Uint8Array };
 type Sent = { seq: number; line: string; bytes: number; rid?: string };
 
 /** A server line's header: everything but `data`, which `decode` hands on as the raw text it is. */
@@ -289,8 +308,22 @@ let fallbackTimer: Timer | undefined;
 let fallbackReason: FallbackReason = "refused";
 /** Every attached tab, told the mode when it changes. */
 const clients = new Set<Client>();
-const sseConn: Conn = { key: "sse", lastEventSampleAt: -Infinity, heldEvent: null, reconnect: null, connectingSince: null, largeFrames: [] };
-const linkConn: Conn = { key: "link", lastEventSampleAt: -Infinity, heldEvent: null, reconnect: null, connectingSince: null, largeFrames: [] };
+const sseConn: Conn = {
+  key: "sse",
+  lastEventSampleAt: -Infinity,
+  heldEvent: null,
+  reconnect: null,
+  connectingSince: null,
+  largeFrames: [],
+};
+const linkConn: Conn = {
+  key: "link",
+  lastEventSampleAt: -Infinity,
+  heldEvent: null,
+  reconnect: null,
+  connectingSince: null,
+  largeFrames: [],
+};
 /** The browser link: its socket, the identity it resumes with, and both directions' delivery state. */
 const link = {
   ws: null as WebSocket | null,
@@ -361,7 +394,11 @@ function post(client: Client, message: unknown): void {
 
 function notifyError(subscription: Subscription, readyState: ReadyState): void {
   subscription.state = readyState;
-  post(subscription.client, { id: subscription.streamId, type: "error", readyState });
+  post(subscription.client, {
+    id: subscription.streamId,
+    type: "error",
+    readyState,
+  });
 }
 
 /** A connection dropped: its live subscriptions are reconnecting. */
@@ -396,7 +433,13 @@ function scheduleReconnect(): void {
 }
 
 function ensureSource(): void {
-  if (mode !== "sse" || source || reconnectTimer !== undefined || subscriptions.size === 0) return;
+  if (
+    mode !== "sse" ||
+    source ||
+    reconnectTimer !== undefined ||
+    subscriptions.size === 0
+  )
+    return;
   const current = new EventSource(EVENT_STREAM_PATH);
   source = current;
   sseConn.connectingSince ??= Date.now();
@@ -410,7 +453,8 @@ function ensureSource(): void {
     }
     handleControl(frame, sseConn);
   });
-  for (const subscription of subscriptions.values()) current.addEventListener(subscription.id, subscription.listener);
+  for (const subscription of subscriptions.values())
+    current.addEventListener(subscription.id, subscription.listener);
   current.onerror = () => {
     if (source !== current) return;
     if (current.readyState === CLOSED) {
@@ -438,7 +482,8 @@ function requestServer(body: Record<string, unknown>): Promise<Response> {
 
 /** A control frame from the EventSource or the link (`conn`): the setting, a hello, or a subscription's open/end/refused. */
 function handleControl(frame: ControlFrame, conn: Conn): void {
-  if (frame.type === "transport" || frame.type === "hello") setTransport(frame.transport);
+  if (frame.type === "transport" || frame.type === "hello")
+    setTransport(frame.transport);
   if (frame.type === "transport") return;
   if (frame.type === "hello") {
     // The link's own hello (inside its first line) only carries the setting: its welcome did the rest.
@@ -461,7 +506,8 @@ function handleControl(frame: ControlFrame, conn: Conn): void {
   // A subscription's frames count only from the connection the mode uses.
   if ((conn === sseConn) !== (mode === "sse")) return;
   if (frame.type === "open") endReconnect(conn, Date.now());
-  const subscription = typeof frame.sub === "string" ? subscriptions.get(frame.sub) : undefined;
+  const subscription =
+    typeof frame.sub === "string" ? subscriptions.get(frame.sub) : undefined;
   if (!subscription) return;
   if (frame.type === "open") {
     subscription.state = OPEN;
@@ -470,7 +516,8 @@ function handleControl(frame: ControlFrame, conn: Conn): void {
     // A server-ended channel keeps EventSource's reconnect semantics.
     retrySubscription(subscription);
   } else if (frame.type === "refused") {
-    if (transientFileRefusal(subscription, frame.status, frame.code)) return retrySubscription(subscription);
+    if (transientFileRefusal(subscription, frame.status, frame.code))
+      return retrySubscription(subscription);
     // The link's answer to a failed `sub`: fatal, like a refused POST below.
     release(subscription);
     notifyError(subscription, CLOSED);
@@ -487,7 +534,8 @@ function setTransport(transport: unknown): void {
 
 /** Puts the mode in effect: SSE or the link, every subscription and command switching at once (spec B7). */
 function applyMode(): void {
-  const next: BrowserTransport = setting === "ws" && fallbackTimer === undefined ? "ws" : "sse";
+  const next: BrowserTransport =
+    setting === "ws" && fallbackTimer === undefined ? "ws" : "sse";
   if (next === mode) return;
   mode = next;
   for (const client of clients) post(client, { transport: mode });
@@ -506,7 +554,11 @@ function applyMode(): void {
   // commands go back to their tabs, which POST them (their queued lines are dropped, so none also runs on the link).
   for (const subscription of subscriptions.values()) {
     link.sender.drop(subscription.id);
-    if (link.token !== null) queueUp(subscription.id, JSON.stringify({ type: "unsub", id: subscription.id }));
+    if (link.token !== null)
+      queueUp(
+        subscription.id,
+        JSON.stringify({ type: "unsub", id: subscription.id }),
+      );
   }
   // Uploads go back too: the tab resumes each over HTTP from the host's offset.
   for (const upload of [...uploads.values()]) {
@@ -530,41 +582,66 @@ function applyMode(): void {
 function subscribe(subscription: Subscription): void {
   if (subscriptions.get(subscription.id) !== subscription) return;
   if (mode === "ws") {
-    queueUp(subscription.id, JSON.stringify({ type: "sub", id: subscription.id, channel: subscription.channel }));
+    queueUp(
+      subscription.id,
+      JSON.stringify({
+        type: "sub",
+        id: subscription.id,
+        channel: subscription.channel,
+      }),
+    );
     return;
   }
   if (!connectionId) return;
   const requestedOn = connectionId;
-  const stale = () => subscriptions.get(subscription.id) !== subscription || connectionId !== requestedOn;
-  requestServer({ subscribe: { id: subscription.id, channel: subscription.channel } }).then(async (response) => {
-    // Success is signalled by the `open` control frame, which is ordered with
-    // the subscription's data on the stream; the POST response is not.
-    if (response.ok || stale()) return;
-    const body = await response.json().catch(() => null);
-    if (stale()) return;
-    if (body?.code === UNKNOWN_CONNECTION_CODE) {
-      // The server restarted between hello and this POST.
-      scheduleReconnect();
-      return;
-    }
-    if (transientFileRefusal(subscription, response.status, body?.code)) return retrySubscription(subscription);
-    // Other refusals are terminal; the tab decides whether to reopen them.
-    release(subscription);
-    notifyError(subscription, CLOSED);
-  }, () => {
-    if (!stale()) scheduleReconnect();
-  });
+  const stale = () =>
+    subscriptions.get(subscription.id) !== subscription ||
+    connectionId !== requestedOn;
+  requestServer({
+    subscribe: { id: subscription.id, channel: subscription.channel },
+  }).then(
+    async (response) => {
+      // Success is signalled by the `open` control frame, which is ordered with
+      // the subscription's data on the stream; the POST response is not.
+      if (response.ok || stale()) return;
+      const body = await response.json().catch(() => null);
+      if (stale()) return;
+      if (body?.code === UNKNOWN_CONNECTION_CODE) {
+        // The server restarted between hello and this POST.
+        scheduleReconnect();
+        return;
+      }
+      if (transientFileRefusal(subscription, response.status, body?.code))
+        return retrySubscription(subscription);
+      // Other refusals are terminal; the tab decides whether to reopen them.
+      release(subscription);
+      notifyError(subscription, CLOSED);
+    },
+    () => {
+      if (!stale()) scheduleReconnect();
+    },
+  );
 }
 
-function transientFileRefusal(subscription: Subscription, status: unknown, code: unknown): boolean {
-  return subscription.channel.kind === "file"
-    && ((status === 503 && code === "host_offline") || (status === 504 && code === "host_timeout"));
+function transientFileRefusal(
+  subscription: Subscription,
+  status: unknown,
+  code: unknown,
+): boolean {
+  return (
+    subscription.channel.kind === "file" &&
+    ((status === 503 && code === "host_offline") ||
+      (status === 504 && code === "host_timeout"))
+  );
 }
 
 function retrySubscription(subscription: Subscription): void {
   notifyError(subscription, CONNECTING);
   clearTimeout(subscription.retryTimer);
-  subscription.retryTimer = setTimeout(() => subscribe(subscription), RESUBSCRIBE_DELAY_MS);
+  subscription.retryTimer = setTimeout(
+    () => subscribe(subscription),
+    RESUBSCRIBE_DELAY_MS,
+  );
 }
 
 function release(subscription: Subscription): void {
@@ -583,7 +660,11 @@ function release(subscription: Subscription): void {
   linkIdle();
 }
 
-function open(client: Client, streamId: number, channel: EventStreamChannel): void {
+function open(
+  client: Client,
+  streamId: number,
+  channel: EventStreamChannel,
+): void {
   close(client, streamId);
   const subscription: Subscription = {
     id: `s${nextSubscriptionId++}`,
@@ -592,7 +673,13 @@ function open(client: Client, streamId: number, channel: EventStreamChannel): vo
     channel,
     state: CONNECTING,
     retryTimer: undefined,
-    listener: (event) => deliver(subscription, sseConn, event.data, event.lastEventId ? Number(event.lastEventId) : NaN),
+    listener: (event) =>
+      deliver(
+        subscription,
+        sseConn,
+        event.data,
+        event.lastEventId ? Number(event.lastEventId) : NaN,
+      ),
   };
   subscriptions.set(subscription.id, subscription);
   client.streams.set(streamId, subscription);
@@ -612,35 +699,58 @@ function close(client: Client, streamId: number): void {
   if (!subscription) return;
   const wasConnected = connectionId;
   // Queued before the release, which may shut the link (and its queue) when this was its last use.
-  if (mode === "ws") queueUp(subscription.id, JSON.stringify({ type: "unsub", id: subscription.id }));
+  if (mode === "ws")
+    queueUp(
+      subscription.id,
+      JSON.stringify({ type: "unsub", id: subscription.id }),
+    );
   release(subscription);
-  if (mode === "sse" && wasConnected && connectionId === wasConnected) requestServer({ unsubscribe: subscription.id }).catch(() => {});
+  if (mode === "sse" && wasConnected && connectionId === wasConnected)
+    requestServer({ unsubscribe: subscription.id }).catch(() => {});
 }
 
 function dropClient(client: Client): void {
   clients.delete(client);
   for (const streamId of [...client.streams.keys()]) close(client, streamId);
   // A closed tab's uploads cannot be sent with any prompt.
-  for (const upload of [...uploads.values()]) if (upload.client === client) abortUpload(upload.id);
+  for (const upload of [...uploads.values()])
+    if (upload.client === client) abortUpload(upload.id);
 }
 
 // ---- The browser link (spec B3-B5) ----
 
 function linkWanted(): boolean {
-  if (mode === "ws") return subscriptions.size > 0 || pending.size > 0 || uploads.size > 0 || aborts.size > 0 || link.sender.hasKeyWith("up:");
+  if (mode === "ws")
+    return (
+      subscriptions.size > 0 ||
+      pending.size > 0 ||
+      uploads.size > 0 ||
+      aborts.size > 0 ||
+      link.sender.hasKeyWith("up:")
+    );
   // On SSE the link stays only until the commands sent on it are answered.
   for (const command of pending.values()) if (command.sent) return true;
   return false;
 }
 
 function ensureLink(): void {
-  if (link.ws || link.reconnectTimer !== undefined || link.diagnosing || !linkWanted()) return;
+  if (
+    link.ws ||
+    link.reconnectTimer !== undefined ||
+    link.diagnosing ||
+    !linkWanted()
+  )
+    return;
   dial();
 }
 
 /** Nothing left for the link: it closes with DONE_CODE and the server drops it at once. */
 function linkIdle(): void {
-  if (!linkWanted() && (link.ws || link.reconnectTimer !== undefined || link.token !== null)) shutLink();
+  if (
+    !linkWanted() &&
+    (link.ws || link.reconnectTimer !== undefined || link.token !== null)
+  )
+    shutLink();
 }
 
 function shutLink(): void {
@@ -684,7 +794,9 @@ function stopSilenceCheck(): void {
 }
 
 function dial(): void {
-  const ws = new WebSocket(new URL(BROWSER_LINK_PATH, scope.location.href).href.replace(/^http/, "ws"));
+  const ws = new WebSocket(
+    new URL(BROWSER_LINK_PATH, scope.location.href).href.replace(/^http/, "ws"),
+  );
   link.ws = ws;
   link.opened = false;
   link.welcomed = false;
@@ -698,7 +810,12 @@ function dial(): void {
     link.opened = true;
     // The upgrade works: whatever refused dials came before were the network, not a proxy.
     link.refusals = 0;
-    sendControl({ type: "hello", v: BROWSER_LINK_VERSION, token: link.token, ack: link.down.acked });
+    sendControl({
+      type: "hello",
+      v: BROWSER_LINK_VERSION,
+      token: link.token,
+      ack: link.down.acked,
+    });
     clockPing();
   };
   ws.onmessage = (event: MessageEvent<string>) => {
@@ -739,7 +856,8 @@ function giveUp(trigger: string): boolean {
     return false;
   }
   dropped(linkConn, trigger);
-  for (const command of pending.values()) if (!command.queued && command.deadline === undefined) waitToSend(command);
+  for (const command of pending.values())
+    if (!command.queued && command.deadline === undefined) waitToSend(command);
   return true;
 }
 
@@ -774,11 +892,23 @@ function refused(): void {
   const offline = scope.navigator.onLine === false;
   link.diagnosing = true;
   // Without a deadline a GET that never answers leaves `diagnosing` set and nothing redials; an abort counts as status 0.
-  withDeadline(METRICS_TIMEOUT_MS, (signal) => fetch(BROWSER_LINK_PATH, { cache: "no-store", signal })).then((response) => response.status, () => 0).then((status) => {
-    link.diagnosing = false;
-    if (offline || [0, 401, 502, 503, 504].includes(status) || ++link.refusals < FALLBACK_REFUSALS) scheduleDial(backoff());
-    else fallBack("refused");
-  });
+  withDeadline(METRICS_TIMEOUT_MS, (signal) =>
+    fetch(BROWSER_LINK_PATH, { cache: "no-store", signal }),
+  )
+    .then(
+      (response) => response.status,
+      () => 0,
+    )
+    .then((status) => {
+      link.diagnosing = false;
+      if (
+        offline ||
+        [0, 401, 502, 503, 504].includes(status) ||
+        ++link.refusals < FALLBACK_REFUSALS
+      )
+        scheduleDial(backoff());
+      else fallBack("refused");
+    });
 }
 
 function fallBack(reason: FallbackReason): void {
@@ -792,13 +922,20 @@ function fallBack(reason: FallbackReason): void {
   // applyMode handed the unsent commands back to their tabs. A sent idempotent one goes back too (the tab POSTs it,
   // running it again is harmless); any other has no link to carry its reply and may have run.
   for (const command of [...pending.values()]) {
-    settle(command, isIdempotentCommand(command.type) ? { cmd: command.n, http: true } : failure(command, TRANSPORT_LOST));
+    settle(
+      command,
+      isIdempotentCommand(command.type)
+        ? { cmd: command.n, http: true }
+        : failure(command, TRANSPORT_LOST),
+    );
   }
 }
 
 /** After FALLBACK_MS: dial in the background and leave SSE only once the upgrade works, so the tabs never see a failed try. */
 function probeLink(): void {
-  const probe = new WebSocket(new URL(BROWSER_LINK_PATH, scope.location.href).href.replace(/^http/, "ws"));
+  const probe = new WebSocket(
+    new URL(BROWSER_LINK_PATH, scope.location.href).href.replace(/^http/, "ws"),
+  );
   let opened = false;
   probe.onopen = () => {
     opened = true;
@@ -837,7 +974,9 @@ function flushLink(): void {
   link.flushTimer = undefined;
   const ws = link.ws;
   if (!ws || !link.welcomed) return;
-  const room = () => ws.bufferedAmount < SEND_BUFFER_BYTES && link.unacked < LINK_LIMITS.unackedBytes;
+  const room = () =>
+    ws.bufferedAmount < SEND_BUFFER_BYTES &&
+    link.unacked < LINK_LIMITS.unackedBytes;
   const now = Date.now();
   const write = (item: Sent) => {
     ws.send(item.line);
@@ -868,14 +1007,20 @@ function flushLink(): void {
       continue;
     }
     const rid = "rid" in unit.item ? unit.item.rid : undefined;
-    const item = { seq: unit.seq, line: unit.line, bytes: encoder.encode(unit.line).byteLength, rid };
+    const item = {
+      seq: unit.seq,
+      line: unit.line,
+      bytes: encoder.encode(unit.line).byteLength,
+      rid,
+    };
     link.outbox.push(item);
     write(item);
     if (unit.done && rid?.startsWith(ABORT_RID)) {
       const abort = aborts.get(rid.slice(ABORT_RID.length));
       if (abort) abort.seq = unit.seq;
     }
-    const command = unit.done && rid !== undefined ? pending.get(rid) : undefined;
+    const command =
+      unit.done && rid !== undefined ? pending.get(rid) : undefined;
     if (command) {
       command.sent = true;
       command.seq = unit.seq;
@@ -883,7 +1028,8 @@ function flushLink(): void {
       if (command.attempts++ === 0) command.sentAt = now;
     }
   }
-  if (ws.bufferedAmount >= SEND_BUFFER_BYTES) link.flushTimer = setTimeout(flushLink, LINK_LIMITS.flushMs);
+  if (ws.bufferedAmount >= SEND_BUFFER_BYTES)
+    link.flushTimer = setTimeout(flushLink, LINK_LIMITS.flushMs);
   if (hadUp && !link.sender.hasKeyWith("up:")) linkIdle();
 }
 
@@ -892,7 +1038,10 @@ function decode(text: string): { head: DownHead; data: string } {
   const start = text.indexOf(',"data":');
   if (start < 0) return { head: JSON.parse(text), data: "" };
   const end = text.lastIndexOf(',"seq":');
-  return { head: JSON.parse(text.slice(0, start) + text.slice(end)), data: text.slice(start + 8, end) };
+  return {
+    head: JSON.parse(text.slice(0, start) + text.slice(end)),
+    data: text.slice(start + 8, end),
+  };
 }
 
 function onLine(text: string): void {
@@ -926,7 +1075,10 @@ function onLine(text: string): void {
   owe(text.length);
 }
 
-function apply({ head, data }: { head: DownHead; data: string }, now: number): void {
+function apply(
+  { head, data }: { head: DownHead; data: string },
+  now: number,
+): void {
   if (head.type === "e") {
     const at = Number(head.at);
     if (head.name === MUX_CONTROL_EVENT) {
@@ -939,16 +1091,40 @@ function apply({ head, data }: { head: DownHead; data: string }, now: number): v
       handleControl(frame, linkConn);
       return;
     }
-    const subscription = typeof head.name === "string" ? subscriptions.get(head.name) : undefined;
-    if (subscription && mode === "ws") deliver(subscription, linkConn, data, at);
+    const subscription =
+      typeof head.name === "string" ? subscriptions.get(head.name) : undefined;
+    if (subscription && mode === "ws")
+      deliver(subscription, linkConn, data, at);
   } else if (head.type === "reply") {
-    const command = typeof head.rid === "string" ? pending.get(head.rid) : undefined;
+    const command =
+      typeof head.rid === "string" ? pending.get(head.rid) : undefined;
     if (!command) return;
     const at = Number(head.at);
     const entry = logFrame(linkConn, command.session, data.length, at, now);
     const clock = currentClock(now);
-    const behind = clock && Number.isFinite(at) ? behindFrames(linkConn.largeFrames, command.session, at, now, clock, entry).other : null;
-    settle(command, reply(command, Number(head.status), JSON.parse(data), Number(head.recvAt), at, head.deduped === true, behind));
+    const behind =
+      clock && Number.isFinite(at)
+        ? behindFrames(
+            linkConn.largeFrames,
+            command.session,
+            at,
+            now,
+            clock,
+            entry,
+          ).other
+        : null;
+    settle(
+      command,
+      reply(
+        command,
+        Number(head.status),
+        JSON.parse(data),
+        Number(head.recvAt),
+        at,
+        head.deduped === true,
+        behind,
+      ),
+    );
   } else if (head.type === "up_ack" || head.type === "up_error") {
     onUploadLine(head);
   }
@@ -978,7 +1154,8 @@ function onAck(ack: number): void {
     } else link.commandWaitSince = Date.now();
   }
   link.ackedUp = Math.max(link.ackedUp, ack);
-  for (const item of link.outbox.ack(ack)) if (item.seq <= link.sentSeq) link.unacked -= item.bytes;
+  for (const item of link.outbox.ack(ack))
+    if (item.seq <= link.sentSeq) link.unacked -= item.bytes;
   settleAborts(ack);
   flushLink();
   linkIdle();
@@ -995,7 +1172,8 @@ function onWelcome(welcome: DownHead): void {
   link.reconnectDelayMs = RECONNECT_MIN_MS;
   const resumed = welcome.resumed === true && welcome.token === link.token;
   const ack = Number(welcome.ack);
-  const sameServer = link.serverId === null || link.serverId === welcome.serverId;
+  const sameServer =
+    link.serverId === null || link.serverId === welcome.serverId;
   if (resumed) {
     link.ackedUp = Math.max(link.ackedUp, ack);
     link.outbox.ack(ack);
@@ -1006,7 +1184,8 @@ function onWelcome(welcome: DownHead): void {
   link.sentSeq = resumed ? ack : 0;
   link.unacked = 0;
   link.token = typeof welcome.token === "string" ? welcome.token : null;
-  link.serverId = typeof welcome.serverId === "string" ? welcome.serverId : null;
+  link.serverId =
+    typeof welcome.serverId === "string" ? welcome.serverId : null;
   link.welcomed = true;
   linkConn.connectingSince = null;
   if (!resumed && mode === "ws") {
@@ -1020,7 +1199,11 @@ function onWelcome(welcome: DownHead): void {
     command.deadline = undefined;
     if (command.queued) continue;
     if (!command.sent) sendCommand(command);
-    else if (isIdempotentCommand(command.type) || (sameServer && now - command.sentAt < COMMAND_DEDUPE_MS)) sendCommand(command);
+    else if (
+      isIdempotentCommand(command.type) ||
+      (sameServer && now - command.sentAt < COMMAND_DEDUPE_MS)
+    )
+      sendCommand(command);
     else settle(command, failure(command, TRANSPORT_LOST));
   }
   // Every upload starts again (or for the first time): its up_start's answer says where its chunks go from.
@@ -1031,7 +1214,8 @@ function onWelcome(welcome: DownHead): void {
     reconnect.resumed = resumed;
     // Resumed, the link itself is the stream: its outage ends here. A resync ends at the first open or frame after it.
     if (resumed) endReconnect(linkConn, now);
-    else if (subscriptions.size === 0 || mode !== "ws") linkConn.reconnect = null;
+    else if (subscriptions.size === 0 || mode !== "ws")
+      linkConn.reconnect = null;
   }
   flushLink();
 }
@@ -1039,8 +1223,12 @@ function onWelcome(welcome: DownHead): void {
 function checkSilence(): void {
   if (!link.ws) return;
   const now = Date.now();
-  if (now - link.lastFrameAt >= LINK_LIMITS.offlineMs) redial(backoff(), "silence");
-  else if (link.commandWaitSince !== undefined && now - link.commandWaitSince >= link.commandAckMs) {
+  if (now - link.lastFrameAt >= LINK_LIMITS.offlineMs)
+    redial(backoff(), "silence");
+  else if (
+    link.commandWaitSince !== undefined &&
+    now - link.commandWaitSince >= link.commandAckMs
+  ) {
     // Frames still arriving prove only the way down: a command that is not acked means the way up is gone.
     link.commandAckMs = Math.min(link.commandAckMs * 2, LINK_LIMITS.offlineMs);
     redial(0, "command");
@@ -1059,7 +1247,11 @@ function wake(reason: string): void {
   const now = Date.now();
   const type = effectiveType();
   // Every tab forwards the same event: the first of a burst keeps the type from before it.
-  if (reason !== "hidden" && reason !== "init" && !(lastWake && now - lastWake.at < WAKE_REDIAL_GAP_MS)) {
+  if (
+    reason !== "hidden" &&
+    reason !== "init" &&
+    !(lastWake && now - lastWake.at < WAKE_REDIAL_GAP_MS)
+  ) {
     lastWake = { at: now, effectiveType: knownEffectiveType ?? type };
   }
   knownEffectiveType = type;
@@ -1069,9 +1261,17 @@ function wake(reason: string): void {
     link.reconnectDelayMs = RECONNECT_MIN_MS;
     link.refusals = 0;
   }
-  const justDialed = link.ws !== null && !link.welcomed && now - link.dialedAt < WAKE_REDIAL_GAP_MS;
-  if (justDialed || (link.ws === null && link.reconnectTimer === undefined)) return;
-  if (reason === "online" || reason === "network" || (reason === "visible" && link.reconnectTimer !== undefined)) {
+  const justDialed =
+    link.ws !== null &&
+    !link.welcomed &&
+    now - link.dialedAt < WAKE_REDIAL_GAP_MS;
+  if (justDialed || (link.ws === null && link.reconnectTimer === undefined))
+    return;
+  if (
+    reason === "online" ||
+    reason === "network" ||
+    (reason === "visible" && link.reconnectTimer !== undefined)
+  ) {
     redial(0, reason);
   } else if (reason === "visible" && link.welcomed) {
     // The server answers a clock ping at once: no frame within VISIBLE_PROBE_MS means the socket died while hidden.
@@ -1112,8 +1312,17 @@ function queueCommand(client: Client, message: Record<string, unknown>): void {
     behindOtherBytes: null,
   };
   // UTF-8 bytes, as the route counts them; a body under a third of the limit cannot reach it.
-  if (body.length * 3 > MAX_AGENT_COMMAND_REQUEST_BYTES && encoder.encode(body).byteLength > MAX_AGENT_COMMAND_REQUEST_BYTES) {
-    post(client, reply(command, 413, { error: "Agent command is too large", code: "request_too_large" }));
+  if (
+    body.length * 3 > MAX_AGENT_COMMAND_REQUEST_BYTES &&
+    encoder.encode(body).byteLength > MAX_AGENT_COMMAND_REQUEST_BYTES
+  ) {
+    post(
+      client,
+      reply(command, 413, {
+        error: "Agent command is too large",
+        code: "request_too_large",
+      }),
+    );
     return;
   }
   // Spec D6 "Uplink": what the link holds ahead of it, and how much of that is this or other sessions' commands.
@@ -1145,10 +1354,21 @@ function sendCommand(command: Command): void {
 
 /** No link to send on: unavailable if none comes within SEND_DEADLINE_MS (the command never left the browser). */
 function waitToSend(command: Command): void {
-  command.deadline = setTimeout(() => settle(command, failure(command, TRANSPORT_UNAVAILABLE)), SEND_DEADLINE_MS);
+  command.deadline = setTimeout(
+    () => settle(command, failure(command, TRANSPORT_UNAVAILABLE)),
+    SEND_DEADLINE_MS,
+  );
 }
 
-function reply(command: Command, status: number, body: unknown, recvAt: number | null = null, repliedAt: number | null = null, deduped = false, replyBehindOtherBytes: number | null = null) {
+function reply(
+  command: Command,
+  status: number,
+  body: unknown,
+  recvAt: number | null = null,
+  repliedAt: number | null = null,
+  deduped = false,
+  replyBehindOtherBytes: number | null = null,
+) {
   return {
     cmd: command.n,
     status,
@@ -1246,7 +1466,18 @@ function openUpload(upload: Upload): void {
   stopUpload(upload);
   const { id, host, name, type } = upload;
   upload.opens = ++upStartSeq;
-  queueUp(`up:${id}`, JSON.stringify({ type: "up_start", id, n: upload.opens, host, name, size: upload.blob.size, mime: type }));
+  queueUp(
+    `up:${id}`,
+    JSON.stringify({
+      type: "up_start",
+      id,
+      n: upload.opens,
+      host,
+      name,
+      size: upload.blob.size,
+      mime: type,
+    }),
+  );
 }
 
 function dropUpload(upload: Upload): void {
@@ -1262,7 +1493,14 @@ function watchUpload(upload: Upload): void {
   upload.stallTimer = setTimeout(() => {
     if (uploads.get(upload.id) !== upload) return;
     dropUpload(upload);
-    post(upload.client, { up: upload.id, error: { status: 504, code: "upload_stalled", message: "The upload stopped making progress" } });
+    post(upload.client, {
+      up: upload.id,
+      error: {
+        status: 504,
+        code: "upload_stalled",
+        message: "The upload stopped making progress",
+      },
+    });
     linkIdle();
   }, UPLOAD_STALL_MS);
 }
@@ -1286,8 +1524,13 @@ function abortUpload(id: string, host?: string): void {
   const upload = uploads.get(id);
   if (upload) dropUpload(upload);
   if (!aborts.has(id)) {
-    if (aborts.size >= ABORTS_MAX) aborts.delete(aborts.keys().next().value as string);
-    aborts.set(id, { host: host ?? upload?.host, http: false, fetching: false });
+    if (aborts.size >= ABORTS_MAX)
+      aborts.delete(aborts.keys().next().value as string);
+    aborts.set(id, {
+      host: host ?? upload?.host,
+      http: false,
+      fetching: false,
+    });
     sendAbort(id);
   }
   linkIdle();
@@ -1300,32 +1543,56 @@ function sendAbort(id: string): void {
   abort.seq = undefined;
   abort.http = mode !== "ws";
   if (abort.http) return deleteUpload(id, abort);
-  if (link.token !== null) queueUp(`up:${id}`, JSON.stringify({ type: "up_abort", id, host: abort.host }), `${ABORT_RID}${id}`);
+  if (link.token !== null)
+    queueUp(
+      `up:${id}`,
+      JSON.stringify({ type: "up_abort", id, host: abort.host }),
+      `${ABORT_RID}${id}`,
+    );
   else ensureLink();
 }
 
 /** The server applied the up lines through `ack`: those aborts are delivered. */
 function settleAborts(ack: number): void {
-  for (const [id, abort] of aborts) if (!abort.http && abort.seq !== undefined && abort.seq <= ack) aborts.delete(id);
+  for (const [id, abort] of aborts)
+    if (!abort.http && abort.seq !== undefined && abort.seq <= ack)
+      aborts.delete(id);
 }
 
 /** A 2xx or 4xx answer settles it (the server owns delivery from there), except 408 and 429; a network error, a timeout or a 5xx keeps it for a retry. */
 function deleteUpload(id: string, abort: Abort): void {
   if (abort.fetching) return;
   abort.fetching = true;
-  const query = abort.host === undefined ? "" : `?host=${encodeURIComponent(abort.host)}`;
+  const query =
+    abort.host === undefined ? "" : `?host=${encodeURIComponent(abort.host)}`;
   // The deadline is above the server's 30 s host-op timeout: a request that hangs (half-open socket) would otherwise
   // keep `fetching` set and block every retry. A timeout counts as not settled.
-  withDeadline(ABORT_DELETE_TIMEOUT_MS, (signal) => fetch(`/api/uploads/${encodeURIComponent(id)}${query}`, { method: "DELETE", signal })).then((response) => response.status < 500 && response.status !== 408 && response.status !== 429, () => false).then((settled) => {
-    abort.fetching = false;
-    if (aborts.get(id) !== abort) return;
-    if (settled) {
-      aborts.delete(id);
-      abortFailures = 0;
-    } else if (abort.http && abortTimer === undefined) {
-      abortTimer = setTimeout(retryAborts, ABORT_RETRY_MS[Math.min(abortFailures++, ABORT_RETRY_MS.length - 1)]);
-    }
-  });
+  withDeadline(ABORT_DELETE_TIMEOUT_MS, (signal) =>
+    fetch(`/api/uploads/${encodeURIComponent(id)}${query}`, {
+      method: "DELETE",
+      signal,
+    }),
+  )
+    .then(
+      (response) =>
+        response.status < 500 &&
+        response.status !== 408 &&
+        response.status !== 429,
+      () => false,
+    )
+    .then((settled) => {
+      abort.fetching = false;
+      if (aborts.get(id) !== abort) return;
+      if (settled) {
+        aborts.delete(id);
+        abortFailures = 0;
+      } else if (abort.http && abortTimer === undefined) {
+        abortTimer = setTimeout(
+          retryAborts,
+          ABORT_RETRY_MS[Math.min(abortFailures++, ABORT_RETRY_MS.length - 1)],
+        );
+      }
+    });
 }
 
 function retryAborts(): void {
@@ -1339,26 +1606,44 @@ function retryAborts(): void {
  * whole pieces but the file's last. The sender cuts it into pieces.
  */
 function pump(upload: Upload): void {
-  if (!upload.started || upload.reading || uploads.get(upload.id) !== upload) return;
+  if (!upload.started || upload.reading || uploads.get(upload.id) !== upload)
+    return;
   const { epoch, sent } = upload;
   const left = upload.blob.size - sent;
   const room = Math.min(left, UPLOAD_WINDOW_BYTES - (sent - upload.acked));
   const bytes = room === left ? room : room - (room % LINK_LIMITS.pieceBytes);
   if (bytes <= 0) return;
   upload.reading = true;
-  upload.blob.slice(sent, sent + bytes).arrayBuffer().then((buffer) => {
-    upload.reading = false;
-    if (upload.epoch !== epoch || uploads.get(upload.id) !== upload) return pump(upload);
-    upload.sent = sent + buffer.byteLength;
-    link.sender.push(`up:${upload.id}`, { id: upload.id, blob: new Uint8Array(buffer) });
-    flushLink();
-    pump(upload);
-  }, () => {
-    upload.reading = false;
-    if (uploads.get(upload.id) !== upload) return;
-    post(upload.client, { up: upload.id, error: { status: 0, code: "upload_read_failed", message: "The file could not be read" } });
-    abortUpload(upload.id);
-  });
+  upload.blob
+    .slice(sent, sent + bytes)
+    .arrayBuffer()
+    .then(
+      (buffer) => {
+        upload.reading = false;
+        if (upload.epoch !== epoch || uploads.get(upload.id) !== upload)
+          return pump(upload);
+        upload.sent = sent + buffer.byteLength;
+        link.sender.push(`up:${upload.id}`, {
+          id: upload.id,
+          blob: new Uint8Array(buffer),
+        });
+        flushLink();
+        pump(upload);
+      },
+      () => {
+        upload.reading = false;
+        if (uploads.get(upload.id) !== upload) return;
+        post(upload.client, {
+          up: upload.id,
+          error: {
+            status: 0,
+            code: "upload_read_failed",
+            message: "The file could not be read",
+          },
+        });
+        abortUpload(upload.id);
+      },
+    );
 }
 
 /** An up_ack or up_error. Before its start's answer, an ack is of chunks sent before a drop: only the answer to the
@@ -1371,7 +1656,14 @@ function onUploadLine(head: DownHead): void {
   if (head.start !== undefined && head.start !== upload.opens) return;
   if (head.type === "up_error") {
     dropUpload(upload);
-    post(upload.client, { up: upload.id, error: { status: Number(head.status), code: String(head.code), message: String(head.message) } });
+    post(upload.client, {
+      up: upload.id,
+      error: {
+        status: Number(head.status),
+        code: String(head.code),
+        message: String(head.message),
+      },
+    });
     linkIdle();
     return;
   }
@@ -1388,7 +1680,12 @@ function onUploadLine(head: DownHead): void {
     return;
   }
   watchUpload(upload);
-  post(upload.client, { up: upload.id, received: upload.acked, done, ...(done && typeof head.proof === "string" ? { proof: head.proof } : {}) });
+  post(upload.client, {
+    up: upload.id,
+    received: upload.acked,
+    done,
+    ...(done && typeof head.proof === "string" ? { proof: head.proof } : {}),
+  });
   if (!done) return pump(upload);
   dropUpload(upload);
   linkIdle();
@@ -1411,9 +1708,14 @@ function clockSample(c: number, at: number, now: number): void {
 
 /** The lowest-RTT sample of the window, or null before the first. */
 function currentClock(now: number): Clock | null {
-  while (clockSamples.length > 1 && now - clockSamples[0].takenAt > CLOCK_WINDOW_MS) clockSamples.shift();
+  while (
+    clockSamples.length > 1 &&
+    now - clockSamples[0].takenAt > CLOCK_WINDOW_MS
+  )
+    clockSamples.shift();
   let best: Clock | null = null;
-  for (const sample of clockSamples) if (!best || sample.rtt < best.rtt) best = sample;
+  for (const sample of clockSamples)
+    if (!best || sample.rtt < best.rtt) best = sample;
   return best;
 }
 
@@ -1435,7 +1737,10 @@ function scheduleSseProbe(current: string): void {
 }
 
 /** Runs `run` with a signal that aborts after `ms` (no AbortSignal.timeout: older browsers lack it). */
-async function withDeadline<T>(ms: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+async function withDeadline<T>(
+  ms: number,
+  run: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
   try {
@@ -1448,7 +1753,9 @@ async function withDeadline<T>(ms: number, run: (signal: AbortSignal) => Promise
 async function probeClock(): Promise<void> {
   const c = Date.now();
   try {
-    const body = await withDeadline(METRICS_TIMEOUT_MS, async (signal) => (await fetch(METRICS_PATH, { cache: "no-store", signal })).json());
+    const body = await withDeadline(METRICS_TIMEOUT_MS, async (signal) =>
+      (await fetch(METRICS_PATH, { cache: "no-store", signal })).json(),
+    );
     clockSample(c, body.now, Date.now());
   } catch {
     // Offline, refused or no answer in time: the next probe tries again.
@@ -1456,9 +1763,16 @@ async function probeClock(): Promise<void> {
 }
 
 /** Prunes the connection's log of large frames (cross-session blocking) and logs this one if it is large. */
-function logFrame(conn: Conn, owner: string, bytes: number, at: number, gotAt: number): LoggedFrame | null {
+function logFrame(
+  conn: Conn,
+  owner: string,
+  bytes: number,
+  at: number,
+  gotAt: number,
+): LoggedFrame | null {
   const log = conn.largeFrames;
-  while (log.length > 0 && gotAt - log[0].gotAt > LARGE_FRAME_LOG_MS) log.shift();
+  while (log.length > 0 && gotAt - log[0].gotAt > LARGE_FRAME_LOG_MS)
+    log.shift();
   if (bytes < LARGE_FRAME_BYTES || !Number.isFinite(at)) return null;
   const entry = { owner, bytes, at, gotAt };
   log.push(entry);
@@ -1469,10 +1783,23 @@ function logFrame(conn: Conn, owner: string, bytes: number, at: number, gotAt: n
  * The bytes of logged frames that a frame written at `at` and arrived at `gotAt` came in behind, by owner: written
  * before it, arrived before it and still arriving when it was written. `self`: its own entry, if logged.
  */
-function behindFrames(log: LoggedFrame[], owner: string, at: number, gotAt: number, clock: Clock, self: LoggedFrame | null) {
+function behindFrames(
+  log: LoggedFrame[],
+  owner: string,
+  at: number,
+  gotAt: number,
+  clock: Clock,
+  self: LoggedFrame | null,
+) {
   const behind = { same: 0, other: 0 };
   for (const frame of log) {
-    if (frame === self || frame.gotAt > gotAt || frame.at > at || frame.gotAt + clock.offset <= at) continue;
+    if (
+      frame === self ||
+      frame.gotAt > gotAt ||
+      frame.at > at ||
+      frame.gotAt + clock.offset <= at
+    )
+      continue;
     if (frame.owner === owner) behind.same += frame.bytes;
     else behind.other += frame.bytes;
   }
@@ -1484,7 +1811,12 @@ function behindFrames(log: LoggedFrame[], owner: string, at: number, gotAt: numb
  * (one behind another session's large frame always). Before the worker's first clock the connection's first frame is
  * held and recorded with that clock (recordHeldEvents).
  */
-function deliver(subscription: Subscription, conn: Conn, data: string, at: number): void {
+function deliver(
+  subscription: Subscription,
+  conn: Conn,
+  data: string,
+  at: number,
+): void {
   const { channel } = subscription;
   const gotAt = Date.now();
   const owner = channel.kind === "session" ? channel.sessionId : "app";
@@ -1493,19 +1825,57 @@ function deliver(subscription: Subscription, conn: Conn, data: string, at: numbe
   if (Number.isFinite(at)) {
     const clock = currentClock(gotAt);
     if (clock) {
-      const behind = behindFrames(conn.largeFrames, owner, at, gotAt, clock, entry);
-      if (behind.other > 0 || gotAt - conn.lastEventSampleAt >= EVENT_SAMPLE_MS) eventSample(conn, channel.kind, at, gotAt, data.length, clock, behind);
+      const behind = behindFrames(
+        conn.largeFrames,
+        owner,
+        at,
+        gotAt,
+        clock,
+        entry,
+      );
+      if (behind.other > 0 || gotAt - conn.lastEventSampleAt >= EVENT_SAMPLE_MS)
+        eventSample(conn, channel.kind, at, gotAt, data.length, clock, behind);
     } else if (conn.lastEventSampleAt === -Infinity) {
       conn.lastEventSampleAt = gotAt;
-      conn.heldEvent = { channel: channel.kind, owner, at, gotAt, bytes: data.length, entry };
+      conn.heldEvent = {
+        channel: channel.kind,
+        owner,
+        at,
+        gotAt,
+        bytes: data.length,
+        entry,
+      };
     }
   }
-  post(subscription.client, { id: subscription.streamId, type: "message", data });
+  post(subscription.client, {
+    id: subscription.streamId,
+    type: "message",
+    data,
+  });
 }
 
-function eventSample(conn: Conn, channel: string, at: number, gotAt: number, bytes: number, clock: Clock, behind: { same: number; other: number }): void {
+function eventSample(
+  conn: Conn,
+  channel: string,
+  at: number,
+  gotAt: number,
+  bytes: number,
+  clock: Clock,
+  behind: { same: number; other: number },
+): void {
   conn.lastEventSampleAt = gotAt;
-  record({ metric: "event", socket: conn.key, channel, at, gotAt, offset: clock.offset, offsetRtt: clock.rtt, bytes, behindSameBytes: behind.same, behindOtherBytes: behind.other });
+  record({
+    metric: "event",
+    socket: conn.key,
+    channel,
+    at,
+    gotAt,
+    offset: clock.offset,
+    offsetRtt: clock.rtt,
+    bytes,
+    behindSameBytes: behind.same,
+    behindOtherBytes: behind.other,
+  });
 }
 
 /** The worker's first clock: the frames held for it are recorded with it. */
@@ -1516,15 +1886,45 @@ function recordHeldEvents(): void {
     const held = conn.heldEvent;
     if (!held) continue;
     conn.heldEvent = null;
-    eventSample(conn, held.channel, held.at, held.gotAt, held.bytes, clock, behindFrames(conn.largeFrames, held.owner, held.at, held.gotAt, clock, held.entry));
+    eventSample(
+      conn,
+      held.channel,
+      held.at,
+      held.gotAt,
+      held.bytes,
+      clock,
+      behindFrames(
+        conn.largeFrames,
+        held.owner,
+        held.at,
+        held.gotAt,
+        clock,
+        held.entry,
+      ),
+    );
   }
 }
 
 /** A tab's sample. An HTTP action's reply shared the SSE stream's HTTP/2 connection: measured against its frame log. */
 function recordTabSample(sample: Sample): void {
-  if (sample.metric === "action" && sample.via === "http" && sample.replyBehindOtherBytes === null && Number.isFinite(sample.repliedAt) && Number.isFinite(sample.gotAt)) {
+  if (
+    sample.metric === "action" &&
+    sample.via === "http" &&
+    sample.replyBehindOtherBytes === null &&
+    Number.isFinite(sample.repliedAt) &&
+    Number.isFinite(sample.gotAt)
+  ) {
     const clock = currentClock(Date.now());
-    const behind = clock && behindFrames(sseConn.largeFrames, String(sample.session), Number(sample.repliedAt), Number(sample.gotAt), clock, null);
+    const behind =
+      clock &&
+      behindFrames(
+        sseConn.largeFrames,
+        String(sample.session),
+        Number(sample.repliedAt),
+        Number(sample.gotAt),
+        clock,
+        null,
+      );
     if (behind) sample = { ...sample, replyBehindOtherBytes: behind.other };
   }
   record(sample);
@@ -1536,10 +1936,19 @@ function dropped(conn: Conn, trigger: string): void {
   if (conn.reconnect) return;
   const dropAt = Date.now();
   const woke = lastWake !== null && dropAt - lastWake.at <= WAKE_WINDOW_MS;
-  conn.reconnect = { trigger, dropAt, startAt: woke && lastWake ? lastWake.at : dropAt, effectiveTypeBefore: woke && lastWake ? lastWake.effectiveType : effectiveType(), hello: false, resumed: null };
+  conn.reconnect = {
+    trigger,
+    dropAt,
+    startAt: woke && lastWake ? lastWake.at : dropAt,
+    effectiveTypeBefore:
+      woke && lastWake ? lastWake.effectiveType : effectiveType(),
+    hello: false,
+    resumed: null,
+  };
   // A drop is kept while an outage within BATCH_WINDOW_MS of it may still end and count it.
   let oldest = dropAt;
-  for (const each of [sseConn, linkConn]) if (each.reconnect) oldest = Math.min(oldest, each.reconnect.dropAt);
+  for (const each of [sseConn, linkConn])
+    if (each.reconnect) oldest = Math.min(oldest, each.reconnect.dropAt);
   recentDrops = recentDrops.filter((at) => at >= oldest - BATCH_WINDOW_MS);
   recentDrops.push(dropAt);
 }
@@ -1549,9 +1958,15 @@ function endReconnect(conn: Conn, now: number): void {
   const reconnect = conn.reconnect;
   if (!reconnect?.hello) return;
   conn.reconnect = null;
-  lastReconnect = { at: now, trigger: reconnect.trigger, outageMs: now - reconnect.dropAt, resumed: reconnect.resumed };
+  lastReconnect = {
+    at: now,
+    trigger: reconnect.trigger,
+    outageMs: now - reconnect.dropAt,
+    resumed: reconnect.resumed,
+  };
   let batch = 0;
-  for (const at of recentDrops) if (Math.abs(at - reconnect.dropAt) <= BATCH_WINDOW_MS) batch += 1;
+  for (const at of recentDrops)
+    if (Math.abs(at - reconnect.dropAt) <= BATCH_WINDOW_MS) batch += 1;
   record({
     metric: "reconnect",
     socket: conn.key,
@@ -1585,7 +2000,12 @@ function stamp(sample: Sample): Sample {
     clientId,
     effectiveType: effectiveType(),
     visible,
-    ...(sample.metric === "action" ? { offset: clock ? clock.offset : null, offsetRtt: clock ? clock.rtt : null } : {}),
+    ...(sample.metric === "action"
+      ? {
+          offset: clock ? clock.offset : null,
+          offsetRtt: clock ? clock.rtt : null,
+        }
+      : {}),
     ...sample,
   };
 }
@@ -1594,7 +2014,8 @@ function record(sample: Sample): void {
   const stamped = stamp(sample);
   samples.push(stamped);
   diagnosticSamples.push({ t: Date.now(), sample: stamped });
-  if (diagnosticSamples.length > DIAGNOSTICS_MAX) diagnosticSamples.splice(0, diagnosticSamples.length - DIAGNOSTICS_MAX);
+  if (diagnosticSamples.length > DIAGNOSTICS_MAX)
+    diagnosticSamples.splice(0, diagnosticSamples.length - DIAGNOSTICS_MAX);
   trimSamples();
   // Reaching the count flushes right after this task, off the path that recorded it (a frame's delivery); a failed POST
   // leaves more than that, which then waits for the timer instead of retrying per sample.
@@ -1614,7 +2035,8 @@ function trimSamples(): void {
 }
 
 function scheduleFlush(): void {
-  if (flushTimer === undefined && samples.length > 0) flushTimer = setTimeout(flushSamples, METRICS_FLUSH_MS);
+  if (flushTimer === undefined && samples.length > 0)
+    flushTimer = setTimeout(flushSamples, METRICS_FLUSH_MS);
 }
 
 /** POSTs the oldest METRICS_FLUSH_COUNT samples (and a `dropped` count); a failure keeps them for the next flush. */
@@ -1626,15 +2048,26 @@ function flushSamples(): void {
   const droppedCount = droppedSamples;
   droppedSamples = 0;
   flushing = true;
-  const body = JSON.stringify({ samples: droppedCount > 0 ? batch.concat(stamp({ metric: "dropped", count: droppedCount })) : batch });
+  const body = JSON.stringify({
+    samples:
+      droppedCount > 0
+        ? batch.concat(stamp({ metric: "dropped", count: droppedCount }))
+        : batch,
+  });
   // The deadline grows with the batch so a slow link (about 2 KB/s and up) can finish it. A timeout after the server has
   // processed the batch sends it again and duplicates its samples (metrics only).
-  withDeadline(METRICS_TIMEOUT_MS + body.length / METRICS_POST_BYTES_PER_MS, async (signal) => (await fetch(METRICS_PATH, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body,
-    signal,
-  })).ok)
+  withDeadline(
+    METRICS_TIMEOUT_MS + body.length / METRICS_POST_BYTES_PER_MS,
+    async (signal) =>
+      (
+        await fetch(METRICS_PATH, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+          signal,
+        })
+      ).ok,
+  )
     .catch(() => false)
     .then((ok) => {
       flushing = false;
@@ -1654,11 +2087,16 @@ function flushSamples(): void {
 /** The connection diagnostics panel's snapshot: the connection in use now and the last DIAGNOSTICS_WINDOW_MS of samples. */
 function diagnostics(): ConnectionDiagnostics {
   const now = Date.now();
-  const from = diagnosticSamples.findIndex((entry) => now - entry.t <= DIAGNOSTICS_WINDOW_MS);
+  const from = diagnosticSamples.findIndex(
+    (entry) => now - entry.t <= DIAGNOSTICS_WINDOW_MS,
+  );
   diagnosticSamples = from === -1 ? [] : diagnosticSamples.slice(from);
   const conn = mode === "ws" ? linkConn : sseConn;
   const wanted = mode === "ws" ? linkWanted() : subscriptions.size > 0;
-  const connected = mode === "ws" ? link.ws?.readyState === OPEN && link.welcomed : source !== null && connectionId !== null;
+  const connected =
+    mode === "ws"
+      ? link.ws?.readyState === OPEN && link.welcomed
+      : source !== null && connectionId !== null;
   const since = !wanted || connected ? null : conn.connectingSince;
   let reconnects = 0;
   let resumes = 0;
@@ -1675,7 +2113,13 @@ function diagnostics(): ConnectionDiagnostics {
     mode,
     fallback: setting === "ws" && mode === "sse" ? fallbackReason : null,
     // Down once commands would fail for want of a connection (SEND_DEADLINE_MS).
-    status: !wanted ? "idle" : connected ? "connected" : since !== null && now - since >= SEND_DEADLINE_MS ? "down" : "connecting",
+    status: !wanted
+      ? "idle"
+      : connected
+        ? "connected"
+        : since !== null && now - since >= SEND_DEADLINE_MS
+          ? "down"
+          : "connecting",
     since,
     lastReconnect,
     reconnects,
@@ -1712,7 +2156,10 @@ const outboxItems = new Map<string, OutboxItem>();
 const outboxReading = new Set<string>();
 const outboxDropping = new Set<string>();
 /** A session whose shared-list read failed reads again after this delay (1 s doubling to 30 s): no send goes before it. */
-const outboxReadRetry = new Map<string, { timer: Timer | undefined; ms: number }>();
+const outboxReadRetry = new Map<
+  string,
+  { timer: Timer | undefined; ms: number }
+>();
 /** The last read of the shared list failed: this worker's list may miss other workers' earlier entries. */
 let outboxPartial = false;
 const outboxDb = openOutboxDb();
@@ -1734,7 +2181,8 @@ function openOutboxDb(): Promise<IDBDatabase | null> {
     if (!factory) return resolve(null);
     try {
       const request = factory.open(OUTBOX_DB, 1);
-      request.onupgradeneeded = () => request.result.createObjectStore(OUTBOX_STORE, { keyPath: "id" });
+      request.onupgradeneeded = () =>
+        request.result.createObjectStore(OUTBOX_STORE, { keyPath: "id" });
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => resolve(null);
     } catch {
@@ -1744,14 +2192,19 @@ function openOutboxDb(): Promise<IDBDatabase | null> {
 }
 
 /** A failed read must not let a private worker's incomplete snapshot choose which message goes first. */
-function readOutbox(db: IDBDatabase | null): Promise<LocalOutboxEntry[] | null> {
+function readOutbox(
+  db: IDBDatabase | null,
+): Promise<LocalOutboxEntry[] | null> {
   return new Promise((resolve) => {
     if (!db) return resolve(null);
     try {
       const transaction = db.transaction(OUTBOX_STORE);
       const request = transaction.objectStore(OUTBOX_STORE).getAll();
       transaction.oncomplete = () => resolve(request.result);
-      transaction.onerror = transaction.onabort = request.onerror = () => resolve(null);
+      transaction.onerror =
+        transaction.onabort =
+        request.onerror =
+          () => resolve(null);
     } catch {
       resolve(null);
     }
@@ -1762,13 +2215,25 @@ function readOutbox(db: IDBDatabase | null): Promise<LocalOutboxEntry[] | null> 
 async function loadOutbox(db: IDBDatabase | null): Promise<boolean> {
   const stored = await readOutbox(db);
   if (!stored) return false;
-  for (const entry of stored) outboxItems.set(entry.id, { entry, inFlight: false, retryTimer: undefined, retryMs: RECONNECT_MIN_MS });
-  await Promise.all([...new Set(stored.map((entry) => entry.sessionId))].map((sessionId) => sendOutbox(sessionId)));
+  for (const entry of stored)
+    outboxItems.set(entry.id, {
+      entry,
+      inFlight: false,
+      retryTimer: undefined,
+      retryMs: RECONNECT_MIN_MS,
+    });
+  await Promise.all(
+    [...new Set(stored.map((entry) => entry.sessionId))].map((sessionId) =>
+      sendOutbox(sessionId),
+    ),
+  );
   return true;
 }
 
 /** True only once a write commits: a quota error or abort must not clear the composer's draft. */
-async function writeOutbox(change: (store: IDBObjectStore) => void): Promise<boolean> {
+async function writeOutbox(
+  change: (store: IDBObjectStore) => void,
+): Promise<boolean> {
   const db = await outboxDb;
   if (!db) return false;
   return await new Promise<boolean>((resolve) => {
@@ -1785,39 +2250,69 @@ async function writeOutbox(change: (store: IDBObjectStore) => void): Promise<boo
 
 /** Unsequenced legacy rows precede new adds; their already-lost timestamp ties use a deterministic id fallback. */
 function compareOutbox(a: LocalOutboxEntry, b: LocalOutboxEntry): number {
-  return (a.enqueueOrder ?? 0) - (b.enqueueOrder ?? 0) || a.createdAt - b.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  return (
+    (a.enqueueOrder ?? 0) - (b.enqueueOrder ?? 0) ||
+    a.createdAt - b.createdAt ||
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  );
 }
 
 /** Every entry, in submission order. */
 function outboxList(): LocalOutboxEntry[] {
-  return [...outboxItems.values()].map((item) => item.entry).sort(compareOutbox);
+  return [...outboxItems.values()]
+    .map((item) => item.entry)
+    .sort(compareOutbox);
 }
 
 function broadcastOutbox(): void {
   const list = outboxList();
-  for (const client of clients) post(client, outboxPartial ? { outbox: list, partial: true } : { outbox: list });
+  for (const client of clients)
+    post(
+      client,
+      outboxPartial ? { outbox: list, partial: true } : { outbox: list },
+    );
 }
 
 /** A tab's list once loaded. An empty one only when `always`: a tab back from the bfcache may still show gone entries. */
 function tellOutbox(client: Client, always: boolean): void {
   void ensureOutboxReady().then((loaded) => {
-    if (loaded && (always || outboxItems.size > 0)) post(client, outboxPartial ? { outbox: outboxList(), partial: true } : { outbox: outboxList() });
+    if (loaded && (always || outboxItems.size > 0))
+      post(
+        client,
+        outboxPartial
+          ? { outbox: outboxList(), partial: true }
+          : { outbox: outboxList() },
+      );
   });
 }
 
 function addOutbox(client: Client, n: number, entry: LocalOutboxEntry): void {
   void ensureOutboxReady().then(async (loaded) => {
-    const item: OutboxItem = { entry: { ...entry, state: "sending" }, inFlight: false, retryTimer: undefined, retryMs: RECONNECT_MIN_MS };
-    const committed = loaded && await writeOutbox((store) => {
-      const request = store.getAll();
-      request.onsuccess = () => {
-        // The store's readwrite lock serializes allocation with every other worker's acceptance.
-        item.entry.enqueueOrder = (request.result as LocalOutboxEntry[]).reduce((max, row) => Math.max(max, row.enqueueOrder ?? 0), 0) + 1;
-        store.add(item.entry);
-      };
-    });
+    const item: OutboxItem = {
+      entry: { ...entry, state: "sending" },
+      inFlight: false,
+      retryTimer: undefined,
+      retryMs: RECONNECT_MIN_MS,
+    };
+    const committed =
+      loaded &&
+      (await writeOutbox((store) => {
+        const request = store.getAll();
+        request.onsuccess = () => {
+          // The store's readwrite lock serializes allocation with every other worker's acceptance.
+          item.entry.enqueueOrder =
+            (request.result as LocalOutboxEntry[]).reduce(
+              (max, row) => Math.max(max, row.enqueueOrder ?? 0),
+              0,
+            ) + 1;
+          store.add(item.entry);
+        };
+      }));
     if (!committed) {
-      post(client, { outboxAdded: n, error: "The message could not be saved to this browser. Send it again." });
+      post(client, {
+        outboxAdded: n,
+        error: "The message could not be saved to this browser. Send it again.",
+      });
       return;
     }
     // Committed: the entry is accepted whatever follows, or a resend from the composer would duplicate it under a new id.
@@ -1835,10 +2330,13 @@ function dropOutbox(client: Client, n: number, id: string): void {
   void ensureOutboxReady().then(async (loaded) => {
     const item = outboxItems.get(id);
     outboxDropping.add(id);
-    const removed = loaded && await writeOutbox((store) => store.delete(id));
+    const removed = loaded && (await writeOutbox((store) => store.delete(id)));
     outboxDropping.delete(id);
     if (!removed) {
-      post(client, { outboxDropped: n, error: "The message could not be removed from this browser. Try again." });
+      post(client, {
+        outboxDropped: n,
+        error: "The message could not be removed from this browser. Try again.",
+      });
       return;
     }
     clearTimeout(item?.retryTimer);
@@ -1869,9 +2367,17 @@ async function refreshOutbox(): Promise<boolean | null> {
   for (const entry of entries) {
     const item = outboxItems.get(entry.id);
     if (!item) {
-      outboxItems.set(entry.id, { entry, inFlight: false, retryTimer: undefined, retryMs: RECONNECT_MIN_MS });
+      outboxItems.set(entry.id, {
+        entry,
+        inFlight: false,
+        retryTimer: undefined,
+        retryMs: RECONNECT_MIN_MS,
+      });
       changed = true;
-    } else if (item.entry.state !== entry.state || item.entry.error !== entry.error) {
+    } else if (
+      item.entry.state !== entry.state ||
+      item.entry.error !== entry.error
+    ) {
       item.entry = entry;
       changed = true;
     }
@@ -1886,7 +2392,10 @@ async function sendOutbox(sessionId: string): Promise<void> {
   const changed = await refreshOutbox();
   outboxReading.delete(sessionId);
   if (changed === null) {
-    const retry = outboxReadRetry.get(sessionId) ?? { timer: undefined, ms: RECONNECT_MIN_MS };
+    const retry = outboxReadRetry.get(sessionId) ?? {
+      timer: undefined,
+      ms: RECONNECT_MIN_MS,
+    };
     outboxReadRetry.set(sessionId, retry);
     if (retry.timer !== undefined) return;
     retry.timer = setTimeout(() => {
@@ -1899,23 +2408,58 @@ async function sendOutbox(sessionId: string): Promise<void> {
   clearTimeout(outboxReadRetry.get(sessionId)?.timer);
   outboxReadRetry.delete(sessionId);
   if (changed) broadcastOutbox();
-  const head = outboxList().find((entry) => entry.sessionId === sessionId && entry.state === "sending");
+  const head = outboxList().find(
+    (entry) => entry.sessionId === sessionId && entry.state === "sending",
+  );
   const item = head && outboxItems.get(head.id);
-  if (!item || item.inFlight || item.retryTimer !== undefined || outboxDropping.has(item.entry.id)) return;
-  if (Date.now() - item.entry.createdAt > OUTBOX_MAX_AGE_MS) return failOutbox(item, "Not sent within 7 days.");
-  if (typeof item.entry.scope !== "string" || !item.entry.scope) return failOutbox(item, "This message has no saved installation or sign-in scope and cannot be sent.");
+  if (
+    !item ||
+    item.inFlight ||
+    item.retryTimer !== undefined ||
+    outboxDropping.has(item.entry.id)
+  )
+    return;
+  if (Date.now() - item.entry.createdAt > OUTBOX_MAX_AGE_MS)
+    return failOutbox(item, "Not sent within 7 days.");
+  if (typeof item.entry.scope !== "string" || !item.entry.scope)
+    return failOutbox(
+      item,
+      "This message has no saved installation or sign-in scope and cannot be sent.",
+    );
   item.inFlight = true;
-  const { id, scope, advisor, mode, message, images, uploads, uploadProofs } = item.entry;
-  const body = JSON.stringify({ type: "outbox_add", id, scope, mode, message, images, uploads, uploadProofs });
+  const { id, scope, advisor, mode, message, images, uploads, uploadProofs } =
+    item.entry;
+  const body = JSON.stringify({
+    type: "outbox_add",
+    id,
+    scope,
+    mode,
+    message,
+    images,
+    uploads,
+    uploadProofs,
+  });
   // A tab of the worker's own (not in `clients`): the command takes the current transport as a tab's would.
   const port: Port = {
     onmessage: null,
     postMessage(answer) {
-      const { http, status, body: reply } = answer as { http?: true; status: number; body: unknown };
+      const {
+        http,
+        status,
+        body: reply,
+      } = answer as { http?: true; status: number; body: unknown };
       if (!http) return outboxAnswer(item, status, reply);
       // A half-open POST must not block this session forever; include the body read and allow 2 KB/s for its uplink.
       withDeadline(40_000 + Math.ceil(body.length / 2), async (signal) => {
-        const response = await fetch(`/api/agent/${encodeURIComponent(sessionId)}${advisor === true ? "?advisor=1" : ""}`, { method: "POST", headers: { "Content-Type": "application/json" }, body, signal });
+        const response = await fetch(
+          `/api/agent/${encodeURIComponent(sessionId)}${advisor === true ? "?advisor=1" : ""}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+            signal,
+          },
+        );
         const reply = await response.json().catch((error) => {
           if (signal.aborted) throw error;
           return null;
@@ -1929,50 +2473,98 @@ async function sendOutbox(sessionId: string): Promise<void> {
   };
   // A fresh request id per attempt; the server dedupes outbox_add by the entry's id.
   const req = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
-  queueCommand({ port, streams: new Map(), visible: false }, { n: 0, req, sessionId, advisor: advisor === true, body, type: "outbox_add" });
+  queueCommand(
+    { port, streams: new Map(), visible: false },
+    {
+      n: 0,
+      req,
+      sessionId,
+      advisor: advisor === true,
+      body,
+      type: "outbox_add",
+    },
+  );
 }
 
 /** A transport success is not a storage receipt (a sign-in page can also answer 200). */
 function acceptedOutboxEntry(body: unknown, id: string): unknown {
-  const reply = body as { success?: unknown; data?: { entry?: Record<string, unknown> } } | null;
+  const reply = body as {
+    success?: unknown;
+    data?: { entry?: Record<string, unknown> };
+  } | null;
   const entry = reply?.data?.entry;
-  return reply?.success === true && entry?.id === id &&
-    typeof entry.sessionId === "string" && entry.sessionId.length > 0 &&
+  return reply?.success === true &&
+    entry?.id === id &&
+    typeof entry.sessionId === "string" &&
+    entry.sessionId.length > 0 &&
     ["prompt", "followUp", "steer"].includes(entry.mode as string) &&
-    ["held", "waiting_host", "delivering", "failed", "delivered"].includes(entry.state as string) &&
-    (entry.images === undefined || Array.isArray(entry.images) && entry.images.every((image) => image?.type === "image" && typeof image.data === "string" && typeof image.mimeType === "string")) &&
-    (entry.uploads === undefined || Array.isArray(entry.uploads) && entry.uploads.every((upload) => typeof upload === "string")) &&
+    ["held", "waiting_host", "delivering", "failed", "delivered"].includes(
+      entry.state as string,
+    ) &&
+    (entry.images === undefined ||
+      (Array.isArray(entry.images) &&
+        entry.images.every(
+          (image) =>
+            image?.type === "image" &&
+            typeof image.data === "string" &&
+            typeof image.mimeType === "string",
+        ))) &&
+    (entry.uploads === undefined ||
+      (Array.isArray(entry.uploads) &&
+        entry.uploads.every((upload) => typeof upload === "string"))) &&
     (entry.error === undefined || typeof entry.error === "string") &&
-    (entry.mayHaveBeenSent === undefined || typeof entry.mayHaveBeenSent === "boolean") &&
-    (entry.settlement === undefined || ["native", "none", "uncorrelated"].includes(entry.settlement as string)) &&
-    typeof entry.message === "string" && typeof entry.createdAt === "number" && Number.isFinite(entry.createdAt) && entry.createdAt >= 0
-    ? entry : null;
+    (entry.mayHaveBeenSent === undefined ||
+      typeof entry.mayHaveBeenSent === "boolean") &&
+    (entry.settlement === undefined ||
+      ["native", "none", "uncorrelated"].includes(
+        entry.settlement as string,
+      )) &&
+    typeof entry.message === "string" &&
+    typeof entry.createdAt === "number" &&
+    Number.isFinite(entry.createdAt) &&
+    entry.createdAt >= 0
+    ? entry
+    : null;
 }
 
 /**
  * Valid 2xx acceptance: stored, gone from here. Unconfirmed success, no answer, 401, 408, 429 or a 5xx: again after the entry's
  * delay. Any other refusal is final (O6): "failed" until a tab drops it, and the session's next entry goes.
  */
-async function outboxAnswer(item: OutboxItem, status: number, body: unknown): Promise<void> {
+async function outboxAnswer(
+  item: OutboxItem,
+  status: number,
+  body: unknown,
+): Promise<void> {
   const { id, sessionId } = item.entry;
   if (outboxItems.get(id) !== item) return;
   const reply = (body ?? {}) as { error?: unknown };
   const accepted = acceptedOutboxEntry(body, id);
   if (status >= 200 && status < 300 && !accepted) status = 0;
   if (status >= 200 && status < 300) {
-    if (!(await writeOutbox((store) => store.delete(id)))) return outboxAnswer(item, 0, null);
+    if (!(await writeOutbox((store) => store.delete(id))))
+      return outboxAnswer(item, 0, null);
     outboxItems.delete(id);
-    const stored = isRecord(accepted) && accepted.state === "delivered"
-      && (accepted.settlement === "native" || accepted.settlement === "uncorrelated")
-      ? {
-          ...accepted,
-          message: item.entry.message,
-          ...(item.entry.images ? { images: item.entry.images } : {}),
-          ...(item.entry.uploads ? { uploads: item.entry.uploads } : {}),
-        }
-      : accepted;
+    const stored =
+      isRecord(accepted) &&
+      accepted.state === "delivered" &&
+      (accepted.settlement === "native" ||
+        accepted.settlement === "uncorrelated")
+        ? {
+            ...accepted,
+            message: item.entry.message,
+            ...(item.entry.images ? { images: item.entry.images } : {}),
+            ...(item.entry.uploads ? { uploads: item.entry.uploads } : {}),
+          }
+        : accepted;
     for (const client of clients) post(client, { outboxStored: stored });
-  } else if (status === 0 || status === 401 || status === 408 || status === 429 || status >= 500) {
+  } else if (
+    status === 0 ||
+    status === 401 ||
+    status === 408 ||
+    status === 429 ||
+    status >= 500
+  ) {
     item.inFlight = false;
     item.retryTimer = setTimeout(() => {
       item.retryTimer = undefined;
@@ -1981,7 +2573,10 @@ async function outboxAnswer(item: OutboxItem, status: number, body: unknown): Pr
     item.retryMs = Math.min(item.retryMs * 2, RECONNECT_MAX_MS);
     return;
   } else {
-    return failOutbox(item, typeof reply.error === "string" ? reply.error : `HTTP ${status}`);
+    return failOutbox(
+      item,
+      typeof reply.error === "string" ? reply.error : `HTTP ${status}`,
+    );
   }
   broadcastOutbox();
   sendOutbox(sessionId);
@@ -2019,7 +2614,8 @@ function retryOutbox(): void {
     item.retryTimer = undefined;
     item.retryMs = RECONNECT_MIN_MS;
   }
-  for (const item of [...outboxItems.values()]) sendOutbox(item.entry.sessionId);
+  for (const item of [...outboxItems.values()])
+    sendOutbox(item.entry.sessionId);
 }
 
 function attach(port: Port): void {
@@ -2058,7 +2654,8 @@ function attach(port: Port): void {
         post(client, { diag: data.n, data: diagnostics() });
         break;
       case "metric":
-        if (data.sample && typeof data.sample === "object") recordTabSample(data.sample as Sample);
+        if (data.sample && typeof data.sample === "object")
+          recordTabSample(data.sample as Sample);
         break;
       case "cmd":
         queueCommand(client, data);
@@ -2075,7 +2672,10 @@ function attach(port: Port): void {
         break;
       }
       case "up_abort":
-        abortUpload(String(data.id), typeof data.host === "string" ? data.host : undefined);
+        abortUpload(
+          String(data.id),
+          typeof data.host === "string" ? data.host : undefined,
+        );
         break;
       case "outbox_add":
         addOutbox(client, Number(data.n), data.entry as LocalOutboxEntry);

@@ -8,7 +8,8 @@ import type { BunPlugin, PluginBuilder } from "bun";
 import tailwind from "bun-plugin-tailwind";
 
 // Tailwind's printer: `prop: fallback;` then the override block, at the declaration's indent.
-const COLOR_MIX_POLYFILL = /^( *)([\w-]+): .*;\n\1@supports \(color: color-mix\(in lab, red, red\)\) \{\n\1 {2}& \{\n\1 {4}\2: (.*);\n\1 {2}\}\n\1\}\n/gm;
+const COLOR_MIX_POLYFILL =
+  /^( *)([\w-]+): .*;\n\1@supports \(color: color-mix\(in lab, red, red\)\) \{\n\1 {2}& \{\n\1 {4}\2: (.*);\n\1 {2}\}\n\1\}\n/gm;
 
 const plugin: BunPlugin = {
   name: "tailwind-without-color-mix-polyfill",
@@ -17,8 +18,15 @@ const plugin: BunPlugin = {
     const onLoad: PluginBuilder["onLoad"] = (constraints, callback) =>
       build.onLoad(constraints, async (args) => {
         const result = await callback(args);
-        if (result && "contents" in result && typeof result.contents === "string") {
-          result.contents = result.contents.replace(COLOR_MIX_POLYFILL, "$1$2: $3;\n");
+        if (
+          result &&
+          "contents" in result &&
+          typeof result.contents === "string"
+        ) {
+          result.contents = result.contents.replace(
+            COLOR_MIX_POLYFILL,
+            "$1$2: $3;\n",
+          );
         }
         return result;
       });

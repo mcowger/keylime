@@ -9,20 +9,20 @@ import type { CommandTable, FrameTable } from "./types";
 
 /** Every host command by name; each group file owns its names. */
 export const commands: CommandTable = {
-	...promptingCommands,
-	...modelCommands,
-	...sessionCommands,
-	...toolsCommands,
-	...agentsCommands,
-	...eventsCommands,
-	...correlationCommands,
+  ...promptingCommands,
+  ...modelCommands,
+  ...sessionCommands,
+  ...toolsCommands,
+  ...agentsCommands,
+  ...eventsCommands,
+  ...correlationCommands,
 };
 
 /** Every non-command host frame by `t`; each group file owns its frame types. */
 export const frames: FrameTable = {
-	...promptingFrames,
-	...modelFrames,
-	...sessionFrames,
-	...toolsFrames,
-	...agentsFrames,
+  ...promptingFrames,
+  ...modelFrames,
+  ...sessionFrames,
+  ...toolsFrames,
+  ...agentsFrames,
 };

@@ -36,18 +36,21 @@
 ### Task 1: Daemon tracks and replays pending blocking requests (link v3)
 
 **Files:**
+
 - Modify: `lib/hosts/link-protocol.ts` (version 3; hello channel `pending: string[]`), `lib/hosts/daemon.ts`
 - Create: `lib/hosts/pending-requests.ts`
 - Test: `lib/hosts/pending-requests.test.mjs`, `lib/hosts/daemon.test.mjs`
 
 **Interfaces:**
+
 - Produces:
   ```ts
-  export class PendingRequests {             // one per channel, daemon side
+  export class PendingRequests {
+    // one per channel, daemon side
     constructor(limitBytes: number);
-    noteStdout(line: string): void;          // decodes (RpcFrameDecoder) and opens/closes entries
-    noteStdin(line: string): void;           // host_tool_result / extension_ui_response close by id
-    lines(): string[] | null;                // raw lines of open requests in order; null when over the cap
+    noteStdout(line: string): void; // decodes (RpcFrameDecoder) and opens/closes entries
+    noteStdin(line: string): void; // host_tool_result / extension_ui_response close by id
+    lines(): string[] | null; // raw lines of open requests in order; null when over the cap
   }
   // hello: channels: { ch: string; sessionId: string | null; pending: string[] | null }[]
   ```
@@ -61,10 +64,12 @@
 ### Task 2: Adopted session wrapper
 
 **Files:**
+
 - Modify: `lib/omp/rpc-process.ts`, `lib/rpc-manager.ts`
 - Test: `lib/rpc-manager.test.mjs`, `lib/omp/rpc-process-runtime.test.mjs`
 
 **Interfaces:**
+
 - Produces:
   ```ts
   // RpcProcessOptions gains:
@@ -83,10 +88,12 @@
 ### Task 3: The hub adopts instead of killing
 
 **Files:**
+
 - Modify: `lib/hosts/hub.ts` (`reattach`), `lib/session-resume.ts` (`resumeOnHostLink`), `lib/hosts/session-index.ts` (session lookup for adoption)
 - Test: `lib/hosts/hub.test.mjs`, `lib/session-resume.test.mjs`, `lib/hosts/link-integration.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `adoptRpcSession` (Task 2), hello `pending` (Task 1).
 - Produces: on `hello`, each listed channel with no transport and a `sessionId` found in that host's session list (fresh `listSessions`, not the cache) is adopted with its `pending` lines as `replay`. Channels with no `sessionId`, an unknown session, `pending === null`, or a failed adoption take today's orphan path (kill, `orphanExit`, resume once if it was mid-run). An adopted session is removed from the interrupted-session list so `resumeOnHostLink` never resumes it.
 - [ ] **Step 1: Failing tests** — hub: a listed unknown channel for a known session is adopted (no `kill` sent, wrapper registered); unknown session → killed as today; adoption failure → killed and resumed once; `pending: null` → killed. session-resume: an adopted session gets no resume prompt. link-integration: real daemon + fake omp; start a run, recreate the hub (simulated web restart), the same child pid keeps streaming frames to a new wrapper with no gap or duplicate, and no resume prompt is written to its stdin; a run waiting on an `ask` shows the dialog again after the restart and the answer reaches omp.
@@ -98,14 +105,19 @@
 ### Task 4: Local link bootstrap
 
 **Files:**
+
 - Modify: `lib/hosts/registry.ts` (reserved `local` record), `lib/hosts/hub.ts` (`getHost("local")` → the linked host), `lib/hosts/daemon.ts` (re-read `host.json` on 401; loopback http), `bin/omp-web-host.js`, `instrumentation.node.ts` (bootstrap at start), `app/api/hosts/route.ts` (local row from the registry, not synthesized)
 - Create: `lib/hosts/local-bootstrap.ts`
 - Test: `lib/hosts/local-bootstrap.test.mjs`, `lib/hosts/daemon.test.mjs`, `lib/hosts/hosts-route.test.mjs`
 
 **Interfaces:**
+
 - Produces:
   ```ts
-  export function ensureLocalHostLink(input: { url: string }): { token: string; written: boolean };
+  export function ensureLocalHostLink(input: { url: string }): {
+    token: string;
+    written: boolean;
+  };
   // registry: the "local" record exists exactly once; createHost never returns id "local"; updateHost/revokeHost("local") throw
   ```
   At startup the web server calls `ensureLocalHostLink({ url: "http://127.0.0.1:<its port>" })` — skipped when `NODE_ENV` is `development` — : creates or keeps the `local` record, writes `<agent dir>/omp-web/host.json` (0600, temp + rename) when its url/token differ. The port is the one the server actually listens on (read how `bin/omp-web.js` passes it to `next start`). The daemon, on 401, re-reads `host.json` once and redials with the new token; it exits only when the file still holds the rejected token. `http://` is accepted for loopback hosts without `--allow-http`.
@@ -118,10 +130,12 @@
 ### Task 5: Main never runs omp or reads session files itself
 
 **Files:**
+
 - Modify: `lib/hosts/local-host.ts` (becomes the daemon's machine implementation; main imports nothing from it), `lib/api-utils.ts`, `lib/hosts/session-index.ts`, `lib/rpc-manager.ts`, every `app/api/**` route importing `localHost`, `lib/session-resume.ts`, `lib/file-access.ts` (local roots now come from the `local` host's session list)
 - Test: affected route/manager tests; add `lib/hosts/no-direct-local.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `getHost("local")` from Task 4.
 - Produces: every main-side path that used `localHost` uses `getHost("local")`. `allowFileRoot` keeps working for `local` (local paths are main's paths) — the check becomes `host.id === "local"` instead of `host === localHost`. `no-direct-local.test.mjs` fails if any file under `app/` or `lib/` other than `lib/hosts/daemon.ts`, `lib/hosts/local-host.ts` and their tests imports `local-host` or `spawnLocalRpcTransport`.
 - [ ] **Step 1: Write** `no-direct-local.test.mjs` (it fails on the current imports).
@@ -133,10 +147,12 @@
 ### Task 6: Offline local host UI and install hint
 
 **Files:**
+
 - Modify: `components/HostsConfig.tsx` (local row: no rename/revoke; offline hint), `components/AppShell.tsx` (one-time banner), `lib/i18n/locales/*.json`
 - Test: `components/HostsConfig.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `hosts` channel status for `local`.
 - Produces: when `local` is offline, Settings → Hosts shows "start the ompweb-host service"; when it has never linked since this web server started and 10 s have passed, AppShell shows a one-time dismissible banner "This machine needs the ompweb-host service. Install it with: <command>", where the command is the platform's helper from Task 7 (`ompweb systemd install` / `ompweb launchd install`).
 - [ ] **Step 1: Failing tests** — local row renders no Rename/Revoke; offline local row shows the hint; banner appears once after 10 s offline, not again after dismissal (localStorage key), not when local links.
@@ -146,10 +162,12 @@
 ### Task 7: Service helpers install both units
 
 **Files:**
+
 - Modify: `bin/omp-web-systemd.js`, `bin/omp-web-launchd.js`, `bin/omp-web-tray.js`
 - Test: `bin/omp-web-systemd.test.mjs`, a launchd plist test
 
 **Interfaces:**
+
 - Produces: `install` writes and enables two units — the existing web unit and `ompweb-host` running `<ompweb bin> host` with `Restart=always` (systemd) / `KeepAlive` (launchd); `uninstall` removes both; `status` reports both. The tray shows the daemon state next to the web state.
 - [ ] **Step 1: Failing tests** — generated systemd units: two files, the host unit's `ExecStart` ends with ` host`; launchd: two plists with `KeepAlive`.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → PASS.
@@ -158,6 +176,7 @@
 ### Task 8: This machine's deploy and docs
 
 **Files:**
+
 - Modify (outside the repo, not under git): `/opt/omp-deployment/bin/ompweb-deploy`; create the `ompweb-host` systemd unit for this VM
 - Modify: `AGENTS.md`, `README.md`, `DESIGN.md`, `CHANGELOG.md`
 

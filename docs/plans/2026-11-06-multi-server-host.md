@@ -33,6 +33,7 @@
 5. The daemon restarts while a run is in flight and both servers relink → the session resumes once, with one resume prompt, and both UIs show the resumed run. (Task 7)
 
 ---
+
 ## File ownership and dependencies
 
 - `daemon-link.ts` owns one connection's delivery state; `daemon.ts` coordinates the links, shared ops and process table. Preserve the existing transport, upload and update-safety contracts.
@@ -45,14 +46,15 @@
 
 See the spec's final section: correlate using existing RPC ids; never repeat an ambiguously completed web callback; preserve preparation/background-work protection in the host timers; schedule the first v6 → v7 restart only on a quiescent host. No operational change is authorized by this planning commit.
 
-
 ### Task 1: Link protocol v7 messages
 
 **Files:**
+
 - Modify: `lib/hosts/link-protocol.ts` (version constants, `HelloMessage`, `DownMessage`, `UpMessage`, `HOST_OP_NAMES`, encoders/decoders)
 - Test: `lib/hosts/link-protocol.test.mjs`
 
 **Interfaces:**
+
 - Produces:
   - hello (daemon → hub) gains optional `link?: { id: string; notifier: boolean }`.
   - Export `OpenChannelRequest = { sessionId: string | null; launch: SpawnRequest }` and `OpenChannelResult = { ch: string; joined: boolean; pending: string[] | null; streaming: string | null; cwd: string; fellBack: boolean; launchAdvisor: boolean; autoApproveExtension: boolean }`. Reuse `SpawnRequest` from `lib/hosts/host.ts`: `sessionFile: string`, optional `toolNames?: string[]` and `spawnModel?: string`, not new nullable variants. `streaming` is one whole `message_update` line or null. Add `"open"` and `"close"` to `HOST_OP_NAMES`; `close` args are `{ ch: string }`, result `{}`.
@@ -68,10 +70,12 @@ See the spec's final section: correlate using existing RPC ids; never repeat an 
 ### Task 2: `host.json` holds several links
 
 **Files:**
+
 - Modify: `lib/hosts/host-login.ts`, `lib/hosts/local-bootstrap.ts`, `lib/hosts/host-cli.ts`, `instrumentation.node.ts` (await asynchronous bootstrap)
 - Test: `lib/hosts/host-login.test.mjs` (create), `lib/hosts/local-bootstrap.test.mjs`
 
 **Interfaces:**
+
 - Produces in `host-login.ts`:
   - `type HostLink = { url: string; token: string }`
   - `readHostLinks(): HostLink[]` — `links` if present, else `[{url, token}]` from the top level, else `[]`; URLs trimmed of trailing `/`.
@@ -91,11 +95,13 @@ See the spec's final section: correlate using existing RPC ids; never repeat an 
 ### Task 3: One `DaemonLink` per server (behaviour-preserving refactor)
 
 **Files:**
+
 - Create: `lib/hosts/daemon-link.ts`
 - Modify: `lib/hosts/daemon.ts`, `lib/hosts/host-cli.ts`
 - Test: `lib/hosts/daemon.test.mjs` (existing suite, unchanged), plus `lib/hosts/daemon-links.test.mjs` (create)
 
 **Interfaces:**
+
 - Produces `class DaemonLink` in `daemon-link.ts`: constructor `(login: HostLink, id: string, deps: LinkDeps)`; methods `start(): void`, `stop(): Promise<void>`, `isUp(): boolean`, and `queue(...)` preserving the current daemon queue's typed `Unsequenced<UpMessage>` arguments and `number | null` result. Preserve the existing byte counters, send pacing, stats and binary-result ordering rather than recreating them differently.
 - `LinkDeps` owns the cross-boundary callbacks: `hello(link: DaemonLink, replay: boolean): string`, `handleDown(link: DaemonLink, message: DownMessage | UnknownMessage): void`, `onEnd(link: DaemonLink, reason: "revoked" | "replaced" | "version"): void`, `log(message: string): void`. Per-link configuration carries `allowHttp` and `primary`; enforce the existing HTTPS/loopback trust boundary.
 - Change `runHostDaemon` and `host-cli.ts` together to read `readHostLinks()` instead of receiving one URL/token. Keep `Map<string, DaemonLink>` keyed by URL; reconcile on a debounced directory watch (200 ms) and link failures. Invalid reloads leave running links intact. Include `id`, `notifier` and current channel listings in each hello. For an older server's version refusal, negotiate a mutually supported version before classifying the link as incompatible; a v7 hello sent unchanged to a v6 server is rejected today. Revocation, replacement, stats, request results and binary frames belong to their source link. Track upload progress by link, upload id and attempt so another link's retry cannot receive the wrong acknowledgement.
@@ -109,11 +115,13 @@ See the spec's final section: correlate using existing RPC ids; never repeat an 
 ### Task 4: Shared channels, joining and reply routing
 
 **Files:**
+
 - Create: `lib/hosts/daemon-channels.ts`
 - Modify: `lib/hosts/daemon.ts`
 - Test: `lib/hosts/daemon-channels.test.mjs` (create)
 
 **Interfaces:**
+
 - Consumes: `DaemonLink.queue` (Task 3), the `open`/`close` ops (Task 1).
 - Produces `class ChannelTable`:
   - `open(link: DaemonLink, args: OpenChannelRequest): Promise<OpenChannelResult>` — matches the canonical session identity, including aliases from legal session moves. Concurrent opens share one spawn. Legacy-owned sessions are refused with `new HostOpError(409, "session_running_elsewhere", "...")`.
@@ -133,11 +141,13 @@ See the spec's final section: correlate using existing RPC ids; never repeat an 
 ### Task 5: The streaming message on join and resync
 
 **Files:**
+
 - Create: `lib/hosts/stream-snapshot.ts`
 - Modify: `lib/hosts/daemon-channels.ts`
 - Test: `lib/hosts/stream-snapshot.test.mjs` (create)
 
 **Interfaces:**
+
 - Produces `class StreamSnapshot`: `note(frame: RpcFrameRecord): void`, `whole(): string | null`, `clear(): void`. Consume decoded logical frames from Task 4, not a second raw-line decoder; use `applyMessageDelta` and `withStreamedArguments` from `lib/message-delta.ts`.
 - `open` puts `whole()` in `OpenChannelResult.streaming`. Resync supplies a new snapshot with an ordered boundary so deltas already represented by the snapshot are not appended twice.
 
@@ -150,11 +160,13 @@ See the spec's final section: correlate using existing RPC ids; never repeat an 
 ### Task 6: Lifecycle and startup settings in the daemon
 
 **Files:**
+
 - Create: `lib/hosts/channel-lifecycle.ts`
 - Modify: `lib/hosts/daemon-channels.ts`, `lib/hosts/daemon.ts`
 - Test: `lib/hosts/channel-lifecycle.test.mjs` (create)
 
 **Interfaces:**
+
 - Produces `class ChannelLifecycle` per v7 channel with `noteStdout(frame: RpcFrameRecord): void`, `noteStdin(frame: RpcFrameRecord): void`, `setInterest(linkId: string, on: boolean): void`, `linkDown(linkId: string): void`, `linkGone(linkId: string): void`, and `dispose(): void`. Inject time/timers through one constructor parameter for deterministic boundary tests; its stop callback receives `"abandoned" | "idle"`.
 - Consume Task 4's decoded frames. Track agent execution, native settlement/background work, unanswered requests and command preparation separately: no timer may kill an unsettled run or a blocking dialog. Preserve pending upload-attachment preparation via a host activity lease reported before attachment starts, not just after prompt stdin. Both timers require no run/background work, startup or protected work. Disconnect grace starts at link loss; abandoning starts when the final interest actually expires.
 - After spawn, await bounded `negotiate_protocol` before relying on chunk decoding or startup settings. Then send delta filtering, subagent events and ask-dialog mode once with `d:` ids. Retain full-update fallback when omp rejects or emits incompatible deltas; servers must not independently change the child's filter.
@@ -169,11 +181,13 @@ See the spec's final section: correlate using existing RPC ids; never repeat an 
 ### Task 7: Resume after a daemon restart
 
 **Files:**
+
 - Create: `lib/hosts/host-resume.ts`
 - Modify: `lib/hosts/daemon.ts`, `lib/hosts/channel-lifecycle.ts` (run start/settle callbacks)
 - Test: `lib/hosts/host-resume.test.mjs` (create)
 
 **Interfaces:**
+
 - Consumes: `loadWebServerSettings().autoResumeSessions` from `lib/web-settings.ts` through a Node-safe import graph. Move `RESUME_PROMPT` to the Node-safe resume module and update its existing importers.
 - Export `type HostResumeEntry = { sessionId: string; launch: SpawnRequest }`. `HostResumeTracker` has `recordRunning(entries: HostResumeEntry[]): void`, `freeze(): void`, `takeRunning(): HostResumeEntry[]`, `dispose(): void`; use an instance, not a module-global tracker that can mix test hosts. Write the first run transition immediately, coalesce subsequent changes to at most once per second, and flush on orderly shutdown before freezing.
 - On startup claim the file atomically, validate ids and launch paths against the owning host's session root, and spawn each entry once through the same spawn fence used by `open`. Await startup settings before sending `RESUME_PROMPT` with a daemon-owned id. Malformed manifests must never spawn arbitrary paths or be silently overwritten.
@@ -188,11 +202,13 @@ See the spec's final section: correlate using existing RPC ids; never repeat an 
 ### Task 8: Dialogs, web tool callbacks, notifier, session-list changes
 
 **Files:**
+
 - Create: `lib/hosts/shared-requests.ts`
 - Modify: `lib/hosts/daemon-channels.ts`, `lib/hosts/daemon.ts`
 - Test: `lib/hosts/shared-requests.test.mjs` (create)
 
 **Interfaces:**
+
 - Produces `class SharedRequests` per v7 channel:
   - Dialogs: blocking `extension_ui_request` goes to every member (unchanged fan-out). `answer(linkId, line)`: the first `extension_ui_response` for an id goes to stdin; later ones are dropped; every other member gets `{"type":"extension_ui_request","method":"cancel","targetId":<id>}`.
   - Web tool callbacks: `setTools(linkId: string, tools: unknown[], schemes: string[]): void`; validate definitions with the same schema as existing tool registration. Merge registrations by name, update omp only on actual union changes, and remove registrations when a link leaves. Use the last prompt/steer/follow-up sender if eligible, otherwise the earliest-linked eligible server. Hold undispatched calls until an executor exists. Once dispatched, retain its executor across reconnects; do not re-execute it elsewhere after an ambiguous link loss. Native `tool_execution_*` events/results still fan out to every member, regardless of callback executor.
@@ -208,10 +224,12 @@ See the spec's final section: correlate using existing RPC ids; never repeat an 
 ### Task 9: The web server speaks v7
 
 **Files:**
+
 - Modify: `lib/hosts/hub.ts`, `lib/hosts/host.ts`, `lib/omp/rpc-transport.ts`, `lib/rpc-manager.ts`, `lib/notification-hub.ts`, `lib/hosts/session-index.ts`, `lib/session-resume.ts`, `instrumentation.node.ts`, and `lib/agent-command.ts` for preparation leases.
 - Test: `lib/hosts/hub.test.mjs`, `lib/rpc-manager.test.mjs`; locate the additional existing adoption/reaper suites before editing and run that set.
 
 **Interfaces:**
+
 - Consumes: Task 1 messages; the daemon behaviour of Tasks 4–8.
 - Produces:
   - Extend `SpawnResult` and the transport capability with host-owned-lifecycle metadata, joined-channel pending requests and streaming snapshot. `RemoteHost.spawnRpc` uses `open` for v7, obtains the daemon's channel id before registering the transport, and holds/replays subsequent frames without a result/output race. Keep the old preallocated-channel path for legacy hosts.
@@ -230,6 +248,7 @@ See the spec's final section: correlate using existing RPC ids; never repeat an 
 ### Task 10: Two servers, one daemon, end to end
 
 **Files:**
+
 - Modify: `lib/hosts/link-integration.test.mjs` (new cases), `scripts/smoke.ts` (`--second-server` starts a second built server on the same throwaway HOME)
 - Test: same
 
@@ -241,13 +260,13 @@ See the spec's final section: correlate using existing RPC ids; never repeat an 
 ### Task 11: Documentation
 
 **Files:**
+
 - Modify: `AGENTS.md` ("Remote hosts", "Local daemon", "RPC session lifecycle", "Auto-resume after a restart", "Link protocol versions"), `CHANGELOG.md`, `docs/specs/2026-10-28-remote-hosts-design.md` (version list).
 
 - [ ] **Step 1:** Describe: one daemon, several links from `host.json`; the daemon owns stops and resume for v7; reply routing by command id; notifier; v6 isolation and the 409; `ompweb host login --add`.
 - [ ] **Step 2:** Commit `docs(hosts): several servers on one daemon`.
 
 **Whole-branch gate before publication or deployment:** run `npm test`, `npm run typecheck`, `npm run lint`, `npm run build` and `npm run smoke -- --second-server` on the integrated head. Exercise both rendered browser views against the throwaway two-server setup: send from each view, observe matching messages/tool results, answer one dialog and verify both close, reconnect one view without disturbing the other. Then request one condensed `reviewer` round covering contract, hostile correctness, test honesty and unnecessary complexity. Resolve findings, run affected proof once more, publish the implementation PR and register pr-watcher. CI/bot reviews follow repository policy. No production cutover occurs until the release is verified and the user approves its timing.
-
 
 ### Task 12: Enable a second web server after the verified release
 

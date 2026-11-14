@@ -8,13 +8,21 @@ function canonicalOrigin(value: string): string | null {
 
 /** `https:` when the first X-Forwarded-Proto value says so (`wss` on a WebSocket upgrade, as Traefik sends): behind a TLS-terminating proxy Bun's request.url is still http://. */
 export function requestProtocol(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
-  return forwarded === "https" || forwarded === "wss" ? "https:" : new URL(request.url).protocol;
+  const forwarded = request.headers
+    .get("x-forwarded-proto")
+    ?.split(",")[0]
+    ?.trim()
+    .toLowerCase();
+  return forwarded === "https" || forwarded === "wss"
+    ? "https:"
+    : new URL(request.url).protocol;
 }
 
 function getRequestOrigin(request: Request): string | null {
   const host = request.headers.get("host");
-  return host ? canonicalOrigin(`${requestProtocol(request)}//${host}`) : new URL(request.url).origin;
+  return host
+    ? canonicalOrigin(`${requestProtocol(request)}//${host}`)
+    : new URL(request.url).origin;
 }
 
 /** Reject browser cross-site API requests while preserving non-browser clients. */
@@ -37,9 +45,11 @@ export function isApiRequestOriginAllowed(request: Request): boolean {
   try {
     const received = new URL(origin);
     const expected = new URL(requestOrigin);
-    return received.protocol === expected.protocol
-      && received.hostname === expected.hostname
-      && received.port === "";
+    return (
+      received.protocol === expected.protocol &&
+      received.hostname === expected.hostname &&
+      received.port === ""
+    );
   } catch {
     return false;
   }

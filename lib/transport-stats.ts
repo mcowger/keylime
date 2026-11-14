@@ -15,7 +15,10 @@ export function percentile(values: number[], p: number): number | null {
 
 function sortedPercentile(sorted: number[], p: number): number {
   // p * n / 100, not p / 100 * n: 99.9 / 100 * 2000 is 1998.0000000000002, whose ceiling is one rank too high.
-  return sorted[Math.min(sorted.length, Math.max(1, Math.ceil((p * sorted.length) / 100))) - 1];
+  return sorted[
+    Math.min(sorted.length, Math.max(1, Math.ceil((p * sorted.length) / 100))) -
+      1
+  ];
 }
 
 export const diff = (a: unknown, b: unknown): number | undefined => {
@@ -33,14 +36,18 @@ export const serverMsOf = (s: Sample) => diff(s.repliedAt, s.recvAt);
 export function transportMsOf(s: Sample): number | undefined {
   const totalMs = totalMsOf(s);
   const serverMs = serverMsOf(s);
-  return totalMs !== undefined && serverMs !== undefined ? totalMs - serverMs : undefined;
+  return totalMs !== undefined && serverMs !== undefined
+    ? totalMs - serverMs
+    : undefined;
 }
 
 /** An action's one-way trip to the server, through the worker's clock offset. */
 export function upMsOf(s: Sample): number | undefined {
   const sentAt = asNumber(s.sentAt);
   const offset = asNumber(s.offset);
-  return sentAt === undefined || offset === undefined ? undefined : diff(s.recvAt, sentAt + offset);
+  return sentAt === undefined || offset === undefined
+    ? undefined
+    : diff(s.recvAt, sentAt + offset);
 }
 
 /** An event's one-way trip from the server, through the worker's clock offset. */
@@ -63,20 +70,37 @@ export interface DurationSummary {
 }
 
 export function summarizeDurations(values: number[]): DurationSummary {
-  if (values.length === 0) return { count: 0, mean: null, p50: null, p95: null, p999: null, max: null };
+  if (values.length === 0)
+    return {
+      count: 0,
+      mean: null,
+      p50: null,
+      p95: null,
+      p999: null,
+      max: null,
+    };
   const sorted = [...values].sort((a, b) => a - b);
   return {
     count: sorted.length,
     mean: sorted.reduce((a, b) => a + b, 0) / sorted.length,
     p50: sortedPercentile(sorted, 50),
     p95: sortedPercentile(sorted, 95),
-    p999: sorted.length >= P999_MIN_COUNT ? sortedPercentile(sorted, 99.9) : null,
+    p999:
+      sorted.length >= P999_MIN_COUNT ? sortedPercentile(sorted, 99.9) : null,
     max: sorted[sorted.length - 1],
   };
 }
 
-export type DiagnosticMetric = "upMs" | "transportMs" | "ompMs" | "serverMs" | "totalMs" | "eventMs";
-const METRIC_ORDER: DiagnosticMetric[] = ["upMs", "transportMs", "ompMs", "serverMs", "totalMs", "eventMs"];
+export type DiagnosticMetric =
+  "upMs" | "transportMs" | "ompMs" | "serverMs" | "totalMs" | "eventMs";
+const METRIC_ORDER: DiagnosticMetric[] = [
+  "upMs",
+  "transportMs",
+  "ompMs",
+  "serverMs",
+  "totalMs",
+  "eventMs",
+];
 
 export interface DiagnosticStat extends DurationSummary {
   transport: string;
@@ -86,7 +110,11 @@ export interface DiagnosticStat extends DurationSummary {
 /** The diagnostics panel's rows: per transport, each metric with at least one value. */
 export function diagnosticStats(samples: Sample[]): DiagnosticStat[] {
   const groups = new Map<string, number[]>();
-  const add = (transport: string, metric: DiagnosticMetric, value: number | undefined) => {
+  const add = (
+    transport: string,
+    metric: DiagnosticMetric,
+    value: number | undefined,
+  ) => {
     if (value === undefined) return;
     const key = `${transport}\0${metric}`;
     const values = groups.get(key);
@@ -101,17 +129,26 @@ export function diagnosticStats(samples: Sample[]): DiagnosticStat[] {
       add(transport, "upMs", upMsOf(s));
       const totalMs = totalMsOf(s);
       // A backward clock step during the command makes its round trip (and so its transport share) meaningless.
-      if (totalMs !== undefined && totalMs >= 0) add(transport, "transportMs", transportMsOf(s));
-      if (typeof s.type === "string" && NO_OMP_REPLY_COMMANDS.has(s.type)) continue;
+      if (totalMs !== undefined && totalMs >= 0)
+        add(transport, "transportMs", transportMsOf(s));
+      if (typeof s.type === "string" && NO_OMP_REPLY_COMMANDS.has(s.type))
+        continue;
       if (s.type === "get_state") add(transport, "ompMs", serverMsOf(s));
       add(transport, "serverMs", serverMsOf(s));
-      if (totalMs !== undefined && totalMs >= 0) add(transport, "totalMs", totalMs);
+      if (totalMs !== undefined && totalMs >= 0)
+        add(transport, "totalMs", totalMs);
     } else if (s.metric === "event") {
       add(transport, "eventMs", eventMsOf(s));
     }
   }
-  return [...groups].map(([key, values]): DiagnosticStat => {
-    const [transport, metric] = key.split("\0") as [string, DiagnosticMetric];
-    return { transport, metric, ...summarizeDurations(values) };
-  }).sort((a, b) => a.transport.localeCompare(b.transport) || METRIC_ORDER.indexOf(a.metric) - METRIC_ORDER.indexOf(b.metric));
+  return [...groups]
+    .map(([key, values]): DiagnosticStat => {
+      const [transport, metric] = key.split("\0") as [string, DiagnosticMetric];
+      return { transport, metric, ...summarizeDurations(values) };
+    })
+    .sort(
+      (a, b) =>
+        a.transport.localeCompare(b.transport) ||
+        METRIC_ORDER.indexOf(a.metric) - METRIC_ORDER.indexOf(b.metric),
+    );
 }

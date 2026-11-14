@@ -1,6 +1,13 @@
 /** One IDB store: queued transactions, read-your-writes, unique adds, and atomic commit/abort. */
 export function fakeIndexedDB() {
-  const idb = { entries: new Map(), hold: false, held: [], upgraded: false, failWrites: false, failReads: false };
+  const idb = {
+    entries: new Map(),
+    hold: false,
+    held: [],
+    upgraded: false,
+    failWrites: false,
+    failReads: false,
+  };
   const transactions = [];
   let active = false;
   idb.release = () => {
@@ -24,7 +31,9 @@ export function fakeIndexedDB() {
         active = false;
         startNext();
       };
-      const abort = (error = new DOMException("Transaction aborted", "AbortError")) => {
+      const abort = (
+        error = new DOMException("Transaction aborted", "AbortError"),
+      ) => {
         if (finished) return;
         finished = true;
         transaction.error = error;
@@ -33,7 +42,8 @@ export function fakeIndexedDB() {
       };
       const commit = () => {
         if (finished) return;
-        if (idb.failWrites && writing) return abort(new DOMException("Commit failed", "QuotaExceededError"));
+        if (idb.failWrites && writing)
+          return abort(new DOMException("Commit failed", "QuotaExceededError"));
         finished = true;
         if (writing) {
           idb.entries.clear();
@@ -43,33 +53,41 @@ export function fakeIndexedDB() {
         finish();
       };
       let committing = false;
-      const settle = () => queueMicrotask(() => {
-        if (pending > 0 || finished || committing) return;
-        committing = true;
-        if (idb.hold) idb.held.push(commit);
-        else commit();
-      });
+      const settle = () =>
+        queueMicrotask(() => {
+          if (pending > 0 || finished || committing) return;
+          committing = true;
+          if (idb.hold) idb.held.push(commit);
+          else commit();
+        });
       const request = (operation, write = false) => {
-        if (finished || committing) throw new DOMException("Transaction inactive", "TransactionInactiveError");
-        if (write && mode !== "readwrite") throw new DOMException("Readonly transaction", "ReadOnlyError");
+        if (finished || committing)
+          throw new DOMException(
+            "Transaction inactive",
+            "TransactionInactiveError",
+          );
+        if (write && mode !== "readwrite")
+          throw new DOMException("Readonly transaction", "ReadOnlyError");
         const request = {};
         pending++;
-        const run = () => queueMicrotask(() => {
-          if (finished) return;
-          pending--;
-          try {
-            if (idb.failReads && !write) throw new DOMException("Read failed", "UnknownError");
-            request.result = operation();
-            writing ||= write;
-          } catch (error) {
-            request.error = error;
-            request.onerror?.();
-            abort(error);
-            return;
-          }
-          request.onsuccess?.();
-          settle();
-        });
+        const run = () =>
+          queueMicrotask(() => {
+            if (finished) return;
+            pending--;
+            try {
+              if (idb.failReads && !write)
+                throw new DOMException("Read failed", "UnknownError");
+              request.result = operation();
+              writing ||= write;
+            } catch (error) {
+              request.error = error;
+              request.onerror?.();
+              abort(error);
+              return;
+            }
+            request.onsuccess?.();
+            settle();
+          });
         if (data) run();
         else requests.push(run);
         return request;
@@ -79,23 +97,37 @@ export function fakeIndexedDB() {
         objectStore: () => ({
           put: (value) => {
             const copy = structuredClone(value);
-            return request(() => { data.set(copy.id, copy); return copy.id; }, true);
-          },
-          add: (value) => {
-            const copy = structuredClone(value);
             return request(() => {
-              if (data.has(copy.id)) throw new DOMException("Key already exists", "ConstraintError");
               data.set(copy.id, copy);
               return copy.id;
             }, true);
           },
-          delete: (id) => request(() => { data.delete(id); }, true),
+          add: (value) => {
+            const copy = structuredClone(value);
+            return request(() => {
+              if (data.has(copy.id))
+                throw new DOMException("Key already exists", "ConstraintError");
+              data.set(copy.id, copy);
+              return copy.id;
+            }, true);
+          },
+          delete: (id) =>
+            request(() => {
+              data.delete(id);
+            }, true),
           get: (id) => request(() => structuredClone(data.get(id))),
-          getAll: () => request(() => [...data].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, value]) => structuredClone(value))),
+          getAll: () =>
+            request(() =>
+              [...data]
+                .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+                .map(([, value]) => structuredClone(value)),
+            ),
         }),
       };
       transactions.push(() => {
-        data = new Map([...idb.entries].map(([id, value]) => [id, structuredClone(value)]));
+        data = new Map(
+          [...idb.entries].map(([id, value]) => [id, structuredClone(value)]),
+        );
         for (const run of requests) run();
         settle();
       });

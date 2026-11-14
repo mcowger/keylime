@@ -7,7 +7,10 @@ export interface ActivePlan {
   objective: string;
 }
 
-export function createActiveGoal(objective: string, startedAt = Date.now()): ActiveGoal {
+export function createActiveGoal(
+  objective: string,
+  startedAt = Date.now(),
+): ActiveGoal {
   return { objective: objective.trim(), startedAt };
 }
 
@@ -18,8 +21,14 @@ export function parseActiveGoal(value: string | null): ActiveGoal | null {
     const parsed: unknown = JSON.parse(value);
     if (!parsed || typeof parsed !== "object") return null;
     const { objective, startedAt } = parsed as Record<string, unknown>;
-    if (typeof objective !== "string" || !objective.trim()
-      || typeof startedAt !== "number" || !Number.isFinite(startedAt) || startedAt < 0) return null;
+    if (
+      typeof objective !== "string" ||
+      !objective.trim() ||
+      typeof startedAt !== "number" ||
+      !Number.isFinite(startedAt) ||
+      startedAt < 0
+    )
+      return null;
     return { objective, startedAt };
   } catch {
     return null;

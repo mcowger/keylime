@@ -1,11 +1,7 @@
 // Markdown export for a session transcript. Ports the Tauri desktop app's
 // session-menu "Copy transcript" (User/Assistant sections, thinking details,
 // Tool/Shell sections) to the web sidebar. Pure formatter: no DOM, no fetch.
-import type {
-  AgentMessage,
-  AssistantContentBlock,
-  TextContent,
-} from "./types";
+import type { AgentMessage, AssistantContentBlock, TextContent } from "./types";
 
 export const TRANSCRIPT_BLOCK_CHAR_LIMIT = 20000;
 export const TRANSCRIPT_TOTAL_CHAR_LIMIT = 500000;
@@ -52,7 +48,9 @@ function assistantThinking(blocks: AssistantContentBlock[]): string[] {
   const out: string[] = [];
   for (const block of blocks) {
     if (block.type === "thinking" && block.thinking.trim()) {
-      out.push(`<details><summary>Thinking</summary>\n\n${truncateBlock(block.thinking)}\n\n</details>`);
+      out.push(
+        `<details><summary>Thinking</summary>\n\n${truncateBlock(block.thinking)}\n\n</details>`,
+      );
     }
   }
   return out;
@@ -70,12 +68,18 @@ function toolInputSummary(input: Record<string, unknown>): string {
  * output. Images degrade to a placeholder line since binary bytes cannot
  * travel through the clipboard.
  */
-export function transcriptToMarkdown(messages: AgentMessage[], meta: TranscriptMeta = {}): string {
+export function transcriptToMarkdown(
+  messages: AgentMessage[],
+  meta: TranscriptMeta = {},
+): string {
   const sections: string[] = [];
   if (meta.title) sections.push(`# ${meta.title}`);
   if (meta.cwd) sections.push(`_${meta.cwd}_`);
 
-  const pendingResults = new Map<string, { name?: string; text: string; isError?: boolean }>();
+  const pendingResults = new Map<
+    string,
+    { name?: string; text: string; isError?: boolean }
+  >();
   for (const message of messages) {
     if (message.role === "toolResult") {
       const text = textOf(message.content);
@@ -96,7 +100,10 @@ export function transcriptToMarkdown(messages: AgentMessage[], meta: TranscriptM
         break;
       }
       case "assistant": {
-        const header = message.provider || message.model ? `## Assistant (${[message.provider, message.model].filter(Boolean).join("/")})` : "## Assistant";
+        const header =
+          message.provider || message.model
+            ? `## Assistant (${[message.provider, message.model].filter(Boolean).join("/")})`
+            : "## Assistant";
         const body: string[] = [];
         const text = assistantText(message.content).trim();
         if (text) body.push(truncateBlock(text));
@@ -109,17 +116,26 @@ export function transcriptToMarkdown(messages: AgentMessage[], meta: TranscriptM
           const result = pendingResults.get(block.toolCallId);
           if (result) {
             consumedResults.add(block.toolCallId);
-            const label = result.isError ? "Tool result (error)" : "Tool result";
+            const label = result.isError
+              ? "Tool result (error)"
+              : "Tool result";
             const name = result.name ?? block.toolName;
             lines.push(`**${label}: ${name}**`);
-            if (result.text.trim()) lines.push(fenced(truncateBlock(result.text.trim())));
+            if (result.text.trim())
+              lines.push(fenced(truncateBlock(result.text.trim())));
             else lines.push("_(empty)_");
           }
           body.push(lines.join("\n\n"));
         }
         if (message.errorMessage) {
-          const isInterrupted = message.stopReason === "aborted" || /^interrupted(\s+by\s+user)?/i.test(message.errorMessage);
-          body.push(isInterrupted ? "_Generation interrupted_" : `**Error:** ${message.errorMessage}`);
+          const isInterrupted =
+            message.stopReason === "aborted" ||
+            /^interrupted(\s+by\s+user)?/i.test(message.errorMessage);
+          body.push(
+            isInterrupted
+              ? "_Generation interrupted_"
+              : `**Error:** ${message.errorMessage}`,
+          );
         }
         if (body.length > 0) sections.push(`${header}\n\n${body.join("\n\n")}`);
         break;
@@ -129,31 +145,43 @@ export function transcriptToMarkdown(messages: AgentMessage[], meta: TranscriptM
         // matching call in the transcript window) get their own section.
         if (consumedResults.has(message.toolCallId)) break;
         const text = textOf(message.content).trim();
-        const label = message.isError ? "### Tool result (error)" : "### Tool result";
+        const label = message.isError
+          ? "### Tool result (error)"
+          : "### Tool result";
         const name = message.toolName ?? message.toolCallId;
-        sections.push(text ? `${label}: ${name}\n\n${fenced(truncateBlock(text))}` : `${label}: ${name}\n\n_(empty)_`);
+        sections.push(
+          text
+            ? `${label}: ${name}\n\n${fenced(truncateBlock(text))}`
+            : `${label}: ${name}\n\n_(empty)_`,
+        );
         break;
       }
       case "bashExecution": {
         const lines = [`### Shell: \`${message.command}\``];
         if (message.exitCode !== undefined || message.cancelled) {
-          lines.push(`_exit ${message.cancelled ? "cancelled" : message.exitCode}_`);
+          lines.push(
+            `_exit ${message.cancelled ? "cancelled" : message.exitCode}_`,
+          );
         }
-        if (message.output.trim()) lines.push(fenced(truncateBlock(message.output.trim())));
+        if (message.output.trim())
+          lines.push(fenced(truncateBlock(message.output.trim())));
         sections.push(lines.join("\n\n"));
         break;
       }
       case "pythonExecution": {
         const lines = ["### Python"];
         lines.push(fenced(truncateBlock(message.code.trim()), "python"));
-        if (message.output.trim()) lines.push(fenced(truncateBlock(message.output.trim())));
+        if (message.output.trim())
+          lines.push(fenced(truncateBlock(message.output.trim())));
         sections.push(lines.join("\n\n"));
         break;
       }
       case "fileMention": {
         const lines = ["### Attached files"];
         for (const file of message.files) {
-          lines.push(`- \`${file.path}\`${file.skippedReason ? ` _(${file.skippedReason})_` : ""}`);
+          lines.push(
+            `- \`${file.path}\`${file.skippedReason ? ` _(${file.skippedReason})_` : ""}`,
+          );
         }
         sections.push(lines.join("\n"));
         break;
@@ -166,7 +194,8 @@ export function transcriptToMarkdown(messages: AgentMessage[], meta: TranscriptM
       case "custom": {
         if (!message.display) break;
         const text = textOf(message.content).trim();
-        if (text) sections.push(`### ${message.customType}\n\n${truncateBlock(text)}`);
+        if (text)
+          sections.push(`### ${message.customType}\n\n${truncateBlock(text)}`);
         break;
       }
     }

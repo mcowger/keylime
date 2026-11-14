@@ -25,7 +25,10 @@ export async function GET(req: Request) {
       const body = { sessions: matched, runningSessionIds, runningSessions };
       const bodyJson = JSON.stringify(body);
       return new Response(bodyJson, {
-        headers: { "Content-Type": "application/json", ...SESSION_LIST_HEADERS },
+        headers: {
+          "Content-Type": "application/json",
+          ...SESSION_LIST_HEADERS,
+        },
       });
     }
 
@@ -34,14 +37,24 @@ export async function GET(req: Request) {
     const etag = `"${createHash("sha1").update(bodyJson).digest("hex").slice(0, 16)}"`;
 
     if (req.headers.get("if-none-match") === etag) {
-      return new Response(null, { status: 304, headers: { ETag: etag, ...SESSION_LIST_HEADERS } });
+      return new Response(null, {
+        status: 304,
+        headers: { ETag: etag, ...SESSION_LIST_HEADERS },
+      });
     }
     return new Response(bodyJson, {
-      headers: { ETag: etag, "Content-Type": "application/json", ...SESSION_LIST_HEADERS },
+      headers: {
+        ETag: etag,
+        "Content-Type": "application/json",
+        ...SESSION_LIST_HEADERS,
+      },
     });
   } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : String(error), code: "internal_error" },
+      {
+        error: error instanceof Error ? error.message : String(error),
+        code: "internal_error",
+      },
       { status: 500, headers: { "Cache-Control": "no-store" } },
     );
   }

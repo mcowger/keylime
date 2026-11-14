@@ -3,8 +3,10 @@ import type { CSSProperties } from "react";
 // OSC must precede the single-char Fe branch, whose class `[@-Z\\-_]` also
 // matches `]`. OSC content excludes ESC so an unterminated sequence cannot
 // make every later `ESC ]` rescan to the end of the string.
-const ANSI_ESCAPE_RE = /\x1B(?:\][^\x07\x1B]*(?:\x07|\x1B\\)|\[[0-?]*[ -/]*[@-~]|[@-Z\\-_])/g;
-const ANSI_ESCAPE_STICKY_RE = /\x1B(?:\][^\x07\x1B]*(?:\x07|\x1B\\)|\[[0-?]*[ -/]*[@-~]|[@-Z\\-_])/y;
+const ANSI_ESCAPE_RE =
+  /\x1B(?:\][^\x07\x1B]*(?:\x07|\x1B\\)|\[[0-?]*[ -/]*[@-~]|[@-Z\\-_])/g;
+const ANSI_ESCAPE_STICKY_RE =
+  /\x1B(?:\][^\x07\x1B]*(?:\x07|\x1B\\)|\[[0-?]*[ -/]*[@-~]|[@-Z\\-_])/y;
 const ANSI_SGR_RE = /\x1B\[([0-9;]*)m/g;
 const TUI_CURSOR_MARKER_RE = /\x1B_pi:c\x07/g;
 
@@ -39,7 +41,9 @@ export function stripAnsi(text: string): string {
   return text.replace(TUI_CURSOR_MARKER_RE, "").replace(ANSI_ESCAPE_RE, "");
 }
 
-function visibleCharPositions(text: string): Array<{ start: number; end: number; char: string }> {
+function visibleCharPositions(
+  text: string,
+): Array<{ start: number; end: number; char: string }> {
   const positions: Array<{ start: number; end: number; char: string }> = [];
   let i = 0;
   while (i < text.length) {
@@ -102,17 +106,27 @@ export function normalizeCustomPanelLines(lines: string[]): string[] {
     while (lastIdx >= firstIdx && positions[lastIdx].char.trim() === "") {
       lastIdx--;
     }
-    if (lastIdx >= firstIdx && (positions[lastIdx].char === "│" || positions[lastIdx].char === "┃")) {
+    if (
+      lastIdx >= firstIdx &&
+      (positions[lastIdx].char === "│" || positions[lastIdx].char === "┃")
+    ) {
       lastIdx--;
       while (lastIdx >= firstIdx && positions[lastIdx].char.trim() === "") {
         lastIdx--;
       }
     }
 
-    normalized.push(stripDroppedVisibleChars(lineWithoutCursor, positions, firstIdx, lastIdx));
+    normalized.push(
+      stripDroppedVisibleChars(lineWithoutCursor, positions, firstIdx, lastIdx),
+    );
   }
-  while (normalized.length > 0 && stripAnsi(normalized[0]).trim() === "") normalized.shift();
-  while (normalized.length > 0 && stripAnsi(normalized[normalized.length - 1]).trim() === "") normalized.pop();
+  while (normalized.length > 0 && stripAnsi(normalized[0]).trim() === "")
+    normalized.shift();
+  while (
+    normalized.length > 0 &&
+    stripAnsi(normalized[normalized.length - 1]).trim() === ""
+  )
+    normalized.pop();
   return normalized.length ? normalized : lines;
 }
 
@@ -124,7 +138,7 @@ export function ansi256Color(index: number): string | undefined {
     const r = Math.floor(n / 36);
     const g = Math.floor((n % 36) / 6);
     const b = n % 6;
-    const scale = (v: number) => v === 0 ? 0 : 55 + v * 40;
+    const scale = (v: number) => (v === 0 ? 0 : 55 + v * 40);
     return `rgb(${scale(r)}, ${scale(g)}, ${scale(b)})`;
   }
   if (index >= 232 && index <= 255) {
@@ -139,7 +153,8 @@ function applyAnsiCodes(style: CSSProperties, codes: number[]): CSSProperties {
   for (let i = 0; i < codes.length; i++) {
     const code = codes[i];
     if (code === 0) {
-      for (const key of Object.keys(next) as Array<keyof CSSProperties>) delete next[key];
+      for (const key of Object.keys(next) as Array<keyof CSSProperties>)
+        delete next[key];
     } else if (code === 1) {
       next.fontWeight = 700;
     } else if (code === 2) {
@@ -169,7 +184,11 @@ function applyAnsiCodes(style: CSSProperties, codes: number[]): CSSProperties {
       next.background = ANSI_BRIGHT_COLORS[code - 100];
     } else if ((code === 38 || code === 48) && codes[i + 1] === 2) {
       const [r, g, b] = [codes[i + 2], codes[i + 3], codes[i + 4]];
-      if ([r, g, b].every((value) => typeof value === "number" && Number.isFinite(value))) {
+      if (
+        [r, g, b].every(
+          (value) => typeof value === "number" && Number.isFinite(value),
+        )
+      ) {
         if (code === 38) next.color = `rgb(${r}, ${g}, ${b})`;
         else next.background = `rgb(${r}, ${g}, ${b})`;
       }

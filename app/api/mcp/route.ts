@@ -1,18 +1,43 @@
-import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
-import { deleteMcpServer, parseMcpListOutput, readDiscoveredMcpServers, readMcpConfig, readUserMcpConfig, type McpLiveServer, validateMcpServer, writeMcpServer } from "@/lib/omp/mcp-config";
+import {
+  getAllowedFileRoots,
+  isExistingFilePathAllowed,
+} from "@/lib/file-access";
+import {
+  deleteMcpServer,
+  parseMcpListOutput,
+  readDiscoveredMcpServers,
+  readMcpConfig,
+  readUserMcpConfig,
+  type McpLiveServer,
+  validateMcpServer,
+  writeMcpServer,
+} from "@/lib/omp/mcp-config";
 import { WebRpcError, getRpcSession, startRpcSession } from "@/lib/rpc-manager";
 import { getHost } from "@/lib/hosts/hub";
 import { LOCAL_HOST_ID } from "@/lib/hosts/registry";
 import { sessionSpawnTarget } from "@/lib/hosts/session-index";
 import { RpcCommandError } from "@/lib/omp/rpc-process";
-import { parseJsonWithinLimit, RequestBodyTooLargeError } from "@/lib/bounded-form-data";
+import {
+  parseJsonWithinLimit,
+  RequestBodyTooLargeError,
+} from "@/lib/bounded-form-data";
 import { redactMcpServer } from "@/lib/omp/mcp-config";
 
 const MAX_MCP_REQUEST_BYTES = 1024 * 1024;
 
 function mcpErrorResponse(error: unknown) {
   const status = error instanceof RequestBodyTooLargeError ? 413 : 400;
-  return Response.json({ error: error instanceof RequestBodyTooLargeError ? "MCP request is too large" : error instanceof Error ? error.message : String(error) }, { status });
+  return Response.json(
+    {
+      error:
+        error instanceof RequestBodyTooLargeError
+          ? "MCP request is too large"
+          : error instanceof Error
+            ? error.message
+            : String(error),
+    },
+    { status },
+  );
 }
 
 /** Stable client-safe message for the GET liveError field: raw child-process
@@ -25,20 +50,35 @@ function sanitizeMcpLiveError(error: unknown): string {
   return "Could not load live MCP server states";
 }
 
-function mergeMcpServers(primary: McpLiveServer[], secondary: McpLiveServer[]): McpLiveServer[] {
-  const result: McpLiveServer[] = primary.map((server) => ({ ...server, sourcePath: secondary.find((other) => other.name === server.name && other.source === server.source)?.sourcePath }));
-  const seen = new Set(primary.map((server) => `${server.source}:${server.name}`));
+function mergeMcpServers(
+  primary: McpLiveServer[],
+  secondary: McpLiveServer[],
+): McpLiveServer[] {
+  const result: McpLiveServer[] = primary.map((server) => ({
+    ...server,
+    sourcePath: secondary.find(
+      (other) => other.name === server.name && other.source === server.source,
+    )?.sourcePath,
+  }));
+  const seen = new Set(
+    primary.map((server) => `${server.source}:${server.name}`),
+  );
   for (const server of secondary) {
     const key = `${server.source}:${server.name}`;
-    if (!seen.has(key)) { result.push(server); seen.add(key); }
+    if (!seen.has(key)) {
+      result.push(server);
+      seen.add(key);
+    }
   }
   return result;
 }
 
 async function allowedCwd(cwd: unknown): Promise<string> {
-  if (typeof cwd !== "string" || !cwd.trim()) throw new Error("cwd is required");
+  if (typeof cwd !== "string" || !cwd.trim())
+    throw new Error("cwd is required");
   const allowedRoots = await getAllowedFileRoots();
-  if (!isExistingFilePathAllowed(cwd, allowedRoots)) throw new Error("Workspace is not allowed");
+  if (!isExistingFilePathAllowed(cwd, allowedRoots))
+    throw new Error("Workspace is not allowed");
   return cwd;
 }
 
@@ -50,9 +90,44 @@ export async function GET(request: Request) {
     const file = cwd ? readMcpConfig(cwd) : null;
     const user = readUserMcpConfig();
     const inventory: McpLiveServer[] = [
-      ...user.servers.map(({ name, config }) => ({ name, source: "User level", sourcePath: user.path, status: config.enabled === false ? "disabled" as const : "configured" as const, type: typeof config.type === "string" ? config.type : typeof config.url === "string" ? "http" : "stdio" })),
-      ...user.disabledServers.map((name) => ({ name, source: "Disabled", sourcePath: user.path, status: "disabled" as const })),
-      ...Object.entries(file?.config.mcpServers ?? {}).map(([name, config]) => ({ name, source: "Project level", sourcePath: file?.path, status: config.enabled === false ? "disabled" as const : "configured" as const, type: typeof config.type === "string" ? config.type : typeof config.url === "string" ? "http" : "stdio" })),
+      ...user.servers.map(({ name, config }) => ({
+        name,
+        source: "User level",
+        sourcePath: user.path,
+        status:
+          config.enabled === false
+            ? ("disabled" as const)
+            : ("configured" as const),
+        type:
+          typeof config.type === "string"
+            ? config.type
+            : typeof config.url === "string"
+              ? "http"
+              : "stdio",
+      })),
+      ...user.disabledServers.map((name) => ({
+        name,
+        source: "Disabled",
+        sourcePath: user.path,
+        status: "disabled" as const,
+      })),
+      ...Object.entries(file?.config.mcpServers ?? {}).map(
+        ([name, config]) => ({
+          name,
+          source: "Project level",
+          sourcePath: file?.path,
+          status:
+            config.enabled === false
+              ? ("disabled" as const)
+              : ("configured" as const),
+          type:
+            typeof config.type === "string"
+              ? config.type
+              : typeof config.url === "string"
+                ? "http"
+                : "stdio",
+        }),
+      ),
       ...readDiscoveredMcpServers(cwd ?? undefined, user.disabledServers),
     ];
     // The user-level config may carry bearer tokens/API keys in `headers` and
@@ -63,16 +138,27 @@ export async function GET(request: Request) {
       disabledServers: user.disabledServers,
       error: user.error,
       servers: user.servers.map(({ name, config }) => {
-        const type = typeof config.type === "string" && config.type !== "stdio" ? config.type
-          : typeof config.url === "string" ? "http" : "stdio";
-        const command = typeof config.command === "string" ? config.command.trim() : "";
+        const type =
+          typeof config.type === "string" && config.type !== "stdio"
+            ? config.type
+            : typeof config.url === "string"
+              ? "http"
+              : "stdio";
+        const command =
+          typeof config.command === "string" ? config.command.trim() : "";
         const url = typeof config.url === "string" ? config.url.trim() : "";
         const hasCommand = command.length > 0;
         const hasUrl = url.length > 0;
-        const valid = (hasCommand || hasUrl) && !(hasCommand && hasUrl) && (type === "http" || type === "sse" ? hasUrl : hasCommand);
+        const valid =
+          (hasCommand || hasUrl) &&
+          !(hasCommand && hasUrl) &&
+          (type === "http" || type === "sse" ? hasUrl : hasCommand);
         return {
           name,
-          status: config.enabled === false ? ("disabled" as const) : ("configured" as const),
+          status:
+            config.enabled === false
+              ? ("disabled" as const)
+              : ("configured" as const),
           type,
           enabled: config.enabled !== false,
           valid,
@@ -94,7 +180,11 @@ export async function GET(request: Request) {
       try {
         let session = getRpcSession(sessionId);
         if (!session?.isAlive()) {
-          if (attachOnly) throw new WebRpcError("The session is not running", "session_not_running");
+          if (attachOnly)
+            throw new WebRpcError(
+              "The session is not running",
+              "session_not_running",
+            );
           // MCP settings are this machine's only.
           const host = getHost(LOCAL_HOST_ID);
           const target = await sessionSpawnTarget(sessionId, host);
@@ -102,14 +192,37 @@ export async function GET(request: Request) {
           // Fresh spawn only (an alive child is reused above): apply the
           // caller's advisor opinion so a racing prompt doesn't inherit a
           // wrong-flag child for its whole turn.
-          ({ session } = await startRpcSession(sessionId, target.sessionFile, target.cwd, undefined, advisor, target.recordedCwd, undefined, host));
+          ({ session } = await startRpcSession(
+            sessionId,
+            target.sessionFile,
+            target.cwd,
+            undefined,
+            advisor,
+            target.recordedCwd,
+            undefined,
+            host,
+          ));
         }
-        liveServers = mergeMcpServers(parseMcpListOutput(await session.getMcpList()), inventory);
+        liveServers = mergeMcpServers(
+          parseMcpListOutput(await session.getMcpList()),
+          inventory,
+        );
       } catch (error) {
         liveError = sanitizeMcpLiveError(error);
       }
     }
-    return Response.json({ root: file?.root ?? null, path: file?.path ?? null, exists: file?.exists ?? false, servers: Object.entries(file?.config.mcpServers ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([name, config]) => ({ name, config: redactMcpServer(config) })), user: safeUser, inventory, liveServers, liveError });
+    return Response.json({
+      root: file?.root ?? null,
+      path: file?.path ?? null,
+      exists: file?.exists ?? false,
+      servers: Object.entries(file?.config.mcpServers ?? {})
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([name, config]) => ({ name, config: redactMcpServer(config) })),
+      user: safeUser,
+      inventory,
+      liveServers,
+      liveError,
+    });
   } catch (error) {
     return mcpErrorResponse(error);
   }
@@ -117,11 +230,28 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const body = await parseJsonWithinLimit<{ cwd?: unknown; name?: unknown; previousName?: unknown; server?: unknown }>(request, MAX_MCP_REQUEST_BYTES);
+    const body = await parseJsonWithinLimit<{
+      cwd?: unknown;
+      name?: unknown;
+      previousName?: unknown;
+      server?: unknown;
+    }>(request, MAX_MCP_REQUEST_BYTES);
     const cwd = await allowedCwd(body.cwd);
     validateMcpServer(body.name, body.server);
-    if (body.previousName !== undefined && typeof body.previousName !== "string") throw new Error("previousName must be a string");
-    return Response.json({ success: true, ...writeMcpServer(cwd, body.name as string, body.server, body.previousName) });
+    if (
+      body.previousName !== undefined &&
+      typeof body.previousName !== "string"
+    )
+      throw new Error("previousName must be a string");
+    return Response.json({
+      success: true,
+      ...writeMcpServer(
+        cwd,
+        body.name as string,
+        body.server,
+        body.previousName,
+      ),
+    });
   } catch (error) {
     return mcpErrorResponse(error);
   }
@@ -129,9 +259,15 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const body = await parseJsonWithinLimit<{ name?: unknown; server?: unknown }>(request, MAX_MCP_REQUEST_BYTES);
+    const body = await parseJsonWithinLimit<{
+      name?: unknown;
+      server?: unknown;
+    }>(request, MAX_MCP_REQUEST_BYTES);
     validateMcpServer(body.name, body.server);
-    return Response.json({ success: true, message: "MCP server configuration is valid" });
+    return Response.json({
+      success: true,
+      message: "MCP server configuration is valid",
+    });
   } catch (error) {
     return mcpErrorResponse(error);
   }
@@ -139,7 +275,10 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const body = await parseJsonWithinLimit<{ cwd?: unknown; name?: unknown }>(request, MAX_MCP_REQUEST_BYTES);
+    const body = await parseJsonWithinLimit<{ cwd?: unknown; name?: unknown }>(
+      request,
+      MAX_MCP_REQUEST_BYTES,
+    );
     const cwd = await allowedCwd(body.cwd);
     if (typeof body.name !== "string") throw new Error("name is required");
     return Response.json({ success: true, ...deleteMcpServer(cwd, body.name) });
@@ -151,10 +290,25 @@ export async function DELETE(request: Request) {
 /** Native local commands only: never a model prompt or shell command. */
 export async function PATCH(request: Request) {
   try {
-    const body = await parseJsonWithinLimit<{ sessionId?: unknown; action?: unknown; name?: unknown }>(request, MAX_MCP_REQUEST_BYTES);
-    if (typeof body.sessionId !== "string" || !body.sessionId) throw new Error("Select a session first");
-    if (body.action !== "enable" && body.action !== "disable" && body.action !== "reload") throw new Error("Invalid MCP action");
-    if (body.action !== "reload" && (typeof body.name !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(body.name))) throw new Error("Invalid MCP server name");
+    const body = await parseJsonWithinLimit<{
+      sessionId?: unknown;
+      action?: unknown;
+      name?: unknown;
+    }>(request, MAX_MCP_REQUEST_BYTES);
+    if (typeof body.sessionId !== "string" || !body.sessionId)
+      throw new Error("Select a session first");
+    if (
+      body.action !== "enable" &&
+      body.action !== "disable" &&
+      body.action !== "reload"
+    )
+      throw new Error("Invalid MCP action");
+    if (
+      body.action !== "reload" &&
+      (typeof body.name !== "string" ||
+        !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(body.name))
+    )
+      throw new Error("Invalid MCP server name");
     // Load the selected session through the same validated path as inventory.
     // Do not create a different session or apply the caller's arbitrary cwd.
     let session = getRpcSession(body.sessionId);
@@ -162,12 +316,39 @@ export async function PATCH(request: Request) {
       const host = getHost(LOCAL_HOST_ID);
       const target = await sessionSpawnTarget(body.sessionId, host);
       if (!target) throw new Error("Session not found");
-      ({ session } = await startRpcSession(body.sessionId, target.sessionFile, target.cwd, undefined, undefined, target.recordedCwd, undefined, host));
+      ({ session } = await startRpcSession(
+        body.sessionId,
+        target.sessionFile,
+        target.cwd,
+        undefined,
+        undefined,
+        target.recordedCwd,
+        undefined,
+        host,
+      ));
     }
-    if (session.isRunning()) return Response.json({ error: "Wait for the current run to finish before changing MCP servers." }, { status: 409 });
-    await session.changeMcp(body.action, typeof body.name === "string" ? body.name : undefined);
+    if (session.isRunning())
+      return Response.json(
+        {
+          error:
+            "Wait for the current run to finish before changing MCP servers.",
+        },
+        { status: 409 },
+      );
+    await session.changeMcp(
+      body.action,
+      typeof body.name === "string" ? body.name : undefined,
+    );
     return Response.json({ success: true });
   } catch (error) {
-    return Response.json({ error: sanitizeMcpLiveError(error) }, { status: error instanceof WebRpcError && error.code === "session_busy" ? 409 : 400 });
+    return Response.json(
+      { error: sanitizeMcpLiveError(error) },
+      {
+        status:
+          error instanceof WebRpcError && error.code === "session_busy"
+            ? 409
+            : 400,
+      },
+    );
   }
 }

@@ -2,9 +2,18 @@ import "../tests/setup-dom.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test, { afterEach } from "node:test";
-const { act, cleanup, renderHook } = await import("@testing-library/react/pure.js");
+const { act, cleanup, renderHook } =
+  await import("@testing-library/react/pure.js");
 
-const { nextThemePreference, resolveTheme, isDarkTheme, LIGHT_THEMES, DARK_THEMES, ALL_THEMES, useTheme } = await import("./useTheme.ts");
+const {
+  nextThemePreference,
+  resolveTheme,
+  isDarkTheme,
+  LIGHT_THEMES,
+  DARK_THEMES,
+  ALL_THEMES,
+  useTheme,
+} = await import("./useTheme.ts");
 
 afterEach(cleanup);
 
@@ -52,11 +61,20 @@ test("nextThemePreference toggles custom dark themes to light and custom light t
 test("each theme's browser chrome color is its CSS --bg-panel, the top bar's color", async () => {
   // The pre-paint script reads the CSS and the hook reads the table: a mismatch
   // flickers the status bar after hydration and sends a stale manifest color.
-  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const css = await readFile(
+    new URL("../app/globals.css", import.meta.url),
+    "utf8",
+  );
   for (const { id, panel } of ALL_THEMES) {
-    const selector = id === "light" ? ":root" : id === "omp" ? "html.omp" : `html.theme-${id}`;
+    const selector =
+      id === "light" ? ":root" : id === "omp" ? "html.omp" : `html.theme-${id}`;
     // The first `:root` block holds the self-hosted font variables; take the one that sets --bg-panel.
-    const match = css.match(new RegExp(`(^|, )${selector.replace(".", "\\.")} \\{[^}]*--bg-panel:\\s*(#[0-9A-Fa-f]{6})`, "m"));
+    const match = css.match(
+      new RegExp(
+        `(^|, )${selector.replace(".", "\\.")} \\{[^}]*--bg-panel:\\s*(#[0-9A-Fa-f]{6})`,
+        "m",
+      ),
+    );
     assert.equal(match?.[2].toUpperCase(), panel, id);
   }
 });
@@ -66,7 +84,10 @@ test("browser chrome follows the selected theme and only follows OS changes in s
   const originalClass = root.getAttribute("class");
   const originalTheme = root.getAttribute("data-theme");
   const originalPreference = localStorage.getItem("omp-theme");
-  const originalMatchMedia = Object.getOwnPropertyDescriptor(window, "matchMedia");
+  const originalMatchMedia = Object.getOwnPropertyDescriptor(
+    window,
+    "matchMedia",
+  );
   const meta = document.createElement("meta");
   meta.name = "theme-color";
   meta.content = "#000000";
@@ -82,19 +103,24 @@ test("browser chrome follows the selected theme and only follows OS changes in s
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     writable: true,
-    value: (query) => query === "(prefers-color-scheme: dark)" ? media : { matches: false },
+    value: (query) =>
+      query === "(prefers-color-scheme: dark)" ? media : { matches: false },
   });
   t.after(() => {
     cleanup();
     meta.remove();
     manifest.remove();
-    for (const [attribute, value] of [["class", originalClass], ["data-theme", originalTheme]]) {
+    for (const [attribute, value] of [
+      ["class", originalClass],
+      ["data-theme", originalTheme],
+    ]) {
       if (value === null) root.removeAttribute(attribute);
       else root.setAttribute(attribute, value);
     }
     if (originalPreference === null) localStorage.removeItem("omp-theme");
     else localStorage.setItem("omp-theme", originalPreference);
-    if (originalMatchMedia) Object.defineProperty(window, "matchMedia", originalMatchMedia);
+    if (originalMatchMedia)
+      Object.defineProperty(window, "matchMedia", originalMatchMedia);
     else delete window.matchMedia;
   });
 
@@ -104,11 +130,20 @@ test("browser chrome follows the selected theme and only follows OS changes in s
     assert.equal(hook.result.current.preference, preference);
     assert.equal(hook.result.current.isDark, dark);
     assert.equal(root.getAttribute("data-theme"), theme);
-    assert.deepEqual([...root.classList].sort(), ["keep-layout", ...classes].sort());
+    assert.deepEqual(
+      [...root.classList].sort(),
+      ["keep-layout", ...classes].sort(),
+    );
     assert.equal(meta.getAttribute("content"), color);
-    assert.match(document.cookie, new RegExp(`(^|; )omp-theme-color=${color.slice(1)}(;|$)`));
+    assert.match(
+      document.cookie,
+      new RegExp(`(^|; )omp-theme-color=${color.slice(1)}(;|$)`),
+    );
     // A new href makes Chrome drop its cached manifest and refetch the new color.
-    assert.equal(manifest.getAttribute("href"), `/api/manifest?theme=${color.slice(1)}`);
+    assert.equal(
+      manifest.getAttribute("href"),
+      `/api/manifest?theme=${color.slice(1)}`,
+    );
     assert.equal(localStorage.getItem("omp-theme"), preference);
   };
   const changeOS = async (dark) => {
@@ -135,7 +170,11 @@ test("browser chrome follows the selected theme and only follows OS changes in s
   assertTheme("dark", "#231F1B", true, ["dark", "theme-dark"], "system");
   hook.unmount();
   await changeOS(false);
-  assert.equal(root.getAttribute("data-theme"), "dark", "unmounted consumers no longer update browser chrome");
+  assert.equal(
+    root.getAttribute("data-theme"),
+    "dark",
+    "unmounted consumers no longer update browser chrome",
+  );
   assert.equal(meta.getAttribute("content"), "#231F1B");
   hook = renderHook(() => useTheme());
   assertTheme("light", "#F2F0EA", false, ["theme-light"], "system");

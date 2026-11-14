@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -57,14 +63,21 @@ test("readTrayConfig prefers CLI overrides over the service config file", () => 
   try {
     const agentDir = path.join(home, ".omp", "agent");
     mkdirSync(agentDir, { recursive: true });
-    writeFileSync(path.join(agentDir, "web-service.json"), JSON.stringify({ port: 40001, hostname: "0.0.0.0" }));
+    writeFileSync(
+      path.join(agentDir, "web-service.json"),
+      JSON.stringify({ port: 40001, hostname: "0.0.0.0" }),
+    );
 
     const config = readTrayConfig({}, {}, home);
     assert.equal(config.port, 40001);
     assert.equal(config.hostname, "0.0.0.0");
     assert.equal(config.serviceUrl, "http://0.0.0.0:40001");
 
-    const overridden = readTrayConfig({ port: 40100, hostname: "127.0.0.1" }, {}, home);
+    const overridden = readTrayConfig(
+      { port: 40100, hostname: "127.0.0.1" },
+      {},
+      home,
+    );
     assert.equal(overridden.port, 40100);
     assert.equal(overridden.serviceUrl, "http://127.0.0.1:40100");
   } finally {
@@ -84,7 +97,14 @@ test("readTrayConfig falls back to defaults without a config file", () => {
 });
 
 test("buildMenuItems reflects running state and service availability", () => {
-  const running = buildMenuItems({ running: true, version: "0.4.2", autostart: true, hasService: true, exposed: false, hasDialogTool: true });
+  const running = buildMenuItems({
+    running: true,
+    version: "0.4.2",
+    autostart: true,
+    hasService: true,
+    exposed: false,
+    hasDialogTool: true,
+  });
   assert.equal(itemById(running, 2).label, "  Status: Running");
   assert.equal(itemById(running, 7).label, "Stop Server (omp runs keep going)");
   assert.equal(itemById(running, 12).label, "Expose to Network");
@@ -92,10 +112,24 @@ test("buildMenuItems reflects running state and service availability", () => {
   assert.equal(itemById(running, 16).label, "Start with Plasma");
   assert.equal(itemById(running, 16).state, 1);
 
-  const exposed = buildMenuItems({ running: true, version: "0.4.2", autostart: false, hasService: true, exposed: true, hasDialogTool: true });
+  const exposed = buildMenuItems({
+    running: true,
+    version: "0.4.2",
+    autostart: false,
+    hasService: true,
+    exposed: true,
+    hasDialogTool: true,
+  });
   assert.equal(itemById(exposed, 12).state, 1);
 
-  const stoppedNoService = buildMenuItems({ running: false, version: "0.4.2", autostart: false, hasService: false, exposed: false, hasDialogTool: true });
+  const stoppedNoService = buildMenuItems({
+    running: false,
+    version: "0.4.2",
+    autostart: false,
+    hasService: false,
+    exposed: false,
+    hasDialogTool: true,
+  });
   assert.equal(itemById(stoppedNoService, 2).label, "  Status: Stopped");
   assert.equal(itemById(stoppedNoService, 7).label, "Start Server");
   assert.equal(itemById(stoppedNoService, 7).enabled, false);
@@ -103,7 +137,14 @@ test("buildMenuItems reflects running state and service availability", () => {
   assert.equal(itemById(stoppedNoService, 16).state, 0);
 
   // Settings actions need both the service and a dialog tool.
-  const noDialog = buildMenuItems({ running: true, version: "0.4.2", autostart: false, hasService: true, exposed: false, hasDialogTool: false });
+  const noDialog = buildMenuItems({
+    running: true,
+    version: "0.4.2",
+    autostart: false,
+    hasService: true,
+    exposed: false,
+    hasDialogTool: false,
+  });
   assert.equal(itemById(noDialog, 12).enabled, false);
   assert.equal(itemById(noDialog, 13).enabled, false);
   assert.equal(itemById(noDialog, 14).enabled, false);
@@ -111,9 +152,20 @@ test("buildMenuItems reflects running state and service availability", () => {
   // The ompweb-host daemon state sits under the web status.
   assert.equal(itemById(running, 19).label, "  Daemon: Not installed");
   assert.equal(itemById(running, 19).enabled, false);
-  const withDaemon = buildMenuItems({ running: true, version: "0.4.2", autostart: false, hasService: true, exposed: false, hasDialogTool: true, daemon: "running" });
+  const withDaemon = buildMenuItems({
+    running: true,
+    version: "0.4.2",
+    autostart: false,
+    hasService: true,
+    exposed: false,
+    hasDialogTool: true,
+    daemon: "running",
+  });
   assert.equal(itemById(withDaemon, 19).label, "  Daemon: Running");
-  assert.equal(withDaemon.findIndex((item) => item.id === 19), withDaemon.findIndex((item) => item.id === 2) + 1);
+  assert.equal(
+    withDaemon.findIndex((item) => item.id === 19),
+    withDaemon.findIndex((item) => item.id === 2) + 1,
+  );
 
   // Inert rows and separators.
   assert.equal(itemById(running, 1).enabled, false);
@@ -129,13 +181,25 @@ test("itemProperties renders standard, separator, and checkmark items", () => {
   const separator = itemProperties({ id: 6, separator: true });
   assert.equal(separator.type.value, "separator");
 
-  const checkmark = itemProperties({ id: 11, label: "Start with Plasma", checkmark: true, state: 1 });
+  const checkmark = itemProperties({
+    id: 11,
+    label: "Start with Plasma",
+    checkmark: true,
+    state: 1,
+  });
   assert.equal(checkmark["toggle-type"].value, "checkmark");
   assert.equal(checkmark["toggle-state"].value, 1);
 });
 
 test("buildLayout nests all items under the root with the given revision", () => {
-  const items = buildMenuItems({ running: true, version: "0.4.2", autostart: true, hasService: true, exposed: false, hasDialogTool: true });
+  const items = buildMenuItems({
+    running: true,
+    version: "0.4.2",
+    autostart: true,
+    hasService: true,
+    exposed: false,
+    hasDialogTool: true,
+  });
   const [revision, root] = buildLayout(items, 7, 0);
   assert.equal(revision, 7);
   assert.equal(root[0], 0);
@@ -152,9 +216,14 @@ test("buildLayout nests all items under the root with the given revision", () =>
 });
 
 test("autostart desktop file references the tray script", () => {
-  const desktop = buildAutostartDesktop("/usr/bin/bun /opt/ompweb/bin/linux-tray.js --start");
+  const desktop = buildAutostartDesktop(
+    "/usr/bin/bun /opt/ompweb/bin/linux-tray.js --start",
+  );
   assert.match(desktop, /^\[Desktop Entry\]/);
-  assert.match(desktop, /^Exec=\/usr\/bin\/bun \/opt\/ompweb\/bin\/linux-tray\.js --start$/m);
+  assert.match(
+    desktop,
+    /^Exec=\/usr\/bin\/bun \/opt\/ompweb\/bin\/linux-tray\.js --start$/m,
+  );
   assert.match(desktop, /^Terminal=false$/m);
   assert.match(desktop, /^X-KDE-autostart-after=panel$/m);
 });
@@ -164,12 +233,19 @@ test("buildAutostartExec quotes paths containing spaces", () => {
   assert.match(exec, / --start$/);
   const parts = exec.match(/"([^"]+)"/g);
   if (parts) {
-    for (const part of parts) assert.ok(!part.includes(" ") || part.startsWith('"'), "spaces must be quoted");
+    for (const part of parts)
+      assert.ok(
+        !part.includes(" ") || part.startsWith('"'),
+        "spaces must be quoted",
+      );
   }
 });
 
 test("terminal candidates honor explicit env overrides first", () => {
-  const candidates = terminalCandidates({ OMP_WEB_TERMINAL: "foot", TERMINAL: "wezterm" });
+  const candidates = terminalCandidates({
+    OMP_WEB_TERMINAL: "foot",
+    TERMINAL: "wezterm",
+  });
   assert.deepEqual(candidates.slice(0, 2), ["foot", "wezterm"]);
   assert.ok(candidates.includes("konsole"));
 });
@@ -194,10 +270,20 @@ test("buildTrayIconPixels renders opaque rounded square with transparent corners
 
   const pixel = (x, y) => {
     const offset = (y * 64 + x) * 4;
-    return [buffer[offset], buffer[offset + 1], buffer[offset + 2], buffer[offset + 3]];
+    return [
+      buffer[offset],
+      buffer[offset + 1],
+      buffer[offset + 2],
+      buffer[offset + 3],
+    ];
   };
   // Corners are outside the rounded box → fully transparent.
-  for (const [x, y] of [[0, 0], [63, 0], [0, 63], [63, 63]]) {
+  for (const [x, y] of [
+    [0, 0],
+    [63, 0],
+    [0, 63],
+    [63, 63],
+  ]) {
     assert.equal(pixel(x, y)[0], 0, `corner ${x},${y} must be transparent`);
   }
   // Center of the box: background color #c96f4a.
@@ -251,7 +337,10 @@ test("writeServiceEnv writes atomically with mode 600 and readServiceEnv round-t
     const file = path.join(dir, "web-service.env");
     writeServiceEnv({ PORT: "40100", OMP_WEB_PASSWORD: "s3cret" }, file);
     assert.equal(statSync(file).mode & 0o777, 0o600);
-    assert.deepEqual(readServiceEnv(file), { PORT: "40100", OMP_WEB_PASSWORD: "s3cret" });
+    assert.deepEqual(readServiceEnv(file), {
+      PORT: "40100",
+      OMP_WEB_PASSWORD: "s3cret",
+    });
     assert.ok(escapeEnvValue("a\nb").includes(" "));
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -263,8 +352,14 @@ test("readTrayConfig prefers the env file over the JSON config", () => {
   try {
     const agentDir = path.join(home, ".omp", "agent");
     mkdirSync(agentDir, { recursive: true });
-    writeFileSync(path.join(agentDir, "web-service.json"), JSON.stringify({ port: 40001, hostname: "0.0.0.0" }));
-    writeFileSync(path.join(agentDir, "web-service.env"), serializeServiceEnv({ PORT: "40200", OMP_WEB_HOSTNAME: "127.0.0.1" }));
+    writeFileSync(
+      path.join(agentDir, "web-service.json"),
+      JSON.stringify({ port: 40001, hostname: "0.0.0.0" }),
+    );
+    writeFileSync(
+      path.join(agentDir, "web-service.env"),
+      serializeServiceEnv({ PORT: "40200", OMP_WEB_HOSTNAME: "127.0.0.1" }),
+    );
 
     const config = readTrayConfig({}, {}, home);
     assert.equal(config.port, 40200);
@@ -277,7 +372,10 @@ test("readTrayConfig prefers the env file over the JSON config", () => {
 
 test("dialog candidates put kdialog first and resolve via override", () => {
   assert.deepEqual(dialogCandidates(), ["kdialog", "zenity"]);
-  assert.equal(resolveDialogTool({ OMP_WEB_DIALOG: "definitely-not-on-path-xyz" }), null);
+  assert.equal(
+    resolveDialogTool({ OMP_WEB_DIALOG: "definitely-not-on-path-xyz" }),
+    null,
+  );
 });
 
 test("dialogPrompt returns null on cancel and text on success", async () => {
@@ -288,9 +386,21 @@ test("dialogPrompt returns null on cancel and text on success", async () => {
     return { stdout: "30178\n" };
   };
   const tool = "/usr/bin/kdialog";
-  assert.equal(await dialogPrompt({ tool, title: "t", text: "port", value: "1" }, fakeRun), "30178");
-  assert.equal(await dialogPrompt({ tool, title: "t", text: "pw", password: true }, fakeRun), null);
-  assert.equal(await dialogPrompt({ tool: null, title: "t", text: "x" }, fakeRun), null);
+  assert.equal(
+    await dialogPrompt({ tool, title: "t", text: "port", value: "1" }, fakeRun),
+    "30178",
+  );
+  assert.equal(
+    await dialogPrompt(
+      { tool, title: "t", text: "pw", password: true },
+      fakeRun,
+    ),
+    null,
+  );
+  assert.equal(
+    await dialogPrompt({ tool: null, title: "t", text: "x" }, fakeRun),
+    null,
+  );
 });
 
 // dbus-next is no longer a dependency (#268), so in this repo's install
@@ -306,28 +416,44 @@ function dbusIsInstalled() {
   }
 }
 
-test("ensureDbusInstalled reports failure without throwing when the installer fails (#268)", { skip: dbusIsInstalled() }, () => {
-  let calls = 0;
-  const ok = ensureDbusInstalled({ runInstall: () => { calls += 1; return false; } });
-  assert.equal(ok, false);
-  assert.equal(calls, 1);
-});
-
-test("tray --start fails gracefully with an install hint when dbus-next is absent (#268)", { skip: dbusIsInstalled() || process.platform !== "linux" }, () => {
-  const home = mkdtempSync(path.join(tmpdir(), "ompweb-tray-nodbus-"));
-  try {
-    const script = path.join(path.dirname(fileURLToPath(import.meta.url)), "linux-tray.js");
-    const res = spawnSync(process.execPath, [script, "--start"], {
-      env: { ...process.env, HOME: home },
-      encoding: "utf8",
-      timeout: 15000,
+test(
+  "ensureDbusInstalled reports failure without throwing when the installer fails (#268)",
+  { skip: dbusIsInstalled() },
+  () => {
+    let calls = 0;
+    const ok = ensureDbusInstalled({
+      runInstall: () => {
+        calls += 1;
+        return false;
+      },
     });
-    const output = `${res.stdout || ""}\n${res.stderr || ""}`;
-    assert.equal(res.status, 1);
-    assert.match(output, /dbus-next/);
-    assert.match(output, /bun add dbus-next/);
-    assert.doesNotMatch(output, /MODULE_NOT_FOUND|Cannot find module/);
-  } finally {
-    rmSync(home, { recursive: true, force: true });
-  }
-});
+    assert.equal(ok, false);
+    assert.equal(calls, 1);
+  },
+);
+
+test(
+  "tray --start fails gracefully with an install hint when dbus-next is absent (#268)",
+  { skip: dbusIsInstalled() || process.platform !== "linux" },
+  () => {
+    const home = mkdtempSync(path.join(tmpdir(), "ompweb-tray-nodbus-"));
+    try {
+      const script = path.join(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "linux-tray.js",
+      );
+      const res = spawnSync(process.execPath, [script, "--start"], {
+        env: { ...process.env, HOME: home },
+        encoding: "utf8",
+        timeout: 15000,
+      });
+      const output = `${res.stdout || ""}\n${res.stderr || ""}`;
+      assert.equal(res.status, 1);
+      assert.match(output, /dbus-next/);
+      assert.match(output, /bun add dbus-next/);
+      assert.doesNotMatch(output, /MODULE_NOT_FOUND|Cannot find module/);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  },
+);

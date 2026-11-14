@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { manifestHref, THEME_COLOR_COOKIE } from "@/lib/manifest-theme";
 
-export type LightTheme = "light" | "one-light" | "catppuccin-latte" | "rose-pine-dawn";
+export type LightTheme =
+  "light" | "one-light" | "catppuccin-latte" | "rose-pine-dawn";
 export type DarkTheme =
   | "dark"
   | "omp"
@@ -30,29 +31,135 @@ export type ThemeDefinition = {
 };
 
 export const LIGHT_THEMES: ReadonlyArray<ThemeDefinition> = [
-  { id: "light", name: "Light (default)", mode: "light", bg: "#FAF9F6", panel: "#F2F0EA", accent: "#B03E22" },
-  { id: "one-light", name: "One Light", mode: "light", bg: "#FAFAFA", panel: "#F0F0F0", accent: "#2F65D9" },
-  { id: "catppuccin-latte", name: "Catppuccin Latte", mode: "light", bg: "#EFF1F5", panel: "#E6E9EF", accent: "#1E66F5" },
-  { id: "rose-pine-dawn", name: "Rosé Pine Dawn", mode: "light", bg: "#FAF4ED", panel: "#FFFAF3", accent: "#286983" },
+  {
+    id: "light",
+    name: "Light (default)",
+    mode: "light",
+    bg: "#FAF9F6",
+    panel: "#F2F0EA",
+    accent: "#B03E22",
+  },
+  {
+    id: "one-light",
+    name: "One Light",
+    mode: "light",
+    bg: "#FAFAFA",
+    panel: "#F0F0F0",
+    accent: "#2F65D9",
+  },
+  {
+    id: "catppuccin-latte",
+    name: "Catppuccin Latte",
+    mode: "light",
+    bg: "#EFF1F5",
+    panel: "#E6E9EF",
+    accent: "#1E66F5",
+  },
+  {
+    id: "rose-pine-dawn",
+    name: "Rosé Pine Dawn",
+    mode: "light",
+    bg: "#FAF4ED",
+    panel: "#FFFAF3",
+    accent: "#286983",
+  },
 ];
 
 export const DARK_THEMES: ReadonlyArray<ThemeDefinition> = [
-  { id: "omp", name: "OMP Midnight", mode: "dark", bg: "#000000", panel: "#0A0A0C", accent: "#EC5BAB" },
-  { id: "dark", name: "Dark", mode: "dark", bg: "#1B1916", panel: "#231F1B", accent: "#E07B54" },
-  { id: "dracula", name: "Dracula", mode: "dark", bg: "#282A36", panel: "#21222C", accent: "#FF79C6" },
-  { id: "harbor", name: "Harbor", mode: "dark", bg: "#1B1B1B", panel: "#242424", accent: "#E75A50" },
-  { id: "one-dark-pro", name: "One Dark Pro", mode: "dark", bg: "#282C34", panel: "#21252B", accent: "#61AFEF" },
-  { id: "rose-pine", name: "Rosé Pine", mode: "dark", bg: "#191724", panel: "#1F1D2E", accent: "#EBBCBA" },
-  { id: "catppuccin-mocha", name: "Catppuccin Mocha", mode: "dark", bg: "#1E1E2E", panel: "#181825", accent: "#CBA6F7" },
-  { id: "gruvbox-dark", name: "Gruvbox Dark", mode: "dark", bg: "#282828", panel: "#1D2021", accent: "#FE8019" },
-  { id: "nord", name: "Nord", mode: "dark", bg: "#2E3440", panel: "#272C36", accent: "#88C0D0" },
-  { id: "tokyo-night", name: "Tokyo Night", mode: "dark", bg: "#1A1B26", panel: "#16161E", accent: "#7AA2F7" },
+  {
+    id: "omp",
+    name: "OMP Midnight",
+    mode: "dark",
+    bg: "#000000",
+    panel: "#0A0A0C",
+    accent: "#EC5BAB",
+  },
+  {
+    id: "dark",
+    name: "Dark",
+    mode: "dark",
+    bg: "#1B1916",
+    panel: "#231F1B",
+    accent: "#E07B54",
+  },
+  {
+    id: "dracula",
+    name: "Dracula",
+    mode: "dark",
+    bg: "#282A36",
+    panel: "#21222C",
+    accent: "#FF79C6",
+  },
+  {
+    id: "harbor",
+    name: "Harbor",
+    mode: "dark",
+    bg: "#1B1B1B",
+    panel: "#242424",
+    accent: "#E75A50",
+  },
+  {
+    id: "one-dark-pro",
+    name: "One Dark Pro",
+    mode: "dark",
+    bg: "#282C34",
+    panel: "#21252B",
+    accent: "#61AFEF",
+  },
+  {
+    id: "rose-pine",
+    name: "Rosé Pine",
+    mode: "dark",
+    bg: "#191724",
+    panel: "#1F1D2E",
+    accent: "#EBBCBA",
+  },
+  {
+    id: "catppuccin-mocha",
+    name: "Catppuccin Mocha",
+    mode: "dark",
+    bg: "#1E1E2E",
+    panel: "#181825",
+    accent: "#CBA6F7",
+  },
+  {
+    id: "gruvbox-dark",
+    name: "Gruvbox Dark",
+    mode: "dark",
+    bg: "#282828",
+    panel: "#1D2021",
+    accent: "#FE8019",
+  },
+  {
+    id: "nord",
+    name: "Nord",
+    mode: "dark",
+    bg: "#2E3440",
+    panel: "#272C36",
+    accent: "#88C0D0",
+  },
+  {
+    id: "tokyo-night",
+    name: "Tokyo Night",
+    mode: "dark",
+    bg: "#1A1B26",
+    panel: "#16161E",
+    accent: "#7AA2F7",
+  },
 ];
 
-export const ALL_THEMES: ReadonlyArray<ThemeDefinition> = [...LIGHT_THEMES, ...DARK_THEMES];
+export const ALL_THEMES: ReadonlyArray<ThemeDefinition> = [
+  ...LIGHT_THEMES,
+  ...DARK_THEMES,
+];
 
 export function isDarkTheme(theme: Theme): boolean {
-  return theme !== "light" && theme !== "one-light" && theme !== "catppuccin-latte" && theme !== "rose-pine-dawn";
+  return (
+    theme !== "light" &&
+    theme !== "one-light" &&
+    theme !== "catppuccin-latte" &&
+    theme !== "rose-pine-dawn"
+  );
 }
 
 const VALID_PREFERENCES: Record<string, true> = {
@@ -94,13 +201,18 @@ function storedPreference(): ThemePreference {
   }
 }
 
-export function resolveTheme(preference: ThemePreference, prefersDark = false): Theme {
+export function resolveTheme(
+  preference: ThemePreference,
+  prefersDark = false,
+): Theme {
   if (preference === "omp") return "omp";
   if (preference === "system") return prefersDark ? "dark" : "light";
   return preference;
 }
 
-export function nextThemePreference(preference: ThemePreference): ThemePreference {
+export function nextThemePreference(
+  preference: ThemePreference,
+): ThemePreference {
   if (preference === "light") return "dark";
   if (preference === "dark") return "omp";
   if (preference === "omp") return "system";
@@ -134,11 +246,15 @@ export function applyDomTheme(theme: Theme): void {
   document.cookie = `${THEME_COLOR_COOKIE}=${color.slice(1)}; path=/; max-age=31536000; SameSite=Lax`;
   const manifest = document.querySelector('link[rel="manifest"]');
   const href = manifestHref(color.slice(1));
-  if (manifest && manifest.getAttribute("href") !== href) manifest.setAttribute("href", href);
+  if (manifest && manifest.getAttribute("href") !== href)
+    manifest.setAttribute("href", href);
 }
 
 function applyTheme(preference: ThemePreference): void {
-  const theme = resolveTheme(preference, window.matchMedia?.("(prefers-color-scheme: dark)").matches);
+  const theme = resolveTheme(
+    preference,
+    window.matchMedia?.("(prefers-color-scheme: dark)").matches,
+  );
   applyDomTheme(theme);
   try {
     localStorage.setItem(STORAGE_KEY, preference);
@@ -154,7 +270,9 @@ function getServerSnapshot(): ThemePreference {
 
 type ToggleOrigin = { x: number; y: number };
 function motionDurationMs(variable: string, fallback: number): number {
-  const raw = getComputedStyle(document.documentElement).getPropertyValue(variable).trim();
+  const raw = getComputedStyle(document.documentElement)
+    .getPropertyValue(variable)
+    .trim();
   if (raw.endsWith("ms")) {
     const value = Number.parseFloat(raw);
     return Number.isFinite(value) ? value : fallback;
@@ -166,14 +284,19 @@ function motionDurationMs(variable: string, fallback: number): number {
   return fallback;
 }
 
-
 export function useTheme() {
-  const preference = useSyncExternalStore(subscribe, storedPreference, getServerSnapshot);
+  const preference = useSyncExternalStore(
+    subscribe,
+    storedPreference,
+    getServerSnapshot,
+  );
   // The OS preference is browser-only. Deferring it until after hydration keeps
   // the initial client tree identical to the server's omp snapshot.
   const [hydrated, setHydrated] = useState(false);
   const [osDark, setOsDark] = useState(false);
-  useEffect(() => { setHydrated(true); }, []);
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
   // Track the OS color scheme in state so an OS light/dark flip changes the
   // snapshot and re-renders isDark consumers, even when the stored preference
   // itself ("system") is unchanged. Registered unconditionally at subscription
@@ -194,7 +317,10 @@ export function useTheme() {
   // without this, hot-reloaded windows keep stale classes until restarted.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const current = resolveTheme(preference, window.matchMedia?.("(prefers-color-scheme: dark)").matches);
+    const current = resolveTheme(
+      preference,
+      window.matchMedia?.("(prefers-color-scheme: dark)").matches,
+    );
     applyDomTheme(current);
   }, [preference]);
 
@@ -210,31 +336,60 @@ export function useTheme() {
     return () => media.removeEventListener("change", onChange);
   }, [preference]);
 
-  const setTheme = useCallback((next: ThemePreference, origin?: ToggleOrigin) => {
-    const apply = () => applyTheme(next);
-    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const supportsVT = typeof document.startViewTransition === "function";
-    if (!supportsVT || reduceMotion) {
-      apply();
-      return;
-    }
+  const setTheme = useCallback(
+    (next: ThemePreference, origin?: ToggleOrigin) => {
+      const apply = () => applyTheme(next);
+      const reduceMotion = window.matchMedia?.(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      const supportsVT = typeof document.startViewTransition === "function";
+      if (!supportsVT || reduceMotion) {
+        apply();
+        return;
+      }
 
-    const x = origin?.x ?? window.innerWidth / 2;
-    const y = origin?.y ?? window.innerHeight / 2;
-    const endRadius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
-    const transition = document.startViewTransition(apply);
-    transition.ready.then(() => {
-      const styles = getComputedStyle(document.documentElement);
-      document.documentElement.animate({ clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${endRadius}px at ${x}px ${y}px)`] }, {
-        duration: motionDurationMs("--dur-theme", 450),
-        easing: styles.getPropertyValue("--ease-out-warm").trim() || "ease-out",
-        pseudoElement: "::view-transition-new(root)",
-      });
-    }).catch(() => {});
-    transition.finished?.catch(() => {});
-  }, []);
+      const x = origin?.x ?? window.innerWidth / 2;
+      const y = origin?.y ?? window.innerHeight / 2;
+      const endRadius = Math.hypot(
+        Math.max(x, window.innerWidth - x),
+        Math.max(y, window.innerHeight - y),
+      );
+      const transition = document.startViewTransition(apply);
+      transition.ready
+        .then(() => {
+          const styles = getComputedStyle(document.documentElement);
+          document.documentElement.animate(
+            {
+              clipPath: [
+                `circle(0px at ${x}px ${y}px)`,
+                `circle(${endRadius}px at ${x}px ${y}px)`,
+              ],
+            },
+            {
+              duration: motionDurationMs("--dur-theme", 450),
+              easing:
+                styles.getPropertyValue("--ease-out-warm").trim() || "ease-out",
+              pseudoElement: "::view-transition-new(root)",
+            },
+          );
+        })
+        .catch(() => {});
+      transition.finished?.catch(() => {});
+    },
+    [],
+  );
 
-  const toggleTheme = useCallback((origin?: ToggleOrigin) => setTheme(nextThemePreference(preference), origin), [preference, setTheme]);
+  const toggleTheme = useCallback(
+    (origin?: ToggleOrigin) =>
+      setTheme(nextThemePreference(preference), origin),
+    [preference, setTheme],
+  );
 
-  return { theme, preference, isDark: isDarkTheme(theme), setTheme, toggleTheme };
+  return {
+    theme,
+    preference,
+    isDark: isDarkTheme(theme),
+    setTheme,
+    toggleTheme,
+  };
 }

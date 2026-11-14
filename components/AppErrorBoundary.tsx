@@ -29,14 +29,28 @@ export function AppCrashScreen({
         background: "var(--bg)",
       }}
     >
-      <TriangleAlert size={44} strokeWidth={1.5} color="var(--accent)" style={{ opacity: 0.85 }} aria-hidden />
+      <TriangleAlert
+        size={44}
+        strokeWidth={1.5}
+        color="var(--accent)"
+        style={{ opacity: 0.85 }}
+        aria-hidden
+      />
       <h2
         className="display-serif"
         style={{ margin: 0, fontSize: "1.5rem", color: "var(--text)" }}
       >
         {translate("errors.appCrash.title")}
       </h2>
-      <p style={{ margin: 0, color: "var(--text-muted)", maxWidth: "28rem", fontSize: "0.875rem", lineHeight: 1.6 }}>
+      <p
+        style={{
+          margin: 0,
+          color: "var(--text-muted)",
+          maxWidth: "28rem",
+          fontSize: "0.875rem",
+          lineHeight: 1.6,
+        }}
+      >
         {translate("errors.appCrash.description")}
       </p>
       {error.digest && (
@@ -68,8 +82,12 @@ export function AppCrashScreen({
           boxShadow: "var(--shadow-card)",
           transition: "background var(--dur-fast) var(--ease-out-warm)",
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--accent-hover)"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = "var(--accent-strong)"; }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--accent-hover)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "var(--accent-strong)";
+        }}
       >
         {translate("errors.appCrash.retry")}
       </button>
@@ -77,7 +95,10 @@ export function AppCrashScreen({
   );
 }
 
-export class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+export class AppErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
   state: { error: Error | null } = { error: null };
 
   static getDerivedStateFromError(error: Error) {
@@ -86,6 +107,13 @@ export class AppErrorBoundary extends Component<{ children: ReactNode }, { error
 
   render() {
     const { error } = this.state;
-    return error ? <AppCrashScreen error={error} reset={() => this.setState({ error: null })} /> : this.props.children;
+    return error ? (
+      <AppCrashScreen
+        error={error}
+        reset={() => this.setState({ error: null })}
+      />
+    ) : (
+      this.props.children
+    );
   }
 }

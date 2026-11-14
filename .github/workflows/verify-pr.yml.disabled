@@ -43,11 +43,11 @@ jobs:
           bun runner/scripts/use-omp-build.ts
           bun install --cwd runner --frozen-lockfile
 
+      - name: Bun formatting check
+        run: bun run format:check
+
       - name: TypeScript typecheck
         run: bun run typecheck
-
-      - name: ESLint check
-        run: bun run lint
 
       - name: Run unit & integration test suite
         run: bun run test

@@ -1,4 +1,8 @@
-import { apiErrorResponse, opErrorResponse, resolveSessionHostOr404 } from "@/lib/api-utils";
+import {
+  apiErrorResponse,
+  opErrorResponse,
+  resolveSessionHostOr404,
+} from "@/lib/api-utils";
 import { HostOpError } from "@/lib/hosts/link-protocol";
 import { isValidSubagentId } from "@/lib/hosts/session-ops";
 
@@ -15,12 +19,15 @@ import { isValidSubagentId } from "@/lib/hosts/session-ops";
  */
 export async function GET(
   req: Request,
-  { params }: { params: Promise<{ id: string; subagentId: string }> }
+  { params }: { params: Promise<{ id: string; subagentId: string }> },
 ) {
   const { id, subagentId } = await params;
   try {
     if (!isValidSubagentId(subagentId)) {
-      return Response.json({ error: "Invalid subagent id", code: "invalid_subagent_id" }, { status: 400 });
+      return Response.json(
+        { error: "Invalid subagent id", code: "invalid_subagent_id" },
+        { status: 400 },
+      );
     }
     const resolved = await resolveSessionHostOr404(id);
     if ("response" in resolved) return resolved.response;

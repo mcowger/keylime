@@ -5,7 +5,12 @@ import { isRecord } from "./type-guards";
  * browser (in-app toasts, in-page system notifications, settings).
  */
 
-export const NOTIFICATION_TYPES = ["completed", "input", "error", "modelSwitch"] as const;
+export const NOTIFICATION_TYPES = [
+  "completed",
+  "input",
+  "error",
+  "modelSwitch",
+] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
 export interface NotificationEvent {
@@ -47,17 +52,27 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
 
 /** Validate untrusted prefs (request bodies, localStorage); unknown fields fall back to defaults. */
 export function parseNotificationPrefs(value: unknown): NotificationPrefs {
-  const raw = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-  const rawTypes = raw.types && typeof raw.types === "object" ? (raw.types as Record<string, unknown>) : {};
+  const raw =
+    value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
+  const rawTypes =
+    raw.types && typeof raw.types === "object"
+      ? (raw.types as Record<string, unknown>)
+      : {};
   const types = { ...DEFAULT_NOTIFICATION_PREFS.types };
   for (const type of NOTIFICATION_TYPES) {
-    if (typeof rawTypes[type] === "boolean") types[type] = rawTypes[type] as boolean;
+    if (typeof rawTypes[type] === "boolean")
+      types[type] = rawTypes[type] as boolean;
   }
   return {
     enabled: raw.enabled === true,
     types,
     whenActive: raw.whenActive === "system" ? "system" : "toast",
-    locale: typeof raw.locale === "string" && /^[A-Za-z-]{2,10}$/.test(raw.locale) ? raw.locale : "en",
+    locale:
+      typeof raw.locale === "string" && /^[A-Za-z-]{2,10}$/.test(raw.locale)
+        ? raw.locale
+        : "en",
   };
 }
 
@@ -69,7 +84,10 @@ export interface RenderedNotification {
   sessionId: string;
 }
 
-type Translate = (key: string, vars?: Record<string, string | number>) => string;
+type Translate = (
+  key: string,
+  vars?: Record<string, string | number>,
+) => string;
 
 const MAX_DETAIL = 180;
 /** Session names can be pasted at any length; push payloads are capped near 4 KB. */
@@ -81,7 +99,10 @@ function clip(text: string, max = MAX_DETAIL): string {
 }
 
 /** Title, body, click target, and replace-tag for one event in the caller's language. */
-export function renderNotification(event: NotificationEvent, t: Translate): RenderedNotification {
+export function renderNotification(
+  event: NotificationEvent,
+  t: Translate,
+): RenderedNotification {
   const detail = event.detail ? clip(event.detail) : "";
   let body: string;
   switch (event.type) {
@@ -89,16 +110,27 @@ export function renderNotification(event: NotificationEvent, t: Translate): Rend
       body = t("notifications.completedBody");
       break;
     case "input":
-      body = detail ? t("notifications.inputBody", { detail }) : t("notifications.inputBodyNoDetail");
+      body = detail
+        ? t("notifications.inputBody", { detail })
+        : t("notifications.inputBodyNoDetail");
       break;
     case "error":
-      body = detail ? t("notifications.errorBody", { detail }) : t("notifications.errorBodyNoDetail");
+      body = detail
+        ? t("notifications.errorBody", { detail })
+        : t("notifications.errorBodyNoDetail");
       break;
     case "modelSwitch":
       if (event.from && event.to) {
         body = detail
-          ? t("notifications.modelSwitchBody", { from: event.from, to: event.to, detail })
-          : t("notifications.modelSwitchBodyNoDetail", { from: event.from, to: event.to });
+          ? t("notifications.modelSwitchBody", {
+              from: event.from,
+              to: event.to,
+              detail,
+            })
+          : t("notifications.modelSwitchBodyNoDetail", {
+              from: event.from,
+              to: event.to,
+            });
       } else {
         body = detail;
       }
@@ -108,9 +140,13 @@ export function renderNotification(event: NotificationEvent, t: Translate): Rend
       break;
   }
   return {
-    title: (event.sessionName && clip(event.sessionName, MAX_TITLE)) || t("notifications.untitledSession"),
+    title:
+      (event.sessionName && clip(event.sessionName, MAX_TITLE)) ||
+      t("notifications.untitledSession"),
     body,
-    url: event.sessionId ? `/?session=${encodeURIComponent(event.sessionId)}` : "/",
+    url: event.sessionId
+      ? `/?session=${encodeURIComponent(event.sessionId)}`
+      : "/",
     tag: `${event.sessionId}:${event.type}`,
     sessionId: event.sessionId,
   };
@@ -125,9 +161,13 @@ export function isValidNotificationId(value: unknown): value is string {
   return typeof value === "string" && NOTIFICATION_ID_PATTERN.test(value);
 }
 
-const str = (value: unknown): string | undefined => (typeof value === "string" && value.trim() ? value : undefined);
+const str = (value: unknown): string | undefined =>
+  typeof value === "string" && value.trim() ? value : undefined;
 
-type Detect = (frame: Record<string, unknown>, session: { sessionId: string; sessionName: string | null }) => NotificationEvent[];
+type Detect = (
+  frame: Record<string, unknown>,
+  session: { sessionId: string; sessionName: string | null },
+) => NotificationEvent[];
 
 /**
  * Per-session detector: feed it every top-level rpc-ui frame in order. Subagent
@@ -167,7 +207,14 @@ export function createNotificationDetector(): Detect {
         lastOutcome = "error";
         if (failureReported) return events;
         failureReported = true;
-        return [...events, { ...base, type: "error", detail: str(frame.errorMessage) ?? str(frame.detail) }];
+        return [
+          ...events,
+          {
+            ...base,
+            type: "error",
+            detail: str(frame.errorMessage) ?? str(frame.detail),
+          },
+        ];
       }
       case "auto_retry_start":
         return releaseFallback(str(frame.errorMessage));
@@ -175,7 +222,12 @@ export function createNotificationDetector(): Detect {
         const from = str(frame.from);
         const to = str(frame.to);
         if (!from || !to) return [];
-        const event: NotificationEvent = { ...base, type: "modelSwitch", from, to };
+        const event: NotificationEvent = {
+          ...base,
+          type: "modelSwitch",
+          from,
+          to,
+        };
         const reason = str(frame.reason);
         if (reason) return [...releaseFallback(), { ...event, detail: reason }];
         const earlier = releaseFallback();
@@ -185,7 +237,8 @@ export function createNotificationDetector(): Detect {
       case "notice": {
         const source = str(frame.source);
         const message = str(frame.message);
-        if (!source || !message || !MODEL_SWITCH_NOTICE_SOURCES.has(source)) return [];
+        if (!source || !message || !MODEL_SWITCH_NOTICE_SOURCES.has(source))
+          return [];
         return [{ ...base, type: "modelSwitch", detail: message }];
       }
       case "prompt_result": {
@@ -194,7 +247,16 @@ export function createNotificationDetector(): Detect {
         lastOutcome = str(frame.status) ?? null;
         if (lastOutcome !== "error" || failureReported) return events;
         failureReported = true;
-        return [...events, { ...base, type: "error", detail: isRecord(frame.error) ? str(frame.error.message) : undefined }];
+        return [
+          ...events,
+          {
+            ...base,
+            type: "error",
+            detail: isRecord(frame.error)
+              ? str(frame.error.message)
+              : undefined,
+          },
+        ];
       }
       case "auto_retry_end":
         return releaseFallback();
@@ -213,10 +275,13 @@ export function createNotificationDetector(): Detect {
         if (frame.method === "formDialog") return [{ ...base, type: "input" }];
         const args = Array.isArray(frame.args) ? frame.args : [];
         const first: unknown = args[0];
-        const detail = str(first)
-          ?? (Array.isArray(first) && isRecord(first[0]) ? str(first[0].question) : undefined)
-          ?? (isRecord(first) ? str(first.compact) : undefined)
-          ?? str(args[1]);
+        const detail =
+          str(first) ??
+          (Array.isArray(first) && isRecord(first[0])
+            ? str(first[0].question)
+            : undefined) ??
+          (isRecord(first) ? str(first.compact) : undefined) ??
+          str(args[1]);
         return [{ ...base, type: "input", detail }];
       }
       default:

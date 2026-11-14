@@ -9,6 +9,7 @@
 **State (2026-11-13):** I1, I2 and K1–K5 are done, and K7's schedule is back; the first promoted release is `v18.20.0-int.202611130808.gfd57e86`. W1–W3 landed in ompweb PR #473 (one PR instead of PRs B and C), pinned to that release. Open: K6's rewiring, K7's first scheduled run, W2's first pre-release after the merge, and I3.
 
 **Owners and places:**
+
 - **integration-ci** — `andrebrait/integration-ci` (a local checkout), CI reads its `main`; the script's only home. Tasks I1, I2, I3.
 - **fork-ci** — orphan branch `fork-ci` of `ompweb-dev/oh-my-pi`, in a worktree of the local oh-my-pi checkout. Sources: integration-ci at `5db42d1`. Tasks K1–K7.
 - **ompweb** — `ompweb-dev/ompweb`, PR #473 (`feat/omp-runner`). Tasks W1–W3.

@@ -1,6 +1,18 @@
 // Linked-host registry for the main omp-web server. Pure Node: no Next or `@/` imports.
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { getAgentDir } from "../omp/paths";
 
@@ -35,7 +47,8 @@ function normalizeLabel(label: string): string {
   return trimmed;
 }
 
-const sha256Hex = (token: string): string => createHash("sha256").update(token).digest("hex");
+const sha256Hex = (token: string): string =>
+  createHash("sha256").update(token).digest("hex");
 
 // Keep only usable records so one bad entry cannot break token lookup for the rest.
 function parseHostRecord(raw: unknown): HostRecord | null {
@@ -66,7 +79,9 @@ export function readHosts(): HostRecord[] {
     text = readFileSync(file, "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw new HostRegistryUnreadableError(`Cannot read ${file}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new HostRegistryUnreadableError(
+      `Cannot read ${file}: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
   let parsed: unknown;
   try {
@@ -74,8 +89,12 @@ export function readHosts(): HostRecord[] {
   } catch {
     throw new HostRegistryUnreadableError(`${file} is not valid JSON`);
   }
-  const hosts = parsed && typeof parsed === "object" && "hosts" in parsed ? parsed.hosts : undefined;
-  if (!Array.isArray(hosts)) throw new HostRegistryUnreadableError(`${file} has no hosts list`);
+  const hosts =
+    parsed && typeof parsed === "object" && "hosts" in parsed
+      ? parsed.hosts
+      : undefined;
+  if (!Array.isArray(hosts))
+    throw new HostRegistryUnreadableError(`${file} has no hosts list`);
   return hosts.map(parseHostRecord).filter((h): h is HostRecord => h !== null);
 }
 
@@ -93,7 +112,11 @@ function saveHosts(hosts: HostRecord[]): void {
   // Atomic write, owner-only: the file holds token hashes for every linked host.
   const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
   try {
-    writeFileSync(temp, `${JSON.stringify({ hosts } satisfies HostsFile, null, 2)}\n`, { mode: 0o600 });
+    writeFileSync(
+      temp,
+      `${JSON.stringify({ hosts } satisfies HostsFile, null, 2)}\n`,
+      { mode: 0o600 },
+    );
     renameSync(temp, file);
   } finally {
     // Best-effort cleanup if the rename never happened.
@@ -132,15 +155,33 @@ export class ReservedHostError extends Error {
   }
 }
 
-export function updateHost(id: string, updates: { label?: string; allowAgentStart?: boolean; shareCredentials?: boolean }): HostRecord {
-  if (id === LOCAL_HOST_ID && (updates.allowAgentStart !== undefined || updates.shareCredentials !== undefined)) throw new ReservedHostError();
+export function updateHost(
+  id: string,
+  updates: {
+    label?: string;
+    allowAgentStart?: boolean;
+    shareCredentials?: boolean;
+  },
+): HostRecord {
+  if (
+    id === LOCAL_HOST_ID &&
+    (updates.allowAgentStart !== undefined ||
+      updates.shareCredentials !== undefined)
+  )
+    throw new ReservedHostError();
   const hosts = readHosts();
   const host = hosts.find((h) => h.id === id);
   if (!host) throw new UnknownHostError();
   // An empty name resets this machine to the default.
-  if (updates.label !== undefined) host.label = id === LOCAL_HOST_ID && !updates.label.trim() ? "" : normalizeLabel(updates.label);
-  if (updates.allowAgentStart !== undefined) host.allowAgentStart = updates.allowAgentStart;
-  if (updates.shareCredentials !== undefined) host.shareCredentials = updates.shareCredentials;
+  if (updates.label !== undefined)
+    host.label =
+      id === LOCAL_HOST_ID && !updates.label.trim()
+        ? ""
+        : normalizeLabel(updates.label);
+  if (updates.allowAgentStart !== undefined)
+    host.allowAgentStart = updates.allowAgentStart;
+  if (updates.shareCredentials !== undefined)
+    host.shareCredentials = updates.shareCredentials;
   saveHosts(hosts);
   return host;
 }
@@ -180,7 +221,8 @@ export function hostForToken(token: string): HostRecord | null {
   const digest = Buffer.from(sha256Hex(token));
   for (const host of readHosts()) {
     const stored = Buffer.from(host.tokenHash);
-    if (stored.length === digest.length && timingSafeEqual(stored, digest)) return host;
+    if (stored.length === digest.length && timingSafeEqual(stored, digest))
+      return host;
   }
   return null;
 }

@@ -1,4 +1,10 @@
-import fs, { existsSync, lstatSync, readdirSync, readlinkSync, realpathSync } from "fs";
+import fs, {
+  existsSync,
+  lstatSync,
+  readdirSync,
+  readlinkSync,
+  realpathSync,
+} from "fs";
 import { homedir } from "os";
 import path from "path";
 import { isUtf8 } from "node:buffer";
@@ -7,17 +13,16 @@ import { hostSessions } from "./hosts/session-index";
 import { LOCAL_HOST_ID } from "./hosts/registry";
 import { HostOpError } from "./hosts/link-protocol";
 
-
-
 // Allowed roots — in-memory plus session-derived, globalThis for hot-reload.
 declare global {
-  var __piAllowedRootsCache: { roots: Set<string>; expiresAt: number } | undefined;
+  var __piAllowedRootsCache:
+    { roots: Set<string>; expiresAt: number } | undefined;
   var __piAdditionalAllowedRoots: Set<string> | undefined;
 }
 
-
 function getAdditionalAllowedRoots(): Set<string> {
-  if (!globalThis.__piAdditionalAllowedRoots) globalThis.__piAdditionalAllowedRoots = new Set();
+  if (!globalThis.__piAdditionalAllowedRoots)
+    globalThis.__piAdditionalAllowedRoots = new Set();
   return globalThis.__piAdditionalAllowedRoots;
 }
 
@@ -71,30 +76,66 @@ export function getConfigAgentRoots(): string[] {
  * Hard links retain distinct paths, so compare their device/inode identity too.
  */
 const OMP_ENV_NAME = /^\.env(?:\.|$)/i;
-const OMP_SECRET_NAME = /^(?:\.?agent\.db(?:[-.~].*)?|\.?models\.(?:yml|yaml|json)(?:[.~].*|-(?:backup|bak|old)(?:[.~-].*)?)?|\.env(?:\..*)?)$/i;
-const credentialPolicyUnavailable = () => new HostOpError(503, "credential_policy_unavailable", "Credential exclusions cannot be verified while their filesystem metadata is unreadable");
+const OMP_SECRET_NAME =
+  /^(?:\.?agent\.db(?:[-.~].*)?|\.?models\.(?:yml|yaml|json)(?:[.~].*|-(?:backup|bak|old)(?:[.~-].*)?)?|\.env(?:\..*)?)$/i;
+const credentialPolicyUnavailable = () =>
+  new HostOpError(
+    503,
+    "credential_policy_unavailable",
+    "Credential exclusions cannot be verified while their filesystem metadata is unreadable",
+  );
 
 /** Request metadata failures retain a 404; incomplete credential ownership metadata throws a 503. */
 export function isOmpSecretFile(filePath: string): boolean {
   let requestUnavailable = false;
-  const markRequestUnavailable = () => { requestUnavailable = true; };
+  const markRequestUnavailable = () => {
+    requestUnavailable = true;
+  };
   // Follow the original path before any lexical normalization: link/.. is
   // resolved by the filesystem, not necessarily by path.resolve's string rules.
   const requested = resolvedOrSelf(filePath, markRequestUnavailable);
   const target = comparablePath(requested);
   const name = path.basename(requested);
-  const parents = new Set([path.dirname(requested), resolvedOrSelf(path.dirname(filePath), markRequestUnavailable)].map(comparablePath));
+  const parents = new Set(
+    [
+      path.dirname(requested),
+      resolvedOrSelf(path.dirname(filePath), markRequestUnavailable),
+    ].map(comparablePath),
+  );
   let metadataUnavailable = false;
-  const markUnavailable = () => { metadataUnavailable = true; };
-  const configDirs = ompConfigDirs([filePath, requested], markUnavailable, markRequestUnavailable);
-  const agentDirs = [getAgentDir(), ...configDirs.map((dir) => path.join(dir, "agent"))];
+  const markUnavailable = () => {
+    metadataUnavailable = true;
+  };
+  const configDirs = ompConfigDirs(
+    [filePath, requested],
+    markUnavailable,
+    markRequestUnavailable,
+  );
+  const agentDirs = [
+    getAgentDir(),
+    ...configDirs.map((dir) => path.join(dir, "agent")),
+  ];
   const requestedIdentity = fileIdentity(filePath, markRequestUnavailable);
-  const identity = requestedIdentity && requestedIdentity.nlink > 1 && requestedIdentity.ino > 0 ? requestedIdentity : null;
+  const identity =
+    requestedIdentity &&
+    requestedIdentity.nlink > 1 &&
+    requestedIdentity.ino > 0
+      ? requestedIdentity
+      : null;
   for (const dir of new Set([...agentDirs, ...configDirs])) {
     const agentDir = agentDirs.includes(dir);
     const namePattern = agentDir ? OMP_SECRET_NAME : OMP_ENV_NAME;
-    if (namePattern.test(name) && (parents.has(comparablePath(dir)) || parents.has(comparablePath(resolvedOrSelf(dir, markUnavailable))))) return true;
-    const names = new Set(agentDir ? ["agent.db", "models.yml", "models.yaml", "models.json", ".env"] : [".env"]);
+    if (
+      namePattern.test(name) &&
+      (parents.has(comparablePath(dir)) ||
+        parents.has(comparablePath(resolvedOrSelf(dir, markUnavailable))))
+    )
+      return true;
+    const names = new Set(
+      agentDir
+        ? ["agent.db", "models.yml", "models.yaml", "models.json", ".env"]
+        : [".env"],
+    );
     try {
       for (const entry of readdirSync(dir, { encoding: "buffer" })) {
         const name = entry.toString("utf8");
@@ -110,17 +151,27 @@ export function isOmpSecretFile(filePath: string): boolean {
     if (agentDir) {
       // SQLite sidecars/backups may live beside the canonical database and may
       // themselves be symlinks. Compare exact resolved files, never a path prefix.
-      const database = resolvedOrSelf(path.join(dir, "agent.db"), markUnavailable);
+      const database = resolvedOrSelf(
+        path.join(dir, "agent.db"),
+        markUnavailable,
+      );
       const databaseDir = path.dirname(database);
       const databaseName = path.basename(database);
-      const sidecars = new Set(["-wal", "-shm", "-journal"].map((suffix) => `${databaseName}${suffix}`));
+      const sidecars = new Set(
+        ["-wal", "-shm", "-journal"].map(
+          (suffix) => `${databaseName}${suffix}`,
+        ),
+      );
       const basename = databaseName;
       try {
         for (const entry of readdirSync(databaseDir, { encoding: "buffer" })) {
           const name = entry.toString("utf8");
           const candidate = name;
-          const suffix = candidate.startsWith(basename) ? candidate.slice(basename.length)
-            : candidate.startsWith(`.${basename}`) ? candidate.slice(basename.length + 1) : null;
+          const suffix = candidate.startsWith(basename)
+            ? candidate.slice(basename.length)
+            : candidate.startsWith(`.${basename}`)
+              ? candidate.slice(basename.length + 1)
+              : null;
           // Apply the same agent.db copy/editor rule to a renamed canonical database.
           if (suffix !== null && OMP_SECRET_NAME.test(`agent.db${suffix}`)) {
             if (isUtf8(entry)) sidecars.add(name);
@@ -135,29 +186,44 @@ export function isOmpSecretFile(filePath: string): boolean {
     for (const file of files) {
       const canonical = resolvedOrSelf(file, markUnavailable);
       if (target === comparablePath(canonical)) return true;
-      if (process.platform === "darwin" && !requestedIdentity && prospectiveMacAlias(requested, canonical, markUnavailable)) return true;
+      if (
+        process.platform === "darwin" &&
+        !requestedIdentity &&
+        prospectiveMacAlias(requested, canonical, markUnavailable)
+      )
+        return true;
       if (identity) {
         // Stat the configured path first: a canonical string can lose POSIX byte filenames.
-        const other = fileIdentity(file, markUnavailable)
-          ?? (canonical !== file ? fileIdentity(canonical, markUnavailable) : null);
-        if (other && identity.dev === other.dev && identity.ino === other.ino) return true;
+        const other =
+          fileIdentity(file, markUnavailable) ??
+          (canonical !== file
+            ? fileIdentity(canonical, markUnavailable)
+            : null);
+        if (other && identity.dev === other.dev && identity.ino === other.ino)
+          return true;
       }
     }
   }
   // Unknown off-tree aliases cannot be declared safe without complete ownership metadata.
-  if (requestUnavailable) throw new HostOpError(404, "file_not_found", "Not found");
+  if (requestUnavailable)
+    throw new HostOpError(404, "file_not_found", "Not found");
   if (metadataUnavailable) throw credentialPolicyUnavailable();
   return false;
 }
 
 /** Default and genuine named-profile config roots, both loaded by omp's env.ts. */
-function ompConfigDirs(filePaths: string[], onUnavailable: () => void, onRequestUnavailable: () => void): string[] {
+function ompConfigDirs(
+  filePaths: string[],
+  onUnavailable: () => void,
+  onRequestUnavailable: () => void,
+): string[] {
   const configRoot = getConfigRoot();
   const profiles = path.join(configRoot, "profiles");
   const dirs = new Set([configRoot]);
   try {
     for (const profile of readdirSync(profiles, { encoding: "buffer" })) {
-      if (isUtf8(profile)) dirs.add(path.join(profiles, profile.toString("utf8")));
+      if (isUtf8(profile))
+        dirs.add(path.join(profiles, profile.toString("utf8")));
       else onUnavailable();
     }
   } catch (error) {
@@ -166,9 +232,22 @@ function ompConfigDirs(filePaths: string[], onUnavailable: () => void, onRequest
   const profileParent = comparablePath(resolvedOrSelf(profiles, onUnavailable));
   for (const file of filePaths) {
     const parent = path.dirname(file);
-    if (comparablePath(resolvedOrSelf(path.dirname(parent), onRequestUnavailable)) === profileParent) dirs.add(parent);
-    if (path.posix.basename(comparablePath(parent)) === "agent"
-      && comparablePath(resolvedOrSelf(path.dirname(path.dirname(parent)), onRequestUnavailable)) === profileParent) dirs.add(path.dirname(parent));
+    if (
+      comparablePath(
+        resolvedOrSelf(path.dirname(parent), onRequestUnavailable),
+      ) === profileParent
+    )
+      dirs.add(parent);
+    if (
+      path.posix.basename(comparablePath(parent)) === "agent" &&
+      comparablePath(
+        resolvedOrSelf(
+          path.dirname(path.dirname(parent)),
+          onRequestUnavailable,
+        ),
+      ) === profileParent
+    )
+      dirs.add(path.dirname(parent));
   }
   return [...dirs];
 }
@@ -183,16 +262,25 @@ function fileIdentity(filePath: string, onUnavailable?: () => void) {
   }
 }
 
-
-function resolvedOrSelf(dir: string, onUnavailable?: () => void, seen?: Set<string>): string {
+function resolvedOrSelf(
+  dir: string,
+  onUnavailable?: () => void,
+  seen?: Set<string>,
+): string {
   const base = dir;
   try {
     return realpathSync.native(base);
   } catch (error) {
-    if (!isMissingPathError(error)) { onUnavailable?.(); return base; }
+    if (!isMissingPathError(error)) {
+      onUnavailable?.();
+      return base;
+    }
   }
   const visited = seen ?? new Set<string>();
-  if (visited.has(base)) { onUnavailable?.(); return base; }
+  if (visited.has(base)) {
+    onUnavailable?.();
+    return base;
+  }
   visited.add(base);
   let current = base;
   let suffix = "";
@@ -200,18 +288,35 @@ function resolvedOrSelf(dir: string, onUnavailable?: () => void, seen?: Set<stri
     try {
       if (lstatSync(current).isSymbolicLink()) {
         const bytes = readlinkSync(current, { encoding: "buffer" });
-        if (!isUtf8(bytes)) { onUnavailable?.(); return base; }
+        if (!isUtf8(bytes)) {
+          onUnavailable?.();
+          return base;
+        }
         const link = bytes.toString("utf8");
-        const target = path.isAbsolute(link) ? link : joinWithoutNormalizing(resolvedOrSelf(path.dirname(current), onUnavailable, visited), link);
-        return resolvedOrSelf(suffix ? joinWithoutNormalizing(target, suffix) : target, onUnavailable, visited);
+        const target = path.isAbsolute(link)
+          ? link
+          : joinWithoutNormalizing(
+              resolvedOrSelf(path.dirname(current), onUnavailable, visited),
+              link,
+            );
+        return resolvedOrSelf(
+          suffix ? joinWithoutNormalizing(target, suffix) : target,
+          onUnavailable,
+          visited,
+        );
       }
       const canonical = realpathSync.native(current);
       return suffix ? joinWithoutNormalizing(canonical, suffix) : canonical;
     } catch (error) {
-      if (!isMissingPathError(error)) { onUnavailable?.(); return base; }
+      if (!isMissingPathError(error)) {
+        onUnavailable?.();
+        return base;
+      }
       const parent = path.dirname(current);
       if (parent === current) return base;
-      suffix = suffix ? `${path.basename(current)}${path.sep}${suffix}` : path.basename(current);
+      suffix = suffix
+        ? `${path.basename(current)}${path.sep}${suffix}`
+        : path.basename(current);
       current = parent;
     }
   }
@@ -224,26 +329,48 @@ function joinWithoutNormalizing(parent: string, child: string): string {
 
 /** Missing targets have no inode: calibrate macOS name folding without creating a probe file. */
 // shortcut: add mount-specific calibration before supporting prospective aliases on Linux casefold filesystems.
-function prospectiveMacAlias(requested: string, owned: string, onUnavailable: () => void): boolean {
+function prospectiveMacAlias(
+  requested: string,
+  owned: string,
+  onUnavailable: () => void,
+): boolean {
   const left = requested.normalize("NFD");
   const right = owned.normalize("NFD");
   if (left === right) return true;
-  if (left.toLowerCase().toUpperCase() !== right.toLowerCase().toUpperCase()) return false;
+  if (left.toLowerCase().toUpperCase() !== right.toLowerCase().toUpperCase())
+    return false;
   let directory = path.dirname(owned);
   for (;;) {
     try {
       const original = fs.statSync(directory, { bigint: true });
       const parent = path.dirname(directory);
-      if (!original.isDirectory() || parent === directory || fs.statSync(parent, { bigint: true }).dev !== original.dev) break;
-      const alternate = path.basename(directory).replace(/[a-zA-Z]/, (letter) => letter === letter.toUpperCase() ? letter.toLowerCase() : letter.toUpperCase());
+      if (
+        !original.isDirectory() ||
+        parent === directory ||
+        fs.statSync(parent, { bigint: true }).dev !== original.dev
+      )
+        break;
+      const alternate = path
+        .basename(directory)
+        .replace(/[a-zA-Z]/, (letter) =>
+          letter === letter.toUpperCase()
+            ? letter.toLowerCase()
+            : letter.toUpperCase(),
+        );
       if (alternate !== path.basename(directory)) {
         try {
-          const alias = fs.statSync(path.join(parent, alternate), { bigint: true });
+          const alias = fs.statSync(path.join(parent, alternate), {
+            bigint: true,
+          });
           return original.dev === alias.dev && original.ino === alias.ino;
         } catch (error) {
           if (!isMissingPathError(error)) break;
           const stillPresent = fs.statSync(directory, { bigint: true });
-          if (original.dev === stillPresent.dev && original.ino === stillPresent.ino) return false;
+          if (
+            original.dev === stillPresent.dev &&
+            original.ino === stillPresent.ino
+          )
+            return false;
           break;
         }
       }
@@ -264,7 +391,6 @@ function comparablePath(filePath: string): string {
   return filePath.replace(/\/+$/, "");
 }
 
-
 export async function getAllowedFileRoots(): Promise<Set<string>> {
   const now = Date.now();
   const cached = globalThis.__piAllowedRootsCache;
@@ -281,7 +407,10 @@ export async function getAllowedFileRoots(): Promise<Set<string>> {
   // workspaces (session cwds, project roots, allowFileRoot() roots) before it
   // can land in ~/.omp or ~/.agents.
   for (const root of getConfigAgentRoots()) roots.add(root);
-  globalThis.__piAllowedRootsCache = { roots, expiresAt: now + ALLOWED_ROOTS_TTL_MS };
+  globalThis.__piAllowedRootsCache = {
+    roots,
+    expiresAt: now + ALLOWED_ROOTS_TTL_MS,
+  };
   return roots;
 }
 
@@ -321,7 +450,10 @@ export function isAbsoluteFileRequestPath(filePath: string): boolean {
  * authorization in place — this only ever widens *which in-root path* a
  * relative name maps to, never past a root.
  */
-export function resolveRequestedFilePath(requestPath: string, roots: Set<string>): string | null {
+export function resolveRequestedFilePath(
+  requestPath: string,
+  roots: Set<string>,
+): string | null {
   const request = requestPath;
   if (!request || isAbsoluteFileRequestPath(request)) return null;
   const relative = request.replace(/^\/+/, "");
@@ -338,21 +470,39 @@ export function resolveRequestedFilePath(requestPath: string, roots: Set<string>
 }
 
 /** isExistingPathWithinRoots for many targets: realpaths the roots once. */
-export function existingPathWithinRootsChecker(roots: Set<string>): (target: string) => boolean {
+export function existingPathWithinRootsChecker(
+  roots: Set<string>,
+): (target: string) => boolean {
   const realRoots = new Set<string>();
-  for (const root of roots) { try { realRoots.add(realpathSync(root)); } catch { /* stale */ } }
+  for (const root of roots) {
+    try {
+      realRoots.add(realpathSync(root));
+    } catch {
+      /* stale */
+    }
+  }
   return (target) => {
     let realTarget: string;
-    try { realTarget = realpathSync(target); } catch { return false; }
+    try {
+      realTarget = realpathSync(target);
+    } catch {
+      return false;
+    }
     return isPathWithinRoots(realTarget, realRoots);
   };
 }
 
-export function isExistingPathWithinRoots(target: string, roots: Set<string>): boolean {
+export function isExistingPathWithinRoots(
+  target: string,
+  roots: Set<string>,
+): boolean {
   return existingPathWithinRootsChecker(roots)(target);
 }
 
-export function isExistingFilePathAllowed(target: string, allowedRoots: Set<string>): boolean {
+export function isExistingFilePathAllowed(
+  target: string,
+  allowedRoots: Set<string>,
+): boolean {
   return isExistingPathWithinRoots(target, allowedRoots);
 }
 

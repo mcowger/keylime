@@ -9,7 +9,9 @@ import { RouteLoadingFallback } from "@/components/RouteLoadingFallback";
 
 // createRoot (not hydrateRoot) replaces the static skeleton or sign-in form that app/index.html puts in #root; a
 // password typed into the static form carries over.
-const typedPassword = document.querySelector<HTMLInputElement>("#root #web-password")?.value;
+const typedPassword = document.querySelector<HTMLInputElement>(
+  "#root #web-password",
+)?.value;
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <AppErrorBoundary>

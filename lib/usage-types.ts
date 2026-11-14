@@ -5,9 +5,9 @@ export type UsageBreakdownView = "model" | "day" | "project";
 export type CostQualityTier = "provider_reported" | "model_priced" | "unpriced";
 
 export interface ModelRates {
-  input: number;      // USD per million tokens
-  output: number;     // USD per million tokens
-  cacheRead: number;  // USD per million tokens
+  input: number; // USD per million tokens
+  output: number; // USD per million tokens
+  cacheRead: number; // USD per million tokens
   cacheWrite: number; // USD per million tokens
 }
 
@@ -17,13 +17,13 @@ export interface UsageRecord {
   sessionCwd: string;
   provider: string;
   model: string;
-  input: number;        // uncached input tokens
-  output: number;       // output tokens
-  reasoning: number;    // reasoning / thought tokens
-  cacheRead: number;    // prompt cache read tokens
-  cacheWrite: number;   // prompt cache write tokens
+  input: number; // uncached input tokens
+  output: number; // output tokens
+  reasoning: number; // reasoning / thought tokens
+  cacheRead: number; // prompt cache read tokens
+  cacheWrite: number; // prompt cache write tokens
   totalTokens: number;
-  cost: number;         // USD
+  cost: number; // USD
   cacheSavings: number; // USD
   costQuality: CostQualityTier;
   /**
@@ -61,8 +61,8 @@ export interface UsageSummary {
   cachePercentage: number;
   costQuality: {
     providerReported: number; // percentage 0-100
-    modelPriced: number;      // percentage 0-100
-    unpriced: number;         // percentage 0-100
+    modelPriced: number; // percentage 0-100
+    unpriced: number; // percentage 0-100
   };
 }
 

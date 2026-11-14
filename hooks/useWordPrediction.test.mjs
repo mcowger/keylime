@@ -1,7 +1,8 @@
 import "../tests/setup-dom.mjs";
 import assert from "node:assert/strict";
 import test, { afterEach } from "node:test";
-const { act, cleanup, renderHook } = await import("@testing-library/react/pure.js");
+const { act, cleanup, renderHook } =
+  await import("@testing-library/react/pure.js");
 
 // Drives the composer's ghost-text controller with a fake omp: the ghost a
 // user would see (peek) and the feedback omp would learn from.
@@ -26,7 +27,8 @@ function fakeOmp(answer) {
 }
 
 function render(omp) {
-  return renderHook(() => useWordPrediction(omp.predict, omp.onFeedback)).result.current;
+  return renderHook(() => useWordPrediction(omp.predict, omp.onFeedback)).result
+    .current;
 }
 
 function type(prediction, text) {
@@ -37,7 +39,9 @@ afterEach(cleanup);
 
 test("shows the answer for the latest draft and drops a slower stale answer", async () => {
   const slow = Promise.withResolvers();
-  const omp = fakeOmp((text) => (text === "the we" ? slow.promise : Promise.resolve("ather")));
+  const omp = fakeOmp((text) =>
+    text === "the we" ? slow.promise : Promise.resolve("ather"),
+  );
   const prediction = render(omp);
 
   type(prediction, "the we");
@@ -46,21 +50,35 @@ test("shows the answer for the latest draft and drops a slower stale answer", as
   // No ghost to carry forward yet: a fresh answer is needed.
   assert.equal(prediction.peek(), null);
   await settle();
-  assert.deepEqual(prediction.peek(), { text: "the weathe", cursor: 10, suffix: "ather" });
+  assert.deepEqual(prediction.peek(), {
+    text: "the weathe",
+    cursor: 10,
+    suffix: "ather",
+  });
 
   await act(async () => slow.resolve("ek"));
-  assert.equal(prediction.peek().suffix, "ather", "the stale answer for 'the we' must not replace it");
+  assert.equal(
+    prediction.peek().suffix,
+    "ather",
+    "the stale answer for 'the we' must not replace it",
+  );
 });
 
 test("typing through keeps the ghost, typing past reports one rejection", async () => {
-  const omp = fakeOmp((text) => Promise.resolve(text === "the weath" ? "er" : null));
+  const omp = fakeOmp((text) =>
+    Promise.resolve(text === "the weath" ? "er" : null),
+  );
   const prediction = render(omp);
 
   type(prediction, "the weath");
   await settle();
   type(prediction, "the weathe");
   await settle();
-  assert.equal(prediction.peek()?.suffix, "r", "a null re-answer keeps the carried ghost");
+  assert.equal(
+    prediction.peek()?.suffix,
+    "r",
+    "a null re-answer keeps the carried ghost",
+  );
 
   type(prediction, "the weathex");
   assert.equal(prediction.peek(), null);
@@ -84,7 +102,9 @@ test("take hands over the ghost once and reports the accept", async () => {
 });
 
 test("an omp without predict_word is not asked again on every keystroke", async () => {
-  const omp = fakeOmp(() => Promise.reject(new Error("Unknown command: predict_word")));
+  const omp = fakeOmp(() =>
+    Promise.reject(new Error("Unknown command: predict_word")),
+  );
   const prediction = render(omp);
   type(prediction, "the weath");
   await settle();

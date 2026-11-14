@@ -51,9 +51,36 @@ import vscDarkPlusTheme from "react-syntax-highlighter/dist/esm/styles/prism/vsc
 // sh, html, yml, dockerfile, ...) and register their own dependencies, so
 // registering under the canonical name is enough.
 const GRAMMARS: Record<string, unknown> = {
-  bash, c, cpp, csharp, css, diff, docker, go, graphql, hcl, ini, java,
-  javascript, json, jsx, kotlin, makefile, markdown, markup, protobuf,
-  python, ruby, rust, scss, sql, swift, toml, tsx, typescript, yaml,
+  bash,
+  c,
+  cpp,
+  csharp,
+  css,
+  diff,
+  docker,
+  go,
+  graphql,
+  hcl,
+  ini,
+  java,
+  javascript,
+  json,
+  jsx,
+  kotlin,
+  makefile,
+  markdown,
+  markup,
+  protobuf,
+  python,
+  ruby,
+  rust,
+  scss,
+  sql,
+  swift,
+  toml,
+  tsx,
+  typescript,
+  yaml,
 };
 
 for (const [name, grammar] of Object.entries(GRAMMARS)) {
@@ -78,7 +105,9 @@ export function isLanguageRegistered(language: string): boolean {
  * rendering (SyntaxHighlightedCode, FileViewer). Every grammar is already
  * registered, so there is never anything to wait for.
  */
-export function ensureLanguageRegistered(language: string): Promise<void> | null {
+export function ensureLanguageRegistered(
+  language: string,
+): Promise<void> | null {
   void language; // All grammars are eager — kept only for call-site clarity.
   return null;
 }

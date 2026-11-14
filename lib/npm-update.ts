@@ -22,31 +22,55 @@ let cached: { checkedAt: number; status: NpmUpdateStatus } | null = null;
 export async function checkNpmUpdate(force = false): Promise<NpmUpdateStatus> {
   const currentVersion = packageJson.version;
   const installMethod = Bun.isStandaloneExecutable ? "binary" : "bun";
-  const updateCommand = installMethod === "binary" ? `https://github.com/${releaseRepo()}/releases/latest` : "bun add -g @kahme247/ompweb";
+  const updateCommand =
+    installMethod === "binary"
+      ? `https://github.com/${releaseRepo()}/releases/latest`
+      : "bun add -g @kahme247/ompweb";
 
   if (isUpdateDisabled()) {
-    return { currentVersion, availableVersion: null, updateAvailable: false, installMethod, updateCommand, updatesDisabled: true };
+    return {
+      currentVersion,
+      availableVersion: null,
+      updateAvailable: false,
+      installMethod,
+      updateCommand,
+      updatesDisabled: true,
+    };
   }
-  if (!force && cached && Date.now() - cached.checkedAt < CHECK_TTL_MS) return cached.status;
+  if (!force && cached && Date.now() - cached.checkedAt < CHECK_TTL_MS)
+    return cached.status;
 
   try {
-    const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(NPM_PACKAGE)}/latest`, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(5_000),
-    });
-    const data = response.ok ? await response.json() as { version?: unknown } : null;
-    const availableVersion = typeof data?.version === "string" ? data.version : null;
+    const response = await fetch(
+      `https://registry.npmjs.org/${encodeURIComponent(NPM_PACKAGE)}/latest`,
+      {
+        cache: "no-store",
+        signal: AbortSignal.timeout(5_000),
+      },
+    );
+    const data = response.ok
+      ? ((await response.json()) as { version?: unknown })
+      : null;
+    const availableVersion =
+      typeof data?.version === "string" ? data.version : null;
     const status: NpmUpdateStatus = {
       currentVersion,
       availableVersion,
-      updateAvailable: Boolean(availableVersion && isNewerVersion(availableVersion, currentVersion)),
+      updateAvailable: Boolean(
+        availableVersion && isNewerVersion(availableVersion, currentVersion),
+      ),
       installMethod,
       updateCommand,
     };
     cached = { checkedAt: Date.now(), status };
     return status;
   } catch {
-    return { currentVersion, availableVersion: null, updateAvailable: false, installMethod, updateCommand };
+    return {
+      currentVersion,
+      availableVersion: null,
+      updateAvailable: false,
+      installMethod,
+      updateCommand,
+    };
   }
 }
-

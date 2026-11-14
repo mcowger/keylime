@@ -31,7 +31,11 @@ export interface CompiledSearchQuery {
 
 export function searchField(text: string, weight: number): SearchField {
   const normalized = normalize(text).replace(/\s+/g, " ").trim();
-  return { text: normalized, words: [...new Set(normalized.match(WORD_RE) ?? [])], weight };
+  return {
+    text: normalized,
+    words: [...new Set(normalized.match(WORD_RE) ?? [])],
+    weight,
+  };
 }
 
 let prevRow = new Uint16Array(64);
@@ -56,7 +60,11 @@ function editDistance(a: string, b: string, max: number): number {
     cur[0] = i;
     let rowMin = i;
     for (let j = 1; j <= b.length; j++) {
-      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      cur[j] = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
       rowMin = Math.min(rowMin, cur[j]);
     }
     if (rowMin > max) return max + 1;
@@ -79,7 +87,10 @@ function termQuality(term: string, word: string): number {
   const distance =
     word.length <= term.length || fullDistance <= 1
       ? fullDistance
-      : Math.min(fullDistance, editDistance(term, word.slice(0, term.length), maxTypos));
+      : Math.min(
+          fullDistance,
+          editDistance(term, word.slice(0, term.length), maxTypos),
+        );
   // editDistance reports "too far" as maxTypos + 1, which must not read as a typo count.
   if (distance > maxTypos) return 0;
   return distance === 1 ? 0.45 : 0.3;
@@ -89,7 +100,9 @@ export function compileSearchQuery(raw: string): CompiledSearchQuery | null {
   const terms: string[] = [];
   const phrases: string[] = [];
   // An unclosed quote is a phrase still being typed. Typographic quotes (“” „ «») count too.
-  for (const match of normalize(raw).matchAll(/["“”„«»]([^"“”„«»]*)["“”„«»]?|[^\s"“”„«»]+/g)) {
+  for (const match of normalize(raw).matchAll(
+    /["“”„«»]([^"“”„«»]*)["“”„«»]?|[^\s"“”„«»]+/g,
+  )) {
     if (match[1] !== undefined) {
       const phrase = match[1].replace(/\s+/g, " ").trim();
       if (phrase) phrases.push(phrase);
@@ -126,11 +139,16 @@ function inOrder(text: string, terms: string[]): boolean {
 }
 
 /** Score of a document split into weighted fields, or null when it does not match. */
-export function scoreSearchFields(fields: SearchField[], query: CompiledSearchQuery): number | null {
+export function scoreSearchFields(
+  fields: SearchField[],
+  query: CompiledSearchQuery,
+): number | null {
   let score = 0;
   for (const phrase of query.phrases) {
     let best = 0;
-    for (const field of fields) if (field.weight > best && field.text.includes(phrase)) best = field.weight;
+    for (const field of fields)
+      if (field.weight > best && field.text.includes(phrase))
+        best = field.weight;
     if (best === 0) return null;
     score += best;
   }
@@ -154,7 +172,8 @@ export function scoreSearchFields(fields: SearchField[], query: CompiledSearchQu
     let bonus = 0;
     for (const field of fields) {
       if (field.text.includes(adjacent)) bonus = Math.max(bonus, field.weight);
-      else if (inOrder(field.text, texts)) bonus = Math.max(bonus, field.weight / 2);
+      else if (inOrder(field.text, texts))
+        bonus = Math.max(bonus, field.weight / 2);
     }
     score += bonus;
   }
@@ -173,14 +192,25 @@ export interface SearchMatchSpan {
  * each quoted phrase verbatim, and each word that matches a term, fuzzy hits
  * included. Unlike scoreSearchFields, one matching term is enough.
  */
-export function findSearchMatches(text: string, query: CompiledSearchQuery): SearchMatchSpan[] {
+export function findSearchMatches(
+  text: string,
+  query: CompiledSearchQuery,
+): SearchMatchSpan[] {
   const spans: SearchMatchSpan[] = [];
   for (const phrase of query.phrases) {
     // Whitespace within one rendered line of text: at most one space before a line break. A blank
     // line (new paragraph) or a hard break (2+ trailing spaces, or a backslash) renders the words
     // in separate text nodes, where the chat could not find the phrase.
-    const pattern = phrase.split(" ").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("(?:[^\\S\\n]+|[^\\S\\n]?\\n[^\\S\\n]*)");
-    for (const match of text.matchAll(new RegExp(pattern, "giu"))) spans.push({ start: match.index, end: match.index + match[0].length, quality: 1 });
+    const pattern = phrase
+      .split(" ")
+      .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("(?:[^\\S\\n]+|[^\\S\\n]?\\n[^\\S\\n]*)");
+    for (const match of text.matchAll(new RegExp(pattern, "giu")))
+      spans.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        quality: 1,
+      });
   }
   if (query.terms.length > 0) {
     for (const match of text.matchAll(WORD_RE)) {
@@ -199,7 +229,10 @@ export function findSearchMatches(text: string, query: CompiledSearchQuery): Sea
       let end = start + match[0].length;
       // Exact, prefix and substring hits mark only the typed term, as browser find does;
       // typo hits (and words whose case folding changes length) mark the whole word.
-      const at = best >= 0.6 && word.length === match[0].length ? word.indexOf(bestTerm) : -1;
+      const at =
+        best >= 0.6 && word.length === match[0].length
+          ? word.indexOf(bestTerm)
+          : -1;
       if (at >= 0) {
         start += at;
         end = start + bestTerm.length;
@@ -209,6 +242,7 @@ export function findSearchMatches(text: string, query: CompiledSearchQuery): Sea
   }
   spans.sort((a, b) => a.start - b.start || b.end - a.end);
   const merged: SearchMatchSpan[] = [];
-  for (const span of spans) if (span.start >= (merged.at(-1)?.end ?? 0)) merged.push(span);
+  for (const span of spans)
+    if (span.start >= (merged.at(-1)?.end ?? 0)) merged.push(span);
   return merged;
 }

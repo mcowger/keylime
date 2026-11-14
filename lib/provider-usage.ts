@@ -25,9 +25,18 @@ let usageInFlightForced = false;
 function nonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
-function normalizeWindowId(scope: Record<string, unknown>, window: Record<string, unknown>): ProviderUsageWindowId | undefined {
+function normalizeWindowId(
+  scope: Record<string, unknown>,
+  window: Record<string, unknown>,
+): ProviderUsageWindowId | undefined {
   const windowId = nonEmptyString(scope.windowId);
-  if (windowId === "5h" || windowId === "7d" || windowId === "monthly" || windowId === "30d" || windowId === "daily") {
+  if (
+    windowId === "5h" ||
+    windowId === "7d" ||
+    windowId === "monthly" ||
+    windowId === "30d" ||
+    windowId === "daily"
+  ) {
     if (windowId === "30d") return "monthly";
     if (windowId === "daily") return "5h";
     return windowId;
@@ -36,7 +45,8 @@ function normalizeWindowId(scope: Record<string, unknown>, window: Record<string
   if (durationMs === undefined) return undefined;
   if (Math.abs(durationMs - 5 * 60 * 60 * 1000) <= 60_000) return "5h";
   if (Math.abs(durationMs - 7 * 24 * 60 * 60 * 1000) <= 60_000) return "7d";
-  if (Math.abs(durationMs - 30 * 24 * 60 * 60 * 1000) <= 60 * 60 * 1000) return "monthly";
+  if (Math.abs(durationMs - 30 * 24 * 60 * 60 * 1000) <= 60 * 60 * 1000)
+    return "monthly";
   if (Math.abs(durationMs - 24 * 60 * 60 * 1000) <= 60_000) return "5h";
   return undefined;
 }
@@ -51,16 +61,24 @@ function usageWindow(
   if (windowId === "5h") {
     return {
       percent: fraction * 100,
-      ...(resetAt !== undefined ? { resetMinutes: Math.max(0, Math.round((resetAt - now) / 60_000)) } : {}),
+      ...(resetAt !== undefined
+        ? { resetMinutes: Math.max(0, Math.round((resetAt - now) / 60_000)) }
+        : {}),
     };
   }
   return {
     percent: fraction * 100,
-    ...(resetAt !== undefined ? { resetHours: Math.max(0, Math.round((resetAt - now) / 3_600_000)) } : {}),
+    ...(resetAt !== undefined
+      ? { resetHours: Math.max(0, Math.round((resetAt - now) / 3_600_000)) }
+      : {}),
   };
 }
 
-type UsageLimit = { id: ProviderUsageWindowId; fraction: number; window: Record<string, unknown> };
+type UsageLimit = {
+  id: ProviderUsageWindowId;
+  fraction: number;
+  window: Record<string, unknown>;
+};
 
 type UsageGroup = {
   priority: number;
@@ -84,7 +102,10 @@ type UsageGroup = {
  * Other providers return undefined: Anthropic's Fable bucket already
  * arrives as scope.tier, and no other provider's labels are bucket names.
  */
-function antigravityBucket(rawLimit: Record<string, unknown>, scope: Record<string, unknown>): string | undefined {
+function antigravityBucket(
+  rawLimit: Record<string, unknown>,
+  scope: Record<string, unknown>,
+): string | undefined {
   const label = nonEmptyString(rawLimit.label);
   if (label === "Gemini" || label === "Claude & GPT (shared)") return label;
   const usageMatch = label ? /^Usage \((.+)\)$/.exec(label) : null;
@@ -114,7 +135,12 @@ function normalizeReport(
   const groups = new Map<string, UsageGroup>();
 
   for (const rawLimit of limits) {
-    if (!isRecord(rawLimit) || !isRecord(rawLimit.scope) || !isRecord(rawLimit.amount)) continue;
+    if (
+      !isRecord(rawLimit) ||
+      !isRecord(rawLimit.scope) ||
+      !isRecord(rawLimit.amount)
+    )
+      continue;
     const scope = rawLimit.scope;
     const amount = rawLimit.amount;
     const fraction = asNumber(amount.usedFraction);
@@ -123,18 +149,26 @@ function normalizeReport(
     const windowId = normalizeWindowId(scope, window);
     if (!windowId) continue;
     const modelId = nonEmptyString(scope.modelId);
-    if (activeModelId && modelId && modelId.toLowerCase() !== activeModelId) continue;
+    if (activeModelId && modelId && modelId.toLowerCase() !== activeModelId)
+      continue;
     const tier = nonEmptyString(scope.tier);
     const normalizedModelId = modelId?.toLowerCase();
     const normalizedTier = tier?.toLowerCase();
     // Antigravity buckets must not merge: without a bucket in the key, a
     // Gemini weekly limit and a Claude & GPT weekly limit collapse into
     // one group and only the larger fraction survives (#284).
-    const bucket = provider === "google-antigravity" || provider === "antigravity"
-      ? antigravityBucket(rawLimit, scope)
-      : undefined;
+    const bucket =
+      provider === "google-antigravity" || provider === "antigravity"
+        ? antigravityBucket(rawLimit, scope)
+        : undefined;
     const groupKey = `${normalizedModelId ?? ""}\0${normalizedTier ?? ""}\0${bucket ?? ""}`;
-    const priority = modelId ? (normalizedTier ? 0 : 1) : normalizedTier ? 2 : 3;
+    const priority = modelId
+      ? normalizedTier
+        ? 0
+        : 1
+      : normalizedTier
+        ? 2
+        : 3;
     let group = groups.get(groupKey);
     if (!group) {
       group = { priority, modelId, tier, bucket, limits: new Map() };
@@ -142,7 +176,8 @@ function normalizeReport(
     }
     const candidate = { id: windowId, fraction, window };
     const current = group.limits.get(windowId);
-    if (!current || fraction > current.fraction) group.limits.set(windowId, candidate);
+    if (!current || fraction > current.fraction)
+      group.limits.set(windowId, candidate);
   }
 
   const selectedGroups = [...groups.values()];
@@ -151,23 +186,31 @@ function normalizeReport(
     // Antigravity's Gemini and shared buckets share priority (no modelId,
     // no tier) and differ only by bucket, so picking one would drop a
     // quota bucket from a model-filtered query (#284, CodeRabbit).
-    const bestPriority = Math.min(...selectedGroups.map((group) => group.priority));
-    const kept = selectedGroups.filter((group) => group.priority === bestPriority);
+    const bestPriority = Math.min(
+      ...selectedGroups.map((group) => group.priority),
+    );
+    const kept = selectedGroups.filter(
+      (group) => group.priority === bestPriority,
+    );
     selectedGroups.splice(0, selectedGroups.length, ...kept);
   }
-  const metadata = isRecord(rawReport.metadata) ? rawReport.metadata : undefined;
+  const metadata = isRecord(rawReport.metadata)
+    ? rawReport.metadata
+    : undefined;
   // Email only: unredacted account ids are opaque UUIDs, so those accounts
   // show as "Account N".
   const label = nonEmptyString(metadata?.email);
   const plan = nonEmptyString(metadata?.planType);
   if (selectedGroups.length === 0) {
-    return [{
-      provider,
-      ...(label ? { accountLabel: label } : {}),
-      ...(!label ? { accountIndex: reportIndex + 1 } : {}),
-      ...(plan ? { plan } : {}),
-      noLimits: true,
-    }];
+    return [
+      {
+        provider,
+        ...(label ? { accountLabel: label } : {}),
+        ...(!label ? { accountIndex: reportIndex + 1 } : {}),
+        ...(plan ? { plan } : {}),
+        noLimits: true,
+      },
+    ];
   }
   return selectedGroups.flatMap((group) => {
     const result: ProviderUsageReport = {
@@ -180,32 +223,56 @@ function normalizeReport(
       ...(group.bucket ? { bucket: group.bucket } : {}),
     };
     for (const candidate of group.limits.values()) {
-      const normalized = usageWindow(candidate.id, candidate.fraction, candidate.window, now);
-      if (candidate.id === "5h" && !result.fiveHour) result.fiveHour = normalized;
-      if (candidate.id === "7d" && !result.sevenDay) result.sevenDay = normalized;
-      if (candidate.id === "monthly" && !result.monthly) result.monthly = normalized;
+      const normalized = usageWindow(
+        candidate.id,
+        candidate.fraction,
+        candidate.window,
+        now,
+      );
+      if (candidate.id === "5h" && !result.fiveHour)
+        result.fiveHour = normalized;
+      if (candidate.id === "7d" && !result.sevenDay)
+        result.sevenDay = normalized;
+      if (candidate.id === "monthly" && !result.monthly)
+        result.monthly = normalized;
     }
     return result.fiveHour || result.sevenDay || result.monthly ? [result] : [];
   });
 }
 
-export function parseProviderUsageOutput(output: string, query: UsageQuery = {}, now = Date.now()): ProviderUsageSnapshot {
+export function parseProviderUsageOutput(
+  output: string,
+  query: UsageQuery = {},
+  now = Date.now(),
+): ProviderUsageSnapshot {
   let payload: unknown;
   try {
     payload = JSON.parse(output);
   } catch {
     throw new Error("omp usage returned invalid JSON");
   }
-  if (!isRecord(payload)) throw new Error("omp usage returned an invalid response");
+  if (!isRecord(payload))
+    throw new Error("omp usage returned an invalid response");
   const rawReports = Array.isArray(payload.reports) ? payload.reports : [];
-  const reports = rawReports.flatMap((report, index) => isRecord(report) ? normalizeReport(report, query, now, index) : []);
-  const accountsWithoutUsage = Array.isArray(payload.accountsWithoutUsage) ? payload.accountsWithoutUsage : [];
+  const reports = rawReports.flatMap((report, index) =>
+    isRecord(report) ? normalizeReport(report, query, now, index) : [],
+  );
+  const accountsWithoutUsage = Array.isArray(payload.accountsWithoutUsage)
+    ? payload.accountsWithoutUsage
+    : [];
   for (const [index, account] of accountsWithoutUsage.entries()) {
     if (!isRecord(account)) continue;
-    reports.push(...normalizeReport({
-      provider: account.provider,
-      metadata: { email: account.email },
-    }, query, now, rawReports.length + index));
+    reports.push(
+      ...normalizeReport(
+        {
+          provider: account.provider,
+          metadata: { email: account.email },
+        },
+        query,
+        now,
+        rawReports.length + index,
+      ),
+    );
   }
   const generatedAt = asNumber(payload.generatedAt) ?? null;
   return { generatedAt, reports };
@@ -234,10 +301,14 @@ async function fetchProviderUsage(refresh = false): Promise<string> {
 }
 
 function getUsageOutput(refresh = false): Promise<string> {
-  if (!refresh && usageCache && usageCache.expiresAt > Date.now()) return Promise.resolve(usageCache.output);
+  if (!refresh && usageCache && usageCache.expiresAt > Date.now())
+    return Promise.resolve(usageCache.output);
   if (usageInFlight) {
     return refresh && !usageInFlightForced
-      ? usageInFlight.then(() => getUsageOutput(true), () => getUsageOutput(true))
+      ? usageInFlight.then(
+          () => getUsageOutput(true),
+          () => getUsageOutput(true),
+        )
       : usageInFlight;
   }
   usageInFlightForced = refresh;
@@ -246,10 +317,15 @@ function getUsageOutput(refresh = false): Promise<string> {
       usageCache = { output, expiresAt: Date.now() + USAGE_CACHE_TTL_MS };
       return output;
     })
-    .finally(() => { usageInFlight = undefined; });
+    .finally(() => {
+      usageInFlight = undefined;
+    });
   return usageInFlight;
 }
 
-export async function getProviderUsage(query: UsageQuery = {}, refresh = false): Promise<ProviderUsageSnapshot> {
+export async function getProviderUsage(
+  query: UsageQuery = {},
+  refresh = false,
+): Promise<ProviderUsageSnapshot> {
   return parseProviderUsageOutput(await getUsageOutput(refresh), query);
 }

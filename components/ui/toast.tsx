@@ -49,11 +49,23 @@ const DEFAULT_TIMEOUT_MS = 6000;
 const ERROR_TIMEOUT_MS = 10000;
 
 /** Auto-dismiss delay: an explicit `timeout`/`duration` (0 = sticky) wins over the per-kind default. */
-export function resolveToastTimeout(kind: ToastKind, options?: Pick<ToastOptions, "timeout" | "duration">): number {
-  return options?.timeout ?? options?.duration ?? (kind === "error" ? ERROR_TIMEOUT_MS : DEFAULT_TIMEOUT_MS);
+export function resolveToastTimeout(
+  kind: ToastKind,
+  options?: Pick<ToastOptions, "timeout" | "duration">,
+): number {
+  return (
+    options?.timeout ??
+    options?.duration ??
+    (kind === "error" ? ERROR_TIMEOUT_MS : DEFAULT_TIMEOUT_MS)
+  );
 }
 
-function add(kind: ToastKind, title: React.ReactNode, description?: React.ReactNode, options?: ToastOptions) {
+function add(
+  kind: ToastKind,
+  title: React.ReactNode,
+  description?: React.ReactNode,
+  options?: ToastOptions,
+) {
   const timeout = resolveToastTimeout(kind, options);
   return manager.add({
     id: options?.id,
@@ -66,20 +78,53 @@ function add(kind: ToastKind, title: React.ReactNode, description?: React.ReactN
   });
 }
 export const toast = {
-  success: (title: React.ReactNode, description?: React.ReactNode, options?: ToastOptions) =>
-    add("success", title, description, options),
-  error: (title: React.ReactNode, description?: React.ReactNode, options?: ToastOptions) =>
-    add("error", title, description, options),
-  info: (title: React.ReactNode, description?: React.ReactNode, options?: ToastOptions) =>
-    add("info", title, description, options),
+  success: (
+    title: React.ReactNode,
+    description?: React.ReactNode,
+    options?: ToastOptions,
+  ) => add("success", title, description, options),
+  error: (
+    title: React.ReactNode,
+    description?: React.ReactNode,
+    options?: ToastOptions,
+  ) => add("error", title, description, options),
+  info: (
+    title: React.ReactNode,
+    description?: React.ReactNode,
+    options?: ToastOptions,
+  ) => add("info", title, description, options),
   close: (id?: string) => manager.close(id),
 };
 
 export function KindIcon({ kind }: { kind?: ToastKind }) {
-  const common = { size: 13, strokeWidth: 2, style: { flexShrink: 0, marginTop: 2 } } as const;
-  if (kind === "success") return <Check {...common} style={{ ...common.style, color: "var(--accent)" }} aria-hidden />;
-  if (kind === "error") return <AlertCircle {...common} style={{ ...common.style, color: "var(--accent-strong)" }} aria-hidden />;
-  return <Info {...common} style={{ ...common.style, color: "var(--text-muted)" }} aria-hidden />;
+  const common = {
+    size: 13,
+    strokeWidth: 2,
+    style: { flexShrink: 0, marginTop: 2 },
+  } as const;
+  if (kind === "success")
+    return (
+      <Check
+        {...common}
+        style={{ ...common.style, color: "var(--accent)" }}
+        aria-hidden
+      />
+    );
+  if (kind === "error")
+    return (
+      <AlertCircle
+        {...common}
+        style={{ ...common.style, color: "var(--accent-strong)" }}
+        aria-hidden
+      />
+    );
+  return (
+    <Info
+      {...common}
+      style={{ ...common.style, color: "var(--text-muted)" }}
+      aria-hidden
+    />
+  );
 }
 
 export const descriptionBaseStyle = {
@@ -112,7 +157,11 @@ export function clampDescriptionStyle(expanded: boolean): React.CSSProperties {
  * content. Rendered inside a Toast.Description for long notices (e.g. the MCP
  * tool inventory) via toast.info(..., { clamp: true }).
  */
-export function ClampedDescription({ children }: { children: React.ReactNode }) {
+export function ClampedDescription({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const [expanded, setExpanded] = useState(false);
   return (
     <span
@@ -154,19 +203,26 @@ export function useDragClickGuard() {
   const press = useRef<{ x: number; y: number; travel: number } | null>(null);
   const travelTo = (x: number, y: number) => {
     const from = press.current;
-    if (from) from.travel = Math.max(from.travel, Math.hypot(x - from.x, y - from.y));
+    if (from)
+      from.travel = Math.max(from.travel, Math.hypot(x - from.x, y - from.y));
   };
   return {
     onPointerDown: (event: React.PointerEvent) => {
       press.current = { x: event.clientX, y: event.clientY, travel: 0 };
     },
-    onPointerMove: (event: React.PointerEvent) => travelTo(event.clientX, event.clientY),
+    onPointerMove: (event: React.PointerEvent) =>
+      travelTo(event.clientX, event.clientY),
     onClickCapture: (event: React.MouseEvent) => {
       const from = press.current;
       press.current = null;
       // detail 0: a keyboard-activated click, which has no pointer travel.
       if (!from || event.detail === 0) return;
-      if (Math.max(from.travel, Math.hypot(event.clientX - from.x, event.clientY - from.y)) > DRAG_SLOP_PX) {
+      if (
+        Math.max(
+          from.travel,
+          Math.hypot(event.clientX - from.x, event.clientY - from.y),
+        ) > DRAG_SLOP_PX
+      ) {
         event.stopPropagation();
         event.preventDefault();
       }
@@ -189,10 +245,15 @@ export function createSwipeTracker(startX: number): SwipeTracker {
   let peak = 0;
   const track = (x: number) => {
     const dx = x - startX;
-    if (Math.sign(dx) !== Math.sign(peak) || Math.abs(dx) > Math.abs(peak)) peak = dx;
+    if (Math.sign(dx) !== Math.sign(peak) || Math.abs(dx) > Math.abs(peak))
+      peak = dx;
     return dx;
   };
-  return { track, pulledBack: (x: number) => Math.abs(peak) - Math.abs(track(x)) >= SWIPE_RETURN_PX };
+  return {
+    track,
+    pulledBack: (x: number) =>
+      Math.abs(peak) - Math.abs(track(x)) >= SWIPE_RETURN_PX,
+  };
 }
 
 function Toaster() {
@@ -203,7 +264,12 @@ function Toaster() {
   // Press origin for the whole-card onClick action below: base-ui captures the
   // pointer for its swipe, which retargets the click to the card, so the
   // action judges the element that was pressed instead of the click target.
-  const press = useRef<{ x: number; y: number; target: EventTarget | null; travel: number } | null>(null);
+  const press = useRef<{
+    x: number;
+    y: number;
+    target: EventTarget | null;
+    travel: number;
+  } | null>(null);
   // Clear the app chrome (topbar 36/44px + tab bar 36px) with a safe gap so
   // toasts never cover the header, tabs, or chat content.
   const topOffset = isMobile ? 88 : 80;
@@ -234,52 +300,105 @@ function Toaster() {
               clickGuard.onPointerDown(event);
               // A mouse drag selects text (e.g. to copy an error), as on any page.
               if (event.pointerType === "mouse") event.preventBaseUIHandler();
-              else swipe.current = { id: event.pointerId, tracker: createSwipeTracker(event.clientX) };
-              press.current = { x: event.clientX, y: event.clientY, target: event.target, travel: 0 };
+              else
+                swipe.current = {
+                  id: event.pointerId,
+                  tracker: createSwipeTracker(event.clientX),
+                };
+              press.current = {
+                x: event.clientX,
+                y: event.clientY,
+                target: event.target,
+                travel: 0,
+              };
             }}
             onPointerMove={(event) => {
               clickGuard.onPointerMove(event);
-              if (swipe.current?.id === event.pointerId) swipe.current.tracker.track(event.clientX);
+              if (swipe.current?.id === event.pointerId)
+                swipe.current.tracker.track(event.clientX);
               const from = press.current;
-              if (from) from.travel = Math.max(from.travel, Math.hypot(event.clientX - from.x, event.clientY - from.y));
+              if (from)
+                from.travel = Math.max(
+                  from.travel,
+                  Math.hypot(event.clientX - from.x, event.clientY - from.y),
+                );
             }}
             onPointerUp={(event) => {
               const current = swipe.current;
               swipe.current = null;
-              if (current?.id !== event.pointerId || !current.tracker.pulledBack(event.clientX)) return;
+              if (
+                current?.id !== event.pointerId ||
+                !current.tracker.pulledBack(event.clientX)
+              )
+                return;
               // base-ui dismisses on distance alone. Turn this release into the
               // pointercancel it treats as "put the toast back", and keep the
               // original from reaching its document-level listener.
               event.preventBaseUIHandler();
               event.stopPropagation();
-              event.currentTarget.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, pointerId: event.pointerId, pointerType: event.pointerType }));
+              event.currentTarget.dispatchEvent(
+                new PointerEvent("pointercancel", {
+                  bubbles: true,
+                  pointerId: event.pointerId,
+                  pointerType: event.pointerType,
+                }),
+              );
             }}
             onClickCapture={clickGuard.onClickCapture}
-            onClick={t.data?.onClick ? (event) => {
-              const onClick = t.data?.onClick;
-              const from = press.current;
-              press.current = null;
-              // base-ui captures the pointer for its swipe, which retargets the
-              // click to the card; judge the element that was pressed instead.
-              const pointerClick = from && event.detail !== 0;
-              const target = pointerClick ? from.target : event.target;
-              if (!onClick || (target instanceof Element && target.closest("button, a, input, textarea, select, [aria-expanded]"))) return;
-              // A drag that fell short of a swipe, even one brought back to where
-              // it started, is not a click (detail 0: keyboard).
-              if (pointerClick && Math.max(from.travel, Math.hypot(event.clientX - from.x, event.clientY - from.y)) > 10) return;
-              // Releasing a text selection is not a request to open anything.
-              if (window.getSelection()?.isCollapsed === false) return;
-              manager.close(t.id);
-              onClick();
-            } : undefined}
+            onClick={
+              t.data?.onClick
+                ? (event) => {
+                    const onClick = t.data?.onClick;
+                    const from = press.current;
+                    press.current = null;
+                    // base-ui captures the pointer for its swipe, which retargets the
+                    // click to the card; judge the element that was pressed instead.
+                    const pointerClick = from && event.detail !== 0;
+                    const target = pointerClick ? from.target : event.target;
+                    if (
+                      !onClick ||
+                      (target instanceof Element &&
+                        target.closest(
+                          "button, a, input, textarea, select, [aria-expanded]",
+                        ))
+                    )
+                      return;
+                    // A drag that fell short of a swipe, even one brought back to where
+                    // it started, is not a click (detail 0: keyboard).
+                    if (
+                      pointerClick &&
+                      Math.max(
+                        from.travel,
+                        Math.hypot(
+                          event.clientX - from.x,
+                          event.clientY - from.y,
+                        ),
+                      ) > 10
+                    )
+                      return;
+                    // Releasing a text selection is not a request to open anything.
+                    if (window.getSelection()?.isCollapsed === false) return;
+                    manager.close(t.id);
+                    onClick();
+                  }
+                : undefined
+            }
             // The card is focusable (base-ui gives it tabIndex 0): Enter on it
             // runs the action, which has no separate button.
-            onKeyDown={t.data?.onClick ? (event) => {
-              if (event.key !== "Enter" || event.target !== event.currentTarget) return;
-              event.preventDefault();
-              manager.close(t.id);
-              t.data?.onClick?.();
-            } : undefined}
+            onKeyDown={
+              t.data?.onClick
+                ? (event) => {
+                    if (
+                      event.key !== "Enter" ||
+                      event.target !== event.currentTarget
+                    )
+                      return;
+                    event.preventDefault();
+                    manager.close(t.id);
+                    t.data?.onClick?.();
+                  }
+                : undefined
+            }
             style={{
               pointerEvents: "auto",
               cursor: t.data?.onClick ? "pointer" : undefined,
@@ -296,16 +415,25 @@ function Toaster() {
           >
             <KindIcon kind={t.type as ToastKind | undefined} />
             <Toast.Content style={{ flex: 1, minWidth: 0 }}>
-              <Toast.Title className="display-serif" style={{ fontSize: 13, lineHeight: 1.4 }} />
+              <Toast.Title
+                className="display-serif"
+                style={{ fontSize: 13, lineHeight: 1.4 }}
+              />
               {t.data?.clamp ? (
-                <Toast.Description render={<div />} style={descriptionBaseStyle}>
+                <Toast.Description
+                  render={<div />}
+                  style={descriptionBaseStyle}
+                >
                   <ClampedDescription>{t.description}</ClampedDescription>
                 </Toast.Description>
               ) : (
                 // Rendered as a div (not base-ui's default <p>): descriptions can
                 // carry block-level JSX (e.g. the update toasts' flex rows), and a
                 // <div> inside <p> would throw a hydration error.
-                <Toast.Description render={<div />} style={descriptionBaseStyle} />
+                <Toast.Description
+                  render={<div />}
+                  style={descriptionBaseStyle}
+                />
               )}
             </Toast.Content>
             <Toast.Close
@@ -324,7 +452,11 @@ function Toaster() {
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
-    <Toast.Provider toastManager={manager} timeout={DEFAULT_TIMEOUT_MS} limit={4}>
+    <Toast.Provider
+      toastManager={manager}
+      timeout={DEFAULT_TIMEOUT_MS}
+      limit={4}
+    >
       {children}
       <Toaster />
     </Toast.Provider>

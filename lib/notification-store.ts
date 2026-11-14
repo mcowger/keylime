@@ -1,4 +1,11 @@
-import { chmodSync, closeSync, mkdirSync, openSync, readFileSync, rmSync } from "fs";
+import {
+  chmodSync,
+  closeSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  rmSync,
+} from "fs";
 import { join } from "path";
 import { Database } from "bun:sqlite";
 import type { PushSubscription } from "web-push";
@@ -44,7 +51,13 @@ export function parsePushSubscription(value: unknown): PushSubscription | null {
   const { endpoint } = value;
   const { p256dh, auth } = value.keys;
   if (typeof endpoint !== "string" || endpoint.length > 2048) return null;
-  if (typeof p256dh !== "string" || !P256DH_PATTERN.test(p256dh) || typeof auth !== "string" || !AUTH_PATTERN.test(auth)) return null;
+  if (
+    typeof p256dh !== "string" ||
+    !P256DH_PATTERN.test(p256dh) ||
+    typeof auth !== "string" ||
+    !AUTH_PATTERN.test(auth)
+  )
+    return null;
   try {
     if (new URL(endpoint).protocol !== "https:") return null;
   } catch {
@@ -98,17 +111,32 @@ function importLegacy(db: Database, file: string): boolean {
     console.warn(`[notifications] ignoring unreadable ${file}`);
     return false;
   }
-  const empty = !db.prepare("SELECT 1 FROM vapid").get() && !db.prepare("SELECT 1 FROM devices").get();
+  const empty =
+    !db.prepare("SELECT 1 FROM vapid").get() &&
+    !db.prepare("SELECT 1 FROM devices").get();
   if (!empty) return false;
   const { vapid } = parsed;
-  if (isRecord(vapid) && typeof vapid.publicKey === "string" && typeof vapid.privateKey === "string") {
-    db.prepare("INSERT INTO vapid (id, public_key, private_key) VALUES (1, ?, ?)").run(vapid.publicKey, vapid.privateKey);
+  if (
+    isRecord(vapid) &&
+    typeof vapid.publicKey === "string" &&
+    typeof vapid.privateKey === "string"
+  ) {
+    db.prepare(
+      "INSERT INTO vapid (id, public_key, private_key) VALUES (1, ?, ?)",
+    ).run(vapid.publicKey, vapid.privateKey);
   }
-  const insert = db.prepare("INSERT OR IGNORE INTO devices (device_id, prefs, subscription, updated_at) VALUES (?, ?, ?, ?)");
+  const insert = db.prepare(
+    "INSERT OR IGNORE INTO devices (device_id, prefs, subscription, updated_at) VALUES (?, ?, ?, ?)",
+  );
   for (const device of Array.isArray(parsed.devices) ? parsed.devices : []) {
     if (!isRecord(device) || !isValidNotificationId(device.deviceId)) continue;
     const subscription = parsePushSubscription(device.subscription);
-    insert.run(device.deviceId, JSON.stringify(parseNotificationPrefs(device.prefs)), subscription ? JSON.stringify(subscription) : null, Number(device.updatedAt) || 0);
+    insert.run(
+      device.deviceId,
+      JSON.stringify(parseNotificationPrefs(device.prefs)),
+      subscription ? JSON.stringify(subscription) : null,
+      Number(device.updatedAt) || 0,
+    );
   }
   return true;
 }
@@ -146,7 +174,8 @@ function open(dir: string, path: string): Database {
         database.exec("PRAGMA journal_mode = WAL");
         break;
       } catch (error) {
-        if (!isRecord(error) || error.errno !== 5 || attempt >= 250) throw error;
+        if (!isRecord(error) || error.errno !== 5 || attempt >= 250)
+          throw error;
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
       }
     }
@@ -174,65 +203,131 @@ function open(dir: string, path: string): Database {
 /** The installation's VAPID key pair, generated on first use. */
 export function getVapidKeys(generate: () => VapidKeys): VapidKeys {
   const database = db();
-  const read = () => database.prepare("SELECT public_key, private_key FROM vapid WHERE id = 1").get() as { public_key: string; private_key: string } | null;
-  const row = read() ?? transaction(database, () => {
-    // Re-read under the write lock: another instance may have generated them meanwhile.
-    if (!read()) {
-      const fresh = generate();
-      database.prepare("INSERT INTO vapid (id, public_key, private_key) VALUES (1, ?, ?)").run(fresh.publicKey, fresh.privateKey);
-    }
-    return read()!;
-  });
+  const read = () =>
+    database
+      .prepare("SELECT public_key, private_key FROM vapid WHERE id = 1")
+      .get() as { public_key: string; private_key: string } | null;
+  const row =
+    read() ??
+    transaction(database, () => {
+      // Re-read under the write lock: another instance may have generated them meanwhile.
+      if (!read()) {
+        const fresh = generate();
+        database
+          .prepare(
+            "INSERT INTO vapid (id, public_key, private_key) VALUES (1, ?, ?)",
+          )
+          .run(fresh.publicKey, fresh.privateKey);
+      }
+      return read()!;
+    });
   return { publicKey: row.public_key, privateKey: row.private_key };
 }
 
 // ---------------------------------------------------------------- devices
 
-type DeviceRow = { device_id: string; prefs: string; subscription: string | null; updated_at: number };
+type DeviceRow = {
+  device_id: string;
+  prefs: string;
+  subscription: string | null;
+  updated_at: number;
+};
 
 function toDevice(row: DeviceRow): NotificationDevice | undefined {
   if (!isValidNotificationId(row.device_id)) return undefined;
-  const subscription = row.subscription === null ? undefined : parsePushSubscription(parseJson(row.subscription)) ?? undefined;
-  return { deviceId: row.device_id, prefs: parseNotificationPrefs(parseJson(row.prefs)), subscription, updatedAt: Number(row.updated_at) };
+  const subscription =
+    row.subscription === null
+      ? undefined
+      : (parsePushSubscription(parseJson(row.subscription)) ?? undefined);
+  return {
+    deviceId: row.device_id,
+    prefs: parseNotificationPrefs(parseJson(row.prefs)),
+    subscription,
+    updatedAt: Number(row.updated_at),
+  };
 }
 
 export function listDevices(): NotificationDevice[] {
-  const rows = db().prepare("SELECT device_id, prefs, subscription, updated_at FROM devices ORDER BY updated_at DESC").all() as DeviceRow[];
+  const rows = db()
+    .prepare(
+      "SELECT device_id, prefs, subscription, updated_at FROM devices ORDER BY updated_at DESC",
+    )
+    .all() as DeviceRow[];
   return rows.flatMap((row) => toDevice(row) ?? []);
 }
 
 export function getDevice(deviceId: string): NotificationDevice | undefined {
-  const row = db().prepare("SELECT device_id, prefs, subscription, updated_at FROM devices WHERE device_id = ?").get(deviceId) as DeviceRow | null;
+  const row = db()
+    .prepare(
+      "SELECT device_id, prefs, subscription, updated_at FROM devices WHERE device_id = ?",
+    )
+    .get(deviceId) as DeviceRow | null;
   return row ? toDevice(row) : undefined;
 }
 
 /** Store a device's prefs, and its push subscription when given (otherwise the stored one is kept). */
-export function saveDevice(deviceId: string, prefs: NotificationPrefs, subscription?: PushSubscription): NotificationDevice {
+export function saveDevice(
+  deviceId: string,
+  prefs: NotificationPrefs,
+  subscription?: PushSubscription,
+): NotificationDevice {
   const database = db();
   return transaction(database, () => {
-    const device: NotificationDevice = { deviceId, prefs, subscription: subscription ?? getDevice(deviceId)?.subscription, updatedAt: Date.now() };
+    const device: NotificationDevice = {
+      deviceId,
+      prefs,
+      subscription: subscription ?? getDevice(deviceId)?.subscription,
+      updatedAt: Date.now(),
+    };
     // A push endpoint belongs to one browser; drop it from any other device id.
     if (device.subscription) {
       for (const other of listDevices()) {
-        if (other.deviceId !== deviceId && other.subscription?.endpoint === device.subscription.endpoint) database.prepare("DELETE FROM devices WHERE device_id = ?").run(other.deviceId);
+        if (
+          other.deviceId !== deviceId &&
+          other.subscription?.endpoint === device.subscription.endpoint
+        )
+          database
+            .prepare("DELETE FROM devices WHERE device_id = ?")
+            .run(other.deviceId);
       }
     }
-    database.prepare(`INSERT INTO devices (device_id, prefs, subscription, updated_at) VALUES (?, ?, ?, ?)
-      ON CONFLICT (device_id) DO UPDATE SET prefs = excluded.prefs, subscription = excluded.subscription, updated_at = excluded.updated_at`)
-      .run(deviceId, JSON.stringify(prefs), device.subscription ? JSON.stringify(device.subscription) : null, device.updatedAt);
+    database
+      .prepare(
+        `INSERT INTO devices (device_id, prefs, subscription, updated_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT (device_id) DO UPDATE SET prefs = excluded.prefs, subscription = excluded.subscription, updated_at = excluded.updated_at`,
+      )
+      .run(
+        deviceId,
+        JSON.stringify(prefs),
+        device.subscription ? JSON.stringify(device.subscription) : null,
+        device.updatedAt,
+      );
     // Over the cap, forget devices that would never be notified before ones that would.
-    const useful = (entry: NotificationDevice) => (entry.prefs.enabled || entry.subscription ? 1 : 0);
-    const ranked = listDevices().sort((a, b) => useful(b) - useful(a) || b.updatedAt - a.updatedAt);
-    for (const extra of ranked.slice(MAX_DEVICES)) database.prepare("DELETE FROM devices WHERE device_id = ?").run(extra.deviceId);
+    const useful = (entry: NotificationDevice) =>
+      entry.prefs.enabled || entry.subscription ? 1 : 0;
+    const ranked = listDevices().sort(
+      (a, b) => useful(b) - useful(a) || b.updatedAt - a.updatedAt,
+    );
+    for (const extra of ranked.slice(MAX_DEVICES))
+      database
+        .prepare("DELETE FROM devices WHERE device_id = ?")
+        .run(extra.deviceId);
     return device;
   });
 }
 
 /** Forget a subscription the push service no longer accepts, unless the device has since saved a new one. */
-export function dropDeviceSubscription(deviceId: string, endpoint: string): void {
+export function dropDeviceSubscription(
+  deviceId: string,
+  endpoint: string,
+): void {
   const device = getDevice(deviceId);
   if (device?.subscription?.endpoint !== endpoint) return;
-  db().prepare("UPDATE devices SET subscription = NULL WHERE device_id = ? AND subscription = ?").run(deviceId, JSON.stringify(device.subscription));
+  db()
+    .prepare(
+      "UPDATE devices SET subscription = NULL WHERE device_id = ? AND subscription = ?",
+    )
+    .run(deviceId, JSON.stringify(device.subscription));
 }
 
 // ---------------------------------------------------------------- history
@@ -241,21 +336,43 @@ type HistoryRow = { id: string; event: string; at: number; read: number };
 
 /** Newest first. */
 export function listHistory(): NotificationHistoryEntry[] {
-  const rows = db().prepare("SELECT id, event, at, read FROM history ORDER BY at DESC, rowid DESC").all() as HistoryRow[];
+  const rows = db()
+    .prepare(
+      "SELECT id, event, at, read FROM history ORDER BY at DESC, rowid DESC",
+    )
+    .all() as HistoryRow[];
   return rows.flatMap((row) => {
     const event = parseJson(row.event);
-    return isRecord(event) ? [{ id: row.id, event: event as unknown as NotificationEvent, at: Number(row.at), read: row.read === 1 }] : [];
+    return isRecord(event)
+      ? [
+          {
+            id: row.id,
+            event: event as unknown as NotificationEvent,
+            at: Number(row.at),
+            read: row.read === 1,
+          },
+        ]
+      : [];
   });
 }
 
 /** A reused id (`<sessionId>:<type>`) replaces its entry: it is a new notification, unread unless `read` says it was seen. */
-export function recordHistory(event: NotificationEvent, { at = Date.now(), read = false }: { at?: number; read?: boolean } = {}): NotificationHistoryEntry {
+export function recordHistory(
+  event: NotificationEvent,
+  { at = Date.now(), read = false }: { at?: number; read?: boolean } = {},
+): NotificationHistoryEntry {
   const database = db();
   const id = `${event.sessionId}:${event.type}`;
   transaction(database, () => {
     database.prepare("DELETE FROM history WHERE id = ?").run(id);
-    database.prepare("INSERT INTO history (id, event, at, read) VALUES (?, ?, ?, ?)").run(id, JSON.stringify(event), at, read ? 1 : 0);
-    database.prepare("DELETE FROM history WHERE rowid NOT IN (SELECT rowid FROM history ORDER BY at DESC, rowid DESC LIMIT ?)").run(MAX_HISTORY);
+    database
+      .prepare("INSERT INTO history (id, event, at, read) VALUES (?, ?, ?, ?)")
+      .run(id, JSON.stringify(event), at, read ? 1 : 0);
+    database
+      .prepare(
+        "DELETE FROM history WHERE rowid NOT IN (SELECT rowid FROM history ORDER BY at DESC, rowid DESC LIMIT ?)",
+      )
+      .run(MAX_HISTORY);
   });
   return { id, event, at, read };
 }

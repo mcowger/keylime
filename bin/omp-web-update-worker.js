@@ -1,17 +1,18 @@
 #!/usr/bin/env bun
 "use strict";
 // Dependency-free CommonJS, copied outside pkgDir to survive replacement.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const fs = require("node:fs");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const path = require("node:path");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const cp = require("node:child_process");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const os = require("node:os");
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const STAGES = ["preparing", "stopping", "installing", "restarting", "finalizing"];
+const STAGES = [
+  "preparing",
+  "stopping",
+  "installing",
+  "restarting",
+  "finalizing",
+];
 
 function arg(name) {
   const idx = process.argv.indexOf(name);
@@ -22,7 +23,6 @@ const root = arg("--root");
 const packageDir = arg("--package-dir");
 const managerPath = arg("--manager-path");
 const target = arg("--target");
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const from = arg("--from");
 const launcherPid = Number(arg("--launcher-pid"));
 const serverPid = Number(arg("--server-pid"));
@@ -36,19 +36,41 @@ try {
   descriptor = null;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function leaseFile() { return path.join(root, "lease.json"); }
-function statusFile() { return path.join(root, "status.json"); }
-function markerFile(m) { return path.join(root, attemptId + "." + m); }
-function abortFile() { return markerFile("abort.json"); }
+function leaseFile() {
+  return path.join(root, "lease.json");
+}
+function statusFile() {
+  return path.join(root, "status.json");
+}
+function markerFile(m) {
+  return path.join(root, attemptId + "." + m);
+}
+function abortFile() {
+  return markerFile("abort.json");
+}
 
 function readJson(file) {
-  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
 }
 function atomicWrite(file, obj) {
   const tmp = file + "." + process.pid + ".tmp";
-  fs.writeFileSync(tmp, JSON.stringify(obj), { encoding: "utf8", mode: 0o600, flag: "wx" });
-  try { fs.renameSync(tmp, file); } catch (e) { try { fs.rmSync(tmp, { force: true }); } catch {} throw e; }
+  fs.writeFileSync(tmp, JSON.stringify(obj), {
+    encoding: "utf8",
+    mode: 0o600,
+    flag: "wx",
+  });
+  try {
+    fs.renameSync(tmp, file);
+  } catch (e) {
+    try {
+      fs.rmSync(tmp, { force: true });
+    } catch {}
+    throw e;
+  }
 }
 function updateStatus(patch) {
   const cur = readJson(statusFile()) || {};
@@ -56,20 +78,40 @@ function updateStatus(patch) {
   // atomic write via tmp+rename
   const dir = path.dirname(statusFile());
   const tmp = path.join(dir, ".status." + process.pid + ".tmp");
-  fs.writeFileSync(tmp, JSON.stringify(next), { encoding: "utf8", mode: 0o600, flag: "wx" });
+  fs.writeFileSync(tmp, JSON.stringify(next), {
+    encoding: "utf8",
+    mode: 0o600,
+    flag: "wx",
+  });
   fs.renameSync(tmp, statusFile());
 }
-function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 // The launcher (bin/omp-web.js watchUpdateCompletion) was armed at commit: an attempt that ends without a restart must
 // disarm it, or it takes the running server's next exit for this update's restart and waits forever.
 function disarmLauncher() {
-  try { atomicWrite(markerFile("complete.json"), { protocol: 1, attemptId, state: "failed", completedAt: new Date().toISOString() }); } catch {}
+  try {
+    atomicWrite(markerFile("complete.json"), {
+      protocol: 1,
+      attemptId,
+      state: "failed",
+      completedAt: new Date().toISOString(),
+    });
+  } catch {}
 }
 function isLaunchdActive() {
   try {
-    const plist = path.join(os.homedir(), "Library", "LaunchAgents", "com.kahme247.ompweb.plist");
+    const plist = path.join(
+      os.homedir(),
+      "Library",
+      "LaunchAgents",
+      "com.kahme247.ompweb.plist",
+    );
     return fs.existsSync(plist);
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 function isTrayActive() {
   try {
@@ -77,13 +119,28 @@ function isTrayActive() {
     if (!fs.existsSync(svc)) return false;
     const data = readJson(svc);
     return Boolean(data && data.pid);
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 function systemctl(action) {
-  const result = cp.spawnSync("systemctl", [...systemctlScope, action, systemdUnit], { encoding: "utf8", timeout: 120000 });
+  const result = cp.spawnSync(
+    "systemctl",
+    [...systemctlScope, action, systemdUnit],
+    { encoding: "utf8", timeout: 120000 },
+  );
   if (result.status !== 0) {
-    const detail = (result.stderr || result.stdout || (result.error && result.error.message) || "").trim().slice(0, 200);
-    throw new Error(`systemctl ${action} ${systemdUnit} failed${detail ? `: ${detail}` : ""}`);
+    const detail = (
+      result.stderr ||
+      result.stdout ||
+      (result.error && result.error.message) ||
+      ""
+    )
+      .trim()
+      .slice(0, 200);
+    throw new Error(
+      `systemctl ${action} ${systemdUnit} failed${detail ? `: ${detail}` : ""}`,
+    );
   }
 }
 
@@ -99,7 +156,9 @@ async function stopOriginalProcesses() {
   if (launchd) {
     try {
       const uid = typeof process.getuid === "function" ? process.getuid() : 501;
-      cp.spawnSync("launchctl", ["bootout", `gui/${uid}/com.kahme247.ompweb`], { timeout: 15000 });
+      cp.spawnSync("launchctl", ["bootout", `gui/${uid}/com.kahme247.ompweb`], {
+        timeout: 15000,
+      });
     } catch {}
     await sleep(500);
   }
@@ -116,12 +175,17 @@ async function stopOriginalProcesses() {
   if (!launchd && !tray) {
     for (const pid of [launcherPid, serverPid]) {
       if (!Number.isInteger(pid) || pid <= 0) continue;
-      try { process.kill(pid, "SIGTERM"); } catch {}
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch {}
     }
     await sleep(5000);
     for (const pid of [launcherPid, serverPid]) {
       if (!Number.isInteger(pid) || pid <= 0) continue;
-      try { process.kill(pid, 0); process.kill(pid, "SIGKILL"); } catch {}
+      try {
+        process.kill(pid, 0);
+        process.kill(pid, "SIGKILL");
+      } catch {}
     }
     // waitForPort 90s simplified: sleep 1s (real impl would poll port)
     await sleep(1000);
@@ -138,31 +202,66 @@ function preflightCandidate() {
     fs.writeFileSync(path.join(prefix, "package.json"), '{"private":true}');
     const pkg = `@kahme247/ompweb@${target}`;
     const args = ["add", "--cwd", prefix, "--production", "--exact", pkg];
-    const install = cp.spawnSync(managerPath || process.execPath, args, { timeout: 5 * 60 * 1000, env: process.env });
+    const install = cp.spawnSync(managerPath || process.execPath, args, {
+      timeout: 5 * 60 * 1000,
+      env: process.env,
+    });
     if (install.status !== 0) {
-      const detail = install.stderr ? install.stderr.toString().trim().slice(-300) : String(install.error || "");
-      throw new Error(`candidate install failed (exit ${install.status})${detail ? `: ${detail}` : ""}`);
+      const detail = install.stderr
+        ? install.stderr.toString().trim().slice(-300)
+        : String(install.error || "");
+      throw new Error(
+        `candidate install failed (exit ${install.status})${detail ? `: ${detail}` : ""}`,
+      );
     }
     const release = path.join(prefix, "node_modules", "@kahme247", "ompweb");
     // Detected statically: an older ompweb takes `preflight` for a positional and starts a web server.
     if (!fs.existsSync(path.join(release, "lib", "hosts", "preflight.ts"))) {
-      console.warn(`ompweb ${target} has no preflight command; its omp was not checked`);
+      console.warn(
+        `ompweb ${target} has no preflight command; its omp was not checked`,
+      );
       return;
     }
     // OMP_WEB_PACKAGE_DIR: the launcher set it to the running install, whose omp this must not check.
     const candidate = (command, timeout) => {
-      const result = cp.spawnSync(process.execPath, [path.join(release, "bin", "omp-web.js"), command], { cwd: prefix, timeout, env: { ...process.env, OMP_WEB_PACKAGE_DIR: release }, encoding: "utf8" });
-      return result.status === 0 ? null : ((result.stderr || "").trim() || String(result.error || `exit ${result.status}`)).slice(-300);
+      const result = cp.spawnSync(
+        process.execPath,
+        [path.join(release, "bin", "omp-web.js"), command],
+        {
+          cwd: prefix,
+          timeout,
+          env: { ...process.env, OMP_WEB_PACKAGE_DIR: release },
+          encoding: "utf8",
+        },
+      );
+      return result.status === 0
+        ? null
+        : (
+            (result.stderr || "").trim() ||
+            String(result.error || `exit ${result.status}`)
+          ).slice(-300);
     };
     // 15 min, as the host updater allows the download.
-    const fetchFailure = fs.existsSync(path.join(release, "lib", "omp", "runner-fetch.ts")) ? candidate("fetch-omp", 15 * 60 * 1000) : null;
-    if (fetchFailure) throw new Error(`the new release could not fetch its omp: ${fetchFailure}`);
+    const fetchFailure = fs.existsSync(
+      path.join(release, "lib", "omp", "runner-fetch.ts"),
+    )
+      ? candidate("fetch-omp", 15 * 60 * 1000)
+      : null;
+    if (fetchFailure)
+      throw new Error(
+        `the new release could not fetch its omp: ${fetchFailure}`,
+      );
     // 120 s: the preflight itself can take 30 s for the hello, 7 s to stop omp and 30 s for the version probe.
     const preflightFailure = candidate("preflight", 120 * 1000);
-    if (preflightFailure) throw new Error(`the new release cannot start a session: ${preflightFailure}`);
+    if (preflightFailure)
+      throw new Error(
+        `the new release cannot start a session: ${preflightFailure}`,
+      );
   } finally {
     // Cleanup is best effort after the preflight.
-    try { fs.rmSync(prefix, { recursive: true, force: true, maxRetries: 3 }); } catch {}
+    try {
+      fs.rmSync(prefix, { recursive: true, force: true, maxRetries: 3 });
+    } catch {}
   }
 }
 
@@ -173,11 +272,19 @@ async function runManagerGate() {
   let retries = 0;
   let lastResult;
   while (retries <= 1) {
-    const result = cp.spawnSync(cmd, args, { timeout: 5 * 60 * 1000, env: process.env });
+    const result = cp.spawnSync(cmd, args, {
+      timeout: 5 * 60 * 1000,
+      env: process.env,
+    });
     lastResult = result;
     const stderr = result.stderr ? result.stderr.toString() : "";
-    const spawnError = result.error ? String(result.error.code || result.error.message || "") : "";
-    const isBusy = (result.error && ["EBUSY", "EPERM"].includes(result.error.code || "")) || /EBUSY|EPERM/.test(stderr) || /EBUSY|EPERM/.test(spawnError);
+    const spawnError = result.error
+      ? String(result.error.code || result.error.message || "")
+      : "";
+    const isBusy =
+      (result.error && ["EBUSY", "EPERM"].includes(result.error.code || "")) ||
+      /EBUSY|EPERM/.test(stderr) ||
+      /EBUSY|EPERM/.test(spawnError);
     if (isBusy && retries === 0) {
       retries++;
       await sleep(2000);
@@ -186,10 +293,19 @@ async function runManagerGate() {
     break;
   }
   if (lastResult && lastResult.status !== 0) {
-    const stderr = lastResult.stderr ? lastResult.stderr.toString().trim().slice(0, 500) : "";
-    const spawnErr = lastResult.error ? String(lastResult.error.message || lastResult.error.code || "").slice(0, 200) : "";
+    const stderr = lastResult.stderr
+      ? lastResult.stderr.toString().trim().slice(0, 500)
+      : "";
+    const spawnErr = lastResult.error
+      ? String(lastResult.error.message || lastResult.error.code || "").slice(
+          0,
+          200,
+        )
+      : "";
     const detail = stderr || spawnErr;
-    throw new Error(`package install failed (exit ${lastResult.status})${detail ? `: ${detail}` : ""}`);
+    throw new Error(
+      `package install failed (exit ${lastResult.status})${detail ? `: ${detail}` : ""}`,
+    );
   }
 }
 
@@ -207,7 +323,20 @@ async function restartServices(info) {
   if (info.launchd) {
     try {
       const uid = typeof process.getuid === "function" ? process.getuid() : 501;
-      cp.spawnSync("launchctl", ["bootstrap", `gui/${uid}`, path.join(os.homedir(), "Library", "LaunchAgents", "com.kahme247.ompweb.plist")], { timeout: 15000 });
+      cp.spawnSync(
+        "launchctl",
+        [
+          "bootstrap",
+          `gui/${uid}`,
+          path.join(
+            os.homedir(),
+            "Library",
+            "LaunchAgents",
+            "com.kahme247.ompweb.plist",
+          ),
+        ],
+        { timeout: 15000 },
+      );
     } catch {}
     await sleep(1000);
     return;
@@ -216,7 +345,10 @@ async function restartServices(info) {
     try {
       const trayBin = path.join(packageDir, "bin", "omp-web-tray.js");
       if (fs.existsSync(trayBin)) {
-        cp.spawn(process.execPath, [trayBin, "--start"], { detached: true, stdio: "ignore" }).unref();
+        cp.spawn(process.execPath, [trayBin, "--start"], {
+          detached: true,
+          stdio: "ignore",
+        }).unref();
       }
     } catch {}
     await sleep(1000);
@@ -226,7 +358,12 @@ async function restartServices(info) {
   try {
     const restartRequest = path.join(root, attemptId + ".restart-request.json");
     const restartAck = path.join(root, attemptId + ".restart-ack.json");
-    atomicWrite(restartRequest, { attemptId, port: descriptor && descriptor.port, hostname: descriptor && descriptor.hostname, requestedAt: new Date().toISOString() });
+    atomicWrite(restartRequest, {
+      attemptId,
+      port: descriptor && descriptor.port,
+      hostname: descriptor && descriptor.hostname,
+      requestedAt: new Date().toISOString(),
+    });
     // Wait up to 30s for ack
     for (let i = 0; i < 30; i++) {
       if (fs.existsSync(restartAck)) break;
@@ -236,12 +373,22 @@ async function restartServices(info) {
 }
 
 async function main() {
-  if (!/^[0-9a-f-]{36}$/i.test(attemptId || "") || !root || !packageDir || !target) {
+  if (
+    !/^[0-9a-f-]{36}$/i.test(attemptId || "") ||
+    !root ||
+    !packageDir ||
+    !target
+  ) {
     process.exit(1);
   }
   // Check abort
   if (fs.existsSync(abortFile())) {
-    updateStatus({ state: "failed", error: (readJson(abortFile()) || {}).reason || "aborted", finishedAt: new Date().toISOString(), cleanupReady: true });
+    updateStatus({
+      state: "failed",
+      error: (readJson(abortFile()) || {}).reason || "aborted",
+      finishedAt: new Date().toISOString(),
+      cleanupReady: true,
+    });
     disarmLauncher();
     process.exit(0);
   }
@@ -253,7 +400,11 @@ async function main() {
       await sleep(200);
     }
   }
-  updateStatus({ state: "running", stage: "preparing", startedAt: new Date().toISOString() });
+  updateStatus({
+    state: "running",
+    stage: "preparing",
+    startedAt: new Date().toISOString(),
+  });
   await sleep(1000); // PREPARING_MIN 1s
 
   let svcInfo = { launchd: false, tray: false };
@@ -272,22 +423,48 @@ async function main() {
     } catch {}
     await restartServices(svcInfo);
     await sleep(500);
-    updateStatus({ state: "succeeded", stage: "finalizing", finishedAt: new Date().toISOString(), cleanupReady: true });
+    updateStatus({
+      state: "succeeded",
+      stage: "finalizing",
+      finishedAt: new Date().toISOString(),
+      cleanupReady: true,
+    });
     // write complete marker
-    try { atomicWrite(markerFile("complete.json"), { attemptId, completedAt: new Date().toISOString() }); } catch {}
+    try {
+      atomicWrite(markerFile("complete.json"), {
+        attemptId,
+        completedAt: new Date().toISOString(),
+      });
+    } catch {}
   } catch (e) {
     let msg = e instanceof Error ? e.message : String(e);
     // Never leave the service stopped after a failed install.
     if (systemdUnit) {
-      try { systemctl("start"); } catch { msg = `${systemdUnit} is still stopped: ${msg}`; }
+      try {
+        systemctl("start");
+      } catch {
+        msg = `${systemdUnit} is still stopped: ${msg}`;
+      }
     }
-    updateStatus({ state: "failed", error: msg.slice(0, 240), finishedAt: new Date().toISOString(), cleanupReady: true });
+    updateStatus({
+      state: "failed",
+      error: msg.slice(0, 240),
+      finishedAt: new Date().toISOString(),
+      cleanupReady: true,
+    });
     disarmLauncher();
   }
 }
 
 main().catch((e) => {
-  try { updateStatus({ state: "failed", error: String(e).slice(0, 240), finishedAt: new Date().toISOString(), cleanupReady: true }); } catch {}
+  try {
+    updateStatus({
+      state: "failed",
+      error: String(e).slice(0, 240),
+      finishedAt: new Date().toISOString(),
+      cleanupReady: true,
+    });
+  } catch {}
   disarmLauncher();
   process.exit(1);
 });

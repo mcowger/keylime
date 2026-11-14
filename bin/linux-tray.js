@@ -1,6 +1,5 @@
 "use strict";
 
-
 // Linux system tray for ompweb (KDE Plasma and any StatusNotifierItem host).
 //
 // Registers a StatusNotifierItem on the session bus with a DBusMenu context
@@ -16,24 +15,18 @@
 //   ompweb-tray --open                       open the web UI in the browser
 //   -p, --port / -H, --hostname              override status endpoint
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { parseArgs } = require("util");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { spawn, spawnSync, execFile } = require("node:child_process");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { promisify } = require("node:util");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const fs = require("node:fs");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const net = require("node:net");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const os = require("node:os");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const path = require("node:path");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { readServiceEnv, writeServiceEnv } = require("./service-env");// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { getAccessibleAddresses, isLoopbackHost } = require("./network-addresses");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { readServiceEnv, writeServiceEnv } = require("./service-env");
+const {
+  getAccessibleAddresses,
+  isLoopbackHost,
+} = require("./network-addresses");
 const { hashPassword } = require("./omp-web-password-hash");
 
 // dbus-next is intentionally NOT a dependency of ompweb (see #268): it
@@ -58,7 +51,6 @@ class FallbackVariant {
 
 function loadDbus() {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require("dbus-next");
   } catch {
     const err = new Error(DBUS_MISSING_MESSAGE);
@@ -110,7 +102,9 @@ function getDbusClasses() {
         "",
         this.state.running ? buildIconPixmap(true) : buildIconPixmap(false),
         "ompweb",
-        this.state.running ? `Running — ${this.state.serviceUrl}` : "Service stopped",
+        this.state.running
+          ? `Running — ${this.state.serviceUrl}`
+          : "Service stopped",
       ];
     }
 
@@ -125,12 +119,24 @@ function getDbusClasses() {
     Scroll() {}
 
     // Signal emitters — dbus-next emits the returned value as the signal body.
-    NewTitle(...args) { return args; }
-    NewIcon(...args) { return args; }
-    NewAttentionIcon(...args) { return args; }
-    NewOverlayIcon(...args) { return args; }
-    NewToolTip(...args) { return args; }
-    NewStatus(...args) { return args; }
+    NewTitle(...args) {
+      return args;
+    }
+    NewIcon(...args) {
+      return args;
+    }
+    NewAttentionIcon(...args) {
+      return args;
+    }
+    NewOverlayIcon(...args) {
+      return args;
+    }
+    NewToolTip(...args) {
+      return args;
+    }
+    NewStatus(...args) {
+      return args;
+    }
   }
 
   StatusNotifierItem.configureMembers({
@@ -185,7 +191,11 @@ function getDbusClasses() {
     }
 
     GetLayout(parentId) {
-      return buildLayout(this.state.menuItems(), this.state.menuRevision, Number(parentId) || 0);
+      return buildLayout(
+        this.state.menuItems(),
+        this.state.menuRevision,
+        Number(parentId) || 0,
+      );
     }
 
     GetGroupProperties(ids) {
@@ -214,8 +224,12 @@ function getDbusClasses() {
     }
 
     // Signal emitters — dbus-next emits the returned value as the signal body.
-    LayoutUpdated(...args) { return args; }
-    ItemsPropertiesUpdated(...args) { return args; }
+    LayoutUpdated(...args) {
+      return args;
+    }
+    ItemsPropertiesUpdated(...args) {
+      return args;
+    }
   }
 
   DbusMenu.configureMembers({
@@ -271,8 +285,21 @@ const MENU_PATH = "/MenuBar";
 const TRAY_PATH = "/ompweb/tray";
 const SERVICE_UNIT = "ompweb.service";
 const DAEMON_UNIT = "ompweb-host.service";
-const AUTOSTART_FILE = path.join(os.homedir(), ".config", "autostart", "ompweb-tray.desktop");
-const ICON_DIR = path.join(os.homedir(), ".local", "share", "icons", "hicolor", "scalable", "apps");
+const AUTOSTART_FILE = path.join(
+  os.homedir(),
+  ".config",
+  "autostart",
+  "ompweb-tray.desktop",
+);
+const ICON_DIR = path.join(
+  os.homedir(),
+  ".local",
+  "share",
+  "icons",
+  "hicolor",
+  "scalable",
+  "apps",
+);
 const POLL_INTERVAL_MS = 5000;
 
 // Warm-palette tray icons; installed into the user hicolor icon dir.
@@ -330,10 +357,11 @@ function foregroundDistance(px, py, running) {
     // Flat horizontal bar: rounded rect centered (32, 32), half (12, 4), r 4.
     return sdRoundRect(px, py, 32, 32, 12, 4, 4);
   }
-  const chevron = Math.min(
-    sdSegment(px, py, 18, 22, 30, 32),
-    sdSegment(px, py, 30, 32, 18, 42),
-  ) - 3; // 6px stroke → half-width 3
+  const chevron =
+    Math.min(
+      sdSegment(px, py, 18, 22, 30, 32),
+      sdSegment(px, py, 30, 32, 18, 42),
+    ) - 3; // 6px stroke → half-width 3
   const underscore = sdRoundRect(px, py, 41, 41, 7, 3, 3);
   return Math.min(chevron, underscore);
 }
@@ -343,7 +371,12 @@ function shadePixel(designX, designY, running, colors) {
   // 2×2 supersampling against the background rounded box and the glyph.
   let bgCover = 0;
   let fgCover = 0;
-  for (const [ox, oy] of [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]]) {
+  for (const [ox, oy] of [
+    [0.25, 0.25],
+    [0.75, 0.25],
+    [0.25, 0.75],
+    [0.75, 0.75],
+  ]) {
     const x = designX + ox;
     const y = designY + oy;
     bgCover += clamp01(0.5 - sdRoundRect(x, y, 32, 32, 28, 28, 14));
@@ -355,7 +388,12 @@ function shadePixel(designX, designY, running, colors) {
   const outA = fgA + bgA * (1 - fgA);
   if (outA <= 0) return [0, 0, 0, 0];
   const mix = (f, b) => (f * fgA + b * bgA * (1 - fgA)) / outA;
-  return [outA, mix(colors.fg[0], colors.bg[0]), mix(colors.fg[1], colors.bg[1]), mix(colors.fg[2], colors.bg[2])];
+  return [
+    outA,
+    mix(colors.fg[0], colors.bg[0]),
+    mix(colors.fg[1], colors.bg[1]),
+    mix(colors.fg[2], colors.bg[2]),
+  ];
 }
 
 // Rasterize the tray icon; returns an ARGB32 byte buffer ([A,R,G,B] per pixel).
@@ -366,7 +404,12 @@ function buildTrayIconPixels(size, running) {
   let offset = 0;
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
-      const [a, r, g, b] = shadePixel((x + 0.5) / scale, (y + 0.5) / scale, running, colors);
+      const [a, r, g, b] = shadePixel(
+        (x + 0.5) / scale,
+        (y + 0.5) / scale,
+        running,
+        colors,
+      );
       buffer[offset] = Math.round(a * 255);
       buffer[offset + 1] = Math.round(r);
       buffer[offset + 2] = Math.round(g);
@@ -379,7 +422,11 @@ function buildTrayIconPixels(size, running) {
 
 // SNI IconPixmap value: array of (width, height, ARGB32 bytes) structs.
 function buildIconPixmap(running) {
-  return TRAY_ICON_PIXMAP_SIZES.map((size) => [size, size, buildTrayIconPixels(size, running)]);
+  return TRAY_ICON_PIXMAP_SIZES.map((size) => [
+    size,
+    size,
+    buildTrayIconPixels(size, running),
+  ]);
 }
 
 function printHelp() {
@@ -408,7 +455,6 @@ Options:
 
 function readPackageVersion() {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require("../package.json").version ?? "0.0.0";
   } catch {
     return "0.0.0";
@@ -432,8 +478,14 @@ function sanitizeHostname(val, fallback = "127.0.0.1") {
 // Tray configuration precedence: CLI overrides, then the service env file
 // (the source the tray edits), then the JSON config, then
 // defaults.
-function readTrayConfig(overrides = {}, env = process.env, home = os.homedir()) {
-  const agentDir = (env.PI_CODING_AGENT_DIR ?? path.join(home, ".omp", "agent")).replace(/^~(?=\/|$)/, home);
+function readTrayConfig(
+  overrides = {},
+  env = process.env,
+  home = os.homedir(),
+) {
+  const agentDir = (
+    env.PI_CODING_AGENT_DIR ?? path.join(home, ".omp", "agent")
+  ).replace(/^~(?=\/|$)/, home);
   const configFile = path.join(agentDir, "web-service.json");
   const serviceEnv = readServiceEnv(path.join(agentDir, "web-service.env"));
   let jsonConfig = {};
@@ -442,24 +494,53 @@ function readTrayConfig(overrides = {}, env = process.env, home = os.homedir()) 
   } catch {
     jsonConfig = {};
   }
-  const port = overrides.port ?? sanitizePort(serviceEnv.PORT ?? jsonConfig.port);
-  const hostname = overrides.hostname ?? sanitizeHostname(serviceEnv.OMP_WEB_HOSTNAME ?? jsonConfig.hostname);
-  return { port, hostname, configFile, serviceUrl: `http://${hostname}:${port}` };
+  const port =
+    overrides.port ?? sanitizePort(serviceEnv.PORT ?? jsonConfig.port);
+  const hostname =
+    overrides.hostname ??
+    sanitizeHostname(serviceEnv.OMP_WEB_HOSTNAME ?? jsonConfig.hostname);
+  return {
+    port,
+    hostname,
+    configFile,
+    serviceUrl: `http://${hostname}:${port}`,
+  };
 }
 
 // Menu item table. `separator` items render as dividers; `checkmark` items
 // carry a toggle state; `disabled` items are inert status rows.
 // `daemon` is "running", "stopped" or "not installed" (the ompweb-host unit).
-function buildMenuItems({ running, version, autostart, hasService, exposed, hasDialogTool, daemon = "not installed" }) {
+function buildMenuItems({
+  running,
+  version,
+  autostart,
+  hasService,
+  exposed,
+  hasDialogTool,
+  daemon = "not installed",
+}) {
   return [
     { id: 1, label: `ompweb (v${version})`, enabled: false },
-    { id: 2, label: running ? "  Status: Running" : "  Status: Stopped", enabled: false },
-    { id: 19, label: `  Daemon: ${daemon[0].toUpperCase()}${daemon.slice(1)}`, enabled: false },
+    {
+      id: 2,
+      label: running ? "  Status: Running" : "  Status: Stopped",
+      enabled: false,
+    },
+    {
+      id: 19,
+      label: `  Daemon: ${daemon[0].toUpperCase()}${daemon.slice(1)}`,
+      enabled: false,
+    },
     { id: 3, separator: true },
     { id: 4, label: "Open in Browser", action: "open" },
     { id: 5, label: "Copy Web URL", action: "copy" },
     { id: 6, separator: true },
-    { id: 7, label: running ? "Stop Server (omp runs keep going)" : "Start Server", action: "toggle", enabled: hasService },
+    {
+      id: 7,
+      label: running ? "Stop Server (omp runs keep going)" : "Start Server",
+      action: "toggle",
+      enabled: hasService,
+    },
     { id: 8, label: "Restart Server", action: "restart", enabled: hasService },
     { id: 9, separator: true },
     { id: 10, label: "View Logs", action: "logs" },
@@ -472,10 +553,26 @@ function buildMenuItems({ running, version, autostart, hasService, exposed, hasD
       state: exposed ? 1 : 0,
       enabled: hasService && hasDialogTool,
     },
-    { id: 13, label: "Change Port…", action: "port", enabled: hasService && hasDialogTool },
-    { id: 14, label: "Set Web Password…", action: "password", enabled: hasService && hasDialogTool },
+    {
+      id: 13,
+      label: "Change Port…",
+      action: "port",
+      enabled: hasService && hasDialogTool,
+    },
+    {
+      id: 14,
+      label: "Set Web Password…",
+      action: "password",
+      enabled: hasService && hasDialogTool,
+    },
     { id: 15, separator: true },
-    { id: 16, label: "Start with Plasma", action: "autostart", checkmark: true, state: autostart ? 1 : 0 },
+    {
+      id: 16,
+      label: "Start with Plasma",
+      action: "autostart",
+      checkmark: true,
+      state: autostart ? 1 : 0,
+    },
     { id: 17, separator: true },
     { id: 18, label: "Quit Tray", action: "quit" },
   ];
@@ -503,14 +600,27 @@ function itemProperties(item) {
 
 // (ia{sv}av) struct for one menu node; children wrapped in variants.
 function layoutNode(id, props, children = []) {
-  return [id, props, children.map((child) => new (getVariant())("(ia{sv}av)", child))];
+  return [
+    id,
+    props,
+    children.map((child) => new (getVariant())("(ia{sv}av)", child)),
+  ];
 }
 
 // Full GetLayout response for the flat tray menu.
 function buildLayout(items, revision, parentId = 0) {
   if (parentId === 0) {
-    const children = items.map((item) => layoutNode(item.id, itemProperties(item), []));
-    return [revision, layoutNode(0, { "children-display": new (getVariant())("s", "submenu") }, children)];
+    const children = items.map((item) =>
+      layoutNode(item.id, itemProperties(item), []),
+    );
+    return [
+      revision,
+      layoutNode(
+        0,
+        { "children-display": new (getVariant())("s", "submenu") },
+        children,
+      ),
+    ];
   }
   const item = items.find((entry) => entry.id === parentId);
   if (!item) return [revision, layoutNode(parentId, {}, [])];
@@ -585,7 +695,8 @@ function which(name) {
 function resolveTerminal(env = process.env) {
   for (const candidate of terminalCandidates(env)) {
     const base = path.basename(candidate);
-    if (candidate.includes(path.sep) && isExecutable(candidate)) return candidate;
+    if (candidate.includes(path.sep) && isExecutable(candidate))
+      return candidate;
     if (!candidate.includes(path.sep) && which(base)) return base;
   }
   return null;
@@ -603,7 +714,11 @@ function dialogCandidates() {
 function resolveDialogTool(env = process.env) {
   const override = env.OMP_WEB_DIALOG;
   if (override) {
-    return override.includes(path.sep) ? (isExecutable(override) ? override : null) : which(override);
+    return override.includes(path.sep)
+      ? isExecutable(override)
+        ? override
+        : null
+      : which(override);
   }
   for (const candidate of dialogCandidates()) {
     const found = which(candidate);
@@ -615,7 +730,10 @@ function resolveDialogTool(env = process.env) {
 // Show an input dialog; returns the entered string ("" allowed) or null on
 // cancel / missing tool. Async so the tray's DBus loop stays responsive while
 // the dialog is open.
-async function dialogPrompt({ tool, title, text, value = "", password = false }, run = execFileAsync) {
+async function dialogPrompt(
+  { tool, title, text, value = "", password = false },
+  run = execFileAsync,
+) {
   if (!tool) return null;
   let args;
   if (path.basename(tool) === "kdialog") {
@@ -625,10 +743,18 @@ async function dialogPrompt({ tool, title, text, value = "", password = false },
   } else {
     args = password
       ? ["--password", `--title=${title}`]
-      : ["--entry", `--title=${title}`, `--text=${text}`, ...(value ? [`--entry-text=${value}`] : [])];
+      : [
+          "--entry",
+          `--title=${title}`,
+          `--text=${text}`,
+          ...(value ? [`--entry-text=${value}`] : []),
+        ];
   }
   try {
-    const { stdout } = await run(tool, args, { encoding: "utf8", maxBuffer: 1024 * 64 });
+    const { stdout } = await run(tool, args, {
+      encoding: "utf8",
+      maxBuffer: 1024 * 64,
+    });
     return String(stdout ?? "").replace(/\n+$/, "");
   } catch {
     return null;
@@ -659,7 +785,9 @@ function probeServer(hostname, port, timeoutMs = 1200) {
 }
 
 function systemctlUser(args) {
-  const result = spawnSync("systemctl", ["--user", ...args], { encoding: "utf8" });
+  const result = spawnSync("systemctl", ["--user", ...args], {
+    encoding: "utf8",
+  });
   return {
     ok: !result.error && result.status === 0,
     stdout: (result.stdout ?? "").trim(),
@@ -678,7 +806,9 @@ function serviceInstalled() {
 
 function daemonState() {
   if (!unitInstalled(DAEMON_UNIT)) return "not installed";
-  return systemctlUser(["is-active", DAEMON_UNIT]).stdout === "active" ? "running" : "stopped";
+  return systemctlUser(["is-active", DAEMON_UNIT]).stdout === "active"
+    ? "running"
+    : "stopped";
 }
 
 function openUrl(url) {
@@ -691,7 +821,8 @@ function openUrl(url) {
 function copyToClipboard(text) {
   const bin = resolveClipboardBin();
   if (!bin) return false;
-  const args = path.basename(bin) === "xclip" ? ["-selection", "clipboard"] : [];
+  const args =
+    path.basename(bin) === "xclip" ? ["-selection", "clipboard"] : [];
   const result = spawnSync(bin, args, { input: text, encoding: "utf8" });
   return !result.error && result.status === 0;
 }
@@ -702,11 +833,15 @@ function viewLogs() {
   const resolved = candidateBinPath(terminal);
   if (!resolved) return false;
   const prefix = terminalPrefix(terminal).slice(1);
-  const child = spawn(resolved, [...prefix, `journalctl --user -u ompweb -u ompweb-host -f`], {
-    stdio: "ignore",
-    detached: true,
-    env: process.env,
-  });
+  const child = spawn(
+    resolved,
+    [...prefix, `journalctl --user -u ompweb -u ompweb-host -f`],
+    {
+      stdio: "ignore",
+      detached: true,
+      env: process.env,
+    },
+  );
   child.on("error", () => {});
   child.unref();
   return true;
@@ -782,7 +917,10 @@ function createTrayState(config, { log = console.log } = {}) {
     }
     const result = systemctlUser(["restart", SERVICE_UNIT]);
     if (!result.ok) {
-      state.notify("ompweb", `Service restart failed: ${result.stderr || result.stdout || "unknown error"}`);
+      state.notify(
+        "ompweb",
+        `Service restart failed: ${result.stderr || result.stdout || "unknown error"}`,
+      );
       return false;
     }
     state.reloadConfig();
@@ -799,7 +937,12 @@ function createTrayState(config, { log = console.log } = {}) {
     getDbusClasses().Interface.emitPropertiesChanged(state.sni, {
       IconName: "",
       IconPixmap: buildIconPixmap(state.running),
-      ToolTip: ["", buildIconPixmap(state.running), "ompweb", state.running ? `Running — ${state.serviceUrl}` : "Service stopped"],
+      ToolTip: [
+        "",
+        buildIconPixmap(state.running),
+        "ompweb",
+        state.running ? `Running — ${state.serviceUrl}` : "Service stopped",
+      ],
     });
     state.sni.NewIcon();
     state.sni.NewToolTip();
@@ -814,7 +957,11 @@ function createTrayState(config, { log = console.log } = {}) {
         openUrl(state.serviceUrl);
         break;
       case "copy":
-        if (!copyToClipboard(state.serviceUrl)) state.notify("ompweb", "No clipboard tool found (install wl-clipboard)");
+        if (!copyToClipboard(state.serviceUrl))
+          state.notify(
+            "ompweb",
+            "No clipboard tool found (install wl-clipboard)",
+          );
         break;
       case "toggle":
         systemctlUser([state.running ? "stop" : "start", SERVICE_UNIT]);
@@ -823,14 +970,17 @@ function createTrayState(config, { log = console.log } = {}) {
         systemctlUser(["restart", SERVICE_UNIT]);
         break;
       case "logs":
-        if (!viewLogs()) state.notify("ompweb", "No terminal emulator found for logs");
+        if (!viewLogs())
+          state.notify("ompweb", "No terminal emulator found for logs");
         break;
       case "autostart":
         state.setAutostart(!state.autostart);
         break;
       case "expose": {
         const exposing = !state.exposed;
-        const updates = { OMP_WEB_HOSTNAME: exposing ? "0.0.0.0" : "127.0.0.1" };
+        const updates = {
+          OMP_WEB_HOSTNAME: exposing ? "0.0.0.0" : "127.0.0.1",
+        };
         if (exposing && !readServiceEnv().OMP_WEB_PASSWORD_HASH) {
           const password = await dialogPrompt({
             tool: state.dialogTool,
@@ -839,14 +989,20 @@ function createTrayState(config, { log = console.log } = {}) {
             password: true,
           });
           if (!password) {
-            state.notify("ompweb", "Expose cancelled: a password is required to leave loopback");
+            state.notify(
+              "ompweb",
+              "Expose cancelled: a password is required to leave loopback",
+            );
             break;
           }
           updates.OMP_WEB_PASSWORD_HASH = hashPassword(password);
         }
         if (state.applyServiceEnv(updates)) {
-          const urls = getAccessibleAddresses({ hostname: state.hostname, port: state.port }).entries
-            .filter((entry) => entry.label !== "Local")
+          const urls = getAccessibleAddresses({
+            hostname: state.hostname,
+            port: state.port,
+          })
+            .entries.filter((entry) => entry.label !== "Local")
             .map((entry) => entry.url);
           state.notify(
             "ompweb",
@@ -888,10 +1044,14 @@ function createTrayState(config, { log = console.log } = {}) {
           updates.OMP_WEB_PASSWORD_HASH = hashPassword(password);
         } else {
           updates.OMP_WEB_PASSWORD_HASH = null;
-          if (!isLoopbackHost(state.hostname)) updates.OMP_WEB_HOSTNAME = "127.0.0.1";
+          if (!isLoopbackHost(state.hostname))
+            updates.OMP_WEB_HOSTNAME = "127.0.0.1";
         }
         if (state.applyServiceEnv(updates)) {
-          state.notify("ompweb", password ? "Password updated" : "Password disabled (loopback only)");
+          state.notify(
+            "ompweb",
+            password ? "Password updated" : "Password disabled (loopback only)",
+          );
         }
         break;
       }
@@ -907,7 +1067,11 @@ function createTrayState(config, { log = console.log } = {}) {
     try {
       if (enable) {
         fs.mkdirSync(path.dirname(AUTOSTART_FILE), { recursive: true });
-        fs.writeFileSync(AUTOSTART_FILE, buildAutostartDesktop(buildAutostartExec()), { mode: 0o644 });
+        fs.writeFileSync(
+          AUTOSTART_FILE,
+          buildAutostartDesktop(buildAutostartExec()),
+          { mode: 0o644 },
+        );
       } else {
         fs.rmSync(AUTOSTART_FILE, { force: true });
       }
@@ -921,7 +1085,10 @@ function createTrayState(config, { log = console.log } = {}) {
   state.notify = async (summary, body) => {
     if (!state.bus) return;
     try {
-      const obj = await state.bus.getProxyObject("org.freedesktop.Notifications", "/org/freedesktop/Notifications");
+      const obj = await state.bus.getProxyObject(
+        "org.freedesktop.Notifications",
+        "/org/freedesktop/Notifications",
+      );
       const iface = obj.getInterface("org.freedesktop.Notifications");
       await iface.Notify("ompweb", 0, "ompweb", summary, body, [], {}, 5000);
     } catch {
@@ -953,7 +1120,10 @@ function createTrayState(config, { log = console.log } = {}) {
   state.registerWithWatcher = async () => {
     if (!state.bus) return;
     try {
-      const obj = await state.bus.getProxyObject("org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher");
+      const obj = await state.bus.getProxyObject(
+        "org.kde.StatusNotifierWatcher",
+        "/StatusNotifierWatcher",
+      );
       const watcher = obj.getInterface("org.kde.StatusNotifierWatcher");
       // KDE's watcher expects the bare bus name; /StatusNotifierItem is assumed.
       // Re-registration is idempotent (the watcher dedupes), so this also
@@ -982,7 +1152,10 @@ function createTrayState(config, { log = console.log } = {}) {
   return state;
 }
 
-async function startTray(config, { log = console.log, error = console.error } = {}) {
+async function startTray(
+  config,
+  { log = console.log, error = console.error } = {},
+) {
   // Fail fast, before writing icons, if dbus-next is not installed: the
   // error message tells the user exactly how to install it (#268).
   const { StatusNotifierItem, DbusMenu, TrayControl } = getDbusClasses();
@@ -1030,8 +1203,12 @@ async function startTray(config, { log = console.log, error = console.error } = 
 function installIcons({ log = console.log } = {}) {
   try {
     fs.mkdirSync(ICON_DIR, { recursive: true });
-    fs.writeFileSync(path.join(ICON_DIR, "ompweb.svg"), ICON_RUNNING, { mode: 0o644 });
-    fs.writeFileSync(path.join(ICON_DIR, "ompweb-off.svg"), ICON_STOPPED, { mode: 0o644 });
+    fs.writeFileSync(path.join(ICON_DIR, "ompweb.svg"), ICON_RUNNING, {
+      mode: 0o644,
+    });
+    fs.writeFileSync(path.join(ICON_DIR, "ompweb-off.svg"), ICON_STOPPED, {
+      mode: 0o644,
+    });
   } catch (err) {
     log(`warning: could not install tray icons: ${err.message}`);
   }
@@ -1039,10 +1216,16 @@ function installIcons({ log = console.log } = {}) {
 
 // Best-effort cache refresh so plasmashell picks up freshly written icons.
 function ensureIconThemeCache() {
-  for (const tool of ["kbuildsycoca6", "kbuildsycoca5", "gtk-update-icon-cache"]) {
+  for (const tool of [
+    "kbuildsycoca6",
+    "kbuildsycoca5",
+    "gtk-update-icon-cache",
+  ]) {
     const bin = which(tool);
     if (!bin) continue;
-    const args = tool.startsWith("gtk-update-icon-cache") ? ["-f", "-t", path.join(ICON_DIR, "..", "..", "..") ] : [];
+    const args = tool.startsWith("gtk-update-icon-cache")
+      ? ["-f", "-t", path.join(ICON_DIR, "..", "..", "..")]
+      : [];
     try {
       spawnSync(bin, args, { stdio: "ignore", timeout: 10000 });
     } catch {
@@ -1058,7 +1241,10 @@ function ensureIconThemeCache() {
 
 async function getTrayRunning(bus) {
   try {
-    const dbusObj = await bus.getProxyObject("org.freedesktop.DBus", "/org/freedesktop/DBus");
+    const dbusObj = await bus.getProxyObject(
+      "org.freedesktop.DBus",
+      "/org/freedesktop/DBus",
+    );
     const dbusIface = dbusObj.getInterface("org.freedesktop.DBus");
     await dbusIface.GetNameOwner(BUS_NAME);
     return true;
@@ -1101,7 +1287,10 @@ async function readStatus(overrides) {
     // No session bus (CI, SSH without a GUI session): report not running.
     trayRunning = false;
   }
-  const active = systemctlUser(["is-active", SERVICE_UNIT.replace(/\.service$/, "")]);
+  const active = systemctlUser([
+    "is-active",
+    SERVICE_UNIT.replace(/\.service$/, ""),
+  ]);
   const serviceRunning = active.ok && active.stdout === "active";
   const autostart = fs.existsSync(AUTOSTART_FILE);
   return {
@@ -1127,10 +1316,14 @@ async function readStatus(overrides) {
 // autostart); they fail with DBUS_MISSING_MESSAGE instead.
 function defaultNpmInstallDbus() {
   try {
-    const res = spawnSync(process.execPath, ["add", "dbus-next@^0.10.2", "--no-save"], {
-      cwd: path.join(__dirname, ".."),
-      stdio: "inherit",
-    });
+    const res = spawnSync(
+      process.execPath,
+      ["add", "dbus-next@^0.10.2", "--no-save"],
+      {
+        cwd: path.join(__dirname, ".."),
+        stdio: "inherit",
+      },
+    );
     return res && res.status === 0;
   } catch {
     return false;
@@ -1163,7 +1356,9 @@ function spawnDetachedTray() {
     detached: true,
     env: process.env,
   });
-  child.on("error", (err) => console.error(`failed to start tray: ${err.message}`));
+  child.on("error", (err) =>
+    console.error(`failed to start tray: ${err.message}`),
+  );
   child.unref();
 }
 
@@ -1171,19 +1366,19 @@ async function runCli(argv = process.argv.slice(2)) {
   const { values: cliArgs, positionals } = parseArgs({
     args: argv,
     options: {
-      install:        { type: "boolean" },
-      uninstall:      { type: "boolean" },
-      start:          { type: "boolean" },
-      stop:           { type: "boolean" },
-      restart:        { type: "boolean" },
-      status:         { type: "boolean" },
-      open:           { type: "boolean" },
-      port:           { type: "string", short: "p" },
-      hostname:       { type: "string", short: "H" },
+      install: { type: "boolean" },
+      uninstall: { type: "boolean" },
+      start: { type: "boolean" },
+      stop: { type: "boolean" },
+      restart: { type: "boolean" },
+      status: { type: "boolean" },
+      open: { type: "boolean" },
+      port: { type: "string", short: "p" },
+      hostname: { type: "string", short: "H" },
       "no-autostart": { type: "boolean" },
-      json:           { type: "boolean" },
-      help:           { type: "boolean", short: "h" },
-      version:        { type: "boolean", short: "v" },
+      json: { type: "boolean" },
+      help: { type: "boolean", short: "h" },
+      version: { type: "boolean", short: "v" },
     },
     strict: false,
     allowPositionals: true,
@@ -1206,7 +1401,9 @@ async function runCli(argv = process.argv.slice(2)) {
   const has = (flag) => cliArgs[flag] || positionals.includes(flag);
   const overrides = {
     ...(cliArgs.port ? { port: sanitizePort(cliArgs.port) } : {}),
-    ...(cliArgs.hostname ? { hostname: sanitizeHostname(cliArgs.hostname) } : {}),
+    ...(cliArgs.hostname
+      ? { hostname: sanitizeHostname(cliArgs.hostname) }
+      : {}),
   };
 
   if (has("install")) {
@@ -1218,7 +1415,11 @@ async function runCli(argv = process.argv.slice(2)) {
     ensureIconThemeCache();
     if (!cliArgs["no-autostart"]) {
       fs.mkdirSync(path.dirname(AUTOSTART_FILE), { recursive: true });
-      fs.writeFileSync(AUTOSTART_FILE, buildAutostartDesktop(buildAutostartExec()), { mode: 0o644 });
+      fs.writeFileSync(
+        AUTOSTART_FILE,
+        buildAutostartDesktop(buildAutostartExec()),
+        { mode: 0o644 },
+      );
       console.log(`autostart installed: ${AUTOSTART_FILE}`);
     }
     spawnDetachedTray();
@@ -1283,21 +1484,27 @@ async function runCli(argv = process.argv.slice(2)) {
   } else {
     console.log(`=== ompweb Linux tray status ===`);
     console.log(`  Tray running    : ${status.trayRunning ? "Yes" : "No"}`);
-    console.log(`  Service unit    : ${status.serviceInstalled ? "installed" : "not installed"} (${status.serviceRunning ? "active" : "inactive"})`);
+    console.log(
+      `  Service unit    : ${status.serviceInstalled ? "installed" : "not installed"} (${status.serviceRunning ? "active" : "inactive"})`,
+    );
     console.log(`  Host daemon     : ${status.daemon}`);
-    console.log(`  Autostart       : ${status.autostart ? `enabled (${status.autostartFile})` : "disabled"}`);
+    console.log(
+      `  Autostart       : ${status.autostart ? `enabled (${status.autostartFile})` : "disabled"}`,
+    );
     console.log(`  Live URL        : ${status.serviceUrl}`);
   }
   return { exitCode: 0, status };
 }
 
 if (require.main === module) {
-  runCli().then(({ exitCode }) => {
-    if (exitCode !== undefined && exitCode !== 0) process.exit(exitCode);
-  }).catch((err) => {
-    console.error("Fatal error:", err);
-    process.exit(1);
-  });
+  runCli()
+    .then(({ exitCode }) => {
+      if (exitCode !== undefined && exitCode !== 0) process.exit(exitCode);
+    })
+    .catch((err) => {
+      console.error("Fatal error:", err);
+      process.exit(1);
+    });
 }
 
 module.exports = {

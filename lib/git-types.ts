@@ -1,13 +1,9 @@
 export type GitFileStatusKind =
-  | "modified"
-  | "added"
-  | "deleted"
-  | "renamed"
-  | "untracked"
-  | "conflict";
+  "modified" | "added" | "deleted" | "renamed" | "untracked" | "conflict";
 
 /** Why `.gitattributes` moves a changed file out of the main review list. */
-export type GitCollapseReason = "generated" | "vendored" | "documentation" | "no-diff";
+export type GitCollapseReason =
+  "generated" | "vendored" | "documentation" | "no-diff";
 
 export interface GitFileStatus {
   filePath: string;

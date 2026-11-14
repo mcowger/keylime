@@ -28,7 +28,10 @@ import { isRecord } from "../type-guards";
 
 // Keep user-session directory traversal out of Next's static NFT globbing.
 // These paths are resolved and authorized at request time by omp-web.
-const readDirectorySyncRuntime = Reflect.get(fsRuntime, "readdirSync") as typeof readdirSync;
+const readDirectorySyncRuntime = Reflect.get(
+  fsRuntime,
+  "readdirSync",
+) as typeof readdirSync;
 import type {
   CompactionEntry,
   SessionEntry,
@@ -100,7 +103,12 @@ function truncateTitleForSlot(
   while (low <= high) {
     const mid = (low + high) >>> 1;
     const candidate = codePoints.slice(0, mid).join("");
-    if (Buffer.byteLength(titleSlotLine(candidate, source, updatedAt, ""), "utf8") <= SESSION_TITLE_SLOT_BYTES) {
+    if (
+      Buffer.byteLength(
+        titleSlotLine(candidate, source, updatedAt, ""),
+        "utf8",
+      ) <= SESSION_TITLE_SLOT_BYTES
+    ) {
       best = candidate;
       low = mid + 1;
     } else {
@@ -125,10 +133,15 @@ export function parseTitleSlotLine(line: string): SessionTitleSlot | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const record = value as Record<string, unknown>;
   if (record.type !== "title" || record.v !== 1) return undefined;
-  if (typeof record.title !== "string" || typeof record.updatedAt !== "string" || typeof record.pad !== "string") {
+  if (
+    typeof record.title !== "string" ||
+    typeof record.updatedAt !== "string" ||
+    typeof record.pad !== "string"
+  ) {
     return undefined;
   }
-  if (record.source !== undefined && !isSessionTitleSource(record.source)) return undefined;
+  if (record.source !== undefined && !isSessionTitleSource(record.source))
+    return undefined;
   const slot: SessionTitleSlot = {
     type: "title",
     v: 1,
@@ -142,13 +155,26 @@ export function parseTitleSlotLine(line: string): SessionTitleSlot | undefined {
 
 /** Serialize the title slot to exactly 256 UTF-8 bytes including the newline. */
 export function serializeTitleSlot(update: SessionTitleUpdate): string {
-  const title = truncateTitleForSlot(update.title ?? "", update.source, update.updatedAt);
+  const title = truncateTitleForSlot(
+    update.title ?? "",
+    update.source,
+    update.updatedAt,
+  );
   const unpadded = titleSlotLine(title, update.source, update.updatedAt, "");
-  const padBytes = SESSION_TITLE_SLOT_BYTES - Buffer.byteLength(unpadded, "utf8");
-  if (padBytes < 0) throw new Error("Session title slot metadata exceeds fixed slot size");
-  const line = titleSlotLine(title, update.source, update.updatedAt, " ".repeat(padBytes));
+  const padBytes =
+    SESSION_TITLE_SLOT_BYTES - Buffer.byteLength(unpadded, "utf8");
+  if (padBytes < 0)
+    throw new Error("Session title slot metadata exceeds fixed slot size");
+  const line = titleSlotLine(
+    title,
+    update.source,
+    update.updatedAt,
+    " ".repeat(padBytes),
+  );
   if (Buffer.byteLength(line, "utf8") !== SESSION_TITLE_SLOT_BYTES) {
-    throw new Error("Session title slot serialization failed to produce fixed-width output");
+    throw new Error(
+      "Session title slot serialization failed to produce fixed-width output",
+    );
   }
   return line;
 }
@@ -213,10 +239,16 @@ function migrateV1ToV2(header: SessionHeader, entries: MutableEntry[]): void {
     ids.add(entry.id);
     entry.parentId = prevId;
     prevId = entry.id;
-    if (entry.type === "compaction" && typeof entry.firstKeptEntryIndex === "number") {
+    if (
+      entry.type === "compaction" &&
+      typeof entry.firstKeptEntryIndex === "number"
+    ) {
       // firstKeptEntryIndex counts within the physical file entries, where the
       // header occupies index 0 (omp migrates over the combined array).
-      const target = entry.firstKeptEntryIndex >= 1 ? entries[entry.firstKeptEntryIndex - 1] : undefined;
+      const target =
+        entry.firstKeptEntryIndex >= 1
+          ? entries[entry.firstKeptEntryIndex - 1]
+          : undefined;
       if (target) (entry as CompactionEntry).firstKeptEntryId = target.id;
       delete entry.firstKeptEntryIndex;
     }
@@ -236,7 +268,10 @@ function migrateV2ToV3(header: SessionHeader, entries: MutableEntry[]): void {
   }
 }
 
-function migrateToCurrentVersion(header: SessionHeader, entries: MutableEntry[]): void {
+function migrateToCurrentVersion(
+  header: SessionHeader,
+  entries: MutableEntry[],
+): void {
   const version = header.version ?? 1;
   if (version >= CURRENT_SESSION_VERSION) return;
   if (version < 2) migrateV1ToV2(header, entries);
@@ -269,18 +304,30 @@ function readBlobSync(hash: string): Buffer | null {
   }
 }
 
-function isImageBlock(value: unknown): value is { type: "image"; data: string; mimeType?: string } {
-  return isRecord(value) && value.type === "image" && typeof value.data === "string";
+function isImageBlock(
+  value: unknown,
+): value is { type: "image"; data: string; mimeType?: string } {
+  return (
+    isRecord(value) && value.type === "image" && typeof value.data === "string"
+  );
 }
 
-function isImageDataPayload(value: unknown): value is { data: string; mimeType?: string } {
+function isImageDataPayload(
+  value: unknown,
+): value is { data: string; mimeType?: string } {
   if (!isRecord(value) || typeof value.data !== "string") return false;
   if (isImageBlock(value)) return true;
-  return typeof value.mimeType === "string" && value.mimeType.toLowerCase().startsWith("image/");
+  return (
+    typeof value.mimeType === "string" &&
+    value.mimeType.toLowerCase().startsWith("image/")
+  );
 }
 
 /** Degrade a missing-blob image block to a visible text placeholder in place. */
-function degradeMissingBlobImage(block: Record<string, unknown>, hash: string): void {
+function degradeMissingBlobImage(
+  block: Record<string, unknown>,
+  hash: string,
+): void {
   block.type = "text";
   block.text = `[image unavailable: blob ${hash.slice(0, 12)}… not found]`;
   delete block.data;
@@ -352,12 +399,16 @@ export interface ResolveBlobOptions {
 }
 
 /** Resolve blob references in loaded entries back to inline base64. Mutates in place. */
-export function resolveBlobRefsInEntries(entries: SessionEntry[], options: ResolveBlobOptions = {}): void {
+export function resolveBlobRefsInEntries(
+  entries: SessionEntry[],
+  options: ResolveBlobOptions = {},
+): void {
   for (const entry of entries) {
     if (
       options.skipToolResultImages &&
       entry.type === "message" &&
-      ((entry.message as { role?: string } | null | undefined)?.role === "toolResult")
+      (entry.message as { role?: string } | null | undefined)?.role ===
+        "toolResult"
     ) {
       continue;
     }
@@ -385,7 +436,11 @@ export interface LoadSessionOptions extends ResolveBlobOptions {
   resolveBlobs?: boolean;
   /** Retain only an entry's indexing metadata while scanning. Runs before
    * legacy migration; byte ranges exclude LF but include any CR. */
-  projectEntry?: (entry: SessionEntry, offset: number, length: number) => SessionEntry;
+  projectEntry?: (
+    entry: SessionEntry,
+    offset: number,
+    length: number,
+  ) => SessionEntry;
 }
 
 const SESSION_READ_CHUNK_BYTES = 1024 * 1024;
@@ -453,7 +508,10 @@ export function forEachFileLineSync(
  * hold in memory additionally sets error:"too_large" so routes can say so
  * instead of reporting it as malformed.
  */
-export function loadSessionFile(filePath: string, options: LoadSessionOptions = {}): LoadedSession {
+export function loadSessionFile(
+  filePath: string,
+  options: LoadSessionOptions = {},
+): LoadedSession {
   let size: number;
   try {
     size = statSync(filePath).size;
@@ -461,7 +519,12 @@ export function loadSessionFile(filePath: string, options: LoadSessionOptions = 
     return { header: null, entries: [], titleSlot: undefined };
   }
   if (size > MAX_SESSION_LOAD_BYTES) {
-    return { header: null, entries: [], titleSlot: undefined, error: "too_large" };
+    return {
+      header: null,
+      entries: [],
+      titleSlot: undefined,
+      error: "too_large",
+    };
   }
 
   let titleSlot: SessionTitleSlot | undefined;
@@ -482,22 +545,42 @@ export function loadSessionFile(filePath: string, options: LoadSessionOptions = 
       } catch {
         return; // Skip malformed line (torn write).
       }
-      records.push(records.length > 0 && record && record.type !== "session" && options.projectEntry
-        ? options.projectEntry(record as unknown as SessionEntry, offset, length) as unknown as Record<string, unknown>
-        : record);
+      records.push(
+        records.length > 0 &&
+          record &&
+          record.type !== "session" &&
+          options.projectEntry
+          ? (options.projectEntry(
+              record as unknown as SessionEntry,
+              offset,
+              length,
+            ) as unknown as Record<string, unknown>)
+          : record,
+      );
     });
   } catch (error) {
     // A single line past the string cap, or an allocation failure part-way in.
     const tooLarge = error instanceof RangeError;
-    return { header: null, entries: [], titleSlot, ...(tooLarge ? { error: "too_large" as const } : {}) };
+    return {
+      header: null,
+      entries: [],
+      titleSlot,
+      ...(tooLarge ? { error: "too_large" as const } : {}),
+    };
   }
 
   const headerRecord = records[0];
-  if (!headerRecord || headerRecord.type !== "session" || typeof headerRecord.id !== "string") {
+  if (
+    !headerRecord ||
+    headerRecord.type !== "session" ||
+    typeof headerRecord.id !== "string"
+  ) {
     return { header: null, entries: [], titleSlot };
   }
   const header = headerRecord as unknown as SessionHeader;
-  const entries = records.slice(1).filter((record) => record.type !== "session") as unknown as MutableEntry[];
+  const entries = records
+    .slice(1)
+    .filter((record) => record.type !== "session") as unknown as MutableEntry[];
 
   migrateToCurrentVersion(header, entries);
 
@@ -513,7 +596,9 @@ export function loadSessionFile(filePath: string, options: LoadSessionOptions = 
   }
 
   if (options.resolveBlobs) {
-    resolveBlobRefsInEntries(entries, { skipToolResultImages: options.skipToolResultImages });
+    resolveBlobRefsInEntries(entries, {
+      skipToolResultImages: options.skipToolResultImages,
+    });
   }
 
   return { header, entries, titleSlot };
@@ -524,14 +609,24 @@ export function loadSessionFile(filePath: string, options: LoadSessionOptions = 
  * the second when line 1 is a title slot), capped at 64 KiB. The slot title is
  * folded into the returned header.
  */
-export function readSessionHeaderSync(filePath: string, strict = false): SessionHeader | null {
+export function readSessionHeaderSync(
+  filePath: string,
+  strict = false,
+): SessionHeader | null {
   const maxHeaderBytes = 64 * 1024 + SESSION_TITLE_SLOT_BYTES;
-  if (strict && !lstatSync(path.dirname(filePath)).isDirectory()) throw new Error(`Cannot inventory symlinked session project at ${filePath}`);
+  if (strict && !lstatSync(path.dirname(filePath)).isDirectory())
+    throw new Error(
+      `Cannot inventory symlinked session project at ${filePath}`,
+    );
   const expected = strict ? lstatSync(filePath, { bigint: true }) : null;
-  if (expected && !expected.isFile()) throw new Error(`Cannot inventory non-regular session path ${filePath}`);
+  if (expected && !expected.isFile())
+    throw new Error(`Cannot inventory non-regular session path ${filePath}`);
   let fd: number;
   try {
-    fd = openSync(filePath, strict ? fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0) : "r");
+    fd = openSync(
+      filePath,
+      strict ? fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0) : "r",
+    );
   } catch (error) {
     if (strict) throw error;
     return null;
@@ -541,10 +636,20 @@ export function readSessionHeaderSync(filePath: string, strict = false): Session
     if (expected) {
       const opened = fstatSync(fd, { bigint: true });
       const current = lstatSync(filePath, { bigint: true });
-      if (!lstatSync(path.dirname(filePath)).isDirectory()) throw new Error(`Session project changed during strict discovery: ${filePath}`);
-      if (!current.isFile() || expected.dev !== opened.dev || expected.ino !== opened.ino
-        || current.dev !== opened.dev || current.ino !== opened.ino) {
-        throw new Error(`Session path changed during strict discovery: ${filePath}`);
+      if (!lstatSync(path.dirname(filePath)).isDirectory())
+        throw new Error(
+          `Session project changed during strict discovery: ${filePath}`,
+        );
+      if (
+        !current.isFile() ||
+        expected.dev !== opened.dev ||
+        expected.ino !== opened.ino ||
+        current.dev !== opened.dev ||
+        current.ino !== opened.ino
+      ) {
+        throw new Error(
+          `Session path changed during strict discovery: ${filePath}`,
+        );
       }
     }
     const buffer = Buffer.allocUnsafe(maxHeaderBytes);
@@ -567,8 +672,14 @@ export function readSessionHeaderSync(filePath: string, strict = false): Session
   if (slot) {
     const rest = head.slice(firstLineEnd + 1);
     const secondLineEnd = rest.indexOf("\n");
-    if (secondLineEnd === -1 && Buffer.byteLength(rest, "utf8") + firstLineEnd >= maxHeaderBytes) return null;
-    headerLine = (secondLineEnd === -1 ? rest : rest.slice(0, secondLineEnd)).trim();
+    if (
+      secondLineEnd === -1 &&
+      Buffer.byteLength(rest, "utf8") + firstLineEnd >= maxHeaderBytes
+    )
+      return null;
+    headerLine = (
+      secondLineEnd === -1 ? rest : rest.slice(0, secondLineEnd)
+    ).trim();
   } else {
     headerLine = firstLine;
   }
@@ -625,7 +736,8 @@ export function buildSessionTree(entries: SessionEntry[]): SessionTreeNode[] {
   }
 
   const byTimestamp = (a: SessionTreeNode, b: SessionTreeNode) =>
-    new Date(a.entry.timestamp).getTime() - new Date(b.entry.timestamp).getTime();
+    new Date(a.entry.timestamp).getTime() -
+    new Date(b.entry.timestamp).getTime();
   const stack = [...roots];
   while (stack.length > 0) {
     const node = stack.pop()!;
@@ -644,7 +756,8 @@ export function getLeafEntryId(entries: SessionEntry[]): string | null {
 // Session listing (port of session-listing.ts)
 // ============================================================================
 
-export type SessionStatus = "complete" | "interrupted" | "aborted" | "error" | "pending" | "unknown";
+export type SessionStatus =
+  "complete" | "interrupted" | "aborted" | "error" | "pending" | "unknown";
 
 export interface OmpSessionInfo {
   path: string;
@@ -680,7 +793,11 @@ function decodeJsonStringFragment(value: string): string {
 }
 
 /** Raw-text string-property scan used on the possibly-truncated prefix window. */
-function extractStringProperty(source: string, name: string, startIndex = 0): string | undefined {
+function extractStringProperty(
+  source: string,
+  name: string,
+  startIndex = 0,
+): string | undefined {
   const propertyIndex = source.indexOf(`"${name}"`, startIndex);
   if (propertyIndex === -1) return undefined;
   const colonIndex = source.indexOf(":", propertyIndex + name.length + 2);
@@ -721,21 +838,27 @@ function countMessageMarkers(content: string): number {
     if (typeIndex === -1) break;
     const colonIndex = content.indexOf(":", typeIndex + 6);
     if (colonIndex === -1) break;
-    if (extractStringProperty(content, "type", typeIndex) === "message") count++;
+    if (extractStringProperty(content, "type", typeIndex) === "message")
+      count++;
     index = colonIndex + 1;
   }
   return count;
 }
 
-function extractFirstDisplayMessageFromPrefix(content: string): string | undefined {
+function extractFirstDisplayMessageFromPrefix(
+  content: string,
+): string | undefined {
   let fallback: string | undefined;
   let index = content.indexOf('"role"');
   while (index !== -1) {
     const role = extractStringProperty(content, "role", index);
-    const text = extractStringProperty(content, "content", index) ?? extractStringProperty(content, "text", index);
+    const text =
+      extractStringProperty(content, "content", index) ??
+      extractStringProperty(content, "text", index);
     if (text) {
       if (role === "user") return text;
-      if (!fallback && (role === "developer" || role === "assistant")) fallback = text;
+      if (!fallback && (role === "developer" || role === "assistant"))
+        fallback = text;
     }
     index = content.indexOf('"role"', index + 6);
   }
@@ -760,8 +883,12 @@ function scanFirstUserMessage(filePath: string): string {
           text = extractTextFromContent(entry.message.content);
           return !text;
         }
-        if (entry.type === "custom_message" && entry.customType === "skill-prompt") {
-          const content = typeof entry.content === "string" ? entry.content : "";
+        if (
+          entry.type === "custom_message" &&
+          entry.customType === "skill-prompt"
+        ) {
+          const content =
+            typeof entry.content === "string" ? entry.content : "";
           const parts = content.split(/\nUser:\s*/);
           if (parts.length > 1 && parts[parts.length - 1].trim()) {
             text = parts[parts.length - 1].trim();
@@ -788,7 +915,12 @@ function extractTextFromContent(content: unknown): string {
   if (!Array.isArray(content)) return "";
   const text: string[] = [];
   for (const block of content) {
-    if (isRecord(block) && block.type === "text" && typeof block.text === "string") text.push(block.text);
+    if (
+      isRecord(block) &&
+      block.type === "text" &&
+      typeof block.text === "string"
+    )
+      text.push(block.text);
   }
   return text.join(" ");
 }
@@ -811,7 +943,10 @@ function statusFromTailMessage(message: TailMessage): SessionStatus {
           return "interrupted";
       }
       const content = message.content;
-      if (Array.isArray(content) && content.some((block) => isRecord(block) && block.type === "toolCall")) {
+      if (
+        Array.isArray(content) &&
+        content.some((block) => isRecord(block) && block.type === "toolCall")
+      ) {
         return "interrupted";
       }
       return "complete";
@@ -826,7 +961,10 @@ function statusFromTailMessage(message: TailMessage): SessionStatus {
 }
 
 /** The tail window's last message entry: lifecycle status plus its timestamp. */
-function scanTailMessage(suffix: string): { status: SessionStatus; lastMessageAt?: Date } {
+function scanTailMessage(suffix: string): {
+  status: SessionStatus;
+  lastMessageAt?: Date;
+} {
   if (!suffix) return { status: "unknown" };
   const lines = suffix.split("\n");
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -841,8 +979,14 @@ function scanTailMessage(suffix: string): { status: SessionStatus; lastMessageAt
       continue;
     }
     if (entry.type === "message" && entry.message) {
-      const at = typeof entry.timestamp === "string" ? new Date(entry.timestamp) : undefined;
-      return { status: statusFromTailMessage(entry.message), lastMessageAt: at && !Number.isNaN(at.getTime()) ? at : undefined };
+      const at =
+        typeof entry.timestamp === "string"
+          ? new Date(entry.timestamp)
+          : undefined;
+      return {
+        status: statusFromTailMessage(entry.message),
+        lastMessageAt: at && !Number.isNaN(at.getTime()) ? at : undefined,
+      };
     }
   }
   return { status: "unknown" };
@@ -856,7 +1000,9 @@ interface SessionListHeader {
   timestamp?: string;
 }
 
-function normalizeTitleOverride(title: string | undefined): string | null | undefined {
+function normalizeTitleOverride(
+  title: string | undefined,
+): string | null | undefined {
   if (title === undefined) return undefined;
   return title.trim() ? title : null;
 }
@@ -865,27 +1011,39 @@ function sessionListHeaderFromRecord(
   record: Record<string, unknown> | undefined,
   titleOverride?: string | null,
 ): SessionListHeader | undefined {
-  if (record?.type !== "session" || typeof record.id !== "string") return undefined;
+  if (record?.type !== "session" || typeof record.id !== "string")
+    return undefined;
   return {
     id: record.id,
     cwd: typeof record.cwd === "string" ? record.cwd : undefined,
     title:
       titleOverride === null
         ? undefined
-        : (titleOverride ?? (typeof record.title === "string" ? record.title : undefined)),
-    parentSession: typeof record.parentSession === "string" ? record.parentSession : undefined,
-    timestamp: typeof record.timestamp === "string" ? record.timestamp : undefined,
+        : (titleOverride ??
+          (typeof record.title === "string" ? record.title : undefined)),
+    parentSession:
+      typeof record.parentSession === "string"
+        ? record.parentSession
+        : undefined,
+    timestamp:
+      typeof record.timestamp === "string" ? record.timestamp : undefined,
   };
 }
 
-function parseSessionListHeaderLine(line: string, titleOverride?: string | null): SessionListHeader | undefined {
+function parseSessionListHeaderLine(
+  line: string,
+  titleOverride?: string | null,
+): SessionListHeader | undefined {
   if (extractStringProperty(line, "type") !== "session") return undefined;
   const id = extractStringProperty(line, "id");
   if (!id) return undefined;
   return {
     id,
     cwd: extractStringProperty(line, "cwd"),
-    title: titleOverride === null ? undefined : (titleOverride ?? extractStringProperty(line, "title")),
+    title:
+      titleOverride === null
+        ? undefined
+        : (titleOverride ?? extractStringProperty(line, "title")),
     parentSession: extractStringProperty(line, "parentSession"),
     timestamp: extractStringProperty(line, "timestamp"),
   };
@@ -899,9 +1057,14 @@ function parseSessionListHeader(
 ): SessionListHeader | undefined {
   const firstEntry = entries[0];
   const parsedSlotTitle = normalizeTitleOverride(
-    firstEntry?.type === "title" && typeof firstEntry.title === "string" ? firstEntry.title : undefined,
+    firstEntry?.type === "title" && typeof firstEntry.title === "string"
+      ? firstEntry.title
+      : undefined,
   );
-  const parsedHeader = sessionListHeaderFromRecord(entries[firstEntry?.type === "title" ? 1 : 0], parsedSlotTitle);
+  const parsedHeader = sessionListHeaderFromRecord(
+    entries[firstEntry?.type === "title" ? 1 : 0],
+    parsedSlotTitle,
+  );
   if (parsedHeader) return parsedHeader;
 
   let slotTitle: string | null | undefined;
@@ -930,14 +1093,21 @@ function readTextSlices(
   try {
     const prefixLength = Math.min(prefixBytes, stat.size);
     const prefixBuffer = Buffer.allocUnsafe(prefixLength);
-    const prefixRead = prefixLength > 0 ? readSync(fd, prefixBuffer, 0, prefixLength, 0) : 0;
+    const prefixRead =
+      prefixLength > 0 ? readSync(fd, prefixBuffer, 0, prefixLength, 0) : 0;
     const prefix = prefixBuffer.subarray(0, prefixRead).toString("utf8");
 
     let suffix = "";
     if (suffixBytes > 0 && stat.size > 0) {
       const suffixLength = Math.min(suffixBytes, stat.size);
       const suffixBuffer = Buffer.allocUnsafe(suffixLength);
-      const suffixRead = readSync(fd, suffixBuffer, 0, suffixLength, stat.size - suffixLength);
+      const suffixRead = readSync(
+        fd,
+        suffixBuffer,
+        0,
+        suffixLength,
+        stat.size - suffixLength,
+      );
       suffix = suffixBuffer.subarray(0, suffixRead).toString("utf8");
     }
     return [prefix, suffix, stat.size, stat.mtime];
@@ -971,8 +1141,15 @@ export function scanSessionInfo(
     let firstMessage = "";
     let shortSummary: string | undefined;
     for (let i = 1; i < entries.length; i++) {
-      const entry = entries[i] as { type?: string; message?: { role?: string; content?: unknown }; shortSummary?: string };
-      if (entry.type === "compaction" && typeof entry.shortSummary === "string") {
+      const entry = entries[i] as {
+        type?: string;
+        message?: { role?: string; content?: unknown };
+        shortSummary?: string;
+      };
+      if (
+        entry.type === "compaction" &&
+        typeof entry.shortSummary === "string"
+      ) {
         shortSummary = entry.shortSummary;
       }
       if (entry.type === "message" && entry.message) {
@@ -985,11 +1162,21 @@ export function scanSessionInfo(
 
     // Cap at the prefix size: the list ships firstMessage for every session.
     // Files past the load ceiling cannot be opened anyway, so skip reading them.
-    if (!firstMessage && size > SESSION_LIST_PREFIX_BYTES && size <= MAX_SESSION_LOAD_BYTES) {
-      firstMessage = scanFirstUserMessage(filePath).slice(0, SESSION_LIST_PREFIX_BYTES);
+    if (
+      !firstMessage &&
+      size > SESSION_LIST_PREFIX_BYTES &&
+      size <= MAX_SESSION_LOAD_BYTES
+    ) {
+      firstMessage = scanFirstUserMessage(filePath).slice(
+        0,
+        SESSION_LIST_PREFIX_BYTES,
+      );
     }
     firstMessage ||= extractFirstDisplayMessageFromPrefix(content) ?? "";
-    const messageCount = Math.max(parsedMessageCount, countMessageMarkers(content));
+    const messageCount = Math.max(
+      parsedMessageCount,
+      countMessageMarkers(content),
+    );
     const tail = withStatus ? scanTailMessage(suffix) : undefined;
     return {
       path: filePath,
@@ -1034,7 +1221,8 @@ function scanCacheKey(filePath: string): string {
 }
 
 function getSessionScanCache(): Map<string, SessionScanCacheEntry> {
-  if (!globalThis.__ompSessionScanCache) globalThis.__ompSessionScanCache = new Map();
+  if (!globalThis.__ompSessionScanCache)
+    globalThis.__ompSessionScanCache = new Map();
   return globalThis.__ompSessionScanCache;
 }
 
@@ -1121,7 +1309,8 @@ interface SessionFileListCacheEntry {
 }
 
 declare global {
-  var __ompSessionFileListCache: Map<string, SessionFileListCacheEntry> | undefined;
+  var __ompSessionFileListCache:
+    Map<string, SessionFileListCacheEntry> | undefined;
 }
 
 /** Cached walk of `<sessionsRoot>/<project>/*.jsonl`, keyed on the root's
@@ -1133,14 +1322,17 @@ export function invalidateSessionFileListCache(): void {
   globalThis.__ompSessionFileListCache?.clear();
 }
 
-export async function listSessionFiles(sessionsRoot: string): Promise<string[]> {
+export async function listSessionFiles(
+  sessionsRoot: string,
+): Promise<string[]> {
   let rootStat: { mtimeMs: number };
   try {
     rootStat = statSync(sessionsRoot);
   } catch {
     return [];
   }
-  if (!globalThis.__ompSessionFileListCache) globalThis.__ompSessionFileListCache = new Map();
+  if (!globalThis.__ompSessionFileListCache)
+    globalThis.__ompSessionFileListCache = new Map();
   const cache = globalThis.__ompSessionFileListCache;
   const cached = cache.get(sessionsRoot);
   if (cached && cached.rootMtimeMs === rootStat.mtimeMs) {
@@ -1148,13 +1340,20 @@ export async function listSessionFiles(sessionsRoot: string): Promise<string[]> 
     // Validate by sampling subdir mtimes (cheap: stat per project dir, not per file).
     let stale = false;
     try {
-      for (const dirent of readDirectorySyncRuntime(sessionsRoot, { withFileTypes: true })) {
+      for (const dirent of readDirectorySyncRuntime(sessionsRoot, {
+        withFileTypes: true,
+      })) {
         if (!dirent.isDirectory()) continue;
         const subPath = path.join(sessionsRoot, dirent.name);
         const subMtime = statSync(subPath).mtimeMs;
-        if (subMtime > cached.subMaxMtimeMs) { stale = true; break; }
+        if (subMtime > cached.subMaxMtimeMs) {
+          stale = true;
+          break;
+        }
       }
-    } catch { stale = true; }
+    } catch {
+      stale = true;
+    }
     if (!stale) return cached.files;
   }
 
@@ -1164,22 +1363,34 @@ export async function listSessionFiles(sessionsRoot: string): Promise<string[]> 
   // subdir outgrows the root (the normal NTFS steady state), defeating the cache.
   let subMaxMtimeMs = 0;
   try {
-    for (const dirent of readDirectorySyncRuntime(sessionsRoot, { withFileTypes: true })) {
+    for (const dirent of readDirectorySyncRuntime(sessionsRoot, {
+      withFileTypes: true,
+    })) {
       if (!dirent.isDirectory()) continue;
-      subMaxMtimeMs = Math.max(subMaxMtimeMs, statSync(path.join(sessionsRoot, dirent.name)).mtimeMs);
+      subMaxMtimeMs = Math.max(
+        subMaxMtimeMs,
+        statSync(path.join(sessionsRoot, dirent.name)).mtimeMs,
+      );
     }
   } catch {}
-  cache.set(sessionsRoot, { rootMtimeMs: rootStat.mtimeMs, subMaxMtimeMs, files });
+  cache.set(sessionsRoot, {
+    rootMtimeMs: rootStat.mtimeMs,
+    subMaxMtimeMs,
+    files,
+  });
   return files;
 }
 
 /** Restore conflict preflight only: an uncached, complete ID inventory. Never populate or trust the best-effort sidebar
  * caches: skipped directories or unreadable/unidentifiable headers cannot prove a session absent on this machine. */
-export function listSessionIdsForRestore(sessionsRoot = getSessionsDir()): string[] {
+export function listSessionIdsForRestore(
+  sessionsRoot = getSessionsDir(),
+): string[] {
   const ids: string[] = [];
   for (const file of collectSessionFiles(sessionsRoot, true)) {
     const header = readSessionHeaderSync(file, true);
-    if (!header || typeof header.id !== "string" || !header.id) throw new Error(`Cannot identify active session at ${file}`);
+    if (!header || typeof header.id !== "string" || !header.id)
+      throw new Error(`Cannot identify active session at ${file}`);
     ids.push(header.id);
   }
   return ids;
@@ -1193,21 +1404,38 @@ function collectSessionFiles(sessionsRoot: string, strict = false): string[] {
     if (strict) {
       const root = lstatSync(sessionsRoot);
       observedRoot = true;
-      if (!root.isDirectory()) throw new Error(`Cannot inventory non-directory sessions root ${sessionsRoot}`);
+      if (!root.isDirectory())
+        throw new Error(
+          `Cannot inventory non-directory sessions root ${sessionsRoot}`,
+        );
     }
     projects = readDirectorySyncRuntime(sessionsRoot, { withFileTypes: true });
   } catch (error) {
     // Only a root absent from the outset is an empty inventory. Once observed, disappearance is uncertainty.
-    if (strict && (observedRoot || !(error && typeof error === "object" && "code" in error && error.code === "ENOENT"))) throw error;
+    if (
+      strict &&
+      (observedRoot ||
+        !(
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          error.code === "ENOENT"
+        ))
+    )
+      throw error;
     return [];
   }
   for (const dirent of projects) {
     const dirPath = path.join(sessionsRoot, dirent.name);
-    if (strict && dirent.isSymbolicLink()) throw new Error(`Cannot inventory symlinked session project ${dirPath}`);
+    if (strict && dirent.isSymbolicLink())
+      throw new Error(`Cannot inventory symlinked session project ${dirPath}`);
     if (!dirent.isDirectory()) continue;
     let inner: Dirent[];
     try {
-      if (strict && !lstatSync(dirPath).isDirectory()) throw new Error(`Session project changed during strict discovery: ${dirPath}`);
+      if (strict && !lstatSync(dirPath).isDirectory())
+        throw new Error(
+          `Session project changed during strict discovery: ${dirPath}`,
+        );
       inner = readDirectorySyncRuntime(dirPath, { withFileTypes: true });
     } catch (error) {
       // This project was enumerated: even ENOENT may mean it was renamed with active sessions inside. Never skip it in preflight.
@@ -1216,9 +1444,12 @@ function collectSessionFiles(sessionsRoot: string, strict = false): string[] {
     }
     for (const file of inner) {
       if (strict && file.isSymbolicLink() && file.name.endsWith(".jsonl")) {
-        throw new Error(`Cannot inventory symlinked session file ${path.join(dirPath, file.name)}`);
+        throw new Error(
+          `Cannot inventory symlinked session file ${path.join(dirPath, file.name)}`,
+        );
       }
-      if (file.isFile() && file.name.endsWith(".jsonl")) files.push(path.join(dirPath, file.name));
+      if (file.isFile() && file.name.endsWith(".jsonl"))
+        files.push(path.join(dirPath, file.name));
     }
   }
   return files;
@@ -1248,10 +1479,18 @@ export function cleanSessionTitle(raw: string): string {
  * title_change audit entry — omp-web only needs the display title, and a
  * bounded 256-byte write cannot corrupt a file a live omp process may hold.
  */
-export function setSessionTitle(filePath: string, title: string, source: SessionTitleSource): boolean {
+export function setSessionTitle(
+  filePath: string,
+  title: string,
+  source: SessionTitleSource,
+): boolean {
   const cleaned = cleanSessionTitle(title);
   if (!cleaned) return false;
-  const update: SessionTitleUpdate = { title: cleaned, source, updatedAt: new Date().toISOString() };
+  const update: SessionTitleUpdate = {
+    title: cleaned,
+    source,
+    updatedAt: new Date().toISOString(),
+  };
 
   if (readTitleSlot(filePath)) {
     const slotLine = Buffer.from(serializeTitleSlot(update), "utf8");
@@ -1259,8 +1498,15 @@ export function setSessionTitle(filePath: string, title: string, source: Session
     try {
       let offset = 0;
       while (offset < slotLine.length) {
-        const written = writeSync(fd, slotLine, offset, slotLine.length - offset, offset);
-        if (written === 0) throw new Error("Short write while updating session title slot");
+        const written = writeSync(
+          fd,
+          slotLine,
+          offset,
+          slotLine.length - offset,
+          offset,
+        );
+        if (written === 0)
+          throw new Error("Short write while updating session title slot");
         offset += written;
       }
     } finally {
@@ -1284,7 +1530,8 @@ export function setSessionTitle(filePath: string, title: string, source: Session
   const content = readFileSync(filePath, "utf8");
   const lines = content.split("\n");
   const headerIndex = lines.findIndex((line) => line.trim().length > 0);
-  if (headerIndex === -1) throw new Error("Cannot rename an empty session file");
+  if (headerIndex === -1)
+    throw new Error("Cannot rename an empty session file");
   let header: Record<string, unknown>;
   try {
     header = JSON.parse(lines[headerIndex]) as Record<string, unknown>;
@@ -1307,7 +1554,11 @@ export function setSessionTitle(filePath: string, title: string, source: Session
  * mid-write would permanently destroy the session; rename is atomic, leaving
  * either the old or the new file. Mirrors omp's own atomic session rewrite.
  */
-export function writeSessionFileAtomicSync(filePath: string, body: string, tag = "rewrite"): void {
+export function writeSessionFileAtomicSync(
+  filePath: string,
+  body: string,
+  tag = "rewrite",
+): void {
   const dir = path.dirname(filePath);
   const tempDir = mkdtempSync(path.join(dir, `.omp-web-${tag}-`));
   const tempPath = path.join(tempDir, path.basename(filePath));
@@ -1337,7 +1588,10 @@ export interface SessionArchiveRoots {
  * source file remains byte-for-byte unchanged until the compressed destination
  * is durably renamed; failures roll back both moves where possible.
  */
-export function archiveSessionFileWithArtifacts(filePath: string, roots: SessionArchiveRoots = {}): string {
+export function archiveSessionFileWithArtifacts(
+  filePath: string,
+  roots: SessionArchiveRoots = {},
+): string {
   const sessionsRoot = path.resolve(roots.sessionsRoot ?? getSessionsDir());
   const source = path.resolve(filePath);
   const relative = path.relative(sessionsRoot, source);
@@ -1347,11 +1601,16 @@ export function archiveSessionFileWithArtifacts(filePath: string, roots: Session
     path.isAbsolute(relative) ||
     !relative.endsWith(".jsonl")
   ) {
-    throw new Error("Session path is outside the active OMP sessions directory");
+    throw new Error(
+      "Session path is outside the active OMP sessions directory",
+    );
   }
-  if (!lstatSync(source).isFile()) throw new Error("Session path is not a regular file");
+  if (!lstatSync(source).isFile())
+    throw new Error("Session path is not a regular file");
 
-  const archiveRoot = path.resolve(roots.archiveRoot ?? getArchivedSessionsDir());
+  const archiveRoot = path.resolve(
+    roots.archiveRoot ?? getArchivedSessionsDir(),
+  );
   const destination = path.join(archiveRoot, `${relative}.gz`);
   const legacyDestination = destination.slice(0, -3);
   if (existsSync(destination) || existsSync(legacyDestination)) {
@@ -1363,7 +1622,9 @@ export function archiveSessionFileWithArtifacts(filePath: string, roots: Session
   // directory after appending `.gz` to the session file.
   const destinationArtifacts = destination.slice(0, -".gz".length);
   mkdirSync(path.dirname(destination), { recursive: true });
-  const tempDir = mkdtempSync(path.join(path.dirname(destination), ".omp-web-archive-"));
+  const tempDir = mkdtempSync(
+    path.join(path.dirname(destination), ".omp-web-archive-"),
+  );
   const tempCompressed = path.join(tempDir, path.basename(destination));
   const tempRestore = path.join(tempDir, path.basename(source));
   let destinationCreated = false;
@@ -1378,7 +1639,10 @@ export function archiveSessionFileWithArtifacts(filePath: string, roots: Session
     sourceRemoved = true;
 
     if (existsSync(sourceArtifacts)) {
-      if (existsSync(destinationArtifacts)) throw new Error("Archived session artifacts destination already exists");
+      if (existsSync(destinationArtifacts))
+        throw new Error(
+          "Archived session artifacts destination already exists",
+        );
       mkdirSync(path.dirname(destinationArtifacts), { recursive: true });
       renameSync(sourceArtifacts, destinationArtifacts);
       artifactsMoved = true;
@@ -1386,7 +1650,11 @@ export function archiveSessionFileWithArtifacts(filePath: string, roots: Session
     return destination;
   } catch (error) {
     if (artifactsMoved) {
-      try { renameSync(destinationArtifacts, sourceArtifacts); } catch { /* preserve original error */ }
+      try {
+        renameSync(destinationArtifacts, sourceArtifacts);
+      } catch {
+        /* preserve original error */
+      }
     }
     // Restore the source if it was already removed. Only after the restore
     // SUCCEEDS is the archive safe to delete — if the restore fails, the
@@ -1400,14 +1668,24 @@ export function archiveSessionFileWithArtifacts(filePath: string, roots: Session
         mkdirSync(path.dirname(source), { recursive: true });
         renameSync(tempRestore, source);
         restored = true;
-      } catch { /* preserve original error */ }
+      } catch {
+        /* preserve original error */
+      }
     }
     if (destinationCreated && restored) {
-      try { unlinkSync(destination); } catch { /* preserve original error */ }
+      try {
+        unlinkSync(destination);
+      } catch {
+        /* preserve original error */
+      }
     }
     throw error;
   } finally {
-    try { rmSync(tempDir, { recursive: true, force: true }); } catch { /* best effort */ }
+    try {
+      rmSync(tempDir, { recursive: true, force: true });
+    } catch {
+      /* best effort */
+    }
   }
 }
 

@@ -380,11 +380,11 @@ the cluster keeps its own configuration, managed on that machine.
   the daemon is connected, otherwise the next time it reaches this machine (and is refused). A session start
   that races a leave is refused. This machine is the master: nothing is
   mirrored to it and nothing of it is backed up.
-- **Settings:** each member's line in **Settings → Hosts** shows *same as the master*,
-  *updating…*, *failed* with the reason, *held by another ompweb server*, or that the host needs
+- **Settings:** each member's line in **Settings → Hosts** shows _same as the master_,
+  _updating…_, _failed_ with the reason, _held by another ompweb server_, or that the host needs
   an update, and the MCP server commands in the mirrored files that are not installed there.
   When this machine's configuration cannot be mirrored, one message names the file, and no
-  member line says *updating…*. For a session or project of the cluster, the Models, settings, MCP, Skills, Plugins and Agents
+  member line says _updating…_. For a session or project of the cluster, the Models, settings, MCP, Skills, Plugins and Agents
   screens say that changes apply to every member, and so does **Settings → System** next to the
   agent environment variables. For a session on another member they act on
   this machine's user-level configuration, which the member runs; that session's and project's
@@ -409,7 +409,6 @@ the cluster keeps its own configuration, managed on that machine.
   written as an environment-variable name or as a `!command` resolves on the member: the
   variable or command must exist there (variables set in Settings → System or in the mirrored
   `.env` do). MCP servers started by a command need that command on each member.
-
 
 ### Local worker maintenance
 
@@ -506,8 +505,8 @@ systemctl --user daemon-reload
 systemctl --user enable --now ompweb ompweb-host
 ```
 
-  On macOS, two launchd agents (`ProgramArguments` `…/ompweb --no-open` and
-  `…/ompweb host`, with `RunAtLoad` and `KeepAlive`) do the same.
+On macOS, two launchd agents (`ProgramArguments` `…/ompweb --no-open` and
+`…/ompweb host`, with `RunAtLoad` and `KeepAlive`) do the same.
 
 ### Run as a macOS Service (launchd)
 
@@ -559,6 +558,7 @@ on crash:
 ```bash
 bunx --bun --package=@kahme247/ompweb@latest ompweb-systemd install
 ```
+
 The installer creates `~/.omp/agent/web-service.env` automatically with mode
 `600`; no manual file creation is required. The explicit `--package` form makes
 `bunx` run the systemd executable from the selected package.
@@ -649,6 +649,7 @@ HTTP(S). It dials out, so it can sit behind NAT.
 
    Paste the token when prompted (or pipe it in). It is saved to
    `~/.omp/agent/omp-web/host.json` with mode `600`.
+
 3. Start the link and leave it running:
 
    ```bash
@@ -852,7 +853,6 @@ Run `ompweb-host-run` in a tmux window; Ctrl-C stops the daemon and its sessions
 Start it again after a reboot or logout. If the login keychain locks itself after
 inactivity or on sleep, SSH key passphrases and signing fail until you restart it.
 
-
 ## Features
 
 - **Interactive Chat**: Real-time streaming conversation with your local `omp` agent — tool calls, thinking levels, token counts, cost, context gauge, queue controls, and interrupt & retry.
@@ -875,20 +875,20 @@ inactivity or on sleep, SSH key passphrases and signing fail until you restart i
 
 ## Environment Variables
 
-| Variable | Description | Default |
-| --- | --- | --- |
-| `PORT` | Server port | `30177` |
-| `OMP_WEB_HOSTNAME` | Server bind host | `127.0.0.1` |
-| `OMP_WEB_PASSWORD_HASH` | Optional scrypt hash of the web login password, from `ompweb hash-password`. Required for a non-loopback bind | _None (auth disabled)_ |
-| `OMP_WEB_TRUSTED_HEADER_SHA256` | SHA-256 hex digest of the secret a trusted reverse proxy sends in `X-Omp-Web-Auth` to skip the password for that request; see [Skipping the password on trusted networks](#skipping-the-password-on-trusted-networks) | _None (disabled)_ |
-| `OMP_WEB_NO_OPEN` | Set to `1` to prevent auto-opening browser | `0` |
-| `OMP_WEB_DISABLE_AUTOUPDATE` | Set to `1` to disable update checks and in-app updates; restart after changing | `0` |
-| `OMP_WEB_NAME` | Name shown in browser tabs and installed-app names. `url`, `host` or `domain` (any case) uses the hostname the browser connected to, without port; localhost and IP addresses keep `omp web`. Any other value is used as-is. Restart after changing | `omp web` |
-| `OMP_WEB_OMP_BIN` | Path to an `ompweb-omp` build to use instead of the downloaded one: a copy of the release's `ompweb-omp-<os>-<arch>` on a machine that cannot reach GitHub, or `runner/release/ompweb-omp-<os>-<arch>` from a source checkout. A stock `omp` does not work: it does not speak ompweb's channel. The service installers write it into the service environment only when you set it | _the downloaded `ompweb-omp`_ |
-| `PI_CODING_AGENT_DIR` | Custom omp agent directory | `~/.omp/agent` |
-| `OMP_WEB_STT_ENDPOINT` | OpenAI-compatible transcription endpoint URL. Leave unset to transcribe with `OMP_WEB_STT_MODEL` through omp's own credentials | _None_ |
-| `OMP_WEB_STT_KEY` | Optional API key for the STT endpoint | _None_ |
-| `OMP_WEB_STT_MODEL` | Model name for the STT endpoint. Without an endpoint: an omp speech-to-text model run with omp's logins, such as `openai-codex/codex-transcribe` (ChatGPT subscription; needs an omp version with that model) | _None (disabled without an endpoint)_ |
+| Variable                        | Description                                                                                                                                                                                                                                                                                                                                                                       | Default                               |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| `PORT`                          | Server port                                                                                                                                                                                                                                                                                                                                                                       | `30177`                               |
+| `OMP_WEB_HOSTNAME`              | Server bind host                                                                                                                                                                                                                                                                                                                                                                  | `127.0.0.1`                           |
+| `OMP_WEB_PASSWORD_HASH`         | Optional scrypt hash of the web login password, from `ompweb hash-password`. Required for a non-loopback bind                                                                                                                                                                                                                                                                     | _None (auth disabled)_                |
+| `OMP_WEB_TRUSTED_HEADER_SHA256` | SHA-256 hex digest of the secret a trusted reverse proxy sends in `X-Omp-Web-Auth` to skip the password for that request; see [Skipping the password on trusted networks](#skipping-the-password-on-trusted-networks)                                                                                                                                                             | _None (disabled)_                     |
+| `OMP_WEB_NO_OPEN`               | Set to `1` to prevent auto-opening browser                                                                                                                                                                                                                                                                                                                                        | `0`                                   |
+| `OMP_WEB_DISABLE_AUTOUPDATE`    | Set to `1` to disable update checks and in-app updates; restart after changing                                                                                                                                                                                                                                                                                                    | `0`                                   |
+| `OMP_WEB_NAME`                  | Name shown in browser tabs and installed-app names. `url`, `host` or `domain` (any case) uses the hostname the browser connected to, without port; localhost and IP addresses keep `omp web`. Any other value is used as-is. Restart after changing                                                                                                                               | `omp web`                             |
+| `OMP_WEB_OMP_BIN`               | Path to an `ompweb-omp` build to use instead of the downloaded one: a copy of the release's `ompweb-omp-<os>-<arch>` on a machine that cannot reach GitHub, or `runner/release/ompweb-omp-<os>-<arch>` from a source checkout. A stock `omp` does not work: it does not speak ompweb's channel. The service installers write it into the service environment only when you set it | _the downloaded `ompweb-omp`_         |
+| `PI_CODING_AGENT_DIR`           | Custom omp agent directory                                                                                                                                                                                                                                                                                                                                                        | `~/.omp/agent`                        |
+| `OMP_WEB_STT_ENDPOINT`          | OpenAI-compatible transcription endpoint URL. Leave unset to transcribe with `OMP_WEB_STT_MODEL` through omp's own credentials                                                                                                                                                                                                                                                    | _None_                                |
+| `OMP_WEB_STT_KEY`               | Optional API key for the STT endpoint                                                                                                                                                                                                                                                                                                                                             | _None_                                |
+| `OMP_WEB_STT_MODEL`             | Model name for the STT endpoint. Without an endpoint: an omp speech-to-text model run with omp's logins, such as `openai-codex/codex-transcribe` (ChatGPT subscription; needs an omp version with that model)                                                                                                                                                                     | _None (disabled without an endpoint)_ |
 
 **`OMP_WEB_NAME` and installed apps.** An installed app (PWA) is usually named after the page it was installed from. If you later change `OMP_WEB_NAME`, or reach omp-web through a different address while `OMP_WEB_NAME` is `url`, `host` or `domain`, your operating system may rename the installed app as well. Leave `OMP_WEB_NAME` empty, or set a name that identifies this omp-web server whatever domain name or address is used to reach it.
 
@@ -1022,10 +1022,13 @@ and the daemon stays linked to your installed ompweb.
 ### Checks
 
 ```bash
-bun run typecheck   # Type check (TypeScript)
-bun run lint        # ESLint
-bun run test            # Run test suite (bun test)
+bun run typecheck   # Bun type checks for the root project and runner
+bun fmt             # Format files
+bun fmt --check     # Check formatting
+bun run test        # Run test suite (bun test)
 ```
+
+Linting has been removed: pinned Bun 1.4.4 has no built-in linter, and this project uses neither ESLint nor `tsc`. CI does not gate on formatting because the inherited baseline is not fully formatted.
 
 ## License & Credits
 

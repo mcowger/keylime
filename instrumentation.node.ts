@@ -7,7 +7,10 @@ export async function register(): Promise<void> {
   // listener cancels the default exit: end the process the way a signal would
   // (130/143, as `next start` did). Their "exit" listeners still run. First,
   // before any await, so a signal during boot is not swallowed.
-  for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
+  for (const [signal, code] of [
+    ["SIGINT", 130],
+    ["SIGTERM", 143],
+  ] as const) {
     process.on(signal, () => process.exit(code));
   }
 
@@ -15,9 +18,7 @@ export async function register(): Promise<void> {
   // failures here must never block boot.
   try {
     const { getAgentDir } = await import("@/lib/session-reader");
-    console.log(
-      `[omp-web] starting (agent-dir ${getAgentDir()})`,
-    );
+    console.log(`[omp-web] starting (agent-dir ${getAgentDir()})`);
   } catch {
     // Diagnostics are best-effort.
   }
@@ -27,11 +28,15 @@ export async function register(): Promise<void> {
   // Requests are refused either way; this is the readable half.
   void (async () => {
     try {
-      const { webPasswordConfigurationProblem } = await import("@/lib/web-auth");
+      const { webPasswordConfigurationProblem } =
+        await import("@/lib/web-auth");
       const problem = webPasswordConfigurationProblem();
-      if (problem) console.error(`[omp-web] password configuration error:\n${problem}`);
+      if (problem)
+        console.error(`[omp-web] password configuration error:\n${problem}`);
     } catch (error) {
-      console.warn(`[omp-web] password configuration check failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.warn(
+        `[omp-web] password configuration check failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   })();
 
@@ -47,7 +52,9 @@ export async function register(): Promise<void> {
       await runUtilityCommand({ type: "get_state" });
       const { getOmpVersion } = await import("@/lib/omp/omp-cli");
       const version = await getOmpVersion();
-      console.log(`[omp-web] omp utility ready (${version ?? "version unknown"})`);
+      console.log(
+        `[omp-web] omp utility ready (${version ?? "version unknown"})`,
+      );
     } catch (error) {
       const { resolveOmpBin } = await import("@/lib/omp/omp-cli");
       const bin = resolveOmpBin();
@@ -55,28 +62,36 @@ export async function register(): Promise<void> {
       const hint = bin
         ? `resolved ${bin}; repair with: omp update (or: bun install -g @oh-my-pi/pi-coding-agent@latest)`
         : "omp binary not found; install oh-my-pi or set OMP_WEB_OMP_BIN";
-      console.warn(`[omp-web] omp utility warm-up failed (routes will retry on demand): ${detail} — ${hint}`);
+      console.warn(
+        `[omp-web] omp utility warm-up failed (routes will retry on demand): ${detail} — ${hint}`,
+      );
     }
   })();
 
   // Add this server's local daemon link without moving any existing production link.
   if (process.env.NODE_ENV !== "development") {
     try {
-      const { ensureLocalHostLink, localLinkUrl } = await import("@/lib/hosts/local-bootstrap");
+      const { ensureLocalHostLink, localLinkUrl } =
+        await import("@/lib/hosts/local-bootstrap");
       const target = localLinkUrl();
       if ("url" in target) await ensureLocalHostLink({ url: target.url });
       else console.warn(`[omp-web] local daemon link skipped: ${target.skip}`);
     } catch (error) {
-      console.warn(`[omp-web] local daemon link not prepared: ${error instanceof Error ? error.message : String(error)}`);
+      console.warn(
+        `[omp-web] local daemon link not prepared: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
   // Each host daemon deletes sent uploads after the configured number of days: tell it the setting whenever it links.
   try {
-    const { startUploadRetentionSync } = await import("@/lib/hosts/upload-retention-sync");
+    const { startUploadRetentionSync } =
+      await import("@/lib/hosts/upload-retention-sync");
     startUploadRetentionSync();
   } catch (error) {
-    console.warn(`[omp-web] upload retention sync not started: ${error instanceof Error ? error.message : String(error)}`);
+    console.warn(
+      `[omp-web] upload retention sync not started: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
   // Cluster members run on this machine's omp configuration: every 30 s a member that is behind gets it (lib/hosts/hub.ts).
@@ -84,7 +99,9 @@ export async function register(): Promise<void> {
     const { startClusterConfigSync } = await import("@/lib/hosts/hub");
     startClusterConfigSync();
   } catch (error) {
-    console.warn(`[omp-web] cluster configuration sync not started: ${error instanceof Error ? error.message : String(error)}`);
+    console.warn(
+      `[omp-web] cluster configuration sync not started: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
   // Resume sessions that were mid-run when omp-web last stopped (opt-in
@@ -94,7 +111,9 @@ export async function register(): Promise<void> {
       const { resumeInterruptedSessions } = await import("@/lib/rpc-manager");
       await resumeInterruptedSessions();
     } catch (error) {
-      console.warn(`[omp-web] session auto-resume failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.warn(
+        `[omp-web] session auto-resume failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   })();
 
@@ -103,7 +122,9 @@ export async function register(): Promise<void> {
     const { startOutbox } = await import("@/lib/message-outbox");
     startOutbox();
   } catch (error) {
-    console.warn(`[omp-web] message outbox not started: ${error instanceof Error ? error.message : String(error)}`);
+    console.warn(
+      `[omp-web] message outbox not started: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
   // Crash/stall journal: a long-running server that dies or wedges while the
@@ -119,20 +140,39 @@ export async function register(): Promise<void> {
     try {
       mkdirSync(logDir, { recursive: true });
       try {
-        if (statSync(logPath).size > 1_000_000) renameSync(logPath, `${logPath}.old`);
-      } catch { /* first write or unreadable — append anyway */ }
-      appendFileSync(logPath, `${new Date().toISOString()} [${kind}] ${detail}\n`, { encoding: "utf8" });
-    } catch { /* diagnostics must never crash the server */ }
+        if (statSync(logPath).size > 1_000_000)
+          renameSync(logPath, `${logPath}.old`);
+      } catch {
+        /* first write or unreadable — append anyway */
+      }
+      appendFileSync(
+        logPath,
+        `${new Date().toISOString()} [${kind}] ${detail}\n`,
+        { encoding: "utf8" },
+      );
+    } catch {
+      /* diagnostics must never crash the server */
+    }
   };
-  const describe = (value: unknown) => (value instanceof Error ? `${value.name}: ${value.message}\n${value.stack ?? ""}` : String(value));
+  const describe = (value: unknown) =>
+    value instanceof Error
+      ? `${value.name}: ${value.message}\n${value.stack ?? ""}`
+      : String(value);
   process.on("uncaughtException", (error) => {
     // A client disconnecting mid-request can surface here as an unhandled
     // `Error: aborted` (ECONNRESET) from a request stream nobody listens to.
     // That is a peer event, not a corrupted server: journal it (one line, no
     // stack, so aborts cannot rotate real crash records out of the journal
     // quickly) and keep serving.
-    if (error instanceof Error && error.message === "aborted" && (error as NodeJS.ErrnoException).code === "ECONNRESET") {
-      appendDiag("client-abort", "uncaughtException Error: aborted (ECONNRESET)");
+    if (
+      error instanceof Error &&
+      error.message === "aborted" &&
+      (error as NodeJS.ErrnoException).code === "ECONNRESET"
+    ) {
+      appendDiag(
+        "client-abort",
+        "uncaughtException Error: aborted (ECONNRESET)",
+      );
       return;
     }
     appendDiag("crash", `uncaughtException ${describe(error)}`);
@@ -151,7 +191,8 @@ export async function register(): Promise<void> {
     const now = Date.now();
     const cpu = process.cpuUsage();
     const drift = now - lastTick;
-    const cpuMs = (cpu.user - lastCpu.user + cpu.system - lastCpu.system) / 1000;
+    const cpuMs =
+      (cpu.user - lastCpu.user + cpu.system - lastCpu.system) / 1000;
     lastTick = now;
     lastCpu = cpu;
     if (drift > 45_000) {
@@ -161,9 +202,15 @@ export async function register(): Promise<void> {
       // next long-idle investigation.
       const seconds = Math.round(drift / 1000);
       if (cpuMs < Math.min(5_000, drift / 2)) {
-        appendDiag("sleep", `event loop gap of ~${seconds}s with negligible CPU time — machine was asleep/suspended or CPU-starved, not a synchronous block`);
+        appendDiag(
+          "sleep",
+          `event loop gap of ~${seconds}s with negligible CPU time — machine was asleep/suspended or CPU-starved, not a synchronous block`,
+        );
       } else {
-        appendDiag("stall", `event loop unresponsive for ~${seconds}s — a synchronous operation is blocking every request`);
+        appendDiag(
+          "stall",
+          `event loop unresponsive for ~${seconds}s — a synchronous operation is blocking every request`,
+        );
       }
     }
   }, 15_000);

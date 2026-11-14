@@ -93,7 +93,11 @@ type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 // returns undefined.
 export type RouteHandler = (
   request: Request,
-  context: { params: Promise<never>; disableIdleTimeout: () => void; upgrade: (data: ServerSocketData) => boolean },
+  context: {
+    params: Promise<never>;
+    disableIdleTimeout: () => void;
+    upgrade: (data: ServerSocketData) => boolean;
+  },
 ) => Response | undefined | Promise<Response | undefined>;
 export type RouteModule = Partial<Record<Method, RouteHandler>>;
 
@@ -102,7 +106,7 @@ export const ROUTE_MODULES: Record<string, RouteModule> = {
   "agent/[id]/bash-output": agentIdBashOutput,
   "agent/[id]": agentId,
   "agent/new": agentNew,
-  "agents": agents,
+  agents: agents,
   "app-update/notes": appUpdateNotes,
   "app-update": appUpdate,
   "auth/accounts/[provider]": authAccountsProvider,
@@ -113,29 +117,29 @@ export const ROUTE_MODULES: Record<string, RouteModule> = {
   "cwd/browse": cwdBrowse,
   "cwd/validate": cwdValidate,
   "default-cwd": defaultCwd,
-  "events": events,
+  events: events,
   "events/link": eventsLink,
   "file-index": fileIndex,
   "files/[...path]": filesPath,
   "git/diff": gitDiff,
   "git/status": gitStatus,
   "github-repo": githubRepo,
-  "home": home,
+  home: home,
   "hosts/broker/[...path]": hostsBrokerPath,
   "hosts/cluster-config/file/[hash]": hostsClusterConfigFileHash,
   "hosts/cluster-config/manifest": hostsClusterConfigManifest,
   "hosts/link": hostsLink,
-  "hosts": hosts,
+  hosts: hosts,
   "hosts/[id]/cluster": hostsIdCluster,
   "hosts/[id]/updates": hostsIdUpdates,
-  "manifest": manifest,
-  "mcp": mcp,
+  manifest: manifest,
+  mcp: mcp,
   "media/[hash]": mediaHash,
   "model-roles": modelRoles,
   "models-config/catalog": modelsConfigCatalog,
   "models-config": modelsConfig,
   "models-config/test": modelsConfigTest,
-  "models": models,
+  models: models,
   "notifications/devices": notificationsDevices,
   "notifications/history": notificationsHistory,
   "notifications/presence": notificationsPresence,
@@ -143,9 +147,9 @@ export const ROUTE_MODULES: Record<string, RouteModule> = {
   "omp-settings": ompSettings,
   "omp-update": ompUpdate,
   "omp-version": ompVersion,
-  "plugins": plugins,
+  plugins: plugins,
   "projects/clone": projectsClone,
-  "projects": projects,
+  projects: projects,
   "provider-usage": providerUsage,
   "providers/enable": providersEnable,
   "sessions/[id]/archive": sessionsIdArchive,
@@ -161,34 +165,43 @@ export const ROUTE_MODULES: Record<string, RouteModule> = {
   "sessions/[id]/subagents": sessionsIdSubagents,
   "sessions/archive": sessionsArchive,
   "sessions/import": sessionsImport,
-  "sessions": sessions,
+  sessions: sessions,
   "sessions/search": sessionsSearch,
   "skills/check": skillsCheck,
   "skills/install": skillsInstall,
-  "skills": skills,
+  skills: skills,
   "skills/search": skillsSearch,
   "skills/update": skillsUpdate,
   "stt/[jobId]/audio": sttJobIdAudio,
   "stt/[jobId]": sttJobId,
-  "stt": stt,
+  stt: stt,
   "transport-metrics": transportMetrics,
   "uploads/[id]": uploadsId,
-  "uploads": uploads,
-  "usage": usage,
+  uploads: uploads,
+  usage: usage,
   "web-auth/session": webAuthSession,
   "web-settings": webSettings,
-  "worktrees": worktrees,
+  worktrees: worktrees,
 };
 
 const METHODS: Method[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
 /** Bun.serve pattern for a table key: `[x]` → `:x`, `[...x]` → `*` (its segments start at pathname index `rest.index`). */
-export function routePattern(key: string): { pattern: string; rest: { name: string; index: number } | null } {
+export function routePattern(key: string): {
+  pattern: string;
+  rest: { name: string; index: number } | null;
+} {
   const segments = key.split("/");
   const restAt = segments.findIndex((segment) => segment.startsWith("[..."));
   const pattern = `/api/${segments.map((segment) => (segment.startsWith("[...") ? "*" : segment.replace(/^\[(\w+)\]$/, ":$1"))).join("/")}`;
   // pathname.split("/") is ["", "api", ...segments].
-  return { pattern, rest: restAt < 0 ? null : { name: segments[restAt].slice(4, -1), index: restAt + 2 } };
+  return {
+    pattern,
+    rest:
+      restAt < 0
+        ? null
+        : { name: segments[restAt].slice(4, -1), index: restAt + 2 },
+  };
 }
 
 /** Runs the module's handler for the request method, answering HEAD, OPTIONS and missing methods as Next did. */
@@ -199,15 +212,27 @@ export async function dispatch(
   disableIdleTimeout: () => void = () => {},
   upgrade: (data: ServerSocketData) => boolean = () => false,
 ): Promise<Response | undefined> {
-  const handler = mod[request.method as Method] ?? (request.method === "HEAD" ? mod.GET : undefined);
+  const handler =
+    mod[request.method as Method] ??
+    (request.method === "HEAD" ? mod.GET : undefined);
   if (!handler) {
     const methods = METHODS.filter((method) => mod[method]);
-    if (request.method !== "OPTIONS") return new Response(null, { status: 405, headers: { allow: methods.join(", ") } });
-    const allow = [...methods, ...(mod.GET ? ["HEAD"] : []), "OPTIONS"].sort().join(", ");
+    if (request.method !== "OPTIONS")
+      return new Response(null, {
+        status: 405,
+        headers: { allow: methods.join(", ") },
+      });
+    const allow = [...methods, ...(mod.GET ? ["HEAD"] : []), "OPTIONS"]
+      .sort()
+      .join(", ");
     return new Response(null, { status: 204, headers: { allow } });
   }
   try {
-    return await handler(request, { params: Promise.resolve(params) as Promise<never>, disableIdleTimeout, upgrade });
+    return await handler(request, {
+      params: Promise.resolve(params) as Promise<never>,
+      disableIdleTimeout,
+      upgrade,
+    });
   } catch (error) {
     console.error(error);
     return Response.json({ error: "Internal Server Error" }, { status: 500 });

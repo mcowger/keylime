@@ -6,7 +6,11 @@ import { getAgentEnvOverrides } from "../omp/agent-env";
 import { spawnOmpTransport } from "../omp/rpc-process";
 import { readNativeSettings } from "../omp/settings-config";
 import { isReservedLaunchArg, loadProjectRegistry } from "../project-registry";
-import { invalidateSessionEntriesCache, invalidateSessionListCache, invalidateSessionListMeta } from "../session-reader";
+import {
+  invalidateSessionEntriesCache,
+  invalidateSessionListCache,
+  invalidateSessionListMeta,
+} from "../session-reader";
 import { PRESET_FULL } from "../tool-presets";
 import type { ProjectLaunchConfig } from "../types";
 import { resolveProject } from "../worktree";
@@ -16,7 +20,10 @@ import { sessionOps } from "./session-ops";
 
 // omp aliases "find"->"glob" and has no "ls" tool; the web UI presets still use
 // the pi names (lib/tool-presets.ts), so translate before building --tools.
-const TOOL_NAME_ALIASES: Record<string, string> = { find: "glob", search: "grep" };
+const TOOL_NAME_ALIASES: Record<string, string> = {
+  find: "glob",
+  search: "grep",
+};
 const DROPPED_TOOL_NAMES = new Set(["ls"]);
 
 /** Translate pi-web preset tool names into omp builtin tool names. */
@@ -31,10 +38,19 @@ export function mapPresetToolNames(toolNames: string[]): string[] {
   return out;
 }
 
-const FULL_PRESET_KEY = [...PRESET_FULL].map((n) => n.toLowerCase()).sort().join(",");
+const FULL_PRESET_KEY = [...PRESET_FULL]
+  .map((n) => n.toLowerCase())
+  .sort()
+  .join(",");
 
 /** Extra CLI args for spawning `ompweb-omp --headless` for a session. */
-export function buildSessionSpawnArgs(sessionFile: string, toolNames?: string[], advisor = false, launchConfig?: ProjectLaunchConfig, modelOverride?: string): string[] {
+export function buildSessionSpawnArgs(
+  sessionFile: string,
+  toolNames?: string[],
+  advisor = false,
+  launchConfig?: ProjectLaunchConfig,
+  modelOverride?: string,
+): string[] {
   const args: string[] = [];
   if (sessionFile) {
     // An absolute path (or anything containing "/") resolves deterministically:
@@ -46,11 +62,18 @@ export function buildSessionSpawnArgs(sessionFile: string, toolNames?: string[],
     // session whose saved model can no longer be restored dies before any
     // set_model RPC can run (#277). Args are passed as an argv array, never
     // through a shell, so only whitespace / flag-smuggled values are kept out.
-    if (modelOverride && !modelOverride.startsWith("-") && !/\s/.test(modelOverride)) {
+    if (
+      modelOverride &&
+      !modelOverride.startsWith("-") &&
+      !/\s/.test(modelOverride)
+    ) {
       args.push("--model", modelOverride);
     }
   } else if (toolNames !== undefined) {
-    const presetKey = toolNames.map((n) => n.toLowerCase()).sort().join(",");
+    const presetKey = toolNames
+      .map((n) => n.toLowerCase())
+      .sort()
+      .join(",");
     if (toolNames.length === 0) {
       args.push("--no-tools");
     } else if (presetKey === FULL_PRESET_KEY) {
@@ -67,14 +90,22 @@ export function buildSessionSpawnArgs(sessionFile: string, toolNames?: string[],
   // flag would silently change the profile or pass its value as a positional.
   if (launchConfig?.profile !== undefined) {
     if (!launchConfig.profile || !isValidOmpProfile(launchConfig.profile)) {
-      throw new HostOpError(400, "stored_invalid_profile", "Invalid saved workspace profile. Open the workspace launch configuration and correct or clear the profile before starting a session.");
+      throw new HostOpError(
+        400,
+        "stored_invalid_profile",
+        "Invalid saved workspace profile. Open the workspace launch configuration and correct or clear the profile before starting a session.",
+      );
     }
     args.push("--profile", launchConfig.profile);
   }
   if (launchConfig?.extraArgs) {
     const reserved = launchConfig.extraArgs.find(isReservedLaunchArg);
     if (reserved !== undefined) {
-      throw new HostOpError(400, "stored_reserved_launch_arg", `Saved workspace extra arguments contain the reserved option ${JSON.stringify(reserved)}. Open the workspace launch configuration and remove it and its value before starting a session.`);
+      throw new HostOpError(
+        400,
+        "stored_reserved_launch_arg",
+        `Saved workspace extra arguments contain the reserved option ${JSON.stringify(reserved)}. Open the workspace launch configuration and remove it and its value before starting a session.`,
+      );
     }
     args.push(...launchConfig.extraArgs);
   }
@@ -99,7 +130,10 @@ export function resolveSpawnCwd(recordedCwd?: string | null): string {
  * directory the sidebar/header still advertises — a silent wrong-tree fallback
  * would let file tool calls edit an unexpected repo with no signal.
  */
-export function resolveSpawnCwdResult(recordedCwd?: string | null): { cwd: string; fellBack: boolean } {
+export function resolveSpawnCwdResult(recordedCwd?: string | null): {
+  cwd: string;
+  fellBack: boolean;
+} {
   // A file at the path exists but cannot be a cwd: spawn() would fail with ENOTDIR.
   const isDirectory = (path: string) => {
     try {
@@ -108,10 +142,12 @@ export function resolveSpawnCwdResult(recordedCwd?: string | null): { cwd: strin
       return false;
     }
   };
-  if (recordedCwd && isDirectory(recordedCwd)) return { cwd: recordedCwd, fellBack: false };
+  if (recordedCwd && isDirectory(recordedCwd))
+    return { cwd: recordedCwd, fellBack: false };
   try {
     const serverCwd = process.cwd();
-    if (serverCwd && isDirectory(serverCwd)) return { cwd: serverCwd, fellBack: true };
+    if (serverCwd && isDirectory(serverCwd))
+      return { cwd: serverCwd, fellBack: true };
   } catch {
     // process.cwd() itself throws when the server's own cwd was removed.
   }
@@ -119,12 +155,20 @@ export function resolveSpawnCwdResult(recordedCwd?: string | null): { cwd: strin
 }
 
 /** Look up the workspace-registered launch config; unregistered projects attach none. */
-export async function launchConfigForCwd(cwd: string): Promise<ProjectLaunchConfig | undefined> {
+export async function launchConfigForCwd(
+  cwd: string,
+): Promise<ProjectLaunchConfig | undefined> {
   let canonical = cwd;
-  try { canonical = realpathSync(cwd); } catch {}
-  const projects = loadProjectRegistry().projects.filter((project) => !project.hidden);
+  try {
+    canonical = realpathSync(cwd);
+  } catch {}
+  const projects = loadProjectRegistry().projects.filter(
+    (project) => !project.hidden,
+  );
   const key = comparableProjectPath(canonical);
-  const direct = projects.find((project) => comparableProjectPath(project.path) === key);
+  const direct = projects.find(
+    (project) => comparableProjectPath(project.path) === key,
+  );
   if (direct) return direct.launchConfig;
   const { projectRoot } = await resolveProject(canonical);
   const rootKey = comparableProjectPath(projectRoot);
@@ -146,9 +190,18 @@ export const localHost: Omit<Host, "workspaceOps" | "supportsWorkspaceOp"> = {
     const launchConfig = await launchConfigForCwd(cwd);
     if (request.creationId !== undefined) {
       try {
-        if (!statSync(cwd).isDirectory() || comparableProjectPath(realpathSync(cwd)) !== comparableProjectPath(cwd)) throw new Error("Prepared cwd changed");
+        if (
+          !statSync(cwd).isDirectory() ||
+          comparableProjectPath(realpathSync(cwd)) !==
+            comparableProjectPath(cwd)
+        )
+          throw new Error("Prepared cwd changed");
       } catch {
-        throw new HostOpError(409, "prepared_cwd_changed", "The prepared worktree is no longer available");
+        throw new HostOpError(
+          409,
+          "prepared_cwd_changed",
+          "The prepared worktree is no longer available",
+        );
       }
     }
     const transport = spawnOmpTransport({
@@ -156,7 +209,15 @@ export const localHost: Omit<Host, "workspaceOps" | "supportsWorkspaceOp"> = {
       // Re-read per spawn so a respawn picks up environment values the user
       // added in Settings after the session was created (#104).
       env: { ...getAgentEnvOverrides(), ...options?.env },
-      extraArgs: [...buildSessionSpawnArgs(request.sessionFile, request.toolNames, request.advisor, launchConfig, request.spawnModel)],
+      extraArgs: [
+        ...buildSessionSpawnArgs(
+          request.sessionFile,
+          request.toolNames,
+          request.advisor,
+          launchConfig,
+          request.spawnModel,
+        ),
+      ],
     });
     return {
       transport,
@@ -181,7 +242,9 @@ export const localHost: Omit<Host, "workspaceOps" | "supportsWorkspaceOp"> = {
   autoApproveExtension() {
     // Only the "Allow tool: <name>" confirmation is covered (see the wrapper).
     try {
-      return readNativeSettings().settings.tools?.approval?.extension === "allow";
+      return (
+        readNativeSettings().settings.tools?.approval?.extension === "allow"
+      );
     } catch {
       // A malformed config must not prevent normal interactive approval.
       return false;

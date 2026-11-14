@@ -17,19 +17,39 @@ import { createJsonParsePlugin } from "../node_modules/@oh-my-pi/pi-coding-agent
 import { createLegacyPiVirtualModulePlugin } from "../node_modules/@oh-my-pi/pi-coding-agent/scripts/legacy-pi-virtual-module";
 
 interface Target {
-	/** Native addon platform tag (`process.platform`). */
-	readonly platform: string;
-	readonly arch: string;
-	readonly bun: Bun.Build.CompileTarget;
-	readonly outName: string;
+  /** Native addon platform tag (`process.platform`). */
+  readonly platform: string;
+  readonly arch: string;
+  readonly bun: Bun.Build.CompileTarget;
+  readonly outName: string;
 }
 
 // The four targets omp's release ships to glibc/macOS users.
 const TARGETS: Record<string, Target> = {
-	"linux-x64": { platform: "linux", arch: "x64", bun: "bun-linux-x64-baseline", outName: "ompweb-omp-linux-x64" },
-	"linux-arm64": { platform: "linux", arch: "arm64", bun: "bun-linux-arm64", outName: "ompweb-omp-linux-arm64" },
-	"darwin-x64": { platform: "darwin", arch: "x64", bun: "bun-darwin-x64", outName: "ompweb-omp-darwin-x64" },
-	"darwin-arm64": { platform: "darwin", arch: "arm64", bun: "bun-darwin-arm64", outName: "ompweb-omp-darwin-arm64" },
+  "linux-x64": {
+    platform: "linux",
+    arch: "x64",
+    bun: "bun-linux-x64-baseline",
+    outName: "ompweb-omp-linux-x64",
+  },
+  "linux-arm64": {
+    platform: "linux",
+    arch: "arm64",
+    bun: "bun-linux-arm64",
+    outName: "ompweb-omp-linux-arm64",
+  },
+  "darwin-x64": {
+    platform: "darwin",
+    arch: "x64",
+    bun: "bun-darwin-x64",
+    outName: "ompweb-omp-darwin-x64",
+  },
+  "darwin-arm64": {
+    platform: "darwin",
+    arch: "arm64",
+    bun: "bun-darwin-arm64",
+    outName: "ompweb-omp-darwin-arm64",
+  },
 };
 
 /** Never bundled: omp installs them on demand at runtime (upstream `COMPILED_EXTERNAL_DEPENDENCIES`). */
@@ -39,135 +59,194 @@ const ADDON_ZSTD_LEVEL = 19;
 const runnerDir = path.resolve(import.meta.dir, "..");
 
 function packageDir(name: string, from: string): string {
-	// Every package here maps `.` to a file one level below its root (`src/index.ts`, `native/index.js`).
-	return path.dirname(path.dirname(Bun.resolveSync(name, from)));
+  // Every package here maps `.` to a file one level below its root (`src/index.ts`, `native/index.js`).
+  return path.dirname(path.dirname(Bun.resolveSync(name, from)));
 }
 
 const codingAgentDir = packageDir("@oh-my-pi/pi-coding-agent", runnerDir);
-const nativesDir = await fs.realpath(path.join(packageDir("@oh-my-pi/pi-natives", runnerDir), "native"));
-const statsDir = await fs.realpath(packageDir("@oh-my-pi/omp-stats", codingAgentDir));
+const nativesDir = await fs.realpath(
+  path.join(packageDir("@oh-my-pi/pi-natives", runnerDir), "native"),
+);
+const statsDir = await fs.realpath(
+  packageDir("@oh-my-pi/omp-stats", codingAgentDir),
+);
 
 async function readVersion(manifestPath: string): Promise<string> {
-	const manifest: unknown = await Bun.file(manifestPath).json();
-	if (typeof manifest !== "object" || manifest === null || !("version" in manifest)) {
-		throw new Error(`${manifestPath} has no version`);
-	}
-	return String(manifest.version);
+  const manifest: unknown = await Bun.file(manifestPath).json();
+  if (
+    typeof manifest !== "object" ||
+    manifest === null ||
+    !("version" in manifest)
+  ) {
+    throw new Error(`${manifestPath} has no version`);
+  }
+  return String(manifest.version);
 }
 
 /**
  * Replaces pi-natives' null `embedded-addon.js` with a manifest pointing at one zstd frame per addon
  * variant, which the loader extracts on first run (upstream `natives/scripts/embed-native.ts`).
  */
-async function embeddedAddonFiles(target: Target): Promise<Record<string, string | Uint8Array>> {
-	const platformTag = `${target.platform}-${target.arch}`;
-	const leafPackage = `@oh-my-pi/pi-natives-${platformTag}`;
-	let leafManifest: string;
-	try {
-		leafManifest = Bun.resolveSync(`${leafPackage}/package.json`, nativesDir);
-	} catch (error) {
-		throw new Error(
-			`${leafPackage} is not installed; run \`bun install --os=${target.platform} --cpu=${target.arch}\``,
-			{ cause: error },
-		);
-	}
-	const version = await readVersion(path.join(nativesDir, "..", "package.json"));
-	const leafVersion = await readVersion(leafManifest);
-	if (leafVersion !== version) throw new Error(`${leafPackage}@${leafVersion} does not match pi-natives@${version}`);
+async function embeddedAddonFiles(
+  target: Target,
+): Promise<Record<string, string | Uint8Array>> {
+  const platformTag = `${target.platform}-${target.arch}`;
+  const leafPackage = `@oh-my-pi/pi-natives-${platformTag}`;
+  let leafManifest: string;
+  try {
+    leafManifest = Bun.resolveSync(`${leafPackage}/package.json`, nativesDir);
+  } catch (error) {
+    throw new Error(
+      `${leafPackage} is not installed; run \`bun install --os=${target.platform} --cpu=${target.arch}\``,
+      { cause: error },
+    );
+  }
+  const version = await readVersion(
+    path.join(nativesDir, "..", "package.json"),
+  );
+  const leafVersion = await readVersion(leafManifest);
+  if (leafVersion !== version)
+    throw new Error(
+      `${leafPackage}@${leafVersion} does not match pi-natives@${version}`,
+    );
 
-	const leafDir = path.dirname(leafManifest);
-	const candidates =
-		target.arch === "x64"
-			? [
-					{ variant: "modern", filename: `pi_natives.${platformTag}-modern.node` },
-					{ variant: "baseline", filename: `pi_natives.${platformTag}-baseline.node` },
-				]
-			: [{ variant: "default", filename: `pi_natives.${platformTag}.node` }];
-	const present = new Set(await fs.readdir(leafDir));
-	const available = await Promise.all(
-		candidates
-			.filter(candidate => present.has(candidate.filename))
-			.map(async candidate => ({ ...candidate, bytes: await Bun.file(path.join(leafDir, candidate.filename)).bytes() })),
-	);
-	if (available.length === 0) throw new Error(`${leafPackage} has no pi_natives addon in ${leafDir}`);
+  const leafDir = path.dirname(leafManifest);
+  const candidates =
+    target.arch === "x64"
+      ? [
+          {
+            variant: "modern",
+            filename: `pi_natives.${platformTag}-modern.node`,
+          },
+          {
+            variant: "baseline",
+            filename: `pi_natives.${platformTag}-baseline.node`,
+          },
+        ]
+      : [{ variant: "default", filename: `pi_natives.${platformTag}.node` }];
+  const present = new Set(await fs.readdir(leafDir));
+  const available = await Promise.all(
+    candidates
+      .filter((candidate) => present.has(candidate.filename))
+      .map(async (candidate) => ({
+        ...candidate,
+        bytes: await Bun.file(path.join(leafDir, candidate.filename)).bytes(),
+      })),
+  );
+  if (available.length === 0)
+    throw new Error(`${leafPackage} has no pi_natives addon in ${leafDir}`);
 
-	const frames = await Promise.all(available.map(({ bytes }) => Bun.zstdCompress(bytes, { level: ADDON_ZSTD_LEVEL })));
-	const imports = available.map(
-		({ filename }, index) => `import zstdPath${index} from ${JSON.stringify(`./${filename}.zst`)} with { type: "file" };`,
-	);
-	const files = available.map(
-		({ variant, filename, bytes }, index) =>
-			`{ variant: ${JSON.stringify(variant)}, filename: ${JSON.stringify(filename)}, size: ${bytes.length}, zstdPath: zstdPath${index} }`,
-	);
-	const overrides: Record<string, string | Uint8Array> = {
-		[path.join(nativesDir, "embedded-addon.js")]: `${imports.join("\n")}
+  const frames = await Promise.all(
+    available.map(({ bytes }) =>
+      Bun.zstdCompress(bytes, { level: ADDON_ZSTD_LEVEL }),
+    ),
+  );
+  const imports = available.map(
+    ({ filename }, index) =>
+      `import zstdPath${index} from ${JSON.stringify(`./${filename}.zst`)} with { type: "file" };`,
+  );
+  const files = available.map(
+    ({ variant, filename, bytes }, index) =>
+      `{ variant: ${JSON.stringify(variant)}, filename: ${JSON.stringify(filename)}, size: ${bytes.length}, zstdPath: zstdPath${index} }`,
+  );
+  const overrides: Record<string, string | Uint8Array> = {
+    [path.join(nativesDir, "embedded-addon.js")]: `${imports.join("\n")}
 export const embeddedAddon = {
 	platformTag: ${JSON.stringify(platformTag)},
 	version: ${JSON.stringify(version)},
 	files: [${files.join(", ")}],
 };
 `,
-	};
-	available.forEach(({ filename }, index) => {
-		overrides[path.join(nativesDir, `${filename}.zst`)] = frames[index];
-	});
-	return overrides;
+  };
+  available.forEach(({ filename }, index) => {
+    overrides[path.join(nativesDir, `${filename}.zst`)] = frames[index];
+  });
+  return overrides;
 }
 
 /** The `omp stats` dashboard as the base64 gzip tar omp-stats serves when compiled (upstream `gen:stats`). */
 async function embeddedStatsClient(): Promise<Record<string, string>> {
-	const clientDir = path.join(statsDir, "dist", "client");
-	const entries: Record<string, Uint8Array> = {};
-	for await (const file of new Bun.Glob("**/*").scan({ cwd: clientDir, onlyFiles: true })) {
-		entries[file.split(path.sep).join("/")] = await Bun.file(path.join(clientDir, file)).bytes();
-	}
-	if (!entries["index.html"]) throw new Error(`omp-stats ships no dashboard in ${clientDir}`);
-	const archive = Bun.gzipSync(await new Bun.Archive(entries).bytes(), { level: 9 });
-	return { [path.join(statsDir, "src", "embedded-client.generated.txt")]: Buffer.from(archive).toString("base64") };
+  const clientDir = path.join(statsDir, "dist", "client");
+  const entries: Record<string, Uint8Array> = {};
+  for await (const file of new Bun.Glob("**/*").scan({
+    cwd: clientDir,
+    onlyFiles: true,
+  })) {
+    entries[file.split(path.sep).join("/")] = await Bun.file(
+      path.join(clientDir, file),
+    ).bytes();
+  }
+  if (!entries["index.html"])
+    throw new Error(`omp-stats ships no dashboard in ${clientDir}`);
+  const archive = Bun.gzipSync(await new Bun.Archive(entries).bytes(), {
+    level: 9,
+  });
+  return {
+    [path.join(statsDir, "src", "embedded-client.generated.txt")]:
+      Buffer.from(archive).toString("base64"),
+  };
 }
 
-async function build(id: string, target: Target, statsClient: Record<string, string>, docsEmbed: string): Promise<void> {
-	const outfile = path.join(runnerDir, "release", target.outName);
-	console.log(`Building ${path.relative(runnerDir, outfile)}...`);
-	const output = await Bun.build({
-		entrypoints: [path.join(runnerDir, "src", "cli.ts")],
-		root: runnerDir,
-		external: EXTERNAL,
-		files: { ...(await embeddedAddonFiles(target)), ...statsClient },
-		define: {
-			"process.env.PI_COMPILED": JSON.stringify("true"),
-			"process.env.PI_DOCS_EMBED": JSON.stringify(docsEmbed),
-		},
-		format: "esm",
-		bytecode: true,
-		splitting: true,
-		// Upstream's `chunks/[name]-[hash]` collides here: type-only modules from different packages
-		// (`pi-tui/src/render/types.ts`, `pi-coding-agent/src/dap/types.ts`) emit identical chunks.
-		naming: { chunk: "chunks/[dir]/[name]-[hash].[ext]" },
-		minify: { identifiers: true, keepNames: true },
-		plugins: [createJsonParsePlugin(), await createLegacyPiVirtualModulePlugin()],
-		compile: {
-			execArgv: [`--user-agent=${USER_AGENT}`],
-			target: target.bun,
-			outfile,
-			autoloadBunfig: false,
-			autoloadDotenv: false,
-			autoloadTsconfig: false,
-			autoloadPackageJson: false,
-		},
-		throw: false,
-	});
-	if (!output.success) throw new Error(`${id}: bundle failed:\n${output.logs.map(log => log.message).join("\n")}`);
-	// shortcut: darwin binaries carry only Bun's built-in ad-hoc signature (no hardened runtime, no
-	// entitlements); add omp's Developer ID signing step before distributing outside our own machines.
+async function build(
+  id: string,
+  target: Target,
+  statsClient: Record<string, string>,
+  docsEmbed: string,
+): Promise<void> {
+  const outfile = path.join(runnerDir, "release", target.outName);
+  console.log(`Building ${path.relative(runnerDir, outfile)}...`);
+  const output = await Bun.build({
+    entrypoints: [path.join(runnerDir, "src", "cli.ts")],
+    root: runnerDir,
+    external: EXTERNAL,
+    files: { ...(await embeddedAddonFiles(target)), ...statsClient },
+    define: {
+      "process.env.PI_COMPILED": JSON.stringify("true"),
+      "process.env.PI_DOCS_EMBED": JSON.stringify(docsEmbed),
+    },
+    format: "esm",
+    bytecode: true,
+    splitting: true,
+    // Upstream's `chunks/[name]-[hash]` collides here: type-only modules from different packages
+    // (`pi-tui/src/render/types.ts`, `pi-coding-agent/src/dap/types.ts`) emit identical chunks.
+    naming: { chunk: "chunks/[dir]/[name]-[hash].[ext]" },
+    minify: { identifiers: true, keepNames: true },
+    plugins: [
+      createJsonParsePlugin(),
+      await createLegacyPiVirtualModulePlugin(),
+    ],
+    compile: {
+      execArgv: [`--user-agent=${USER_AGENT}`],
+      target: target.bun,
+      outfile,
+      autoloadBunfig: false,
+      autoloadDotenv: false,
+      autoloadTsconfig: false,
+      autoloadPackageJson: false,
+    },
+    throw: false,
+  });
+  if (!output.success)
+    throw new Error(
+      `${id}: bundle failed:\n${output.logs.map((log) => log.message).join("\n")}`,
+    );
+  // shortcut: darwin binaries carry only Bun's built-in ad-hoc signature (no hardened runtime, no
+  // entitlements); add omp's Developer ID signing step before distributing outside our own machines.
 }
 
 const hostId = `${process.platform}-${process.arch}`;
 const ids = process.argv.length > 2 ? process.argv.slice(2) : [hostId];
 for (const id of ids) {
-	if (!TARGETS[id]) throw new Error(`unknown target ${id}; expected one of ${Object.keys(TARGETS).join(", ")}`);
+  if (!TARGETS[id])
+    throw new Error(
+      `unknown target ${id}; expected one of ${Object.keys(TARGETS).join(", ")}`,
+    );
 }
 // npm packs the docs corpus the compiled binary would otherwise embed from the monorepo's `docs/`.
-const docsEmbed = (await Bun.file(path.join(codingAgentDir, "dist", "docs-index.generated.txt")).text()).trimEnd();
+const docsEmbed = (
+  await Bun.file(
+    path.join(codingAgentDir, "dist", "docs-index.generated.txt"),
+  ).text()
+).trimEnd();
 const statsClient = await embeddedStatsClient();
 for (const id of ids) await build(id, TARGETS[id], statsClient, docsEmbed);

@@ -34,11 +34,13 @@ function megabytes(bytes: number): number {
 }
 
 function isBase64DataChar(code: number): boolean {
-  return (code >= 0x41 && code <= 0x5a)
-    || (code >= 0x61 && code <= 0x7a)
-    || (code >= 0x30 && code <= 0x39)
-    || code === 0x2b
-    || code === 0x2f;
+  return (
+    (code >= 0x41 && code <= 0x5a) ||
+    (code >= 0x61 && code <= 0x7a) ||
+    (code >= 0x30 && code <= 0x39) ||
+    code === 0x2b ||
+    code === 0x2f
+  );
 }
 
 export function getBase64DecodedByteLength(data: string): number | null {
@@ -60,21 +62,31 @@ const attachedSizes = new WeakMap<object, number>();
  *  the inline budget on every render, and rescanning megabytes of base64 per upload chip stalls typing. */
 export function attachedImageBytes(image: { readonly data: string }): number {
   let bytes = attachedSizes.get(image);
-  if (bytes === undefined) attachedSizes.set(image, (bytes = getBase64DecodedByteLength(image.data) ?? 0));
+  if (bytes === undefined)
+    attachedSizes.set(
+      image,
+      (bytes = getBase64DecodedByteLength(image.data) ?? 0),
+    );
   return bytes;
 }
 
 function getImageByteLengthWithinLimits(value: unknown): number | null {
   if (!value || typeof value !== "object") return null;
   const image = value as Partial<Base64ImageAttachment>;
-  if (typeof image.data !== "string" || typeof image.mimeType !== "string" || !image.mimeType.startsWith("image/")) {
+  if (
+    typeof image.data !== "string" ||
+    typeof image.mimeType !== "string" ||
+    !image.mimeType.startsWith("image/")
+  ) {
     return null;
   }
   const bytes = getBase64DecodedByteLength(image.data);
   return bytes !== null && bytes <= MAX_ATTACHED_IMAGE_BYTES ? bytes : null;
 }
 
-export function isBase64ImageWithinLimits(value: unknown): value is Base64ImageAttachment {
+export function isBase64ImageWithinLimits(
+  value: unknown,
+): value is Base64ImageAttachment {
   return getImageByteLengthWithinLimits(value) !== null;
 }
 
@@ -103,7 +115,11 @@ export function validateAgentImages(value: unknown): string | null {
   if (value === undefined) return null;
   if (!Array.isArray(value)) return "images must be an array";
   for (const image of value) {
-    if (!image || typeof image !== "object" || (image as { type?: unknown }).type !== "image") {
+    if (
+      !image ||
+      typeof image !== "object" ||
+      (image as { type?: unknown }).type !== "image"
+    ) {
       return "Each attachment must be an image";
     }
   }
@@ -118,10 +134,16 @@ function jsonStringByteLength(value: string): number {
 /** Size of the JSON command body an outgoing prompt produces. Base64 data is
  * ASCII and needs no escaping, so it is measured by length instead of being
  * re-serialized. */
-export function getAgentRequestByteLength(message: string, images: readonly Base64ImageAttachment[] = []): number {
+export function getAgentRequestByteLength(
+  message: string,
+  images: readonly Base64ImageAttachment[] = [],
+): number {
   let bytes = COMMAND_ENVELOPE_BYTES + jsonStringByteLength(message);
   for (const image of images) {
-    bytes += IMAGE_ENTRY_OVERHEAD_BYTES + image.data.length + jsonStringByteLength(image.mimeType);
+    bytes +=
+      IMAGE_ENTRY_OVERHEAD_BYTES +
+      image.data.length +
+      jsonStringByteLength(image.mimeType);
   }
   return bytes;
 }
@@ -134,7 +156,9 @@ export function validateOutgoingPrompt(
 ): string | null {
   const imageError = validateImageBudget(images);
   if (imageError) return imageError;
-  if (getAgentRequestByteLength(message, images) > MAX_AGENT_COMMAND_REQUEST_BYTES) {
+  if (
+    getAgentRequestByteLength(message, images) > MAX_AGENT_COMMAND_REQUEST_BYTES
+  ) {
     return `This message is too large to send: keep it under ${megabytes(MAX_AGENT_COMMAND_REQUEST_BYTES)}MB including attachments.`;
   }
   return null;

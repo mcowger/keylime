@@ -14,16 +14,26 @@ import { useEffect } from "react";
 export function IosFocusZoomGuard() {
   useEffect(() => {
     const { userAgent, platform, maxTouchPoints } = navigator;
-    const isIos = /iP(hone|ad|od)/.test(userAgent) || (platform === "MacIntel" && maxTouchPoints > 1);
+    const isIos =
+      /iP(hone|ad|od)/.test(userAgent) ||
+      (platform === "MacIntel" && maxTouchPoints > 1);
     if (!isIos) return;
     const apply = () => {
-      document.querySelectorAll<HTMLMetaElement>('meta[name="viewport"]').forEach((meta) => {
-        if (!meta.content.includes("maximum-scale")) meta.content += ", maximum-scale=1";
-      });
+      document
+        .querySelectorAll<HTMLMetaElement>('meta[name="viewport"]')
+        .forEach((meta) => {
+          if (!meta.content.includes("maximum-scale"))
+            meta.content += ", maximum-scale=1";
+        });
     };
     apply();
     const observer = new MutationObserver(apply);
-    observer.observe(document.head, { childList: true, subtree: true, attributes: true, attributeFilter: ["content"] });
+    observer.observe(document.head, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["content"],
+    });
     return () => observer.disconnect();
   }, []);
   return null;

@@ -39,7 +39,10 @@ export interface SessionHistoryPage {
   hasMore: boolean;
 }
 
-export interface SessionHistoryRange extends Omit<SessionHistoryPage, "context"> {
+export interface SessionHistoryRange extends Omit<
+  SessionHistoryPage,
+  "context"
+> {
   start: number;
   end: number;
 }
@@ -53,7 +56,9 @@ export interface SessionSyncResponse extends SessionHistoryPage {
 
 export const MAX_SYNC_MESSAGES = 200;
 
-export function historyCursor(context: Pick<SessionContext, "entryIds">): SessionHistoryCursor {
+export function historyCursor(
+  context: Pick<SessionContext, "entryIds">,
+): SessionHistoryCursor {
   return {
     firstEntryId: context.entryIds[0] ?? null,
     lastEntryId: context.entryIds.at(-1) ?? null,
@@ -61,15 +66,23 @@ export function historyCursor(context: Pick<SessionContext, "entryIds">): Sessio
 }
 
 /** Decode only bounded IDs; a cursor never authorizes a session or a file path. */
-export function parseHistoryCursor(raw: string | null): SessionHistoryCursor | null {
+export function parseHistoryCursor(
+  raw: string | null,
+): SessionHistoryCursor | null {
   if (raw === null) return null;
   if (raw.length > 2048) throw new Error("Invalid history cursor");
   const value: unknown = JSON.parse(raw);
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid history cursor");
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Invalid history cursor");
   const cursor = value as Record<string, unknown>;
-  const validId = (id: unknown): id is string | null => id === null || (typeof id === "string" && id.length > 0 && id.length <= 256);
-  if (!validId(cursor.firstEntryId) || !validId(cursor.lastEntryId)
-    || (cursor.firstEntryId === null) !== (cursor.lastEntryId === null)) {
+  const validId = (id: unknown): id is string | null =>
+    id === null ||
+    (typeof id === "string" && id.length > 0 && id.length <= 256);
+  if (
+    !validId(cursor.firstEntryId) ||
+    !validId(cursor.lastEntryId) ||
+    (cursor.firstEntryId === null) !== (cursor.lastEntryId === null)
+  ) {
     throw new Error("Invalid history cursor");
   }
   return { firstEntryId: cursor.firstEntryId, lastEntryId: cursor.lastEntryId };
@@ -81,10 +94,18 @@ export function selectSessionHistory(
   cursor: SessionHistoryCursor | null,
   limit = MAX_SYNC_MESSAGES,
 ): SessionHistoryPage {
-  const { start, end, ...page } = selectHistoryRange(context.entryIds, cursor, limit);
+  const { start, end, ...page } = selectHistoryRange(
+    context.entryIds,
+    cursor,
+    limit,
+  );
   return {
     ...page,
-    context: { ...context, messages: context.messages.slice(start, end), entryIds: context.entryIds.slice(start, end) },
+    context: {
+      ...context,
+      messages: context.messages.slice(start, end),
+      entryIds: context.entryIds.slice(start, end),
+    },
   };
 }
 
@@ -95,13 +116,19 @@ export function selectHistoryRange(
   limit = MAX_SYNC_MESSAGES,
   positions?: ReadonlyMap<string, number>,
 ): SessionHistoryRange {
-  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SYNC_MESSAGES) throw new RangeError("Invalid history page limit");
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SYNC_MESSAGES)
+    throw new RangeError("Invalid history page limit");
   const firstEntryId = entryIds[0] ?? null;
   const cursorIndex = cursor?.lastEntryId
-    ? positions ? positions.get(cursor.lastEntryId) ?? -1 : entryIds.indexOf(cursor.lastEntryId)
+    ? positions
+      ? (positions.get(cursor.lastEntryId) ?? -1)
+      : entryIds.indexOf(cursor.lastEntryId)
     : -1;
-  const append = cursor !== null && cursor.firstEntryId === firstEntryId
-    && ((cursorIndex >= 0 && entryIds[cursorIndex] === cursor.lastEntryId) || (cursor.lastEntryId === null && entryIds.length === 0));
+  const append =
+    cursor !== null &&
+    cursor.firstEntryId === firstEntryId &&
+    ((cursorIndex >= 0 && entryIds[cursorIndex] === cursor.lastEntryId) ||
+      (cursor.lastEntryId === null && entryIds.length === 0));
   const start = append ? cursorIndex + 1 : 0;
   const end = Math.min(start + limit, entryIds.length);
   return {

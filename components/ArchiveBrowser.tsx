@@ -1,10 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { useI18n } from "@/lib/i18n";
 import { formatApiError } from "@/lib/i18n/api-error";
 import { copyText } from "@/lib/clipboard";
-import { Dialog, DialogContent, DialogTitle, DialogClose, Tooltip } from "./ui/primitives";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogClose,
+  Tooltip,
+} from "./ui/primitives";
 import { toast } from "./ui/toast";
 import type { ArchivedSessionInfo } from "@/lib/types";
 import { useHostRows } from "@/hooks/useHostRows";
@@ -34,7 +47,8 @@ export interface ArchiveBrowserProps {
 }
 
 /** Identity across hosts: two hosts can hold an archive under the same key. */
-const archiveId = (archive: ArchivedSessionInfo) => `${archive.hostId ?? "local"}:${archive.key}`;
+const archiveId = (archive: ArchivedSessionInfo) =>
+  `${archive.hostId ?? "local"}:${archive.key}`;
 
 export function formatArchiveSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
@@ -43,7 +57,10 @@ export function formatArchiveSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function formatArchiveRelativeTime(value: string, now: number): string | null {
+export function formatArchiveRelativeTime(
+  value: string,
+  now: number,
+): string | null {
   const timestamp = new Date(value).getTime();
   if (!Number.isFinite(timestamp)) return null;
 
@@ -62,7 +79,10 @@ export function formatArchiveRelativeTime(value: string, now: number): string | 
   return `${Math.floor(months / 12)}y`;
 }
 
-export function formatArchiveDateTime(isoString: string, locale: string): string {
+export function formatArchiveDateTime(
+  isoString: string,
+  locale: string,
+): string {
   try {
     const d = new Date(isoString);
     if (Number.isNaN(d.getTime())) return isoString;
@@ -82,7 +102,10 @@ export function formatArchiveDateTime(isoString: string, locale: string): string
 function StatusBadge({ status }: { status?: ArchivedSessionInfo["status"] }) {
   if (!status) return null;
 
-  const colorMap: Record<string, { bg: string; color: string; border: string }> = {
+  const colorMap: Record<
+    string,
+    { bg: string; color: string; border: string }
+  > = {
     complete: {
       bg: "color-mix(in srgb, var(--status-success) 12%, transparent)",
       color: "var(--status-success)",
@@ -148,7 +171,12 @@ export function MetadataRow({
   mono = false,
   action,
 }: {
-  icon: React.ComponentType<{ size?: number; className?: string; style?: CSSProperties; "aria-hidden"?: boolean | "true" | "false" }>;
+  icon: React.ComponentType<{
+    size?: number;
+    className?: string;
+    style?: CSSProperties;
+    "aria-hidden"?: boolean | "true" | "false";
+  }>;
   label: string;
   value: React.ReactNode;
   mono?: boolean;
@@ -184,7 +212,11 @@ export function MetadataRow({
         <Icon size={14} aria-hidden="true" />
       </div>
       <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
-        <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 2 }}>{label}</div>
+        <div
+          style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 2 }}
+        >
+          {label}
+        </div>
         <div
           style={{
             fontSize: 12,
@@ -205,7 +237,11 @@ export function MetadataRow({
   );
 }
 
-export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProps) {
+export function ArchiveBrowser({
+  open,
+  onClose,
+  onRestored,
+}: ArchiveBrowserProps) {
   const { t, locale } = useI18n();
   const [archives, setArchives] = useState<ArchivedSessionInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -214,15 +250,20 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [restoringKey, setRestoringKey] = useState<string | null>(null);
-  const [unavailableHosts, setUnavailableHosts] = useState<{ id: string; label: string }[]>([]);
+  const [unavailableHosts, setUnavailableHosts] = useState<
+    { id: string; label: string }[]
+  >([]);
   const [copiedId, setCopiedId] = useState(false);
   const [relativeTimeNow] = useState(() => Date.now());
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { hosts: hostRows } = useHostRows();
-  const hostLabel = useCallback((hostId: string) => {
-    const row = hostRows?.find((host) => host.id === hostId);
-    return row ? hostName(t, row) : hostId;
-  }, [hostRows, t]);
+  const hostLabel = useCallback(
+    (hostId: string) => {
+      const row = hostRows?.find((host) => host.id === hostId);
+      return row ? hostName(t, row) : hostId;
+    },
+    [hostRows, t],
+  );
 
   const fetchArchives = useCallback(async (isManualRefresh = false) => {
     if (isManualRefresh) setRefreshing(true);
@@ -232,15 +273,24 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
     try {
       const res = await fetch("/api/sessions/archive");
       if (!res.ok) {
-        const payload = await res.json().catch(() => ({})) as { error?: string; code?: string };
+        const payload = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          code?: string;
+        };
         throw new Error(formatApiError(payload, `errors.http${res.status}`));
       }
-      const data = (await res.json()) as { archives?: ArchivedSessionInfo[]; unavailableHosts?: { id: string; label: string }[] };
+      const data = (await res.json()) as {
+        archives?: ArchivedSessionInfo[];
+        unavailableHosts?: { id: string; label: string }[];
+      };
       const items = Array.isArray(data.archives) ? data.archives : [];
       setArchives(items);
-      setUnavailableHosts(Array.isArray(data.unavailableHosts) ? data.unavailableHosts : []);
+      setUnavailableHosts(
+        Array.isArray(data.unavailableHosts) ? data.unavailableHosts : [],
+      );
       setSelectedKey((prevKey) => {
-        if (prevKey && items.some((item) => archiveId(item) === prevKey)) return prevKey;
+        if (prevKey && items.some((item) => archiveId(item) === prevKey))
+          return prevKey;
         return items.length > 0 ? archiveId(items[0]) : null;
       });
     } catch (err) {
@@ -283,7 +333,9 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
         cwd.includes(query) ||
         firstMessage.includes(query) ||
         status.includes(query) ||
-        hostLabel(archive.hostId ?? "local").toLowerCase().includes(query)
+        hostLabel(archive.hostId ?? "local")
+          .toLowerCase()
+          .includes(query)
       );
     });
   }, [archives, searchQuery, hostLabel]);
@@ -291,7 +343,10 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
   // Update selectedKey if current selection is filtered out
   useEffect(() => {
     if (filteredArchives.length > 0) {
-      if (!selectedKey || !filteredArchives.some((item) => archiveId(item) === selectedKey)) {
+      if (
+        !selectedKey ||
+        !filteredArchives.some((item) => archiveId(item) === selectedKey)
+      ) {
         setSelectedKey(archiveId(filteredArchives[0]));
       }
     } else {
@@ -304,16 +359,19 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
     return archives.find((a) => archiveId(a) === selectedKey) ?? null;
   }, [archives, selectedKey]);
 
-  const handleCopyId = useCallback(async (id: string) => {
-    try {
-      await copyText(id);
-      setCopiedId(true);
-      setTimeout(() => setCopiedId(false), 2000);
-      toast.success(t("archiveBrowser.copied"));
-    } catch {
-      toast.error(t("appShell.commandCopyFailed"));
-    }
-  }, [t]);
+  const handleCopyId = useCallback(
+    async (id: string) => {
+      try {
+        await copyText(id);
+        setCopiedId(true);
+        setTimeout(() => setCopiedId(false), 2000);
+        toast.success(t("archiveBrowser.copied"));
+      } catch {
+        toast.error(t("appShell.commandCopyFailed"));
+      }
+    },
+    [t],
+  );
 
   const handleRestore = useCallback(
     async (archive: ArchivedSessionInfo) => {
@@ -326,21 +384,35 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ key: archive.key, hostId: archive.hostId ?? "local" }),
+          body: JSON.stringify({
+            key: archive.key,
+            hostId: archive.hostId ?? "local",
+          }),
         });
 
         if (!res.ok) {
-          const payload = await res.json().catch(() => ({})) as { error?: string; code?: string; host?: string };
-          throw new Error(payload.code === "host_offline" && payload.host
-            ? t("archiveBrowser.restoreHostOffline", { host: payload.host })
-            : formatApiError(payload, `errors.http${res.status}`));
+          const payload = (await res.json().catch(() => ({}))) as {
+            error?: string;
+            code?: string;
+            host?: string;
+          };
+          throw new Error(
+            payload.code === "host_offline" && payload.host
+              ? t("archiveBrowser.restoreHostOffline", { host: payload.host })
+              : formatApiError(payload, `errors.http${res.status}`),
+          );
         }
 
         const data = (await res.json()) as { ok?: boolean; sessionId?: string };
         const restoredId = data.sessionId || archive.id;
-        toast.success(t("archiveBrowser.restoreSuccess", {
-          name: archive.name || archive.firstMessage.slice(0, 30) || archive.id.slice(0, 10),
-        }));
+        toast.success(
+          t("archiveBrowser.restoreSuccess", {
+            name:
+              archive.name ||
+              archive.firstMessage.slice(0, 30) ||
+              archive.id.slice(0, 10),
+          }),
+        );
         onRestored(restoredId);
         onClose();
       } catch (err) {
@@ -354,7 +426,12 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
   );
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+    >
       <DialogContent
         ariaLabel={t("archiveBrowser.title")}
         style={{
@@ -378,7 +455,13 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
             background: "var(--bg)",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div
                 style={{
@@ -395,10 +478,18 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                 <Archive size={17} strokeWidth={2} aria-hidden="true" />
               </div>
               <div>
-                <DialogTitle style={{ margin: 0, fontSize: 17, lineHeight: 1.2 }}>
+                <DialogTitle
+                  style={{ margin: 0, fontSize: 17, lineHeight: 1.2 }}
+                >
                   {t("archiveBrowser.title")}
                 </DialogTitle>
-                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "var(--text-muted)",
+                    marginTop: 2,
+                  }}
+                >
                   {t("archiveBrowser.description")}
                 </div>
               </div>
@@ -422,7 +513,8 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                     background: "var(--bg-panel)",
                     color: "var(--text)",
                     cursor: loading || refreshing ? "wait" : "pointer",
-                    transition: "background var(--dur-fast), border-color var(--dur-fast)",
+                    transition:
+                      "background var(--dur-fast), border-color var(--dur-fast)",
                   }}
                 >
                   <RefreshCw
@@ -458,7 +550,13 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
           </div>
 
           {/* Search Bar */}
-          <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+          <div
+            style={{
+              position: "relative",
+              display: "flex",
+              alignItems: "center",
+            }}
+          >
             <Search
               size={14}
               strokeWidth={2}
@@ -520,13 +618,25 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
         </div>
 
         {unavailableHosts.length > 0 && (
-          <div role="status" style={{ padding: "8px 20px", borderBottom: "1px solid var(--border)", fontSize: 12, color: "var(--text-muted)" }}>
-            {t("archiveBrowser.hostsUnavailable", { hosts: unavailableHosts.map((host) => host.label).join(", ") })}
+          <div
+            role="status"
+            style={{
+              padding: "8px 20px",
+              borderBottom: "1px solid var(--border)",
+              fontSize: 12,
+              color: "var(--text-muted)",
+            }}
+          >
+            {t("archiveBrowser.hostsUnavailable", {
+              hosts: unavailableHosts.map((host) => host.label).join(", "),
+            })}
           </div>
         )}
 
         {/* Content Area */}
-        <div style={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
+        <div
+          style={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}
+        >
           {loading && archives.length === 0 ? (
             <div
               style={{
@@ -540,7 +650,12 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                 fontSize: 13,
               }}
             >
-              <RefreshCw size={22} strokeWidth={2} className="icon-spin" aria-hidden="true" />
+              <RefreshCw
+                size={22}
+                strokeWidth={2}
+                className="icon-spin"
+                aria-hidden="true"
+              />
               <span>{t("archiveBrowser.loading")}</span>
             </div>
           ) : error && archives.length === 0 ? (
@@ -564,17 +679,34 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                   width: 40,
                   height: 40,
                   borderRadius: "var(--radius-card)",
-                  background: "color-mix(in srgb, var(--status-error) 12%, transparent)",
+                  background:
+                    "color-mix(in srgb, var(--status-error) 12%, transparent)",
                   color: "var(--status-error)",
                 }}
               >
                 <AlertCircle size={20} strokeWidth={2} aria-hidden="true" />
               </div>
               <div style={{ maxWidth: 420 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>
-                  {t("archiveBrowser.loadFailed", { detail: "" }).replace(/:\s*$/, "")}
+                <div
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "var(--text)",
+                    marginBottom: 4,
+                  }}
+                >
+                  {t("archiveBrowser.loadFailed", { detail: "" }).replace(
+                    /:\s*$/,
+                    "",
+                  )}
                 </div>
-                <div style={{ fontSize: 12, color: "var(--text-muted)", wordBreak: "break-word" }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "var(--text-muted)",
+                    wordBreak: "break-word",
+                  }}
+                >
                   {error}
                 </div>
               </div>
@@ -626,10 +758,18 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
               >
                 <Archive size={22} strokeWidth={1.8} aria-hidden="true" />
               </div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
+              <div
+                style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}
+              >
                 {t("archiveBrowser.noArchives")}
               </div>
-              <div style={{ fontSize: 12, color: "var(--text-muted)", maxWidth: 320 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "var(--text-muted)",
+                  maxWidth: 320,
+                }}
+              >
                 {t("archiveBrowser.noArchivesDescription")}
               </div>
             </div>
@@ -659,7 +799,11 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                     alignItems: "center",
                   }}
                 >
-                  <span>{t("archiveBrowser.count", { count: filteredArchives.length })}</span>
+                  <span>
+                    {t("archiveBrowser.count", {
+                      count: filteredArchives.length,
+                    })}
+                  </span>
                 </div>
 
                 <div
@@ -681,7 +825,13 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                         fontSize: 12,
                       }}
                     >
-                      <div style={{ fontWeight: 600, marginBottom: 4, color: "var(--text-muted)" }}>
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          marginBottom: 4,
+                          color: "var(--text-muted)",
+                        }}
+                      >
                         {t("archiveBrowser.noMatches")}
                       </div>
                       <div>{t("archiveBrowser.noMatchesDescription")}</div>
@@ -713,7 +863,9 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                             border: isSelected
                               ? "1px solid var(--accent)"
                               : "1px solid transparent",
-                            background: isSelected ? "var(--bg-selected)" : "transparent",
+                            background: isSelected
+                              ? "var(--bg-selected)"
+                              : "transparent",
                             color: "var(--text)",
                             textAlign: "left",
                             cursor: "pointer",
@@ -736,7 +888,9 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                               style={{
                                 fontSize: 12.5,
                                 fontWeight: isSelected ? 600 : 500,
-                                color: isSelected ? "var(--accent)" : "var(--text)",
+                                color: isSelected
+                                  ? "var(--accent)"
+                                  : "var(--text)",
                                 overflow: "hidden",
                                 textOverflow: "ellipsis",
                                 whiteSpace: "nowrap",
@@ -770,7 +924,14 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                             }}
                           >
                             {archive.hostId && archive.hostId !== "local" && (
-                              <span style={{ flexShrink: 0, color: "var(--text-muted)" }}>{hostLabel(archive.hostId)}</span>
+                              <span
+                                style={{
+                                  flexShrink: 0,
+                                  color: "var(--text-muted)",
+                                }}
+                              >
+                                {hostLabel(archive.hostId)}
+                              </span>
                             )}
                             <span
                               style={{
@@ -842,7 +1003,14 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                       }}
                     >
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            marginBottom: 4,
+                          }}
+                        >
                           <h3
                             style={{
                               margin: 0,
@@ -853,7 +1021,9 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                             }}
                           >
                             {selectedArchive.name ||
-                              selectedArchive.firstMessage.trim().slice(0, 60) ||
+                              selectedArchive.firstMessage
+                                .trim()
+                                .slice(0, 60) ||
                               selectedArchive.id}
                           </h3>
                           {selectedArchive.status && (
@@ -875,7 +1045,10 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                       <button
                         type="button"
                         onClick={() => void handleRestore(selectedArchive)}
-                        disabled={restoringKey !== null || selectedArchive.restorePending === true}
+                        disabled={
+                          restoringKey !== null ||
+                          selectedArchive.restorePending === true
+                        }
                         style={{
                           display: "inline-flex",
                           alignItems: "center",
@@ -887,17 +1060,30 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                           border: "none",
                           fontSize: 13,
                           fontWeight: 600,
-                          cursor: selectedArchive.restorePending ? "not-allowed" : restoringKey !== null ? "wait" : "pointer",
-                          opacity: restoringKey !== null || selectedArchive.restorePending ? 0.7 : 1,
+                          cursor: selectedArchive.restorePending
+                            ? "not-allowed"
+                            : restoringKey !== null
+                              ? "wait"
+                              : "pointer",
+                          opacity:
+                            restoringKey !== null ||
+                            selectedArchive.restorePending
+                              ? 0.7
+                              : 1,
                           boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
-                          transition: "opacity var(--dur-fast), transform var(--dur-fast)",
+                          transition:
+                            "opacity var(--dur-fast), transform var(--dur-fast)",
                           flexShrink: 0,
                         }}
                       >
                         <RotateCcw
                           size={14}
                           strokeWidth={2.2}
-                          className={restoringKey === archiveId(selectedArchive) ? "icon-spin" : undefined}
+                          className={
+                            restoringKey === archiveId(selectedArchive)
+                              ? "icon-spin"
+                              : undefined
+                          }
                           aria-hidden="true"
                         />
                         <span>
@@ -927,7 +1113,8 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                        gridTemplateColumns:
+                          "repeat(auto-fit, minmax(220px, 1fr))",
                         gap: 10,
                       }}
                     >
@@ -937,23 +1124,29 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                         value={selectedArchive.cwd}
                         mono
                       />
-                      {selectedArchive.hostId && selectedArchive.hostId !== "local" && (
-                        <MetadataRow
-                          icon={Server}
-                          label={t("archiveBrowser.host")}
-                          value={hostLabel(selectedArchive.hostId)}
-                        />
-                      )}
+                      {selectedArchive.hostId &&
+                        selectedArchive.hostId !== "local" && (
+                          <MetadataRow
+                            icon={Server}
+                            label={t("archiveBrowser.host")}
+                            value={hostLabel(selectedArchive.hostId)}
+                          />
+                        )}
                       <MetadataRow
                         icon={Hash}
                         label={t("archiveBrowser.sessionId")}
                         value={selectedArchive.id}
                         mono
                         action={
-                          <Tooltip content={t("archiveBrowser.copyId")} side="left">
+                          <Tooltip
+                            content={t("archiveBrowser.copyId")}
+                            side="left"
+                          >
                             <button
                               type="button"
-                              onClick={() => void handleCopyId(selectedArchive.id)}
+                              onClick={() =>
+                                void handleCopyId(selectedArchive.id)
+                              }
                               aria-label={t("archiveBrowser.copyId")}
                               style={{
                                 display: "flex",
@@ -970,7 +1163,11 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                               }}
                             >
                               {copiedId ? (
-                                <Check size={13} style={{ color: "var(--status-success)" }} aria-hidden="true" />
+                                <Check
+                                  size={13}
+                                  style={{ color: "var(--status-success)" }}
+                                  aria-hidden="true"
+                                />
                               ) : (
                                 <Copy size={13} aria-hidden="true" />
                               )}
@@ -981,12 +1178,18 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                       <MetadataRow
                         icon={Calendar}
                         label={t("archiveBrowser.created")}
-                        value={formatArchiveDateTime(selectedArchive.created, locale)}
+                        value={formatArchiveDateTime(
+                          selectedArchive.created,
+                          locale,
+                        )}
                       />
                       <MetadataRow
                         icon={Clock}
                         label={t("archiveBrowser.archivedAt")}
-                        value={formatArchiveDateTime(selectedArchive.archivedAt, locale)}
+                        value={formatArchiveDateTime(
+                          selectedArchive.archivedAt,
+                          locale,
+                        )}
                       />
                       <MetadataRow
                         icon={MessageSquare}
@@ -1001,7 +1204,13 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                     </div>
 
                     {/* Initial Prompt Preview */}
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                      }}
+                    >
                       <div
                         style={{
                           fontSize: 12,
@@ -1028,10 +1237,13 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                           wordBreak: "break-word",
                           maxHeight: 200,
                           overflowY: "auto",
-                          fontStyle: selectedArchive.firstMessage.trim() ? "normal" : "italic",
+                          fontStyle: selectedArchive.firstMessage.trim()
+                            ? "normal"
+                            : "italic",
                         }}
                       >
-                        {selectedArchive.firstMessage.trim() || t("archiveBrowser.noFirstMessage")}
+                        {selectedArchive.firstMessage.trim() ||
+                          t("archiveBrowser.noFirstMessage")}
                       </div>
                     </div>
                   </div>
@@ -1049,7 +1261,12 @@ export function ArchiveBrowser({ open, onClose, onRestored }: ArchiveBrowserProp
                       textAlign: "center",
                     }}
                   >
-                    <Archive size={28} strokeWidth={1.5} style={{ marginBottom: 10, opacity: 0.6 }} aria-hidden="true" />
+                    <Archive
+                      size={28}
+                      strokeWidth={1.5}
+                      style={{ marginBottom: 10, opacity: 0.6 }}
+                      aria-hidden="true"
+                    />
                     <span>{t("archiveBrowser.selectPrompt")}</span>
                   </div>
                 )}

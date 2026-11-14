@@ -52,7 +52,10 @@ function loadUnreadSessionIds(): Set<string> {
     const raw = window.localStorage.getItem(UNREAD_SESSIONS_STORAGE_KEY);
     if (!raw) return new Set();
     const parsed = JSON.parse(raw) as unknown;
-    if (Array.isArray(parsed)) return new Set(parsed.filter((id): id is string => typeof id === "string"));
+    if (Array.isArray(parsed))
+      return new Set(
+        parsed.filter((id): id is string => typeof id === "string"),
+      );
     return new Set();
   } catch {
     return new Set();
@@ -62,8 +65,13 @@ function loadUnreadSessionIds(): Set<string> {
 function saveUnreadSessionIds(ids: Set<string>): void {
   if (typeof window === "undefined") return;
   try {
-    if (ids.size === 0) window.localStorage.removeItem(UNREAD_SESSIONS_STORAGE_KEY);
-    else window.localStorage.setItem(UNREAD_SESSIONS_STORAGE_KEY, JSON.stringify([...ids]));
+    if (ids.size === 0)
+      window.localStorage.removeItem(UNREAD_SESSIONS_STORAGE_KEY);
+    else
+      window.localStorage.setItem(
+        UNREAD_SESSIONS_STORAGE_KEY,
+        JSON.stringify([...ids]),
+      );
   } catch {
     // ignore storage quota / privacy-mode errors
   }
@@ -82,7 +90,14 @@ function loadExpandedProjects(): Set<string> | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
     if (Array.isArray(parsed)) {
-      return new Set(parsed.filter((path): path is string => typeof path === "string" && path.length > 0).map((path) => comparableProjectPath(path)));
+      return new Set(
+        parsed
+          .filter(
+            (path): path is string =>
+              typeof path === "string" && path.length > 0,
+          )
+          .map((path) => comparableProjectPath(path)),
+      );
     }
     return null;
   } catch {
@@ -93,7 +108,10 @@ function loadExpandedProjects(): Set<string> | null {
 function saveExpandedProjects(paths: Set<string>): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(EXPANDED_PROJECTS_STORAGE_KEY, JSON.stringify([...paths]));
+    window.localStorage.setItem(
+      EXPANDED_PROJECTS_STORAGE_KEY,
+      JSON.stringify([...paths]),
+    );
   } catch {
     // ignore storage quota / privacy-mode errors
   }
@@ -113,7 +131,8 @@ function loadProjectSortMode(): ProjectSortMode {
 function saveProjectSortMode(mode: ProjectSortMode): void {
   if (typeof window === "undefined") return;
   try {
-    if (mode === "none") window.localStorage.removeItem(PROJECT_SORT_STORAGE_KEY);
+    if (mode === "none")
+      window.localStorage.removeItem(PROJECT_SORT_STORAGE_KEY);
     else window.localStorage.setItem(PROJECT_SORT_STORAGE_KEY, mode);
   } catch {
     // ignore storage quota / privacy-mode errors
@@ -121,7 +140,9 @@ function saveProjectSortMode(mode: ProjectSortMode): void {
 }
 /** Substitute the home dir prefix with ~ (no path truncation — see PathLabel) */
 function displayCwd(cwd: string, homeDir?: string): string {
-  return (homeDir && cwd.startsWith(homeDir)) ? "~" + cwd.slice(homeDir.length) : cwd;
+  return homeDir && cwd.startsWith(homeDir)
+    ? "~" + cwd.slice(homeDir.length)
+    : cwd;
 }
 
 /** Final folder name of a project path. */
@@ -130,7 +151,11 @@ function projectLabel(projectPath: string): string {
   const index = trimmed.lastIndexOf("/");
   return index >= 0 ? trimmed.slice(index + 1) : trimmed;
 }
-function formatRelativeTime(value: string, _locale: string, now: number): string | null {
+function formatRelativeTime(
+  value: string,
+  _locale: string,
+  now: number,
+): string | null {
   const timestamp = new Date(value).getTime();
   if (!Number.isFinite(timestamp)) return null;
 
@@ -153,7 +178,10 @@ interface SessionTreeNode {
   children: SessionTreeNode[];
 }
 
-function buildSessionTree(sessions: SessionInfo[], scores?: Map<string, number>): SessionTreeNode[] {
+function buildSessionTree(
+  sessions: SessionInfo[],
+  scores?: Map<string, number>,
+): SessionTreeNode[] {
   const byId = new Map<string, SessionTreeNode>();
   for (const s of sessions) {
     byId.set(s.id, { session: s, children: [] });
@@ -190,7 +218,11 @@ function buildSessionTree(sessions: SessionInfo[], scores?: Map<string, number>)
 
   // Sort each level by search score (when searching), then modified desc
   const sort = (nodes: SessionTreeNode[]) => {
-    nodes.sort((a, b) => ((scores?.get(b.session.id) ?? 0) - (scores?.get(a.session.id) ?? 0)) || b.session.modified.localeCompare(a.session.modified));
+    nodes.sort(
+      (a, b) =>
+        (scores?.get(b.session.id) ?? 0) - (scores?.get(a.session.id) ?? 0) ||
+        b.session.modified.localeCompare(a.session.modified),
+    );
     nodes.forEach((n) => sort(n.children));
   };
   sort(roots);
@@ -218,7 +250,13 @@ function livePlace(
   known: ReadonlyMap<string, LivePlace>,
   selected: LivePlace,
 ): LivePlace {
-  return (optimistic?.id === id ? optimistic : undefined) ?? running[id] ?? exited.get(id) ?? known.get(id) ?? selected;
+  return (
+    (optimistic?.id === id ? optimistic : undefined) ??
+    running[id] ??
+    exited.get(id) ??
+    known.get(id) ??
+    selected
+  );
 }
 /** True when a host is link-up in `next` but was not in `prev` (a host new to
  *  the list counts). On the first snapshot (`prev` null) only a linked remote
@@ -228,8 +266,13 @@ function hostsCameOnline(
   prev: ReadonlyArray<{ id: string; status: HostStatus }> | null,
   next: ReadonlyArray<{ id: string; status: HostStatus }>,
 ): boolean {
-  if (!prev) return next.some((host) => host.id !== LOCAL_HOST_ID && isLinkUp(host.status));
-  const wasUp = new Set(prev.filter((host) => isLinkUp(host.status)).map((host) => host.id));
+  if (!prev)
+    return next.some(
+      (host) => host.id !== LOCAL_HOST_ID && isLinkUp(host.status),
+    );
+  const wasUp = new Set(
+    prev.filter((host) => isLinkUp(host.status)).map((host) => host.id),
+  );
   return next.some((host) => isLinkUp(host.status) && !wasUp.has(host.id));
 }
 const MAX_PROJECT_SESSIONS = 5;

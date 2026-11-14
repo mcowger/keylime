@@ -12,7 +12,13 @@ const RENEW_MS = 10_000;
  * daemon may be running it, or be handed its request later by a sender that was suspended. `since`: when the claim last
  * renewed. `instance`: the daemon process that reserved the token (null in a row an earlier build wrote, which recorded none):
  * only that process can revoke the token and say whether its restore runs, so no other answer proves the restore stopped. */
-export type HeldRestore = { sessionId: string; hostId: string; claim: string; instance: string | null; since: number };
+export type HeldRestore = {
+  sessionId: string;
+  hostId: string;
+  claim: string;
+  instance: string | null;
+  since: number;
+};
 
 export type RestoreClaim = {
   /** The row's owner and the token daemons admit a restore by (`restoreReserve`, `restoreArchive`, `restoreFence`). */
@@ -69,7 +75,9 @@ export async function withArchiveRestoreLock<T>(
     const SCHEMA_VERSION = 2;
     // SQLite rows are untyped; each is read through a named shape.
     const schemaVersion = () => {
-      const row = db.prepare("PRAGMA user_version").get() as { user_version: number };
+      const row = db.prepare("PRAGMA user_version").get() as {
+        user_version: number;
+      };
       return row.user_version;
     };
     if (schemaVersion() < SCHEMA_VERSION) {
@@ -77,80 +85,173 @@ export async function withArchiveRestoreLock<T>(
         // Re-checked under the write lock: another process may have migrated since.
         if (schemaVersion() >= SCHEMA_VERSION) return;
         const kind = (name: string) => {
-          const row = db.prepare("SELECT type FROM sqlite_master WHERE name = ?").get(name) as { type: string } | null;
+          const row = db
+            .prepare("SELECT type FROM sqlite_master WHERE name = ?")
+            .get(name) as { type: string } | null;
           return row === null ? null : row.type;
         };
-        if (kind("restore_leases") === "table") db.exec("ALTER TABLE restore_leases RENAME TO restore_claims");
-        db.exec("CREATE TABLE IF NOT EXISTS restore_claims (session_id TEXT PRIMARY KEY, owner TEXT NOT NULL, renewed_at INTEGER NOT NULL, host_id TEXT, instance TEXT)");
-        const columns = (db.prepare("PRAGMA table_info(restore_claims)").all() as { name: string }[]).map((column) => column.name);
-        for (const column of ["host_id", "instance"]) if (!columns.includes(column)) db.exec(`ALTER TABLE restore_claims ADD COLUMN ${column} TEXT`);
-        if (kind("restore_leases") === null) db.exec("CREATE VIEW restore_leases AS SELECT session_id, owner, renewed_at FROM restore_claims");
+        if (kind("restore_leases") === "table")
+          db.exec("ALTER TABLE restore_leases RENAME TO restore_claims");
+        db.exec(
+          "CREATE TABLE IF NOT EXISTS restore_claims (session_id TEXT PRIMARY KEY, owner TEXT NOT NULL, renewed_at INTEGER NOT NULL, host_id TEXT, instance TEXT)",
+        );
+        const columns = (
+          db.prepare("PRAGMA table_info(restore_claims)").all() as {
+            name: string;
+          }[]
+        ).map((column) => column.name);
+        for (const column of ["host_id", "instance"])
+          if (!columns.includes(column))
+            db.exec(`ALTER TABLE restore_claims ADD COLUMN ${column} TEXT`);
+        if (kind("restore_leases") === null)
+          db.exec(
+            "CREATE VIEW restore_leases AS SELECT session_id, owner, renewed_at FROM restore_claims",
+          );
         db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
       }).immediate();
     }
-    const take = () => db.transaction(() => {
-      const now = Date.now();
-      // A lease dated ahead (the writer's clock was fast) lapses too, or it would never expire.
-      db.prepare("DELETE FROM restore_claims WHERE session_id = ? AND host_id IS NULL AND renewed_at NOT BETWEEN ? AND ?").run(sessionId, now - LEASE_MS, now + LEASE_MS);
-      return db.prepare("INSERT INTO restore_claims (session_id, owner, renewed_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").run(sessionId, owner, now).changes === 1;
-    }).immediate();
+    const take = () =>
+      db
+        .transaction(() => {
+          const now = Date.now();
+          // A lease dated ahead (the writer's clock was fast) lapses too, or it would never expire.
+          db.prepare(
+            "DELETE FROM restore_claims WHERE session_id = ? AND host_id IS NULL AND renewed_at NOT BETWEEN ? AND ?",
+          ).run(sessionId, now - LEASE_MS, now + LEASE_MS);
+          return (
+            db
+              .prepare(
+                "INSERT INTO restore_claims (session_id, owner, renewed_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
+              )
+              .run(sessionId, owner, now).changes === 1
+          );
+        })
+        .immediate();
     claimed = take();
     if (!claimed && confirmStopped) {
       const now = Date.now();
       // A held claim still renewing belongs to a request awaiting its host: that one stays busy.
-      const held = db.prepare("SELECT owner, host_id, instance, renewed_at FROM restore_claims WHERE session_id = ? AND host_id IS NOT NULL AND renewed_at NOT BETWEEN ? AND ?")
-        .get(sessionId, now - LEASE_MS, now + LEASE_MS) as { owner: string; host_id: string; instance: string | null; renewed_at: number } | null;
+      const held = db
+        .prepare(
+          "SELECT owner, host_id, instance, renewed_at FROM restore_claims WHERE session_id = ? AND host_id IS NOT NULL AND renewed_at NOT BETWEEN ? AND ?",
+        )
+        .get(sessionId, now - LEASE_MS, now + LEASE_MS) as {
+        owner: string;
+        host_id: string;
+        instance: string | null;
+        renewed_at: number;
+      } | null;
       if (held) {
-        await confirmStopped({ sessionId, hostId: held.host_id, claim: held.owner, instance: held.instance, since: held.renewed_at });
-        db.prepare("DELETE FROM restore_claims WHERE session_id = ? AND owner = ?").run(sessionId, held.owner);
+        await confirmStopped({
+          sessionId,
+          hostId: held.host_id,
+          claim: held.owner,
+          instance: held.instance,
+          since: held.renewed_at,
+        });
+        db.prepare(
+          "DELETE FROM restore_claims WHERE session_id = ? AND owner = ?",
+        ).run(sessionId, held.owner);
         claimed = take();
       }
     }
-    if (!claimed) throw new HostOpError(409, "archive_restore_busy", `Session ${sessionId} is already being restored`);
+    if (!claimed)
+      throw new HostOpError(
+        409,
+        "archive_restore_busy",
+        `Session ${sessionId} is already being restored`,
+      );
     renewal = setInterval(() => {
       try {
-        db.prepare("UPDATE restore_claims SET renewed_at = ? WHERE session_id = ? AND owner = ?").run(Date.now(), sessionId, owner);
-      } catch { /* busy: the next renewal retries well within the lease */ }
+        db.prepare(
+          "UPDATE restore_claims SET renewed_at = ? WHERE session_id = ? AND owner = ?",
+        ).run(Date.now(), sessionId, owner);
+      } catch {
+        /* busy: the next renewal retries well within the lease */
+      }
     }, RENEW_MS);
     renewal.unref();
     return await restore({
       token: owner,
       hold(hostId, instance) {
         // Renewed in the same write: the request leaves right after, and a held row that looked stale would be fenced by another request.
-        if (db.prepare("UPDATE restore_claims SET host_id = ?, instance = ?, renewed_at = ? WHERE session_id = ? AND owner = ?").run(hostId, instance, Date.now(), sessionId, owner).changes !== 1) {
-          throw new HostOpError(409, "archive_restore_busy", `Session ${sessionId} restore claim was lost`);
+        if (
+          db
+            .prepare(
+              "UPDATE restore_claims SET host_id = ?, instance = ?, renewed_at = ? WHERE session_id = ? AND owner = ?",
+            )
+            .run(hostId, instance, Date.now(), sessionId, owner).changes !== 1
+        ) {
+          throw new HostOpError(
+            409,
+            "archive_restore_busy",
+            `Session ${sessionId} restore claim was lost`,
+          );
         }
       },
       release() {
         try {
-          db.prepare("DELETE FROM restore_claims WHERE session_id = ? AND owner = ?").run(sessionId, owner);
-        } catch { /* busy: the row stays held, which the next restore of this session asks the host about */ }
+          db.prepare(
+            "DELETE FROM restore_claims WHERE session_id = ? AND owner = ?",
+          ).run(sessionId, owner);
+        } catch {
+          /* busy: the row stays held, which the next restore of this session asks the host about */
+        }
       },
       publish(run) {
         db.exec("BEGIN IMMEDIATE");
         try {
-          if (!db.prepare("SELECT 1 FROM restore_claims WHERE session_id = ? AND owner = ?").get(sessionId, owner)) {
-            throw new HostOpError(409, "archive_restore_busy", `Session ${sessionId} restore claim was lost; the archive was not restored`);
+          if (
+            !db
+              .prepare(
+                "SELECT 1 FROM restore_claims WHERE session_id = ? AND owner = ?",
+              )
+              .get(sessionId, owner)
+          ) {
+            throw new HostOpError(
+              409,
+              "archive_restore_busy",
+              `Session ${sessionId} restore claim was lost; the archive was not restored`,
+            );
           }
           const result = run();
           db.exec("COMMIT");
           return result;
         } catch (error) {
-          try { db.exec("ROLLBACK"); } catch { /* already ended */ }
+          try {
+            db.exec("ROLLBACK");
+          } catch {
+            /* already ended */
+          }
           throw error;
         }
       },
     });
   } catch (error) {
-    if (!claimed && error && typeof error === "object" && "errno" in error && error.errno === 5) {
-      throw new HostOpError(409, "archive_restore_busy", `Session ${sessionId} restore lock is busy`);
+    if (
+      !claimed &&
+      error &&
+      typeof error === "object" &&
+      "errno" in error &&
+      error.errno === 5
+    ) {
+      throw new HostOpError(
+        409,
+        "archive_restore_busy",
+        `Session ${sessionId} restore lock is busy`,
+      );
     }
     throw error;
   } finally {
     clearInterval(renewal);
     try {
       // A held row outlives this request: only its host's confirmation ends it.
-      if (claimed) db.prepare("DELETE FROM restore_claims WHERE session_id = ? AND owner = ? AND host_id IS NULL").run(sessionId, owner);
-    } finally { db.close(true); }
+      if (claimed)
+        db.prepare(
+          "DELETE FROM restore_claims WHERE session_id = ? AND owner = ? AND host_id IS NULL",
+        ).run(sessionId, owner);
+    } finally {
+      db.close(true);
+    }
   }
 }

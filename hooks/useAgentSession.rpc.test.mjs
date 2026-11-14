@@ -4,13 +4,13 @@ import test, { afterEach, beforeEach } from "node:test";
 import React from "react";
 import { existsSync, readFileSync } from "node:fs";
 import { mock } from "bun:test";
-const { act, cleanup, fireEvent, render, renderHook, within } = await import("@testing-library/react/pure.js");
+const { act, cleanup, fireEvent, render, renderHook, within } =
+  await import("@testing-library/react/pure.js");
 
 // useAgentSession is the chat state machine. These tests drive it through a
 // controllable fake shared-worker event stream + fetch router mounted via React
 // Testing Library: connection, streaming, terminal events, late/duplicate
 // frames, reconnect, and unmount — not source-string checks.
-
 
 // ---------------------------------------------------------------------------
 // Fake shared-worker event streams + fetch router
@@ -27,7 +27,10 @@ class FakeStream {
     this.readyState = FakeStream.CONNECTING;
     this.closedByCaller = false;
     // The hook's `running` subscription is not a session observer: tests count those.
-    (channel.kind === "running" ? world.runningStreams : world.esInstances).push(this);
+    (channel.kind === "running"
+      ? world.runningStreams
+      : world.esInstances
+    ).push(this);
   }
   deliver(message) {
     this.port.onmessage?.({ data: { id: this.id, ...message } });
@@ -37,20 +40,34 @@ class FakeStream {
     this.readyState = FakeStream.OPEN;
     this.deliver({ type: "open" });
     const sid = this.channel.sessionId;
-    this.deliver({ type: "message", data: JSON.stringify({ type: "connected", web: world.streams.get(sid) ?? { streamId: `stream-${sid}`, sequence: 0 } }) });
+    this.deliver({
+      type: "message",
+      data: JSON.stringify({
+        type: "connected",
+        web: world.streams.get(sid) ?? {
+          streamId: `stream-${sid}`,
+          sequence: 0,
+        },
+      }),
+    });
     void dispatchOutbox();
   }
   emit(event, { persist = true } = {}) {
     if (this.closedByCaller) return;
     const sid = this.channel.sessionId;
-    const previous = world.streams.get(sid) ?? { streamId: `stream-${sid}`, sequence: 0 };
+    const previous = world.streams.get(sid) ?? {
+      streamId: `stream-${sid}`,
+      sequence: 0,
+    };
     const web = event.web ?? { ...previous, sequence: previous.sequence + 1 };
     world.streams.set(sid, web);
     if (event.type === "agent_start") this.running = true;
     this.deliver({ type: "message", data: JSON.stringify({ ...event, web }) });
     // Native message_end precedes appendMessage; make that persistence explicit.
-    if (event.type === "message_end" && persist && this.running) appendEntry(sid, event.message);
-    if (event.type === "agent_end" && event.isTerminal !== false) this.running = false;
+    if (event.type === "message_end" && persist && this.running)
+      appendEntry(sid, event.message);
+    if (event.type === "agent_end" && event.isTerminal !== false)
+      this.running = false;
   }
   failFatal() {
     // Fatal subscription error (409 unmanaged wrapper): CLOSED + onerror.
@@ -78,7 +95,10 @@ class FakeSharedWorker {
       start() {},
       postMessage: (message) => {
         if (message.op === "open") {
-          streams.set(message.id, new FakeStream(this.port, message.id, message.channel));
+          streams.set(
+            message.id,
+            new FakeStream(this.port, message.id, message.channel),
+          );
         } else if (message.op === "close") {
           const stream = streams.get(message.id);
           if (!stream) return;
@@ -91,7 +111,14 @@ class FakeSharedWorker {
           world.lastOutboxAdd = message;
           const commit = () => {
             world.outbox.push(message.entry);
-            this.port.onmessage?.({ data: { outbox: world.outbox.map((entry) => ({ ...entry, state: "sending" })) } });
+            this.port.onmessage?.({
+              data: {
+                outbox: world.outbox.map((entry) => ({
+                  ...entry,
+                  state: "sending",
+                })),
+              },
+            });
             this.port.onmessage?.({ data: { outboxAdded: message.n } });
             void dispatchOutbox();
           };
@@ -100,10 +127,21 @@ class FakeSharedWorker {
         } else if (message.op === "outbox_drop") {
           const commit = (error) => {
             if (!error) {
-              world.outbox = world.outbox.filter((entry) => entry.id !== message.id);
-              this.port.onmessage?.({ data: { outbox: world.outbox.map((entry) => ({ ...entry, state: entry.state ?? "sending" })) } });
+              world.outbox = world.outbox.filter(
+                (entry) => entry.id !== message.id,
+              );
+              this.port.onmessage?.({
+                data: {
+                  outbox: world.outbox.map((entry) => ({
+                    ...entry,
+                    state: entry.state ?? "sending",
+                  })),
+                },
+              });
             }
-            this.port.onmessage?.({ data: { outboxDropped: message.n, ...(error ? { error } : {}) } });
+            this.port.onmessage?.({
+              data: { outboxDropped: message.n, ...(error ? { error } : {}) },
+            });
           };
           if (world.outboxDrop) world.outboxDrop(commit);
           else commit();
@@ -118,32 +156,67 @@ class FakeSharedWorker {
 async function answerCommand(port, { n, sessionId, advisor, body }) {
   let answer = await world.socketAnswer?.(JSON.parse(body));
   if (!answer) {
-    const res = await fetchStub(`/api/agent/${encodeURIComponent(sessionId)}${advisor ? "?advisor=1" : ""}`, { method: "POST", body });
+    const res = await fetchStub(
+      `/api/agent/${encodeURIComponent(sessionId)}${advisor ? "?advisor=1" : ""}`,
+      { method: "POST", body },
+    );
     answer = { status: res.status, body: await res.json() };
   }
-  port.onmessage?.({ data: { cmd: n, recvAt: null, repliedAt: null, attempts: 1, deduped: false, behindBytes: 0, ...answer } });
+  port.onmessage?.({
+    data: {
+      cmd: n,
+      recvAt: null,
+      repliedAt: null,
+      attempts: 1,
+      deduped: false,
+      behindBytes: 0,
+      ...answer,
+    },
+  });
 }
 
 /** The web server's dispatcher, as the hook sees it: each held entry goes, oldest first, as the omp command its mode
  * maps to once the session's stream is open (`world.outboxHold` keeps them held). */
 async function dispatchOutbox(withoutTab = false) {
   while (!world.outboxHold) {
-    const stream = (sid) => world.esInstances.findLast((es) => es.channel.sessionId === sid && es.readyState === FakeStream.OPEN && !es.closedByCaller);
-    const entry = world.outbox.find((held) => withoutTab || stream(held.sessionId));
+    const stream = (sid) =>
+      world.esInstances.findLast(
+        (es) =>
+          es.channel.sessionId === sid &&
+          es.readyState === FakeStream.OPEN &&
+          !es.closedByCaller,
+      );
+    const entry = world.outbox.find(
+      (held) => withoutTab || stream(held.sessionId),
+    );
     if (!entry) return;
     world.outbox.splice(world.outbox.indexOf(entry), 1);
-    workerPort?.onmessage?.({ data: { outbox: world.outbox.map((held) => ({ ...held, state: "sending" })) } });
+    workerPort?.onmessage?.({
+      data: {
+        outbox: world.outbox.map((held) => ({ ...held, state: "sending" })),
+      },
+    });
     const running = stream(entry.sessionId)?.running;
     const slash = running && entry.message.startsWith("/");
-    const type = slash || (entry.mode === "prompt" && !running) ? "prompt" : entry.mode === "steer" && running ? "steer" : "follow_up";
+    const type =
+      slash || (entry.mode === "prompt" && !running)
+        ? "prompt"
+        : entry.mode === "steer" && running
+          ? "steer"
+          : "follow_up";
     const body = {
       type,
       message: entry.message,
-      ...(slash ? { streamingBehavior: entry.mode === "steer" ? "steer" : "followUp" } : {}),
+      ...(slash
+        ? { streamingBehavior: entry.mode === "steer" ? "steer" : "followUp" }
+        : {}),
       ...(entry.images ? { images: entry.images } : {}),
       ...(entry.uploads ? { uploads: entry.uploads } : {}),
     };
-    await fetchStub(`/api/agent/${encodeURIComponent(entry.sessionId)}`, { method: "POST", body: JSON.stringify(body) });
+    await fetchStub(`/api/agent/${encodeURIComponent(entry.sessionId)}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
   }
 }
 
@@ -156,7 +229,12 @@ function safeParse(text) {
 }
 
 function jsonResponse(status, value) {
-  return { ok: status >= 200 && status < 300, status, headers: new Headers(), json: async () => value };
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: new Headers(),
+    json: async () => value,
+  };
 }
 
 // Backend snapshot the router serves. Tests mutate these between phases.
@@ -202,28 +280,55 @@ async function fetchStub(url, init = {}) {
   let m;
   if ((m = u.match(/\/api\/sessions\/([^/?#]+)\/state/))) {
     const wrapper = world.wrappers.get(decodeURIComponent(m[1]));
-    if (wrapper) return jsonResponse(200, { running: wrapper.isAlive(), state: await wrapper.send({ type: "get_state" }), outboxScope: "test-scope" });
-    const a = world.agents.get(decodeURIComponent(m[1])) ?? { running: false, state: {} };
-    return jsonResponse(200, { running: a.running, state: a.state, outboxScope: "test-scope" });
+    if (wrapper)
+      return jsonResponse(200, {
+        running: wrapper.isAlive(),
+        state: await wrapper.send({ type: "get_state" }),
+        outboxScope: "test-scope",
+      });
+    const a = world.agents.get(decodeURIComponent(m[1])) ?? {
+      running: false,
+      state: {},
+    };
+    return jsonResponse(200, {
+      running: a.running,
+      state: a.state,
+      outboxScope: "test-scope",
+    });
   }
   if (/\/api\/sessions\/[^/?#]+\/subagents/.test(u)) {
     return jsonResponse(200, { subagents: [] });
   }
-  if ((m = u.match(/\/api\/sessions\/([^/?#]+)\/context/)) && method === "GET") {
+  if (
+    (m = u.match(/\/api\/sessions\/([^/?#]+)\/context/)) &&
+    method === "GET"
+  ) {
     const sid = decodeURIComponent(m[1]);
     if (world.contextUnavailable) return jsonResponse(503, {});
     const params = new URL(u, "http://localhost").searchParams;
-    const f = world.views.get(`${sid}:${params.get("leafId") ?? ""}:${params.has("includePreCompaction")}`)
-      ?? world.sessions.get(sid);
+    const f =
+      world.views.get(
+        `${sid}:${params.get("leafId") ?? ""}:${params.has("includePreCompaction")}`,
+      ) ?? world.sessions.get(sid);
     if (!f) return jsonResponse(404, {});
-    if (params.get("boundary") === "1") return jsonResponse(200, { entryIds: [...f.entryIds] });
+    if (params.get("boundary") === "1")
+      return jsonResponse(200, { entryIds: [...f.entryIds] });
     const context = { todoPhases: [], thinkingLevel: "off", model: null, ...f };
     if (!params.has("sync")) return jsonResponse(200, { context });
     return jsonResponse(200, {
-      ...selectSessionHistory(context, params.has("cursor") ? JSON.parse(params.get("cursor")) : null),
+      ...selectSessionHistory(
+        context,
+        params.has("cursor") ? JSON.parse(params.get("cursor")) : null,
+      ),
       sessionId: sid,
       leafId: params.get("leafId") ?? f.leafId,
-      live: params.has("leafId") ? null : structuredClone(world.wrappers.get(sid)?.getStreamSnapshot() ?? world.live.get(sid) ?? null),
+      live: params.has("leafId")
+        ? null
+        : structuredClone(
+            world.wrappers.get(sid)?.getStreamSnapshot() ??
+              world.live.get(sid) ??
+              null,
+          ),
     });
   }
   if ((m = u.match(/\/api\/sessions\/([^/?#]+)/)) && method === "GET") {
@@ -231,32 +336,75 @@ async function fetchStub(url, init = {}) {
     const f = world.sessions.get(decodeURIComponent(m[1]));
     if (!f) return jsonResponse(404, {});
     return jsonResponse(200, {
-      sessionId: decodeURIComponent(m[1]), filePath: f.filePath ?? "/fixture/session.jsonl", tree: f.tree ?? [],
+      sessionId: decodeURIComponent(m[1]),
+      filePath: f.filePath ?? "/fixture/session.jsonl",
+      tree: f.tree ?? [],
       leafId: f.leafId,
       context: { todoPhases: [], thinkingLevel: "off", model: null, ...f },
     });
   }
   if (/^\/api\/models/.test(u)) {
-    return jsonResponse(200, world.models ?? { models: {}, modelList: [], defaultModel: null });
+    return jsonResponse(
+      200,
+      world.models ?? { models: {}, modelList: [], defaultModel: null },
+    );
   }
   if ((m = u.match(/\/api\/agent\/([^/?#]+)/))) {
-    if (method === "POST" && body?.type === "outbox_scope") return jsonResponse(200, { success: true, data: { scope: "test-scope" } });
+    if (method === "POST" && body?.type === "outbox_scope")
+      return jsonResponse(200, {
+        success: true,
+        data: { scope: "test-scope" },
+      });
     const sid = decodeURIComponent(m[1]);
     if (method === "POST" && body?.type === "get_client_message_status") {
       const data = world.clientMessageStatuses.get(sid);
-      if (!data) return jsonResponse(400, { error: "Unknown command: get_client_message_status", code: "rpc_command_failed" });
-      if (data.status) return jsonResponse(data.status, { error: data.error, code: data.code });
-      assert.ok(Array.isArray(body.clientMessageIds) && body.clientMessageIds.length > 0 && body.clientMessageIds.length <= 32);
+      if (!data)
+        return jsonResponse(400, {
+          error: "Unknown command: get_client_message_status",
+          code: "rpc_command_failed",
+        });
+      if (data.status)
+        return jsonResponse(data.status, {
+          error: data.error,
+          code: data.code,
+        });
+      assert.ok(
+        Array.isArray(body.clientMessageIds) &&
+          body.clientMessageIds.length > 0 &&
+          body.clientMessageIds.length <= 32,
+      );
       const requested = new Set(body.clientMessageIds);
-      assert.equal(requested.size, body.clientMessageIds.length, "selective reads contain unique IDs");
-      const selected = { ...data, messages: data.messages.filter((envelope) => requested.has(envelope.clientMessageId)) };
-      for (const key of ["resolvedClientMessageIds", "persistedClientMessageIds", "unresolvedClientMessageIds"]) selected[key] = data[key].filter((id) => requested.has(id));
+      assert.equal(
+        requested.size,
+        body.clientMessageIds.length,
+        "selective reads contain unique IDs",
+      );
+      const selected = {
+        ...data,
+        messages: data.messages.filter((envelope) =>
+          requested.has(envelope.clientMessageId),
+        ),
+      };
+      for (const key of [
+        "resolvedClientMessageIds",
+        "persistedClientMessageIds",
+        "unresolvedClientMessageIds",
+      ])
+        selected[key] = data[key].filter((id) => requested.has(id));
       return jsonResponse(200, { success: true, data: selected });
     }
     const wrapper = world.wrappers.get(sid);
     if (wrapper) {
-      if (method === "GET") return jsonResponse(200, { running: wrapper.isAlive(), state: await wrapper.send({ type: "get_state" }) });
-      if (method === "POST") return jsonResponse(200, { success: true, data: await wrapper.send(safeParse(init.body)) });
+      if (method === "GET")
+        return jsonResponse(200, {
+          running: wrapper.isAlive(),
+          state: await wrapper.send({ type: "get_state" }),
+        });
+      if (method === "POST")
+        return jsonResponse(200, {
+          success: true,
+          data: await wrapper.send(safeParse(init.body)),
+        });
     }
     if (method === "GET") {
       const a = world.agents.get(sid) ?? { running: false, state: {} };
@@ -264,12 +412,19 @@ async function fetchStub(url, init = {}) {
     }
     if (method === "POST") {
       const nativeHistory = world.nativeHistories.get(sid);
-      if (nativeHistory && ["edit_message", "prompt"].includes(body?.type)) return nativeHistory.command(body);
+      if (nativeHistory && ["edit_message", "prompt"].includes(body?.type))
+        return nativeHistory.command(body);
       if (body?.type === "get_subagents") {
-        return jsonResponse(200, { success: true, data: { subagents: world.subagentSnapshots.get(sid) ?? [] } });
+        return jsonResponse(200, {
+          success: true,
+          data: { subagents: world.subagentSnapshots.get(sid) ?? [] },
+        });
       }
       if (body?.type === "get_btw_history") {
-        return jsonResponse(200, { success: true, data: { records: world.btwHistory.get(sid) ?? [] } });
+        return jsonResponse(200, {
+          success: true,
+          data: { records: world.btwHistory.get(sid) ?? [] },
+        });
       }
       // omp before abort_and_restore_queue rejects it (its real wording), which keeps the
       // per-entry withdrawal tests on their fallback path; tests of the atomic
@@ -277,7 +432,10 @@ async function fetchStub(url, init = {}) {
       if (body?.type === "abort_and_restore_queue") {
         return world.abortRestoreQueue
           ? jsonResponse(200, { success: true, data: world.abortRestoreQueue })
-          : jsonResponse(400, { error: "Unknown command: abort_and_restore_queue", code: "rpc_command_failed" });
+          : jsonResponse(400, {
+              error: "Unknown command: abort_and_restore_queue",
+              code: "rpc_command_failed",
+            });
       }
       return jsonResponse(200, { success: true, data: {} });
     }
@@ -291,17 +449,38 @@ let visibilityState = "hidden";
 const overrides = [
   [globalThis, "SharedWorker", { value: FakeSharedWorker }],
   [globalThis, "fetch", { value: fetchStub }],
-  [globalThis, "ResizeObserver", { value: class { observe() {} disconnect() {} } }],
-  [globalThis, "CSS", { value: globalThis.CSS ?? { escape: (value) => value } }], // Existing TabBar test shim; fixture IDs contain no CSS escapes.
+  [
+    globalThis,
+    "ResizeObserver",
+    {
+      value: class {
+        observe() {}
+        disconnect() {}
+      },
+    },
+  ],
+  [
+    globalThis,
+    "CSS",
+    { value: globalThis.CSS ?? { escape: (value) => value } },
+  ], // Existing TabBar test shim; fixture IDs contain no CSS escapes.
   [window.HTMLElement.prototype, "scrollIntoView", { value() {} }],
   [document, "hidden", { get: () => visibilityState === "hidden" }],
   [document, "visibilityState", { get: () => visibilityState }],
   [document, "fonts", { value: new window.EventTarget() }],
-  [window, "matchMedia", {
-    value: (media) => Object.assign(new window.EventTarget(), { matches: false, media }),
-  }],
+  [
+    window,
+    "matchMedia",
+    {
+      value: (media) =>
+        Object.assign(new window.EventTarget(), { matches: false, media }),
+    },
+  ],
 ].map(([target, key, replacement]) => ({
-  target, key, replacement, original: Object.getOwnPropertyDescriptor(target, key),
+  target,
+  key,
+  replacement,
+  original: Object.getOwnPropertyDescriptor(target, key),
 }));
 
 // Track both the render handle and its committed React lifetime. Clearing a
@@ -313,7 +492,9 @@ function TestRoot({ children }) {
   const owner = React.useRef(null);
   React.useLayoutEffect(() => {
     mountedRoots.add(owner);
-    return () => { mountedRoots.delete(owner); };
+    return () => {
+      mountedRoots.delete(owner);
+    };
   }, []);
   return children;
 }
@@ -347,9 +528,19 @@ afterEach(async () => {
         cleanup();
       }
     });
-    assert.equal(mountedRoots.size, 0, "every committed React root must unmount before restoring the browser doubles");
-    assert.equal(world.esInstances.some((stream) => !stream.closedByCaller && stream.readyState !== FakeStream.CLOSED), false,
-      "no hook-owned observer may remain live at teardown, including unopened connections");
+    assert.equal(
+      mountedRoots.size,
+      0,
+      "every committed React root must unmount before restoring the browser doubles",
+    );
+    assert.equal(
+      world.esInstances.some(
+        (stream) =>
+          !stream.closedByCaller && stream.readyState !== FakeStream.CLOSED,
+      ),
+      false,
+      "no hook-owned observer may remain live at teardown, including unopened connections",
+    );
   } finally {
     for (const { target, key, original } of overrides) {
       if (original) Object.defineProperty(target, key, original);
@@ -362,10 +553,13 @@ afterEach(async () => {
 
 // Replace only the imperative notification boundary. AppShell's transitive
 // notification UI keeps the real provider, descriptions, gestures and icons.
-const realToastExports = { ...await import("@/components/ui/toast") };
-const { toast: testToast, toastCalls: testToastCalls } = await import("./__fixtures__/toast-stub.mjs");
+const realToastExports = { ...(await import("@/components/ui/toast")) };
+const { toast: testToast, toastCalls: testToastCalls } =
+  await import("./__fixtures__/toast-stub.mjs");
 mock.module("@/components/ui/toast", () => ({
-  ...realToastExports, toast: testToast, default: testToast,
+  ...realToastExports,
+  toast: testToast,
+  default: testToast,
 }));
 const { useAgentSession } = await import("../hooks/useAgentSession.ts");
 const { selectSessionHistory } = await import("@/lib/session-sync");
@@ -378,12 +572,15 @@ const onlineHost = {
   sessionOps: {},
   status: () => "online",
   onStatus: () => () => {},
-  spawnRpc: async () => { throw new Error("this test never spawns"); },
+  spawnRpc: async () => {
+    throw new Error("this test never spawns");
+  },
   sessionFileExists: async (path) => existsSync(path),
   invalidateSessionLists() {},
   autoApproveExtension: () => false,
 };
-const { isUnknownSlashCommand, slashCommandName, runHostTool } = await import("@/hooks/useAgentSession-stream");
+const { isUnknownSlashCommand, slashCommandName, runHostTool } =
+  await import("@/hooks/useAgentSession-stream");
 const toastCalls = testToastCalls;
 const { MessageView } = await import("@/components/MessageView");
 const { translate } = await import("@/lib/i18n");
@@ -393,8 +590,14 @@ const { AppShell } = await import("@/components/AppShell");
 const { FileExplorer } = await import("@/components/FileExplorer");
 // Edit only opens a confirm dialog; the edit starts from its confirm button.
 async function confirmEdit(view, button) {
-  await act(async () => { fireEvent.click(button); });
-  await act(async () => { fireEvent.click(view.getByRole("button", { name: translate("messageView.editFromHere") })); });
+  await act(async () => {
+    fireEvent.click(button);
+  });
+  await act(async () => {
+    fireEvent.click(
+      view.getByRole("button", { name: translate("messageView.editFromHere") }),
+    );
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -422,21 +625,37 @@ function sessionInfo(sid) {
   };
 }
 
-async function mountSession(sid, onAgentEnd, options = {}, strictMode = false, onCommit) {
+async function mountSession(
+  sid,
+  onAgentEnd,
+  options = {},
+  strictMode = false,
+  onCommit,
+) {
   const session = sid === null ? null : sessionInfo(sid);
   let changeLeaf;
   const onBranchDataChange = (tree, leaf, handler) => {
     changeLeaf = handler;
     options.onBranchDataChange?.(tree, leaf, handler);
   };
-  const { result, unmount } = ownRoot(renderHook(() => {
-    const state = useAgentSession({
-      session, newSessionCwd: null, ...(onAgentEnd ? { onAgentEnd } : {}), ...options,
-      onBranchDataChange,
-    });
-    React.useLayoutEffect(() => { onCommit?.(state); });
-    return state;
-  }, { reactStrictMode: strictMode, wrapper: TestRoot }));
+  const { result, unmount } = ownRoot(
+    renderHook(
+      () => {
+        const state = useAgentSession({
+          session,
+          newSessionCwd: null,
+          ...(onAgentEnd ? { onAgentEnd } : {}),
+          ...options,
+          onBranchDataChange,
+        });
+        React.useLayoutEffect(() => {
+          onCommit?.(state);
+        });
+        return state;
+      },
+      { reactStrictMode: strictMode, wrapper: TestRoot },
+    ),
+  );
   await settle(); // hydration: loadSession + /state + models + subagents
   return {
     unmount,
@@ -452,7 +671,9 @@ function lastEs() {
 }
 
 function callsTo(method, urlPart) {
-  return world.calls.filter((c) => c.method === method && c.url.includes(urlPart));
+  return world.calls.filter(
+    (c) => c.method === method && c.url.includes(urlPart),
+  );
 }
 
 function resetWorld() {
@@ -484,44 +705,172 @@ function resetWorld() {
 
 function servePooledWorkspace() {
   const sessions = [
-    { ...sessionInfo("worker-one"), name: "Worker one conversation", cwd: "/shared", projectRoot: "/shared", hostId: "h1", poolId: "workers", projectId: "app", projectKey: "pool:workers:app" },
-    { ...sessionInfo("worker-two"), name: "Worker two conversation", cwd: "/shared", projectRoot: "/shared", hostId: "h2", poolId: "workers", projectId: "app", projectKey: "pool:workers:app" },
-    { ...sessionInfo("legacy"), name: "Worker legacy conversation", cwd: "/legacy", projectRoot: "/legacy", hostId: "h1" },
-    { ...sessionInfo("mac"), name: "Mac conversation", cwd: "/shared", projectRoot: "/shared", hostId: "local" },
+    {
+      ...sessionInfo("worker-one"),
+      name: "Worker one conversation",
+      cwd: "/shared",
+      projectRoot: "/shared",
+      hostId: "h1",
+      poolId: "workers",
+      projectId: "app",
+      projectKey: "pool:workers:app",
+    },
+    {
+      ...sessionInfo("worker-two"),
+      name: "Worker two conversation",
+      cwd: "/shared",
+      projectRoot: "/shared",
+      hostId: "h2",
+      poolId: "workers",
+      projectId: "app",
+      projectKey: "pool:workers:app",
+    },
+    {
+      ...sessionInfo("legacy"),
+      name: "Worker legacy conversation",
+      cwd: "/legacy",
+      projectRoot: "/legacy",
+      hostId: "h1",
+    },
+    {
+      ...sessionInfo("mac"),
+      name: "Mac conversation",
+      cwd: "/shared",
+      projectRoot: "/shared",
+      hostId: "local",
+    },
   ];
   const projects = [
-    { path: "/shared", hostId: "h1", poolId: "workers", projectId: "app", projectKey: "pool:workers:app", name: "Pool app", origin: "git@example.invalid:app.git" },
+    {
+      path: "/shared",
+      hostId: "h1",
+      poolId: "workers",
+      projectId: "app",
+      projectKey: "pool:workers:app",
+      name: "Pool app",
+      origin: "git@example.invalid:app.git",
+    },
     { path: "/legacy", hostId: "h1", alias: "Worker legacy project" },
     { path: "/shared", hostId: "local", alias: "Mac project" },
   ];
   const hosts = [
-    { id: "local", label: "Mac", status: "online", ompVersion: "18.4.4", ompwebVersion: "0.6.0", platform: "darwin", lastSeenAt: null, hostVersion: 2, serverVersion: 2, serverPlatform: "darwin", daemonManaged: false },
-    ...["h1", "h2"].map((id, index) => ({ id, label: `Worker ${index + 1}`, status: "online", ompVersion: "18.4.4", ompwebVersion: "0.6.0", platform: "linux", lastSeenAt: "2026-11-10T00:00:00.000Z", allowAgentStart: true, hostVersion: 2, serverVersion: 2 })),
+    {
+      id: "local",
+      label: "Mac",
+      status: "online",
+      ompVersion: "18.4.4",
+      ompwebVersion: "0.6.0",
+      platform: "darwin",
+      lastSeenAt: null,
+      hostVersion: 2,
+      serverVersion: 2,
+      serverPlatform: "darwin",
+      daemonManaged: false,
+    },
+    ...["h1", "h2"].map((id, index) => ({
+      id,
+      label: `Worker ${index + 1}`,
+      status: "online",
+      ompVersion: "18.4.4",
+      ompwebVersion: "0.6.0",
+      platform: "linux",
+      lastSeenAt: "2026-11-10T00:00:00.000Z",
+      allowAgentStart: true,
+      hostVersion: 2,
+      serverVersion: 2,
+    })),
   ];
-  const pools = [{
-    id: "workers", label: "Worker pool", enabled: true,
-    members: ["h1", "h2"].map((hostId) => ({ hostId, projectsRoot: "/projects", provisioned: true, draining: false })),
-    projects: [{ id: "app", name: "Pool app", origin: "git@example.invalid:app.git", clonePaths: { h1: "/shared", h2: "/shared" }, addedAt: "2026-11-10T00:00:00.000Z" }],
-  }];
-  for (const session of sessions) primeSession(session.id, [userMsg(`${session.id}-u`, `Question for ${session.name}`)]);
+  const pools = [
+    {
+      id: "workers",
+      label: "Worker pool",
+      enabled: true,
+      members: ["h1", "h2"].map((hostId) => ({
+        hostId,
+        projectsRoot: "/projects",
+        provisioned: true,
+        draining: false,
+      })),
+      projects: [
+        {
+          id: "app",
+          name: "Pool app",
+          origin: "git@example.invalid:app.git",
+          clonePaths: { h1: "/shared", h2: "/shared" },
+          addedAt: "2026-11-10T00:00:00.000Z",
+        },
+      ],
+    },
+  ];
+  for (const session of sessions)
+    primeSession(session.id, [
+      userMsg(`${session.id}-u`, `Question for ${session.name}`),
+    ]);
   world.respond = (method, raw) => {
     if (method !== "GET") return null;
     const url = new URL(raw, "https://omp.test");
-    if (url.pathname === "/api/sessions") return jsonResponse(200, { sessions, runningSessionIds: [], runningSessions: [] });
-    if (url.pathname === "/api/projects") return jsonResponse(200, { projects });
-    if (url.pathname === "/api/hosts") return jsonResponse(200, { hosts, pools });
-    if (url.pathname === "/api/worktrees") return jsonResponse(200, { isGit: false, isTopLevel: false, worktrees: [] });
-    if (url.pathname.startsWith("/api/git/")) return jsonResponse(200, url.pathname.endsWith("/status") ? { isGitRepository: false, repositoryRoot: null, files: [] } : { supported: false });
+    if (url.pathname === "/api/sessions")
+      return jsonResponse(200, {
+        sessions,
+        runningSessionIds: [],
+        runningSessions: [],
+      });
+    if (url.pathname === "/api/projects")
+      return jsonResponse(200, { projects });
+    if (url.pathname === "/api/hosts")
+      return jsonResponse(200, { hosts, pools });
+    if (url.pathname === "/api/worktrees")
+      return jsonResponse(200, {
+        isGit: false,
+        isTopLevel: false,
+        worktrees: [],
+      });
+    if (url.pathname.startsWith("/api/git/"))
+      return jsonResponse(
+        200,
+        url.pathname.endsWith("/status")
+          ? { isGitRepository: false, repositoryRoot: null, files: [] }
+          : { supported: false },
+      );
     if (url.pathname.startsWith("/api/files/")) {
       const owner = url.searchParams.get("sessionId");
-      if (url.searchParams.get("type") === "list") return jsonResponse(200, { entries: [{ name: owner === "worker-one" ? "owner-only.txt" : "central-decoy.txt", isDir: false, size: 12 }] });
-      const content = owner === "worker-one" ? "FIRST OWNER CONTENT" : owner === "worker-two" ? "SECOND OWNER CONTENT" : "CENTRAL DECOY CONTENT";
-      return jsonResponse(200, { content, language: "text", size: content.length });
+      if (url.searchParams.get("type") === "list")
+        return jsonResponse(200, {
+          entries: [
+            {
+              name:
+                owner === "worker-one" ? "owner-only.txt" : "central-decoy.txt",
+              isDir: false,
+              size: 12,
+            },
+          ],
+        });
+      const content =
+        owner === "worker-one"
+          ? "FIRST OWNER CONTENT"
+          : owner === "worker-two"
+            ? "SECOND OWNER CONTENT"
+            : "CENTRAL DECOY CONTENT";
+      return jsonResponse(200, {
+        content,
+        language: "text",
+        size: content.length,
+      });
     }
-    if (url.pathname === "/api/file-index") return jsonResponse(200, { matches: url.searchParams.get("sessionId") === "worker-one" ? [{ path: "worker-search-result.txt", isDir: false }] : [], truncated: false });
+    if (url.pathname === "/api/file-index")
+      return jsonResponse(200, {
+        matches:
+          url.searchParams.get("sessionId") === "worker-one"
+            ? [{ path: "worker-search-result.txt", isDir: false }]
+            : [],
+        truncated: false,
+      });
     return null;
   };
-  localStorage.setItem("omp-web:expanded-projects", JSON.stringify(["pool:workers:app", "h1:/legacy", "/shared"]));
+  localStorage.setItem(
+    "omp-web:expanded-projects",
+    JSON.stringify(["pool:workers:app", "h1:/legacy", "/shared"]),
+  );
   return { sessions, projects, hosts, pools };
 }
 
@@ -534,16 +883,33 @@ function primeSession(sid, messages) {
   world.agents.set(sid, { running: false, state: {} });
 }
 
-function saveSession(sid, messages, entryIds = messages.map((_, i) => `e${i}`)) {
-  world.sessions.set(sid, { leafId: entryIds.at(-1) ?? null, messages, entryIds });
+function saveSession(
+  sid,
+  messages,
+  entryIds = messages.map((_, i) => `e${i}`),
+) {
+  world.sessions.set(sid, {
+    leafId: entryIds.at(-1) ?? null,
+    messages,
+    entryIds,
+  });
 }
 
 function appendEntry(sid, message) {
   const previous = world.sessions.get(sid);
-  saveSession(sid, [...previous.messages, message], [...previous.entryIds, `e${previous.entryIds.length}`]);
+  saveSession(
+    sid,
+    [...previous.messages, message],
+    [...previous.entryIds, `e${previous.entryIds.length}`],
+  );
 }
 
-const userMsg = (id, text) => ({ role: "user", id, content: text, timestamp: 1 });
+const userMsg = (id, text) => ({
+  role: "user",
+  id,
+  content: text,
+  timestamp: 1,
+});
 const assistantMsg = (id, text) => ({
   role: "assistant",
   id,
@@ -571,7 +937,13 @@ async function startRun(sid, message, strictMode = false, options = {}) {
     assert.deepEqual(await sendPromise, { status: "accepted" });
     await sleep(10);
   });
-  assert.equal(callsTo("POST", "/api/agent/").some((c) => c.body?.type === "prompt" && c.body?.message === message), true, "prompt command must be sent");
+  assert.equal(
+    callsTo("POST", "/api/agent/").some(
+      (c) => c.body?.type === "prompt" && c.body?.message === message,
+    ),
+    true,
+    "prompt command must be sent",
+  );
   await act(async () => {
     es.emit({ type: "agent_start" });
     await Promise.resolve();
@@ -590,15 +962,43 @@ async function startRun(sid, message, strictMode = false, options = {}) {
 test("the queue panel shows omp's snapshot on load and follows queue_update, not local sends", async () => {
   resetWorld();
   primeSession("queue-snapshot", [userMsg("u0", "q")]);
-  world.agents.set("queue-snapshot", { running: true, state: { queuedMessages: { steering: ["from another device"], followUp: [] } } });
+  world.agents.set("queue-snapshot", {
+    running: true,
+    state: {
+      queuedMessages: { steering: ["from another device"], followUp: [] },
+    },
+  });
   const { w, es } = await startRun("queue-snapshot", "run");
-  assert.deepEqual(w.latest.queuedMessages, { steering: ["from another device"], followUp: [] });
-  await act(async () => { await w.latest.handleFollowUp("later"); });
-  assert.deepEqual(w.latest.queuedMessages, { steering: ["from another device"], followUp: [] }, "an acknowledged send is not a queue entry yet");
-  await act(() => es.emit({ type: "queue_update", steering: ["from another device"], followUp: ["later"] }));
-  assert.deepEqual(w.latest.queuedMessages, { steering: ["from another device"], followUp: ["later"] });
-  await act(() => es.emit({ type: "queue_update", steering: [], followUp: ["later"] }));
-  assert.deepEqual(w.latest.queuedMessages, { steering: [], followUp: ["later"] });
+  assert.deepEqual(w.latest.queuedMessages, {
+    steering: ["from another device"],
+    followUp: [],
+  });
+  await act(async () => {
+    await w.latest.handleFollowUp("later");
+  });
+  assert.deepEqual(
+    w.latest.queuedMessages,
+    { steering: ["from another device"], followUp: [] },
+    "an acknowledged send is not a queue entry yet",
+  );
+  await act(() =>
+    es.emit({
+      type: "queue_update",
+      steering: ["from another device"],
+      followUp: ["later"],
+    }),
+  );
+  assert.deepEqual(w.latest.queuedMessages, {
+    steering: ["from another device"],
+    followUp: ["later"],
+  });
+  await act(() =>
+    es.emit({ type: "queue_update", steering: [], followUp: ["later"] }),
+  );
+  assert.deepEqual(w.latest.queuedMessages, {
+    steering: [],
+    followUp: ["later"],
+  });
 });
 
 test("upload ids ride the prompt and follow-up bodies; a files-only prompt is sent", async () => {
@@ -615,10 +1015,19 @@ test("upload ids ride the prompt and follow-up bodies; a files-only prompt is se
     lastEs().open();
     await sending;
   });
-  const prompt = callsTo("POST", "/api/agent/").find((call) => call.body?.type === "prompt");
+  const prompt = callsTo("POST", "/api/agent/").find(
+    (call) => call.body?.type === "prompt",
+  );
   assert.deepEqual(prompt?.body.uploads, [id]);
-  await act(async () => { await w.latest.handleFollowUp("and this", undefined, [id]); });
-  assert.deepEqual(callsTo("POST", "/api/agent/").find((call) => call.body?.type === "follow_up")?.body.uploads, [id]);
+  await act(async () => {
+    await w.latest.handleFollowUp("and this", undefined, [id]);
+  });
+  assert.deepEqual(
+    callsTo("POST", "/api/agent/").find(
+      (call) => call.body?.type === "follow_up",
+    )?.body.uploads,
+    [id],
+  );
 });
 
 test("upload continuity: an uploaded file reaches held outbox intent after a real ChatWindow remount", async (t) => {
@@ -629,56 +1038,140 @@ test("upload continuity: an uploaded file reaches held outbox intent after a rea
   primeSession(sid, [userMsg("u0", "before")]);
   world.outboxHold = true;
   world.holds.push(
-    { match: (method, url) => method === "POST" && url === "/api/uploads", produce: async () => ({ value: { received: 0 } }) },
-    { match: (method, url) => method === "PUT" && url.startsWith("/api/uploads/"), produce: async () => ({ value: { received: 8, done: true, proof: "accepted-completion-proof" } }) },
+    {
+      match: (method, url) => method === "POST" && url === "/api/uploads",
+      produce: async () => ({ value: { received: 0 } }),
+    },
+    {
+      match: (method, url) =>
+        method === "PUT" && url.startsWith("/api/uploads/"),
+      produce: async () => ({
+        value: { received: 8, done: true, proof: "accepted-completion-proof" },
+      }),
+    },
   );
   const chatInputRef = React.createRef();
   const mount = async () => {
-    const view = ownRoot(render(React.createElement(ChatWindow, {
-      session: sessionInfo(sid), newSessionCwd: null, chatInputRef,
-    }), { wrapper: TestRoot }));
+    const view = ownRoot(
+      render(
+        React.createElement(ChatWindow, {
+          session: sessionInfo(sid),
+          newSessionCwd: null,
+          chatInputRef,
+        }),
+        { wrapper: TestRoot },
+      ),
+    );
     await settle();
     return view;
   };
   const first = await mount();
   await act(async () => {
-    chatInputRef.current.addFiles([new File([new Uint8Array([0x50, 0x4b, 3, 4, 0, 0, 0, 0])], "proof.zip", { type: "application/zip" })]);
+    chatInputRef.current.addFiles([
+      new File([new Uint8Array([0x50, 0x4b, 3, 4, 0, 0, 0, 0])], "proof.zip", {
+        type: "application/zip",
+      }),
+    ]);
   });
-  await until(() => getDraft(sid)?.uploads?.length === 1, "the completed file must reach the draft");
+  await until(
+    () => getDraft(sid)?.uploads?.length === 1,
+    "the completed file must reach the draft",
+  );
   const id = getDraft(sid).uploads[0].id;
   await act(() => first.unmount());
   const second = await mount();
-  assert.ok(second.getByText("proof.zip"), "the remounted real composer owns the completed attachment");
-  await act(async () => { fireEvent.keyDown(second.getByRole("textbox"), { key: "Enter" }); });
-  await until(() => world.outbox.length === 1, "Send must commit the file-only message to the worker");
+  assert.ok(
+    second.getByText("proof.zip"),
+    "the remounted real composer owns the completed attachment",
+  );
+  await act(async () => {
+    fireEvent.keyDown(second.getByRole("textbox"), { key: "Enter" });
+  });
+  await until(
+    () => world.outbox.length === 1,
+    "Send must commit the file-only message to the worker",
+  );
   assert.deepEqual(world.outbox[0].uploads, [id]);
-  assert.deepEqual(world.outbox[0].uploadProofs, { [id]: "accepted-completion-proof" }, "the durable intent retains completion authority, not just the chip");
-  assert.equal(getDraft(sid), null, "the stored intent consumes the unchanged draft");
+  assert.deepEqual(
+    world.outbox[0].uploadProofs,
+    { [id]: "accepted-completion-proof" },
+    "the durable intent retains completion authority, not just the chip",
+  );
+  assert.equal(
+    getDraft(sid),
+    null,
+    "the stored intent consumes the unchanged draft",
+  );
   await act(() => second.unmount());
   await mount();
-  assert.deepEqual(world.outbox[0].uploadProofs, { [id]: "accepted-completion-proof" }, "a new hook lifetime cannot strip the held intent");
+  assert.deepEqual(
+    world.outbox[0].uploadProofs,
+    { [id]: "accepted-completion-proof" },
+    "a new hook lifetime cannot strip the held intent",
+  );
 });
 
-for (const [preference, mode] of [["steer", "steer"], ["followup", "followUp"]]) {
+for (const [preference, mode] of [
+  ["steer", "steer"],
+  ["followup", "followUp"],
+]) {
   test(`upload continuity: real composer ${mode} preserves completed proof in held intent`, async (t) => {
     resetWorld();
-    const { setDraft, getDraft, clearDraft } = await import("@/lib/draft-store");
+    const { setDraft, getDraft, clearDraft } =
+      await import("@/lib/draft-store");
     const sid = `proof-queue-${mode}`;
     t.after(() => clearDraft(sid));
     primeSession(sid, [userMsg("u0", "before")]);
-    world.agents.set(sid, { running: true, state: { isStreaming: true, isPromptRunning: true } });
+    world.agents.set(sid, {
+      running: true,
+      state: { isStreaming: true, isPromptRunning: true },
+    });
     world.outboxHold = true;
     localStorage.setItem("omp-web:submit-during-run", preference);
-    setDraft(sid, { value: "with my file", images: [], files: [], uploads: [{ id: "queue-upload", name: "queued.zip", size: 8, hostId: "local", proof: "queue-completion-proof" }] });
-    const view = ownRoot(render(React.createElement(ChatWindow, { session: sessionInfo(sid), newSessionCwd: null }), { wrapper: TestRoot }));
+    setDraft(sid, {
+      value: "with my file",
+      images: [],
+      files: [],
+      uploads: [
+        {
+          id: "queue-upload",
+          name: "queued.zip",
+          size: 8,
+          hostId: "local",
+          proof: "queue-completion-proof",
+        },
+      ],
+    });
+    const view = ownRoot(
+      render(
+        React.createElement(ChatWindow, {
+          session: sessionInfo(sid),
+          newSessionCwd: null,
+        }),
+        { wrapper: TestRoot },
+      ),
+    );
     await settle();
-    await act(async () => { lastEs()?.open(); });
+    await act(async () => {
+      lastEs()?.open();
+    });
     await settle();
-    await act(async () => { fireEvent.keyDown(view.getByRole("textbox"), { key: "Enter" }); });
-    await until(() => world.outbox.length === 1, "queue submission must reach worker storage");
+    await act(async () => {
+      fireEvent.keyDown(view.getByRole("textbox"), { key: "Enter" });
+    });
+    await until(
+      () => world.outbox.length === 1,
+      "queue submission must reach worker storage",
+    );
     assert.equal(world.outbox[0].mode, mode);
-    assert.deepEqual(world.outbox[0].uploadProofs, { "queue-upload": "queue-completion-proof" });
-    assert.equal(getDraft(sid), null, "the real composer clears only after its intent is stored");
+    assert.deepEqual(world.outbox[0].uploadProofs, {
+      "queue-upload": "queue-completion-proof",
+    });
+    assert.equal(
+      getDraft(sid),
+      null,
+      "the real composer clears only after its intent is stored",
+    );
   });
 }
 
@@ -692,47 +1185,122 @@ test("a `!` message with an inline text attachment is held as a prompt, never ru
   setDraft(sid, {
     value: "!touch /tmp/ompweb-never-run",
     images: [],
-    files: [{ name: "notes.txt", mimeType: "text/plain", content: "rm -rf /", size: 8 }],
+    files: [
+      {
+        name: "notes.txt",
+        mimeType: "text/plain",
+        content: "rm -rf /",
+        size: 8,
+      },
+    ],
   });
-  const view = ownRoot(render(React.createElement(ChatWindow, { session: sessionInfo(sid), newSessionCwd: null }), { wrapper: TestRoot }));
+  const view = ownRoot(
+    render(
+      React.createElement(ChatWindow, {
+        session: sessionInfo(sid),
+        newSessionCwd: null,
+      }),
+      { wrapper: TestRoot },
+    ),
+  );
   await settle();
-  await act(async () => { fireEvent.keyDown(view.getByRole("textbox"), { key: "Enter" }); });
-  await until(() => world.outbox.length === 1, "the composed prompt must reach worker storage");
+  await act(async () => {
+    fireEvent.keyDown(view.getByRole("textbox"), { key: "Enter" });
+  });
+  await until(
+    () => world.outbox.length === 1,
+    "the composed prompt must reach worker storage",
+  );
   assert.equal(world.outbox[0].mode, "prompt");
-  assert.equal(world.outbox[0].message, "!touch /tmp/ompweb-never-run\n\nAttached file: notes.txt\n```text\nrm -rf /\n```");
-  assert.deepEqual(world.calls.filter((call) => call.body?.type === "bash"), [], "neither the typed text nor the attachment reaches the shell");
-  assert.equal(getDraft(sid), null, "the stored prompt consumes the unchanged draft");
+  assert.equal(
+    world.outbox[0].message,
+    "!touch /tmp/ompweb-never-run\n\nAttached file: notes.txt\n```text\nrm -rf /\n```",
+  );
+  assert.deepEqual(
+    world.calls.filter((call) => call.body?.type === "bash"),
+    [],
+    "neither the typed text nor the attachment reaches the shell",
+  );
+  assert.equal(
+    getDraft(sid),
+    null,
+    "the stored prompt consumes the unchanged draft",
+  );
 });
 
 test("editing and resending a queued bang-prefixed prompt never runs its inline file text as shell", async (t) => {
   resetWorld();
   const { clearDraft } = await import("@/lib/draft-store");
   const sid = "queued-bang-prompt";
-  const message = "!!explain this\n\nAttached file: notes.txt\n```text\necho attachment-content\n```";
+  const message =
+    "!!explain this\n\nAttached file: notes.txt\n```text\necho attachment-content\n```";
   t.after(() => clearDraft(sid));
   primeSession(sid, [userMsg("u0", "before")]);
-  world.agents.set(sid, { running: true, state: { queuedMessages: { steering: [], followUp: [message] } } });
+  world.agents.set(sid, {
+    running: true,
+    state: { queuedMessages: { steering: [], followUp: [message] } },
+  });
   world.outboxHold = true;
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "remove_queued_message",
-    produce: async () => ({ value: { success: true, data: { removed: true } } }),
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "remove_queued_message",
+    produce: async () => ({
+      value: { success: true, data: { removed: true } },
+    }),
   });
-  const view = ownRoot(render(React.createElement(ChatWindow, { session: sessionInfo(sid), newSessionCwd: null }), { wrapper: TestRoot }));
+  const view = ownRoot(
+    render(
+      React.createElement(ChatWindow, {
+        session: sessionInfo(sid),
+        newSessionCwd: null,
+      }),
+      { wrapper: TestRoot },
+    ),
+  );
   await settle();
-  await act(async () => { fireEvent.click(view.getByTitle("Edit this queued message")); });
-  await until(() => view.getByRole("textbox").value === message, "the removed queue entry must return to the composer");
-  await act(async () => { fireEvent.keyDown(view.getByRole("textbox"), { key: "Enter" }); });
-  await until(() => world.outbox.length === 1 || world.calls.some((call) => call.body?.type === "bash"), "the recovered message must be dispatched");
-  assert.deepEqual(world.calls.filter((call) => call.body?.type === "bash"), [], "queue recovery must preserve prompt intent");
-  assert.equal(world.outbox[0]?.mode, "prompt");
-  assert.equal(world.outbox[0]?.message, message);
-  await until(() => view.getByRole("textbox").value === "", "a stored prompt clears its originating draft");
   await act(async () => {
-    fireEvent.change(view.getByRole("textbox"), { target: { value: "!!printf example" } });
+    fireEvent.click(view.getByTitle("Edit this queued message"));
+  });
+  await until(
+    () => view.getByRole("textbox").value === message,
+    "the removed queue entry must return to the composer",
+  );
+  await act(async () => {
     fireEvent.keyDown(view.getByRole("textbox"), { key: "Enter" });
   });
-  await until(() => world.calls.some((call) => call.body?.type === "bash"), "fresh input still supports shell commands");
-  assert.deepEqual(world.calls.filter((call) => call.body?.type === "bash").map((call) => call.body.command), ["printf example"]);
+  await until(
+    () =>
+      world.outbox.length === 1 ||
+      world.calls.some((call) => call.body?.type === "bash"),
+    "the recovered message must be dispatched",
+  );
+  assert.deepEqual(
+    world.calls.filter((call) => call.body?.type === "bash"),
+    [],
+    "queue recovery must preserve prompt intent",
+  );
+  assert.equal(world.outbox[0]?.mode, "prompt");
+  assert.equal(world.outbox[0]?.message, message);
+  await until(
+    () => view.getByRole("textbox").value === "",
+    "a stored prompt clears its originating draft",
+  );
+  await act(async () => {
+    fireEvent.change(view.getByRole("textbox"), {
+      target: { value: "!!printf example" },
+    });
+    fireEvent.keyDown(view.getByRole("textbox"), { key: "Enter" });
+  });
+  await until(
+    () => world.calls.some((call) => call.body?.type === "bash"),
+    "fresh input still supports shell commands",
+  );
+  assert.deepEqual(
+    world.calls
+      .filter((call) => call.body?.type === "bash")
+      .map((call) => call.body.command),
+    ["printf example"],
+  );
 });
 
 test("removing the last recovered image clears prompt-only mode for fresh shell input", async (t) => {
@@ -741,22 +1309,69 @@ test("removing the last recovered image clears prompt-only mode for fresh shell 
   const sid = "cleared-image-prompt";
   t.after(() => clearDraft(sid));
   primeSession(sid, [userMsg("u0", "before")]);
-  world.agents.set(sid, { running: true, state: { queuedMessages: { steering: [], followUp: ["[Image]"] } } });
+  world.agents.set(sid, {
+    running: true,
+    state: { queuedMessages: { steering: [], followUp: ["[Image]"] } },
+  });
   world.outboxHold = true;
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "remove_queued_message",
-    produce: async () => ({ value: { success: true, data: { removed: true, images: [{ data: "AAAA", mimeType: "image/png" }] } } }),
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "remove_queued_message",
+    produce: async () => ({
+      value: {
+        success: true,
+        data: {
+          removed: true,
+          images: [{ data: "AAAA", mimeType: "image/png" }],
+        },
+      },
+    }),
   });
-  const view = ownRoot(render(React.createElement(ChatWindow, { session: sessionInfo(sid), newSessionCwd: null }), { wrapper: TestRoot }));
+  const view = ownRoot(
+    render(
+      React.createElement(ChatWindow, {
+        session: sessionInfo(sid),
+        newSessionCwd: null,
+      }),
+      { wrapper: TestRoot },
+    ),
+  );
   await settle();
-  await act(async () => { fireEvent.click(view.getByTitle("Edit this queued message")); });
-  await until(() => view.queryAllByRole("button", { name: /remove image/i }).length === 1, "the image-only prompt must be recovered");
-  await act(async () => { fireEvent.click(view.getByRole("button", { name: /remove image/i })); });
-  await act(async () => { fireEvent.change(view.getByRole("textbox"), { target: { value: "!!printf example" } }); });
-  await act(async () => { fireEvent.keyDown(view.getByRole("textbox"), { key: "Enter" }); });
-  await until(() => world.outbox.length === 1 || world.calls.some((call) => call.body?.type === "bash"), "fresh input must be dispatched");
-  assert.deepEqual(world.calls.filter((call) => call.body?.type === "bash").map((call) => call.body.command), ["printf example"]);
-  assert.deepEqual(world.outbox, [], "clearing the recovered image must not leave fresh shell input in prompt mode");
+  await act(async () => {
+    fireEvent.click(view.getByTitle("Edit this queued message"));
+  });
+  await until(
+    () => view.queryAllByRole("button", { name: /remove image/i }).length === 1,
+    "the image-only prompt must be recovered",
+  );
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name: /remove image/i }));
+  });
+  await act(async () => {
+    fireEvent.change(view.getByRole("textbox"), {
+      target: { value: "!!printf example" },
+    });
+  });
+  await act(async () => {
+    fireEvent.keyDown(view.getByRole("textbox"), { key: "Enter" });
+  });
+  await until(
+    () =>
+      world.outbox.length === 1 ||
+      world.calls.some((call) => call.body?.type === "bash"),
+    "fresh input must be dispatched",
+  );
+  assert.deepEqual(
+    world.calls
+      .filter((call) => call.body?.type === "bash")
+      .map((call) => call.body.command),
+    ["printf example"],
+  );
+  assert.deepEqual(
+    world.outbox,
+    [],
+    "clearing the recovered image must not leave fresh shell input in prompt mode",
+  );
 });
 
 test("a shell-queued outbox prompt and steer use queue_update without a phantom turn or reply notice", async () => {
@@ -764,11 +1379,17 @@ test("a shell-queued outbox prompt and steer use queue_update without a phantom 
   primeSession("bash-queue", [userMsg("u0", "q")]);
   // The agent route answers a prompt/steer with this while a `!!` shell command
   // owns the session (see lib/rpc-manager.ts).
-  const queuedReply = { success: true, data: { queued: true, queue: "followUp", reason: "shellRunning" } };
-  const holdReply = () => world.holds.push({
-    match: (method, _url, body) => method === "POST" && (body?.type === "prompt" || body?.type === "steer"),
-    produce: () => Promise.resolve({ value: queuedReply }),
-  });
+  const queuedReply = {
+    success: true,
+    data: { queued: true, queue: "followUp", reason: "shellRunning" },
+  };
+  const holdReply = () =>
+    world.holds.push({
+      match: (method, _url, body) =>
+        method === "POST" &&
+        (body?.type === "prompt" || body?.type === "steer"),
+      produce: () => Promise.resolve({ value: queuedReply }),
+    });
   holdReply();
   holdReply();
   const w = await mountSession("bash-queue");
@@ -777,18 +1398,42 @@ test("a shell-queued outbox prompt and steer use queue_update without a phantom 
     sending = w.latest.handleSend("after the shell finishes");
     await sleep(30);
   });
-  await act(async () => { lastEs()?.open(); await sending; });
+  await act(async () => {
+    lastEs()?.open();
+    await sending;
+  });
   assert.equal((await sending).status, "accepted");
-  assert.equal(w.latest.agentRunning, false, "no turn started behind the shell command");
+  assert.equal(
+    w.latest.agentRunning,
+    false,
+    "no turn started behind the shell command",
+  );
   assert.deepEqual(
-    w.latest.messages.filter((message) => message.role === "user").map((message) => message.content),
+    w.latest.messages
+      .filter((message) => message.role === "user")
+      .map((message) => message.content),
     ["q"],
     "the text lives in omp's queue, not in an optimistic bubble",
   );
-  assert.deepEqual(w.latest.notices, [], "the dispatcher reply never creates a tab-owned queue notice");
-  await act(async () => { await w.latest.handleSteer("steer instead"); });
-  await act(() => lastEs().emit({ type: "queue_update", steering: [], followUp: ["after the shell finishes", "steer instead"] }));
-  assert.deepEqual(w.latest.queuedMessages, { steering: [], followUp: ["after the shell finishes", "steer instead"] });
+  assert.deepEqual(
+    w.latest.notices,
+    [],
+    "the dispatcher reply never creates a tab-owned queue notice",
+  );
+  await act(async () => {
+    await w.latest.handleSteer("steer instead");
+  });
+  await act(() =>
+    lastEs().emit({
+      type: "queue_update",
+      steering: [],
+      followUp: ["after the shell finishes", "steer instead"],
+    }),
+  );
+  assert.deepEqual(w.latest.queuedMessages, {
+    steering: [],
+    followUp: ["after the shell finishes", "steer instead"],
+  });
   assert.deepEqual(w.latest.notices, []);
 });
 
@@ -796,23 +1441,57 @@ test("queued cancellation reports omp's answer and leaves the chip to the snapsh
   for (const outcome of [
     {
       name: "removed",
-      response: { value: { success: true, data: { removed: true, images: [{ type: "image", data: "AAAA", mimeType: "image/png" }, { bogus: true }] } } },
+      response: {
+        value: {
+          success: true,
+          data: {
+            removed: true,
+            images: [
+              { type: "image", data: "AAAA", mimeType: "image/png" },
+              { bogus: true },
+            ],
+          },
+        },
+      },
       result: [{ data: "AAAA", mimeType: "image/png" }],
       notices: [],
     },
-    { name: "not pending", response: { value: { success: true, data: { removed: false } } }, result: false, notices: ["warning"] },
-    { name: "unsupported", response: { status: 400, value: { error: "Unknown RPC command: remove_queued_message" } }, result: false, notices: ["error"] },
+    {
+      name: "not pending",
+      response: { value: { success: true, data: { removed: false } } },
+      result: false,
+      notices: ["warning"],
+    },
+    {
+      name: "unsupported",
+      response: {
+        status: 400,
+        value: { error: "Unknown RPC command: remove_queued_message" },
+      },
+      result: false,
+      notices: ["error"],
+    },
   ]) {
     await t.test(outcome.name, async () => {
       resetWorld();
       const sid = `cancel-${outcome.name.replace(" ", "-")}`;
       primeSession(sid, [userMsg("u0", "q")]);
       const { w, es } = await startRun(sid, "run");
-      await act(() => es.emit({ type: "queue_update", steering: [], followUp: ["target", "target"] }));
+      await act(() =>
+        es.emit({
+          type: "queue_update",
+          steering: [],
+          followUp: ["target", "target"],
+        }),
+      );
       let release;
       world.holds.push({
-        match: (method, _url, body) => method === "POST" && body?.type === "remove_queued_message",
-        produce: () => new Promise((resolve) => { release = resolve; }),
+        match: (method, _url, body) =>
+          method === "POST" && body?.type === "remove_queued_message",
+        produce: () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
       });
       let first;
       let second;
@@ -820,35 +1499,72 @@ test("queued cancellation reports omp's answer and leaves the chip to the snapsh
         first = w.latest.removeQueuedMessage("target", "followUp");
         second = w.latest.removeQueuedMessage("target", "followUp");
       });
-      assert.equal(await second, false, "an overlapping click cannot cancel the duplicate");
-      assert.deepEqual(world.calls.filter((c) => c.body?.type === "remove_queued_message").map((c) => c.body), [
-        { type: "remove_queued_message", message: "target", queue: "followUp" },
-      ]);
+      assert.equal(
+        await second,
+        false,
+        "an overlapping click cannot cancel the duplicate",
+      );
+      assert.deepEqual(
+        world.calls
+          .filter((c) => c.body?.type === "remove_queued_message")
+          .map((c) => c.body),
+        [
+          {
+            type: "remove_queued_message",
+            message: "target",
+            queue: "followUp",
+          },
+        ],
+      );
       await act(async () => {
         release(outcome.response);
         assert.deepEqual(await first, outcome.result);
       });
-      assert.deepEqual(w.latest.queuedMessages, { steering: [], followUp: ["target", "target"] });
-      assert.deepEqual(w.latest.notices.map((n) => n.type), outcome.notices);
+      assert.deepEqual(w.latest.queuedMessages, {
+        steering: [],
+        followUp: ["target", "target"],
+      });
+      assert.deepEqual(
+        w.latest.notices.map((n) => n.type),
+        outcome.notices,
+      );
     });
   }
 });
 
 test("Steer promotes through omp once and reports a refusal", async (t) => {
   for (const outcome of [
-    { name: "promoted", response: { value: { success: true, data: { promoted: true } } }, notices: [] },
-    { name: "not pending", response: { value: { success: true, data: { promoted: false } } }, notices: ["warning"] },
+    {
+      name: "promoted",
+      response: { value: { success: true, data: { promoted: true } } },
+      notices: [],
+    },
+    {
+      name: "not pending",
+      response: { value: { success: true, data: { promoted: false } } },
+      notices: ["warning"],
+    },
   ]) {
     await t.test(outcome.name, async () => {
       resetWorld();
       const sid = `promote-${outcome.name.replace(" ", "-")}`;
       primeSession(sid, [userMsg("u0", "q")]);
       const { w, es } = await startRun(sid, "run");
-      await act(() => es.emit({ type: "queue_update", steering: [], followUp: ["target", "target"] }));
+      await act(() =>
+        es.emit({
+          type: "queue_update",
+          steering: [],
+          followUp: ["target", "target"],
+        }),
+      );
       let release;
       world.holds.push({
-        match: (method, _url, body) => method === "POST" && body?.type === "promote_queued_message",
-        produce: () => new Promise((resolve) => { release = resolve; }),
+        match: (method, _url, body) =>
+          method === "POST" && body?.type === "promote_queued_message",
+        produce: () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
       });
       const callsBefore = world.calls.length;
       let first;
@@ -856,13 +1572,19 @@ test("Steer promotes through omp once and reports a refusal", async (t) => {
         first = w.latest.promoteQueuedToSteer("target");
         await w.latest.promoteQueuedToSteer("target");
       });
-      assert.deepEqual(world.calls.slice(callsBefore).map((c) => c.body), [{ type: "promote_queued_message", message: "target" }],
-        "one promotion, never a separate steer");
+      assert.deepEqual(
+        world.calls.slice(callsBefore).map((c) => c.body),
+        [{ type: "promote_queued_message", message: "target" }],
+        "one promotion, never a separate steer",
+      );
       await act(async () => {
         release(outcome.response);
         await first;
       });
-      assert.deepEqual(w.latest.notices.map((n) => n.type), outcome.notices);
+      assert.deepEqual(
+        w.latest.notices.map((n) => n.type),
+        outcome.notices,
+      );
     });
   }
 });
@@ -872,14 +1594,22 @@ test("a promotion answered after navigation does not notify the new session", as
   primeSession("old-promotion", [userMsg("u0", "old")]);
   primeSession("new-promotion", [userMsg("u1", "new")]);
   const { w: old, es } = await startRun("old-promotion", "run");
-  await act(() => es.emit({ type: "queue_update", steering: [], followUp: ["target"] }));
+  await act(() =>
+    es.emit({ type: "queue_update", steering: [], followUp: ["target"] }),
+  );
   let release;
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "promote_queued_message",
-    produce: () => new Promise((resolve) => { release = resolve; }),
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "promote_queued_message",
+    produce: () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
   });
   let promotion;
-  await act(async () => { promotion = old.latest.promoteQueuedToSteer("target"); });
+  await act(async () => {
+    promotion = old.latest.promoteQueuedToSteer("target");
+  });
   old.unmount();
   const current = await mountSession("new-promotion");
   await act(async () => {
@@ -898,21 +1628,46 @@ test("Stop withdraws pending queued messages into the session draft before abort
   clearDraft("abort-withdraw");
   primeSession("abort-withdraw", [userMsg("u0", "loaded question")]);
   const { w, es } = await startRun("abort-withdraw", "hello agent");
-  await act(() => es.emit({ type: "queue_update", steering: ["my steer", "already taken"], followUp: ["my follow-up"] }));
+  await act(() =>
+    es.emit({
+      type: "queue_update",
+      steering: ["my steer", "already taken"],
+      followUp: ["my follow-up"],
+    }),
+  );
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "remove_queued_message" && body.message === "already taken",
-    produce: async () => ({ value: { success: true, data: { removed: false } } }),
+    match: (method, _url, body) =>
+      method === "POST" &&
+      body?.type === "remove_queued_message" &&
+      body.message === "already taken",
+    produce: async () => ({
+      value: { success: true, data: { removed: false } },
+    }),
   });
   for (const message of ["my steer", "my follow-up"]) {
     world.holds.push({
-      match: (method, _url, body) => method === "POST" && body?.type === "remove_queued_message" && body.message === message,
-      produce: async () => ({ value: { success: true, data: { removed: true } } }),
+      match: (method, _url, body) =>
+        method === "POST" &&
+        body?.type === "remove_queued_message" &&
+        body.message === message,
+      produce: async () => ({
+        value: { success: true, data: { removed: true } },
+      }),
     });
   }
-  await act(async () => { await w.latest.handleAbort(); });
+  await act(async () => {
+    await w.latest.handleAbort();
+  });
   const commands = world.calls.map((c) => c.body?.type).filter(Boolean);
-  assert.ok(commands.lastIndexOf("remove_queued_message") < commands.indexOf("abort"), "the queue is withdrawn before the abort lands");
-  assert.equal(getDraft("abort-withdraw")?.value, "my steer\n\nmy follow-up", "a message the model already took stays out of the draft");
+  assert.ok(
+    commands.lastIndexOf("remove_queued_message") < commands.indexOf("abort"),
+    "the queue is withdrawn before the abort lands",
+  );
+  assert.equal(
+    getDraft("abort-withdraw")?.value,
+    "my steer\n\nmy follow-up",
+    "a message the model already took stays out of the draft",
+  );
   assert.deepEqual(w.latest.notices, []);
   clearDraft("abort-withdraw");
 });
@@ -923,16 +1678,28 @@ test("a slow withdrawal does not hold Stop, and its late answer still recovers t
   clearDraft("abort-slow");
   primeSession("abort-slow", [userMsg("u0", "loaded question")]);
   const { w, es } = await startRun("abort-slow", "hello agent");
-  await act(() => es.emit({ type: "queue_update", steering: ["slow steer"], followUp: [] }));
+  await act(() =>
+    es.emit({ type: "queue_update", steering: ["slow steer"], followUp: [] }),
+  );
   let release;
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "remove_queued_message",
-    produce: () => new Promise((resolve) => { release = resolve; }),
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "remove_queued_message",
+    produce: () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
   });
   let stop;
-  await act(async () => { stop = w.latest.handleAbort(); });
+  await act(async () => {
+    stop = w.latest.handleAbort();
+  });
   await sleep(1700);
-  assert.equal(world.calls.some((c) => c.body?.type === "abort"), true, "abort goes out while the removal is still pending");
+  assert.equal(
+    world.calls.some((c) => c.body?.type === "abort"),
+    true,
+    "abort goes out while the removal is still pending",
+  );
   await act(async () => {
     release({ value: { success: true, data: { removed: true } } });
     await stop;
@@ -947,25 +1714,52 @@ test("Stop saves confirmed text early and still restores the queue in order", as
   clearDraft("abort-mixed");
   primeSession("abort-mixed", [userMsg("u0", "loaded question")]);
   const { w, es } = await startRun("abort-mixed", "hello agent");
-  await act(() => es.emit({ type: "queue_update", steering: ["first", "second"], followUp: [] }));
+  await act(() =>
+    es.emit({
+      type: "queue_update",
+      steering: ["first", "second"],
+      followUp: [],
+    }),
+  );
   let release;
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "remove_queued_message" && body.message === "first",
-    produce: () => new Promise((resolve) => { release = resolve; }),
+    match: (method, _url, body) =>
+      method === "POST" &&
+      body?.type === "remove_queued_message" &&
+      body.message === "first",
+    produce: () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
   });
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "remove_queued_message" && body.message === "second",
-    produce: async () => ({ value: { success: true, data: { removed: true } } }),
+    match: (method, _url, body) =>
+      method === "POST" &&
+      body?.type === "remove_queued_message" &&
+      body.message === "second",
+    produce: async () => ({
+      value: { success: true, data: { removed: true } },
+    }),
   });
   let stop;
-  await act(async () => { stop = w.latest.handleAbort(); });
+  await act(async () => {
+    stop = w.latest.handleAbort();
+  });
   await sleep(1700);
-  assert.equal(getDraft("abort-mixed")?.value, "second", "confirmed text is saved before the stalled request settles");
+  assert.equal(
+    getDraft("abort-mixed")?.value,
+    "second",
+    "confirmed text is saved before the stalled request settles",
+  );
   await act(async () => {
     release({ value: { success: true, data: { removed: true } } });
     await stop;
   });
-  assert.equal(getDraft("abort-mixed")?.value, "first\n\nsecond", "a late confirmation keeps queue order");
+  assert.equal(
+    getDraft("abort-mixed")?.value,
+    "first\n\nsecond",
+    "a late confirmation keeps queue order",
+  );
   clearDraft("abort-mixed");
 });
 
@@ -975,18 +1769,35 @@ test("Stop withdraws a follow-up that a concurrent promotion already moved to st
   clearDraft("abort-promoted");
   primeSession("abort-promoted", [userMsg("u0", "loaded question")]);
   const { w, es } = await startRun("abort-promoted", "hello agent");
-  await act(() => es.emit({ type: "queue_update", steering: [], followUp: ["promoted"] }));
-  for (const [queue, removed] of [["followUp", false], ["steering", true]]) {
+  await act(() =>
+    es.emit({ type: "queue_update", steering: [], followUp: ["promoted"] }),
+  );
+  for (const [queue, removed] of [
+    ["followUp", false],
+    ["steering", true],
+  ]) {
     world.holds.push({
-      match: (method, _url, body) => method === "POST" && body?.type === "remove_queued_message" && body.queue === queue,
+      match: (method, _url, body) =>
+        method === "POST" &&
+        body?.type === "remove_queued_message" &&
+        body.queue === queue,
       produce: async () => ({ value: { success: true, data: { removed } } }),
     });
   }
-  await act(async () => { await w.latest.handleAbort(); });
+  await act(async () => {
+    await w.latest.handleAbort();
+  });
   const commands = world.calls.map((c) => c.body?.type).filter(Boolean);
-  assert.ok(commands.lastIndexOf("remove_queued_message") < commands.indexOf("abort"));
+  assert.ok(
+    commands.lastIndexOf("remove_queued_message") < commands.indexOf("abort"),
+  );
   assert.equal(getDraft("abort-promoted")?.value, "promoted");
-  assert.deepEqual(world.calls.filter((c) => c.body?.type === "remove_queued_message").map((c) => c.body.queue), ["followUp", "steering"]);
+  assert.deepEqual(
+    world.calls
+      .filter((c) => c.body?.type === "remove_queued_message")
+      .map((c) => c.body.queue),
+    ["followUp", "steering"],
+  );
   clearDraft("abort-promoted");
 });
 
@@ -994,103 +1805,173 @@ test("a steering message the model already took is not looked for among follow-u
   resetWorld();
   primeSession("abort-taken", [userMsg("u0", "loaded question")]);
   const { w, es } = await startRun("abort-taken", "hello agent");
-  await act(() => es.emit({ type: "queue_update", steering: ["taken"], followUp: [] }));
+  await act(() =>
+    es.emit({ type: "queue_update", steering: ["taken"], followUp: [] }),
+  );
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "remove_queued_message",
-    produce: async () => ({ value: { success: true, data: { removed: false } } }),
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "remove_queued_message",
+    produce: async () => ({
+      value: { success: true, data: { removed: false } },
+    }),
   });
-  await act(async () => { await w.latest.handleAbort(); });
-  assert.deepEqual(world.calls.filter((c) => c.body?.type === "remove_queued_message").map((c) => c.body.queue), ["steering"]);
+  await act(async () => {
+    await w.latest.handleAbort();
+  });
+  assert.deepEqual(
+    world.calls
+      .filter((c) => c.body?.type === "remove_queued_message")
+      .map((c) => c.body.queue),
+    ["steering"],
+  );
 });
 
 test("a cancellation omp confirms after unmount still reports success so Edit can recover the text", async () => {
   resetWorld();
   primeSession("cancel-unmount", [userMsg("u0", "q")]);
   const { w, es } = await startRun("cancel-unmount", "run");
-  await act(() => es.emit({ type: "queue_update", steering: [], followUp: ["target"] }));
+  await act(() =>
+    es.emit({ type: "queue_update", steering: [], followUp: ["target"] }),
+  );
   let release;
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "remove_queued_message",
-    produce: () => new Promise((resolve) => { release = resolve; }),
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "remove_queued_message",
+    produce: () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
   });
   let cancellation;
-  await act(async () => { cancellation = w.latest.removeQueuedMessage("target", "followUp"); });
+  await act(async () => {
+    cancellation = w.latest.removeQueuedMessage("target", "followUp");
+  });
   w.unmount();
   release({ value: { success: true, data: { removed: true } } });
-  assert.deepEqual(await cancellation, [], "an omp that returns no images still confirms the removal");
+  assert.deepEqual(
+    await cancellation,
+    [],
+    "an omp that returns no images still confirms the removal",
+  );
 });
 
 test("a Stop whose run ended during the withdrawal does not abort the next prompt", async () => {
   resetWorld();
   primeSession("abort-fenced", [userMsg("u0", "loaded question")]);
   const { w, es } = await startRun("abort-fenced", "hello agent");
-  await act(() => es.emit({ type: "queue_update", steering: ["late steer"], followUp: [] }));
+  await act(() =>
+    es.emit({ type: "queue_update", steering: ["late steer"], followUp: [] }),
+  );
   let release;
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "remove_queued_message",
-    produce: () => new Promise((resolve) => { release = resolve; }),
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "remove_queued_message",
+    produce: () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
   });
   let stop;
-  await act(async () => { stop = w.latest.handleAbort(); });
+  await act(async () => {
+    stop = w.latest.handleAbort();
+  });
   await act(async () => {
     es.emit({ type: "message_end", message: assistantMsg("a1", "answer") });
     es.emit({ type: "agent_end", isTerminal: true });
   });
   await settle();
   let sending;
-  await act(async () => { sending = w.latest.handleSend("next prompt"); await sleep(30); });
-  await act(async () => { lastEs().open(); await sending; });
+  await act(async () => {
+    sending = w.latest.handleSend("next prompt");
+    await sleep(30);
+  });
+  await act(async () => {
+    lastEs().open();
+    await sending;
+  });
   await act(async () => {
     release({ value: { success: true, data: { removed: true } } });
     await stop;
   });
-  assert.equal(world.calls.some((c) => c.body?.type === "prompt" && c.body?.message === "next prompt"), true);
-  assert.equal(world.calls.some((c) => c.body?.type === "abort"), false, "the new prompt keeps running");
+  assert.equal(
+    world.calls.some(
+      (c) => c.body?.type === "prompt" && c.body?.message === "next prompt",
+    ),
+    true,
+  );
+  assert.equal(
+    world.calls.some((c) => c.body?.type === "abort"),
+    false,
+    "the new prompt keeps running",
+  );
 });
 
 test("a delayed Stop does not abort a run another device started after the targeted run ended", async () => {
   resetWorld();
   primeSession("abort-remote", [userMsg("u0", "loaded question")]);
   const { w, es } = await startRun("abort-remote", "hello agent");
-  await act(() => es.emit({ type: "queue_update", steering: ["late steer"], followUp: [] }));
+  await act(() =>
+    es.emit({ type: "queue_update", steering: ["late steer"], followUp: [] }),
+  );
   let release;
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "remove_queued_message",
-    produce: () => new Promise((resolve) => { release = resolve; }),
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "remove_queued_message",
+    produce: () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
   });
   let stop;
-  await act(async () => { stop = w.latest.handleAbort(); });
+  await act(async () => {
+    stop = w.latest.handleAbort();
+  });
   await act(async () => {
     es.emit({ type: "message_end", message: assistantMsg("a1", "answer") });
     es.emit({ type: "agent_end", isTerminal: true });
   });
   await settle();
-  await act(async () => { es.emit({ type: "agent_start" }); }); // another device's prompt
+  await act(async () => {
+    es.emit({ type: "agent_start" });
+  }); // another device's prompt
   await settle();
   await act(async () => {
     release({ value: { success: true, data: { removed: true } } });
     await stop;
   });
-  assert.equal(world.calls.some((c) => c.body?.type === "abort"), false, "the other device's run keeps going");
+  assert.equal(
+    world.calls.some((c) => c.body?.type === "abort"),
+    false,
+    "the other device's run keeps going",
+  );
 });
 
 test("a delayed Stop spares another device's run even when the targeted run ended with no visible answer", async () => {
   resetWorld();
   primeSession("abort-remote-empty", [userMsg("u0", "loaded question")]);
   const { w, es } = await startRun("abort-remote-empty", "hello agent");
-  await act(() => es.emit({ type: "queue_update", steering: ["late steer"], followUp: [] }));
+  await act(() =>
+    es.emit({ type: "queue_update", steering: ["late steer"], followUp: [] }),
+  );
   let release;
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "remove_queued_message",
-    produce: () => new Promise((resolve) => { release = resolve; }),
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "remove_queued_message",
+    produce: () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
   });
   // The empty-completion recovery reload stalls, so the hook never renders idle.
   world.holds.push({
-    match: (method, url) => method === "GET" && url.startsWith("/api/sessions/abort-remote-empty"),
+    match: (method, url) =>
+      method === "GET" && url.startsWith("/api/sessions/abort-remote-empty"),
     produce: () => new Promise(() => {}),
   });
   let stop;
-  await act(async () => { stop = w.latest.handleAbort(); });
+  await act(async () => {
+    stop = w.latest.handleAbort();
+  });
   await act(async () => {
     es.emit({ type: "agent_end", isTerminal: true });
     es.emit({ type: "agent_start" }); // another device's prompt
@@ -1099,20 +1980,34 @@ test("a delayed Stop spares another device's run even when the targeted run ende
     release({ value: { success: true, data: { removed: true } } });
     await stop;
   });
-  assert.equal(world.calls.some((c) => c.body?.type === "abort"), false, "the other device's run keeps going");
+  assert.equal(
+    world.calls.some((c) => c.body?.type === "abort"),
+    false,
+    "the other device's run keeps going",
+  );
 });
 
 test("the agent_end snapshot clears a stale queue even when the wrapper reports no model", async () => {
   resetWorld();
   primeSession("end-no-model", [userMsg("u0", "q")]);
   const { w, es } = await startRun("end-no-model", "run");
-  await act(() => es.emit({ type: "queue_update", steering: ["missed delivery"], followUp: [] }));
+  await act(() =>
+    es.emit({
+      type: "queue_update",
+      steering: ["missed delivery"],
+      followUp: [],
+    }),
+  );
   // Keep the transcript reload's own state read out of the picture.
   world.holds.push({
-    match: (method, url) => method === "GET" && url === "/api/sessions/end-no-model/state",
+    match: (method, url) =>
+      method === "GET" && url === "/api/sessions/end-no-model/state",
     produce: () => new Promise(() => {}),
   });
-  world.agents.set("end-no-model", { running: false, state: { queuedMessages: { steering: [], followUp: [] } } });
+  world.agents.set("end-no-model", {
+    running: false,
+    state: { queuedMessages: { steering: [], followUp: [] } },
+  });
   await act(async () => {
     es.emit({ type: "message_end", message: assistantMsg("a1", "answer") });
     es.emit({ type: "agent_end", isTerminal: true });
@@ -1128,30 +2023,59 @@ test("an older state response cannot overwrite a newer snapshot that arrived fir
   let releaseOlder;
   world.holds.push({
     match: (method, url) => method === "GET" && url === "/api/agent/queue-seq",
-    produce: () => new Promise((resolve) => { releaseOlder = resolve; }),
+    produce: () =>
+      new Promise((resolve) => {
+        releaseOlder = resolve;
+      }),
   });
   world.holds.push({
     match: (method, url) => method === "GET" && url === "/api/agent/queue-seq",
-    produce: async () => ({ value: { running: true, state: { queuedMessages: { steering: ["pending"], followUp: [] } } } }),
+    produce: async () => ({
+      value: {
+        running: true,
+        state: { queuedMessages: { steering: ["pending"], followUp: [] } },
+      },
+    }),
   });
   await act(() => es.open()); // older snapshot request, held
   await act(() => es.open()); // newer reconnect snapshot, answers first
   await settle();
-  assert.deepEqual(w.latest.queuedMessages, { steering: ["pending"], followUp: [] });
+  assert.deepEqual(w.latest.queuedMessages, {
+    steering: ["pending"],
+    followUp: [],
+  });
   await act(async () => {
-    releaseOlder({ value: { running: true, state: { queuedMessages: { steering: [], followUp: [] } } } });
+    releaseOlder({
+      value: {
+        running: true,
+        state: { queuedMessages: { steering: [], followUp: [] } },
+      },
+    });
     await sleep(20);
   });
-  assert.deepEqual(w.latest.queuedMessages, { steering: ["pending"], followUp: [] }, "the older response must not clear the chip");
+  assert.deepEqual(
+    w.latest.queuedMessages,
+    { steering: ["pending"], followUp: [] },
+    "the older response must not clear the chip",
+  );
 });
 
 test("overlapping Stops share one withdrawal and one abort", async () => {
   resetWorld();
   primeSession("abort-twice", [userMsg("u0", "loaded question")]);
   const { w, es } = await startRun("abort-twice", "hello agent");
-  await act(() => es.emit({ type: "queue_update", steering: ["A", "B"], followUp: [] }));
-  await act(async () => { await Promise.all([w.latest.handleAbort(), w.latest.handleAbort()]); });
-  assert.deepEqual(world.calls.filter((c) => c.body?.type === "remove_queued_message").map((c) => c.body.message), ["A", "B"]);
+  await act(() =>
+    es.emit({ type: "queue_update", steering: ["A", "B"], followUp: [] }),
+  );
+  await act(async () => {
+    await Promise.all([w.latest.handleAbort(), w.latest.handleAbort()]);
+  });
+  assert.deepEqual(
+    world.calls
+      .filter((c) => c.body?.type === "remove_queued_message")
+      .map((c) => c.body.message),
+    ["A", "B"],
+  );
   assert.equal(world.calls.filter((c) => c.body?.type === "abort").length, 1);
 });
 
@@ -1159,14 +2083,22 @@ test("a stalled withdrawal from an earlier Stop does not swallow the next run's 
   resetWorld();
   primeSession("abort-next", [userMsg("u0", "loaded question")]);
   const { w, es } = await startRun("abort-next", "hello agent");
-  await act(() => es.emit({ type: "queue_update", steering: ["stalled"], followUp: [] }));
+  await act(() =>
+    es.emit({ type: "queue_update", steering: ["stalled"], followUp: [] }),
+  );
   let release;
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "remove_queued_message",
-    produce: () => new Promise((resolve) => { release = resolve; }),
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "remove_queued_message",
+    produce: () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
   });
   let first;
-  await act(async () => { first = w.latest.handleAbort(); });
+  await act(async () => {
+    first = w.latest.handleAbort();
+  });
   await sleep(1700); // deadline passed, first abort sent, removal still pending
   await act(async () => {
     es.emit({ type: "message_end", message: assistantMsg("a1", "answer") });
@@ -1175,10 +2107,22 @@ test("a stalled withdrawal from an earlier Stop does not swallow the next run's 
   });
   await settle();
   let sending;
-  await act(async () => { sending = w.latest.handleSend("next prompt"); await sleep(30); });
-  await act(async () => { lastEs().open(); await sending; });
-  await act(async () => { await w.latest.handleAbort(); });
-  assert.equal(world.calls.filter((c) => c.body?.type === "abort").length, 2, "the new run's Stop sends its own abort");
+  await act(async () => {
+    sending = w.latest.handleSend("next prompt");
+    await sleep(30);
+  });
+  await act(async () => {
+    lastEs().open();
+    await sending;
+  });
+  await act(async () => {
+    await w.latest.handleAbort();
+  });
+  assert.equal(
+    world.calls.filter((c) => c.body?.type === "abort").length,
+    2,
+    "the new run's Stop sends its own abort",
+  );
   await act(async () => {
     release({ value: { success: true, data: { removed: true } } });
     await first;
@@ -1189,14 +2133,24 @@ test("a late follow-up refusal does not remove a same-text steer from a newer ru
   resetWorld();
   primeSession("abort-late-refusal", [userMsg("u0", "loaded question")]);
   const { w, es } = await startRun("abort-late-refusal", "hello agent");
-  await act(() => es.emit({ type: "queue_update", steering: [], followUp: ["same"] }));
+  await act(() =>
+    es.emit({ type: "queue_update", steering: [], followUp: ["same"] }),
+  );
   let refuse;
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "remove_queued_message" && body.queue === "followUp",
-    produce: () => new Promise((resolve) => { refuse = resolve; }),
+    match: (method, _url, body) =>
+      method === "POST" &&
+      body?.type === "remove_queued_message" &&
+      body.queue === "followUp",
+    produce: () =>
+      new Promise((resolve) => {
+        refuse = resolve;
+      }),
   });
   let stop;
-  await act(async () => { stop = w.latest.handleAbort(); });
+  await act(async () => {
+    stop = w.latest.handleAbort();
+  });
   await sleep(1700);
   await act(async () => {
     es.emit({ type: "message_end", message: assistantMsg("a1", "answer") });
@@ -1207,7 +2161,13 @@ test("a late follow-up refusal does not remove a same-text steer from a newer ru
     refuse({ value: { success: true, data: { removed: false } } });
     await stop;
   });
-  assert.equal(world.calls.some((c) => c.body?.type === "remove_queued_message" && c.body.queue === "steering"), false);
+  assert.equal(
+    world.calls.some(
+      (c) =>
+        c.body?.type === "remove_queued_message" && c.body.queue === "steering",
+    ),
+    false,
+  );
 });
 
 test("a state snapshot older than a queue_update is dropped, and opening the stream re-reads the queue", async () => {
@@ -1216,78 +2176,142 @@ test("a state snapshot older than a queue_update is dropped, and opening the str
   const { w, es } = await startRun("queue-order", "run");
   let release;
   world.holds.push({
-    match: (method, url) => method === "GET" && url === "/api/agent/queue-order",
-    produce: () => new Promise((resolve) => { release = resolve; }),
+    match: (method, url) =>
+      method === "GET" && url === "/api/agent/queue-order",
+    produce: () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
   });
   await act(() => es.open()); // reconnect: subscribe, then snapshot
-  await act(() => es.emit({ type: "queue_update", steering: ["newer"], followUp: [] }));
+  await act(() =>
+    es.emit({ type: "queue_update", steering: ["newer"], followUp: [] }),
+  );
   await act(async () => {
-    release({ value: { running: true, state: { queuedMessages: { steering: [], followUp: [] } } } });
+    release({
+      value: {
+        running: true,
+        state: { queuedMessages: { steering: [], followUp: [] } },
+      },
+    });
     await sleep(20);
   });
-  assert.deepEqual(w.latest.queuedMessages, { steering: ["newer"], followUp: [] }, "the stale snapshot must not erase a newer chip");
+  assert.deepEqual(
+    w.latest.queuedMessages,
+    { steering: ["newer"], followUp: [] },
+    "the stale snapshot must not erase a newer chip",
+  );
 
-  world.agents.set("queue-order", { running: true, state: { queuedMessages: { steering: ["queued while disconnected"], followUp: [] } } });
+  world.agents.set("queue-order", {
+    running: true,
+    state: {
+      queuedMessages: { steering: ["queued while disconnected"], followUp: [] },
+    },
+  });
   await act(() => es.open());
   await settle();
-  assert.deepEqual(w.latest.queuedMessages, { steering: ["queued while disconnected"], followUp: [] });
+  assert.deepEqual(w.latest.queuedMessages, {
+    steering: ["queued while disconnected"],
+    followUp: [],
+  });
 });
 
 test("a settled cancellation releases the guard for the next one", async () => {
   resetWorld();
   primeSession("cancel-twice", [userMsg("u0", "q")]);
   const { w, es } = await startRun("cancel-twice", "run");
-  await act(() => es.emit({ type: "queue_update", steering: [], followUp: ["one", "two"] }));
+  await act(() =>
+    es.emit({ type: "queue_update", steering: [], followUp: ["one", "two"] }),
+  );
   await act(async () => {
     await w.latest.removeQueuedMessage("one", "followUp");
     await w.latest.removeQueuedMessage("two", "followUp");
   });
-  assert.deepEqual(world.calls.filter((c) => c.body?.type === "remove_queued_message").map((c) => c.body.message), ["one", "two"]);
+  assert.deepEqual(
+    world.calls
+      .filter((c) => c.body?.type === "remove_queued_message")
+      .map((c) => c.body.message),
+    ["one", "two"],
+  );
 });
 
 test("Stop with an empty queue sends no removal; a failed withdrawal still stops and warns", async () => {
   resetWorld();
   primeSession("abort-empty", [userMsg("u0", "loaded question")]);
   const { w, es } = await startRun("abort-empty", "hello agent");
-  await act(async () => { await w.latest.handleAbort(); });
-  assert.equal(world.calls.some((c) => c.body?.type === "remove_queued_message"), false);
+  await act(async () => {
+    await w.latest.handleAbort();
+  });
+  assert.equal(
+    world.calls.some((c) => c.body?.type === "remove_queued_message"),
+    false,
+  );
   assert.deepEqual(w.latest.notices, []);
 
-  await act(() => es.emit({ type: "queue_update", steering: ["my steer"], followUp: [] }));
+  await act(() =>
+    es.emit({ type: "queue_update", steering: ["my steer"], followUp: [] }),
+  );
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "remove_queued_message",
-    produce: async () => ({ status: 400, value: { error: "Unknown RPC command: remove_queued_message" } }),
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "remove_queued_message",
+    produce: async () => ({
+      status: 400,
+      value: { error: "Unknown RPC command: remove_queued_message" },
+    }),
   });
-  await act(async () => { await w.latest.handleAbort(); });
+  await act(async () => {
+    await w.latest.handleAbort();
+  });
   assert.equal(world.calls.filter((c) => c.body?.type === "abort").length, 2);
-  assert.deepEqual(w.latest.notices.map((n) => n.type), ["warning"]);
+  assert.deepEqual(
+    w.latest.notices.map((n) => n.type),
+    ["warning"],
+  );
 });
 
 test("an answered dialog handoff cannot clear the next unanswered request", async () => {
   resetWorld();
   primeSession("dialog-handoff", [userMsg("u0", "q")]);
   const { w, es } = await startRun("dialog-handoff", "ask me");
-  const first = { type: "ui_request", id: 1, method: "editor", args: ["First question"] };
+  const first = {
+    type: "ui_request",
+    id: 1,
+    method: "editor",
+    args: ["First question"],
+  };
   const next = { ...first, id: 2, args: ["Next question"] };
   await act(() => es.emit(first));
   await settle(300);
-  assert.equal(w.latest.extensionDialog?.id, first.id, "unanswered requests have no clear timer");
+  assert.equal(
+    w.latest.extensionDialog?.id,
+    first.id,
+    "unanswered requests have no clear timer",
+  );
 
   let release;
-  const acknowledgement = new Promise((resolve) => { release = resolve; });
+  const acknowledgement = new Promise((resolve) => {
+    release = resolve;
+  });
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "ui_response",
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "ui_response",
     produce: () => acknowledgement,
   });
   let response;
-  await act(async () => { response = w.latest.respondToExtensionUi(first, "My answer"); });
+  await act(async () => {
+    response = w.latest.respondToExtensionUi(first, "My answer");
+  });
   await act(() => es.emit(next));
   await act(async () => {
     release({ value: { success: true, data: {} } });
     await response;
   });
   await settle(300);
-  assert.equal(w.latest.extensionDialog?.id, next.id, "a delayed response timer only clears its own request");
+  assert.equal(
+    w.latest.extensionDialog?.id,
+    next.id,
+    "a delayed response timer only clears its own request",
+  );
 });
 
 for (const failure of ["HTTP rejection", "connection failure"]) {
@@ -1296,24 +2320,43 @@ for (const failure of ["HTTP rejection", "connection failure"]) {
     const sid = `answer-failure-${failure}`;
     primeSession(sid, [userMsg("u0", "q")]);
     const { w, es } = await startRun(sid, "ask");
-    const request = { type: "ui_request", id: 5, method: "editor", args: ["Answer"] };
+    const request = {
+      type: "ui_request",
+      id: 5,
+      method: "editor",
+      args: ["Answer"],
+    };
     await act(() => es.emit(request));
     world.holds.push({
-      match: (method, _url, body) => method === "POST" && body?.type === "ui_response",
+      match: (method, _url, body) =>
+        method === "POST" && body?.type === "ui_response",
       produce: async () => {
-        if (failure === "connection failure") throw new Error("connection lost");
+        if (failure === "connection failure")
+          throw new Error("connection lost");
         return { status: 500, value: { error: "answer delivery failed" } };
       },
     });
-    await act(async () => { await w.latest.respondToExtensionUi(request, "my retained answer"); });
+    await act(async () => {
+      await w.latest.respondToExtensionUi(request, "my retained answer");
+    });
     await settle(300);
-    assert.equal(w.latest.extensionDialog?.id, request.id, "failure must not unmount and erase the answer");
+    assert.equal(
+      w.latest.extensionDialog?.id,
+      request.id,
+      "failure must not unmount and erase the answer",
+    );
     assert.equal(w.latest.notices.at(-1)?.type, "error");
     await act(() => es.emit({ ...request }));
     assert.equal(w.latest.extensionDialog?.id, request.id);
-    await act(async () => { await w.latest.respondToExtensionUi(request, "my retained answer"); });
+    await act(async () => {
+      await w.latest.respondToExtensionUi(request, "my retained answer");
+    });
     await settle(300);
-    assert.equal(w.latest.extensionDialog, null, "a successful retry closes the answered question");
+    assert.equal(
+      w.latest.extensionDialog,
+      null,
+      "a successful retry closes the answered question",
+    );
   });
 }
 
@@ -1321,43 +2364,91 @@ test("dialog answers go out as ui_response with omp's value; a cancel carries no
   resetWorld();
   primeSession("ui-answers", [userMsg("u0", "q")]);
   const { w, es } = await startRun("ui-answers", "ask");
-  const confirm = { type: "ui_request", id: 8, method: "confirm", args: ["Keep going?", ""] };
+  const confirm = {
+    type: "ui_request",
+    id: 8,
+    method: "confirm",
+    args: ["Keep going?", ""],
+  };
   await act(() => es.emit(confirm));
-  await act(async () => { await w.latest.respondToExtensionUi(confirm, true); });
-  await act(async () => { await w.latest.respondToExtensionUi(confirm, undefined); });
-  const sent = world.calls.filter((c) => c.body?.type === "ui_response").map((c) => c.body);
-  assert.deepEqual(sent.map(({ type, id, value }) => ({ type, id, value })), [
-    { type: "ui_response", id: 8, value: true },
-    { type: "ui_response", id: 8, value: undefined },
-  ]);
-  assert.equal("value" in JSON.parse(JSON.stringify(sent[1])), false, "a cancel sends no value");
+  await act(async () => {
+    await w.latest.respondToExtensionUi(confirm, true);
+  });
+  await act(async () => {
+    await w.latest.respondToExtensionUi(confirm, undefined);
+  });
+  const sent = world.calls
+    .filter((c) => c.body?.type === "ui_response")
+    .map((c) => c.body);
+  assert.deepEqual(
+    sent.map(({ type, id, value }) => ({ type, id, value })),
+    [
+      { type: "ui_response", id: 8, value: true },
+      { type: "ui_response", id: 8, value: undefined },
+    ],
+  );
+  assert.equal(
+    "value" in JSON.parse(JSON.stringify(sent[1])),
+    false,
+    "a cancel sends no value",
+  );
 });
 
 test("ui_end closes another tab's dialog; presentation ui frames drive notices, status, widgets and custom UI", async () => {
   resetWorld();
   primeSession("ui-frames", [userMsg("u0", "q")]);
   const { w, es } = await startRun("ui-frames", "ask");
-  await act(() => es.emit({ type: "ui_request", id: 9, method: "select", args: ["Which?", ["A", "B"]] }));
+  await act(() =>
+    es.emit({
+      type: "ui_request",
+      id: 9,
+      method: "select",
+      args: ["Which?", ["A", "B"]],
+    }),
+  );
   assert.equal(w.latest.extensionDialog?.id, 9);
   await act(() => es.emit({ type: "ui_end", id: 9 }));
   assert.equal(w.latest.extensionDialog, null);
 
   await act(() => {
-    es.emit({ type: "ui", method: "notify", message: "Heads up", notifyType: "warning" });
-    es.emit({ type: "ui", method: "setStatus", statusKey: "lint", statusText: "3 issues" });
-    es.emit({ type: "ui", method: "setWidget", widgetKey: "todo", widgetLines: ["one"] });
+    es.emit({
+      type: "ui",
+      method: "notify",
+      message: "Heads up",
+      notifyType: "warning",
+    });
+    es.emit({
+      type: "ui",
+      method: "setStatus",
+      statusKey: "lint",
+      statusText: "3 issues",
+    });
+    es.emit({
+      type: "ui",
+      method: "setWidget",
+      widgetKey: "todo",
+      widgetLines: ["one"],
+    });
     es.emit({ type: "ui", method: "custom", id: 4, lines: ["hello"] });
   });
   assert.equal(w.latest.notices.at(-1)?.message, "Heads up");
   assert.equal(w.latest.notices.at(-1)?.type, "warning");
-  assert.deepEqual(w.latest.extensionStatuses, [{ key: "lint", text: "3 issues" }]);
-  assert.deepEqual(w.latest.extensionWidgets, [{ key: "todo", lines: ["one"], placement: "aboveEditor" }]);
+  assert.deepEqual(w.latest.extensionStatuses, [
+    { key: "lint", text: "3 issues" },
+  ]);
+  assert.deepEqual(w.latest.extensionWidgets, [
+    { key: "todo", lines: ["one"], placement: "aboveEditor" },
+  ]);
   assert.deepEqual(w.latest.extensionCustomUi?.lines, ["hello"]);
 
-  await act(async () => { await w.latest.sendExtensionCustomInput(w.latest.extensionCustomUi, "x"); });
+  await act(async () => {
+    await w.latest.sendExtensionCustomInput(w.latest.extensionCustomUi, "x");
+  });
   const input = world.calls.find((c) => c.body?.type === "ui_input")?.body;
   assert.deepEqual({ id: input?.id, data: input?.data }, { id: 4, data: "x" });
-  await act(() => es.emit({ type: "ui", method: "custom", id: 4, lines: [], closed: true }));
+  await act(() =>
+    es.emit({ type: "ui", method: "custom", id: 4, lines: [], closed: true }),
+  );
   assert.equal(w.latest.extensionCustomUi, null);
 });
 
@@ -1366,7 +2457,10 @@ test("a stale local queue action reports that its target is unavailable", async 
   primeSession("missing-local-target", [userMsg("u0", "q")]);
   const w = await mountSession("missing-local-target");
   await act(async () => {
-    assert.equal(await w.latest.removeQueuedMessage("already delivered", "followUp"), false);
+    assert.equal(
+      await w.latest.removeQueuedMessage("already delivered", "followUp"),
+      false,
+    );
   });
   assert.deepEqual(w.latest.queuedMessages, { steering: [], followUp: [] });
   assert.equal(w.latest.notices.at(-1)?.type, "warning");
@@ -1378,8 +2472,15 @@ test("a stale local queue action reports that its target is unavailable", async 
 test("ISSUE #167 a command missing from omp's roster is reported, not run silently", () => {
   const known = ["add-dir", "compact", "model", "todo", "mcp", "session"];
   assert.equal(isUnknownSlashCommand("/guided-goal", known), true);
-  assert.equal(isUnknownSlashCommand("/guided-goal ship the thing", known), true);
-  assert.equal(isUnknownSlashCommand("/Goal", known), true, "matching is case-insensitive both ways");
+  assert.equal(
+    isUnknownSlashCommand("/guided-goal ship the thing", known),
+    true,
+  );
+  assert.equal(
+    isUnknownSlashCommand("/Goal", known),
+    true,
+    "matching is case-insensitive both ways",
+  );
   assert.equal(isUnknownSlashCommand("/todo", known), false);
   assert.equal(isUnknownSlashCommand("/compact now", known), false);
   // Builtins are hidden from the palette but still executed by omp.
@@ -1387,7 +2488,13 @@ test("ISSUE #167 a command missing from omp's roster is reported, not run silent
   // No roster yet (or a failed fetch) is not evidence that anything is unknown.
   assert.equal(isUnknownSlashCommand("/guided-goal", []), false);
   // Not command-shaped, so never a false alarm on a path, URL or plain prose.
-  for (const text of ["explain /guided-goal", "//host/path", "/1st thing", "plain text", ""]) {
+  for (const text of [
+    "explain /guided-goal",
+    "//host/path",
+    "/1st thing",
+    "plain text",
+    "",
+  ]) {
     assert.equal(isUnknownSlashCommand(text, known), false, text);
     assert.equal(slashCommandName(text), null, text);
   }
@@ -1401,11 +2508,25 @@ test("ISSUE #167 sending a TUI-only command warns once and still delivers the te
   const w = await mountSession("tui-only");
   // The roster arrives from omp; `/todo` is in it, `/guided-goal` is not.
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "get_commands",
-    produce: () => ({ value: { success: true, data: { commands: [{ name: "todo", description: "todos", source: "builtin" }] } } }),
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "get_commands",
+    produce: () => ({
+      value: {
+        success: true,
+        data: {
+          commands: [{ name: "todo", description: "todos", source: "builtin" }],
+        },
+      },
+    }),
   });
-  await act(async () => { await w.latest.loadSlashCommands(); });
-  assert.deepEqual(w.latest.notices, [], "loading the roster is not itself a warning");
+  await act(async () => {
+    await w.latest.loadSlashCommands();
+  });
+  assert.deepEqual(
+    w.latest.notices,
+    [],
+    "loading the roster is not itself a warning",
+  );
 
   const send = async (text) => {
     let pending;
@@ -1414,16 +2535,31 @@ test("ISSUE #167 sending a TUI-only command warns once and still delivers the te
       await sleep(30); // let the pre-connect get_state POST settle
     });
     const es = lastEs();
-    await act(async () => { es.open(); await pending; });
+    await act(async () => {
+      es.open();
+      await pending;
+    });
     return es;
   };
 
   let es = await send("/guided-goal ship it");
   assert.deepEqual(
     w.latest.notices.map((n) => [n.type, n.message]),
-    [["warning", "/guided-goal is not a command this session can run — it was sent as plain text. TUI-only commands (for example /guided-goal) only work in the omp terminal."]],
+    [
+      [
+        "warning",
+        "/guided-goal is not a command this session can run — it was sent as plain text. TUI-only commands (for example /guided-goal) only work in the omp terminal.",
+      ],
+    ],
   );
-  assert.equal(callsTo("POST", "/api/agent/").some((c) => c.body?.type === "prompt" && c.body?.message === "/guided-goal ship it"), true, "the text is not blocked");
+  assert.equal(
+    callsTo("POST", "/api/agent/").some(
+      (c) =>
+        c.body?.type === "prompt" && c.body?.message === "/guided-goal ship it",
+    ),
+    true,
+    "the text is not blocked",
+  );
 
   es.emit({ type: "agent_end", isTerminal: true });
   await settle();
@@ -1451,22 +2587,35 @@ test("full run over fake SSE: optimistic bubble, coalesced streaming, terminal r
     es.emit({ type: "message_end", message: userMsg("u1", "hello agent") });
     await Promise.resolve();
   });
-  assert.equal(w.latest.messages.length, 2, "optimistic bubble replaced, not duplicated");
+  assert.equal(
+    w.latest.messages.length,
+    2,
+    "optimistic bubble replaced, not duplicated",
+  );
 
   // Two partial updates arrive above display rate; the coalescer must deliver
   // only the LATEST one (full-message frames, latest-wins).
   await act(async () => {
     es.emit({ type: "message_update", message: assistantMsg("a1", "hel") });
-    es.emit({ type: "message_update", message: assistantMsg("a1", "hello world") });
+    es.emit({
+      type: "message_update",
+      message: assistantMsg("a1", "hello world"),
+    });
     await Promise.resolve();
   });
   await settle(90); // > coalescer flush timer
   assert.equal(w.latest.streamState.isStreaming, true);
-  assert.equal(w.latest.streamState.streamingMessage?.content?.[0]?.text, "hello world");
+  assert.equal(
+    w.latest.streamState.streamingMessage?.content?.[0]?.text,
+    "hello world",
+  );
 
   // message_end commits the final message and resets the bubble.
   await act(async () => {
-    es.emit({ type: "message_end", message: assistantMsg("a1", "hello world") });
+    es.emit({
+      type: "message_end",
+      message: assistantMsg("a1", "hello world"),
+    });
     await Promise.resolve();
   });
   assert.equal(w.latest.streamState.isStreaming, false);
@@ -1497,33 +2646,64 @@ test("a finished reply stays on screen until its saved copy replaces it", async 
   const { w, es } = await startRun("s1", "hello agent");
   world.agents.set("s1", { running: true, state: { isStreaming: true } });
   const reply = { ...assistantMsg("a1", "hello world"), timestamp: 42 };
-  await act(async () => { es.emit({ type: "agent_start" }); await Promise.resolve(); });
-  await act(async () => { es.emit({ type: "message_update", message: reply }); await Promise.resolve(); });
+  await act(async () => {
+    es.emit({ type: "agent_start" });
+    await Promise.resolve();
+  });
+  await act(async () => {
+    es.emit({ type: "message_update", message: reply });
+    await Promise.resolve();
+  });
   await settle(90);
-  const shown = () => w.latest.streamState.streamingMessage?.content?.[0]?.text === "hello world";
-  const saved = () => w.latest.messages.filter((m) => m.timestamp === 42).length;
+  const shown = () =>
+    w.latest.streamState.streamingMessage?.content?.[0]?.text === "hello world";
+  const saved = () =>
+    w.latest.messages.filter((m) => m.timestamp === 42).length;
   // The first read after message_end races omp's write: the reply is not
   // saved yet, and the server's live state has no message any more.
-  saveSession("s1", [userMsg("u0", "loaded question"), userMsg("u1", "hello agent")]);
-  const releaseSync = holdNextSync("s1", syncSnapshot("s1", liveSnapshot("s1", 99, null)));
-  await act(async () => { es.emit({ type: "message_end", message: reply }); await Promise.resolve(); });
+  saveSession("s1", [
+    userMsg("u0", "loaded question"),
+    userMsg("u1", "hello agent"),
+  ]);
+  const releaseSync = holdNextSync(
+    "s1",
+    syncSnapshot("s1", liveSnapshot("s1", 99, null)),
+  );
+  await act(async () => {
+    es.emit({ type: "message_end", message: reply });
+    await Promise.resolve();
+  });
   // Dropping the reply before its saved copy arrives empties that space: the
   // chat jumps up to where the reply started, then back down.
   assert.ok(shown(), "the reply stays while the save is read");
-  await act(async () => { releaseSync(); });
+  await act(async () => {
+    releaseSync();
+  });
   await settle();
   assert.ok(shown(), "a read without the saved reply keeps it on screen");
   assert.equal(saved(), 0);
   world.agents.set("s1", { running: false, state: { isStreaming: false } });
-  await act(async () => { es.emit({ type: "agent_end", isTerminal: true }); });
+  await act(async () => {
+    es.emit({ type: "agent_end", isTerminal: true });
+  });
   await settle();
   assert.ok(shown(), "the end of the run keeps it too");
   // The save lands; the next read hands the reply over to its saved copy.
-  saveSession("s1", [userMsg("u0", "loaded question"), userMsg("u1", "hello agent"), reply]);
-  await act(async () => { es.emit({ type: "message_end", message: userMsg("u2", "unrelated") }); });
+  saveSession("s1", [
+    userMsg("u0", "loaded question"),
+    userMsg("u1", "hello agent"),
+    reply,
+  ]);
+  await act(async () => {
+    es.emit({ type: "message_end", message: userMsg("u2", "unrelated") });
+  });
   await settle();
   assert.equal(saved(), 1, "the saved copy is shown once");
-  assert.equal(w.latest.streamState.streamingMessage, null, "the held reply gives way to its saved copy");
+  assert.equal(
+    w.latest.streamState.streamingMessage,
+    null,
+    "the held reply gives way to its saved copy",
+  );
 });
 
 test("provider error on the assistant message is shown instead of ending silently", async () => {
@@ -1549,7 +2729,10 @@ test("provider error on the assistant message is shown instead of ending silentl
   await settle();
 
   assert.equal(w.latest.agentRunning, false);
-  assert.ok(w.latest.notices.some((notice) => notice.message === providerError), "the provider error must be visible");
+  assert.ok(
+    w.latest.notices.some((notice) => notice.message === providerError),
+    "the provider error must be visible",
+  );
 });
 
 for (const terminal of ["rpc_frame_error", "turn_end", "agent_end"]) {
@@ -1561,15 +2744,36 @@ for (const terminal of ["rpc_frame_error", "turn_end", "agent_end"]) {
     const failure = "Malformed RPC frame after assistant text";
     await act(async () => {
       es.emit({ type: "message_end", message: userMsg("u1", "new question") });
-      es.emit({ type: "message_end", message: { ...assistantMsg("a1", "Partial answer"), timestamp: 42 } });
-      if (terminal !== "agent_end") es.emit({ type: terminal, errorMessage: failure });
-      es.emit({ type: "agent_end", isTerminal: true, ...(terminal === "agent_end" ? { errorMessage: failure } : {}) });
+      es.emit({
+        type: "message_end",
+        message: { ...assistantMsg("a1", "Partial answer"), timestamp: 42 },
+      });
+      if (terminal !== "agent_end")
+        es.emit({ type: terminal, errorMessage: failure });
+      es.emit({
+        type: "agent_end",
+        isTerminal: true,
+        ...(terminal === "agent_end" ? { errorMessage: failure } : {}),
+      });
     });
     await settle();
     assert.equal(w.latest.agentRunning, false);
-    assert.ok(w.latest.messages.some((m) => m.role === "assistant" && m.content[0]?.text === "Partial answer"));
-    assert.deepEqual(w.latest.notices.filter((n) => n.type === "error").map((n) => n.message), [failure]);
-    assert.equal(toastCalls.some((call) => call[0] === "error" && call[1] === "Request failed"), false);
+    assert.ok(
+      w.latest.messages.some(
+        (m) =>
+          m.role === "assistant" && m.content[0]?.text === "Partial answer",
+      ),
+    );
+    assert.deepEqual(
+      w.latest.notices.filter((n) => n.type === "error").map((n) => n.message),
+      [failure],
+    );
+    assert.equal(
+      toastCalls.some(
+        (call) => call[0] === "error" && call[1] === "Request failed",
+      ),
+      false,
+    );
   });
 }
 
@@ -1580,26 +2784,55 @@ for (const saved of ["same message", "different message", "no saved error"]) {
     primeSession("s1", [userMsg("u0", "old question")]);
     const { w, es } = await startRun("s1", "new question");
     const failure = "Provider disconnected during generation";
-    const reply = { ...assistantMsg("a1", "Partial answer"), timestamp: 42, stopReason: "error", errorMessage: failure };
+    const reply = {
+      ...assistantMsg("a1", "Partial answer"),
+      timestamp: 42,
+      stopReason: "error",
+      errorMessage: failure,
+    };
     await act(async () => {
       es.emit({ type: "message_end", message: userMsg("u1", "new question") });
       es.emit({ type: "message_end", message: reply }, { persist: false });
-      const savedReply = saved === "same message" ? reply
-        : saved === "different message" ? { ...reply, timestamp: 43 }
-          : { ...assistantMsg("a1", "Partial answer"), timestamp: 42 };
-      saveSession("s1", [userMsg("u0", "old question"), userMsg("u1", "new question"), savedReply]);
+      const savedReply =
+        saved === "same message"
+          ? reply
+          : saved === "different message"
+            ? { ...reply, timestamp: 43 }
+            : { ...assistantMsg("a1", "Partial answer"), timestamp: 42 };
+      saveSession("s1", [
+        userMsg("u0", "old question"),
+        userMsg("u1", "new question"),
+        savedReply,
+      ]);
       es.emit({ type: "agent_end", isTerminal: true });
     });
     await settle();
     assert.equal(w.latest.agentRunning, false);
-    assert.deepEqual(w.latest.notices.filter((n) => n.type === "error").map((n) => n.message),
-      saved === "same message" ? [] : [failure]);
+    assert.deepEqual(
+      w.latest.notices.filter((n) => n.type === "error").map((n) => n.message),
+      saved === "same message" ? [] : [failure],
+    );
     if (saved === "same message") {
       assert.equal(w.latest.messages.at(-1).errorMessage, failure);
-      const bubble = ownRoot(render(React.createElement(MessageView, { message: w.latest.messages.at(-1) }), { wrapper: TestRoot }));
-      assert.ok(bubble.getByText(failure), "the assistant actually renders the provider error");
+      const bubble = ownRoot(
+        render(
+          React.createElement(MessageView, {
+            message: w.latest.messages.at(-1),
+          }),
+          { wrapper: TestRoot },
+        ),
+      );
+      assert.ok(
+        bubble.getByText(failure),
+        "the assistant actually renders the provider error",
+      );
     }
-    assert.equal(toastCalls.some((call) => call[0] === "error" && call[1] === "Request failed"), false);
+    assert.equal(
+      toastCalls.some(
+        (call) => call[0] === "error" && call[1] === "Request failed",
+      ),
+      false,
+    );
   });
 }
 
@@ -1609,22 +2842,44 @@ for (const location of ["saved", "not saved"]) {
     primeSession("s1", [userMsg("u0", "old question")]);
     const { w, es } = await startRun("s1", "new question");
     const failure = "Provider disconnected during generation";
-    const reply = { ...assistantMsg("a1", ""), content: [], timestamp: 42, stopReason: "error", errorMessage: failure };
+    const reply = {
+      ...assistantMsg("a1", ""),
+      content: [],
+      timestamp: 42,
+      stopReason: "error",
+      errorMessage: failure,
+    };
     await act(async () => {
       es.emit({ type: "message_end", message: userMsg("u1", "new question") });
       es.emit({ type: "message_end", message: reply }, { persist: false });
       if (location !== "not saved") {
-        saveSession("s1", [userMsg("u0", "old question"), userMsg("u1", "new question"), reply]);
+        saveSession("s1", [
+          userMsg("u0", "old question"),
+          userMsg("u1", "new question"),
+          reply,
+        ]);
       }
       es.emit({ type: "agent_end", isTerminal: true });
     });
     await settle();
     assert.equal(w.latest.agentRunning, false);
-    assert.deepEqual(w.latest.notices.filter((n) => n.type === "error").map((n) => n.message),
-      location === "saved" ? [] : [failure]);
+    assert.deepEqual(
+      w.latest.notices.filter((n) => n.type === "error").map((n) => n.message),
+      location === "saved" ? [] : [failure],
+    );
     if (location === "saved") {
-      const bubble = ownRoot(render(React.createElement(MessageView, { message: w.latest.messages.at(-1) }), { wrapper: TestRoot }));
-      assert.ok(bubble.getByText(failure), "the saved error-only message renders a banner");
+      const bubble = ownRoot(
+        render(
+          React.createElement(MessageView, {
+            message: w.latest.messages.at(-1),
+          }),
+          { wrapper: TestRoot },
+        ),
+      );
+      assert.ok(
+        bubble.getByText(failure),
+        "the saved error-only message renders a banner",
+      );
     }
   });
 }
@@ -1633,30 +2888,63 @@ test("a run started elsewhere keeps its error visible while an older branch is s
   resetWorld();
   primeSession("s1", [userMsg("u0", "old question")]);
   const w = await mountSession("s1");
-  world.views.set("s1:branch:false", { leafId: "branch", messages: [userMsg("old", "selected branch")], entryIds: ["branch-entry"] });
-  await act(async () => { await w.changeLeaf("branch"); });
-  assert.deepEqual(w.latest.entryIds, ["branch-entry"], "the user is viewing the historical branch");
-  world.agents.set("s1", { running: true, state: { isStreaming: true, isPromptRunning: true } });
+  world.views.set("s1:branch:false", {
+    leafId: "branch",
+    messages: [userMsg("old", "selected branch")],
+    entryIds: ["branch-entry"],
+  });
   await act(async () => {
-    world.runningStreams.at(-1).deliver({ type: "message", data: JSON.stringify({ type: "running", runningSessionIds: ["s1"] }) });
+    await w.changeLeaf("branch");
+  });
+  assert.deepEqual(
+    w.latest.entryIds,
+    ["branch-entry"],
+    "the user is viewing the historical branch",
+  );
+  world.agents.set("s1", {
+    running: true,
+    state: { isStreaming: true, isPromptRunning: true },
+  });
+  await act(async () => {
+    world.runningStreams.at(-1).deliver({
+      type: "message",
+      data: JSON.stringify({ type: "running", runningSessionIds: ["s1"] }),
+    });
     await settle();
     lastEs().open();
     await settle();
   });
   const es = lastEs();
   const failure = "Provider disconnected during generation";
-  const reply = { ...assistantMsg("a1", ""), content: [], timestamp: 42, stopReason: "error", errorMessage: failure };
+  const reply = {
+    ...assistantMsg("a1", ""),
+    content: [],
+    timestamp: 42,
+    stopReason: "error",
+    errorMessage: failure,
+  };
   await act(async () => {
     es.emit({ type: "agent_start" });
     es.emit({ type: "message_end", message: userMsg("u1", "new question") });
     es.emit({ type: "message_end", message: reply }, { persist: false });
-    saveSession("s1", [userMsg("u0", "old question"), userMsg("u1", "new question"), reply]);
+    saveSession("s1", [
+      userMsg("u0", "old question"),
+      userMsg("u1", "new question"),
+      reply,
+    ]);
     es.emit({ type: "agent_end", isTerminal: true });
   });
   await settle();
   assert.equal(w.latest.agentRunning, false);
-  assert.deepEqual(w.latest.entryIds, ["branch-entry"], "the failed current-run message is not in the selected branch");
-  assert.deepEqual(w.latest.notices.filter((n) => n.type === "error").map((n) => n.message), [failure]);
+  assert.deepEqual(
+    w.latest.entryIds,
+    ["branch-entry"],
+    "the failed current-run message is not in the selected branch",
+  );
+  assert.deepEqual(
+    w.latest.notices.filter((n) => n.type === "error").map((n) => n.message),
+    [failure],
+  );
 });
 
 for (const ending of ["message_end", "turn_end", "agent_end", "recovery"]) {
@@ -1665,26 +2953,52 @@ for (const ending of ["message_end", "turn_end", "agent_end", "recovery"]) {
     primeSession("s1", [userMsg("u0", "old question")]);
     const { w, es } = await startRun("s1", "new question");
     const failure = "Provider disconnected during generation";
-    const reply = { ...assistantMsg("a1", ""), content: [], timestamp: 42, stopReason: "error", errorMessage: failure };
+    const reply = {
+      ...assistantMsg("a1", ""),
+      content: [],
+      timestamp: 42,
+      stopReason: "error",
+      errorMessage: failure,
+    };
     await act(async () => {
       es.emit({ type: "message_end", message: userMsg("u1", "new question") });
       es.emit({ type: "message_end", message: reply }, { persist: false });
       if (ending === "turn_end") es.emit({ type: "turn_end", message: reply });
-      if (ending === "recovery") es.emit({ type: "prompt_result", agentInvoked: false });
-      else es.emit({ type: "agent_end", isTerminal: true, ...(ending === "agent_end" ? { messages: [reply] } : {}) });
+      if (ending === "recovery")
+        es.emit({ type: "prompt_result", agentInvoked: false });
+      else
+        es.emit({
+          type: "agent_end",
+          isTerminal: true,
+          ...(ending === "agent_end" ? { messages: [reply] } : {}),
+        });
     });
     await settle();
     assert.equal(w.latest.agentRunning, false);
-    assert.deepEqual(w.latest.notices.filter((n) => n.type === "error").map((n) => n.message), [failure],
-      "an unsaved error-only message cannot carry the error visibly");
+    assert.deepEqual(
+      w.latest.notices.filter((n) => n.type === "error").map((n) => n.message),
+      [failure],
+      "an unsaved error-only message cannot carry the error visibly",
+    );
     await act(async () => {
       appendEntry("s1", reply);
       publishSessionsChanged(["s1"]);
     });
     await settle();
-    assert.deepEqual(w.latest.notices.filter((n) => n.type === "error"), []);
-    const bubble = ownRoot(render(React.createElement(MessageView, { message: w.latest.messages.at(-1) }), { wrapper: TestRoot }));
-    assert.ok(bubble.getByText(failure), "the saved error banner replaces the notice");
+    assert.deepEqual(
+      w.latest.notices.filter((n) => n.type === "error"),
+      [],
+    );
+    const bubble = ownRoot(
+      render(
+        React.createElement(MessageView, { message: w.latest.messages.at(-1) }),
+        { wrapper: TestRoot },
+      ),
+    );
+    assert.ok(
+      bubble.getByText(failure),
+      "the saved error banner replaces the notice",
+    );
   });
 }
 
@@ -1694,30 +3008,59 @@ for (const ending of ["agent_end", "recovery"]) {
     primeSession("s1", [userMsg("u0", "old question")]);
     const { w, es } = await startRun("s1", "new question");
     const failure = "Provider disconnected during generation";
-    const reply = { ...assistantMsg("a1", ""), content: [], timestamp: 42, stopReason: "error", errorMessage: failure };
+    const reply = {
+      ...assistantMsg("a1", ""),
+      content: [],
+      timestamp: 42,
+      stopReason: "error",
+      errorMessage: failure,
+    };
     let release;
     world.holds.push({
-      match: (method, url) => method === "GET" && url.startsWith("/api/sessions/s1?"),
-      produce: () => new Promise((resolve) => {
-        release = () => {
-          const fixture = world.sessions.get("s1");
-          resolve({ value: { sessionId: "s1", filePath: "/fixture/session.jsonl", tree: [],
-            leafId: fixture.leafId, context: { todoPhases: [], thinkingLevel: "off", model: null, ...fixture } } });
-        };
-      }),
+      match: (method, url) =>
+        method === "GET" && url.startsWith("/api/sessions/s1?"),
+      produce: () =>
+        new Promise((resolve) => {
+          release = () => {
+            const fixture = world.sessions.get("s1");
+            resolve({
+              value: {
+                sessionId: "s1",
+                filePath: "/fixture/session.jsonl",
+                tree: [],
+                leafId: fixture.leafId,
+                context: {
+                  todoPhases: [],
+                  thinkingLevel: "off",
+                  model: null,
+                  ...fixture,
+                },
+              },
+            });
+          };
+        }),
     });
     await act(async () => {
       es.emit({ type: "message_end", message: userMsg("u1", "new question") });
       es.emit({ type: "message_end", message: reply }, { persist: false });
-      if (ending === "recovery") es.emit({ type: "prompt_result", agentInvoked: false });
+      if (ending === "recovery")
+        es.emit({ type: "prompt_result", agentInvoked: false });
       else es.emit({ type: "agent_end", isTerminal: true });
       await sleep(20);
     });
     assert.ok(release, "the transcript request is held");
-    assert.deepEqual(w.latest.notices.filter((n) => n.type === "error").map((n) => n.message), [failure]);
-    await act(async () => { release(); });
+    assert.deepEqual(
+      w.latest.notices.filter((n) => n.type === "error").map((n) => n.message),
+      [failure],
+    );
+    await act(async () => {
+      release();
+    });
     await settle();
-    assert.deepEqual(w.latest.notices.filter((n) => n.type === "error").map((n) => n.message), [failure]);
+    assert.deepEqual(
+      w.latest.notices.filter((n) => n.type === "error").map((n) => n.message),
+      [failure],
+    );
   });
 }
 
@@ -1726,19 +3069,41 @@ test("a queued error notice is removed when its message appears without removing
   primeSession("s1", [userMsg("u0", "old question")]);
   const { w, es } = await startRun("s1", "new question");
   const failure = "Provider disconnected during generation";
-  const reply = { ...assistantMsg("a1", ""), content: [], timestamp: 42, stopReason: "error", errorMessage: failure };
+  const reply = {
+    ...assistantMsg("a1", ""),
+    content: [],
+    timestamp: 42,
+    stopReason: "error",
+    errorMessage: failure,
+  };
   await act(async () => {
-    for (let i = 0; i < 5; i++) es.emit({ type: "notice", level: "info", message: `Unrelated notice ${i}` });
+    for (let i = 0; i < 5; i++)
+      es.emit({
+        type: "notice",
+        level: "info",
+        message: `Unrelated notice ${i}`,
+      });
     es.emit({ type: "message_end", message: userMsg("u1", "new question") });
     es.emit({ type: "message_end", message: reply }, { persist: false });
     es.emit({ type: "agent_end", isTerminal: true });
   });
-  await act(async () => { appendEntry("s1", reply); publishSessionsChanged(["s1"]); });
+  await act(async () => {
+    appendEntry("s1", reply);
+    publishSessionsChanged(["s1"]);
+  });
   await settle(30);
-  assert.ok(w.latest.notices.some((n) => n.message.startsWith("Unrelated notice")));
-  await act(async () => { for (const notice of w.latest.notices) w.latest.dismissNotice(notice.id); });
+  assert.ok(
+    w.latest.notices.some((n) => n.message.startsWith("Unrelated notice")),
+  );
+  await act(async () => {
+    for (const notice of w.latest.notices) w.latest.dismissNotice(notice.id);
+  });
   await settle();
-  assert.equal(w.latest.notices.some((n) => n.message === failure), false, "the pending duplicate cannot appear later");
+  assert.equal(
+    w.latest.notices.some((n) => n.message === failure),
+    false,
+    "the pending duplicate cannot appear later",
+  );
 });
 
 for (const order of ["frame before message", "frame after message"]) {
@@ -1747,19 +3112,36 @@ for (const order of ["frame before message", "frame after message"]) {
     primeSession("s1", [userMsg("u0", "old question")]);
     const { w, es } = await startRun("s1", "new question");
     const failure = "Provider disconnected during generation";
-    const reply = { ...assistantMsg("a1", ""), content: [], timestamp: 42, stopReason: "error", errorMessage: failure };
+    const reply = {
+      ...assistantMsg("a1", ""),
+      content: [],
+      timestamp: 42,
+      stopReason: "error",
+      errorMessage: failure,
+    };
     await act(async () => {
       es.emit({ type: "message_end", message: userMsg("u1", "new question") });
-      if (order === "frame before message") es.emit({ type: "rpc_frame_error", errorMessage: failure });
+      if (order === "frame before message")
+        es.emit({ type: "rpc_frame_error", errorMessage: failure });
       es.emit({ type: "message_end", message: reply }, { persist: false });
-      if (order === "frame after message") es.emit({ type: "rpc_frame_error", errorMessage: failure });
+      if (order === "frame after message")
+        es.emit({ type: "rpc_frame_error", errorMessage: failure });
       es.emit({ type: "agent_end", isTerminal: true, messages: [reply] });
     });
     await settle();
-    assert.deepEqual(w.latest.notices.filter((n) => n.type === "error").map((n) => n.message), [failure]);
-    await act(async () => { appendEntry("s1", reply); publishSessionsChanged(["s1"]); });
+    assert.deepEqual(
+      w.latest.notices.filter((n) => n.type === "error").map((n) => n.message),
+      [failure],
+    );
+    await act(async () => {
+      appendEntry("s1", reply);
+      publishSessionsChanged(["s1"]);
+    });
     await settle();
-    assert.deepEqual(w.latest.notices.filter((n) => n.type === "error").map((n) => n.message), [failure]);
+    assert.deepEqual(
+      w.latest.notices.filter((n) => n.type === "error").map((n) => n.message),
+      [failure],
+    );
   });
 }
 
@@ -1769,23 +3151,46 @@ for (const change of ["new run", "historical branch"]) {
     primeSession("s1", [userMsg("u0", "old question")]);
     const { w, es } = await startRun("s1", "new question");
     const failure = "Provider disconnected during generation";
-    const reply = { ...assistantMsg("a1", ""), content: [], timestamp: 42, stopReason: "error", errorMessage: failure };
+    const reply = {
+      ...assistantMsg("a1", ""),
+      content: [],
+      timestamp: 42,
+      stopReason: "error",
+      errorMessage: failure,
+    };
     await act(async () => {
       es.emit({ type: "message_end", message: userMsg("u1", "new question") });
       es.emit({ type: "message_end", message: reply }, { persist: false });
       es.emit({ type: "agent_end", isTerminal: true });
     });
     await settle();
-    assert.deepEqual(w.latest.notices.filter((n) => n.type === "error").map((n) => n.message), [failure]);
+    assert.deepEqual(
+      w.latest.notices.filter((n) => n.type === "error").map((n) => n.message),
+      [failure],
+    );
     if (change === "new run") {
-      await act(async () => { es.emit({ type: "agent_start" }); });
+      await act(async () => {
+        es.emit({ type: "agent_start" });
+      });
     } else {
-      world.views.set("s1:branch:false", { leafId: "branch", messages: [userMsg("old", "selected branch")], entryIds: ["branch-entry"] });
-      await act(async () => { await w.changeLeaf("branch"); });
+      world.views.set("s1:branch:false", {
+        leafId: "branch",
+        messages: [userMsg("old", "selected branch")],
+        entryIds: ["branch-entry"],
+      });
+      await act(async () => {
+        await w.changeLeaf("branch");
+      });
     }
-    await act(async () => { appendEntry("s1", reply); publishSessionsChanged(["s1"]); });
+    await act(async () => {
+      appendEntry("s1", reply);
+      publishSessionsChanged(["s1"]);
+    });
     await settle();
-    assert.deepEqual(w.latest.notices.filter((n) => n.type === "error").map((n) => n.message), [failure]);
+    assert.deepEqual(
+      w.latest.notices.filter((n) => n.type === "error").map((n) => n.message),
+      [failure],
+    );
   });
 }
 
@@ -1794,7 +3199,12 @@ test("an independent error is not hidden by an equal-looking assistant error", a
   primeSession("s1", [userMsg("u0", "old question")]);
   const { w, es } = await startRun("s1", "new question");
   const failure = "Provider disconnected during generation";
-  const reply = { ...assistantMsg("a1", "Partial answer"), timestamp: 42, stopReason: "error", errorMessage: failure };
+  const reply = {
+    ...assistantMsg("a1", "Partial answer"),
+    timestamp: 42,
+    stopReason: "error",
+    errorMessage: failure,
+  };
   await act(async () => {
     es.emit({ type: "message_end", message: userMsg("u1", "new question") });
     es.emit({ type: "message_end", message: reply });
@@ -1802,18 +3212,32 @@ test("an independent error is not hidden by an equal-looking assistant error", a
     es.emit({ type: "agent_end", isTerminal: true });
   });
   await settle();
-  assert.deepEqual(w.latest.notices.filter((n) => n.type === "error").map((n) => n.message), [failure]);
+  assert.deepEqual(
+    w.latest.notices.filter((n) => n.type === "error").map((n) => n.message),
+    [failure],
+  );
 });
 
 for (const previous of ["same turn", "previous turn"]) {
   test(`recovery keeps an independent error despite an equal-looking ${previous} error`, async () => {
     resetWorld();
     const failure = "Provider disconnected during generation";
-    const oldReply = { ...assistantMsg("a0", "Old answer"), timestamp: 41, stopReason: "error", errorMessage: failure };
-    const history = [userMsg("u0", "old question"), ...(previous === "previous turn" ? [oldReply] : [])];
+    const oldReply = {
+      ...assistantMsg("a0", "Old answer"),
+      timestamp: 41,
+      stopReason: "error",
+      errorMessage: failure,
+    };
+    const history = [
+      userMsg("u0", "old question"),
+      ...(previous === "previous turn" ? [oldReply] : []),
+    ];
     primeSession("s1", history);
     const { w, es } = await startRun("s1", "new question");
-    const reply = previous === "same turn" ? { ...oldReply, timestamp: 42 } : assistantMsg("a1", "Partial answer");
+    const reply =
+      previous === "same turn"
+        ? { ...oldReply, timestamp: 42 }
+        : assistantMsg("a1", "Partial answer");
     saveSession("s1", [...history, userMsg("u1", "new question"), reply]);
     await act(async () => {
       es.emit({ type: "rpc_frame_error", errorMessage: failure });
@@ -1821,39 +3245,74 @@ for (const previous of ["same turn", "previous turn"]) {
     });
     await settle();
     assert.equal(w.latest.agentRunning, false);
-    assert.deepEqual(w.latest.notices.filter((n) => n.type === "error").map((n) => n.message), [failure]);
+    assert.deepEqual(
+      w.latest.notices.filter((n) => n.type === "error").map((n) => n.message),
+      [failure],
+    );
   });
 }
 
 test("recovery does not use a previous turn's saved error as the current failure", async () => {
   resetWorld();
   const failure = "Provider disconnected during generation";
-  const oldReply = { ...assistantMsg("a0", "Old answer"), timestamp: 42, stopReason: "error", errorMessage: failure };
+  const oldReply = {
+    ...assistantMsg("a0", "Old answer"),
+    timestamp: 42,
+    stopReason: "error",
+    errorMessage: failure,
+  };
   primeSession("s1", [userMsg("u0", "old question"), oldReply]);
   const { w, es } = await startRun("s1", "new question");
   await act(async () => {
-    es.emit({ type: "message_end", message: { ...oldReply, content: [{ type: "text", text: "New partial answer" }] } }, { persist: false });
+    es.emit(
+      {
+        type: "message_end",
+        message: {
+          ...oldReply,
+          content: [{ type: "text", text: "New partial answer" }],
+        },
+      },
+      { persist: false },
+    );
     es.emit({ type: "prompt_result", agentInvoked: false });
   });
   await settle();
   assert.equal(w.latest.agentRunning, false);
-  assert.deepEqual(w.latest.notices.filter((n) => n.type === "error").map((n) => n.message), [failure]);
+  assert.deepEqual(
+    w.latest.notices.filter((n) => n.type === "error").map((n) => n.message),
+    [failure],
+  );
 });
 
 test("recovery retains a frame error that differs from the saved assistant error", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "old question")]);
   const { w, es } = await startRun("s1", "new question");
-  const reply = { ...assistantMsg("a1", "Partial answer"), timestamp: 42, stopReason: "error", errorMessage: "Earlier provider failure" };
-  saveSession("s1", [userMsg("u0", "old question"), userMsg("u1", "new question"), reply]);
+  const reply = {
+    ...assistantMsg("a1", "Partial answer"),
+    timestamp: 42,
+    stopReason: "error",
+    errorMessage: "Earlier provider failure",
+  };
+  saveSession("s1", [
+    userMsg("u0", "old question"),
+    userMsg("u1", "new question"),
+    reply,
+  ]);
   await act(async () => {
     es.emit({ type: "rpc_frame_error", errorMessage: "Malformed RPC frame" });
     es.emit({ type: "prompt_result", agentInvoked: false });
   });
   await settle();
   assert.equal(w.latest.agentRunning, false);
-  assert.deepEqual(w.latest.notices.filter((n) => n.type === "error").map((n) => n.message), ["Malformed RPC frame"]);
-  assert.equal(w.latest.messages.at(-1).errorMessage, "Earlier provider failure");
+  assert.deepEqual(
+    w.latest.notices.filter((n) => n.type === "error").map((n) => n.message),
+    ["Malformed RPC frame"],
+  );
+  assert.equal(
+    w.latest.messages.at(-1).errorMessage,
+    "Earlier provider failure",
+  );
 });
 
 test("a silent idle transition shows a fallback error instead of disappearing", async () => {
@@ -1871,7 +3330,11 @@ test("a silent idle transition shows a fallback error instead of disappearing", 
   await settle();
 
   assert.equal(w.latest.agentRunning, false);
-  assert.ok(w.latest.notices.some((notice) => /stopped without returning a response/i.test(notice.message)));
+  assert.ok(
+    w.latest.notices.some((notice) =>
+      /stopped without returning a response/i.test(notice.message),
+    ),
+  );
 });
 
 for (const completion of ["visibilitychange", "agent_end"]) {
@@ -1885,7 +3348,8 @@ for (const completion of ["visibilitychange", "agent_end"]) {
       assistantMsg("a1", "Completed while away"),
     ]);
     await act(async () => {
-      if (completion === "agent_end") es.emit({ type: "agent_end", isTerminal: true });
+      if (completion === "agent_end")
+        es.emit({ type: "agent_end", isTerminal: true });
       else {
         visibilityState = "visible";
         document.dispatchEvent(new Event("visibilitychange"));
@@ -1895,8 +3359,17 @@ for (const completion of ["visibilitychange", "agent_end"]) {
     await settle();
 
     assert.equal(w.latest.agentRunning, false);
-    assert.ok(w.latest.messages.some((m) => m.role === "assistant" && m.content[0]?.text === "Completed while away"));
-    assert.deepEqual(w.latest.notices.filter((n) => n.type === "error"), []);
+    assert.ok(
+      w.latest.messages.some(
+        (m) =>
+          m.role === "assistant" &&
+          m.content[0]?.text === "Completed while away",
+      ),
+    );
+    assert.deepEqual(
+      w.latest.notices.filter((n) => n.type === "error"),
+      [],
+    );
   });
 }
 
@@ -1905,10 +3378,16 @@ test("an older answer does not hide a current run with only tool activity", asyn
   const history = [userMsg("u0", "question"), assistantMsg("a0", "Old answer")];
   primeSession("s1", history);
   const { w } = await startRun("s1", "question");
-  primeSession("s1", [...history, userMsg("u1", "question"), {
-    ...assistantMsg("a1", ""),
-    content: [{ type: "toolCall", toolCallId: "tc1", toolName: "read", input: {} }],
-  }]);
+  primeSession("s1", [
+    ...history,
+    userMsg("u1", "question"),
+    {
+      ...assistantMsg("a1", ""),
+      content: [
+        { type: "toolCall", toolCallId: "tc1", toolName: "read", input: {} },
+      ],
+    },
+  ]);
   await act(async () => {
     visibilityState = "visible";
     document.dispatchEvent(new Event("visibilitychange"));
@@ -1921,7 +3400,10 @@ test("an older answer does not hide a current run with only tool activity", asyn
 
 test("a repeated prompt cannot reuse an old saved answer when the new prompt was not persisted", async () => {
   resetWorld();
-  primeSession("s1", [userMsg("u0", "question"), assistantMsg("a0", "Old answer")]);
+  primeSession("s1", [
+    userMsg("u0", "question"),
+    assistantMsg("a0", "Old answer"),
+  ]);
   const { w } = await startRun("s1", "question");
   await act(async () => {
     visibilityState = "visible";
@@ -1941,7 +3423,11 @@ test("recovery preserves a saved provider failure even after partial response co
   primeSession("s1", [
     userMsg("u0", "old question"),
     userMsg("u1", "new question"),
-    { ...assistantMsg("a1", "Partial answer"), stopReason: "error", errorMessage: providerError },
+    {
+      ...assistantMsg("a1", "Partial answer"),
+      stopReason: "error",
+      errorMessage: providerError,
+    },
   ]);
   await act(async () => {
     visibilityState = "visible";
@@ -1951,14 +3437,21 @@ test("recovery preserves a saved provider failure even after partial response co
   await settle();
   assert.equal(w.latest.agentRunning, false);
   assert.equal(w.latest.messages.at(-1).errorMessage, providerError);
-  assert.deepEqual(w.latest.notices.filter((n) => n.type === "error"), []);
+  assert.deepEqual(
+    w.latest.notices.filter((n) => n.type === "error"),
+    [],
+  );
 });
 
 test("a failed transcript reload is retried instead of being classified as an empty response", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "old question")]);
   const { w } = await startRun("s1", "new question");
-  primeSession("s1", [userMsg("u0", "old question"), userMsg("u1", "new question"), assistantMsg("a1", "Saved answer")]);
+  primeSession("s1", [
+    userMsg("u0", "old question"),
+    userMsg("u1", "new question"),
+    assistantMsg("a1", "Saved answer"),
+  ]);
   world.contextUnavailable = true;
   await act(async () => {
     visibilityState = "visible";
@@ -1966,8 +3459,15 @@ test("a failed transcript reload is retried instead of being classified as an em
     await sleep(60);
   });
   await settle();
-  assert.equal(w.latest.agentRunning, true, "unknown completion must remain recoverable");
-  assert.deepEqual(w.latest.notices.filter((n) => n.type === "error"), []);
+  assert.equal(
+    w.latest.agentRunning,
+    true,
+    "unknown completion must remain recoverable",
+  );
+  assert.deepEqual(
+    w.latest.notices.filter((n) => n.type === "error"),
+    [],
+  );
 
   world.contextUnavailable = false;
   await act(async () => {
@@ -1976,8 +3476,15 @@ test("a failed transcript reload is retried instead of being classified as an em
   });
   await settle();
   assert.equal(w.latest.agentRunning, false);
-  assert.ok(w.latest.messages.some((m) => m.role === "assistant" && m.content[0]?.text === "Saved answer"));
-  assert.deepEqual(w.latest.notices.filter((n) => n.type === "error"), []);
+  assert.ok(
+    w.latest.messages.some(
+      (m) => m.role === "assistant" && m.content[0]?.text === "Saved answer",
+    ),
+  );
+  assert.deepEqual(
+    w.latest.notices.filter((n) => n.type === "error"),
+    [],
+  );
 });
 
 for (const recovered of ["answer", "empty", "absent wrapper"]) {
@@ -1986,27 +3493,52 @@ for (const recovered of ["answer", "empty", "absent wrapper"]) {
     primeSession("s1", [userMsg("u0", "old question")]);
     const { w } = await startRun("s1", "new question");
     world.holds.push({
-      match: (method, url) => method === "GET" && url === "/api/sessions/s1/state",
+      match: (method, url) =>
+        method === "GET" && url === "/api/sessions/s1/state",
       produce: async () => ({ status: 503, value: {} }),
     });
-    await act(async () => { window.dispatchEvent(new Event("online")); });
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+    });
     await settle();
-    assert.equal(w.latest.agentRunning, true, "readable history does not prove the provider finished without a response");
-    assert.deepEqual(w.latest.notices.filter((n) => n.type === "error"), []);
+    assert.equal(
+      w.latest.agentRunning,
+      true,
+      "readable history does not prove the provider finished without a response",
+    );
+    assert.deepEqual(
+      w.latest.notices.filter((n) => n.type === "error"),
+      [],
+    );
 
     if (recovered === "answer") {
-      saveSession("s1", [userMsg("u0", "old question"), userMsg("u1", "new question"), assistantMsg("a1", "Recovered answer")]);
+      saveSession("s1", [
+        userMsg("u0", "old question"),
+        userMsg("u1", "new question"),
+        assistantMsg("a1", "Recovered answer"),
+      ]);
     } else if (recovered === "absent wrapper") {
       world.agents.set("s1", { running: false });
     }
-    await act(async () => { window.dispatchEvent(new Event("online")); });
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+    });
     await settle();
     assert.equal(w.latest.agentRunning, false);
     if (recovered === "answer") {
-      assert.equal(w.latest.messages.at(-1).content[0].text, "Recovered answer");
-      assert.deepEqual(w.latest.notices.filter((n) => n.type === "error"), []);
+      assert.equal(
+        w.latest.messages.at(-1).content[0].text,
+        "Recovered answer",
+      );
+      assert.deepEqual(
+        w.latest.notices.filter((n) => n.type === "error"),
+        [],
+      );
     } else {
-      assert.equal(w.latest.notices.filter((n) => n.type === "error").length, 1);
+      assert.equal(
+        w.latest.notices.filter((n) => n.type === "error").length,
+        1,
+      );
     }
   });
 }
@@ -2017,65 +3549,112 @@ for (const result of ["visible answer", "provider failure"]) {
     primeSession("s1", [userMsg("u0", "old question")]);
     const { w } = await startRun("s1", "new question");
     const answer = assistantMsg("a1", "Visible response");
-    if (result === "provider failure") Object.assign(answer, { stopReason: "error", errorMessage: "Provider rejected the request" });
-    saveSession("s1", [userMsg("u0", "old question"), userMsg("u1", "new question"), answer]);
+    if (result === "provider failure")
+      Object.assign(answer, {
+        stopReason: "error",
+        errorMessage: "Provider rejected the request",
+      });
+    saveSession("s1", [
+      userMsg("u0", "old question"),
+      userMsg("u1", "new question"),
+      answer,
+    ]);
     world.holds.push({
-      match: (method, url) => method === "GET" && url === "/api/sessions/s1/state",
+      match: (method, url) =>
+        method === "GET" && url === "/api/sessions/s1/state",
       produce: async () => ({ status: 503, value: {} }),
     });
-    await act(async () => { window.dispatchEvent(new Event("online")); });
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+    });
     await settle();
     assert.equal(w.latest.agentRunning, false);
     assert.equal(w.latest.messages.at(-1).content[0].text, "Visible response");
-    if (result === "provider failure") assert.equal(w.latest.messages.at(-1).errorMessage, "Provider rejected the request");
-    assert.deepEqual(w.latest.notices.filter((n) => n.type === "error"), []);
+    if (result === "provider failure")
+      assert.equal(
+        w.latest.messages.at(-1).errorMessage,
+        "Provider rejected the request",
+      );
+    assert.deepEqual(
+      w.latest.notices.filter((n) => n.type === "error"),
+      [],
+    );
   });
 }
 
 test("interrupt captures saved entries newer than the last rendered transcript", async () => {
-    resetWorld();
-    primeSession("s1", [userMsg("u0", "old question")]);
-    const { w } = await startRun("s1", "question");
-    primeSession("s1", [userMsg("u0", "old question"), userMsg("u1", "question"), assistantMsg("a1", "Previous answer")]);
-    const fullReads = () => world.calls.filter((c) => c.method === "GET" && c.url.startsWith("/api/sessions/s1?")).length;
-    const promptCommands = () => world.calls.filter((c) => c.method === "POST" && ["prompt", "abort_and_prompt"].includes(c.body?.type)).length;
-    const readsBefore = fullReads();
-    const promptsBefore = promptCommands();
-    let releaseBoundary;
-    world.holds.push({
-      match: (method, url) => method === "GET" && url === "/api/sessions/s1/context?boundary=1",
-      produce: () => new Promise((resolve) => {
+  resetWorld();
+  primeSession("s1", [userMsg("u0", "old question")]);
+  const { w } = await startRun("s1", "question");
+  primeSession("s1", [
+    userMsg("u0", "old question"),
+    userMsg("u1", "question"),
+    assistantMsg("a1", "Previous answer"),
+  ]);
+  const fullReads = () =>
+    world.calls.filter(
+      (c) => c.method === "GET" && c.url.startsWith("/api/sessions/s1?"),
+    ).length;
+  const promptCommands = () =>
+    world.calls.filter(
+      (c) =>
+        c.method === "POST" &&
+        ["prompt", "abort_and_prompt"].includes(c.body?.type),
+    ).length;
+  const readsBefore = fullReads();
+  const promptsBefore = promptCommands();
+  let releaseBoundary;
+  world.holds.push({
+    match: (method, url) =>
+      method === "GET" && url === "/api/sessions/s1/context?boundary=1",
+    produce: () =>
+      new Promise((resolve) => {
         const entryIds = [...world.sessions.get("s1").entryIds];
         releaseBoundary = () => resolve({ value: { entryIds } });
       }),
-    });
-    let submission;
-    await act(async () => {
-      submission = w.latest.handleInterruptAndReply("question");
-      await sleep(30);
-    });
-    const replacement = lastEs();
-    await act(async () => {
-      replacement.open();
-      await sleep(20);
-      assert.ok(releaseBoundary, "the persisted-ID boundary must be read immediately before dispatch");
-      assert.equal(promptCommands(), promptsBefore, "dispatch waits for the boundary, including interrupt-and-reply");
-      assert.equal(fullReads(), readsBefore, "pre-prompt boundary capture must not request transcript bodies");
-      releaseBoundary();
-      await submission;
-      replacement.emit({ type: "agent_end", isTerminal: true });
-      replacement.emit({ type: "agent_start" });
-      await Promise.resolve();
-    });
-    // The replacement never persisted a new user entry or answer.
-    await act(async () => {
-      visibilityState = "visible";
-      document.dispatchEvent(new Event("visibilitychange"));
-      await sleep(60);
-    });
-    await settle();
-    assert.equal(w.latest.agentRunning, false);
-    assert.equal(w.latest.notices.filter((n) => n.type === "error").length, 1, "previous answer must not count as replacement success");
+  });
+  let submission;
+  await act(async () => {
+    submission = w.latest.handleInterruptAndReply("question");
+    await sleep(30);
+  });
+  const replacement = lastEs();
+  await act(async () => {
+    replacement.open();
+    await sleep(20);
+    assert.ok(
+      releaseBoundary,
+      "the persisted-ID boundary must be read immediately before dispatch",
+    );
+    assert.equal(
+      promptCommands(),
+      promptsBefore,
+      "dispatch waits for the boundary, including interrupt-and-reply",
+    );
+    assert.equal(
+      fullReads(),
+      readsBefore,
+      "pre-prompt boundary capture must not request transcript bodies",
+    );
+    releaseBoundary();
+    await submission;
+    replacement.emit({ type: "agent_end", isTerminal: true });
+    replacement.emit({ type: "agent_start" });
+    await Promise.resolve();
+  });
+  // The replacement never persisted a new user entry or answer.
+  await act(async () => {
+    visibilityState = "visible";
+    document.dispatchEvent(new Event("visibilitychange"));
+    await sleep(60);
+  });
+  await settle();
+  assert.equal(w.latest.agentRunning, false);
+  assert.equal(
+    w.latest.notices.filter((n) => n.type === "error").length,
+    1,
+    "previous answer must not count as replacement success",
+  );
 });
 
 test("tool activity and turn_end errors do not count as a successful answer", async () => {
@@ -2085,20 +3664,34 @@ test("tool activity and turn_end errors do not count as a successful answer", as
 
   const toolOnlyAssistant = {
     ...assistantMsg("a1", ""),
-    content: [{ type: "toolCall", toolCallId: "tc1", toolName: "read", input: { path: "missing.txt" } }],
+    content: [
+      {
+        type: "toolCall",
+        toolCallId: "tc1",
+        toolName: "read",
+        input: { path: "missing.txt" },
+      },
+    ],
   };
   const providerError = "The provider failed while finishing the turn";
   await act(async () => {
     es.emit({ type: "agent_start" });
     es.emit({ type: "message_end", message: toolOnlyAssistant });
-    es.emit({ type: "tool_execution_start", toolCallId: "tc1", toolName: "read" });
+    es.emit({
+      type: "tool_execution_start",
+      toolCallId: "tc1",
+      toolName: "read",
+    });
     es.emit({ type: "turn_end", error: { message: providerError } });
     es.emit({ type: "agent_end", isTerminal: true });
     await Promise.resolve();
   });
   await settle();
 
-  assert.ok(w.latest.notices.some((notice) => notice.message === providerError), "turn_end errors must be visible");
+  assert.ok(
+    w.latest.notices.some((notice) => notice.message === providerError),
+    "turn_end errors must be visible",
+  );
   assert.equal(w.latest.agentRunning, false);
 });
 
@@ -2109,7 +3702,14 @@ test("tool output streams live before the toolResult message lands", async () =>
 
   const toolCallAssistant = {
     ...assistantMsg("a1", ""),
-    content: [{ type: "toolCall", toolCallId: "tc1", toolName: "bash", input: { command: "long-job" } }],
+    content: [
+      {
+        type: "toolCall",
+        toolCallId: "tc1",
+        toolName: "bash",
+        input: { command: "long-job" },
+      },
+    ],
   };
   await act(async () => {
     es.emit({ type: "agent_start" });
@@ -2117,11 +3717,20 @@ test("tool output streams live before the toolResult message lands", async () =>
     es.emit({ type: "message_end", message: toolCallAssistant });
     await Promise.resolve();
   });
-  assert.equal(w.latest.liveToolResults.size, 0, "nothing is live before the tool starts");
+  assert.equal(
+    w.latest.liveToolResults.size,
+    0,
+    "nothing is live before the tool starts",
+  );
 
   // The tool starts: its row must go live immediately, with no output yet.
   await act(async () => {
-    es.emit({ type: "tool_execution_start", toolCallId: "tc1", toolName: "bash", args: { command: "long-job" } });
+    es.emit({
+      type: "tool_execution_start",
+      toolCallId: "tc1",
+      toolName: "bash",
+      args: { command: "long-job" },
+    });
     await Promise.resolve();
   });
   const started = w.latest.liveToolResults.get("tc1");
@@ -2132,44 +3741,88 @@ test("tool output streams live before the toolResult message lands", async () =>
   // omp sends the FULL accumulated output per chunk; only the latest survives
   // a display frame.
   await act(async () => {
-    es.emit({ type: "tool_execution_update", toolCallId: "tc1", toolName: "bash", partialResult: { content: [{ type: "text", text: "line-1\n" }] } });
-    es.emit({ type: "tool_execution_update", toolCallId: "tc1", toolName: "bash", partialResult: { content: [{ type: "text", text: "line-1\nline-2\n" }] } });
+    es.emit({
+      type: "tool_execution_update",
+      toolCallId: "tc1",
+      toolName: "bash",
+      partialResult: { content: [{ type: "text", text: "line-1\n" }] },
+    });
+    es.emit({
+      type: "tool_execution_update",
+      toolCallId: "tc1",
+      toolName: "bash",
+      partialResult: { content: [{ type: "text", text: "line-1\nline-2\n" }] },
+    });
     await Promise.resolve();
   });
   await settle(90);
   const streamed = w.latest.liveToolResults.get("tc1");
   assert.equal(streamed?.partial, true);
-  assert.equal(streamed?.content?.[0]?.text, "line-1\nline-2\n", "latest accumulated snapshot wins");
+  assert.equal(
+    streamed?.content?.[0]?.text,
+    "line-1\nline-2\n",
+    "latest accumulated snapshot wins",
+  );
 
   // The tool finishes, then omp commits the toolResult message. The committed
   // result supersedes the live snapshot.
   await act(async () => {
-    es.emit({ type: "tool_execution_end", toolCallId: "tc1", toolName: "bash", result: { content: [{ type: "text", text: "line-1\nline-2\n" }] } });
-    await Promise.resolve();
-  });
-  assert.equal(w.latest.liveToolResults.get("tc1")?.partial, undefined, "a finished tool is no longer partial");
-  await act(async () => {
     es.emit({
-      type: "message_end",
-      message: { role: "toolResult", toolCallId: "tc1", toolName: "bash", content: [{ type: "text", text: "line-1\nline-2\n" }] },
+      type: "tool_execution_end",
+      toolCallId: "tc1",
+      toolName: "bash",
+      result: { content: [{ type: "text", text: "line-1\nline-2\n" }] },
     });
     await Promise.resolve();
   });
-  assert.equal(w.latest.liveToolResults.size, 0, "the committed result replaces the live entry");
+  assert.equal(
+    w.latest.liveToolResults.get("tc1")?.partial,
+    undefined,
+    "a finished tool is no longer partial",
+  );
+  await act(async () => {
+    es.emit({
+      type: "message_end",
+      message: {
+        role: "toolResult",
+        toolCallId: "tc1",
+        toolName: "bash",
+        content: [{ type: "text", text: "line-1\nline-2\n" }],
+      },
+    });
+    await Promise.resolve();
+  });
+  assert.equal(
+    w.latest.liveToolResults.size,
+    0,
+    "the committed result replaces the live entry",
+  );
   assert.equal(w.latest.messages.at(-1)?.role, "toolResult");
 
   // Terminal frames clear anything still in flight.
   await act(async () => {
-    es.emit({ type: "tool_execution_start", toolCallId: "tc2", toolName: "bash" });
+    es.emit({
+      type: "tool_execution_start",
+      toolCallId: "tc2",
+      toolName: "bash",
+    });
     await Promise.resolve();
   });
   assert.equal(w.latest.liveToolResults.size, 1);
-  saveSession("s1", [userMsg("u0", "q"), userMsg("u1", "q1"), toolCallAssistant]);
+  saveSession("s1", [
+    userMsg("u0", "q"),
+    userMsg("u1", "q1"),
+    toolCallAssistant,
+  ]);
   await act(async () => {
     es.emit({ type: "agent_end", isTerminal: true });
   });
   await settle();
-  assert.equal(w.latest.liveToolResults.size, 0, "a finished run leaves no live tool state");
+  assert.equal(
+    w.latest.liveToolResults.size,
+    0,
+    "a finished run leaves no live tool state",
+  );
 });
 
 test("late frames after the run finished are ignored (no ghost bubble, no double completion)", async () => {
@@ -2182,7 +3835,11 @@ test("late frames after the run finished are ignored (no ghost bubble, no double
     es.emit({ type: "message_end", message: assistantMsg("a1", "done") });
     // Disk snapshot in sync BEFORE agent_end: the terminal reload replaces
     // in-memory messages with the session file's content.
-    saveSession("s1", [userMsg("u0", "q"), userMsg("u1", "q1"), assistantMsg("a1", "done")]);
+    saveSession("s1", [
+      userMsg("u0", "q"),
+      userMsg("u1", "q1"),
+      assistantMsg("a1", "done"),
+    ]);
     es.emit({ type: "agent_end", isTerminal: true });
     await Promise.resolve();
   });
@@ -2193,16 +3850,31 @@ test("late frames after the run finished are ignored (no ghost bubble, no double
   // Frames buffered while the tab was frozen, flushed after reconcile:
   // message_update / message_end / a SECOND agent_end must change nothing.
   await act(async () => {
-    es.emit({ type: "message_update", message: assistantMsg("a1", "late partial") });
+    es.emit({
+      type: "message_update",
+      message: assistantMsg("a1", "late partial"),
+    });
     es.emit({ type: "message_end", message: assistantMsg("a1", "late full") });
     es.emit({ type: "agent_end", isTerminal: true });
     await Promise.resolve();
   });
   await settle(90);
-  assert.equal(w.latest.agentRunning, false, "late agent_end must not re-enter completion");
-  assert.equal(w.latest.streamState.isStreaming, false, "late updates must not resurrect a streaming bubble");
+  assert.equal(
+    w.latest.agentRunning,
+    false,
+    "late agent_end must not re-enter completion",
+  );
+  assert.equal(
+    w.latest.streamState.isStreaming,
+    false,
+    "late updates must not resurrect a streaming bubble",
+  );
   assert.equal(w.latest.streamState.streamingMessage, null);
-  assert.equal(w.latest.messages.length, 3, "late message_end must not duplicate the message");
+  assert.equal(
+    w.latest.messages.length,
+    3,
+    "late message_end must not duplicate the message",
+  );
 });
 
 test("agent_end with isTerminal=false is an async delivery pause, not a completion", async () => {
@@ -2221,7 +3893,11 @@ test("agent_end with isTerminal=false is an async delivery pause, not a completi
     await Promise.resolve();
   });
   await settle();
-  assert.equal(w.latest.agentRunning, true, "async delivery must keep the run alive");
+  assert.equal(
+    w.latest.agentRunning,
+    true,
+    "async delivery must keep the run alive",
+  );
   assert.equal(w.latest.streamState.isStreaming, true);
 });
 
@@ -2231,7 +3907,10 @@ test("abort_and_prompt: the aborted run's terminal agent_end is consumed, the ne
   const { w, es } = await startRun("s1", "q1");
   await act(async () => {
     es.emit({ type: "agent_start" });
-    es.emit({ type: "message_update", message: assistantMsg("a1", "old run streaming") });
+    es.emit({
+      type: "message_update",
+      message: assistantMsg("a1", "old run streaming"),
+    });
     await Promise.resolve();
   });
   await settle(90);
@@ -2250,7 +3929,9 @@ test("abort_and_prompt: the aborted run's terminal agent_end is consumed, the ne
     await interruptPromise;
   });
   assert.equal(
-    callsTo("POST", "/api/agent/").some((c) => c.body?.type === "abort_and_prompt"),
+    callsTo("POST", "/api/agent/").some(
+      (c) => c.body?.type === "abort_and_prompt",
+    ),
     true,
     "abort_and_prompt command must be sent",
   );
@@ -2262,17 +3943,27 @@ test("abort_and_prompt: the aborted run's terminal agent_end is consumed, the ne
     await Promise.resolve();
   });
   await settle(90);
-  assert.equal(w.latest.agentRunning, true, "the replacement run must still be running");
+  assert.equal(
+    w.latest.agentRunning,
+    true,
+    "the replacement run must still be running",
+  );
 
   // The NEW run streams on.
   await act(async () => {
     esRun.emit({ type: "agent_start" });
-    esRun.emit({ type: "message_update", message: assistantMsg("a2", "new run streaming") });
+    esRun.emit({
+      type: "message_update",
+      message: assistantMsg("a2", "new run streaming"),
+    });
     await Promise.resolve();
   });
   await settle(90);
   assert.equal(w.latest.agentRunning, true);
-  assert.equal(w.latest.streamState.streamingMessage?.content?.[0]?.text, "new run streaming");
+  assert.equal(
+    w.latest.streamState.streamingMessage?.content?.[0]?.text,
+    "new run streaming",
+  );
 });
 
 test("send tolerates a missing session file (local-only slash commands) and still dispatches", async () => {
@@ -2296,11 +3987,18 @@ test("send tolerates a missing session file (local-only slash commands) and stil
     await sendPromise;
   });
   assert.equal(
-    callsTo("POST", "/api/agent/fileless").some((c) => c.body?.type === "prompt" && c.body?.message === "hello after skill"),
+    callsTo("POST", "/api/agent/fileless").some(
+      (c) =>
+        c.body?.type === "prompt" && c.body?.message === "hello after skill",
+    ),
     true,
     "prompt must be dispatched despite the boundary 404",
   );
-  assert.equal(w.latest.agentRunning, false, "the outbox does not start a turn before agent_start");
+  assert.equal(
+    w.latest.agentRunning,
+    false,
+    "the outbox does not start a turn before agent_start",
+  );
   assert.equal(w.latest.notices.length, 0, "no failed-send notice");
 });
 
@@ -2310,7 +4008,10 @@ test("a reconcile response that straddles a run boundary is dropped by the run-i
   const { w, es } = await startRun("s1", "q1");
   await act(async () => {
     es.emit({ type: "agent_start" });
-    es.emit({ type: "message_update", message: assistantMsg("a1", "streaming") });
+    es.emit({
+      type: "message_update",
+      message: assistantMsg("a1", "streaming"),
+    });
     await Promise.resolve();
   });
   await settle(90);
@@ -2318,7 +4019,11 @@ test("a reconcile response that straddles a run boundary is dropped by the run-i
   // todo_reminder triggers the mid-run reconcile poll; hold its response.
   let releaseReconcile;
   const reconcileDone = new Promise((resolve) => {
-    releaseReconcile = () => resolve({ status: 200, value: { running: false, state: { systemPrompt: "STALE-RUN" } } });
+    releaseReconcile = () =>
+      resolve({
+        status: 200,
+        value: { running: false, state: { systemPrompt: "STALE-RUN" } },
+      });
   });
   world.holds.push({
     match: (method, url) => method === "GET" && url.includes("/api/agent/s1"),
@@ -2328,7 +4033,10 @@ test("a reconcile response that straddles a run boundary is dropped by the run-i
     es.emit({ type: "todo_reminder" });
     await sleep(30);
   });
-  assert.ok(callsTo("GET", "/api/agent/s1").length > 0, "reconcile poll must be in flight");
+  assert.ok(
+    callsTo("GET", "/api/agent/s1").length > 0,
+    "reconcile poll must be in flight",
+  );
 
   // The user interrupts-and-replies while the poll is in flight: the run id
   // advances, so the stale response must be discarded entirely.
@@ -2347,8 +4055,16 @@ test("a reconcile response that straddles a run boundary is dropped by the run-i
     await sleep(30);
   });
   await settle();
-  assert.equal(w.latest.agentRunning, true, "stale reconcile must not finish the new run");
-  assert.notEqual(w.latest.systemPrompt, "STALE-RUN", "stale reconcile must not apply its snapshot");
+  assert.equal(
+    w.latest.agentRunning,
+    true,
+    "stale reconcile must not finish the new run",
+  );
+  assert.notEqual(
+    w.latest.systemPrompt,
+    "STALE-RUN",
+    "stale reconcile must not apply its snapshot",
+  );
 
   // The replacement run completes normally afterwards: the next terminal
   // agent_end (no pending interrupt) ends the turn.
@@ -2368,11 +4084,17 @@ test("ISSUE #187 the context ring fills mid-run while the agent is still streami
   const { w, es } = await startRun("s1", "q1");
   await act(async () => {
     es.emit({ type: "agent_start" });
-    es.emit({ type: "message_update", message: assistantMsg("a1", "streaming") });
+    es.emit({
+      type: "message_update",
+      message: assistantMsg("a1", "streaming"),
+    });
     await Promise.resolve();
   });
   await settle(90);
-  assert.ok(!w.latest.contextUsage, "a continued conversation starts with no live usage");
+  assert.ok(
+    !w.latest.contextUsage,
+    "a continued conversation starts with no live usage",
+  );
 
   // The server has real usage while the run is genuinely busy — it used to be
   // dropped, so the ring stayed blank until the run ended.
@@ -2380,7 +4102,13 @@ test("ISSUE #187 the context ring fills mid-run while the agent is still streami
     match: (method, url) => method === "GET" && url.includes("/api/agent/s1"),
     produce: () => ({
       status: 200,
-      value: { running: true, state: { isStreaming: true, contextUsage: { percent: 42, contextWindow: 200000, tokens: 84000 } } },
+      value: {
+        running: true,
+        state: {
+          isStreaming: true,
+          contextUsage: { percent: 42, contextWindow: 200000, tokens: 84000 },
+        },
+      },
     }),
   });
   await act(async () => {
@@ -2388,8 +4116,16 @@ test("ISSUE #187 the context ring fills mid-run while the agent is still streami
     await sleep(30);
   });
   await settle();
-  assert.deepEqual(w.latest.contextUsage, { percent: 42, contextWindow: 200000, tokens: 84000 });
-  assert.equal(w.latest.agentRunning, true, "applying usage must not finish a busy run");
+  assert.deepEqual(w.latest.contextUsage, {
+    percent: 42,
+    contextWindow: 200000,
+    tokens: 84000,
+  });
+  assert.equal(
+    w.latest.agentRunning,
+    true,
+    "applying usage must not finish a busy run",
+  );
 });
 
 test("fatal SSE error mid-run reconnects after 1s and the new stream delivers events", async () => {
@@ -2406,7 +4142,11 @@ test("fatal SSE error mid-run reconnects after 1s and the new stream delivers ev
   es1.failFatal();
   assert.equal(es1.readyState, FakeStream.CLOSED);
   await settle(1500); // > reconnect backoff
-  assert.equal(world.esInstances.length, instanceCount + 1, "a replacement stream must be created");
+  assert.equal(
+    world.esInstances.length,
+    instanceCount + 1,
+    "a replacement stream must be created",
+  );
 
   const es2 = lastEs();
   await act(async () => {
@@ -2415,7 +4155,11 @@ test("fatal SSE error mid-run reconnects after 1s and the new stream delivers ev
     await Promise.resolve();
   });
   await settle();
-  assert.equal(w.latest.agentRunning, false, "events must flow through the replacement stream");
+  assert.equal(
+    w.latest.agentRunning,
+    false,
+    "events must flow through the replacement stream",
+  );
 });
 
 test("a chat with no stream attaches when the running channel reports its session", async () => {
@@ -2431,37 +4175,82 @@ test("a chat with no stream attaches when the running channel reports its sessio
   assert.notEqual(w.latest.displayModel?.modelId, "live-model");
   world.agents.set("started-elsewhere", {
     running: true,
-    state: { isStreaming: true, isPromptRunning: true, model: { provider: "test", id: "live-model" }, thinkingLevel: "high" },
+    state: {
+      isStreaming: true,
+      isPromptRunning: true,
+      model: { provider: "test", id: "live-model" },
+      thinkingLevel: "high",
+    },
   });
   await act(async () => {
-    running.deliver({ type: "message", data: JSON.stringify({ type: "running", runningSessionIds: ["other"] }) });
+    running.deliver({
+      type: "message",
+      data: JSON.stringify({ type: "running", runningSessionIds: ["other"] }),
+    });
     await settle();
   });
-  assert.equal(world.esInstances.length, 0, "another session's run is not this chat's");
+  assert.equal(
+    world.esInstances.length,
+    0,
+    "another session's run is not this chat's",
+  );
   await act(async () => {
-    running.deliver({ type: "message", data: JSON.stringify({ type: "running", runningSessionIds: ["started-elsewhere"] }) });
+    running.deliver({
+      type: "message",
+      data: JSON.stringify({
+        type: "running",
+        runningSessionIds: ["started-elsewhere"],
+      }),
+    });
     await settle();
   });
   assert.equal(world.esInstances.length, 1, "the chat attaches its observer");
   assert.equal(lastEs().channel.sessionId, "started-elsewhere");
   assert.equal(w.latest.agentRunning, true);
-  assert.equal(w.latest.thinkingLevel, "high", "the composer shows the run's thinking level");
-  assert.equal(w.latest.displayModel.modelId, "live-model", "the composer shows the run's model");
+  assert.equal(
+    w.latest.thinkingLevel,
+    "high",
+    "the composer shows the run's thinking level",
+  );
+  assert.equal(
+    w.latest.displayModel.modelId,
+    "live-model",
+    "the composer shows the run's model",
+  );
 });
 
 test("a running attachment applies compaction before its observer opens", async () => {
   resetWorld();
   primeSession("compacting-elsewhere", [userMsg("u0", "q")]);
   const w = await mountSession("compacting-elsewhere");
-  world.agents.set("compacting-elsewhere", { running: true, state: { isCompacting: true } });
+  world.agents.set("compacting-elsewhere", {
+    running: true,
+    state: { isCompacting: true },
+  });
   await act(async () => {
-    world.runningStreams.at(-1).deliver({ type: "message", data: JSON.stringify({ type: "running", runningSessionIds: ["compacting-elsewhere"] }) });
+    world.runningStreams.at(-1).deliver({
+      type: "message",
+      data: JSON.stringify({
+        type: "running",
+        runningSessionIds: ["compacting-elsewhere"],
+      }),
+    });
     await settle();
   });
   assert.equal(lastEs().readyState, FakeStream.CONNECTING);
-  assert.equal(w.latest.isCompacting, true, "the compaction control immediately reflects the attached run");
-  await act(async () => { await w.latest.handleCompact(); });
-  assert.equal(world.calls.some((call) => call.body?.type === "compact"), false, "a second compaction cannot start");
+  assert.equal(
+    w.latest.isCompacting,
+    true,
+    "the compaction control immediately reflects the attached run",
+  );
+  await act(async () => {
+    await w.latest.handleCompact();
+  });
+  assert.equal(
+    world.calls.some((call) => call.body?.type === "compact"),
+    false,
+    "a second compaction cannot start",
+  );
 });
 
 test("compaction attached from another tab settles without replacing a historical view", async (t) => {
@@ -2469,26 +4258,46 @@ test("compaction attached from another tab settles without replacing a historica
   const sid = "historical-compaction";
   primeSession(sid, [userMsg("live", "current branch")]);
   const w = await mountSession(sid);
-  const branch = { leafId: "branch", messages: [userMsg("old", "selected branch")], entryIds: ["branch-entry"] };
+  const branch = {
+    leafId: "branch",
+    messages: [userMsg("old", "selected branch")],
+    entryIds: ["branch-entry"],
+  };
   world.views.set(`${sid}:branch:false`, branch);
-  await act(async () => { await w.changeLeaf("branch"); });
+  await act(async () => {
+    await w.changeLeaf("branch");
+  });
   world.agents.set(sid, { running: true, state: { isCompacting: true } });
   t.mock.timers.enable({ apis: ["setInterval"] });
   await act(async () => {
-    world.runningStreams.at(-1).deliver({ type: "message", data: JSON.stringify({ type: "running", runningSessionIds: [sid] }) });
+    world.runningStreams.at(-1).deliver({
+      type: "message",
+      data: JSON.stringify({ type: "running", runningSessionIds: [sid] }),
+    });
     await settle();
     lastEs().open();
     await settle();
   });
   assert.equal(w.latest.isCompacting, true);
-  assert.equal(w.latest.agentRunning, false, "manual compaction is not a prompt run");
+  assert.equal(
+    w.latest.agentRunning,
+    false,
+    "manual compaction is not a prompt run",
+  );
   world.agents.set(sid, { running: true, state: { isCompacting: false } });
   await act(async () => {
-    world.runningStreams.at(-1).deliver({ type: "message", data: JSON.stringify({ type: "running", runningSessionIds: [] }) });
+    world.runningStreams.at(-1).deliver({
+      type: "message",
+      data: JSON.stringify({ type: "running", runningSessionIds: [] }),
+    });
     t.mock.timers.tick(15_000);
     await settle();
   });
-  assert.equal(w.latest.isCompacting, false, "native idle state releases Stop compaction without a completion event");
+  assert.equal(
+    w.latest.isCompacting,
+    false,
+    "native idle state releases Stop compaction without a completion event",
+  );
   assert.equal(w.latest.activeLeafId, "branch");
   assert.deepEqual(w.latest.entryIds, branch.entryIds);
   assert.deepEqual(w.latest.messages, branch.messages);
@@ -2501,16 +4310,29 @@ test("a refused compact command cannot unlock compaction attached from another t
   const w = await mountSession(sid);
   world.agents.set(sid, { running: true, state: { isCompacting: true } });
   await act(async () => {
-    world.runningStreams.at(-1).deliver({ type: "message", data: JSON.stringify({ type: "running", runningSessionIds: [sid] }) });
+    world.runningStreams.at(-1).deliver({
+      type: "message",
+      data: JSON.stringify({ type: "running", runningSessionIds: [sid] }),
+    });
     await settle();
   });
   await act(async () => {
     const result = await w.latest.handleBuiltinSlashCommand("/compact");
     assert.ok(result.error, "a second compaction is refused");
   });
-  assert.equal(w.latest.isCompacting, true, "the rejected command does not own the attached compaction");
-  await act(async () => { await w.latest.handleCompact(); });
-  assert.equal(world.calls.some(call => call.body?.type === "compact"), false, "neither control can start a second compaction");
+  assert.equal(
+    w.latest.isCompacting,
+    true,
+    "the rejected command does not own the attached compaction",
+  );
+  await act(async () => {
+    await w.latest.handleCompact();
+  });
+  assert.equal(
+    world.calls.some((call) => call.body?.type === "compact"),
+    false,
+    "neither control can start a second compaction",
+  );
 });
 
 test("an idle chat reconciles auto-compaction when its completion event is lost", async () => {
@@ -2520,7 +4342,10 @@ test("an idle chat reconciles auto-compaction when its completion event is lost"
   const w = await mountSession(sid);
   world.agents.set(sid, { running: true, state: {} });
   await act(async () => {
-    world.runningStreams.at(-1).deliver({ type: "message", data: JSON.stringify({ type: "running", runningSessionIds: [sid] }) });
+    world.runningStreams.at(-1).deliver({
+      type: "message",
+      data: JSON.stringify({ type: "running", runningSessionIds: [sid] }),
+    });
     await settle();
     lastEs().open();
     await settle();
@@ -2533,12 +4358,23 @@ test("an idle chat reconciles auto-compaction when its completion event is lost"
     window.dispatchEvent(new Event("online"));
     await settle();
   });
-  assert.equal(w.latest.isCompacting, false, "the ref and rendered state share the same compaction lifecycle");
+  assert.equal(
+    w.latest.isCompacting,
+    false,
+    "the ref and rendered state share the same compaction lifecycle",
+  );
 });
 
 /** A catch-up snapshot of `sid` at `sequence` with no prompt running, only (maybe) a compaction. */
 function compactionSnapshot(sid, sequence, isCompacting) {
-  return { cursor: { streamId: `stream-${sid}`, sequence }, isStreaming: false, isPromptRunning: false, isCompacting, streamingMessage: null, toolEvents: [] };
+  return {
+    cursor: { streamId: `stream-${sid}`, sequence },
+    isStreaming: false,
+    isPromptRunning: false,
+    isCompacting,
+    streamingMessage: null,
+    toolEvents: [],
+  };
 }
 
 test("a compaction-only catch-up snapshot is not a prompt run and does not fail when it ends", async () => {
@@ -2549,14 +4385,24 @@ test("a compaction-only catch-up snapshot is not a prompt run and does not fail 
   world.agents.set(sid, { running: true, state: { isCompacting: true } });
   world.live.set(sid, compactionSnapshot(sid, 0, true));
   const w = await mountSession(sid);
-  await act(async () => { lastEs().open(); await settle(); });
+  await act(async () => {
+    lastEs().open();
+    await settle();
+  });
   assert.equal(w.latest.isCompacting, true);
   assert.equal(w.latest.agentRunning, false, "a compaction runs no prompt");
   world.agents.set(sid, { running: true, state: { isCompacting: false } });
   world.live.set(sid, compactionSnapshot(sid, 1, false));
-  await act(async () => { window.dispatchEvent(new Event("online")); await settle(); });
+  await act(async () => {
+    window.dispatchEvent(new Event("online"));
+    await settle();
+  });
   assert.equal(w.latest.isCompacting, false);
-  assert.deepEqual(w.latest.notices.filter((notice) => notice.type === "error"), [], "a finished compaction is not an empty prompt reply");
+  assert.deepEqual(
+    w.latest.notices.filter((notice) => notice.type === "error"),
+    [],
+    "a finished compaction is not an empty prompt reply",
+  );
 });
 
 test("matching running frames received during an idle lookup trigger one fresh lookup", async () => {
@@ -2566,24 +4412,40 @@ test("matching running frames received during an idle lookup trigger one fresh l
   let release;
   world.holds.push({
     match: (method, url) => method === "GET" && url === "/api/agent/late-start",
-    produce: () => new Promise((resolve) => { release = () => resolve({ value: { running: false, state: {} } }); }),
+    produce: () =>
+      new Promise((resolve) => {
+        release = () => resolve({ value: { running: false, state: {} } });
+      }),
   });
   const running = world.runningStreams.at(-1);
-  const frame = { type: "message", data: JSON.stringify({ type: "running", runningSessionIds: ["late-start"] }) };
+  const frame = {
+    type: "message",
+    data: JSON.stringify({
+      type: "running",
+      runningSessionIds: ["late-start"],
+    }),
+  };
   const gets = callsTo("GET", "/api/agent/late-start").length;
   await act(async () => {
     running.deliver(frame);
     await Promise.resolve();
   });
   assert.equal(typeof release, "function", "the first lookup is in flight");
-  world.agents.set("late-start", { running: true, state: { isStreaming: true } });
+  world.agents.set("late-start", {
+    running: true,
+    state: { isStreaming: true },
+  });
   await act(async () => {
     running.deliver(frame);
     running.deliver(frame);
     release();
     await settle();
   });
-  assert.equal(callsTo("GET", "/api/agent/late-start").length, gets + 2, "overlapping frames coalesce, but are not dropped");
+  assert.equal(
+    callsTo("GET", "/api/agent/late-start").length,
+    gets + 2,
+    "overlapping frames coalesce, but are not dropped",
+  );
   assert.equal(world.esInstances.length, 1);
   assert.equal(w.latest.agentRunning, true);
 });
@@ -2594,7 +4456,13 @@ test("an idle running lookup without a newer matching frame is not retried", asy
   await mountSession("still-idle");
   const gets = callsTo("GET", "/api/agent/still-idle").length;
   await act(async () => {
-    world.runningStreams.at(-1).deliver({ type: "message", data: JSON.stringify({ type: "running", runningSessionIds: ["still-idle"] }) });
+    world.runningStreams.at(-1).deliver({
+      type: "message",
+      data: JSON.stringify({
+        type: "running",
+        runningSessionIds: ["still-idle"],
+      }),
+    });
     await settle();
   });
   assert.equal(callsTo("GET", "/api/agent/still-idle").length, gets + 1);
@@ -2607,24 +4475,62 @@ test("a delayed running lookup cannot take ownership of a locally started shell"
   const w = await mountSession("late-own-shell");
   let releaseLookup;
   let releaseBash;
-  world.holds.push({
-    match: (method, url) => method === "GET" && url === "/api/agent/late-own-shell",
-    produce: () => new Promise((resolve) => { releaseLookup = () => resolve({ value: { running: true, state: { isBashRunning: true } } }); }),
-  }, {
-    match: (method, url, body) => method === "POST" && url === "/api/agent/late-own-shell" && body?.type === "bash",
-    produce: () => new Promise((resolve) => { releaseBash = () => resolve({ value: { success: true, data: { output: "", exitCode: 0 } } }); }),
-  });
+  world.holds.push(
+    {
+      match: (method, url) =>
+        method === "GET" && url === "/api/agent/late-own-shell",
+      produce: () =>
+        new Promise((resolve) => {
+          releaseLookup = () =>
+            resolve({
+              value: { running: true, state: { isBashRunning: true } },
+            });
+        }),
+    },
+    {
+      match: (method, url, body) =>
+        method === "POST" &&
+        url === "/api/agent/late-own-shell" &&
+        body?.type === "bash",
+      produce: () =>
+        new Promise((resolve) => {
+          releaseBash = () =>
+            resolve({
+              value: { success: true, data: { output: "", exitCode: 0 } },
+            });
+        }),
+    },
+  );
   await act(async () => {
-    world.runningStreams.at(-1).deliver({ type: "message", data: JSON.stringify({ type: "running", runningSessionIds: ["late-own-shell"] }) });
+    world.runningStreams.at(-1).deliver({
+      type: "message",
+      data: JSON.stringify({
+        type: "running",
+        runningSessionIds: ["late-own-shell"],
+      }),
+    });
     await Promise.resolve();
   });
   let bash;
-  await act(async () => { bash = w.latest.handleSend("!sleep 5"); await sleep(30); });
+  await act(async () => {
+    bash = w.latest.handleSend("!sleep 5");
+    await sleep(30);
+  });
   assert.equal(w.latest.bashRunning, true);
-  await act(async () => { releaseLookup(); await settle(); });
-  assert.equal(world.esInstances.length, 0, "executeBash still exclusively owns the command's settlement");
+  await act(async () => {
+    releaseLookup();
+    await settle();
+  });
+  assert.equal(
+    world.esInstances.length,
+    0,
+    "executeBash still exclusively owns the command's settlement",
+  );
   assert.equal(w.latest.bashRunning, true);
-  await act(async () => { releaseBash(); await bash; });
+  await act(async () => {
+    releaseBash();
+    await bash;
+  });
   assert.equal(w.latest.bashRunning, false);
 });
 
@@ -2636,30 +4542,80 @@ for (const stopped of [false, true]) {
     const w = await mountSession(sid);
     let releaseLookup;
     let releaseBash;
-    world.holds.push({
-      match: (method, url) => method === "GET" && url === `/api/agent/${sid}`,
-      produce: () => new Promise((resolve) => { releaseLookup = () => resolve({ value: { running: true, state: { isBashRunning: true } } }); }),
-    }, {
-      match: (method, url, body) => method === "POST" && url === `/api/agent/${sid}` && body?.type === "bash",
-      produce: () => new Promise((resolve) => { releaseBash = () => resolve({ value: { success: true, data: { output: "", exitCode: stopped ? 130 : 0, cancelled: stopped } } }); }),
-    });
+    world.holds.push(
+      {
+        match: (method, url) => method === "GET" && url === `/api/agent/${sid}`,
+        produce: () =>
+          new Promise((resolve) => {
+            releaseLookup = () =>
+              resolve({
+                value: { running: true, state: { isBashRunning: true } },
+              });
+          }),
+      },
+      {
+        match: (method, url, body) =>
+          method === "POST" &&
+          url === `/api/agent/${sid}` &&
+          body?.type === "bash",
+        produce: () =>
+          new Promise((resolve) => {
+            releaseBash = () =>
+              resolve({
+                value: {
+                  success: true,
+                  data: {
+                    output: "",
+                    exitCode: stopped ? 130 : 0,
+                    cancelled: stopped,
+                  },
+                },
+              });
+          }),
+      },
+    );
     await act(async () => {
-      world.runningStreams.at(-1).deliver({ type: "message", data: JSON.stringify({ type: "running", runningSessionIds: [sid] }) });
+      world.runningStreams.at(-1).deliver({
+        type: "message",
+        data: JSON.stringify({ type: "running", runningSessionIds: [sid] }),
+      });
       await Promise.resolve();
     });
     let bash;
-    await act(async () => { bash = w.latest.handleSend("!sleep 5"); await sleep(30); });
+    await act(async () => {
+      bash = w.latest.handleSend("!sleep 5");
+      await sleep(30);
+    });
     assert.equal(w.latest.bashRunning, true);
     if (stopped) {
-      await act(async () => { await w.latest.handleAbort(); });
-      assert.equal(world.calls.some((call) => call.body?.type === "abort_bash"), true);
+      await act(async () => {
+        await w.latest.handleAbort();
+      });
+      assert.equal(
+        world.calls.some((call) => call.body?.type === "abort_bash"),
+        true,
+      );
     }
-    await act(async () => { releaseBash(); await bash; });
+    await act(async () => {
+      releaseBash();
+      await bash;
+    });
     assert.equal(w.latest.bashRunning, false);
     const streams = world.esInstances.length;
-    await act(async () => { releaseLookup(); await settle(); });
-    assert.equal(w.latest.bashRunning, false, "an obsolete snapshot cannot restart the settled shell's spinner");
-    assert.equal(world.esInstances.length, streams, "an obsolete shell lookup cannot acquire an observer");
+    await act(async () => {
+      releaseLookup();
+      await settle();
+    });
+    assert.equal(
+      w.latest.bashRunning,
+      false,
+      "an obsolete snapshot cannot restart the settled shell's spinner",
+    );
+    assert.equal(
+      world.esInstances.length,
+      streams,
+      "an obsolete shell lookup cannot acquire an observer",
+    );
   });
 }
 
@@ -2669,11 +4625,22 @@ test("a delayed running lookup cannot attach after a newer send went to the outb
   const w = await mountSession("held-new-prompt");
   let release;
   world.holds.push({
-    match: (method, url) => method === "GET" && url === "/api/agent/held-new-prompt",
-    produce: () => new Promise((resolve) => { release = () => resolve({ value: { running: true, state: { isStreaming: true } } }); }),
+    match: (method, url) =>
+      method === "GET" && url === "/api/agent/held-new-prompt",
+    produce: () =>
+      new Promise((resolve) => {
+        release = () =>
+          resolve({ value: { running: true, state: { isStreaming: true } } });
+      }),
   });
   await act(async () => {
-    world.runningStreams.at(-1).deliver({ type: "message", data: JSON.stringify({ type: "running", runningSessionIds: ["held-new-prompt"] }) });
+    world.runningStreams.at(-1).deliver({
+      type: "message",
+      data: JSON.stringify({
+        type: "running",
+        runningSessionIds: ["held-new-prompt"],
+      }),
+    });
     await Promise.resolve();
   });
   world.outboxHold = true;
@@ -2681,9 +4648,20 @@ test("a delayed running lookup cannot attach after a newer send went to the outb
     const receipt = await w.latest.handleSend("new prompt");
     assert.equal(receipt.status, "accepted");
   });
-  assert.equal(world.esInstances.length, 1, "the held message opened the chat's stream");
-  await act(async () => { release(); await settle(); });
-  assert.equal(world.esInstances.length, 1, "a lookup from an older prompt generation cannot attach a second stream");
+  assert.equal(
+    world.esInstances.length,
+    1,
+    "the held message opened the chat's stream",
+  );
+  await act(async () => {
+    release();
+    await settle();
+  });
+  assert.equal(
+    world.esInstances.length,
+    1,
+    "a lookup from an older prompt generation cannot attach a second stream",
+  );
   assert.equal(w.latest.agentRunning, false);
 });
 
@@ -2694,23 +4672,50 @@ test("a delayed running lookup cannot replace a side question's readiness wait",
   let release;
   world.holds.push({
     match: (method, url) => method === "GET" && url === "/api/agent/late-btw",
-    produce: () => new Promise((resolve) => { release = () => resolve({ value: { running: true, state: { isStreaming: true } } }); }),
+    produce: () =>
+      new Promise((resolve) => {
+        release = () =>
+          resolve({ value: { running: true, state: { isStreaming: true } } });
+      }),
   });
   await act(async () => {
-    world.runningStreams.at(-1).deliver({ type: "message", data: JSON.stringify({ type: "running", runningSessionIds: ["late-btw"] }) });
+    world.runningStreams.at(-1).deliver({
+      type: "message",
+      data: JSON.stringify({
+        type: "running",
+        runningSessionIds: ["late-btw"],
+      }),
+    });
     await Promise.resolve();
   });
   let asking;
-  await act(async () => { asking = w.latest.askBtw("side question"); await sleep(30); });
+  await act(async () => {
+    asking = w.latest.askBtw("side question");
+    await sleep(30);
+  });
   const source = lastEs();
   assert.equal(source.readyState, FakeStream.CONNECTING);
   const gets = callsTo("GET", "/api/sessions/late-btw/state").length;
-  await act(async () => { release(); await settle(); });
+  await act(async () => {
+    release();
+    await settle();
+  });
   assert.equal(world.esInstances.length, 1);
   assert.equal(source.closedByCaller, false);
-  assert.equal(w.latest.agentRunning, false, "the stale lookup cannot manufacture a prompt run");
-  assert.equal(callsTo("GET", "/api/sessions/late-btw/state").length, gets, "the stale lookup cannot refresh composer state");
-  await act(async () => { source.open(); await asking; });
+  assert.equal(
+    w.latest.agentRunning,
+    false,
+    "the stale lookup cannot manufacture a prompt run",
+  );
+  assert.equal(
+    callsTo("GET", "/api/sessions/late-btw/state").length,
+    gets,
+    "the stale lookup cannot refresh composer state",
+  );
+  await act(async () => {
+    source.open();
+    await asking;
+  });
 });
 
 test("a running frame never touches a chat that already has its stream", async () => {
@@ -2718,13 +4723,23 @@ test("a running frame never touches a chat that already has its stream", async (
   primeSession("s1", [userMsg("u0", "q")]);
   const { w } = await startRun("s1", "q1");
   const streams = world.esInstances.length;
-  const gets = world.calls.filter((call) => call.method === "GET" && call.url === "/api/agent/s1").length;
+  const gets = world.calls.filter(
+    (call) => call.method === "GET" && call.url === "/api/agent/s1",
+  ).length;
   await act(async () => {
-    world.runningStreams.at(-1).deliver({ type: "message", data: JSON.stringify({ type: "running", runningSessionIds: ["s1"] }) });
+    world.runningStreams.at(-1).deliver({
+      type: "message",
+      data: JSON.stringify({ type: "running", runningSessionIds: ["s1"] }),
+    });
     await settle();
   });
   assert.equal(world.esInstances.length, streams);
-  assert.equal(world.calls.filter((call) => call.method === "GET" && call.url === "/api/agent/s1").length, gets);
+  assert.equal(
+    world.calls.filter(
+      (call) => call.method === "GET" && call.url === "/api/agent/s1",
+    ).length,
+    gets,
+  );
   assert.equal(w.latest.agentRunning, true);
 });
 
@@ -2735,30 +4750,65 @@ test("a running frame leaves a shell command this idle chat runs to the chat", a
   assert.equal(world.esInstances.length, 0, "an idle chat has no observer");
   let release;
   world.holds.push({
-    match: (method, url, body) => method === "POST" && url === "/api/agent/own-shell" && body?.type === "bash",
-    produce: () => new Promise((resolve) => { release = () => resolve({ value: { success: true, data: { output: "", exitCode: 0 } } }); }),
+    match: (method, url, body) =>
+      method === "POST" &&
+      url === "/api/agent/own-shell" &&
+      body?.type === "bash",
+    produce: () =>
+      new Promise((resolve) => {
+        release = () =>
+          resolve({
+            value: { success: true, data: { output: "", exitCode: 0 } },
+          });
+      }),
   });
   let bash;
-  await act(async () => { bash = w.latest.handleSend("!sleep 5"); await sleep(30); });
+  await act(async () => {
+    bash = w.latest.handleSend("!sleep 5");
+    await sleep(30);
+  });
   assert.equal(w.latest.bashRunning, true);
   // omp reports the session running while its shell runs; executeBash owns that command's settlement.
-  world.agents.set("own-shell", { running: true, state: { isBashRunning: true } });
-  const gets = world.calls.filter((call) => call.method === "GET" && call.url === "/api/agent/own-shell").length;
+  world.agents.set("own-shell", {
+    running: true,
+    state: { isBashRunning: true },
+  });
+  const gets = world.calls.filter(
+    (call) => call.method === "GET" && call.url === "/api/agent/own-shell",
+  ).length;
   await act(async () => {
-    world.runningStreams.at(-1).deliver({ type: "message", data: JSON.stringify({ type: "running", runningSessionIds: ["own-shell"] }) });
+    world.runningStreams.at(-1).deliver({
+      type: "message",
+      data: JSON.stringify({
+        type: "running",
+        runningSessionIds: ["own-shell"],
+      }),
+    });
     await settle();
   });
-  assert.equal(world.calls.filter((call) => call.method === "GET" && call.url === "/api/agent/own-shell").length, gets);
+  assert.equal(
+    world.calls.filter(
+      (call) => call.method === "GET" && call.url === "/api/agent/own-shell",
+    ).length,
+    gets,
+  );
   assert.equal(world.esInstances.length, 0);
   world.agents.set("own-shell", { running: false, state: {} });
-  await act(async () => { release(); await bash; await settle(); });
+  await act(async () => {
+    release();
+    await bash;
+    await settle();
+  });
   assert.equal(w.latest.bashRunning, false);
 });
 
 /** Delivers a `running` frame listing `ids` on the hook's running subscription. */
 async function deliverRunning(ids) {
   await act(async () => {
-    world.runningStreams.at(-1).deliver({ type: "message", data: JSON.stringify({ type: "running", runningSessionIds: ids }) });
+    world.runningStreams.at(-1).deliver({
+      type: "message",
+      data: JSON.stringify({ type: "running", runningSessionIds: ids }),
+    });
     await Promise.resolve();
   });
 }
@@ -2766,7 +4816,13 @@ async function deliverRunning(ids) {
 /** Holds the next request `match` accepts; `release(value, status)` answers it. */
 function holdNext(match) {
   const held = {};
-  world.holds.push({ match, produce: () => new Promise((resolve) => { held.release = (value, status = 200) => resolve({ status, value }); }) });
+  world.holds.push({
+    match,
+    produce: () =>
+      new Promise((resolve) => {
+        held.release = (value, status = 200) => resolve({ status, value });
+      }),
+  });
   return held;
 }
 
@@ -2775,16 +4831,42 @@ test("an idle snapshot cannot release a manual compaction this tab is still send
   const sid = "cold-compact";
   primeSession(sid, [userMsg("u0", "q")]);
   const w = await mountSession(sid);
-  const compact = holdNext((method, url, body) => method === "POST" && url === `/api/agent/${sid}` && body?.type === "compact");
+  const compact = holdNext(
+    (method, url, body) =>
+      method === "POST" &&
+      url === `/api/agent/${sid}` &&
+      body?.type === "compact",
+  );
   let compacting;
-  await act(async () => { compacting = w.latest.handleCompact(); await sleep(30); });
+  await act(async () => {
+    compacting = w.latest.handleCompact();
+    await sleep(30);
+  });
   assert.equal(w.latest.isCompacting, true);
   // omp is still starting: the state poll answers before the command reaches it.
-  await act(async () => { window.dispatchEvent(new Event("online")); await sleep(30); });
-  assert.equal(w.latest.isCompacting, true, "the command's own settlement releases Stop compaction");
-  await act(async () => { await w.latest.handleCompact(); });
-  assert.equal(callsTo("POST", `/api/agent/${sid}`).filter((call) => call.body?.type === "compact").length, 1, "no second compaction");
-  await act(async () => { compact.release({ success: true, data: {} }); await compacting; });
+  await act(async () => {
+    window.dispatchEvent(new Event("online"));
+    await sleep(30);
+  });
+  assert.equal(
+    w.latest.isCompacting,
+    true,
+    "the command's own settlement releases Stop compaction",
+  );
+  await act(async () => {
+    await w.latest.handleCompact();
+  });
+  assert.equal(
+    callsTo("POST", `/api/agent/${sid}`).filter(
+      (call) => call.body?.type === "compact",
+    ).length,
+    1,
+    "no second compaction",
+  );
+  await act(async () => {
+    compact.release({ success: true, data: {} });
+    await compacting;
+  });
   assert.equal(w.latest.isCompacting, false);
 });
 
@@ -2796,17 +4878,38 @@ test("a late idle snapshot from an earlier compaction cannot release the next on
   world.agents.set(sid, { running: true, state: {} });
   await deliverRunning([sid]);
   await settle();
-  await act(async () => { lastEs().open(); await sleep(30); });
-  await act(async () => { lastEs().emit({ type: "auto_compaction_start" }); });
-  const poll = holdNext((method, url) => method === "GET" && url === `/api/agent/${sid}`);
-  await act(async () => { window.dispatchEvent(new Event("online")); await sleep(30); });
-  assert.equal(typeof poll.release, "function", "the poll for the first compaction is in flight");
+  await act(async () => {
+    lastEs().open();
+    await sleep(30);
+  });
+  await act(async () => {
+    lastEs().emit({ type: "auto_compaction_start" });
+  });
+  const poll = holdNext(
+    (method, url) => method === "GET" && url === `/api/agent/${sid}`,
+  );
+  await act(async () => {
+    window.dispatchEvent(new Event("online"));
+    await sleep(30);
+  });
+  assert.equal(
+    typeof poll.release,
+    "function",
+    "the poll for the first compaction is in flight",
+  );
   await act(async () => {
     lastEs().emit({ type: "auto_compaction_end" });
     lastEs().emit({ type: "auto_compaction_start" });
   });
-  await act(async () => { poll.release({ running: true, state: { isCompacting: false } }); await sleep(30); });
-  assert.equal(w.latest.isCompacting, true, "the second compaction is still running");
+  await act(async () => {
+    poll.release({ running: true, state: { isCompacting: false } });
+    await sleep(30);
+  });
+  assert.equal(
+    w.latest.isCompacting,
+    true,
+    "the second compaction is still running",
+  );
 });
 
 test("a failed running lookup is retried", async () => {
@@ -2814,11 +4917,18 @@ test("a failed running lookup is retried", async () => {
   const sid = "lookup-retry";
   primeSession(sid, [userMsg("u0", "q")]);
   const w = await mountSession(sid);
-  world.holds.push({ match: (method, url) => method === "GET" && url === `/api/agent/${sid}`, produce: async () => ({ status: 503, value: { error: "busy" } }) });
+  world.holds.push({
+    match: (method, url) => method === "GET" && url === `/api/agent/${sid}`,
+    produce: async () => ({ status: 503, value: { error: "busy" } }),
+  });
   world.agents.set(sid, { running: true, state: { isStreaming: true } });
   await deliverRunning([sid]);
   await settle();
-  assert.equal(world.esInstances.length, 0, "the failed lookup attached nothing");
+  assert.equal(
+    world.esInstances.length,
+    0,
+    "the failed lookup attached nothing",
+  );
   await settle(1100);
   assert.equal(world.esInstances.length, 1, "the retry attaches the run");
   assert.equal(w.latest.agentRunning, true);
@@ -2829,17 +4939,39 @@ test("a running frame waits for the chat's first load, which it cannot invalidat
   const sid = "hydrating";
   primeSession(sid, [userMsg("u0", "q")]);
   world.agents.set(sid, { running: true, state: { isStreaming: true } });
-  const load = holdNext((method, url) => method === "GET" && url.startsWith(`/api/sessions/${sid}?`));
+  const load = holdNext(
+    (method, url) =>
+      method === "GET" && url.startsWith(`/api/sessions/${sid}?`),
+  );
   const w = await mountSession(sid);
   assert.equal(typeof load.release, "function", "the first load is in flight");
   await deliverRunning([sid]);
   await settle();
   // On the old code the frame attached here, and the run's agent_start dropped the first load.
-  if (lastEs()) await act(async () => { lastEs().open(); lastEs().emit({ type: "agent_start" }); });
-  assert.equal(world.esInstances.length, 0, "no observer before the first load settles");
+  if (lastEs())
+    await act(async () => {
+      lastEs().open();
+      lastEs().emit({ type: "agent_start" });
+    });
+  assert.equal(
+    world.esInstances.length,
+    0,
+    "no observer before the first load settles",
+  );
   const session = world.sessions.get(sid);
   await act(async () => {
-    load.release({ sessionId: sid, filePath: "/fixture/session.jsonl", tree: [], leafId: session.leafId, context: { todoPhases: [], thinkingLevel: "off", model: null, ...session } });
+    load.release({
+      sessionId: sid,
+      filePath: "/fixture/session.jsonl",
+      tree: [],
+      leafId: session.leafId,
+      context: {
+        todoPhases: [],
+        thinkingLevel: "off",
+        model: null,
+        ...session,
+      },
+    });
     await settle();
   });
   assert.ok(w.latest.data, "the first load is kept");
@@ -2852,15 +4984,34 @@ test("a running lookup from before an Edit cannot start a run during it", async 
   const sid = "lookup-edit";
   primeSession(sid, [userMsg("u0", "q")]);
   const w = await mountSession(sid);
-  const lookup = holdNext((method, url) => method === "GET" && url === `/api/agent/${sid}`);
-  const edit = holdNext((method, url, body) => method === "POST" && url === `/api/agent/${sid}` && body?.type === "edit_message");
+  const lookup = holdNext(
+    (method, url) => method === "GET" && url === `/api/agent/${sid}`,
+  );
+  const edit = holdNext(
+    (method, url, body) =>
+      method === "POST" &&
+      url === `/api/agent/${sid}` &&
+      body?.type === "edit_message",
+  );
   await deliverRunning([sid]);
   let editing;
-  await act(async () => { editing = w.latest.handleEdit("e0", "q"); await sleep(30); });
-  await act(async () => { lookup.release({ running: true, state: { isStreaming: true } }); await settle(); });
+  await act(async () => {
+    editing = w.latest.handleEdit("e0", "q");
+    await sleep(30);
+  });
+  await act(async () => {
+    lookup.release({ running: true, state: { isStreaming: true } });
+    await settle();
+  });
   assert.equal(world.esInstances.length, 0);
   assert.equal(w.latest.agentRunning, false);
-  await act(async () => { edit.release({ success: true, data: { cancelled: true, leafId: null, sessionId: sid } }); await editing; });
+  await act(async () => {
+    edit.release({
+      success: true,
+      data: { cancelled: true, leafId: null, sessionId: sid },
+    });
+    await editing;
+  });
 });
 
 test("a running lookup from before a completed Edit cannot attach its stale run", async () => {
@@ -2868,14 +5019,29 @@ test("a running lookup from before a completed Edit cannot attach its stale run"
   const sid = "lookup-edit-done";
   primeSession(sid, [userMsg("u0", "q")]);
   const w = await mountSession(sid);
-  const lookup = holdNext((method, url) => method === "GET" && url === `/api/agent/${sid}`);
+  const lookup = holdNext(
+    (method, url) => method === "GET" && url === `/api/agent/${sid}`,
+  );
   await deliverRunning([sid]);
   world.holds.push({
-    match: (method, url, body) => method === "POST" && url === `/api/agent/${sid}` && body?.type === "edit_message",
-    produce: async () => ({ value: { success: true, data: { cancelled: true, leafId: null, sessionId: sid } } }),
+    match: (method, url, body) =>
+      method === "POST" &&
+      url === `/api/agent/${sid}` &&
+      body?.type === "edit_message",
+    produce: async () => ({
+      value: {
+        success: true,
+        data: { cancelled: true, leafId: null, sessionId: sid },
+      },
+    }),
   });
-  await act(async () => { await w.latest.handleEdit("e0", "q"); });
-  await act(async () => { lookup.release({ running: true, state: { isStreaming: true } }); await settle(); });
+  await act(async () => {
+    await w.latest.handleEdit("e0", "q");
+  });
+  await act(async () => {
+    lookup.release({ running: true, state: { isStreaming: true } });
+    await settle();
+  });
   assert.equal(world.esInstances.length, 0, "the snapshot predates the Edit");
   assert.equal(w.latest.agentRunning, false);
 });
@@ -2888,23 +5054,58 @@ test("a manual compaction settling during an auto-compaction leaves Stop to the 
   world.agents.set(sid, { running: true, state: {} });
   await deliverRunning([sid]);
   await settle();
-  await act(async () => { lastEs().open(); await sleep(30); });
+  await act(async () => {
+    lastEs().open();
+    await sleep(30);
+  });
   world.holds.push({
-    match: (method, url, body) => method === "POST" && url === `/api/agent/${sid}` && body?.type === "compact",
+    match: (method, url, body) =>
+      method === "POST" &&
+      url === `/api/agent/${sid}` &&
+      body?.type === "compact",
     produce: async () => ({ value: { success: true, data: {} } }),
   });
-  const reload = holdNext((method, url) => method === "GET" && url.startsWith(`/api/sessions/${sid}?`));
+  const reload = holdNext(
+    (method, url) =>
+      method === "GET" && url.startsWith(`/api/sessions/${sid}?`),
+  );
   let compacting;
-  await act(async () => { compacting = w.latest.handleCompact(); await sleep(30); });
-  assert.equal(typeof reload.release, "function", "the manual compaction is reloading the transcript");
-  await act(async () => { lastEs().emit({ type: "auto_compaction_start" }); });
+  await act(async () => {
+    compacting = w.latest.handleCompact();
+    await sleep(30);
+  });
+  assert.equal(
+    typeof reload.release,
+    "function",
+    "the manual compaction is reloading the transcript",
+  );
+  await act(async () => {
+    lastEs().emit({ type: "auto_compaction_start" });
+  });
   const session = world.sessions.get(sid);
   await act(async () => {
-    reload.release({ sessionId: sid, filePath: "/fixture/session.jsonl", tree: [], leafId: session.leafId, context: { todoPhases: [], thinkingLevel: "off", model: null, ...session } });
+    reload.release({
+      sessionId: sid,
+      filePath: "/fixture/session.jsonl",
+      tree: [],
+      leafId: session.leafId,
+      context: {
+        todoPhases: [],
+        thinkingLevel: "off",
+        model: null,
+        ...session,
+      },
+    });
     await compacting;
   });
-  assert.equal(w.latest.isCompacting, true, "the auto-compaction is still running");
-  await act(async () => { lastEs().emit({ type: "auto_compaction_end" }); });
+  assert.equal(
+    w.latest.isCompacting,
+    true,
+    "the auto-compaction is still running",
+  );
+  await act(async () => {
+    lastEs().emit({ type: "auto_compaction_end" });
+  });
   assert.equal(w.latest.isCompacting, false);
 });
 
@@ -2914,16 +5115,38 @@ test("a run reported while a sent message waits in the outbox is adopted once it
   primeSession(sid, [userMsg("u0", "q")]);
   const w = await mountSession(sid);
   world.outboxHold = true;
-  await act(async () => { assert.equal((await w.latest.handleSend("mine")).status, "accepted"); });
-  assert.equal(world.outbox.length, 1, "the message waits in the outbox, not in a local startup");
+  await act(async () => {
+    assert.equal((await w.latest.handleSend("mine")).status, "accepted");
+  });
+  assert.equal(
+    world.outbox.length,
+    1,
+    "the message waits in the outbox, not in a local startup",
+  );
   // Another tab's run starts while this held message's stream is still connecting.
   world.agents.set(sid, { running: true, state: { isStreaming: true } });
   await deliverRunning([sid]);
   await settle();
-  assert.equal(world.esInstances.length, 1, "the held message's stream is the chat's only observer");
-  assert.equal(w.latest.agentRunning, false, "nothing is adopted before the stream attaches");
-  await act(async () => { lastEs().open(); lastEs().emit({ type: "connected" }); await settle(); });
-  assert.equal(world.esInstances.length, 1, "the run is adopted on that stream, not a second one");
+  assert.equal(
+    world.esInstances.length,
+    1,
+    "the held message's stream is the chat's only observer",
+  );
+  assert.equal(
+    w.latest.agentRunning,
+    false,
+    "nothing is adopted before the stream attaches",
+  );
+  await act(async () => {
+    lastEs().open();
+    lastEs().emit({ type: "connected" });
+    await settle();
+  });
+  assert.equal(
+    world.esInstances.length,
+    1,
+    "the run is adopted on that stream, not a second one",
+  );
   assert.equal(w.latest.agentRunning, true);
 });
 
@@ -2933,8 +5156,14 @@ test("an idle session's held-message stream adopts no run", async () => {
   primeSession(sid, [userMsg("u0", "q")]);
   const w = await mountSession(sid);
   world.outboxHold = true;
-  await act(async () => { assert.equal((await w.latest.handleSend("mine")).status, "accepted"); });
-  await act(async () => { lastEs().open(); lastEs().emit({ type: "connected" }); await settle(); });
+  await act(async () => {
+    assert.equal((await w.latest.handleSend("mine")).status, "accepted");
+  });
+  await act(async () => {
+    lastEs().open();
+    lastEs().emit({ type: "connected" });
+    await settle();
+  });
   assert.equal(w.latest.agentRunning, false);
 });
 
@@ -2943,15 +5172,36 @@ test("a chat promoted from a new chat attaches a run reported after its first se
   const sid = "promoted-later";
   primeSession(sid, [userMsg("u0", "q")]);
   let promoted = null;
-  const view = ownRoot(renderHook(({ session }) => useAgentSession({ session, newSessionCwd: session ? null : "/workspace", onSessionCreated: (created) => { promoted = created; } }), { initialProps: { session: null }, wrapper: TestRoot }));
+  const view = ownRoot(
+    renderHook(
+      ({ session }) =>
+        useAgentSession({
+          session,
+          newSessionCwd: session ? null : "/workspace",
+          onSessionCreated: (created) => {
+            promoted = created;
+          },
+        }),
+      { initialProps: { session: null }, wrapper: TestRoot },
+    ),
+  );
   await settle(30);
-  world.holds.push({ match: (method, url) => method === "POST" && url === "/api/agent/new", produce: async () => ({ value: { sessionId: sid } }) });
+  world.holds.push({
+    match: (method, url) => method === "POST" && url === "/api/agent/new",
+    produce: async () => ({ value: { sessionId: sid } }),
+  });
   t.mock.timers.enable({ apis: ["setTimeout"] });
   let sending;
-  await act(async () => { sending = view.result.current.handleSend("first"); for (let i = 0; i < 30; i++) await Promise.resolve(); });
+  await act(async () => {
+    sending = view.result.current.handleSend("first");
+    for (let i = 0; i < 30; i++) await Promise.resolve();
+  });
   assert.equal(promoted?.id, sid);
   // Promotion re-renders the same chat with its new session; no mount load runs for it.
-  await act(async () => { view.rerender({ session: promoted }); for (let i = 0; i < 30; i++) await Promise.resolve(); });
+  await act(async () => {
+    view.rerender({ session: promoted });
+    for (let i = 0; i < 30; i++) await Promise.resolve();
+  });
   await act(async () => {
     t.mock.timers.tick(60_001);
     for (let i = 0; i < 30; i++) await Promise.resolve();
@@ -2960,8 +5210,14 @@ test("a chat promoted from a new chat attaches a run reported after its first se
   world.agents.set(sid, { running: true, state: { isStreaming: true } });
   const gets = callsTo("GET", `/api/agent/${sid}`).length;
   await deliverRunning([sid]);
-  assert.equal(callsTo("GET", `/api/agent/${sid}`).length, gets + 1, "no mount load to wait for");
-  await act(async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); });
+  assert.equal(
+    callsTo("GET", `/api/agent/${sid}`).length,
+    gets + 1,
+    "no mount load to wait for",
+  );
+  await act(async () => {
+    for (let i = 0; i < 30; i++) await Promise.resolve();
+  });
   assert.equal(view.result.current.agentRunning, true);
 });
 
@@ -2972,7 +5228,10 @@ test("a run reported while a side question's stream connects is attached once th
   const w = await mountSession(sid);
   t.mock.timers.enable({ apis: ["setTimeout"] });
   let asking;
-  await act(async () => { asking = w.latest.askBtw("side question"); for (let i = 0; i < 30; i++) await Promise.resolve(); });
+  await act(async () => {
+    asking = w.latest.askBtw("side question");
+    for (let i = 0; i < 30; i++) await Promise.resolve();
+  });
   const observer = lastEs();
   assert.equal(observer.readyState, FakeStream.CONNECTING);
   world.agents.set(sid, { running: true, state: { isStreaming: true } });
@@ -2982,8 +5241,16 @@ test("a run reported while a side question's stream connects is attached once th
     for (let i = 0; i < 50; i++) await Promise.resolve();
     assert.equal(await asking, false);
   });
-  assert.equal(observer.closedByCaller, true, "the side question gave up its stream");
-  assert.equal(world.esInstances.length, 2, "the held frame attaches the run without another frame");
+  assert.equal(
+    observer.closedByCaller,
+    true,
+    "the side question gave up its stream",
+  );
+  assert.equal(
+    world.esInstances.length,
+    2,
+    "the held frame attaches the run without another frame",
+  );
   assert.equal(w.latest.agentRunning, true);
 });
 
@@ -2995,14 +5262,28 @@ test("an auto-compaction whose end was missed cannot bring Stop back after a lat
   world.agents.set(sid, { running: true, state: {} });
   await deliverRunning([sid]);
   await settle();
-  await act(async () => { lastEs().open(); await sleep(30); lastEs().emit({ type: "auto_compaction_start" }); });
+  await act(async () => {
+    lastEs().open();
+    await sleep(30);
+    lastEs().emit({ type: "auto_compaction_start" });
+  });
   assert.equal(w.latest.isCompacting, true);
   // The end event is lost; the state poll settles it.
   world.agents.set(sid, { running: true, state: { isCompacting: false } });
-  await act(async () => { window.dispatchEvent(new Event("online")); await sleep(30); });
+  await act(async () => {
+    window.dispatchEvent(new Event("online"));
+    await sleep(30);
+  });
   assert.equal(w.latest.isCompacting, false);
-  await act(async () => { await w.latest.handleCompact(); await sleep(30); });
-  assert.equal(w.latest.isCompacting, false, "the settled auto-compaction does not own Stop again");
+  await act(async () => {
+    await w.latest.handleCompact();
+    await sleep(30);
+  });
+  assert.equal(
+    w.latest.isCompacting,
+    false,
+    "the settled auto-compaction does not own Stop again",
+  );
 });
 
 test("a running lookup from before a manual compaction cannot release it", async () => {
@@ -3010,31 +5291,72 @@ test("a running lookup from before a manual compaction cannot release it", async
   const sid = "lookup-compact";
   primeSession(sid, [userMsg("u0", "q")]);
   const w = await mountSession(sid);
-  const lookup = holdNext((method, url) => method === "GET" && url === `/api/agent/${sid}`);
-  const compact = holdNext((method, url, body) => method === "POST" && url === `/api/agent/${sid}` && body?.type === "compact");
+  const lookup = holdNext(
+    (method, url) => method === "GET" && url === `/api/agent/${sid}`,
+  );
+  const compact = holdNext(
+    (method, url, body) =>
+      method === "POST" &&
+      url === `/api/agent/${sid}` &&
+      body?.type === "compact",
+  );
   await deliverRunning([sid]);
   let compacting;
-  await act(async () => { compacting = w.latest.handleCompact(); await sleep(30); });
-  await act(async () => { lookup.release({ running: true, state: { isCompacting: false } }); await settle(); });
+  await act(async () => {
+    compacting = w.latest.handleCompact();
+    await sleep(30);
+  });
+  await act(async () => {
+    lookup.release({ running: true, state: { isCompacting: false } });
+    await settle();
+  });
   assert.equal(w.latest.isCompacting, true);
-  await act(async () => { await w.latest.handleCompact(); });
-  assert.equal(callsTo("POST", `/api/agent/${sid}`).filter((call) => call.body?.type === "compact").length, 1, "no second compaction");
-  await act(async () => { compact.release({ success: true, data: {} }); await compacting; });
+  await act(async () => {
+    await w.latest.handleCompact();
+  });
+  assert.equal(
+    callsTo("POST", `/api/agent/${sid}`).filter(
+      (call) => call.body?.type === "compact",
+    ).length,
+    1,
+    "no second compaction",
+  );
+  await act(async () => {
+    compact.release({ success: true, data: {} });
+    await compacting;
+  });
 });
 
 test("the first load's idle state cannot overwrite a compaction a later lookup found", async () => {
   resetWorld();
   const sid = "mount-vs-lookup";
   primeSession(sid, [userMsg("u0", "q")]);
-  const state = holdNext((method, url) => method === "GET" && url === `/api/sessions/${sid}/state`);
+  const state = holdNext(
+    (method, url) => method === "GET" && url === `/api/sessions/${sid}/state`,
+  );
   const w = await mountSession(sid);
   world.agents.set(sid, { running: true, state: { isCompacting: true } });
   await deliverRunning([sid]);
   await settle();
-  await act(async () => { state.release({ running: false, state: { isCompacting: false } }); await settle(); });
-  assert.equal(w.latest.isCompacting, true, "the newer lookup's compaction stands");
-  await act(async () => { await w.latest.handleCompact(); });
-  assert.equal(callsTo("POST", `/api/agent/${sid}`).some((call) => call.body?.type === "compact"), false, "and the guard agrees with the control");
+  await act(async () => {
+    state.release({ running: false, state: { isCompacting: false } });
+    await settle();
+  });
+  assert.equal(
+    w.latest.isCompacting,
+    true,
+    "the newer lookup's compaction stands",
+  );
+  await act(async () => {
+    await w.latest.handleCompact();
+  });
+  assert.equal(
+    callsTo("POST", `/api/agent/${sid}`).some(
+      (call) => call.body?.type === "compact",
+    ),
+    false,
+    "and the guard agrees with the control",
+  );
 });
 
 test("a running lookup is dropped when the session left the running set meanwhile", async () => {
@@ -3042,14 +5364,23 @@ test("a running lookup is dropped when the session left the running set meanwhil
   const sid = "lookup-ended";
   primeSession(sid, [userMsg("u0", "q")]);
   const w = await mountSession(sid);
-  const lookup = holdNext((method, url) => method === "GET" && url === `/api/agent/${sid}`);
+  const lookup = holdNext(
+    (method, url) => method === "GET" && url === `/api/agent/${sid}`,
+  );
   await deliverRunning([sid]);
   // The run ends (or its child exits) after the GET read its state, before the reply arrives.
   await deliverRunning([]);
-  await act(async () => { lookup.release({ running: true, state: { isStreaming: true } }); await settle(); });
+  await act(async () => {
+    lookup.release({ running: true, state: { isStreaming: true } });
+    await settle();
+  });
   assert.equal(world.esInstances.length, 0, "the finished run is not attached");
   assert.equal(w.latest.agentRunning, false);
-  assert.equal(world.calls.some((call) => call.body?.type === "set_host_tools"), false, "no registration that could spawn a replacement");
+  assert.equal(
+    world.calls.some((call) => call.body?.type === "set_host_tools"),
+    false,
+    "no registration that could spawn a replacement",
+  );
 });
 
 test("a running lookup is dropped when the chat's session identity moves meanwhile", async () => {
@@ -3057,10 +5388,15 @@ test("a running lookup is dropped when the chat's session identity moves meanwhi
   const sid = "lookup-identity";
   primeSession(sid, [userMsg("u0", "q")]);
   const w = await mountSession(sid);
-  const lookup = holdNext((method, url) => method === "GET" && url === `/api/agent/${sid}`);
+  const lookup = holdNext(
+    (method, url) => method === "GET" && url === `/api/agent/${sid}`,
+  );
   await deliverRunning([sid]);
   w.latest.sessionIdRef.current = "moved-identity";
-  await act(async () => { lookup.release({ running: true, state: { isStreaming: true } }); await settle(); });
+  await act(async () => {
+    lookup.release({ running: true, state: { isStreaming: true } });
+    await settle();
+  });
   assert.equal(world.esInstances.length, 0);
   assert.equal(w.latest.agentRunning, false);
 });
@@ -3094,7 +5430,10 @@ test("an outbox message survives unmount and is dispatched without its tab", asy
     await sleep(30);
   });
   const source = lastEs();
-  assert.ok(source, "the held message opens an observer, but delivery does not wait for it");
+  assert.ok(
+    source,
+    "the held message opens an observer, but delivery does not wait for it",
+  );
   assert.equal(source.readyState, FakeStream.CONNECTING);
   let result;
   await act(async () => {
@@ -3103,13 +5442,32 @@ test("an outbox message survives unmount and is dispatched without its tab", asy
   });
   assert.equal(source.closedByCaller, true);
   assert.equal(result.status, "accepted");
-  assert.equal(world.outbox[0]?.message, "switched chats mid-send", "the worker retains the message after its tab unmounts");
+  assert.equal(
+    world.outbox[0]?.message,
+    "switched chats mid-send",
+    "the worker retains the message after its tab unmounts",
+  );
   await dispatchOutbox(true);
   assert.deepEqual(world.outbox, []);
-  assert.equal(world.calls.filter((call) => call.body?.type === "prompt").length, 1);
-  assert.equal(world.esInstances.length, 1, "no observer is opened for the unmounted chat");
-  for (const type of ["set_host_tools", "set_host_uri_schemes", "get_subagents"]) {
-    assert.equal(world.calls.some((call) => call.body?.type === type), false, `no ${type} for the unmounted chat`);
+  assert.equal(
+    world.calls.filter((call) => call.body?.type === "prompt").length,
+    1,
+  );
+  assert.equal(
+    world.esInstances.length,
+    1,
+    "no observer is opened for the unmounted chat",
+  );
+  for (const type of [
+    "set_host_tools",
+    "set_host_uri_schemes",
+    "get_subagents",
+  ]) {
+    assert.equal(
+      world.calls.some((call) => call.body?.type === type),
+      false,
+      `no ${type} for the unmounted chat`,
+    );
   }
 });
 
@@ -3130,57 +5488,96 @@ test("a failed observer connection leaves the accepted message held in the outbo
   assert.equal(result.status, "accepted");
   assert.equal(world.outbox[0]?.message, "stays in the composer");
   assert.deepEqual(w.latest.notices, []);
-  assert.equal(world.calls.some((call) => call.body?.type === "prompt"), false);
+  assert.equal(
+    world.calls.some((call) => call.body?.type === "prompt"),
+    false,
+  );
 });
 
 test("unmount during btw RPC startup cannot create an observer after teardown", async (t) => {
-    resetWorld();
-    const sid = "startup-unmount-btw";
-    primeSession(sid, [userMsg("u0", "q")]);
-    const w = await mountSession(sid);
-    let release;
-    t.after(() => release?.());
-    world.holds.push({
-      match: (method, url, body) => method === "POST" && url === `/api/agent/${sid}` && body?.type === "get_state",
-      produce: () => new Promise((resolve) => { release = () => resolve({ value: { success: true, data: {} } }); }),
-    });
-    let pending;
-    await act(async () => {
-      pending = w.latest.askBtw("must stay unasked");
-      await sleep(20);
-    });
-    assert.equal(typeof release, "function", "the supported startup RPC must be awaiting its response");
-    assert.equal(world.esInstances.length, 0, "startup has not yet acquired its observer");
-    let result;
-    await act(async () => {
-      w.unmount();
-      release();
-      result = await pending;
-    });
-    assert.equal(mountedRoots.size, 0, "the real React root must already have completed its cleanup");
-    assert.equal(world.esInstances.length, 0, "a late RPC response cannot create an observer its owner cannot close");
-    assert.equal(result, false);
-    assert.equal(world.calls.some((call) => call.body?.type === "btw"), false, "an abandoned side question has no UI left to answer into");
+  resetWorld();
+  const sid = "startup-unmount-btw";
+  primeSession(sid, [userMsg("u0", "q")]);
+  const w = await mountSession(sid);
+  let release;
+  t.after(() => release?.());
+  world.holds.push({
+    match: (method, url, body) =>
+      method === "POST" &&
+      url === `/api/agent/${sid}` &&
+      body?.type === "get_state",
+    produce: () =>
+      new Promise((resolve) => {
+        release = () => resolve({ value: { success: true, data: {} } });
+      }),
+  });
+  let pending;
+  await act(async () => {
+    pending = w.latest.askBtw("must stay unasked");
+    await sleep(20);
+  });
+  assert.equal(
+    typeof release,
+    "function",
+    "the supported startup RPC must be awaiting its response",
+  );
+  assert.equal(
+    world.esInstances.length,
+    0,
+    "startup has not yet acquired its observer",
+  );
+  let result;
+  await act(async () => {
+    w.unmount();
+    release();
+    result = await pending;
+  });
+  assert.equal(
+    mountedRoots.size,
+    0,
+    "the real React root must already have completed its cleanup",
+  );
+  assert.equal(
+    world.esInstances.length,
+    0,
+    "a late RPC response cannot create an observer its owner cannot close",
+  );
+  assert.equal(result, false);
+  assert.equal(
+    world.calls.some((call) => call.body?.type === "btw"),
+    false,
+    "an abandoned side question has no UI left to answer into",
+  );
 });
 
 test("StrictMode final unmount owns the observer attached after its first cleanup", async () => {
   resetWorld();
   primeSession("strict-observer-unmount", [userMsg("u0", "q")]);
   world.agents.set("strict-observer-unmount", {
-    running: true, state: { isStreaming: true, isPromptRunning: true },
+    running: true,
+    state: { isStreaming: true, isPromptRunning: true },
   });
   const w = await mountSession("strict-observer-unmount", undefined, {}, true);
   const source = lastEs();
-  assert.ok(source, "hydration must attach its observer after StrictMode's setup/cleanup replay");
+  assert.ok(
+    source,
+    "hydration must attach its observer after StrictMode's setup/cleanup replay",
+  );
   assert.equal(w.latest.agentRunning, true);
-  await act(async () => { w.unmount(); });
+  await act(async () => {
+    w.unmount();
+  });
   assert.equal(source.closedByCaller, true);
   const before = world.calls.length;
   await act(async () => {
     source.deliver({ type: "open" });
     window.dispatchEvent(new Event("online"));
   });
-  assert.equal(world.calls.length, before, "a dead owner must not reconcile or restore registration");
+  assert.equal(
+    world.calls.length,
+    before,
+    "a dead owner must not reconcile or restore registration",
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -3193,7 +5590,10 @@ async function startStreamingRun(sid) {
   const { w, es } = await startRun(sid, "q1");
   await act(async () => {
     es.emit({ type: "agent_start" });
-    es.emit({ type: "message_update", message: assistantMsg("a1", "streaming") });
+    es.emit({
+      type: "message_update",
+      message: assistantMsg("a1", "streaming"),
+    });
     await Promise.resolve();
   });
   await settle(90);
@@ -3228,7 +5628,11 @@ test("network returns while agent_end was missed: the online reconcile recovers 
   const { w } = await startStreamingRun("s1");
 
   // Half-open SSE: no agent_end frame ever arrived, but omp already finished.
-  saveSession("s1", [userMsg("u0", "q"), userMsg("u1", "q1"), assistantMsg("a1", "streaming")]);
+  saveSession("s1", [
+    userMsg("u0", "q"),
+    userMsg("u1", "q1"),
+    assistantMsg("a1", "streaming"),
+  ]);
   world.agents.set("s1", { running: false, state: {} });
 
   await act(async () => {
@@ -3236,9 +5640,17 @@ test("network returns while agent_end was missed: the online reconcile recovers 
     await sleep(60);
   });
   await settle();
-  assert.equal(w.latest.agentRunning, false, "the online reconcile must finish the stale run");
+  assert.equal(
+    w.latest.agentRunning,
+    false,
+    "the online reconcile must finish the stale run",
+  );
   assert.equal(w.latest.streamState.isStreaming, false);
-  assert.equal(w.latest.messages.length, 3, "transcript reloaded from the session file");
+  assert.equal(
+    w.latest.messages.length,
+    3,
+    "transcript reloaded from the session file",
+  );
 });
 
 test("subagent roster is restored from the get_subagents snapshot after reconnect", async () => {
@@ -3250,7 +5662,13 @@ test("subagent roster is restored from the get_subagents snapshot after reconnec
   // busy server-side) → refreshSubagentRoster against the configured snapshot.
   world.agents.set("s1", { running: true, state: { isStreaming: true } });
   world.subagentSnapshots.set("s1", [
-    { id: "sub-1", agent: "explore", status: "started", index: 0, task: "search the codebase" },
+    {
+      id: "sub-1",
+      agent: "explore",
+      status: "started",
+      index: 0,
+      task: "search the codebase",
+    },
   ]);
   await act(async () => {
     visibilityState = "visible";
@@ -3263,13 +5681,22 @@ test("subagent roster is restored from the get_subagents snapshot after reconnec
     1,
     "snapshot entry must be merged into the live roster",
   );
-  assert.equal(w.latest.subagents.find((s) => s.id === "sub-1")?.status, "started");
+  assert.equal(
+    w.latest.subagents.find((s) => s.id === "sub-1")?.status,
+    "started",
+  );
 
   // SSE dies fatally; the reconnect re-registers roster recovery, and the
   // fresh snapshot now reports the child completed.
   es1.failFatal();
   world.subagentSnapshots.set("s1", [
-    { id: "sub-1", agent: "explore", status: "completed", index: 0, task: "search the codebase" },
+    {
+      id: "sub-1",
+      agent: "explore",
+      status: "completed",
+      index: 0,
+      task: "search the codebase",
+    },
   ]);
   world.agents.set("s1", { running: true, state: { isStreaming: true } });
   await settle(1500); // > reconnect backoff
@@ -3297,22 +5724,37 @@ async function until(check, message, timeoutMs = 2000) {
 }
 
 const btwRecord = (overrides = {}) => ({
-  id: "b1", leafId: null, question: "what is 2+2", answer: "", status: "running", createdAt: 1, updatedAt: 1, ...overrides,
+  id: "b1",
+  leafId: null,
+  question: "what is 2+2",
+  answer: "",
+  status: "running",
+  createdAt: 1,
+  updatedAt: 1,
+  ...overrides,
 });
 
 function holdBtwCommand(type, produce) {
-  world.holds.push({ match: (method, _url, body) => method === "POST" && body?.type === type, produce });
+  world.holds.push({
+    match: (method, _url, body) => method === "POST" && body?.type === type,
+    produce,
+  });
 }
 
 function postedSince(index) {
-  return world.calls.slice(index).filter((c) => c.method === "POST").map((c) => c.body);
+  return world.calls
+    .slice(index)
+    .filter((c) => c.method === "POST")
+    .map((c) => c.body);
 }
 
 test("/btw mid-run asks a side question, never a prompt, and streams its answer beside the run", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   const { w, es } = await startStreamingRun("s1");
-  holdBtwCommand("btw", async () => ({ value: { success: true, data: { record: btwRecord() } } }));
+  holdBtwCommand("btw", async () => ({
+    value: { success: true, data: { record: btwRecord() } },
+  }));
   const before = world.calls.length;
   let result;
   await act(async () => {
@@ -3320,48 +5762,112 @@ test("/btw mid-run asks a side question, never a prompt, and streams its answer 
   });
   assert.deepEqual(result, { handled: true });
   const posted = postedSince(before);
-  assert.deepEqual(posted.filter((b) => ["prompt", "steer", "follow_up", "abort_and_prompt"].includes(b?.type)), []);
-  assert.deepEqual(posted.filter((b) => b?.type === "btw"), [{ type: "btw", question: "what is 2+2" }]);
+  assert.deepEqual(
+    posted.filter((b) =>
+      ["prompt", "steer", "follow_up", "abort_and_prompt"].includes(b?.type),
+    ),
+    [],
+  );
+  assert.deepEqual(
+    posted.filter((b) => b?.type === "btw"),
+    [{ type: "btw", question: "what is 2+2" }],
+  );
 
   await act(async () => {
     es.emit({ type: "btw_delta", recordId: "b1", delta: "It is " });
     es.emit({ type: "btw_delta", recordId: "b1", delta: "4." });
   });
-  await until(() => w.latest.btw.records[0]?.answer === "It is 4.", "deltas stream into the record");
-  assert.equal(w.latest.btw.activeId, "b1", "the side question opens in the composer panel");
+  await until(
+    () => w.latest.btw.records[0]?.answer === "It is 4.",
+    "deltas stream into the record",
+  );
+  assert.equal(
+    w.latest.btw.activeId,
+    "b1",
+    "the side question opens in the composer panel",
+  );
 
   await act(async () => {
-    es.emit({ type: "btw_record", record: btwRecord({ answer: "It is 4.", status: "complete", updatedAt: 2 }) });
+    es.emit({
+      type: "btw_record",
+      record: btwRecord({
+        answer: "It is 4.",
+        status: "complete",
+        updatedAt: 2,
+      }),
+    });
   });
-  await until(() => w.latest.btw.records[0]?.status === "complete", "the terminal record settles it");
+  await until(
+    () => w.latest.btw.records[0]?.status === "complete",
+    "the terminal record settles it",
+  );
   assert.equal(w.latest.agentRunning, true, "the main run is untouched");
-  assert.equal(w.latest.messages.some((m) => JSON.stringify(m.content).includes("2+2")), false, "never enters the transcript");
+  assert.equal(
+    w.latest.messages.some((m) => JSON.stringify(m.content).includes("2+2")),
+    false,
+    "never enters the transcript",
+  );
 });
 
 test("a btw follow-up asks in its topic; a refused ask keeps the composer text and says why", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   const { w } = await startStreamingRun("s1");
-  const followUp = { question: "and 3+3?", answer: "", status: "running", createdAt: 2, updatedAt: 2 };
-  holdBtwCommand("btw", async () => ({ value: { success: true, data: { record: btwRecord({ answer: "4", status: "complete", followUps: [followUp] }) } } }));
+  const followUp = {
+    question: "and 3+3?",
+    answer: "",
+    status: "running",
+    createdAt: 2,
+    updatedAt: 2,
+  };
+  holdBtwCommand("btw", async () => ({
+    value: {
+      success: true,
+      data: {
+        record: btwRecord({
+          answer: "4",
+          status: "complete",
+          followUps: [followUp],
+        }),
+      },
+    },
+  }));
   let before = world.calls.length;
   await act(async () => {
     assert.equal(await w.latest.askBtw("and 3+3?", "b1"), true);
   });
-  assert.deepEqual(postedSince(before).filter((b) => b?.type === "btw"), [{ type: "btw", question: "and 3+3?", recordId: "b1" }]);
+  assert.deepEqual(
+    postedSince(before).filter((b) => b?.type === "btw"),
+    [{ type: "btw", question: "and 3+3?", recordId: "b1" }],
+  );
 
   toastCalls.length = 0;
-  holdBtwCommand("btw", async () => ({ status: 400, value: { error: "A /btw question is still running; cancel it first", code: "rpc_command_failed" } }));
+  holdBtwCommand("btw", async () => ({
+    status: 400,
+    value: {
+      error: "A /btw question is still running; cancel it first",
+      code: "rpc_command_failed",
+    },
+  }));
   let result;
   await act(async () => {
     result = await w.latest.handleBuiltinSlashCommand("/btw another one");
   });
   assert.deepEqual(result, { handled: true, retainInput: true });
-  assert.deepEqual(toastCalls, [["error", "Side question failed", "A /btw question is still running; cancel it first"]]);
+  assert.deepEqual(toastCalls, [
+    [
+      "error",
+      "Side question failed",
+      "A /btw question is still running; cancel it first",
+    ],
+  ]);
 
   // An omp without the commands gets an upgrade hint, not its raw error.
   toastCalls.length = 0;
-  holdBtwCommand("btw", async () => ({ status: 400, value: { error: "Unknown command: btw", code: "rpc_command_failed" } }));
+  holdBtwCommand("btw", async () => ({
+    status: 400,
+    value: { error: "Unknown command: btw", code: "rpc_command_failed" },
+  }));
   await act(async () => {
     await w.latest.handleBuiltinSlashCommand("/btw old omp?");
   });
@@ -3369,7 +5875,13 @@ test("a btw follow-up asks in its topic; a refused ask keeps the composer text a
 
   // Cancelling a btw that is still starting is the user's own doing, not a failure.
   toastCalls.length = 0;
-  holdBtwCommand("btw", async () => ({ status: 400, value: { error: "The /btw question was cancelled before it started", code: "rpc_command_failed" } }));
+  holdBtwCommand("btw", async () => ({
+    status: 400,
+    value: {
+      error: "The /btw question was cancelled before it started",
+      code: "rpc_command_failed",
+    },
+  }));
   await act(async () => {
     result = await w.latest.handleBuiltinSlashCommand("/btw cancelled early");
   });
@@ -3379,7 +5891,11 @@ test("a btw follow-up asks in its topic; a refused ask keeps the composer text a
 
 test("the notify host tool stays out of the Notifications tab, which lists only pushable notification types", async () => {
   toastCalls.length = 0;
-  const result = await runHostTool("notify", { title: "Build done", message: "All green" }, { openUrl: () => "" });
+  const result = await runHostTool(
+    "notify",
+    { title: "Build done", message: "All green" },
+    { openUrl: () => "" },
+  );
   assert.deepEqual(result, { text: "Notification shown", isError: false });
   assert.deepEqual(toastCalls, []);
 });
@@ -3388,40 +5904,93 @@ test("an open_file local:// call asks the server for the calling session's file 
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   world.holds.push({
-    match: (method, url) => method === "GET" && url.includes("/api/sessions/s1/local-file"),
+    match: (method, url) =>
+      method === "GET" && url.includes("/api/sessions/s1/local-file"),
     produce: async () => ({ value: { path: "/sessions/s1/local/note.md" } }),
   });
   const opened = [];
-  const { es } = await startRun("s1", "q1", false, { onOpenFile: (path, name, sessionId) => { opened.push([path, name, sessionId]); } });
+  const { es } = await startRun("s1", "q1", false, {
+    onOpenFile: (path, name, sessionId) => {
+      opened.push([path, name, sessionId]);
+    },
+  });
   await act(async () => {
-    es.emit({ type: "host_tool_call", id: "h1", toolCallId: "c1", toolName: "open_file", arguments: { path: "local://note.md" } });
+    es.emit({
+      type: "host_tool_call",
+      id: "h1",
+      toolCallId: "c1",
+      toolName: "open_file",
+      arguments: { path: "local://note.md" },
+    });
     await sleep(60);
   });
 
   const lookups = callsTo("GET", "/api/sessions/s1/local-file");
   assert.equal(lookups.length, 1, "one lookup, for the session that asked");
-  assert.equal(new URL(lookups[0].url, "http://localhost").searchParams.get("uri"), "local://note.md");
-  assert.deepEqual(opened, [["/sessions/s1/local/note.md", "note.md", { sessionId: "s1", hostId: "local", cwd: "/workspace" }]]);
-  const answer = callsTo("POST", "/api/agent/s1").find((call) => call.body?.type === "host_tool_result");
-  assert.deepEqual([answer?.body.id, answer?.body.isError, answer?.body.result.content[0].text], ["h1", false, "Opened local://note.md"]);
+  assert.equal(
+    new URL(lookups[0].url, "http://localhost").searchParams.get("uri"),
+    "local://note.md",
+  );
+  assert.deepEqual(opened, [
+    [
+      "/sessions/s1/local/note.md",
+      "note.md",
+      { sessionId: "s1", hostId: "local", cwd: "/workspace" },
+    ],
+  ]);
+  const answer = callsTo("POST", "/api/agent/s1").find(
+    (call) => call.body?.type === "host_tool_result",
+  );
+  assert.deepEqual(
+    [
+      answer?.body.id,
+      answer?.body.isError,
+      answer?.body.result.content[0].text,
+    ],
+    ["h1", false, "Opened local://note.md"],
+  );
 });
 
 test("an open_file local:// tab is owned by the session the server resolved, while the answer goes to the caller", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   world.holds.push({
-    match: (method, url) => method === "GET" && url.includes("/api/sessions/s1/local-file"),
-    produce: async () => ({ value: { path: "/tmp/omp-local/s1-moved/note.md", sessionId: "s1-moved" } }),
+    match: (method, url) =>
+      method === "GET" && url.includes("/api/sessions/s1/local-file"),
+    produce: async () => ({
+      value: { path: "/tmp/omp-local/s1-moved/note.md", sessionId: "s1-moved" },
+    }),
   });
   const opened = [];
-  const { es } = await startRun("s1", "q1", false, { onOpenFile: (...args) => { opened.push(args); } });
+  const { es } = await startRun("s1", "q1", false, {
+    onOpenFile: (...args) => {
+      opened.push(args);
+    },
+  });
   await act(async () => {
-    es.emit({ type: "host_tool_call", id: "owned", toolName: "open_file", arguments: { path: "local://note.md" } });
+    es.emit({
+      type: "host_tool_call",
+      id: "owned",
+      toolName: "open_file",
+      arguments: { path: "local://note.md" },
+    });
     await sleep(60);
   });
-  assert.deepEqual(opened, [["/tmp/omp-local/s1-moved/note.md", "note.md", { sessionId: "s1-moved", hostId: "local", cwd: "/workspace" }]]);
-  const answer = callsTo("POST", "/api/agent/s1").find((call) => call.body?.type === "host_tool_result");
-  assert.deepEqual([answer?.body.id, answer?.body.isError], ["owned", false], "the caller still gets the answer");
+  assert.deepEqual(opened, [
+    [
+      "/tmp/omp-local/s1-moved/note.md",
+      "note.md",
+      { sessionId: "s1-moved", hostId: "local", cwd: "/workspace" },
+    ],
+  ]);
+  const answer = callsTo("POST", "/api/agent/s1").find(
+    (call) => call.body?.type === "host_tool_result",
+  );
+  assert.deepEqual(
+    [answer?.body.id, answer?.body.isError],
+    ["owned", false],
+    "the caller still gets the answer",
+  );
 });
 
 test("a lookup pending when the chat's subscription drops is withdrawn, not answered or opened later", async () => {
@@ -3429,22 +5998,52 @@ test("a lookup pending when the chat's subscription drops is withdrawn, not answ
   primeSession("s1", [userMsg("u0", "q")]);
   let release;
   world.holds.push({
-    match: (method, url) => method === "GET" && url.includes("/api/sessions/s1/local-file"),
-    produce: () => new Promise(resolve => { release = () => resolve({ value: { path: "/sessions/s1/local/note.md" } }); }),
+    match: (method, url) =>
+      method === "GET" && url.includes("/api/sessions/s1/local-file"),
+    produce: () =>
+      new Promise((resolve) => {
+        release = () =>
+          resolve({ value: { path: "/sessions/s1/local/note.md" } });
+      }),
   });
   const opened = [];
-  const { es } = await startRun("s1", "q1", false, { onOpenFile: (...args) => { opened.push(args); } });
+  const { es } = await startRun("s1", "q1", false, {
+    onOpenFile: (...args) => {
+      opened.push(args);
+    },
+  });
   await act(async () => {
-    es.emit({ type: "host_tool_call", id: "dropped", toolName: "open_file", arguments: { path: "local://note.md" } });
+    es.emit({
+      type: "host_tool_call",
+      id: "dropped",
+      toolName: "open_file",
+      arguments: { path: "local://note.md" },
+    });
     await sleep(10);
   });
   assert.equal(typeof release, "function", "the lookup is pending");
   // The server rejected the call when its only listener left; the cancel it emitted reached no one.
-  await act(async () => { es.dropRecoverably(); });
-  await act(async () => { release(); await settle(); });
-  assert.deepEqual(opened, [], "no tab opens for a call the server already settled");
-  const answer = callsTo("POST", "/api/agent/s1").find(call => call.body?.type === "host_tool_result" && call.body.id === "dropped");
-  assert.equal(answer, undefined, "no late result for an already-rejected call");
+  await act(async () => {
+    es.dropRecoverably();
+  });
+  await act(async () => {
+    release();
+    await settle();
+  });
+  assert.deepEqual(
+    opened,
+    [],
+    "no tab opens for a call the server already settled",
+  );
+  const answer = callsTo("POST", "/api/agent/s1").find(
+    (call) =>
+      call.body?.type === "host_tool_result" && call.body.id === "dropped",
+  );
+  assert.equal(
+    answer,
+    undefined,
+    "no late result for an already-rejected call",
+  );
 });
 
 test("an open_file local:// call whose lookup fails answers the agent with that error and opens nothing", async () => {
@@ -3452,19 +6051,42 @@ test("an open_file local:// call whose lookup fails answers the agent with that 
   primeSession("s1", [userMsg("u0", "q")]);
   const lookupError = "File not found in this session's local:// directory";
   world.holds.push({
-    match: (method, url) => method === "GET" && url.includes("/api/sessions/s1/local-file"),
-    produce: async () => ({ status: 404, value: { error: lookupError, code: "file_not_found" } }),
+    match: (method, url) =>
+      method === "GET" && url.includes("/api/sessions/s1/local-file"),
+    produce: async () => ({
+      status: 404,
+      value: { error: lookupError, code: "file_not_found" },
+    }),
   });
   const opened = [];
-  const { es } = await startRun("s1", "q1", false, { onOpenFile: (path, name, sessionId) => { opened.push([path, name, sessionId]); } });
+  const { es } = await startRun("s1", "q1", false, {
+    onOpenFile: (path, name, sessionId) => {
+      opened.push([path, name, sessionId]);
+    },
+  });
   await act(async () => {
-    es.emit({ type: "host_tool_call", id: "h2", toolCallId: "c2", toolName: "open_file", arguments: { path: "local://absent.md" } });
+    es.emit({
+      type: "host_tool_call",
+      id: "h2",
+      toolCallId: "c2",
+      toolName: "open_file",
+      arguments: { path: "local://absent.md" },
+    });
     await sleep(60);
   });
 
   assert.deepEqual(opened, [], "no tab opens for a file that is not there");
-  const answer = callsTo("POST", "/api/agent/s1").find((call) => call.body?.type === "host_tool_result");
-  assert.deepEqual([answer?.body.id, answer?.body.isError, answer?.body.result.content[0].text], ["h2", true, lookupError]);
+  const answer = callsTo("POST", "/api/agent/s1").find(
+    (call) => call.body?.type === "host_tool_result",
+  );
+  assert.deepEqual(
+    [
+      answer?.body.id,
+      answer?.body.isError,
+      answer?.body.result.content[0].text,
+    ],
+    ["h2", true, lookupError],
+  );
 });
 
 test("canceling a pending file open leaves other requests and a later run untouched", async () => {
@@ -3472,28 +6094,60 @@ test("canceling a pending file open leaves other requests and a later run untouc
   primeSession("s1", [userMsg("u0", "q")]);
   let release;
   world.holds.push({
-    match: (method, url) => method === "GET" && url.includes("/api/sessions/s1/local-file"),
-    produce: () => new Promise(resolve => { release = () => resolve({ value: { path: "/sessions/s1/local/canceled.md" } }); }),
+    match: (method, url) =>
+      method === "GET" && url.includes("/api/sessions/s1/local-file"),
+    produce: () =>
+      new Promise((resolve) => {
+        release = () =>
+          resolve({ value: { path: "/sessions/s1/local/canceled.md" } });
+      }),
   });
   const opened = [];
-  const { w, es } = await startRun("s1", "q1", false, { onOpenFile: (...args) => { opened.push(args); } });
+  const { w, es } = await startRun("s1", "q1", false, {
+    onOpenFile: (...args) => {
+      opened.push(args);
+    },
+  });
   await act(async () => {
-    es.emit({ type: "host_tool_call", id: "canceled-open", toolName: "open_file", arguments: { path: "local://canceled.md" } });
+    es.emit({
+      type: "host_tool_call",
+      id: "canceled-open",
+      toolName: "open_file",
+      arguments: { path: "local://canceled.md" },
+    });
     await sleep(10);
   });
   assert.equal(typeof release, "function");
   await act(async () => {
     es.emit({ type: "host_tool_cancel", targetId: "canceled-open" });
-    es.emit({ type: "host_tool_call", id: "other-open", toolName: "open_file", arguments: { path: "/workspace/other.md" } });
+    es.emit({
+      type: "host_tool_call",
+      id: "other-open",
+      toolName: "open_file",
+      arguments: { path: "/workspace/other.md" },
+    });
     es.emit({ type: "agent_start" });
     release();
     await settle();
   });
-  assert.deepEqual(opened, [["/workspace/other.md", "other.md", { sessionId: "s1", hostId: "local", cwd: "/workspace" }]]);
+  assert.deepEqual(opened, [
+    [
+      "/workspace/other.md",
+      "other.md",
+      { sessionId: "s1", hostId: "local", cwd: "/workspace" },
+    ],
+  ]);
   assert.equal(w.latest.agentRunning, true);
-  const answers = callsTo("POST", "/api/agent/s1").filter(call => call.body?.type === "host_tool_result");
-  assert.ok(answers.some(call => call.body.id === "other-open" && !call.body.isError));
-  assert.ok(!answers.some(call => call.body.id === "canceled-open"), "a withdrawn request is not answered later");
+  const answers = callsTo("POST", "/api/agent/s1").filter(
+    (call) => call.body?.type === "host_tool_result",
+  );
+  assert.ok(
+    answers.some((call) => call.body.id === "other-open" && !call.body.isError),
+  );
+  assert.ok(
+    !answers.some((call) => call.body.id === "canceled-open"),
+    "a withdrawn request is not answered later",
+  );
 });
 
 test("a delayed local-file lookup cannot open a tab after its chat unmounts", async () => {
@@ -3502,22 +6156,55 @@ test("a delayed local-file lookup cannot open a tab after its chat unmounts", as
   primeSession("s2", [userMsg("u0", "another chat")]);
   let release;
   world.holds.push({
-    match: (method, url) => method === "GET" && url.includes("/api/sessions/s1/local-file"),
-    produce: () => new Promise(resolve => { release = () => resolve({ value: { path: "/sessions/s1/local/note.md" } }); }),
+    match: (method, url) =>
+      method === "GET" && url.includes("/api/sessions/s1/local-file"),
+    produce: () =>
+      new Promise((resolve) => {
+        release = () =>
+          resolve({ value: { path: "/sessions/s1/local/note.md" } });
+      }),
   });
   const opened = [];
-  const { w, es } = await startRun("s1", "q1", false, { onOpenFile: (...args) => { opened.push(args); } });
+  const { w, es } = await startRun("s1", "q1", false, {
+    onOpenFile: (...args) => {
+      opened.push(args);
+    },
+  });
   await act(async () => {
-    es.emit({ type: "host_tool_call", id: "late-open", toolName: "open_file", arguments: { path: "local://note.md" } });
+    es.emit({
+      type: "host_tool_call",
+      id: "late-open",
+      toolName: "open_file",
+      arguments: { path: "local://note.md" },
+    });
     await sleep(10);
   });
-  assert.equal(typeof release, "function", "the original session's lookup is pending");
-  await act(async () => { w.unmount(); });
+  assert.equal(
+    typeof release,
+    "function",
+    "the original session's lookup is pending",
+  );
+  await act(async () => {
+    w.unmount();
+  });
   await mountSession("s2");
-  await act(async () => { release(); await settle(); });
-  assert.deepEqual(opened, [], "the previous chat cannot take over the new view");
-  const answer = callsTo("POST", "/api/agent/s1").find(call => call.body?.type === "host_tool_result");
-  assert.equal(answer, undefined, "leaving the chat must not send a late callback that could restart its child");
+  await act(async () => {
+    release();
+    await settle();
+  });
+  assert.deepEqual(
+    opened,
+    [],
+    "the previous chat cannot take over the new view",
+  );
+  const answer = callsTo("POST", "/api/agent/s1").find(
+    (call) => call.body?.type === "host_tool_result",
+  );
+  assert.equal(
+    answer,
+    undefined,
+    "leaving the chat must not send a late callback that could restart its child",
+  );
 });
 
 test("a delayed local-file lookup survives a confirmed Edit identity move", async (t) => {
@@ -3528,22 +6215,54 @@ test("a delayed local-file lookup survives a confirmed Edit identity move", asyn
   native.moveTo = target;
   await attachEditableWrapper(t, native);
   const opened = [];
-  const w = await mountMovableChat(sid, { onOpenFile: (...args) => { opened.push(args); } });
+  const w = await mountMovableChat(sid, {
+    onOpenFile: (...args) => {
+      opened.push(args);
+    },
+  });
   let release;
   world.holds.push({
-    match: (method, url) => method === "GET" && url.includes(`/api/sessions/${sid}/local-file`),
-    produce: () => new Promise(resolve => { release = () => resolve({ value: { path: `/sessions/${target}/local/note.md` } }); }),
+    match: (method, url) =>
+      method === "GET" && url.includes(`/api/sessions/${sid}/local-file`),
+    produce: () =>
+      new Promise((resolve) => {
+        release = () =>
+          resolve({ value: { path: `/sessions/${target}/local/note.md` } });
+      }),
   });
   await act(async () => {
-    lastEs().emit({ type: "host_tool_call", id: "moved-open", toolName: "open_file", arguments: { path: "local://note.md" } });
+    lastEs().emit({
+      type: "host_tool_call",
+      id: "moved-open",
+      toolName: "open_file",
+      arguments: { path: "local://note.md" },
+    });
     await sleep(10);
   });
   assert.equal(typeof release, "function");
   await confirmEdit(w.view, w.editButton());
-  await until(() => w.selectedId === target, "the real Edit response confirms the new identity before the lookup completes");
-  await act(async () => { release(); await settle(); });
-  assert.deepEqual(opened, [[`/sessions/${target}/local/note.md`, "note.md", { sessionId: sid, hostId: "local", cwd: "/workspace" }]], "the same conversation retains the request's source alias and host");
-  const answer = callsTo("POST", `/api/agent/${sid}`).find(call => call.body?.type === "host_tool_result");
+  await until(
+    () => w.selectedId === target,
+    "the real Edit response confirms the new identity before the lookup completes",
+  );
+  await act(async () => {
+    release();
+    await settle();
+  });
+  assert.deepEqual(
+    opened,
+    [
+      [
+        `/sessions/${target}/local/note.md`,
+        "note.md",
+        { sessionId: sid, hostId: "local", cwd: "/workspace" },
+      ],
+    ],
+    "the same conversation retains the request's source alias and host",
+  );
+  const answer = callsTo("POST", `/api/agent/${sid}`).find(
+    (call) => call.body?.type === "host_tool_result",
+  );
   assert.equal(answer?.body.isError, false);
 });
 
@@ -3552,43 +6271,74 @@ test("SSE open merges the btw history; a no-op cancel re-reads it and settles a 
   primeSession("s1", [userMsg("u0", "q")]);
   world.btwHistory.set("s1", [btwRecord({ answer: "It is" })]);
   const { w } = await startStreamingRun("s1");
-  assert.ok(world.calls.some((c) => c.body?.type === "get_btw_history"), "the stream open reads the history");
-  await until(() => w.latest.btw.activeId === "b1", "a running topic found on connect opens the panel");
+  assert.ok(
+    world.calls.some((c) => c.body?.type === "get_btw_history"),
+    "the stream open reads the history",
+  );
+  await until(
+    () => w.latest.btw.activeId === "b1",
+    "a running topic found on connect opens the panel",
+  );
   assert.equal(w.latest.btw.records[0].answer, "It is");
 
   // The child no longer knows the record (failed checkpoint, replaced child).
   world.btwHistory.set("s1", []);
-  holdBtwCommand("btw_cancel", async () => ({ value: { success: true, data: { cancelled: false } } }));
+  holdBtwCommand("btw_cancel", async () => ({
+    value: { success: true, data: { cancelled: false } },
+  }));
   const before = world.calls.length;
   await act(async () => {
     await w.latest.btw.cancel("b1");
   });
-  assert.deepEqual(postedSince(before).map((b) => b?.type), ["btw_cancel", "get_btw_history"]);
-  assert.deepEqual(postedSince(before)[0], { type: "btw_cancel", recordId: "b1" });
-  await until(() => w.latest.btw.records[0]?.status === "interrupted", "the lost record stops spinning");
+  assert.deepEqual(
+    postedSince(before).map((b) => b?.type),
+    ["btw_cancel", "get_btw_history"],
+  );
+  assert.deepEqual(postedSince(before)[0], {
+    type: "btw_cancel",
+    recordId: "b1",
+  });
+  await until(
+    () => w.latest.btw.records[0]?.status === "interrupted",
+    "the lost record stops spinning",
+  );
 });
 
 function liveSnapshot(sid, sequence, streamingMessage, toolEvents = []) {
   return {
     cursor: { streamId: `stream-${sid}`, sequence },
-    isStreaming: true, isPromptRunning: true, isCompacting: false,
-    streamingMessage, toolEvents,
+    isStreaming: true,
+    isPromptRunning: true,
+    isCompacting: false,
+    streamingMessage,
+    toolEvents,
   };
 }
 
 function syncSnapshot(sid, live = null, cursor = null) {
   const file = world.sessions.get(sid);
   return {
-    ...selectSessionHistory({ todoPhases: [], thinkingLevel: "off", model: null, ...file }, cursor),
-    sessionId: sid, leafId: file.leafId, live,
+    ...selectSessionHistory(
+      { todoPhases: [], thinkingLevel: "off", model: null, ...file },
+      cursor,
+    ),
+    sessionId: sid,
+    leafId: file.leafId,
+    live,
   };
 }
 
 function holdNextSync(sid, value) {
   let release;
   world.holds.push({
-    match: (method, url) => method === "GET" && url.startsWith(`/api/sessions/${sid}/context?`) && url.includes("sync=1"),
-    produce: () => new Promise((resolve) => { release = () => resolve({ value }); }),
+    match: (method, url) =>
+      method === "GET" &&
+      url.startsWith(`/api/sessions/${sid}/context?`) &&
+      url.includes("sync=1"),
+    produce: () =>
+      new Promise((resolve) => {
+        release = () => resolve({ value });
+      }),
   });
   return () => {
     assert.ok(release, "sync must be in flight");
@@ -3601,17 +6351,34 @@ function attachNativeWrapper(t, sid) {
   let frameListener;
   let delivering = true;
   let streaming = false;
-  const wrapper = new AgentSessionWrapper({
-    isAlive: true,
-    onFrame(listener) { frameListener = listener; return () => {}; },
-    async sendCommand(command) {
-      if (command.type === "get_state") return { sessionId: sid, isStreaming: streaming, isCompacting: false, supportsClientMessageIds: true };
-      if (command.type === "prompt") return { agentInvoked: true };
-      return {};
+  const wrapper = new AgentSessionWrapper(
+    {
+      isAlive: true,
+      onFrame(listener) {
+        frameListener = listener;
+        return () => {};
+      },
+      async sendCommand(command) {
+        if (command.type === "get_state")
+          return {
+            sessionId: sid,
+            isStreaming: streaming,
+            isCompacting: false,
+            supportsClientMessageIds: true,
+          };
+        if (command.type === "prompt") return { agentInvoked: true };
+        return {};
+      },
+      sendFrame() {},
+      async dispose() {},
     },
-    sendFrame() {},
-    async dispose() {},
-  }, process.cwd(), null, false, "", undefined, onlineHost);
+    process.cwd(),
+    null,
+    false,
+    "",
+    undefined,
+    onlineHost,
+  );
   wrapper.start();
   world.wrappers.set(sid, wrapper);
   t.after(() => wrapper.destroyAndWait());
@@ -3625,7 +6392,8 @@ function attachNativeWrapper(t, sid) {
     emit(event, deliver = true) {
       delivering = deliver;
       if (event.type === "agent_start") streaming = true;
-      if (event.type === "agent_end" && event.isTerminal !== false) streaming = false;
+      if (event.type === "agent_end" && event.isTerminal !== false)
+        streaming = false;
       frameListener(event);
       delivering = true;
     },
@@ -3638,7 +6406,10 @@ test("wrapper-observed response missed by SSE survives terminal recovery before 
   const { w } = await startRun("s1", "new question");
   const native = attachNativeWrapper(t, "s1");
   const answer = assistantMsg("a1", "Saved after agent_end");
-  saveSession("s1", [userMsg("u0", "old question"), userMsg("u1", "new question")]);
+  saveSession("s1", [
+    userMsg("u0", "old question"),
+    userMsg("u1", "new question"),
+  ]);
   await act(async () => {
     native.emit({ type: "agent_start" });
     native.emit({ type: "message_end", message: answer }, false);
@@ -3646,16 +6417,33 @@ test("wrapper-observed response missed by SSE survives terminal recovery before 
   });
   await settle();
   assert.equal(w.latest.agentRunning, false);
-  assert.deepEqual(w.latest.notices.filter((n) => n.type === "error"), []);
-  assert.equal(w.latest.messages.filter((m) => m.role === "assistant").length, 0, "native observation is not a persisted entry");
+  assert.deepEqual(
+    w.latest.notices.filter((n) => n.type === "error"),
+    [],
+  );
+  assert.equal(
+    w.latest.messages.filter((m) => m.role === "assistant").length,
+    0,
+    "native observation is not a persisted entry",
+  );
   appendEntry("s1", answer);
-  await act(async () => { publishSessionsChanged(["s1"]); });
+  await act(async () => {
+    publishSessionsChanged(["s1"]);
+  });
   await settle();
-  await act(async () => { publishSessionsChanged(["s1"]); });
+  await act(async () => {
+    publishSessionsChanged(["s1"]);
+  });
   await settle();
-  assert.deepEqual(w.latest.messages.filter((m) => m.role === "assistant"), [answer]);
+  assert.deepEqual(
+    w.latest.messages.filter((m) => m.role === "assistant"),
+    [answer],
+  );
   assert.deepEqual(w.latest.entryIds, ["e0", "e1", "e2"]);
-  assert.deepEqual(w.latest.notices.filter((n) => n.type === "error"), []);
+  assert.deepEqual(
+    w.latest.notices.filter((n) => n.type === "error"),
+    [],
+  );
 });
 
 test("a previous wrapper observation cannot hide a replacement run with no response", async (t) => {
@@ -3666,34 +6454,66 @@ test("a previous wrapper observation cannot hide a replacement run with no respo
   saveSession("s1", [userMsg("u0", "q"), userMsg("u1", "first")]);
   await act(async () => {
     native.emit({ type: "agent_start" });
-    native.emit({ type: "message_end", message: assistantMsg("a1", "first answer") }, false);
+    native.emit(
+      { type: "message_end", message: assistantMsg("a1", "first answer") },
+      false,
+    );
     native.emit({ type: "agent_end", isTerminal: true });
   });
   await settle();
   assert.equal(w.latest.agentRunning, false);
-  assert.deepEqual(w.latest.notices.filter((n) => n.type === "error"), []);
+  assert.deepEqual(
+    w.latest.notices.filter((n) => n.type === "error"),
+    [],
+  );
   let sending;
-  await act(async () => { sending = w.latest.handleSend("second"); await sleep(30); });
-  await act(async () => { lastEs().open(); await sending; });
+  await act(async () => {
+    sending = w.latest.handleSend("second");
+    await sleep(30);
+  });
+  await act(async () => {
+    lastEs().open();
+    await sending;
+  });
   // No new agent_start is required for a failed prompt: even pre-start failure
   // must not reuse either the wrapper's or the browser's prior observation.
-  await act(async () => { native.emit({ type: "agent_end", isTerminal: true }); });
+  await act(async () => {
+    native.emit({ type: "agent_end", isTerminal: true });
+  });
   await settle();
   assert.equal(w.latest.agentRunning, false);
-  assert.equal(w.latest.notices.filter((n) => /stopped without returning a response/i.test(n.message)).length, 1);
+  assert.equal(
+    w.latest.notices.filter((n) =>
+      /stopped without returning a response/i.test(n.message),
+    ).length,
+    1,
+  );
 });
 
 test("terminal recovery respects a still-busy authoritative state instead of classifying readable history", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   const { w, es } = await startRun("s1", "new question");
-  world.agents.set("s1", { running: true, state: { isStreaming: true, isPromptRunning: true } });
-  await act(async () => { es.emit({ type: "agent_end", isTerminal: true }); });
+  world.agents.set("s1", {
+    running: true,
+    state: { isStreaming: true, isPromptRunning: true },
+  });
+  await act(async () => {
+    es.emit({ type: "agent_end", isTerminal: true });
+  });
   await settle();
   assert.equal(w.latest.agentRunning, true);
-  assert.deepEqual(w.latest.notices.filter((n) => n.type === "error"), []);
-  world.agents.set("s1", { running: true, state: { isStreaming: false, isPromptRunning: false } });
-  await act(async () => { window.dispatchEvent(new Event("online")); });
+  assert.deepEqual(
+    w.latest.notices.filter((n) => n.type === "error"),
+    [],
+  );
+  world.agents.set("s1", {
+    running: true,
+    state: { isStreaming: false, isPromptRunning: false },
+  });
+  await act(async () => {
+    window.dispatchEvent(new Event("online"));
+  });
   await settle();
   assert.equal(w.latest.agentRunning, false);
   assert.equal(w.latest.notices.filter((n) => n.type === "error").length, 1);
@@ -3705,25 +6525,58 @@ test("busy foreground catch-up restores missing middle messages without overwrit
   const { w, es } = await startStreamingRun("s1");
   world.agents.set("s1", { running: true, state: { isStreaming: true } });
   saveSession("s1", [
-    userMsg("u0", "old question"), userMsg("u1", "q1"),
+    userMsg("u0", "old question"),
+    userMsg("u1", "q1"),
     assistantMsg("middle1", "first missed answer"),
-    { role: "toolResult", toolCallId: "middle-tool", toolName: "read", content: [{ type: "text", text: "missed output" }] },
+    {
+      role: "toolResult",
+      toolCallId: "middle-tool",
+      toolName: "read",
+      content: [{ type: "text", text: "missed output" }],
+    },
     assistantMsg("middle2", "second missed answer"),
   ]);
-  const release = holdNextSync("s1", syncSnapshot("s1", liveSnapshot("s1", 2, assistantMsg("current", "old HTTP partial"))));
+  const release = holdNextSync(
+    "s1",
+    syncSnapshot(
+      "s1",
+      liveSnapshot("s1", 2, assistantMsg("current", "old HTTP partial")),
+    ),
+  );
   await act(async () => {
-    visibilityState = "visible"; document.dispatchEvent(new Event("visibilitychange"));
+    visibilityState = "visible";
+    document.dispatchEvent(new Event("visibilitychange"));
     await sleep(20);
-    es.emit({ type: "ui_request", id: "question", method: "confirm", args: ["Keep going?", ""] });
-    es.emit({ type: "message_update", message: assistantMsg("current", "newer tokens") });
+    es.emit({
+      type: "ui_request",
+      id: "question",
+      method: "confirm",
+      args: ["Keep going?", ""],
+    });
+    es.emit({
+      type: "message_update",
+      message: assistantMsg("current", "newer tokens"),
+    });
     release();
   });
   await settle(90);
   assert.deepEqual(w.latest.entryIds, ["e0", "e1", "e2", "e3", "e4"]);
-  assert.deepEqual(w.latest.messages.filter((m) => m.role === "assistant").map((m) => m.content[0].text), ["first missed answer", "second missed answer"]);
-  assert.equal(w.latest.streamState.streamingMessage?.content[0].text, "newer tokens");
+  assert.deepEqual(
+    w.latest.messages
+      .filter((m) => m.role === "assistant")
+      .map((m) => m.content[0].text),
+    ["first missed answer", "second missed answer"],
+  );
+  assert.equal(
+    w.latest.streamState.streamingMessage?.content[0].text,
+    "newer tokens",
+  );
   assert.equal(w.latest.agentRunning, true);
-  assert.equal(w.latest.extensionDialog?.id, "question", "sync must not discard non-message events");
+  assert.equal(
+    w.latest.extensionDialog?.id,
+    "question",
+    "sync must not discard non-message events",
+  );
 });
 
 test("reopen hydrates a current partial and active tools even when no new token arrives", async () => {
@@ -3731,35 +6584,73 @@ test("reopen hydrates a current partial and active tools even when no new token 
   primeSession("s1", [userMsg("u0", "q")]);
   const { w, es } = await startStreamingRun("s1");
   world.agents.set("s1", { running: true, state: { isStreaming: true } });
-  world.live.set("s1", liveSnapshot("s1", 10, assistantMsg("current", "recovered partial"), [{
-    type: "tool_execution_update", toolCallId: "read-1", toolName: "read", args: { path: "x" },
-    partialResult: { content: [{ type: "text", text: "recovered tool output" }] },
-  }]));
+  world.live.set(
+    "s1",
+    liveSnapshot("s1", 10, assistantMsg("current", "recovered partial"), [
+      {
+        type: "tool_execution_update",
+        toolCallId: "read-1",
+        toolName: "read",
+        args: { path: "x" },
+        partialResult: {
+          content: [{ type: "text", text: "recovered tool output" }],
+        },
+      },
+    ]),
+  );
   await act(async () => {
     // This token is still in the display coalescer when the newer HTTP state lands.
     es.open();
-    es.emit({ type: "message_update", message: assistantMsg("current", "queued old partial") });
+    es.emit({
+      type: "message_update",
+      message: assistantMsg("current", "queued old partial"),
+    });
   });
   await settle(90);
-  assert.equal(w.latest.streamState.streamingMessage?.content[0].text, "recovered partial");
-  assert.equal(w.latest.liveToolResults.get("read-1")?.content[0].text, "recovered tool output");
-  assert.deepEqual(w.latest.agentPhase?.tools, [{ id: "read-1", name: "read" }]);
+  assert.equal(
+    w.latest.streamState.streamingMessage?.content[0].text,
+    "recovered partial",
+  );
+  assert.equal(
+    w.latest.liveToolResults.get("read-1")?.content[0].text,
+    "recovered tool output",
+  );
+  assert.deepEqual(w.latest.agentPhase?.tools, [
+    { id: "read-1", name: "read" },
+  ]);
   await act(async () => {
-    es.emit({ type: "message_update", message: assistantMsg("current", "late pre-snapshot frame"), web: { streamId: "stream-s1", sequence: 9 } });
+    es.emit({
+      type: "message_update",
+      message: assistantMsg("current", "late pre-snapshot frame"),
+      web: { streamId: "stream-s1", sequence: 9 },
+    });
   });
   await settle(90);
-  assert.equal(w.latest.streamState.streamingMessage?.content[0].text, "recovered partial");
+  assert.equal(
+    w.latest.streamState.streamingMessage?.content[0].text,
+    "recovered partial",
+  );
 });
 
 test("a terminal event fences a held busy snapshot and does not revive streaming", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   const { w, es } = await startStreamingRun("s1");
-  const release = holdNextSync("s1", syncSnapshot("s1", liveSnapshot("s1", 2, assistantMsg("current", "stale busy partial"))));
+  const release = holdNextSync(
+    "s1",
+    syncSnapshot(
+      "s1",
+      liveSnapshot("s1", 2, assistantMsg("current", "stale busy partial")),
+    ),
+  );
   await act(async () => {
     publishSessionsChanged(["s1"]);
     await sleep(20);
-    saveSession("s1", [userMsg("u0", "q"), userMsg("u1", "q1"), assistantMsg("a1", "final answer")]);
+    saveSession("s1", [
+      userMsg("u0", "q"),
+      userMsg("u1", "q1"),
+      assistantMsg("a1", "final answer"),
+    ]);
     es.emit({ type: "agent_end", isTerminal: true });
     release();
   });
@@ -3773,7 +6664,10 @@ test("a replacement prompt fences held history and keeps its optimistic user unt
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   const { w } = await startStreamingRun("s1");
-  const release = holdNextSync("s1", syncSnapshot("s1", liveSnapshot("s1", 2, assistantMsg("a1", "old run"))));
+  const release = holdNextSync(
+    "s1",
+    syncSnapshot("s1", liveSnapshot("s1", 2, assistantMsg("a1", "old run"))),
+  );
   await act(async () => {
     publishSessionsChanged(["s1"]);
     await sleep(20);
@@ -3784,20 +6678,33 @@ test("a replacement prompt fences held history and keeps its optimistic user unt
     await interrupt;
     replacement.emit({ type: "agent_end", isTerminal: true });
     replacement.emit({ type: "agent_start" });
-    replacement.emit({ type: "message_update", message: assistantMsg("a2", "new run") });
+    replacement.emit({
+      type: "message_update",
+      message: assistantMsg("a2", "new run"),
+    });
     release();
   });
   await settle(90);
   assert.equal(w.latest.agentRunning, true);
-  assert.equal(w.latest.streamState.streamingMessage?.content[0].text, "new run");
+  assert.equal(
+    w.latest.streamState.streamingMessage?.content[0].text,
+    "new run",
+  );
   assert.equal(w.latest.messages.at(-1).content, "new prompt");
-  assert.deepEqual(w.latest.entryIds, ["e0"], "optimistic messages have no invented entry ID");
+  assert.deepEqual(
+    w.latest.entryIds,
+    ["e0"],
+    "optimistic messages have no invented entry ID",
+  );
   await act(async () => {
     appendEntry("s1", userMsg("native", "new prompt (expanded by native)"));
     publishSessionsChanged(["s1"]);
   });
   await settle();
-  assert.equal(w.latest.messages.at(-1).content, "new prompt (expanded by native)");
+  assert.equal(
+    w.latest.messages.at(-1).content,
+    "new prompt (expanded by native)",
+  );
   assert.equal(w.latest.messages.length, 2);
 });
 
@@ -3805,8 +6712,16 @@ test("branch navigation fences held catch-up and preserves the selected pre-comp
   resetWorld();
   primeSession("s1", [userMsg("live", "live branch")]);
   const w = await mountSession("s1");
-  const branch = { leafId: "branch", messages: [userMsg("b", "selected branch")], entryIds: ["branch-entry"] };
-  const expanded = { leafId: "branch", messages: [userMsg("pre", "before compaction"), ...branch.messages], entryIds: ["pre-entry", "branch-entry"] };
+  const branch = {
+    leafId: "branch",
+    messages: [userMsg("b", "selected branch")],
+    entryIds: ["branch-entry"],
+  };
+  const expanded = {
+    leafId: "branch",
+    messages: [userMsg("pre", "before compaction"), ...branch.messages],
+    entryIds: ["pre-entry", "branch-entry"],
+  };
   world.views.set("s1:branch:false", branch);
   world.views.set("s1:branch:true", expanded);
   const release = holdNextSync("s1", syncSnapshot("s1"));
@@ -3831,7 +6746,11 @@ test("branch navigation fences held catch-up and preserves the selected pre-comp
   assert.deepEqual(w.latest.entryIds, ["pre-entry", "branch-entry"]);
   assert.equal(w.latest.showPreCompactionHistory, true);
   assert.equal(w.latest.activeLeafId, "branch");
-  assert.deepEqual(callsTo("POST", "/api/agent/"), [], "reading a historical/file-only session must not start native");
+  assert.deepEqual(
+    callsTo("POST", "/api/agent/"),
+    [],
+    "reading a historical/file-only session must not start native",
+  );
 });
 
 test("file-only catch-up drains pages, deduplicates IDs, and keeps identical messages with distinct IDs", async () => {
@@ -3839,20 +6758,43 @@ test("file-only catch-up drains pages, deduplicates IDs, and keeps identical mes
   primeSession("s1", [userMsg("u0", "q")]);
   const w = await mountSession("s1");
   const repeated = assistantMsg("not-a-persisted-id", "identical answer");
-  const saved = [userMsg("u0", "q"), ...Array.from({ length: 205 }, () => repeated)];
+  const saved = [
+    userMsg("u0", "q"),
+    ...Array.from({ length: 205 }, () => repeated),
+  ];
   const ids = saved.map((_, i) => `e${i}`);
   saveSession("s1", [...saved, repeated], [...ids, "e205"]);
-  await act(async () => { window.dispatchEvent(new Event("online")); });
+  await act(async () => {
+    window.dispatchEvent(new Event("online"));
+  });
   await settle();
   assert.deepEqual(w.latest.entryIds, ids);
-  assert.equal(w.latest.messages.filter((m) => m.role === "assistant").length, 205);
-  await act(async () => { publishSessionsChanged(["s1"]); });
+  assert.equal(
+    w.latest.messages.filter((m) => m.role === "assistant").length,
+    205,
+  );
+  await act(async () => {
+    publishSessionsChanged(["s1"]);
+  });
   await settle();
-  assert.deepEqual(w.latest.entryIds, ids, "the same persisted ID cannot commit twice");
+  assert.deepEqual(
+    w.latest.entryIds,
+    ids,
+    "the same persisted ID cannot commit twice",
+  );
   assert.deepEqual(callsTo("POST", "/api/agent/"), []);
   // Compaction changed the context prefix and invalidates the old cursor.
-  saveSession("s1", [assistantMsg("summary", "compacted history"), userMsg("tip", "new question")], ["summary", "new-tip"]);
-  await act(async () => { publishSessionsChanged(["s1"]); });
+  saveSession(
+    "s1",
+    [
+      assistantMsg("summary", "compacted history"),
+      userMsg("tip", "new question"),
+    ],
+    ["summary", "new-tip"],
+  );
+  await act(async () => {
+    publishSessionsChanged(["s1"]);
+  });
   await settle();
   assert.deepEqual(w.latest.entryIds, ["summary", "new-tip"]);
   assert.equal(w.latest.messages[0].content[0].text, "compacted history");
@@ -3864,15 +6806,20 @@ test("failed idle catch-up preserves history and cursor for the next online trig
   const w = await mountSession("s1");
   saveSession("s1", [userMsg("u0", "q"), assistantMsg("a1", "saved answer")]);
   world.holds.push({
-    match: (method, url) => method === "GET" && url.includes("/api/sessions/s1/context?"),
+    match: (method, url) =>
+      method === "GET" && url.includes("/api/sessions/s1/context?"),
     produce: async () => ({ status: 503, value: {} }),
   });
-  await act(async () => { publishSessionsChanged(["s1"]); });
+  await act(async () => {
+    publishSessionsChanged(["s1"]);
+  });
   await settle();
   assert.deepEqual(w.latest.entryIds, ["e0"]);
   assert.equal(w.latest.messages[0].content, "q");
   assert.equal(w.latest.error, null);
-  await act(async () => { window.dispatchEvent(new Event("online")); });
+  await act(async () => {
+    window.dispatchEvent(new Event("online"));
+  });
   await settle();
   assert.deepEqual(w.latest.entryIds, ["e0", "e1"]);
   assert.equal(w.latest.messages[1].content[0].text, "saved answer");
@@ -3885,10 +6832,17 @@ test("file notification after delayed native persistence catches up even with SS
   world.agents.set("s1", { running: true, state: { isStreaming: true } });
   await act(async () => {
     es.emit({ type: "message_end", message: userMsg("u1", "q1") });
-    es.emit({ type: "message_end", message: assistantMsg("a1", "saved later") }, { persist: false });
+    es.emit(
+      { type: "message_end", message: assistantMsg("a1", "saved later") },
+      { persist: false },
+    );
   });
   await settle();
-  assert.equal(w.latest.messages.some((m) => m.role === "assistant"), false, "raw message_end has no durable identity");
+  assert.equal(
+    w.latest.messages.some((m) => m.role === "assistant"),
+    false,
+    "raw message_end has no durable identity",
+  );
   await act(async () => {
     appendEntry("s1", assistantMsg("a1", "saved later"));
     publishSessionsChanged(["s1"]);
@@ -3904,16 +6858,31 @@ test("wrapper epoch changes reject an old HTTP snapshot and hydrate the replacem
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   const { w, es } = await startStreamingRun("s1");
-  const release = holdNextSync("s1", syncSnapshot("s1", liveSnapshot("s1", 20, assistantMsg("old", "old wrapper"))));
+  const release = holdNextSync(
+    "s1",
+    syncSnapshot(
+      "s1",
+      liveSnapshot("s1", 20, assistantMsg("old", "old wrapper")),
+    ),
+  );
   await act(async () => {
     publishSessionsChanged(["s1"]);
     await sleep(20);
-    world.live.set("s1", { ...liveSnapshot("s1", 1, assistantMsg("new", "replacement wrapper")), cursor: { streamId: "replacement", sequence: 1 } });
-    es.emit({ type: "connected", web: { streamId: "replacement", sequence: 0 } });
+    world.live.set("s1", {
+      ...liveSnapshot("s1", 1, assistantMsg("new", "replacement wrapper")),
+      cursor: { streamId: "replacement", sequence: 1 },
+    });
+    es.emit({
+      type: "connected",
+      web: { streamId: "replacement", sequence: 0 },
+    });
     release();
   });
   await settle();
-  assert.equal(w.latest.streamState.streamingMessage?.content[0].text, "replacement wrapper");
+  assert.equal(
+    w.latest.streamState.streamingMessage?.content[0].text,
+    "replacement wrapper",
+  );
   assert.equal(w.latest.agentRunning, true);
 });
 
@@ -3922,10 +6891,16 @@ test("an abandoned new-chat send delivers its prompt without promoting or attach
   let release;
   world.holds.push({
     match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: () => new Promise((resolve) => { release = () => resolve({ value: { sessionId: "created" } }); }),
+    produce: () =>
+      new Promise((resolve) => {
+        release = () => resolve({ value: { sessionId: "created" } });
+      }),
   });
   const promoted = [];
-  const w = await mountSession(null, undefined, { newSessionCwd: "/workspace", onSessionCreated: (session) => promoted.push(session.id) });
+  const w = await mountSession(null, undefined, {
+    newSessionCwd: "/workspace",
+    onSessionCreated: (session) => promoted.push(session.id),
+  });
   let send;
   await act(async () => {
     send = w.latest.handleSend("deliver after navigation");
@@ -3939,7 +6914,13 @@ test("an abandoned new-chat send delivers its prompt without promoting or attach
   });
   assert.deepEqual(promoted, []);
   assert.deepEqual(world.esInstances, []);
-  assert.ok(world.calls.some((call) => call.url.startsWith("/api/agent/created") && call.body?.message === "deliver after navigation"));
+  assert.ok(
+    world.calls.some(
+      (call) =>
+        call.url.startsWith("/api/agent/created") &&
+        call.body?.message === "deliver after navigation",
+    ),
+  );
 });
 
 test("a /btw that starts a fresh chat promotes it once omp accepts the question", async () => {
@@ -3948,9 +6929,14 @@ test("a /btw that starts a fresh chat promotes it once omp accepts the question"
     match: (method, url) => method === "POST" && url === "/api/agent/new",
     produce: async () => ({ value: { sessionId: "created" } }),
   });
-  holdBtwCommand("btw", async () => ({ value: { success: true, data: { record: btwRecord() } } }));
+  holdBtwCommand("btw", async () => ({
+    value: { success: true, data: { record: btwRecord() } },
+  }));
   const promoted = [];
-  const w = await mountSession(null, undefined, { newSessionCwd: "/workspace", onSessionCreated: (session) => promoted.push(session.id) });
+  const w = await mountSession(null, undefined, {
+    newSessionCwd: "/workspace",
+    onSessionCreated: (session) => promoted.push(session.id),
+  });
   let asked;
   await act(async () => {
     asked = w.latest.handleBuiltinSlashCommand("/btw what is 2+2");
@@ -3960,8 +6946,17 @@ test("a /btw that starts a fresh chat promotes it once omp accepts the question"
     lastEs().open();
     assert.deepEqual(await asked, { handled: true });
   });
-  assert.ok(world.calls.some((call) => call.url.startsWith("/api/agent/created") && call.body?.type === "btw"));
-  assert.deepEqual(promoted, ["created"], "the new-chat view becomes the session");
+  assert.ok(
+    world.calls.some(
+      (call) =>
+        call.url.startsWith("/api/agent/created") && call.body?.type === "btw",
+    ),
+  );
+  assert.deepEqual(
+    promoted,
+    ["created"],
+    "the new-chat view becomes the session",
+  );
   w.unmount();
 });
 
@@ -3970,11 +6965,19 @@ test("an abandoned new-chat /btw is still asked, but neither promotes, attaches 
   let release;
   world.holds.push({
     match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: () => new Promise((resolve) => { release = () => resolve({ value: { sessionId: "created" } }); }),
+    produce: () =>
+      new Promise((resolve) => {
+        release = () => resolve({ value: { sessionId: "created" } });
+      }),
   });
-  holdBtwCommand("btw", async () => ({ value: { success: true, data: { record: btwRecord() } } }));
+  holdBtwCommand("btw", async () => ({
+    value: { success: true, data: { record: btwRecord() } },
+  }));
   const promoted = [];
-  const w = await mountSession(null, undefined, { newSessionCwd: "/workspace", onSessionCreated: (session) => promoted.push(session.id) });
+  const w = await mountSession(null, undefined, {
+    newSessionCwd: "/workspace",
+    onSessionCreated: (session) => promoted.push(session.id),
+  });
   let asked;
   await act(async () => {
     asked = w.latest.askBtw("asked before leaving");
@@ -3987,39 +6990,78 @@ test("an abandoned new-chat /btw is still asked, but neither promotes, attaches 
     assert.equal(await asked, false);
   });
   assert.deepEqual(promoted, []);
-  assert.deepEqual(world.esInstances, [], "an unmounted chat must not attach a stream its cleanup already ran for");
-  assert.ok(world.calls.some((call) => call.url.startsWith("/api/agent/created") && call.body?.question === "asked before leaving"));
+  assert.deepEqual(
+    world.esInstances,
+    [],
+    "an unmounted chat must not attach a stream its cleanup already ran for",
+  );
+  assert.ok(
+    world.calls.some(
+      (call) =>
+        call.url.startsWith("/api/agent/created") &&
+        call.body?.question === "asked before leaving",
+    ),
+  );
 });
 
 test("forking carries the advisor choice to the child's next native command", async () => {
   resetWorld();
   primeSession("advisor-parent", [userMsg("u0", "q")]);
   const forked = [];
-  const w = await mountSession("advisor-parent", undefined, { onSessionForked: (id) => forked.push(id) });
-  await act(async () => { w.latest.handleAdvisorChange(true); });
-  world.holds.push({
-    match: (method, url) => method === "POST" && url.startsWith("/api/agent/advisor-parent"),
-    produce: async () => ({ value: { success: true, data: { newSessionId: "advisor-child" } } }),
+  const w = await mountSession("advisor-parent", undefined, {
+    onSessionForked: (id) => forked.push(id),
   });
-  await act(async () => { await w.latest.handleFork("e0", false); });
+  await act(async () => {
+    w.latest.handleAdvisorChange(true);
+  });
+  world.holds.push({
+    match: (method, url) =>
+      method === "POST" && url.startsWith("/api/agent/advisor-parent"),
+    produce: async () => ({
+      value: { success: true, data: { newSessionId: "advisor-child" } },
+    }),
+  });
+  await act(async () => {
+    await w.latest.handleFork("e0", false);
+  });
   assert.deepEqual(forked, ["advisor-child"]);
-  assert.equal(localStorage.getItem("omp-advisor-enabled:advisor-child"), "true");
+  assert.equal(
+    localStorage.getItem("omp-advisor-enabled:advisor-child"),
+    "true",
+  );
   const { sendAgentCommand } = await import("@/lib/agent-client");
   await sendAgentCommand("advisor-child", { type: "get_state" });
-  assert.ok(world.calls.some((call) => call.url === "/api/agent/advisor-child?advisor=1"));
+  assert.ok(
+    world.calls.some(
+      (call) => call.url === "/api/agent/advisor-child?advisor=1",
+    ),
+  );
 });
 
 test("an edit-and-resend fork puts the branched prompt into the child's composer", async () => {
   const { getDraft, clearDraft } = await import("@/lib/draft-store");
-  for (const [editPrompt, child] of [[true, "edit-child"], [false, "keep-child"]]) {
+  for (const [editPrompt, child] of [
+    [true, "edit-child"],
+    [false, "keep-child"],
+  ]) {
     resetWorld();
     primeSession("fork-parent", [userMsg("u0", "q")]);
-    const w = await mountSession("fork-parent", undefined, { onSessionForked: () => {} });
-    world.holds.push({
-      match: (method, url) => method === "POST" && url.startsWith("/api/agent/fork-parent"),
-      produce: async () => ({ value: { success: true, data: { newSessionId: child, text: "retry this" } } }),
+    const w = await mountSession("fork-parent", undefined, {
+      onSessionForked: () => {},
     });
-    await act(async () => { await w.latest.handleFork("u0", editPrompt); });
+    world.holds.push({
+      match: (method, url) =>
+        method === "POST" && url.startsWith("/api/agent/fork-parent"),
+      produce: async () => ({
+        value: {
+          success: true,
+          data: { newSessionId: child, text: "retry this" },
+        },
+      }),
+    });
+    await act(async () => {
+      await w.latest.handleFork("u0", editPrompt);
+    });
     assert.equal(getDraft(child)?.value, editPrompt ? "retry this" : undefined);
     clearDraft(child);
     w.unmount();
@@ -4029,22 +7071,36 @@ test("an edit-and-resend fork puts the branched prompt into the child's composer
 test("a second fork click while one is in flight sends no second fork command", async () => {
   resetWorld();
   primeSession("fork-busy", [userMsg("u0", "q")]);
-  const w = await mountSession("fork-busy", undefined, { onSessionForked: () => {} });
+  const w = await mountSession("fork-busy", undefined, {
+    onSessionForked: () => {},
+  });
   let release;
-  const gate = new Promise((resolve) => { release = resolve; });
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
   world.holds.push({
-    match: (method, url) => method === "POST" && url.startsWith("/api/agent/fork-busy"),
+    match: (method, url) =>
+      method === "POST" && url.startsWith("/api/agent/fork-busy"),
     produce: async () => {
       await gate;
       return { value: { success: true, data: { newSessionId: "busy-child" } } };
     },
   });
   let first;
-  await act(async () => { first = w.latest.handleFork("u0", false); await sleep(20); });
-  await act(async () => { await w.latest.handleFork("u0", false); });
+  await act(async () => {
+    first = w.latest.handleFork("u0", false);
+    await sleep(20);
+  });
+  await act(async () => {
+    await w.latest.handleFork("u0", false);
+  });
   release();
-  await act(async () => { await first; });
-  const forkCalls = world.calls.filter((c) => c.method === "POST" && c.url.startsWith("/api/agent/fork-busy"));
+  await act(async () => {
+    await first;
+  });
+  const forkCalls = world.calls.filter(
+    (c) => c.method === "POST" && c.url.startsWith("/api/agent/fork-busy"),
+  );
   assert.equal(forkCalls.length, 1);
   w.unmount();
 });
@@ -4052,18 +7108,32 @@ test("a second fork click while one is in flight sends no second fork command", 
 // A native boundary, not an Edit callback double: active context follows parent
 // links in the persisted JSONL, and prompts consume that context independently
 // of what the hook happens to render. Metadata leaves never become model text.
-function primeEditableHistory(originalSid, messages = [
-  userMsg("u1", "U1"), assistantMsg("a1", "A1"),
-  userMsg("u2", "U2-original"), assistantMsg("a2", "A2-original"),
-  userMsg("u3", "U3-original"), assistantMsg("a3", "A3-original"),
-]) {
+function primeEditableHistory(
+  originalSid,
+  messages = [
+    userMsg("u1", "U1"),
+    assistantMsg("a1", "A1"),
+    userMsg("u2", "U2-original"),
+    assistantMsg("a2", "A2-original"),
+    userMsg("u3", "U3-original"),
+    assistantMsg("a3", "A3-original"),
+  ],
+) {
   let sid = originalSid;
   let filePath = `/fixture/${sid}.jsonl`;
-  const header = { type: "session", version: 3, id: sid, cwd: "/workspace", timestamp: "2026-01-01T00:00:00.000Z" };
+  const header = {
+    type: "session",
+    version: 3,
+    id: sid,
+    cwd: "/workspace",
+    timestamp: "2026-01-01T00:00:00.000Z",
+  };
   let entries = messages.map((message, index) => ({
-    type: "message", id: `entry-${message.id}`,
+    type: "message",
+    id: `entry-${message.id}`,
     parentId: index === 0 ? null : `entry-${messages[index - 1].id}`,
-    timestamp: header.timestamp, message: structuredClone(message),
+    timestamp: header.timestamp,
+    message: structuredClone(message),
   }));
   let jsonl;
   const persistedFiles = new Map();
@@ -4074,15 +7144,29 @@ function primeEditableHistory(originalSid, messages = [
   function context(leafId = entries.at(-1)?.id ?? null) {
     const byId = new Map(entries.map((entry) => [entry.id, entry]));
     const branch = [];
-    for (let entry = byId.get(leafId); entry; entry = byId.get(entry.parentId)) branch.push(entry);
-    const messageEntries = branch.reverse().filter((entry) => entry.type === "message");
-    return { leafId, entryIds: messageEntries.map((entry) => entry.id), messages: structuredClone(messageEntries.map((entry) => entry.message)) };
+    for (let entry = byId.get(leafId); entry; entry = byId.get(entry.parentId))
+      branch.push(entry);
+    const messageEntries = branch
+      .reverse()
+      .filter((entry) => entry.type === "message");
+    return {
+      leafId,
+      entryIds: messageEntries.map((entry) => entry.id),
+      messages: structuredClone(messageEntries.map((entry) => entry.message)),
+    };
   }
 
   function persist() {
-    jsonl = [header, ...entries].map((entry) => JSON.stringify(entry)).join("\n") + "\n";
+    jsonl =
+      [header, ...entries].map((entry) => JSON.stringify(entry)).join("\n") +
+      "\n";
     persistedFiles.set(filePath, jsonl);
-    const nodes = new Map(entries.map((entry) => [entry.id, { entry: structuredClone(entry), children: [] }]));
+    const nodes = new Map(
+      entries.map((entry) => [
+        entry.id,
+        { entry: structuredClone(entry), children: [] },
+      ]),
+    );
     const roots = [];
     for (const entry of entries) {
       const parent = nodes.get(entry.parentId);
@@ -4093,31 +7177,58 @@ function primeEditableHistory(originalSid, messages = [
   }
 
   const native = {
-    get sessionId() { return sid; },
-    get filePath() { return filePath; },
-    edits: [], prompts: [], editOutcome: "success", moveTo: null, onMove: null,
+    get sessionId() {
+      return sid;
+    },
+    get filePath() {
+      return filePath;
+    },
+    edits: [],
+    prompts: [],
+    editOutcome: "success",
+    moveTo: null,
+    onMove: null,
     persistedFiles,
-    get jsonl() { return jsonl; },
-    get entries() { return structuredClone(entries); },
-    get leafId() { return entries.at(-1)?.id ?? null; },
+    get jsonl() {
+      return jsonl;
+    },
+    get entries() {
+      return structuredClone(entries);
+    },
+    get leafId() {
+      return entries.at(-1)?.id ?? null;
+    },
     holdEdit() {
       let release;
-      editGate = new Promise((resolve) => { release = resolve; });
+      editGate = new Promise((resolve) => {
+        release = resolve;
+      });
       return release;
     },
     holdEditReply() {
       let release;
-      editReplyGate = new Promise((resolve) => { release = resolve; });
+      editReplyGate = new Promise((resolve) => {
+        release = resolve;
+      });
       return release;
     },
     holdPrompt() {
       let release;
-      promptGate = new Promise((resolve) => { release = resolve; });
+      promptGate = new Promise((resolve) => {
+        release = resolve;
+      });
       return release;
     },
     reopen() {
-      const [persistedHeader, ...persistedEntries] = jsonl.trim().split("\n").map((line) => JSON.parse(line));
-      assert.equal(persistedHeader.id, sid, "reopening must retain the persisted session identity");
+      const [persistedHeader, ...persistedEntries] = jsonl
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+      assert.equal(
+        persistedHeader.id,
+        sid,
+        "reopening must retain the persisted session identity",
+      );
       entries = persistedEntries;
       persist();
       world.agents.set(sid, { running: false, state: {} });
@@ -4125,17 +7236,33 @@ function primeEditableHistory(originalSid, messages = [
     async command(body) {
       if (body.type === "edit_message") {
         const target = entries.find((entry) => entry.id === body.entryId);
-        assert.equal(target?.type, "message", "Edit must address a persisted entry, not message.id");
-        assert.equal(target.message.role, "user", "native Edit only accepts user entries");
+        assert.equal(
+          target?.type,
+          "message",
+          "Edit must address a persisted entry, not message.id",
+        );
+        assert.equal(
+          target.message.role,
+          "user",
+          "native Edit only accepts user entries",
+        );
         native.edits.push(body.entryId);
         await editGate;
         let response;
-        if (native.editOutcome === "error" || native.editOutcome === "persistence-error") {
-          response = jsonResponse(400, { error: native.editOutcome === "persistence-error"
-            ? "Could not append session file: disk full" : "Native history navigation failed" });
+        if (
+          native.editOutcome === "error" ||
+          native.editOutcome === "persistence-error"
+        ) {
+          response = jsonResponse(400, {
+            error:
+              native.editOutcome === "persistence-error"
+                ? "Could not append session file: disk full"
+                : "Native history navigation failed",
+          });
         } else if (native.editOutcome === "cancelled") {
           response = jsonResponse(200, {
-            success: true, data: { cancelled: true, sessionId: sid, leafId: native.leafId },
+            success: true,
+            data: { cancelled: true, sessionId: sid, leafId: native.leafId },
           });
         } else {
           if (native.moveTo && native.moveTo !== sid) {
@@ -4148,11 +7275,18 @@ function primeEditableHistory(originalSid, messages = [
             native.onMove?.(previousId, sid);
           }
           entries.push({
-            type: "custom", customType: "omp-web-history-navigation", id: `edit-marker-${native.edits.length}`,
-            parentId: target.parentId, timestamp: header.timestamp, data: { entryId: target.id },
+            type: "custom",
+            customType: "omp-web-history-navigation",
+            id: `edit-marker-${native.edits.length}`,
+            parentId: target.parentId,
+            timestamp: header.timestamp,
+            data: { entryId: target.id },
           });
           persist();
-          response = jsonResponse(200, { success: true, data: { cancelled: false, sessionId: sid, leafId: native.leafId } });
+          response = jsonResponse(200, {
+            success: true,
+            data: { cancelled: false, sessionId: sid, leafId: native.leafId },
+          });
         }
         // The native change and its SSE can precede this client's HTTP reply.
         await editReplyGate;
@@ -4161,21 +7295,36 @@ function primeEditableHistory(originalSid, messages = [
       await promptGate;
       const number = native.prompts.length + 1;
       entries.push({
-        type: "message", id: `entry-replacement-${number}`, parentId: native.leafId, timestamp: header.timestamp,
+        type: "message",
+        id: `entry-replacement-${number}`,
+        parentId: native.leafId,
+        timestamp: header.timestamp,
         message: userMsg(`replacement-${number}`, body.message),
       });
       persist();
       native.prompts.push({ sessionId: sid, filePath, ...context() });
-      world.agents.set(sid, { running: true, state: { isStreaming: true, isPromptRunning: true } });
+      world.agents.set(sid, {
+        running: true,
+        state: { isStreaming: true, isPromptRunning: true },
+      });
       return jsonResponse(200, { success: true, data: null });
     },
     completePrompt(stream) {
       assert.equal(stream.channel.sessionId, sid);
       const number = native.prompts.length;
       const message = assistantMsg(`revised-answer-${number}`, "A2-revised");
-      entries.push({ type: "message", id: `entry-revised-answer-${number}`, parentId: native.leafId, timestamp: header.timestamp, message });
+      entries.push({
+        type: "message",
+        id: `entry-revised-answer-${number}`,
+        parentId: native.leafId,
+        timestamp: header.timestamp,
+        message,
+      });
       persist();
-      world.agents.set(sid, { running: false, state: { isStreaming: false, isPromptRunning: false } });
+      world.agents.set(sid, {
+        running: false,
+        state: { isStreaming: false, isPromptRunning: false },
+      });
       stream.emit({ type: "agent_start" });
       stream.emit({ type: "message_end", message }, { persist: false });
       stream.emit({ type: "agent_end", isTerminal: true });
@@ -4196,35 +7345,74 @@ async function attachEditableWrapper(t, native, { holdHistory = false } = {}) {
   const identityChanges = [];
   const ready = { type: "ready", protocolVersion: 2 };
   let readied = false;
-  const emitNative = (frame) => { for (const listener of [...listeners]) listener(frame); };
-  const wrapper = new AgentSessionWrapper({
-    isAlive: true,
-    async waitReady() { readied = true; return ready; },
-    onFrame(listener) { listeners.add(listener); return () => listeners.delete(listener); },
-    async sendCommand(command) {
-      assert.equal(readied, true, "commands must wait for readiness");
-      if (command.type === "get_state") return {
-        sessionId: native.sessionId, sessionFile: native.filePath,
-        isStreaming: world.agents.get(native.sessionId)?.state?.isStreaming ?? false,
-        isCompacting: false, isSettled: true, hasPendingAsyncWork: false, queuedMessageCount: 0,
-      };
-      if (command.type === "edit_message") {
-        const response = await native.command(command);
-        const value = await response.json();
-        if (native.editOutcome === "persistence-error") {
-          emitNative({ type: "notice", source: "session-persistence", level: "error", message: value.error });
+  const emitNative = (frame) => {
+    for (const listener of [...listeners]) listener(frame);
+  };
+  const wrapper = new AgentSessionWrapper(
+    {
+      isAlive: true,
+      async waitReady() {
+        readied = true;
+        return ready;
+      },
+      onFrame(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      async sendCommand(command) {
+        assert.equal(readied, true, "commands must wait for readiness");
+        if (command.type === "get_state")
+          return {
+            sessionId: native.sessionId,
+            sessionFile: native.filePath,
+            isStreaming:
+              world.agents.get(native.sessionId)?.state?.isStreaming ?? false,
+            isCompacting: false,
+            isSettled: true,
+            hasPendingAsyncWork: false,
+            queuedMessageCount: 0,
+          };
+        if (command.type === "edit_message") {
+          const response = await native.command(command);
+          const value = await response.json();
+          if (native.editOutcome === "persistence-error") {
+            emitNative({
+              type: "notice",
+              source: "session-persistence",
+              level: "error",
+              message: value.error,
+            });
+          }
+          if (!response.ok) throw new Error(value.error);
+          return value.data;
         }
-        if (!response.ok) throw new Error(value.error);
-        return value.data;
-      }
-      if (command.type === "prompt") { await native.command(command); return { agentInvoked: true }; }
-      return {};
+        if (command.type === "prompt") {
+          await native.command(command);
+          return { agentInvoked: true };
+        }
+        return {};
+      },
+      sendFrame() {},
+      async dispose() {
+        listeners.clear();
+      },
     },
-    sendFrame() {},
-    async dispose() { listeners.clear(); },
-  }, process.cwd(), null, false, "", undefined, onlineHost);
+    process.cwd(),
+    null,
+    false,
+    "",
+    undefined,
+    onlineHost,
+  );
   t.after(() => wrapper.destroyAndWait());
-  native.onMove = () => emitNative({ type: "notice", source: "session-persistence", level: "warning", message: "Session moved to a sibling file because another process owns the original" });
+  native.onMove = () =>
+    emitNative({
+      type: "notice",
+      source: "session-persistence",
+      level: "warning",
+      message:
+        "Session moved to a sibling file because another process owns the original",
+    });
   wrapper.onIdentityChange((oldId, newId, options) => {
     identityChanges.push({ oldId, newId, keepOldId: options?.keepOldId });
     if (!options?.keepOldId) world.wrappers.delete(oldId);
@@ -4234,22 +7422,40 @@ async function attachEditableWrapper(t, native, { holdHistory = false } = {}) {
     for (const [id, registered] of world.wrappers) {
       if (registered === wrapper) world.streams.set(id, event.web);
     }
-    if (holdHistory && event.type === "session_history_changed") { historyFrames.push(event); return; }
+    if (holdHistory && event.type === "session_history_changed") {
+      historyFrames.push(event);
+      return;
+    }
     for (const stream of world.esInstances) {
-      if (!stream.closedByCaller && world.wrappers.get(stream.channel.sessionId) === wrapper) stream.emit(event, { persist: false });
+      if (
+        !stream.closedByCaller &&
+        world.wrappers.get(stream.channel.sessionId) === wrapper
+      )
+        stream.emit(event, { persist: false });
     }
   });
   wrapper.start();
   await wrapper.waitUntilReady();
   world.wrappers.set(native.sessionId, wrapper);
   return {
-    wrapper, identityChanges, emitNative,
-    completePrompt() { native.completePrompt({ channel: { sessionId: native.sessionId }, emit: emitNative }); },
+    wrapper,
+    identityChanges,
+    emitNative,
+    completePrompt() {
+      native.completePrompt({
+        channel: { sessionId: native.sessionId },
+        emit: emitNative,
+      });
+    },
     releaseHistory() {
       holdHistory = false;
       for (const event of historyFrames.splice(0)) {
         for (const stream of world.esInstances) {
-          if (!stream.closedByCaller && world.wrappers.get(stream.channel.sessionId) === wrapper) stream.emit(event, { persist: false });
+          if (
+            !stream.closedByCaller &&
+            world.wrappers.get(stream.channel.sessionId) === wrapper
+          )
+            stream.emit(event, { persist: false });
         }
       }
     },
@@ -4262,7 +7468,10 @@ async function mountMovableChat(initialId, { onOpenFile } = {}) {
   let navigate;
   let changeLeaf;
   let activeLeaf;
-  const onBranchDataChange = (_tree, leaf, handler) => { activeLeaf = leaf; changeLeaf = handler; };
+  const onBranchDataChange = (_tree, leaf, handler) => {
+    activeLeaf = leaf;
+    changeLeaf = handler;
+  };
   function Shell() {
     const [session, setSession] = React.useState(() => sessionInfo(initialId));
     const [navigationKey, setNavigationKey] = React.useState(0);
@@ -4270,28 +7479,60 @@ async function mountMovableChat(initialId, { onOpenFile } = {}) {
       selectedId = id;
       setSession(sessionInfo(id));
       setNavigationKey((key) => key + 1);
-      window.history.replaceState(null, "", `?session=${encodeURIComponent(id)}`);
+      window.history.replaceState(
+        null,
+        "",
+        `?session=${encodeURIComponent(id)}`,
+      );
     };
     return React.createElement(ChatWindow, {
-      key: navigationKey, session, newSessionCwd: null, chatInputRef, onBranchDataChange, onOpenFile,
+      key: navigationKey,
+      session,
+      newSessionCwd: null,
+      chatInputRef,
+      onBranchDataChange,
+      onOpenFile,
       onSessionMoved(oldId, newId) {
         if (selectedId !== oldId) return;
         selectedId = newId;
         setSession(sessionInfo(newId));
-        window.history.replaceState(null, "", `?session=${encodeURIComponent(newId)}`);
+        window.history.replaceState(
+          null,
+          "",
+          `?session=${encodeURIComponent(newId)}`,
+        );
       },
     });
   }
-  window.history.replaceState(null, "", `?session=${encodeURIComponent(initialId)}`);
-  const view = ownRoot(render(React.createElement(Shell), { wrapper: TestRoot }));
+  window.history.replaceState(
+    null,
+    "",
+    `?session=${encodeURIComponent(initialId)}`,
+  );
+  const view = ownRoot(
+    render(React.createElement(Shell), { wrapper: TestRoot }),
+  );
   await settle();
-  await act(async () => { lastEs()?.open(); });
+  await act(async () => {
+    lastEs()?.open();
+  });
   await settle();
   return {
-    view, chatInputRef, unmount: view.unmount,
-    navigate: (id) => navigate(id), changeLeaf: (leaf) => changeLeaf(leaf),
-    editButton: () => view.getAllByRole("button", { name: translate("messageView.editFromHereTitle") })[1],
-    get selectedId() { return selectedId; }, get activeLeaf() { return activeLeaf; },
+    view,
+    chatInputRef,
+    unmount: view.unmount,
+    navigate: (id) => navigate(id),
+    changeLeaf: (leaf) => changeLeaf(leaf),
+    editButton: () =>
+      view.getAllByRole("button", {
+        name: translate("messageView.editFromHereTitle"),
+      })[1],
+    get selectedId() {
+      return selectedId;
+    },
+    get activeLeaf() {
+      return activeLeaf;
+    },
   };
 }
 
@@ -4302,85 +7543,171 @@ async function mountEditableSession(sid, options = {}) {
   let latest;
   let sending;
   let changeLeaf;
-  const onBranchDataChange = (_tree, _leaf, handler) => { changeLeaf = handler; };
+  const onBranchDataChange = (_tree, _leaf, handler) => {
+    changeLeaf = handler;
+  };
   function Chat() {
     const [value, setValue] = React.useState(() => getDraft(sid)?.value ?? "");
-    React.useImperativeHandle(chatInputRef, () => ({
-      insertIfEmpty(text) { setValue((current) => current.trim() ? current : text); },
-    }), []);
-    React.useEffect(() => { setDraft(sid, { value, images: [], files: [] }); }, [value]);
-    const hook = useAgentSession({ session, newSessionCwd: null, ...options, chatInputRef, onBranchDataChange });
+    React.useImperativeHandle(
+      chatInputRef,
+      () => ({
+        insertIfEmpty(text) {
+          setValue((current) => (current.trim() ? current : text));
+        },
+      }),
+      [],
+    );
+    React.useEffect(() => {
+      setDraft(sid, { value, images: [], files: [] });
+    }, [value]);
+    const hook = useAgentSession({
+      session,
+      newSessionCwd: null,
+      ...options,
+      chatInputRef,
+      onBranchDataChange,
+    });
     latest = hook;
-    const historyBusy = hook.editingEntryId !== null || hook.forkingEntryId !== null;
-    return React.createElement(React.Fragment, null,
-      hook.messages.map((message, index) => message.role === "user"
-        ? React.createElement("section", { key: hook.entryIds[index] ?? index, "data-testid": `message-${hook.entryIds[index]}` },
-          React.createElement(MessageView, {
-            message, entryId: hook.entryIds[index], onEdit: hook.handleEdit,
-            editing: hook.editingEntryId === hook.entryIds[index], editDisabled: historyBusy,
-            onFork: hook.handleFork, forking: hook.forkingEntryId === hook.entryIds[index], forkDisabled: historyBusy,
-          })) : null),
-      React.createElement("form", { onSubmit: (event) => {
-        event.preventDefault();
-        sending = hook.handleSend(value);
-        void sending.then((sent) => { if (sent.status === "accepted") setValue((current) => current === value ? "" : current); });
-      } },
-      React.createElement("textarea", { "aria-label": "Test composer", value, onChange: (event) => setValue(event.target.value) }),
-      React.createElement("button", { type: "submit" }, "Submit replacement")));
+    const historyBusy =
+      hook.editingEntryId !== null || hook.forkingEntryId !== null;
+    return React.createElement(
+      React.Fragment,
+      null,
+      hook.messages.map((message, index) =>
+        message.role === "user"
+          ? React.createElement(
+              "section",
+              {
+                key: hook.entryIds[index] ?? index,
+                "data-testid": `message-${hook.entryIds[index]}`,
+              },
+              React.createElement(MessageView, {
+                message,
+                entryId: hook.entryIds[index],
+                onEdit: hook.handleEdit,
+                editing: hook.editingEntryId === hook.entryIds[index],
+                editDisabled: historyBusy,
+                onFork: hook.handleFork,
+                forking: hook.forkingEntryId === hook.entryIds[index],
+                forkDisabled: historyBusy,
+              }),
+            )
+          : null,
+      ),
+      React.createElement(
+        "form",
+        {
+          onSubmit: (event) => {
+            event.preventDefault();
+            sending = hook.handleSend(value);
+            void sending.then((sent) => {
+              if (sent.status === "accepted")
+                setValue((current) => (current === value ? "" : current));
+            });
+          },
+        },
+        React.createElement("textarea", {
+          "aria-label": "Test composer",
+          value,
+          onChange: (event) => setValue(event.target.value),
+        }),
+        React.createElement("button", { type: "submit" }, "Submit replacement"),
+      ),
+    );
   }
-  const view = ownRoot(render(React.createElement(Chat), { wrapper: TestRoot }));
+  const view = ownRoot(
+    render(React.createElement(Chat), { wrapper: TestRoot }),
+  );
   await settle();
   assert.equal(latest.loading, false, "the real hook must finish hydration");
   return {
-    view, unmount: view.unmount, changeLeaf: (leafId) => changeLeaf(leafId),
-    editButton: (entryId) => within(view.getByTestId(`message-${entryId}`)).getByRole("button", { name: translate("messageView.editFromHereTitle") }),
-    get latest() { return latest; },
-    get sending() { return sending; },
+    view,
+    unmount: view.unmount,
+    changeLeaf: (leafId) => changeLeaf(leafId),
+    editButton: (entryId) =>
+      within(view.getByTestId(`message-${entryId}`)).getByRole("button", {
+        name: translate("messageView.editFromHereTitle"),
+      }),
+    get latest() {
+      return latest;
+    },
+    get sending() {
+      return sending;
+    },
   };
 }
 
 // A live but idle wrapper supplies the observer connection without inventing
 // an agent run just to deliver history notifications.
 async function mountObservedEditableSession(sid, options = {}) {
-  world.agents.set(sid, { running: true, state: { isStreaming: false, isPromptRunning: false } });
+  world.agents.set(sid, {
+    running: true,
+    state: { isStreaming: false, isPromptRunning: false },
+  });
   const w = await mountEditableSession(sid, options);
   const stream = lastEs();
   assert.ok(stream, "the mounted hook must attach an idle history observer");
   assert.deepEqual(stream.channel, { kind: "session", sessionId: sid });
-  await act(async () => { stream.open(); });
+  await act(async () => {
+    stream.open();
+  });
   await settle();
   assert.equal(w.latest.agentRunning, false);
   return { w, stream };
 }
 
-for (const order of ["identity/history before HTTP", "HTTP before history delivery"]) {
+for (const order of [
+  "identity/history before HTTP",
+  "HTTP before history delivery",
+]) {
   test(`native Edit relocation keeps the prefix, composer and resend (${order})`, async (t) => {
     resetWorld();
-    const { getDraft, setDraft, clearDraft } = await import("@/lib/draft-store");
+    const { getDraft, setDraft, clearDraft } =
+      await import("@/lib/draft-store");
     const sid = `edit-move-${order.startsWith("identity") ? "early" : "late"}`;
     const target = `${sid}-owned`;
     for (const id of [sid, target]) clearDraft(id);
-    t.after(() => { clearDraft(sid); clearDraft(target); });
+    t.after(() => {
+      clearDraft(sid);
+      clearDraft(target);
+    });
     const images = [{ data: "AAAA", mimeType: "image/png" }];
-    const files = [{ name: "context.txt", mimeType: "text/plain", content: "keep attached context", size: 21 }];
+    const files = [
+      {
+        name: "context.txt",
+        mimeType: "text/plain",
+        content: "keep attached context",
+        size: 21,
+      },
+    ];
     setDraft(sid, { value: "", images, files });
     const native = primeEditableHistory(sid);
     native.moveTo = target;
     const original = structuredClone(world.sessions.get(sid));
     const originalEntries = native.entries;
     const originalJsonl = native.jsonl;
-    const server = await attachEditableWrapper(t, native, { holdHistory: order.startsWith("HTTP") });
+    const server = await attachEditableWrapper(t, native, {
+      holdHistory: order.startsWith("HTTP"),
+    });
     const w = await mountMovableChat(sid);
     const composer = w.view.getByRole("textbox");
     let releaseReply;
     let replyReady = false;
     if (order.startsWith("identity")) {
-      const replyGate = new Promise((resolve) => { releaseReply = resolve; });
+      const replyGate = new Promise((resolve) => {
+        releaseReply = resolve;
+      });
       t.after(releaseReply);
       world.holds.push({
-        match: (method, url, body) => method === "POST" && url === `/api/agent/${sid}` && body?.type === "edit_message",
+        match: (method, url, body) =>
+          method === "POST" &&
+          url === `/api/agent/${sid}` &&
+          body?.type === "edit_message",
         produce: async () => {
-          const result = await server.wrapper.send({ type: "edit_message", entryId: "entry-u2" });
+          const result = await server.wrapper.send({
+            type: "edit_message",
+            entryId: "entry-u2",
+          });
           replyReady = true;
           await replyGate;
           return { value: { success: true, data: result } };
@@ -4388,65 +7715,175 @@ for (const order of ["identity/history before HTTP", "HTTP before history delive
       });
     }
     await confirmEdit(w.view, w.editButton());
-    await until(() => server.identityChanges.length === 1, "native identity machinery must confirm the copy-on-write move");
-    assert.deepEqual(server.identityChanges, [{ oldId: sid, newId: target, keepOldId: true }]);
-    assert.equal(world.wrappers.get(sid), world.wrappers.get(target), "the existing alias registry retains the originating observer");
+    await until(
+      () => server.identityChanges.length === 1,
+      "native identity machinery must confirm the copy-on-write move",
+    );
+    assert.deepEqual(server.identityChanges, [
+      { oldId: sid, newId: target, keepOldId: true },
+    ]);
+    assert.equal(
+      world.wrappers.get(sid),
+      world.wrappers.get(target),
+      "the existing alias registry retains the originating observer",
+    );
     if (releaseReply) {
-      await until(() => replyReady, "the wrapper history event must precede the held HTTP response");
-      assert.equal(w.selectedId, sid, "a native identity/history event alone cannot navigate the client");
+      await until(
+        () => replyReady,
+        "the wrapper history event must precede the held HTTP response",
+      );
+      assert.equal(
+        w.selectedId,
+        sid,
+        "a native identity/history event alone cannot navigate the client",
+      );
       assert.equal(w.activeLeaf, original.leafId);
       assert.equal(composer.value, "");
-      await act(async () => { releaseReply(); });
+      await act(async () => {
+        releaseReply();
+      });
     }
-    await until(() => w.selectedId === target && w.activeLeaf === native.leafId, "confirmed Edit must reload and select the moved conversation");
+    await until(
+      () => w.selectedId === target && w.activeLeaf === native.leafId,
+      "confirmed Edit must reload and select the moved conversation",
+    );
     await settle();
-    assert.equal(w.view.getByRole("textbox"), composer, "ownership relocation preserves the live composer instance");
+    assert.equal(
+      w.view.getByRole("textbox"),
+      composer,
+      "ownership relocation preserves the live composer instance",
+    );
     assert.equal(w.view.getByRole("textbox").value, "U2-original");
-    assert.equal(new URL(window.location.href).searchParams.get("session"), target);
-    assert.deepEqual(getDraft(target), { value: "U2-original", images, files, promptOnly: true });
-    assert.equal(getDraft(sid), null, "the draft moves rather than remaining on the abandoned branch");
-    assert.deepEqual(world.sessions.get(sid), original, "the non-owned source file remains historical");
-    assert.equal(native.persistedFiles.get(original.filePath), originalJsonl, "copy-on-write must never append the Edit marker to the source file");
-    assert.deepEqual(native.entries.slice(0, originalEntries.length), originalEntries);
-    assert.deepEqual(world.sessions.get(target).messages, original.messages.slice(0, 2));
+    assert.equal(
+      new URL(window.location.href).searchParams.get("session"),
+      target,
+    );
+    assert.deepEqual(getDraft(target), {
+      value: "U2-original",
+      images,
+      files,
+      promptOnly: true,
+    });
+    assert.equal(
+      getDraft(sid),
+      null,
+      "the draft moves rather than remaining on the abandoned branch",
+    );
+    assert.deepEqual(
+      world.sessions.get(sid),
+      original,
+      "the non-owned source file remains historical",
+    );
+    assert.equal(
+      native.persistedFiles.get(original.filePath),
+      originalJsonl,
+      "copy-on-write must never append the Edit marker to the source file",
+    );
+    assert.deepEqual(
+      native.entries.slice(0, originalEntries.length),
+      originalEntries,
+    );
+    assert.deepEqual(
+      world.sessions.get(target).messages,
+      original.messages.slice(0, 2),
+    );
     assert.equal(w.view.queryByText("U3-original"), null);
 
     // A held server frame is delivered during the replacement response. It must
     // not clear the optimistic prompt or reset streaming after the id changed.
     await act(async () => {
-      fireEvent.change(w.view.getByRole("textbox"), { target: { value: "U2-modified" } });
-      fireEvent.keyDown(w.view.getByRole("textbox"), { key: "Enter", code: "Enter" });
+      fireEvent.change(w.view.getByRole("textbox"), {
+        target: { value: "U2-modified" },
+      });
+      fireEvent.keyDown(w.view.getByRole("textbox"), {
+        key: "Enter",
+        code: "Enter",
+      });
     });
-    await until(() => lastEs()?.channel.sessionId === target, "resend must attach the confirmed native identity");
-    await act(async () => { lastEs().open(); });
-    await until(() => native.prompts.length === 1, "replacement prompt must reach native history");
-    const partial = assistantMsg("moving-partial", "Moved response in progress");
-    await act(async () => { server.emitNative({ type: "agent_start" }); server.emitNative({ type: "message_update", message: partial }); });
+    await until(
+      () => lastEs()?.channel.sessionId === target,
+      "resend must attach the confirmed native identity",
+    );
+    await act(async () => {
+      lastEs().open();
+    });
+    await until(
+      () => native.prompts.length === 1,
+      "replacement prompt must reach native history",
+    );
+    const partial = assistantMsg(
+      "moving-partial",
+      "Moved response in progress",
+    );
+    await act(async () => {
+      server.emitNative({ type: "agent_start" });
+      server.emitNative({ type: "message_update", message: partial });
+    });
     await settle(90);
-    await act(async () => { server.releaseHistory(); });
+    await act(async () => {
+      server.releaseHistory();
+    });
     await settle();
-    assert.ok(w.view.getByText("Moved response in progress"), "a delayed history echo must not reset the new response");
+    assert.ok(
+      w.view.getByText("Moved response in progress"),
+      "a delayed history echo must not reset the new response",
+    );
     assert.equal(native.prompts[0].sessionId, target);
-    assert.deepEqual(native.prompts[0].messages.slice(0, 2), original.messages.slice(0, 2));
+    assert.deepEqual(
+      native.prompts[0].messages.slice(0, 2),
+      original.messages.slice(0, 2),
+    );
     assert.match(native.prompts[0].messages.at(-1).content, /U2-modified/);
-    assert.match(native.prompts[0].messages.at(-1).content, /keep attached context/);
-    assert.equal(native.prompts[0].messages.some((message) => message.content === "U3-original"), false);
-    const promptCall = world.calls.findLast((call) => call.body?.type === "prompt");
+    assert.match(
+      native.prompts[0].messages.at(-1).content,
+      /keep attached context/,
+    );
+    assert.equal(
+      native.prompts[0].messages.some(
+        (message) => message.content === "U3-original",
+      ),
+      false,
+    );
+    const promptCall = world.calls.findLast(
+      (call) => call.body?.type === "prompt",
+    );
     assert.equal(promptCall.url, `/api/agent/${target}`);
-    assert.deepEqual(promptCall.body.images.map(({ data, mimeType }) => ({ data, mimeType })), images);
-    await act(async () => { server.completePrompt(); });
-    await until(() => w.activeLeaf === native.leafId && w.view.queryByText("A2-revised") !== null, "the moved replacement must persist and hydrate");
-    await act(async () => { await w.changeLeaf(original.leafId); });
-    assert.ok(w.view.getByText("U3-original"), "the abandoned continuation remains browsable in the copied history");
+    assert.deepEqual(
+      promptCall.body.images.map(({ data, mimeType }) => ({ data, mimeType })),
+      images,
+    );
+    await act(async () => {
+      server.completePrompt();
+    });
+    await until(
+      () =>
+        w.activeLeaf === native.leafId &&
+        w.view.queryByText("A2-revised") !== null,
+      "the moved replacement must persist and hydrate",
+    );
+    await act(async () => {
+      await w.changeLeaf(original.leafId);
+    });
+    assert.ok(
+      w.view.getByText("U3-original"),
+      "the abandoned continuation remains browsable in the copied history",
+    );
     assert.deepEqual(world.sessions.get(sid), original);
-    await act(async () => { await w.changeLeaf(null); });
+    await act(async () => {
+      await w.changeLeaf(null);
+    });
     const revised = structuredClone(world.sessions.get(target));
     w.unmount();
     native.reopen();
-    const reopened = await mountMovableChat(new URL(window.location.href).searchParams.get("session"));
+    const reopened = await mountMovableChat(
+      new URL(window.location.href).searchParams.get("session"),
+    );
     assert.equal(reopened.selectedId, target);
     assert.equal(reopened.activeLeaf, revised.leafId);
-    assert.ok(reopened.view.getByText("A2-revised"), "reloading the selected URL keeps the revised conversation");
+    assert.ok(
+      reopened.view.getByText("A2-revised"),
+      "reloading the selected URL keeps the revised conversation",
+    );
     assert.equal(reopened.view.queryByText("U3-original"), null);
   });
 }
@@ -4454,14 +7891,36 @@ for (const order of ["identity/history before HTTP", "HTTP before history delive
 test("relocation merges existing target attachments and preserves typing added while reload awaits", async (t) => {
   resetWorld();
   const { getDraft, setDraft, clearDraft } = await import("@/lib/draft-store");
-  const sid = "edit-move-new-typing", target = `${sid}-owned`;
-  t.after(() => { clearDraft(sid); clearDraft(target); });
+  const sid = "edit-move-new-typing",
+    target = `${sid}-owned`;
+  t.after(() => {
+    clearDraft(sid);
+    clearDraft(target);
+  });
   const sourceImage = { data: "AAAA", mimeType: "image/png" };
   const targetImage = { data: "BBBB", mimeType: "image/webp" };
-  const sourceFile = { name: "source.txt", mimeType: "text/plain", content: "source", size: 6 };
-  const targetFile = { name: "target.txt", mimeType: "text/plain", content: "target", size: 6 };
-  setDraft(sid, { value: "initial source draft", images: [sourceImage], files: [sourceFile] });
-  setDraft(target, { value: "existing target draft", images: [targetImage], files: [targetFile] });
+  const sourceFile = {
+    name: "source.txt",
+    mimeType: "text/plain",
+    content: "source",
+    size: 6,
+  };
+  const targetFile = {
+    name: "target.txt",
+    mimeType: "text/plain",
+    content: "target",
+    size: 6,
+  };
+  setDraft(sid, {
+    value: "initial source draft",
+    images: [sourceImage],
+    files: [sourceFile],
+  });
+  setDraft(target, {
+    value: "existing target draft",
+    images: [targetImage],
+    files: [targetFile],
+  });
   const native = primeEditableHistory(sid);
   native.moveTo = target;
   await attachEditableWrapper(t, native);
@@ -4469,101 +7928,229 @@ test("relocation merges existing target attachments and preserves typing added w
   let release;
   t.after(() => release?.());
   world.holds.push({
-    match: (method, url) => method === "GET" && url.startsWith(`/api/sessions/${target}?`),
-    produce: () => new Promise((resolve) => { release = () => resolve({ value: {
-      sessionId: target, filePath: native.filePath, tree: world.sessions.get(target).tree,
-      leafId: native.leafId, context: world.sessions.get(target),
-    } }); }),
+    match: (method, url) =>
+      method === "GET" && url.startsWith(`/api/sessions/${target}?`),
+    produce: () =>
+      new Promise((resolve) => {
+        release = () =>
+          resolve({
+            value: {
+              sessionId: target,
+              filePath: native.filePath,
+              tree: world.sessions.get(target).tree,
+              leafId: native.leafId,
+              context: world.sessions.get(target),
+            },
+          });
+      }),
   });
   await confirmEdit(w.view, w.editButton());
-  await until(() => release, "confirmed target history must be awaiting its load");
+  await until(
+    () => release,
+    "confirmed target history must be awaiting its load",
+  );
   await act(async () => {
-    fireEvent.change(w.view.getByRole("textbox"), { target: { value: "new source typing" } });
-    w.chatInputRef.current.addFiles([new File(["new file while waiting"], "new.txt", { type: "text/plain" })]);
+    fireEvent.change(w.view.getByRole("textbox"), {
+      target: { value: "new source typing" },
+    });
+    w.chatInputRef.current.addFiles([
+      new File(["new file while waiting"], "new.txt", { type: "text/plain" }),
+    ]);
   });
-  await until(() => getDraft(sid)?.files.length === 2, "attachment reads completed during the reload must join the moved draft");
-  await act(async () => { release(); });
-  await until(() => w.selectedId === target, "the confirmed move must transition its composer");
+  await until(
+    () => getDraft(sid)?.files.length === 2,
+    "attachment reads completed during the reload must join the moved draft",
+  );
+  await act(async () => {
+    release();
+  });
+  await until(
+    () => w.selectedId === target,
+    "the confirmed move must transition its composer",
+  );
   // Bun appends ";charset=utf-8" to a text File's type, so the type is pinned by its prefix.
   const mimeType = getDraft(target)?.files[1]?.mimeType ?? "";
   assert.ok(mimeType.startsWith("text/plain"), mimeType);
   assert.deepEqual(getDraft(target), {
-    value: "new source typing\n\nexisting target draft", images: [sourceImage, targetImage],
-    files: [sourceFile, { name: "new.txt", mimeType, content: "new file while waiting", size: 22 }, targetFile],
+    value: "new source typing\n\nexisting target draft",
+    images: [sourceImage, targetImage],
+    files: [
+      sourceFile,
+      {
+        name: "new.txt",
+        mimeType,
+        content: "new file while waiting",
+        size: 22,
+      },
+      targetFile,
+    ],
   });
-  assert.equal(w.view.getByRole("textbox").value, "new source typing\n\nexisting target draft");
+  assert.equal(
+    w.view.getByRole("textbox").value,
+    "new source typing\n\nexisting target draft",
+  );
   assert.equal(getDraft(sid), null);
 });
 
 test("relocation keeps the source and existing target finished uploads", async (t) => {
   resetWorld();
   const { getDraft, setDraft, clearDraft } = await import("@/lib/draft-store");
-  const sid = "edit-move-uploads", target = `${sid}-owned`;
-  t.after(() => { clearDraft(sid); clearDraft(target); });
-  const sourceUpload = { id: "up-source", name: "source.bin", size: 10, hostId: "local" };
-  const targetUpload = { id: "up-target", name: "target.bin", size: 20, hostId: "local" };
+  const sid = "edit-move-uploads",
+    target = `${sid}-owned`;
+  t.after(() => {
+    clearDraft(sid);
+    clearDraft(target);
+  });
+  const sourceUpload = {
+    id: "up-source",
+    name: "source.bin",
+    size: 10,
+    hostId: "local",
+  };
+  const targetUpload = {
+    id: "up-target",
+    name: "target.bin",
+    size: 20,
+    hostId: "local",
+  };
   setDraft(sid, { value: "", images: [], files: [], uploads: [sourceUpload] });
-  setDraft(target, { value: "Existing target text", images: [], files: [], uploads: [targetUpload] });
+  setDraft(target, {
+    value: "Existing target text",
+    images: [],
+    files: [],
+    uploads: [targetUpload],
+  });
   const native = primeEditableHistory(sid);
   native.moveTo = target;
   await attachEditableWrapper(t, native);
   const w = await mountMovableChat(sid);
   await confirmEdit(w.view, w.editButton());
-  await until(() => w.selectedId === target, "the confirmed target must become selected");
+  await until(
+    () => w.selectedId === target,
+    "the confirmed target must become selected",
+  );
   await settle();
   // The composer re-persists the merged list in its own order.
-  assert.deepEqual(getDraft(target)?.uploads?.map((upload) => upload.id).sort(), [sourceUpload.id, targetUpload.id]);
+  assert.deepEqual(
+    getDraft(target)
+      ?.uploads?.map((upload) => upload.id)
+      .sort(),
+    [sourceUpload.id, targetUpload.id],
+  );
   assert.equal(getDraft(sid), null);
 });
 
 test("upload continuity: confirmed identity move retains proof through composer persistence and outbox submission", async (t) => {
   resetWorld();
   const { getDraft, setDraft, clearDraft } = await import("@/lib/draft-store");
-  const sid = "proof-edit-move", target = `${sid}-owned`;
-  t.after(() => { clearDraft(sid); clearDraft(target); });
-  const upload = { id: "moved-upload", name: "moved.zip", size: 8, hostId: "local", proof: "moved-completion-proof" };
+  const sid = "proof-edit-move",
+    target = `${sid}-owned`;
+  t.after(() => {
+    clearDraft(sid);
+    clearDraft(target);
+  });
+  const upload = {
+    id: "moved-upload",
+    name: "moved.zip",
+    size: 8,
+    hostId: "local",
+    proof: "moved-completion-proof",
+  };
   setDraft(sid, { value: "", images: [], files: [], uploads: [upload] });
   const native = primeEditableHistory(sid);
   native.moveTo = target;
   await attachEditableWrapper(t, native);
   const w = await mountMovableChat(sid);
   await confirmEdit(w.view, w.editButton());
-  await until(() => w.selectedId === target, "the confirmed target must own the composer");
+  await until(
+    () => w.selectedId === target,
+    "the confirmed target must own the composer",
+  );
   await settle();
-  assert.deepEqual(getDraft(target)?.uploads, [upload], "the live composer must preserve proof when rewriting its moved draft");
+  assert.deepEqual(
+    getDraft(target)?.uploads,
+    [upload],
+    "the live composer must preserve proof when rewriting its moved draft",
+  );
   assert.equal(getDraft(sid), null);
   world.outboxHold = true;
-  await act(async () => { fireEvent.keyDown(w.view.getByRole("textbox"), { key: "Enter" }); });
-  await until(() => world.outbox.length === 1, "the moved composer must store its message");
+  await act(async () => {
+    fireEvent.keyDown(w.view.getByRole("textbox"), { key: "Enter" });
+  });
+  await until(
+    () => world.outbox.length === 1,
+    "the moved composer must store its message",
+  );
   assert.equal(world.outbox[0].sessionId, target);
-  assert.deepEqual(world.outbox[0].uploadProofs, { "moved-upload": "moved-completion-proof" });
+  assert.deepEqual(world.outbox[0].uploadProofs, {
+    "moved-upload": "moved-completion-proof",
+  });
 });
 
 test("relocation merges an upload both drafts hold once", async (t) => {
   resetWorld();
-  const { getDraft, setDraft, clearDraft, subscribeDrafts } = await import("@/lib/draft-store");
-  const sid = "edit-move-shared-upload", target = `${sid}-owned`;
-  t.after(() => { clearDraft(sid); clearDraft(target); });
-  const shared = { id: "up-shared", name: "shared.bin", size: 10, hostId: "local" };
-  const targetOnly = { id: "up-target", name: "target.bin", size: 20, hostId: "local" };
+  const { getDraft, setDraft, clearDraft, subscribeDrafts } =
+    await import("@/lib/draft-store");
+  const sid = "edit-move-shared-upload",
+    target = `${sid}-owned`;
+  t.after(() => {
+    clearDraft(sid);
+    clearDraft(target);
+  });
+  const shared = {
+    id: "up-shared",
+    name: "shared.bin",
+    size: 10,
+    hostId: "local",
+  };
+  const targetOnly = {
+    id: "up-target",
+    name: "target.bin",
+    size: 20,
+    hostId: "local",
+  };
   setDraft(sid, { value: "", images: [], files: [], uploads: [shared] });
-  setDraft(target, { value: "Existing target text", images: [], files: [], uploads: [{ ...shared, name: "target-shared.bin" }, targetOnly] });
+  setDraft(target, {
+    value: "Existing target text",
+    images: [],
+    files: [],
+    uploads: [{ ...shared, name: "target-shared.bin" }, targetOnly],
+  });
   const native = primeEditableHistory(sid);
   native.moveTo = target;
   await attachEditableWrapper(t, native);
   const w = await mountMovableChat(sid);
   const persistedUploads = [];
-  t.after(subscribeDrafts(() => {
-    if (getDraft(sid) === null) persistedUploads.push(getDraft(target)?.uploads ?? []);
-  }));
+  t.after(
+    subscribeDrafts(() => {
+      if (getDraft(sid) === null)
+        persistedUploads.push(getDraft(target)?.uploads ?? []);
+    }),
+  );
   await confirmEdit(w.view, w.editButton());
-  await until(() => w.selectedId === target, "the confirmed target must become selected");
+  await until(
+    () => w.selectedId === target,
+    "the confirmed target must become selected",
+  );
   await settle();
-  assert.deepEqual(getDraft(target)?.uploads?.map((upload) => upload.id).sort(), [shared.id, targetOnly.id]);
-  assert.equal(getDraft(target)?.uploads?.find((upload) => upload.id === shared.id)?.name, shared.name, "the source occurrence wins");
+  assert.deepEqual(
+    getDraft(target)
+      ?.uploads?.map((upload) => upload.id)
+      .sort(),
+    [shared.id, targetOnly.id],
+  );
+  assert.equal(
+    getDraft(target)?.uploads?.find((upload) => upload.id === shared.id)?.name,
+    shared.name,
+    "the source occurrence wins",
+  );
   assert.ok(persistedUploads.length > 0);
   for (const saved of persistedUploads) {
-    assert.equal(saved.filter((upload) => upload.id === shared.id).length, 1, "no persisted snapshot contains the shared id twice");
+    assert.equal(
+      saved.filter((upload) => upload.id === shared.id).length,
+      1,
+      "no persisted snapshot contains the shared id twice",
+    );
   }
   assert.equal(getDraft(sid), null);
 });
@@ -4571,12 +8158,25 @@ test("relocation merges an upload both drafts hold once", async (t) => {
 test("relocation adopts existing target text without prefilling over it", async (t) => {
   resetWorld();
   const { getDraft, setDraft, clearDraft } = await import("@/lib/draft-store");
-  const sid = "edit-move-target-text", target = `${sid}-owned`;
-  t.after(() => { clearDraft(sid); clearDraft(target); });
+  const sid = "edit-move-target-text",
+    target = `${sid}-owned`;
+  t.after(() => {
+    clearDraft(sid);
+    clearDraft(target);
+  });
   const sourceImage = { data: "AAAA", mimeType: "image/png" };
-  const targetFile = { name: "target.txt", mimeType: "text/plain", content: "Target context", size: 14 };
+  const targetFile = {
+    name: "target.txt",
+    mimeType: "text/plain",
+    content: "Target context",
+    size: 14,
+  };
   setDraft(sid, { value: "", images: [sourceImage], files: [] });
-  setDraft(target, { value: "Existing target text", images: [], files: [targetFile] });
+  setDraft(target, {
+    value: "Existing target text",
+    images: [],
+    files: [targetFile],
+  });
   const native = primeEditableHistory(sid);
   native.moveTo = target;
   await attachEditableWrapper(t, native);
@@ -4584,18 +8184,39 @@ test("relocation adopts existing target text without prefilling over it", async 
   const composer = w.view.getByRole("textbox");
   assert.equal(composer.value, "");
   await confirmEdit(w.view, w.editButton());
-  await until(() => w.selectedId === target, "the confirmed target must become selected");
+  await until(
+    () => w.selectedId === target,
+    "the confirmed target must become selected",
+  );
   await settle();
-  assert.equal(w.view.getByRole("textbox"), composer, "the existing composer adopts its new draft identity");
-  assert.equal(composer.value, "Existing target text", "Edit prefill must not replace existing target content");
-  assert.deepEqual(getDraft(target), { value: "Existing target text", images: [sourceImage], files: [targetFile] });
+  assert.equal(
+    w.view.getByRole("textbox"),
+    composer,
+    "the existing composer adopts its new draft identity",
+  );
+  assert.equal(
+    composer.value,
+    "Existing target text",
+    "Edit prefill must not replace existing target content",
+  );
+  assert.deepEqual(getDraft(target), {
+    value: "Existing target text",
+    images: [sourceImage],
+    files: [targetFile],
+  });
   assert.equal(getDraft(sid), null);
 });
 
 // The model prompt may have carried images or inline files that Edit cannot restore; its text starting with `!!` must
 // still go out as a prompt. Anything the user typed or kept keeps its own (shell) meaning.
-const bangHistory = [userMsg("u1", "U1"), assistantMsg("a1", "A1"), userMsg("u2", "!!model text"), assistantMsg("a2", "A2")];
-const bashCalls = () => world.calls.filter((call) => call.body?.type === "bash");
+const bangHistory = [
+  userMsg("u1", "U1"),
+  assistantMsg("a1", "A1"),
+  userMsg("u2", "!!model text"),
+  assistantMsg("a2", "A2"),
+];
+const bashCalls = () =>
+  world.calls.filter((call) => call.body?.type === "bash");
 
 test("same-ID Edit of a `!!` model prompt resends it as a held prompt, never a shell command", async (t) => {
   resetWorld();
@@ -4607,9 +8228,19 @@ test("same-ID Edit of a `!!` model prompt resends it as a held prompt, never a s
   world.outboxHold = true;
   const w = await mountMovableChat(sid);
   await confirmEdit(w.view, w.editButton());
-  await until(() => native.edits.length === 1 && w.view.getByRole("textbox").value === "!!model text", "Edit must prefill the model prompt");
-  await act(async () => { fireEvent.keyDown(w.view.getByRole("textbox"), { key: "Enter" }); });
-  await until(() => world.outbox.length === 1 || bashCalls().length > 0, "the prefilled prompt must be dispatched");
+  await until(
+    () =>
+      native.edits.length === 1 &&
+      w.view.getByRole("textbox").value === "!!model text",
+    "Edit must prefill the model prompt",
+  );
+  await act(async () => {
+    fireEvent.keyDown(w.view.getByRole("textbox"), { key: "Enter" });
+  });
+  await until(
+    () => world.outbox.length === 1 || bashCalls().length > 0,
+    "the prefilled prompt must be dispatched",
+  );
   assert.deepEqual(bashCalls(), []);
   assert.equal(world.outbox[0]?.mode, "prompt");
   assert.equal(world.outbox[0]?.message, "!!model text");
@@ -4626,12 +8257,27 @@ test("same-ID Edit leaves a typed `!!` draft alone and still runs it as a shell 
   world.outboxHold = true;
   const w = await mountMovableChat(sid);
   await confirmEdit(w.view, w.editButton());
-  await until(() => native.edits.length === 1, "Edit must reach native history");
+  await until(
+    () => native.edits.length === 1,
+    "Edit must reach native history",
+  );
   await settle();
-  assert.equal(w.view.getByRole("textbox").value, "!!typed shell", "Edit never overwrites a typed draft");
-  await act(async () => { fireEvent.keyDown(w.view.getByRole("textbox"), { key: "Enter" }); });
-  await until(() => bashCalls().length === 1 || world.outbox.length === 1, "the typed draft must be dispatched");
-  assert.deepEqual(bashCalls().map((call) => call.body.command), ["typed shell"]);
+  assert.equal(
+    w.view.getByRole("textbox").value,
+    "!!typed shell",
+    "Edit never overwrites a typed draft",
+  );
+  await act(async () => {
+    fireEvent.keyDown(w.view.getByRole("textbox"), { key: "Enter" });
+  });
+  await until(
+    () => bashCalls().length === 1 || world.outbox.length === 1,
+    "the typed draft must be dispatched",
+  );
+  assert.deepEqual(
+    bashCalls().map((call) => call.body.command),
+    ["typed shell"],
+  );
   assert.deepEqual(world.outbox, []);
   w.unmount();
 });
@@ -4639,21 +8285,37 @@ test("same-ID Edit leaves a typed `!!` draft alone and still runs it as a shell 
 test("moved-ID Edit of a `!!` model prompt resends it as a held prompt, never a shell command", async (t) => {
   resetWorld();
   const { getDraft, clearDraft } = await import("@/lib/draft-store");
-  const sid = "edit-bang-move", target = `${sid}-owned`;
+  const sid = "edit-bang-move",
+    target = `${sid}-owned`;
   for (const id of [sid, target]) clearDraft(id);
-  t.after(() => { clearDraft(sid); clearDraft(target); });
+  t.after(() => {
+    clearDraft(sid);
+    clearDraft(target);
+  });
   const native = primeEditableHistory(sid, bangHistory);
   native.moveTo = target;
   await attachEditableWrapper(t, native);
   const w = await mountMovableChat(sid);
   await confirmEdit(w.view, w.editButton());
-  await until(() => w.selectedId === target, "the confirmed target must become selected");
+  await until(
+    () => w.selectedId === target,
+    "the confirmed target must become selected",
+  );
   await settle();
   assert.equal(w.view.getByRole("textbox").value, "!!model text");
-  assert.equal(getDraft(target)?.promptOnly, true, "the prefill is marked as model input");
+  assert.equal(
+    getDraft(target)?.promptOnly,
+    true,
+    "the prefill is marked as model input",
+  );
   world.outboxHold = true;
-  await act(async () => { fireEvent.keyDown(w.view.getByRole("textbox"), { key: "Enter" }); });
-  await until(() => world.outbox.length === 1 || bashCalls().length > 0, "the prefilled prompt must be dispatched");
+  await act(async () => {
+    fireEvent.keyDown(w.view.getByRole("textbox"), { key: "Enter" });
+  });
+  await until(
+    () => world.outbox.length === 1 || bashCalls().length > 0,
+    "the prefilled prompt must be dispatched",
+  );
   assert.deepEqual(bashCalls(), []);
   assert.equal(world.outbox[0]?.sessionId, target);
   assert.equal(world.outbox[0]?.mode, "prompt");
@@ -4664,23 +8326,42 @@ test("moved-ID Edit of a `!!` model prompt resends it as a held prompt, never a 
 test("moved-ID Edit keeps an existing target `!!` draft as shell input, not prompt-only", async (t) => {
   resetWorld();
   const { getDraft, setDraft, clearDraft } = await import("@/lib/draft-store");
-  const sid = "edit-bang-move-typed", target = `${sid}-owned`;
+  const sid = "edit-bang-move-typed",
+    target = `${sid}-owned`;
   for (const id of [sid, target]) clearDraft(id);
-  t.after(() => { clearDraft(sid); clearDraft(target); });
+  t.after(() => {
+    clearDraft(sid);
+    clearDraft(target);
+  });
   setDraft(target, { value: "!!target shell", images: [], files: [] });
   const native = primeEditableHistory(sid, bangHistory);
   native.moveTo = target;
   await attachEditableWrapper(t, native);
   const w = await mountMovableChat(sid);
   await confirmEdit(w.view, w.editButton());
-  await until(() => w.selectedId === target, "the confirmed target must become selected");
+  await until(
+    () => w.selectedId === target,
+    "the confirmed target must become selected",
+  );
   await settle();
-  assert.equal(w.view.getByRole("textbox").value, "!!target shell", "Edit must not prefill over existing target text");
+  assert.equal(
+    w.view.getByRole("textbox").value,
+    "!!target shell",
+    "Edit must not prefill over existing target text",
+  );
   assert.notEqual(getDraft(target)?.promptOnly, true);
   world.outboxHold = true;
-  await act(async () => { fireEvent.keyDown(w.view.getByRole("textbox"), { key: "Enter" }); });
-  await until(() => bashCalls().length === 1 || world.outbox.length === 1, "the existing draft must be dispatched");
-  assert.deepEqual(bashCalls().map((call) => call.body.command), ["target shell"]);
+  await act(async () => {
+    fireEvent.keyDown(w.view.getByRole("textbox"), { key: "Enter" });
+  });
+  await until(
+    () => bashCalls().length === 1 || world.outbox.length === 1,
+    "the existing draft must be dispatched",
+  );
+  assert.deepEqual(
+    bashCalls().map((call) => call.body.command),
+    ["target shell"],
+  );
   assert.deepEqual(world.outbox, []);
   w.unmount();
 });
@@ -4688,25 +8369,47 @@ test("moved-ID Edit keeps an existing target `!!` draft as shell input, not prom
 test("relocation at draft capacity preserves every unrelated draft and its attachments", async (t) => {
   resetWorld();
   const { getDraft, setDraft, clearDraft } = await import("@/lib/draft-store");
-  const sid = "edit-move-full-drafts", target = `${sid}-owned`;
-  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+  const sid = "edit-move-full-drafts",
+    target = `${sid}-owned`;
+  const png =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
   const unrelated = Array.from({ length: 49 }, (_, index) => {
     const id = `${sid}-unrelated-${index}`;
-    return [id, {
-      value: `Unsent conversation ${index}`,
-      images: [{ data: png, mimeType: "image/png" }],
-      files: [{ name: `context-${index}.txt`, mimeType: "text/plain", content: `Context ${index}`, size: 10 }],
-    }];
+    return [
+      id,
+      {
+        value: `Unsent conversation ${index}`,
+        images: [{ data: png, mimeType: "image/png" }],
+        files: [
+          {
+            name: `context-${index}.txt`,
+            mimeType: "text/plain",
+            content: `Context ${index}`,
+            size: 10,
+          },
+        ],
+      },
+    ];
   });
   clearDraft(target);
-  t.after(() => { for (const id of [sid, target, ...unrelated.map(([id]) => id)]) clearDraft(id); });
+  t.after(() => {
+    for (const id of [sid, target, ...unrelated.map(([id]) => id)])
+      clearDraft(id);
+  });
   // Fill all 50 slots with the source newer than every unrelated draft.
   // This also removes any in-memory drafts left by earlier tests.
   for (const [id, draft] of unrelated) setDraft(id, draft);
   const source = {
     value: "",
     images: [{ data: png, mimeType: "image/png" }],
-    files: [{ name: "source.txt", mimeType: "text/plain", content: "Source context", size: 14 }],
+    files: [
+      {
+        name: "source.txt",
+        mimeType: "text/plain",
+        content: "Source context",
+        size: 14,
+      },
+    ],
   };
   setDraft(sid, source);
   const native = primeEditableHistory(sid);
@@ -4715,92 +8418,172 @@ test("relocation at draft capacity preserves every unrelated draft and its attac
   const w = await mountMovableChat(sid);
   const composer = w.view.getByRole("textbox");
   await confirmEdit(w.view, w.editButton());
-  await until(() => w.selectedId === target, "Edit must move the selected conversation at full draft capacity");
+  await until(
+    () => w.selectedId === target,
+    "Edit must move the selected conversation at full draft capacity",
+  );
   await settle();
   assert.equal(w.view.getByRole("textbox"), composer);
   assert.equal(composer.value, "U2-original");
-  assert.deepEqual(getDraft(target), { ...source, value: "U2-original", promptOnly: true });
+  assert.deepEqual(getDraft(target), {
+    ...source,
+    value: "U2-original",
+    promptOnly: true,
+  });
   assert.equal(getDraft(sid), null);
   for (const [id, draft] of unrelated) {
-    assert.deepEqual(getDraft(id), draft, `relocation must preserve ${id}, including its attachments`);
+    assert.deepEqual(
+      getDraft(id),
+      draft,
+      `relocation must preserve ${id}, including its attachments`,
+    );
   }
   const [oldestId, oldestDraft] = unrelated[0];
   primeEditableHistory(oldestId);
-  await act(async () => { w.navigate(oldestId); });
+  await act(async () => {
+    w.navigate(oldestId);
+  });
   await settle();
-  assert.equal(w.view.getByRole("textbox").value, oldestDraft.value, "the oldest unrelated conversation still restores its unsent text");
-  assert.deepEqual(getDraft(oldestId), oldestDraft, "restoring the oldest composer keeps both attachment payloads");
+  assert.equal(
+    w.view.getByRole("textbox").value,
+    oldestDraft.value,
+    "the oldest unrelated conversation still restores its unsent text",
+  );
+  assert.deepEqual(
+    getDraft(oldestId),
+    oldestDraft,
+    "restoring the oldest composer keeps both attachment payloads",
+  );
 });
 
 for (const phase of ["HTTP response", "target reload"]) {
-test(`navigation during a moved Edit's ${phase} is not hijacked or prefilled`, async (t) => {
-  resetWorld();
-  const { getDraft, setDraft, clearDraft } = await import("@/lib/draft-store");
-  const sid = `edit-move-leave-${phase.startsWith("HTTP") ? "http" : "reload"}`, target = `${sid}-owned`, other = `${sid}-other`;
-  t.after(() => { for (const id of [sid, target, other]) clearDraft(id); });
-  setDraft(sid, { value: "origin draft", images: [], files: [] });
-  setDraft(other, { value: "other user's navigation draft", images: [], files: [] });
-  const native = primeEditableHistory(sid);
-  native.moveTo = target;
-  primeEditableHistory(other);
-  const server = await attachEditableWrapper(t, native);
-  const w = await mountMovableChat(sid);
-  let release;
-  t.after(() => release?.());
-  if (phase === "HTTP response") {
-    world.holds.push({
-      match: (method, url, body) => method === "POST" && url === `/api/agent/${sid}` && body?.type === "edit_message",
-      produce: async () => {
-        const result = await server.wrapper.send({ type: "edit_message", entryId: "entry-u2" });
-        await new Promise((resolve) => { release = resolve; });
-        return { value: { success: true, data: result } };
-      },
+  test(`navigation during a moved Edit's ${phase} is not hijacked or prefilled`, async (t) => {
+    resetWorld();
+    const { getDraft, setDraft, clearDraft } =
+      await import("@/lib/draft-store");
+    const sid = `edit-move-leave-${phase.startsWith("HTTP") ? "http" : "reload"}`,
+      target = `${sid}-owned`,
+      other = `${sid}-other`;
+    t.after(() => {
+      for (const id of [sid, target, other]) clearDraft(id);
     });
-  } else {
-    world.holds.push({
-      match: (method, url) => method === "GET" && url.startsWith(`/api/sessions/${target}?`),
-      produce: () => new Promise((resolve) => { release = () => resolve({ value: {
-        sessionId: target, leafId: native.leafId, tree: [], context: world.sessions.get(target),
-      } }); }),
+    setDraft(sid, { value: "origin draft", images: [], files: [] });
+    setDraft(other, {
+      value: "other user's navigation draft",
+      images: [],
+      files: [],
     });
-  }
-  await confirmEdit(w.view, w.editButton());
-  await until(() => release, "the old instance must await the moved Edit");
-  await act(async () => { w.navigate(other); });
-  await settle();
-  const selectedComposer = w.view.getByRole("textbox");
-  await act(async () => { release(); });
-  await settle();
-  assert.equal(w.selectedId, other);
-  assert.equal(new URL(window.location.href).searchParams.get("session"), other);
-  assert.equal(selectedComposer.value, "other user's navigation draft");
-  assert.equal(getDraft(other)?.value, "other user's navigation draft");
-  assert.equal(getDraft(sid)?.value, "origin draft");
-  assert.equal(getDraft(target), null);
-});
+    const native = primeEditableHistory(sid);
+    native.moveTo = target;
+    primeEditableHistory(other);
+    const server = await attachEditableWrapper(t, native);
+    const w = await mountMovableChat(sid);
+    let release;
+    t.after(() => release?.());
+    if (phase === "HTTP response") {
+      world.holds.push({
+        match: (method, url, body) =>
+          method === "POST" &&
+          url === `/api/agent/${sid}` &&
+          body?.type === "edit_message",
+        produce: async () => {
+          const result = await server.wrapper.send({
+            type: "edit_message",
+            entryId: "entry-u2",
+          });
+          await new Promise((resolve) => {
+            release = resolve;
+          });
+          return { value: { success: true, data: result } };
+        },
+      });
+    } else {
+      world.holds.push({
+        match: (method, url) =>
+          method === "GET" && url.startsWith(`/api/sessions/${target}?`),
+        produce: () =>
+          new Promise((resolve) => {
+            release = () =>
+              resolve({
+                value: {
+                  sessionId: target,
+                  leafId: native.leafId,
+                  tree: [],
+                  context: world.sessions.get(target),
+                },
+              });
+          }),
+      });
+    }
+    await confirmEdit(w.view, w.editButton());
+    await until(() => release, "the old instance must await the moved Edit");
+    await act(async () => {
+      w.navigate(other);
+    });
+    await settle();
+    const selectedComposer = w.view.getByRole("textbox");
+    await act(async () => {
+      release();
+    });
+    await settle();
+    assert.equal(w.selectedId, other);
+    assert.equal(
+      new URL(window.location.href).searchParams.get("session"),
+      other,
+    );
+    assert.equal(selectedComposer.value, "other user's navigation draft");
+    assert.equal(getDraft(other)?.value, "other user's navigation draft");
+    assert.equal(getDraft(sid)?.value, "origin draft");
+    assert.equal(getDraft(target), null);
+  });
 }
 
 test("a moved conversation whose reload fails preserves attachments without prefilling and reports failure", async (t) => {
   resetWorld();
   const { getDraft, setDraft, clearDraft } = await import("@/lib/draft-store");
-  const sid = "edit-move-load-failed", target = `${sid}-owned`;
-  t.after(() => { clearDraft(sid); clearDraft(target); });
-  const draft = { value: "", images: [{ data: "AAAA", mimeType: "image/png" }],
-    files: [{ name: "keep.txt", mimeType: "text/plain", content: "retained file", size: 13 }] };
+  const sid = "edit-move-load-failed",
+    target = `${sid}-owned`;
+  t.after(() => {
+    clearDraft(sid);
+    clearDraft(target);
+  });
+  const draft = {
+    value: "",
+    images: [{ data: "AAAA", mimeType: "image/png" }],
+    files: [
+      {
+        name: "keep.txt",
+        mimeType: "text/plain",
+        content: "retained file",
+        size: 13,
+      },
+    ],
+  };
   setDraft(sid, draft);
   const native = primeEditableHistory(sid);
   native.moveTo = target;
   await attachEditableWrapper(t, native);
   const w = await mountMovableChat(sid);
   world.holds.push({
-    match: (method, url) => method === "GET" && url.startsWith(`/api/sessions/${target}?`),
+    match: (method, url) =>
+      method === "GET" && url.startsWith(`/api/sessions/${target}?`),
     produce: async () => ({ status: 503, value: {} }),
   });
   await confirmEdit(w.view, w.editButton());
-  await until(() => w.selectedId === target, "authoritative identity must survive a failed read of the moved history");
+  await until(
+    () => w.selectedId === target,
+    "authoritative identity must survive a failed read of the moved history",
+  );
   await settle();
-  assert.equal(new URL(window.location.href).searchParams.get("session"), target);
-  assert.equal(w.view.getByRole("textbox").value, "", "an unconfirmed history load must not prefill the original prompt");
+  assert.equal(
+    new URL(window.location.href).searchParams.get("session"),
+    target,
+  );
+  assert.equal(
+    w.view.getByRole("textbox").value,
+    "",
+    "an unconfirmed history load must not prefill the original prompt",
+  );
   assert.deepEqual(getDraft(target), draft);
   assert.ok(w.view.getByText(translate("agentSession.commandFailed")));
 });
@@ -4810,8 +8593,18 @@ test("observed edit-time persistence errors preserve the real composer and compl
   const { getDraft, setDraft, clearDraft } = await import("@/lib/draft-store");
   const sid = "edit-native-disk-error";
   t.after(() => clearDraft(sid));
-  const draft = { value: "keep unsent text", images: [{ data: "AAAA", mimeType: "image/png" }],
-    files: [{ name: "keep.txt", mimeType: "text/plain", content: "retained file", size: 13 }] };
+  const draft = {
+    value: "keep unsent text",
+    images: [{ data: "AAAA", mimeType: "image/png" }],
+    files: [
+      {
+        name: "keep.txt",
+        mimeType: "text/plain",
+        content: "retained file",
+        size: 13,
+      },
+    ],
+  };
   setDraft(sid, draft);
   const native = primeEditableHistory(sid);
   native.editOutcome = "persistence-error";
@@ -4820,14 +8613,23 @@ test("observed edit-time persistence errors preserve the real composer and compl
   const w = await mountMovableChat(sid);
   const composer = w.view.getByRole("textbox");
   await confirmEdit(w.view, w.editButton());
-  await until(() => w.view.queryAllByText(/Could not append session file: disk full/).length > 0, "native persistence failure must be displayed");
+  await until(
+    () =>
+      w.view.queryAllByText(/Could not append session file: disk full/).length >
+      0,
+    "native persistence failure must be displayed",
+  );
   await settle();
   assert.equal(w.selectedId, sid);
   assert.equal(w.view.getByRole("textbox"), composer);
   assert.equal(composer.value, draft.value);
   assert.deepEqual(getDraft(sid), draft);
   assert.deepEqual(world.sessions.get(sid), original);
-  assert.equal(w.editButton().disabled, false, "failure releases the mutation gate without discarding draft state");
+  assert.equal(
+    w.editButton().disabled,
+    false,
+    "failure releases the mutation gate without discarding draft state",
+  );
 });
 
 test("Edit rewinds and resends in the same persisted session while retaining the old branch", async (t) => {
@@ -4847,18 +8649,31 @@ test("Edit rewinds and resends in the same persisted session while retaining the
   t.after(release);
   const edit = w.editButton("entry-u2");
   await confirmEdit(w.view, edit);
-  await until(() => native.edits.length === 1, "the actual Edit button must reach native history navigation");
+  await until(
+    () => native.edits.length === 1,
+    "the actual Edit button must reach native history navigation",
+  );
   assert.equal(w.latest.editingEntryId, "entry-u2");
   assert.equal(edit.disabled, true);
   await act(async () => {
     fireEvent.click(edit);
-    assert.equal(await w.latest.handleEdit("entry-u2", "U2-original"), false, "the hook also refuses overlapping Edits");
+    assert.equal(
+      await w.latest.handleEdit("entry-u2", "U2-original"),
+      false,
+      "the hook also refuses overlapping Edits",
+    );
     await w.latest.handleFork("entry-u2", true);
-    fireEvent.change(w.view.getByRole("textbox"), { target: { value: "must not reach the old runtime" } });
+    fireEvent.change(w.view.getByRole("textbox"), {
+      target: { value: "must not reach the old runtime" },
+    });
   });
   await act(async () => {
     fireEvent.click(w.view.getByRole("button", { name: "Submit replacement" }));
-    assert.equal((await w.sending).status, "rejected", "a nonempty send is refused while Edit is pending");
+    assert.equal(
+      (await w.sending).status,
+      "rejected",
+      "a nonempty send is refused while Edit is pending",
+    );
   });
   assert.deepEqual(native.edits, ["entry-u2"]);
   assert.deepEqual(native.prompts, []);
@@ -4867,30 +8682,68 @@ test("Edit rewinds and resends in the same persisted session while retaining the
     fireEvent.change(w.view.getByRole("textbox"), { target: { value: "" } });
     release();
   });
-  await until(() => w.latest.editingEntryId === null && w.latest.entryIds.length === 2, "Edit must reload the real active prefix");
+  await until(
+    () => w.latest.editingEntryId === null && w.latest.entryIds.length === 2,
+    "Edit must reload the real active prefix",
+  );
   assert.equal(w.latest.sessionIdRef.current, sid);
   assert.deepEqual(w.latest.messages, original.messages.slice(0, 2));
   assert.deepEqual(w.latest.entryIds, ["entry-u1", "entry-a1"]);
-  assert.equal(w.latest.activeLeafId, "edit-marker-1", "the durable leaf is metadata, not the last visible message");
+  assert.equal(
+    w.latest.activeLeafId,
+    "edit-marker-1",
+    "the durable leaf is metadata, not the last visible message",
+  );
   assert.equal(w.view.getByRole("textbox").value, "U2-original");
-  assert.deepEqual(native.entries.slice(0, originalEntries.length), originalEntries, "navigation must not remove the original continuation");
+  assert.deepEqual(
+    native.entries.slice(0, originalEntries.length),
+    originalEntries,
+    "navigation must not remove the original continuation",
+  );
   assert.equal(native.entries.at(-1).parentId, "entry-a1");
 
   await act(async () => {
-    fireEvent.change(w.view.getByRole("textbox"), { target: { value: "U2-modified" } });
+    fireEvent.change(w.view.getByRole("textbox"), {
+      target: { value: "U2-modified" },
+    });
   });
-  await act(async () => { fireEvent.click(w.view.getByRole("button", { name: "Submit replacement" })); });
-  await until(() => world.esInstances.some((stream) => stream.channel.sessionId === sid), "resend must connect to the same session");
+  await act(async () => {
+    fireEvent.click(w.view.getByRole("button", { name: "Submit replacement" }));
+  });
+  await until(
+    () => world.esInstances.some((stream) => stream.channel.sessionId === sid),
+    "resend must connect to the same session",
+  );
   const stream = lastEs();
-  await act(async () => { stream.open(); assert.equal((await w.sending).status, "accepted"); });
+  await act(async () => {
+    stream.open();
+    assert.equal((await w.sending).status, "accepted");
+  });
   assert.equal(native.prompts.length, 1);
   assert.equal(native.prompts[0].sessionId, sid);
   assert.equal(native.prompts[0].filePath, native.filePath);
-  assert.deepEqual(native.prompts[0].messages, [original.messages[0], original.messages[1], userMsg("replacement-1", "U2-modified")],
-    "the effective model context must exclude U2-original and every message after it");
-  assert.equal(world.calls.findLast((call) => call.body?.type === "prompt").url, `/api/agent/${sid}`);
-  await act(async () => { native.completePrompt(stream); });
-  await until(() => !w.latest.agentRunning && w.latest.entryIds.at(-1) === "entry-revised-answer-1", "the revised branch must persist and hydrate");
+  assert.deepEqual(
+    native.prompts[0].messages,
+    [
+      original.messages[0],
+      original.messages[1],
+      userMsg("replacement-1", "U2-modified"),
+    ],
+    "the effective model context must exclude U2-original and every message after it",
+  );
+  assert.equal(
+    world.calls.findLast((call) => call.body?.type === "prompt").url,
+    `/api/agent/${sid}`,
+  );
+  await act(async () => {
+    native.completePrompt(stream);
+  });
+  await until(
+    () =>
+      !w.latest.agentRunning &&
+      w.latest.entryIds.at(-1) === "entry-revised-answer-1",
+    "the revised branch must persist and hydrate",
+  );
   const revised = structuredClone(world.sessions.get(sid));
   const persisted = native.jsonl;
   w.unmount();
@@ -4900,19 +8753,53 @@ test("Edit rewinds and resends in the same persisted session while retaining the
   assert.equal(reopened.latest.sessionIdRef.current, sid);
   assert.equal(reopened.latest.data.filePath, native.filePath);
   assert.deepEqual(reopened.latest.entryIds, revised.entryIds);
-  assert.deepEqual(reopened.latest.messages, revised.messages, "a cold reopen must select the persisted revised branch");
+  assert.deepEqual(
+    reopened.latest.messages,
+    revised.messages,
+    "a cold reopen must select the persisted revised branch",
+  );
   assert.equal(reopened.latest.activeLeafId, revised.leafId);
   const branchReadsStart = world.calls.length;
-  await act(async () => { await reopened.changeLeaf(original.leafId); });
+  await act(async () => {
+    await reopened.changeLeaf(original.leafId);
+  });
   assert.deepEqual(reopened.latest.entryIds, original.entryIds);
-  assert.deepEqual(reopened.latest.messages, original.messages, "the prior continuation remains reachable through read-only browsing");
-  assert.deepEqual(world.sessions.get(sid).messages, revised.messages, "browsing must not move the native branch");
-  await act(async () => { await reopened.changeLeaf(null); });
+  assert.deepEqual(
+    reopened.latest.messages,
+    original.messages,
+    "the prior continuation remains reachable through read-only browsing",
+  );
+  assert.deepEqual(
+    world.sessions.get(sid).messages,
+    revised.messages,
+    "browsing must not move the native branch",
+  );
+  await act(async () => {
+    await reopened.changeLeaf(null);
+  });
   assert.deepEqual(reopened.latest.messages, revised.messages);
-  assert.equal(native.jsonl, persisted, "neither reopen nor read-only browsing rewrites the session file");
-  assert.ok(world.calls.slice(branchReadsStart).every((call) => call.method === "GET"));
-  assert.deepEqual([...world.sessions.keys()], [sid], "Edit never creates another session");
-  assert.equal(world.calls.some((call) => call.body?.type === "fork" || call.url === "/api/agent/new" || call.body?.type === "new_session"), false);
+  assert.equal(
+    native.jsonl,
+    persisted,
+    "neither reopen nor read-only browsing rewrites the session file",
+  );
+  assert.ok(
+    world.calls.slice(branchReadsStart).every((call) => call.method === "GET"),
+  );
+  assert.deepEqual(
+    [...world.sessions.keys()],
+    [sid],
+    "Edit never creates another session",
+  );
+  assert.equal(
+    world.calls.some(
+      (call) =>
+        call.body?.type === "fork" ||
+        call.url === "/api/agent/new" ||
+        call.body?.type === "new_session",
+    ),
+    false,
+  );
   assert.deepEqual(forked, []);
 });
 
@@ -4929,35 +8816,60 @@ for (const order of ["HTTP first", "SSE first"]) {
     const releaseReply = order === "SSE first" ? native.holdEditReply() : null;
     if (releaseReply) t.after(releaseReply);
     await confirmEdit(w.view, w.editButton("entry-u2"));
-    await until(() => native.leafId === "edit-marker-1", "the real native history must persist the Edit marker");
+    await until(
+      () => native.leafId === "edit-marker-1",
+      "the real native history must persist the Edit marker",
+    );
     const ownLeafId = native.leafId;
     if (releaseReply) {
-      await act(async () => { stream.emit({ type: "session_history_changed", leafId: ownLeafId }); });
-      assert.equal(w.latest.editingEntryId, "entry-u2", "the SSE must not complete the pending HTTP Edit");
+      await act(async () => {
+        stream.emit({ type: "session_history_changed", leafId: ownLeafId });
+      });
+      assert.equal(
+        w.latest.editingEntryId,
+        "entry-u2",
+        "the SSE must not complete the pending HTTP Edit",
+      );
       assert.deepEqual(w.latest.messages, original.messages);
-      await act(async () => { releaseReply(); });
+      await act(async () => {
+        releaseReply();
+      });
     }
-    await until(() => w.latest.editingEntryId === null && w.latest.activeLeafId === ownLeafId, "the successful HTTP Edit must finish its own reload");
+    await until(
+      () =>
+        w.latest.editingEntryId === null && w.latest.activeLeafId === ownLeafId,
+      "the successful HTTP Edit must finish its own reload",
+    );
     await settle();
     assert.deepEqual(w.latest.entryIds, original.entryIds.slice(0, 2));
     assert.deepEqual(w.latest.messages, original.messages.slice(0, 2));
 
     // This is the public callback exported to the branch selector, not a
     // setter for hook internals. The native active branch stays rewound.
-    await act(async () => { await w.changeLeaf(original.leafId); });
+    await act(async () => {
+      await w.changeLeaf(original.leafId);
+    });
     assert.equal(w.latest.activeLeafId, original.leafId);
     assert.deepEqual(w.latest.entryIds, original.entryIds);
     assert.deepEqual(w.latest.messages, original.messages);
     const persisted = native.jsonl;
-    await act(async () => { stream.emit({ type: "session_history_changed", leafId: ownLeafId }); });
+    await act(async () => {
+      stream.emit({ type: "session_history_changed", leafId: ownLeafId });
+    });
     await settle();
-    assert.equal(w.latest.activeLeafId, original.leafId, "a delayed own echo must not leave the selected historical branch");
+    assert.equal(
+      w.latest.activeLeafId,
+      original.leafId,
+      "a delayed own echo must not leave the selected historical branch",
+    );
     assert.deepEqual(w.latest.entryIds, original.entryIds);
     assert.deepEqual(w.latest.messages, original.messages);
     assert.equal(native.jsonl, persisted);
     assert.equal(world.sessions.get(sid).leafId, ownLeafId);
     // A subsequent normal refresh must retain the same catch-up selection.
-    await act(async () => { publishSessionsChanged([sid]); });
+    await act(async () => {
+      publishSessionsChanged([sid]);
+    });
     await settle();
     assert.equal(w.latest.activeLeafId, original.leafId);
     assert.deepEqual(w.latest.entryIds, original.entryIds);
@@ -4965,12 +8877,23 @@ for (const order of ["HTTP first", "SSE first"]) {
 
     // Another client's Edit has a different durable marker and must still
     // leave the historical view and follow its newly selected native prefix.
-    const externalReply = await native.command({ type: "edit_message", entryId: "entry-u3" });
+    const externalReply = await native.command({
+      type: "edit_message",
+      entryId: "entry-u3",
+    });
     const { data: externalEdit } = await externalReply.json();
     assert.notEqual(externalEdit.leafId, ownLeafId);
     const external = structuredClone(world.sessions.get(sid));
-    await act(async () => { stream.emit({ type: "session_history_changed", leafId: externalEdit.leafId }); });
-    await until(() => w.latest.activeLeafId === externalEdit.leafId, "a distinct external marker must reload active history");
+    await act(async () => {
+      stream.emit({
+        type: "session_history_changed",
+        leafId: externalEdit.leafId,
+      });
+    });
+    await until(
+      () => w.latest.activeLeafId === externalEdit.leafId,
+      "a distinct external marker must reload active history",
+    );
     await settle();
     assert.deepEqual(w.latest.entryIds, external.entryIds);
     assert.deepEqual(w.latest.messages, original.messages.slice(0, 4));
@@ -4992,59 +8915,127 @@ test("an HTTP-first Edit echo cannot reset the next replacement prompt", async (
       const original = structuredClone(world.sessions.get(sid));
       const { w, stream: observer } = await mountObservedEditableSession(sid);
       await confirmEdit(w.view, w.editButton("entry-u2"));
-      await until(() => w.latest.editingEntryId === null && w.latest.activeLeafId === "edit-marker-1", "HTTP success and its reload must precede the next send");
+      await until(
+        () =>
+          w.latest.editingEntryId === null &&
+          w.latest.activeLeafId === "edit-marker-1",
+        "HTTP success and its reload must precede the next send",
+      );
       await settle();
       const ownLeafId = native.leafId;
       assert.deepEqual(w.latest.messages, original.messages.slice(0, 2));
       const releasePrompt = native.holdPrompt();
       t.after(releasePrompt);
       await act(async () => {
-        fireEvent.change(w.view.getByRole("textbox"), { target: { value: "U2-modified" } });
+        fireEvent.change(w.view.getByRole("textbox"), {
+          target: { value: "U2-modified" },
+        });
       });
-      await act(async () => { fireEvent.click(w.view.getByRole("button", { name: "Submit replacement" })); });
+      await act(async () => {
+        fireEvent.click(
+          w.view.getByRole("button", { name: "Submit replacement" }),
+        );
+      });
       const stream = lastEs();
       assert.equal(stream, observer, "outbox sends keep the existing observer");
-      await act(async () => { stream.open(); });
-      await until(() => world.calls.some((call) => call.body?.type === "prompt" && call.url === `/api/agent/${sid}`), "the replacement must reach the native dispatch boundary");
-      assert.deepEqual(native.prompts, [], "native persistence is held independently of the outbox");
+      await act(async () => {
+        stream.open();
+      });
+      await until(
+        () =>
+          world.calls.some(
+            (call) =>
+              call.body?.type === "prompt" && call.url === `/api/agent/${sid}`,
+          ),
+        "the replacement must reach the native dispatch boundary",
+      );
+      assert.deepEqual(
+        native.prompts,
+        [],
+        "native persistence is held independently of the outbox",
+      );
       assert.deepEqual(w.latest.entryIds, original.entryIds.slice(0, 2));
       assert.deepEqual(w.latest.messages, original.messages.slice(0, 2));
-      assert.equal(w.latest.agentRunning, false, "holding a message does not start a turn");
+      assert.equal(
+        w.latest.agentRunning,
+        false,
+        "holding a message does not start a turn",
+      );
       if (phase === "streaming") {
-        await act(async () => { releasePrompt(); assert.equal((await w.sending).status, "accepted"); });
-        const partial = assistantMsg("replacement-partial", "Revised answer in progress");
+        await act(async () => {
+          releasePrompt();
+          assert.equal((await w.sending).status, "accepted");
+        });
+        const partial = assistantMsg(
+          "replacement-partial",
+          "Revised answer in progress",
+        );
         await act(async () => {
           stream.emit({ type: "agent_start" });
           stream.emit({ type: "message_update", message: partial });
         });
         await settle(90);
-        assert.deepEqual(w.latest.streamState.streamingMessage?.content, partial.content);
+        assert.deepEqual(
+          w.latest.streamState.streamingMessage?.content,
+          partial.content,
+        );
         assert.equal(w.latest.streamState.isStreaming, true);
       }
       const beforeEcho = {
-        messages: structuredClone(w.latest.messages), entryIds: [...w.latest.entryIds],
-        leafId: w.latest.activeLeafId, streamState: structuredClone(w.latest.streamState),
-        agentPhase: structuredClone(w.latest.agentPhase), persisted: native.jsonl,
+        messages: structuredClone(w.latest.messages),
+        entryIds: [...w.latest.entryIds],
+        leafId: w.latest.activeLeafId,
+        streamState: structuredClone(w.latest.streamState),
+        agentPhase: structuredClone(w.latest.agentPhase),
+        persisted: native.jsonl,
       };
-      await act(async () => { stream.emit({ type: "session_history_changed", leafId: ownLeafId }); });
+      await act(async () => {
+        stream.emit({ type: "session_history_changed", leafId: ownLeafId });
+      });
       await settle();
-      assert.deepEqual(w.latest.messages, beforeEcho.messages, "the old Edit echo must not replace the new transcript");
+      assert.deepEqual(
+        w.latest.messages,
+        beforeEcho.messages,
+        "the old Edit echo must not replace the new transcript",
+      );
       assert.deepEqual(w.latest.entryIds, beforeEcho.entryIds);
       assert.equal(w.latest.activeLeafId, beforeEcho.leafId);
-      assert.deepEqual(w.latest.streamState, beforeEcho.streamState, "the old Edit echo must not reset the new live response");
+      assert.deepEqual(
+        w.latest.streamState,
+        beforeEcho.streamState,
+        "the old Edit echo must not reset the new live response",
+      );
       assert.deepEqual(w.latest.agentPhase, beforeEcho.agentPhase);
       assert.equal(w.latest.agentRunning, phase === "streaming");
       assert.equal(native.jsonl, beforeEcho.persisted);
       if (phase === "dispatch pending") {
-        await act(async () => { releasePrompt(); assert.equal((await w.sending).status, "accepted"); });
+        await act(async () => {
+          releasePrompt();
+          assert.equal((await w.sending).status, "accepted");
+        });
       }
-      await until(() => native.prompts.length === 1, "the dispatcher completes its held native prompt");
+      await until(
+        () => native.prompts.length === 1,
+        "the dispatcher completes its held native prompt",
+      );
       assert.equal(native.prompts.length, 1);
-      assert.deepEqual(native.prompts[0].messages, [
-        ...original.messages.slice(0, 2), userMsg("replacement-1", "U2-modified"),
-      ], "the replacement model context must remain on the edited prefix");
-      await act(async () => { native.completePrompt(stream); });
-      await until(() => !w.latest.agentRunning && w.latest.entryIds.at(-1) === "entry-revised-answer-1", "the replacement must still complete and hydrate normally");
+      assert.deepEqual(
+        native.prompts[0].messages,
+        [
+          ...original.messages.slice(0, 2),
+          userMsg("replacement-1", "U2-modified"),
+        ],
+        "the replacement model context must remain on the edited prefix",
+      );
+      await act(async () => {
+        native.completePrompt(stream);
+      });
+      await until(
+        () =>
+          !w.latest.agentRunning &&
+          w.latest.entryIds.at(-1) === "entry-revised-answer-1",
+        "the replacement must still complete and hydrate normally",
+      );
       assert.deepEqual(w.latest.messages, world.sessions.get(sid).messages);
       assert.deepEqual(w.latest.notices, []);
       w.unmount();
@@ -5065,13 +9056,20 @@ test("history notifications received during an unsuccessful Edit remain effectiv
       const { w, stream } = await mountObservedEditableSession(sid);
       native.editOutcome = outcome === "wrong-session" ? "success" : outcome;
       let releaseReply;
-      const replyGate = new Promise((resolve) => { releaseReply = resolve; });
+      const replyGate = new Promise((resolve) => {
+        releaseReply = resolve;
+      });
       t.after(releaseReply);
       let editCommand;
       let replyReady = false;
       world.holds.push({
         match: (method, url, body) => {
-          if (method !== "POST" || url !== `/api/agent/${sid}` || body?.type !== "edit_message") return false;
+          if (
+            method !== "POST" ||
+            url !== `/api/agent/${sid}` ||
+            body?.type !== "edit_message"
+          )
+            return false;
           editCommand = body;
           return true;
         },
@@ -5083,7 +9081,13 @@ test("history notifications received during an unsuccessful Edit remain effectiv
             // unrelated native conversation switch.
             replyReady = true;
             await replyGate;
-            return { status: 409, value: { error: "The session changed during the history edit", code: "session_changed" } };
+            return {
+              status: 409,
+              value: {
+                error: "The session changed during the history edit",
+                code: "session_changed",
+              },
+            };
           }
           replyReady = true;
           await replyGate;
@@ -5091,7 +9095,10 @@ test("history notifications received during an unsuccessful Edit remain effectiv
         },
       });
       await confirmEdit(w.view, w.editButton("entry-u2"));
-      await until(() => replyReady, "the native Edit must settle before its HTTP reply is released");
+      await until(
+        () => replyReady,
+        "the native Edit must settle before its HTTP reply is released",
+      );
       if (outcome !== "wrong-session") {
         // A separate client successfully navigates while this client's
         // cancellation/error reply is still in transit.
@@ -5100,21 +9107,43 @@ test("history notifications received during an unsuccessful Edit remain effectiv
       }
       const external = structuredClone(world.sessions.get(sid));
       assert.notEqual(external.leafId, original.leafId);
-      await act(async () => { stream.emit({ type: "session_history_changed", leafId: external.leafId }); });
+      await act(async () => {
+        stream.emit({
+          type: "session_history_changed",
+          leafId: external.leafId,
+        });
+      });
       await settle();
       assert.equal(w.latest.editingEntryId, "entry-u2");
       assert.equal(w.latest.activeLeafId, original.leafId);
       assert.deepEqual(w.latest.messages, original.messages);
-      await act(async () => { releaseReply(); });
-      await until(() => w.latest.editingEntryId === null && w.latest.activeLeafId === external.leafId, "an unacknowledged history marker must refresh after the Edit guard releases");
+      await act(async () => {
+        releaseReply();
+      });
+      await until(
+        () =>
+          w.latest.editingEntryId === null &&
+          w.latest.activeLeafId === external.leafId,
+        "an unacknowledged history marker must refresh after the Edit guard releases",
+      );
       await settle();
       assert.deepEqual(w.latest.entryIds, external.entryIds);
       assert.deepEqual(w.latest.messages, external.messages);
-      assert.deepEqual(w.latest.messages, original.messages.slice(0, outcome === "wrong-session" ? 2 : 4));
+      assert.deepEqual(
+        w.latest.messages,
+        original.messages.slice(0, outcome === "wrong-session" ? 2 : 4),
+      );
       assert.equal(w.latest.sessionIdRef.current, sid);
       assert.equal(w.latest.data.filePath, native.filePath);
-      assert.equal(w.view.getByRole("textbox").value, "", "an unsuccessful local Edit must not insert its draft");
-      assert.deepEqual(w.latest.notices.map((notice) => notice.type), outcome === "cancelled" ? [] : ["error"]);
+      assert.equal(
+        w.view.getByRole("textbox").value,
+        "",
+        "an unsuccessful local Edit must not insert its draft",
+      );
+      assert.deepEqual(
+        w.latest.notices.map((notice) => notice.type),
+        outcome === "cancelled" ? [] : ["error"],
+      );
       assert.deepEqual(native.prompts, []);
       w.unmount();
     });
@@ -5134,12 +9163,19 @@ test("cancelled and failed Edits preserve history selection and draft, then rele
       const original = structuredClone(world.sessions.get(sid));
       const persisted = native.jsonl;
       const forked = [];
-      const w = await mountEditableSession(sid, { onSessionForked: (id) => forked.push(id) });
-      await act(async () => { await w.changeLeaf("entry-a2"); });
+      const w = await mountEditableSession(sid, {
+        onSessionForked: (id) => forked.push(id),
+      });
+      await act(async () => {
+        await w.changeLeaf("entry-a2");
+      });
       const selectedIds = [...w.latest.entryIds];
       const selectedMessages = structuredClone(w.latest.messages);
       await confirmEdit(w.view, w.editButton("entry-u2"));
-      await until(() => native.edits.length === 1 && w.latest.editingEntryId === null, "the unsuccessful Edit must settle");
+      await until(
+        () => native.edits.length === 1 && w.latest.editingEntryId === null,
+        "the unsuccessful Edit must settle",
+      );
       assert.equal(w.latest.sessionIdRef.current, sid);
       assert.equal(w.latest.activeLeafId, "entry-a2");
       assert.deepEqual(w.latest.entryIds, selectedIds);
@@ -5148,17 +9184,35 @@ test("cancelled and failed Edits preserve history selection and draft, then rele
       assert.equal(native.jsonl, persisted);
       assert.equal(w.view.getByRole("textbox").value, "keep my draft");
       assert.equal(getDraft(sid)?.value, "keep my draft");
-      assert.deepEqual(w.latest.notices.map((notice) => notice.type), outcome === "error" ? ["error"] : []);
+      assert.deepEqual(
+        w.latest.notices.map((notice) => notice.type),
+        outcome === "error" ? ["error"] : [],
+      );
 
       native.editOutcome = "success";
       await confirmEdit(w.view, w.editButton("entry-u2"));
-      await until(() => native.edits.length === 2 && w.latest.editingEntryId === null, "a settled refusal must allow another Edit");
-      assert.deepEqual(world.sessions.get(sid).entryIds, ["entry-u1", "entry-a1"]);
+      await until(
+        () => native.edits.length === 2 && w.latest.editingEntryId === null,
+        "a settled refusal must allow another Edit",
+      );
+      assert.deepEqual(world.sessions.get(sid).entryIds, [
+        "entry-u1",
+        "entry-a1",
+      ]);
       assert.deepEqual(w.latest.entryIds, ["entry-u1", "entry-a1"]);
-      assert.equal(w.view.getByRole("textbox").value, "keep my draft", "successful insertIfEmpty must not overwrite existing text");
+      assert.equal(
+        w.view.getByRole("textbox").value,
+        "keep my draft",
+        "successful insertIfEmpty must not overwrite existing text",
+      );
       assert.equal(getDraft(sid)?.value, "keep my draft");
       assert.deepEqual([...world.sessions.keys()], [sid]);
-      assert.equal(world.calls.some((call) => call.body?.type === "fork" || call.url === "/api/agent/new"), false);
+      assert.equal(
+        world.calls.some(
+          (call) => call.body?.type === "fork" || call.url === "/api/agent/new",
+        ),
+        false,
+      );
       assert.deepEqual(forked, []);
       w.unmount();
     });
@@ -5171,36 +9225,66 @@ test("an Edit completed after unmount cannot fill the current composer or change
   const sid = "edit-abandoned";
   const currentSid = "edit-current-view";
   for (const id of [sid, currentSid]) clearDraft(id);
-  t.after(() => { clearDraft(sid); clearDraft(currentSid); });
+  t.after(() => {
+    clearDraft(sid);
+    clearDraft(currentSid);
+  });
   const native = primeEditableHistory(sid);
-  const currentNative = primeEditableHistory(currentSid, [userMsg("current-user", "Current question"), assistantMsg("current-answer", "Current answer")]);
+  const currentNative = primeEditableHistory(currentSid, [
+    userMsg("current-user", "Current question"),
+    assistantMsg("current-answer", "Current answer"),
+  ]);
   const sharedComposerRef = React.createRef();
   const forked = [];
-  const options = { chatInputRef: sharedComposerRef, onSessionForked: (id) => forked.push(id) };
+  const options = {
+    chatInputRef: sharedComposerRef,
+    onSessionForked: (id) => forked.push(id),
+  };
   const old = await mountEditableSession(sid, options);
   const release = native.holdEdit();
   t.after(release);
   await confirmEdit(old.view, old.editButton("entry-u2"));
-  await until(() => native.edits.length === 1, "Edit must be waiting on native before leaving");
+  await until(
+    () => native.edits.length === 1,
+    "Edit must be waiting on native before leaving",
+  );
   old.unmount();
   const current = await mountEditableSession(currentSid, options);
   const currentHistory = structuredClone(current.latest.messages);
   const currentLeaf = current.latest.activeLeafId;
   const currentFile = currentNative.jsonl;
-  await act(async () => { release(); });
-  await until(() => native.leafId === "edit-marker-1", "native navigation may still finish in the abandoned session");
+  await act(async () => {
+    release();
+  });
+  await until(
+    () => native.leafId === "edit-marker-1",
+    "native navigation may still finish in the abandoned session",
+  );
   await settle();
-  assert.deepEqual(world.sessions.get(sid).entryIds, ["entry-u1", "entry-a1"], "this is a real successful native Edit, not a dropped response");
+  assert.deepEqual(
+    world.sessions.get(sid).entryIds,
+    ["entry-u1", "entry-a1"],
+    "this is a real successful native Edit, not a dropped response",
+  );
   assert.equal(current.latest.sessionIdRef.current, currentSid);
   assert.equal(current.latest.activeLeafId, currentLeaf);
   assert.deepEqual(current.latest.messages, currentHistory);
   assert.equal(current.latest.data.filePath, currentNative.filePath);
   assert.equal(currentNative.jsonl, currentFile);
-  assert.equal(current.view.getByRole("textbox").value, "", "the shared composer ref now belongs to the new view");
+  assert.equal(
+    current.view.getByRole("textbox").value,
+    "",
+    "the shared composer ref now belongs to the new view",
+  );
   assert.deepEqual(current.latest.notices, []);
   assert.deepEqual(forked, []);
   assert.deepEqual([...world.sessions.keys()], [sid, currentSid]);
-  assert.equal(world.calls.some((call) => call.body?.type === "fork" || call.url === "/api/agent/new"), false);
+  assert.equal(
+    world.calls.some(
+      (call) => call.body?.type === "fork" || call.url === "/api/agent/new",
+    ),
+    false,
+  );
 });
 
 test("catch-up metadata cannot overwrite a newer live todo snapshot during a run", async () => {
@@ -5208,9 +9292,17 @@ test("catch-up metadata cannot overwrite a newer live todo snapshot during a run
   primeSession("s1", [userMsg("u0", "q")]);
   const { w, es } = await startStreamingRun("s1");
   const newerTodos = [{ id: "current", title: "Current plan", tasks: [] }];
-  world.agents.set("s1", { running: true, state: { isStreaming: true, todoPhases: newerTodos } });
-  const response = syncSnapshot("s1", liveSnapshot("s1", 10, assistantMsg("current", "current partial")));
-  response.context.todoPhases = [{ id: "old", title: "Old disk plan", tasks: [] }];
+  world.agents.set("s1", {
+    running: true,
+    state: { isStreaming: true, todoPhases: newerTodos },
+  });
+  const response = syncSnapshot(
+    "s1",
+    liveSnapshot("s1", 10, assistantMsg("current", "current partial")),
+  );
+  response.context.todoPhases = [
+    { id: "old", title: "Old disk plan", tasks: [] },
+  ];
   const release = holdNextSync("s1", response);
   await act(async () => {
     publishSessionsChanged(["s1"]);
@@ -5221,7 +9313,10 @@ test("catch-up metadata cannot overwrite a newer live todo snapshot during a run
   });
   await settle();
   assert.deepEqual(w.latest.todoPhases, newerTodos);
-  assert.equal(w.latest.streamState.streamingMessage?.content[0].text, "current partial");
+  assert.equal(
+    w.latest.streamState.streamingMessage?.content[0].text,
+    "current partial",
+  );
 });
 
 test("a late full branch context cannot replace a newer incremental history commit", async () => {
@@ -5230,18 +9325,32 @@ test("a late full branch context cannot replace a newer incremental history comm
   resetWorld();
   primeSession("s1", [userMsg("live", "live branch")]);
   const w = await mountSession("s1");
-  const branch = { leafId: "branch", messages: [userMsg("b", "branch question")], entryIds: ["b1"] };
+  const branch = {
+    leafId: "branch",
+    messages: [userMsg("b", "branch question")],
+    entryIds: ["b1"],
+  };
   world.views.set("s1:branch:false", branch);
   let release;
   world.holds.push({
-    match: (method, url) => method === "GET" && url.includes("/api/sessions/s1/context?") && !url.includes("sync=1"),
-    produce: () => new Promise((resolve) => { release = () => resolve({ value: { context: branch } }); }),
+    match: (method, url) =>
+      method === "GET" &&
+      url.includes("/api/sessions/s1/context?") &&
+      !url.includes("sync=1"),
+    produce: () =>
+      new Promise((resolve) => {
+        release = () => resolve({ value: { context: branch } });
+      }),
   });
   let navigation;
   await act(async () => {
     navigation = w.changeLeaf("branch");
     await sleep(20);
-    world.views.set("s1:branch:false", { ...branch, messages: [...branch.messages, assistantMsg("new", "new branch answer")], entryIds: ["b1", "b2"] });
+    world.views.set("s1:branch:false", {
+      ...branch,
+      messages: [...branch.messages, assistantMsg("new", "new branch answer")],
+      entryIds: ["b1", "b2"],
+    });
     publishSessionsChanged(["s1"]);
   });
   await settle();
@@ -5262,61 +9371,134 @@ for (const selected of ["active", "branch", "pre-compaction"]) {
       primeSession("s1", [userMsg("u0", "existing view")]);
       const w = await mountSession("s1");
       if (selected === "pre-compaction") {
-        world.views.set("s1:branch:false", { messages: [userMsg("b0", "selected branch")], entryIds: ["b0"], leafId: "branch" });
-        await act(async () => { await w.changeLeaf("branch"); });
+        world.views.set("s1:branch:false", {
+          messages: [userMsg("b0", "selected branch")],
+          entryIds: ["b0"],
+          leafId: "branch",
+        });
+        await act(async () => {
+          await w.changeLeaf("branch");
+        });
         await settle();
       }
       const previousIds = [...w.latest.entryIds];
       const saved = {
-        messages: Array.from({ length: 205 }, (_, i) => assistantMsg(`m${i}`, `saved ${i}`)),
+        messages: Array.from({ length: 205 }, (_, i) =>
+          assistantMsg(`m${i}`, `saved ${i}`),
+        ),
         entryIds: Array.from({ length: 205 }, (_, i) => `saved-${i}`),
         leafId: selected === "active" ? "saved-204" : "branch",
-        todoPhases: [], thinkingLevel: "off", model: null,
+        todoPhases: [],
+        thinkingLevel: "off",
+        model: null,
       };
       if (selected === "active") world.sessions.set("s1", saved);
       else world.views.set(`s1:branch:${selected === "pre-compaction"}`, saved);
       let releaseFull;
       world.holds.push({
-        match: (method, url) => method === "GET" && (selected === "active"
-          ? url.startsWith("/api/sessions/s1?")
-          : url.startsWith("/api/sessions/s1/context?") && !url.includes("sync=1")),
-        produce: () => new Promise((resolve) => {
-          releaseFull = () => resolve({ value: { sessionId: "s1", tree: [], leafId: saved.leafId, context: saved } });
-        }),
+        match: (method, url) =>
+          method === "GET" &&
+          (selected === "active"
+            ? url.startsWith("/api/sessions/s1?")
+            : url.startsWith("/api/sessions/s1/context?") &&
+              !url.includes("sync=1")),
+        produce: () =>
+          new Promise((resolve) => {
+            releaseFull = () =>
+              resolve({
+                value: {
+                  sessionId: "s1",
+                  tree: [],
+                  leafId: saved.leafId,
+                  context: saved,
+                },
+              });
+          }),
       });
       let releasePage;
       world.holds.push({
-        match: (method, url) => method === "GET" && url.includes("sync=1")
-          && JSON.parse(new URL(url, "http://localhost").searchParams.get("cursor") ?? "null")?.lastEntryId === "saved-199",
-        produce: () => new Promise((resolve) => {
-          releasePage = () => resolve(order === "page two fails" ? { status: 503, value: {} } : {
-            value: { ...selectSessionHistory(saved, { firstEntryId: "saved-0", lastEntryId: "saved-199" }), sessionId: "s1", leafId: saved.leafId, live: null },
-          });
-        }),
+        match: (method, url) =>
+          method === "GET" &&
+          url.includes("sync=1") &&
+          JSON.parse(
+            new URL(url, "http://localhost").searchParams.get("cursor") ??
+              "null",
+          )?.lastEntryId === "saved-199",
+        produce: () =>
+          new Promise((resolve) => {
+            releasePage = () =>
+              resolve(
+                order === "page two fails"
+                  ? { status: 503, value: {} }
+                  : {
+                      value: {
+                        ...selectSessionHistory(saved, {
+                          firstEntryId: "saved-0",
+                          lastEntryId: "saved-199",
+                        }),
+                        sessionId: "s1",
+                        leafId: saved.leafId,
+                        live: null,
+                      },
+                    },
+              );
+          }),
       });
       let fullLoad;
       await act(async () => {
-        fullLoad = selected === "active" ? w.latest.handleHandoff()
-          : selected === "branch" ? w.changeLeaf("branch") : w.latest.togglePreCompactionHistory();
+        fullLoad =
+          selected === "active"
+            ? w.latest.handleHandoff()
+            : selected === "branch"
+              ? w.changeLeaf("branch")
+              : w.latest.togglePreCompactionHistory();
         await sleep(20);
         publishSessionsChanged(["s1"]);
       });
       await settle();
       assert.ok(releaseFull && releasePage, "both reads must be held");
-      assert.deepEqual(w.latest.entryIds, previousIds, "page one cannot truncate the selected view");
+      assert.deepEqual(
+        w.latest.entryIds,
+        previousIds,
+        "page one cannot truncate the selected view",
+      );
 
       if (order === "full first") {
-        await act(async () => { releaseFull(); await fullLoad; });
-        assert.deepEqual(w.latest.entryIds, saved.entryIds, "the full history is visible while page two is stalled");
+        await act(async () => {
+          releaseFull();
+          await fullLoad;
+        });
+        assert.deepEqual(
+          w.latest.entryIds,
+          saved.entryIds,
+          "the full history is visible while page two is stalled",
+        );
       } else if (order === "page two fails") {
-        await act(async () => { releasePage(); });
+        await act(async () => {
+          releasePage();
+        });
         await settle();
-        assert.deepEqual(w.latest.entryIds, previousIds, "a failed later page must leave the complete old view intact");
-        await act(async () => { releaseFull(); await fullLoad; });
+        assert.deepEqual(
+          w.latest.entryIds,
+          previousIds,
+          "a failed later page must leave the complete old view intact",
+        );
+        await act(async () => {
+          releaseFull();
+          await fullLoad;
+        });
         await settle();
         assert.deepEqual(w.latest.entryIds, saved.entryIds);
       }
-      const newer = { ...saved, messages: [...saved.messages, assistantMsg("new", "arrived during fetch")], entryIds: [...saved.entryIds, "saved-new"], leafId: selected === "active" ? "saved-new" : "branch" };
+      const newer = {
+        ...saved,
+        messages: [
+          ...saved.messages,
+          assistantMsg("new", "arrived during fetch"),
+        ],
+        entryIds: [...saved.entryIds, "saved-new"],
+        leafId: selected === "active" ? "saved-new" : "branch",
+      };
       if (selected === "active") world.sessions.set("s1", newer);
       else world.views.set(`s1:branch:${selected === "pre-compaction"}`, newer);
       await act(async () => {
@@ -5326,13 +9508,27 @@ for (const selected of ["active", "branch", "pre-compaction"]) {
       await settle();
       assert.deepEqual(w.latest.entryIds, newer.entryIds);
       if (order === "pages first") {
-        await act(async () => { releaseFull(); await fullLoad; });
+        await act(async () => {
+          releaseFull();
+          await fullLoad;
+        });
         await settle();
       }
-      assert.deepEqual(w.latest.entryIds, newer.entryIds, "an older complete response cannot remove a newer confirmed suffix");
-      assert.deepEqual(w.latest.messages, newer.messages, "history remains ordered and duplicate-free");
+      assert.deepEqual(
+        w.latest.entryIds,
+        newer.entryIds,
+        "an older complete response cannot remove a newer confirmed suffix",
+      );
+      assert.deepEqual(
+        w.latest.messages,
+        newer.messages,
+        "history remains ordered and duplicate-free",
+      );
       assert.equal(w.latest.activeLeafId, newer.leafId);
-      assert.equal(w.latest.showPreCompactionHistory, selected === "pre-compaction");
+      assert.equal(
+        w.latest.showPreCompactionHistory,
+        selected === "pre-compaction",
+      );
     });
   }
 }
@@ -5344,16 +9540,40 @@ test("a late full load cannot overwrite a newly selected branch", async () => {
   const old = structuredClone(world.sessions.get("s1"));
   let release;
   world.holds.push({
-    match: (method, url) => method === "GET" && url.startsWith("/api/sessions/s1?"),
-    produce: () => new Promise((resolve) => { release = () => resolve({ value: { sessionId: "s1", tree: [], leafId: old.leafId, context: old } }); }),
+    match: (method, url) =>
+      method === "GET" && url.startsWith("/api/sessions/s1?"),
+    produce: () =>
+      new Promise((resolve) => {
+        release = () =>
+          resolve({
+            value: {
+              sessionId: "s1",
+              tree: [],
+              leafId: old.leafId,
+              context: old,
+            },
+          });
+      }),
   });
   let refresh;
-  await act(async () => { refresh = w.latest.handleHandoff(); await sleep(20); });
-  const branch = { messages: [userMsg("b0", "new selected branch")], entryIds: ["branch-entry"], leafId: "branch" };
+  await act(async () => {
+    refresh = w.latest.handleHandoff();
+    await sleep(20);
+  });
+  const branch = {
+    messages: [userMsg("b0", "new selected branch")],
+    entryIds: ["branch-entry"],
+    leafId: "branch",
+  };
   world.views.set("s1:branch:false", branch);
-  await act(async () => { await w.changeLeaf("branch"); });
+  await act(async () => {
+    await w.changeLeaf("branch");
+  });
   await settle();
-  await act(async () => { release(); await refresh; });
+  await act(async () => {
+    release();
+    await refresh;
+  });
   assert.deepEqual(w.latest.entryIds, branch.entryIds);
   assert.deepEqual(w.latest.messages, branch.messages);
   assert.equal(w.latest.activeLeafId, "branch");
@@ -5366,13 +9586,31 @@ test("a late full load cannot overwrite a newly started run", async () => {
   const old = structuredClone(world.sessions.get("s1"));
   let release;
   world.holds.push({
-    match: (method, url) => method === "GET" && url.startsWith("/api/sessions/s1?"),
-    produce: () => new Promise((resolve) => { release = () => resolve({ value: { sessionId: "s1", tree: [], leafId: old.leafId, context: old } }); }),
+    match: (method, url) =>
+      method === "GET" && url.startsWith("/api/sessions/s1?"),
+    produce: () =>
+      new Promise((resolve) => {
+        release = () =>
+          resolve({
+            value: {
+              sessionId: "s1",
+              tree: [],
+              leafId: old.leafId,
+              context: old,
+            },
+          });
+      }),
   });
   let refresh;
-  await act(async () => { refresh = w.latest.handleHandoff(); await sleep(20); });
+  await act(async () => {
+    refresh = w.latest.handleHandoff();
+    await sleep(20);
+  });
   let sending;
-  await act(async () => { sending = w.latest.handleSend("new question"); await sleep(30); });
+  await act(async () => {
+    sending = w.latest.handleSend("new question");
+    await sleep(30);
+  });
   const es = lastEs();
   await act(async () => {
     es.open();
@@ -5380,13 +9618,25 @@ test("a late full load cannot overwrite a newly started run", async () => {
     world.agents.set("s1", { running: true, state: { isStreaming: true } });
     es.emit({ type: "agent_start" });
     es.emit({ type: "message_end", message: userMsg("u1", "new question") });
-    es.emit({ type: "message_update", message: assistantMsg("a1", "new run partial") });
+    es.emit({
+      type: "message_update",
+      message: assistantMsg("a1", "new run partial"),
+    });
   });
   await settle();
-  await act(async () => { release(); await refresh; });
+  await act(async () => {
+    release();
+    await refresh;
+  });
   assert.deepEqual(w.latest.entryIds, ["e0", "e1"]);
-  assert.deepEqual(w.latest.messages.map((message) => message.content), ["old question", "new question"]);
-  assert.equal(w.latest.streamState.streamingMessage?.content[0].text, "new run partial");
+  assert.deepEqual(
+    w.latest.messages.map((message) => message.content),
+    ["old question", "new question"],
+  );
+  assert.equal(
+    w.latest.streamState.streamingMessage?.content[0].text,
+    "new run partial",
+  );
   assert.equal(w.latest.agentRunning, true);
 });
 
@@ -5404,22 +9654,37 @@ test("a same-text queued delivery shows live and commits only when its distinct 
     es.emit({ type: "message_end", message: delivered }, { persist: false });
   });
   await settle();
-  assert.deepEqual(w.latest.messages.map((message) => message.content), ["q", "same"]);
+  assert.deepEqual(
+    w.latest.messages.map((message) => message.content),
+    ["q", "same"],
+  );
   await act(async () => {
     appendEntry("s1", delivered);
     publishSessionsChanged(["s1"]);
   });
   await settle();
   assert.deepEqual(w.latest.entryIds, ["e0", "e1", "e2"]);
-  assert.deepEqual(w.latest.messages.map((message) => message.content), ["q", "same", "same"]);
+  assert.deepEqual(
+    w.latest.messages.map((message) => message.content),
+    ["q", "same", "same"],
+  );
 });
 
 test("an orphaned tail cursor resets history even when the branch prefix still matches", async () => {
   resetWorld();
-  primeSession("s1", [userMsg("u0", "q"), assistantMsg("old", "orphaned answer")]);
+  primeSession("s1", [
+    userMsg("u0", "q"),
+    assistantMsg("old", "orphaned answer"),
+  ]);
   const w = await mountSession("s1");
-  saveSession("s1", [userMsg("u0", "q"), assistantMsg("new", "replacement branch")], ["e0", "branch-tail"]);
-  await act(async () => { window.dispatchEvent(new Event("online")); });
+  saveSession(
+    "s1",
+    [userMsg("u0", "q"), assistantMsg("new", "replacement branch")],
+    ["e0", "branch-tail"],
+  );
+  await act(async () => {
+    window.dispatchEvent(new Event("online"));
+  });
   await settle();
   assert.deepEqual(w.latest.entryIds, ["e0", "branch-tail"]);
   assert.equal(w.latest.messages[1].content[0].text, "replacement branch");
@@ -5429,7 +9694,11 @@ test("file triggers coalesce while a sync is held and rerun to recover later per
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   const { w } = await startStreamingRun("s1");
-  saveSession("s1", [userMsg("u0", "q"), userMsg("u1", "q1"), assistantMsg("a1", "first saved answer")]);
+  saveSession("s1", [
+    userMsg("u0", "q"),
+    userMsg("u1", "q1"),
+    assistantMsg("a1", "first saved answer"),
+  ]);
   const release = holdNextSync("s1", syncSnapshot("s1"));
   const before = callsTo("GET", "/api/sessions/s1/context?").length;
   await act(async () => {
@@ -5442,9 +9711,21 @@ test("file triggers coalesce while a sync is held and rerun to recover later per
   });
   await settle();
   assert.deepEqual(w.latest.entryIds, ["e0", "e1", "e2", "e3"]);
-  assert.deepEqual(w.latest.messages.filter((message) => message.role === "assistant").map((message) => message.content[0].text), ["first saved answer", "later saved answer"]);
-  assert.equal(callsTo("GET", "/api/sessions/s1/context?").length - before, 2, "one in-flight read plus one coalesced reread");
-  assert.equal(w.latest.streamState.streamingMessage?.content[0].text, "streaming");
+  assert.deepEqual(
+    w.latest.messages
+      .filter((message) => message.role === "assistant")
+      .map((message) => message.content[0].text),
+    ["first saved answer", "later saved answer"],
+  );
+  assert.equal(
+    callsTo("GET", "/api/sessions/s1/context?").length - before,
+    2,
+    "one in-flight read plus one coalesced reread",
+  );
+  assert.equal(
+    w.latest.streamState.streamingMessage?.content[0].text,
+    "streaming",
+  );
 });
 
 for (const persistBeforeReply of [true, false]) {
@@ -5453,29 +9734,59 @@ for (const persistBeforeReply of [true, false]) {
     primeSession("s1", [userMsg("u0", "q")]);
     const { w, es } = await startStreamingRun("s1");
     world.agents.set("s1", { running: true, state: { isStreaming: true } });
-    saveSession("s1", [userMsg("u0", "q"), userMsg("u1", "q1"), assistantMsg("a1", "first saved answer")]);
-    await act(async () => { publishSessionsChanged(["s1"]); });
+    saveSession("s1", [
+      userMsg("u0", "q"),
+      userMsg("u1", "q1"),
+      assistantMsg("a1", "first saved answer"),
+    ]);
+    await act(async () => {
+      publishSessionsChanged(["s1"]);
+    });
     await settle();
     assert.deepEqual(w.latest.entryIds, ["e0", "e1", "e2"]);
 
     appendEntry("s1", assistantMsg("a2", "repeated saved answer"));
-    const release = holdNextSync("s1", syncSnapshot("s1", null, { firstEntryId: "e0", lastEntryId: "e2" }));
+    const release = holdNextSync(
+      "s1",
+      syncSnapshot("s1", null, { firstEntryId: "e0", lastEntryId: "e2" }),
+    );
     const before = callsTo("GET", "/api/sessions/s1/context?").length;
     const concurrent = assistantMsg("a3", "repeated saved answer");
     await act(async () => {
-      visibilityState = "visible"; document.dispatchEvent(new Event("visibilitychange"));
+      visibilityState = "visible";
+      document.dispatchEvent(new Event("visibilitychange"));
       await sleep(20);
-      es.emit({ type: "message_end", message: concurrent }, { persist: persistBeforeReply });
-      es.emit({ type: "message_update", message: assistantMsg("a4", "new partial after completion") });
+      es.emit(
+        { type: "message_end", message: concurrent },
+        { persist: persistBeforeReply },
+      );
+      es.emit({
+        type: "message_update",
+        message: assistantMsg("a4", "new partial after completion"),
+      });
       release();
     });
     await settle();
     const reads = callsTo("GET", "/api/sessions/s1/context?").slice(before);
-    assert.equal(reads.length, 2, "one in-flight fetch plus one completion-triggered reread");
-    assert.equal(JSON.parse(new URL(reads[1].url, "http://localhost").searchParams.get("cursor")).lastEntryId, "e3", "the reread starts after the returned cursor");
+    assert.equal(
+      reads.length,
+      2,
+      "one in-flight fetch plus one completion-triggered reread",
+    );
+    assert.equal(
+      JSON.parse(
+        new URL(reads[1].url, "http://localhost").searchParams.get("cursor"),
+      ).lastEntryId,
+      "e3",
+      "the reread starts after the returned cursor",
+    );
 
     if (!persistBeforeReply) {
-      assert.deepEqual(w.latest.entryIds, ["e0", "e1", "e2", "e3"], "an unpersisted event cannot advance the durable cursor");
+      assert.deepEqual(
+        w.latest.entryIds,
+        ["e0", "e1", "e2", "e3"],
+        "an unpersisted event cannot advance the durable cursor",
+      );
       await act(async () => {
         appendEntry("s1", concurrent);
         publishSessionsChanged(["s1"]);
@@ -5483,10 +9794,16 @@ for (const persistBeforeReply of [true, false]) {
       await settle();
     }
     assert.deepEqual(w.latest.entryIds, ["e0", "e1", "e2", "e3", "e4"]);
-    assert.deepEqual(w.latest.messages.filter((message) => message.role === "assistant").map((message) => message.content[0].text), [
-      "first saved answer", "repeated saved answer", "repeated saved answer",
-    ]);
-    assert.equal(w.latest.streamState.streamingMessage?.content[0].text, "new partial after completion");
+    assert.deepEqual(
+      w.latest.messages
+        .filter((message) => message.role === "assistant")
+        .map((message) => message.content[0].text),
+      ["first saved answer", "repeated saved answer", "repeated saved answer"],
+    );
+    assert.equal(
+      w.latest.streamState.streamingMessage?.content[0].text,
+      "new partial after completion",
+    );
     assert.equal(w.latest.agentRunning, true);
   });
 }
@@ -5496,25 +9813,60 @@ test("a saved provider failure still surfaces when its SSE completion arrives be
   primeSession("s1", [userMsg("u0", "q")]);
   const { w, es } = await startStreamingRun("s1");
   const providerError = "Provider rejected the resumed request";
-  const failed = { ...assistantMsg("failed", ""), stopReason: "error", errorMessage: providerError };
+  const failed = {
+    ...assistantMsg("failed", ""),
+    stopReason: "error",
+    errorMessage: providerError,
+  };
   saveSession("s1", [userMsg("u0", "q"), userMsg("u1", "q1"), failed]);
   world.agents.set("s1", { running: true, state: { isStreaming: true } });
   world.live.set("s1", liveSnapshot("s1", 50, null));
-  await act(async () => { visibilityState = "visible"; document.dispatchEvent(new Event("visibilitychange")); });
+  await act(async () => {
+    visibilityState = "visible";
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
   await settle();
   await act(async () => {
-    es.emit({ type: "message_end", message: failed, web: { streamId: "stream-s1", sequence: 40 } }, { persist: false });
+    es.emit(
+      {
+        type: "message_end",
+        message: failed,
+        web: { streamId: "stream-s1", sequence: 40 },
+      },
+      { persist: false },
+    );
     world.agents.set("s1", { running: false, state: {} });
-    world.live.set("s1", { ...liveSnapshot("s1", 51, null), isStreaming: false, isPromptRunning: false });
+    world.live.set("s1", {
+      ...liveSnapshot("s1", 51, null),
+      isStreaming: false,
+      isPromptRunning: false,
+    });
     window.dispatchEvent(new Event("online"));
   });
   await settle();
   assert.equal(w.latest.agentRunning, false);
-  assert.deepEqual(w.latest.notices.filter((notice) => notice.type === "error"), []);
+  assert.deepEqual(
+    w.latest.notices.filter((notice) => notice.type === "error"),
+    [],
+  );
   assert.deepEqual(w.latest.entryIds, ["e0", "e1", "e2"]);
-  assert.equal(w.latest.messages.filter((message) => message.role === "assistant" && message.errorMessage === providerError).length, 1);
-  const bubble = ownRoot(render(React.createElement(MessageView, { message: w.latest.messages.at(-1) }), { wrapper: TestRoot }));
-  assert.ok(bubble.getByText(providerError), "the recovered saved message renders the failure to the user");
+  assert.equal(
+    w.latest.messages.filter(
+      (message) =>
+        message.role === "assistant" && message.errorMessage === providerError,
+    ).length,
+    1,
+  );
+  const bubble = ownRoot(
+    render(
+      React.createElement(MessageView, { message: w.latest.messages.at(-1) }),
+      { wrapper: TestRoot },
+    ),
+  );
+  assert.ok(
+    bubble.getByText(providerError),
+    "the recovered saved message renders the failure to the user",
+  );
 });
 
 test("terminal full refresh updates branch metadata as well as cursor-owned history", async () => {
@@ -5522,9 +9874,15 @@ test("terminal full refresh updates branch metadata as well as cursor-owned hist
   primeSession("s1", [userMsg("u0", "q")]);
   const { w, es } = await startStreamingRun("s1");
   const tree = [{ id: "new-branch", children: [] }];
-  saveSession("s1", [userMsg("u0", "q"), userMsg("u1", "q1"), assistantMsg("a1", "finished")]);
+  saveSession("s1", [
+    userMsg("u0", "q"),
+    userMsg("u1", "q1"),
+    assistantMsg("a1", "finished"),
+  ]);
   world.sessions.get("s1").tree = tree;
-  await act(async () => { es.emit({ type: "agent_end", isTerminal: true }); });
+  await act(async () => {
+    es.emit({ type: "agent_end", isTerminal: true });
+  });
   await settle();
   assert.deepEqual(w.latest.data.tree, tree);
   assert.deepEqual(w.latest.entryIds, ["e0", "e1", "e2"]);
@@ -5536,60 +9894,136 @@ test("an unrelated newer notice does not prevent recovering a held partial and t
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   const { w, es } = await startStreamingRun("s1");
-  const snapshot = liveSnapshot("s1", 10, assistantMsg("missed", "recovered without another token"), [{
-    type: "tool_execution_update", toolCallId: "missed-tool", toolName: "read",
-    partialResult: { content: [{ type: "text", text: "recovered tool output" }] },
-  }]);
+  const snapshot = liveSnapshot(
+    "s1",
+    10,
+    assistantMsg("missed", "recovered without another token"),
+    [
+      {
+        type: "tool_execution_update",
+        toolCallId: "missed-tool",
+        toolName: "read",
+        partialResult: {
+          content: [{ type: "text", text: "recovered tool output" }],
+        },
+      },
+    ],
+  );
   world.streams.set("s1", snapshot.cursor);
   const release = holdNextSync("s1", syncSnapshot("s1", snapshot));
   await act(async () => {
     publishSessionsChanged(["s1"]);
     await sleep(20);
-    es.emit({ type: "notice", level: "info", message: "A newer unrelated notice" });
+    es.emit({
+      type: "notice",
+      level: "info",
+      message: "A newer unrelated notice",
+    });
     release();
   });
   await settle();
-  assert.equal(w.latest.streamState.streamingMessage?.content[0].text, "recovered without another token");
-  assert.equal(w.latest.liveToolResults.get("missed-tool")?.content[0].text, "recovered tool output");
-  assert.ok(w.latest.notices.some((notice) => notice.message === "A newer unrelated notice"));
+  assert.equal(
+    w.latest.streamState.streamingMessage?.content[0].text,
+    "recovered without another token",
+  );
+  assert.equal(
+    w.latest.liveToolResults.get("missed-tool")?.content[0].text,
+    "recovered tool output",
+  );
+  assert.ok(
+    w.latest.notices.some(
+      (notice) => notice.message === "A newer unrelated notice",
+    ),
+  );
 });
 
 test("selective hydration preserves newer queued tokens and per-tool progress while recovering another tool", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   const { w, es } = await startStreamingRun("s1");
-  const snapshot = liveSnapshot("s1", 10, assistantMsg("old", "stale snapshot tokens"), [
-    { type: "tool_execution_update", toolCallId: "newer-tool", toolName: "bash", partialResult: { content: [{ type: "text", text: "stale tool output" }] } },
-    { type: "tool_execution_update", toolCallId: "missed-tool", toolName: "read", partialResult: { content: [{ type: "text", text: "recovered missed output" }] } },
-  ]);
+  const snapshot = liveSnapshot(
+    "s1",
+    10,
+    assistantMsg("old", "stale snapshot tokens"),
+    [
+      {
+        type: "tool_execution_update",
+        toolCallId: "newer-tool",
+        toolName: "bash",
+        partialResult: {
+          content: [{ type: "text", text: "stale tool output" }],
+        },
+      },
+      {
+        type: "tool_execution_update",
+        toolCallId: "missed-tool",
+        toolName: "read",
+        partialResult: {
+          content: [{ type: "text", text: "recovered missed output" }],
+        },
+      },
+    ],
+  );
   world.streams.set("s1", snapshot.cursor);
   const release = holdNextSync("s1", syncSnapshot("s1", snapshot));
   await act(async () => {
     publishSessionsChanged(["s1"]);
     await sleep(20);
-    es.emit({ type: "tool_execution_start", toolCallId: "newer-tool", toolName: "bash" });
-    es.emit({ type: "tool_execution_update", toolCallId: "newer-tool", toolName: "bash", partialResult: { content: [{ type: "text", text: "newer queued tool output" }] } });
-    es.emit({ type: "message_update", message: assistantMsg("new", "newer queued tokens") });
+    es.emit({
+      type: "tool_execution_start",
+      toolCallId: "newer-tool",
+      toolName: "bash",
+    });
+    es.emit({
+      type: "tool_execution_update",
+      toolCallId: "newer-tool",
+      toolName: "bash",
+      partialResult: {
+        content: [{ type: "text", text: "newer queued tool output" }],
+      },
+    });
+    es.emit({
+      type: "message_update",
+      message: assistantMsg("new", "newer queued tokens"),
+    });
     release();
   });
   await settle(90);
-  assert.equal(w.latest.streamState.streamingMessage?.content[0].text, "newer queued tokens");
-  assert.equal(w.latest.liveToolResults.get("newer-tool")?.content[0].text, "newer queued tool output");
-  assert.equal(w.latest.liveToolResults.get("missed-tool")?.content[0].text, "recovered missed output");
+  assert.equal(
+    w.latest.streamState.streamingMessage?.content[0].text,
+    "newer queued tokens",
+  );
+  assert.equal(
+    w.latest.liveToolResults.get("newer-tool")?.content[0].text,
+    "newer queued tool output",
+  );
+  assert.equal(
+    w.latest.liveToolResults.get("missed-tool")?.content[0].text,
+    "recovered missed output",
+  );
 });
 
 const SLOW_MODEL = { provider: "anthropic", id: "claude-test" };
-const SLOW_STATE = { stage: "low_priority", resetsAtSec: 1770000000, allowanceLeftPercent: 62 };
+const SLOW_STATE = {
+  stage: "low_priority",
+  resetsAtSec: 1770000000,
+  allowanceLeftPercent: 62,
+};
 
 test("opening a session past its Claude usage limit shows the badge, and an idle /slow off clears it", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
-  world.agents.set("s1", { running: true, state: { model: SLOW_MODEL, usageLimit: SLOW_STATE } });
+  world.agents.set("s1", {
+    running: true,
+    state: { model: SLOW_MODEL, usageLimit: SLOW_STATE },
+  });
   const w = await mountSession("s1");
   assert.deepEqual(w.latest.usageLimit, SLOW_STATE);
 
   world.agents.set("s1", { running: true, state: { model: SLOW_MODEL } });
-  await act(async () => { lastEs().emit({ type: "prompt_result", agentInvoked: false }); });
+  await act(async () => {
+    lastEs().emit({ type: "prompt_result", agentInvoked: false });
+  });
   await settle();
   assert.equal(w.latest.usageLimit, undefined);
 });
@@ -5598,14 +10032,24 @@ test("the usage-limit badge appears mid-run and clears when the run ends without
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   const { w, es } = await startStreamingRun("s1");
-  world.agents.set("s1", { running: true, state: { isStreaming: true, model: SLOW_MODEL, usageLimit: SLOW_STATE } });
+  world.agents.set("s1", {
+    running: true,
+    state: { isStreaming: true, model: SLOW_MODEL, usageLimit: SLOW_STATE },
+  });
   // The in-run sample ticks every 2s; wait for it rather than a fixed sleep.
-  for (let waited = 0; w.latest.usageLimit !== SLOW_STATE && waited < 5000; waited += 250) await settle(250);
+  for (
+    let waited = 0;
+    w.latest.usageLimit !== SLOW_STATE && waited < 5000;
+    waited += 250
+  )
+    await settle(250);
   assert.deepEqual(w.latest.usageLimit, SLOW_STATE);
 
   saveSession("s1", [userMsg("u0", "q"), assistantMsg("a1", "done")]);
   world.agents.set("s1", { running: false, state: { model: SLOW_MODEL } });
-  await act(async () => { es.emit({ type: "agent_end", isTerminal: true }); });
+  await act(async () => {
+    es.emit({ type: "agent_end", isTerminal: true });
+  });
   await settle();
   assert.equal(w.latest.usageLimit, undefined);
 });
@@ -5613,15 +10057,30 @@ test("the usage-limit badge appears mid-run and clears when the run ends without
 test("the Slow toggle follows omp's per-model state and is cleared by a switch to an unsupported model", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
-  world.agents.set("s1", { running: true, state: { model: SLOW_MODEL, slowModeSupported: true, slowModeEnabled: true } });
+  world.agents.set("s1", {
+    running: true,
+    state: {
+      model: SLOW_MODEL,
+      slowModeSupported: true,
+      slowModeEnabled: true,
+    },
+  });
   const w = await mountSession("s1");
   assert.equal(w.latest.slowModeSupported, true);
   assert.equal(w.latest.slowModeEnabled, true);
 
   // A model without /slow reports supported:false and omits enabled; the
   // persisted Claude setting may still be on, but it must not show as pressed.
-  world.agents.set("s1", { running: true, state: { model: { provider: "openrouter", id: "other" }, slowModeSupported: false } });
-  await act(async () => { lastEs().emit({ type: "model_changed" }); });
+  world.agents.set("s1", {
+    running: true,
+    state: {
+      model: { provider: "openrouter", id: "other" },
+      slowModeSupported: false,
+    },
+  });
+  await act(async () => {
+    lastEs().emit({ type: "model_changed" });
+  });
   await settle();
   assert.equal(w.latest.slowModeSupported, false);
   assert.equal(w.latest.slowModeEnabled, false);
@@ -5631,15 +10090,25 @@ test("the Slow toggle follows omp's per-model state and is cleared by a switch t
 async function mountSlowToggle(enabled, answer) {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
-  world.agents.set("s1", { running: true, state: { model: SLOW_MODEL, slowModeSupported: true, slowModeEnabled: enabled, slowModeScope: "global" } });
+  world.agents.set("s1", {
+    running: true,
+    state: {
+      model: SLOW_MODEL,
+      slowModeSupported: true,
+      slowModeEnabled: enabled,
+      slowModeScope: "global",
+    },
+  });
   const w = await mountSession("s1");
   assert.equal(w.latest.slowModeEnabled, enabled);
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "set_slow_mode",
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "set_slow_mode",
     produce: async () => answer,
   });
   world.holds.push({
-    match: (method, url) => method === "GET" && url === "/api/sessions/s1/state",
+    match: (method, url) =>
+      method === "GET" && url === "/api/sessions/s1/state",
     produce: () => new Promise(() => {}),
   });
   return w;
@@ -5647,10 +10116,16 @@ async function mountSlowToggle(enabled, answer) {
 
 for (const enabled of [false, true]) {
   test(`turning Slow ${enabled ? "on" : "off"} sends set_slow_mode and applies omp's answer`, async () => {
-    const w = await mountSlowToggle(!enabled, { value: { success: true, data: { enabled } } });
+    const w = await mountSlowToggle(!enabled, {
+      value: { success: true, data: { enabled } },
+    });
     const posted = world.calls.length;
-    await act(async () => { await w.latest.handleSlowModeChange(enabled); });
-    const command = world.calls.slice(posted).find((call) => call.body?.type === "set_slow_mode");
+    await act(async () => {
+      await w.latest.handleSlowModeChange(enabled);
+    });
+    const command = world.calls
+      .slice(posted)
+      .find((call) => call.body?.type === "set_slow_mode");
     assert.deepEqual(command?.body, { type: "set_slow_mode", enabled });
     assert.equal(w.latest.slowModeEnabled, enabled);
     assert.deepEqual(w.latest.notices, []);
@@ -5659,20 +10134,40 @@ for (const enabled of [false, true]) {
 
 test("a refused set_slow_mode leaves the toggle as it was and shows omp's error", async () => {
   const refusal = "Slow mode is unavailable for the current model.";
-  const w = await mountSlowToggle(false, { status: 400, value: { error: refusal } });
-  await act(async () => { await w.latest.handleSlowModeChange(true); });
+  const w = await mountSlowToggle(false, {
+    status: 400,
+    value: { error: refusal },
+  });
+  await act(async () => {
+    await w.latest.handleSlowModeChange(true);
+  });
   assert.equal(w.latest.slowModeEnabled, false);
-  assert.deepEqual(w.latest.notices.map((n) => [n.type, n.message]), [["error", refusal]]);
+  assert.deepEqual(
+    w.latest.notices.map((n) => [n.type, n.message]),
+    [["error", refusal]],
+  );
 });
 
 test("before omp runs, Slow comes from the catalog and the Claude setting; live state then wins", async () => {
   resetWorld();
   world.models = {
-    models: {}, defaultModel: null, anthropicSlowMode: true,
-    modelList: [{ id: SLOW_MODEL.id, name: "Claude", provider: SLOW_MODEL.provider, supportsSlowMode: true }],
+    models: {},
+    defaultModel: null,
+    anthropicSlowMode: true,
+    modelList: [
+      {
+        id: SLOW_MODEL.id,
+        name: "Claude",
+        provider: SLOW_MODEL.provider,
+        supportsSlowMode: true,
+      },
+    ],
   };
   primeSession("s1", [userMsg("u0", "q")]);
-  world.sessions.get("s1").model = { provider: SLOW_MODEL.provider, modelId: SLOW_MODEL.id };
+  world.sessions.get("s1").model = {
+    provider: SLOW_MODEL.provider,
+    modelId: SLOW_MODEL.id,
+  };
   const w = await mountSession("s1");
   assert.equal(w.latest.slowModeSupported, true);
   assert.equal(w.latest.slowModeEnabled, true);
@@ -5680,10 +10175,19 @@ test("before omp runs, Slow comes from the catalog and the Claude setting; live 
 
   // Clicking spawns omp; one that reports no support for the model hides it.
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "set_slow_mode",
-    produce: async () => { world.agents.set("s1", { running: true, state: { model: SLOW_MODEL, slowModeSupported: false } }); return { value: { success: true, data: { enabled: false } } }; },
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "set_slow_mode",
+    produce: async () => {
+      world.agents.set("s1", {
+        running: true,
+        state: { model: SLOW_MODEL, slowModeSupported: false },
+      });
+      return { value: { success: true, data: { enabled: false } } };
+    },
   });
-  await act(async () => { await w.latest.handleSlowModeChange(false); });
+  await act(async () => {
+    await w.latest.handleSlowModeChange(false);
+  });
   await settle();
   assert.equal(w.latest.slowModeSupported, false);
   assert.equal(w.latest.slowModeEnabled, false);
@@ -5692,17 +10196,43 @@ test("before omp runs, Slow comes from the catalog and the Claude setting; live 
 test("the Slow scope follows omp's state and clears with support", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
-  world.agents.set("s1", { running: true, state: { model: SLOW_MODEL, slowModeSupported: true, slowModeEnabled: false, slowModeScope: "global" } });
+  world.agents.set("s1", {
+    running: true,
+    state: {
+      model: SLOW_MODEL,
+      slowModeSupported: true,
+      slowModeEnabled: false,
+      slowModeScope: "global",
+    },
+  });
   const w = await mountSession("s1");
   assert.equal(w.latest.slowModeScope, "global");
 
-  world.agents.set("s1", { running: true, state: { model: { provider: "openai", id: "gpt-test" }, slowModeSupported: true, slowModeEnabled: false, slowModeScope: "session" } });
-  await act(async () => { lastEs().emit({ type: "model_changed" }); });
+  world.agents.set("s1", {
+    running: true,
+    state: {
+      model: { provider: "openai", id: "gpt-test" },
+      slowModeSupported: true,
+      slowModeEnabled: false,
+      slowModeScope: "session",
+    },
+  });
+  await act(async () => {
+    lastEs().emit({ type: "model_changed" });
+  });
   await settle();
   assert.equal(w.latest.slowModeScope, "session");
 
-  world.agents.set("s1", { running: true, state: { model: { provider: "openrouter", id: "other" }, slowModeSupported: false } });
-  await act(async () => { lastEs().emit({ type: "model_changed" }); });
+  world.agents.set("s1", {
+    running: true,
+    state: {
+      model: { provider: "openrouter", id: "other" },
+      slowModeSupported: false,
+    },
+  });
+  await act(async () => {
+    lastEs().emit({ type: "model_changed" });
+  });
   await settle();
   assert.equal(w.latest.slowModeScope, undefined);
 });
@@ -5711,88 +10241,192 @@ test("HTTP discovery of a new wrapper replaces an old still-open stream before h
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   const { w, es } = await startStreamingRun("s1");
-  const snapshot = { ...liveSnapshot("s1", 1, assistantMsg("new", "new wrapper partial")), cursor: { streamId: "new-wrapper", sequence: 1 } };
+  const snapshot = {
+    ...liveSnapshot("s1", 1, assistantMsg("new", "new wrapper partial")),
+    cursor: { streamId: "new-wrapper", sequence: 1 },
+  };
   world.live.set("s1", snapshot);
   world.streams.set("s1", snapshot.cursor);
   const registrationsBefore = world.calls.length;
-  world.subagentSnapshots.set("s1", [{ id: "new-child", agent: "explore", status: "started", index: 0, task: "recover roster" }]);
-  await act(async () => { publishSessionsChanged(["s1"]); });
+  world.subagentSnapshots.set("s1", [
+    {
+      id: "new-child",
+      agent: "explore",
+      status: "started",
+      index: 0,
+      task: "recover roster",
+    },
+  ]);
+  await act(async () => {
+    publishSessionsChanged(["s1"]);
+  });
   await settle();
   const replacement = lastEs();
   assert.notEqual(replacement, es);
-  assert.equal(es.closedByCaller, true, "an old heartbeat-only connection must be replaced");
-  await act(async () => { replacement.open(); });
+  assert.equal(
+    es.closedByCaller,
+    true,
+    "an old heartbeat-only connection must be replaced",
+  );
+  await act(async () => {
+    replacement.open();
+  });
   await settle();
-  const restored = world.calls.slice(registrationsBefore).filter((c) => c.method === "POST").map((c) => c.body.type);
+  const restored = world.calls
+    .slice(registrationsBefore)
+    .filter((c) => c.method === "POST")
+    .map((c) => c.body.type);
   assert.equal(restored.includes("set_host_tools"), true);
   assert.equal(restored.includes("set_host_uri_schemes"), true);
-  assert.equal(w.latest.subagents.find((s) => s.id === "new-child")?.status, "started");
-  assert.equal(w.latest.streamState.streamingMessage?.content[0].text, "new wrapper partial");
-  await act(async () => { replacement.emit({ type: "message_update", message: assistantMsg("new", "new wrapper live-only tokens") }); });
+  assert.equal(
+    w.latest.subagents.find((s) => s.id === "new-child")?.status,
+    "started",
+  );
+  assert.equal(
+    w.latest.streamState.streamingMessage?.content[0].text,
+    "new wrapper partial",
+  );
+  await act(async () => {
+    replacement.emit({
+      type: "message_update",
+      message: assistantMsg("new", "new wrapper live-only tokens"),
+    });
+  });
   await settle(90);
-  assert.equal(w.latest.streamState.streamingMessage?.content[0].text, "new wrapper live-only tokens");
+  assert.equal(
+    w.latest.streamState.streamingMessage?.content[0].text,
+    "new wrapper live-only tokens",
+  );
 });
 
 test("foreground catch-up replaces an idle CLOSED source and resumes later live-only updates", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   const { w, es } = await startStreamingRun("s1");
-  saveSession("s1", [userMsg("u0", "q"), userMsg("u1", "q1"), assistantMsg("done", "finished")]);
-  await act(async () => { es.emit({ type: "agent_end", isTerminal: true }); });
+  saveSession("s1", [
+    userMsg("u0", "q"),
+    userMsg("u1", "q1"),
+    assistantMsg("done", "finished"),
+  ]);
+  await act(async () => {
+    es.emit({ type: "agent_end", isTerminal: true });
+  });
   await settle();
   assert.equal(w.latest.agentRunning, false);
   await act(() => es.failFatal());
   const cursor = { streamId: "stream-s1", sequence: 10 };
   world.streams.set("s1", cursor);
-  world.live.set("s1", { ...liveSnapshot("s1", 10, assistantMsg("resumed", "busy snapshot")), cursor });
+  world.live.set("s1", {
+    ...liveSnapshot("s1", 10, assistantMsg("resumed", "busy snapshot")),
+    cursor,
+  });
   world.agents.set("s1", { running: true, state: { isStreaming: true } });
   const registrationsBefore = world.calls.length;
-  world.subagentSnapshots.set("s1", [{ id: "resumed-child", agent: "explore", status: "started", index: 0, task: "quiet child" }]);
-  await act(async () => { window.dispatchEvent(new Event("online")); });
+  world.subagentSnapshots.set("s1", [
+    {
+      id: "resumed-child",
+      agent: "explore",
+      status: "started",
+      index: 0,
+      task: "quiet child",
+    },
+  ]);
+  await act(async () => {
+    window.dispatchEvent(new Event("online"));
+  });
   await settle();
   const replacement = lastEs();
   assert.notEqual(replacement, es);
-  await act(async () => { replacement.open(); });
+  await act(async () => {
+    replacement.open();
+  });
   await settle();
-  const restored = world.calls.slice(registrationsBefore).filter((c) => c.method === "POST").map((c) => c.body.type);
+  const restored = world.calls
+    .slice(registrationsBefore)
+    .filter((c) => c.method === "POST")
+    .map((c) => c.body.type);
   assert.equal(restored.includes("set_host_tools"), true);
   assert.equal(restored.includes("set_host_uri_schemes"), true);
-  assert.equal(w.latest.subagents.find((s) => s.id === "resumed-child")?.status, "started");
+  assert.equal(
+    w.latest.subagents.find((s) => s.id === "resumed-child")?.status,
+    "started",
+  );
   assert.equal(w.latest.agentRunning, true);
-  assert.equal(w.latest.streamState.streamingMessage?.content[0].text, "busy snapshot");
-  await act(async () => { replacement.emit({ type: "message_update", message: assistantMsg("resumed", "live-only continuation") }); });
+  assert.equal(
+    w.latest.streamState.streamingMessage?.content[0].text,
+    "busy snapshot",
+  );
+  await act(async () => {
+    replacement.emit({
+      type: "message_update",
+      message: assistantMsg("resumed", "live-only continuation"),
+    });
+  });
   await settle(90);
-  assert.equal(w.latest.streamState.streamingMessage?.content[0].text, "live-only continuation");
+  assert.equal(
+    w.latest.streamState.streamingMessage?.content[0].text,
+    "live-only continuation",
+  );
 });
 
 test("newer tool progress does not block hydration of a missed assistant partial", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   const { w, es } = await startStreamingRun("s1");
-  const snapshot = liveSnapshot("s1", 10, assistantMsg("missed", "missed assistant partial"), [{
-    type: "tool_execution_update", toolCallId: "tool", toolName: "bash",
-    partialResult: { content: [{ type: "text", text: "old tool result" }] },
-  }]);
+  const snapshot = liveSnapshot(
+    "s1",
+    10,
+    assistantMsg("missed", "missed assistant partial"),
+    [
+      {
+        type: "tool_execution_update",
+        toolCallId: "tool",
+        toolName: "bash",
+        partialResult: { content: [{ type: "text", text: "old tool result" }] },
+      },
+    ],
+  );
   world.streams.set("s1", snapshot.cursor);
   const release = holdNextSync("s1", syncSnapshot("s1", snapshot));
   await act(async () => {
     publishSessionsChanged(["s1"]);
     await sleep(20);
-    es.emit({ type: "tool_execution_start", toolCallId: "tool", toolName: "bash" });
-    es.emit({ type: "tool_execution_update", toolCallId: "tool", toolName: "bash", partialResult: { content: [{ type: "text", text: "newer tool result" }] } });
+    es.emit({
+      type: "tool_execution_start",
+      toolCallId: "tool",
+      toolName: "bash",
+    });
+    es.emit({
+      type: "tool_execution_update",
+      toolCallId: "tool",
+      toolName: "bash",
+      partialResult: { content: [{ type: "text", text: "newer tool result" }] },
+    });
     release();
   });
   await settle(90);
-  assert.equal(w.latest.streamState.streamingMessage?.content[0].text, "missed assistant partial");
-  assert.equal(w.latest.liveToolResults.get("tool")?.content[0].text, "newer tool result");
+  assert.equal(
+    w.latest.streamState.streamingMessage?.content[0].text,
+    "missed assistant partial",
+  );
+  assert.equal(
+    w.latest.liveToolResults.get("tool")?.content[0].text,
+    "newer tool result",
+  );
 });
 
 test("idle closed streams retain capped backoff and a healthy replacement cancels pending retry", async (t) => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   const { w, es } = await startStreamingRun("s1");
-  saveSession("s1", [userMsg("u0", "q"), userMsg("u1", "q1"), assistantMsg("a1", "finished")]);
-  await act(async () => { es.emit({ type: "agent_end", isTerminal: true }); });
+  saveSession("s1", [
+    userMsg("u0", "q"),
+    userMsg("u1", "q1"),
+    assistantMsg("a1", "finished"),
+  ]);
+  await act(async () => {
+    es.emit({ type: "agent_end", isTerminal: true });
+  });
   await settle();
   assert.equal(w.latest.agentRunning, false);
   t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
@@ -5805,82 +10439,153 @@ test("idle closed streams retain capped backoff and a healthy replacement cancel
       t.mock.timers.tick(delay - 1);
     });
     assert.equal(world.esInstances.length, before);
-    await act(async () => { t.mock.timers.tick(1); });
+    await act(async () => {
+      t.mock.timers.tick(1);
+    });
     assert.equal(world.esInstances.length, before + 1);
     source = lastEs();
   }
 
-  await act(async () => { source.open(); });
+  await act(async () => {
+    source.open();
+  });
   const beforeReset = world.esInstances.length;
   await act(async () => {
     source.failFatal();
     t.mock.timers.tick(999);
   });
   assert.equal(world.esInstances.length, beforeReset);
-  await act(async () => { t.mock.timers.tick(1); });
-  assert.equal(world.esInstances.length, beforeReset + 1, "successful open resets the retry delay");
+  await act(async () => {
+    t.mock.timers.tick(1);
+  });
+  assert.equal(
+    world.esInstances.length,
+    beforeReset + 1,
+    "successful open resets the retry delay",
+  );
 
   source = lastEs();
-  await act(async () => { source.open(); source.failFatal(); });
-  world.live.set("s1", { ...liveSnapshot("s1", 100, null), isStreaming: false, isPromptRunning: false });
-  await act(async () => { window.dispatchEvent(new Event("online")); });
+  await act(async () => {
+    source.open();
+    source.failFatal();
+  });
+  world.live.set("s1", {
+    ...liveSnapshot("s1", 100, null),
+    isStreaming: false,
+    isPromptRunning: false,
+  });
+  await act(async () => {
+    window.dispatchEvent(new Event("online"));
+  });
   const healthy = lastEs();
-  assert.notEqual(healthy, source, "foreground recovery replaces the closed source before its timer");
+  assert.notEqual(
+    healthy,
+    source,
+    "foreground recovery replaces the closed source before its timer",
+  );
   await act(async () => {
     healthy.open();
     t.mock.timers.tick(30000);
   });
-  assert.equal(lastEs(), healthy, "an orphaned backoff timer must not replace the healthy stream");
+  assert.equal(
+    lastEs(),
+    healthy,
+    "an orphaned backoff timer must not replace the healthy stream",
+  );
   assert.equal(healthy.closedByCaller, false);
 });
 
 test("idle file-only catch-up updates persisted model, thinking and data context without RPC startup", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
-  Object.assign(world.sessions.get("s1"), { model: { provider: "test", modelId: "old-model" }, thinkingLevel: "high" });
+  Object.assign(world.sessions.get("s1"), {
+    model: { provider: "test", modelId: "old-model" },
+    thinkingLevel: "high",
+  });
   const w = await mountSession("s1");
   assert.equal(w.latest.displayModel.modelId, "old-model");
   assert.equal(w.latest.thinkingLevel, "high");
   const context = world.sessions.get("s1");
-  Object.assign(context, { model: { provider: "test", modelId: "external-model" }, thinkingLevel: "off" });
-  await act(async () => { publishSessionsChanged(["s1"]); });
+  Object.assign(context, {
+    model: { provider: "test", modelId: "external-model" },
+    thinkingLevel: "off",
+  });
+  await act(async () => {
+    publishSessionsChanged(["s1"]);
+  });
   await settle();
   assert.equal(w.latest.displayModel.modelId, "external-model");
   assert.equal(w.latest.thinkingLevel, "off");
   assert.deepEqual(w.latest.data.context.model, context.model);
   assert.equal(w.latest.data.context.thinkingLevel, "off");
   assert.deepEqual(w.latest.data.context.entryIds, w.latest.entryIds);
-  assert.equal(callsTo("POST", "/api/agent/").length, 0, "reading idle metadata must never spawn a process");
+  assert.equal(
+    callsTo("POST", "/api/agent/").length,
+    0,
+    "reading idle metadata must never spawn a process",
+  );
   assert.equal(world.esInstances.length, 0);
 });
 
 test("file metadata refresh preserves an active RPC model and thinking choice", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
-  world.agents.set("s1", { running: true, state: {
-    isStreaming: true, model: { provider: "test", id: "live-model" }, thinkingLevel: "high",
-  } });
+  world.agents.set("s1", {
+    running: true,
+    state: {
+      isStreaming: true,
+      model: { provider: "test", id: "live-model" },
+      thinkingLevel: "high",
+    },
+  });
   const w = await mountSession("s1");
-  await act(async () => { lastEs().open(); });
-  Object.assign(world.sessions.get("s1"), { model: { provider: "test", modelId: "persisted-model" }, thinkingLevel: "low" });
-  await act(async () => { publishSessionsChanged(["s1"]); });
+  await act(async () => {
+    lastEs().open();
+  });
+  Object.assign(world.sessions.get("s1"), {
+    model: { provider: "test", modelId: "persisted-model" },
+    thinkingLevel: "low",
+  });
+  await act(async () => {
+    publishSessionsChanged(["s1"]);
+  });
   await settle();
   assert.equal(w.latest.agentRunning, true);
   assert.equal(w.latest.displayModel.modelId, "live-model");
   assert.equal(w.latest.thinkingLevel, "high");
-  assert.equal(w.latest.data.context.model.modelId, "persisted-model", "data context still reflects confirmed disk metadata");
+  assert.equal(
+    w.latest.data.context.model.modelId,
+    "persisted-model",
+    "data context still reflects confirmed disk metadata",
+  );
 });
 
 test("a held file snapshot cannot roll back a newer RPC model choice", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
-  Object.assign(world.sessions.get("s1"), { model: { provider: "test", modelId: "old-model" }, thinkingLevel: "low" });
+  Object.assign(world.sessions.get("s1"), {
+    model: { provider: "test", modelId: "old-model" },
+    thinkingLevel: "low",
+  });
   const w = await mountSession("s1");
   const release = holdNextSync("s1", syncSnapshot("s1"));
-  await act(async () => { publishSessionsChanged(["s1"]); await sleep(20); });
-  world.agents.set("s1", { running: true, state: { model: { provider: "test", id: "chosen-model" }, thinkingLevel: "high" } });
-  await act(async () => { await w.latest.handleModelChange("test", "chosen-model"); });
-  await act(async () => { release(); });
+  await act(async () => {
+    publishSessionsChanged(["s1"]);
+    await sleep(20);
+  });
+  world.agents.set("s1", {
+    running: true,
+    state: {
+      model: { provider: "test", id: "chosen-model" },
+      thinkingLevel: "high",
+    },
+  });
+  await act(async () => {
+    await w.latest.handleModelChange("test", "chosen-model");
+  });
+  await act(async () => {
+    release();
+  });
   await settle();
   assert.equal(w.latest.displayModel.modelId, "chosen-model");
   assert.equal(w.latest.thinkingLevel, "high");
@@ -5889,108 +10594,231 @@ test("a held file snapshot cannot roll back a newer RPC model choice", async () 
 test("a model switch shows at once and rolls back with a notice when it fails (#277)", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
-  Object.assign(world.sessions.get("s1"), { model: { provider: "test", modelId: "old-model" }, thinkingLevel: "low" });
+  Object.assign(world.sessions.get("s1"), {
+    model: { provider: "test", modelId: "old-model" },
+    thinkingLevel: "low",
+  });
   const w = await mountSession("s1");
   assert.equal(w.latest.displayModel.modelId, "old-model");
   let fail;
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "set_model",
-    produce: () => new Promise((resolve) => { fail = () => resolve({
-      status: 500,
-      value: { error: "omp exited (code 1, signal none): error: Could not restore model test/old-model" },
-    }); }),
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "set_model",
+    produce: () =>
+      new Promise((resolve) => {
+        fail = () =>
+          resolve({
+            status: 500,
+            value: {
+              error:
+                "omp exited (code 1, signal none): error: Could not restore model test/old-model",
+            },
+          });
+      }),
   });
   let command;
-  await act(async () => { command = w.latest.handleModelChange("test", "chosen-model"); await sleep(20); });
-  assert.equal(w.latest.displayModel.modelId, "chosen-model", "the pick shows while omp starts");
-  await act(async () => { fail(); await command; });
+  await act(async () => {
+    command = w.latest.handleModelChange("test", "chosen-model");
+    await sleep(20);
+  });
+  assert.equal(
+    w.latest.displayModel.modelId,
+    "chosen-model",
+    "the pick shows while omp starts",
+  );
+  await act(async () => {
+    fail();
+    await command;
+  });
   await settle();
-  assert.equal(w.latest.displayModel.modelId, "old-model", "a failed switch must not claim the new model");
+  assert.equal(
+    w.latest.displayModel.modelId,
+    "old-model",
+    "a failed switch must not claim the new model",
+  );
   assert.equal(w.latest.notices.at(-1)?.type, "error");
-  assert.match(w.latest.notices.at(-1)?.message ?? "", /Could not restore model/);
+  assert.match(
+    w.latest.notices.at(-1)?.message ?? "",
+    /Could not restore model/,
+  );
 });
 
 test("an earlier model pick that fails does not undo a newer pick", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
-  Object.assign(world.sessions.get("s1"), { model: { provider: "test", modelId: "old-model" }, thinkingLevel: "low" });
+  Object.assign(world.sessions.get("s1"), {
+    model: { provider: "test", modelId: "old-model" },
+    thinkingLevel: "low",
+  });
   const w = await mountSession("s1");
   const replies = [];
   for (let i = 0; i < 2; i++) {
     world.holds.push({
-      match: (method, _url, body) => method === "POST" && body?.type === "set_model",
-      produce: () => new Promise((resolve) => { replies.push(resolve); }),
+      match: (method, _url, body) =>
+        method === "POST" && body?.type === "set_model",
+      produce: () =>
+        new Promise((resolve) => {
+          replies.push(resolve);
+        }),
     });
   }
   const failure = { status: 500, value: { error: "set_model failed" } };
   let first;
   let second;
-  await act(async () => { first = w.latest.handleModelChange("test", "model-a"); await sleep(20); });
-  await act(async () => { second = w.latest.handleModelChange("test", "model-b"); await sleep(20); });
+  await act(async () => {
+    first = w.latest.handleModelChange("test", "model-a");
+    await sleep(20);
+  });
+  await act(async () => {
+    second = w.latest.handleModelChange("test", "model-b");
+    await sleep(20);
+  });
   assert.equal(w.latest.displayModel.modelId, "model-b");
-  await act(async () => { replies[0](failure); await first; });
-  assert.equal(w.latest.displayModel.modelId, "model-b", "the older failure keeps the newer pick");
-  await act(async () => { replies[1](failure); await second; });
+  await act(async () => {
+    replies[0](failure);
+    await first;
+  });
+  assert.equal(
+    w.latest.displayModel.modelId,
+    "model-b",
+    "the older failure keeps the newer pick",
+  );
+  await act(async () => {
+    replies[1](failure);
+    await second;
+  });
   await settle();
-  assert.equal(w.latest.displayModel.modelId, "old-model", "with both failed, the running model shows again");
+  assert.equal(
+    w.latest.displayModel.modelId,
+    "old-model",
+    "with both failed, the running model shows again",
+  );
 });
 
 test("a refused pick after a successful one shows the model omp now runs", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
-  Object.assign(world.sessions.get("s1"), { model: { provider: "test", modelId: "old-model" }, thinkingLevel: "low" });
-  world.agents.set("s1", { running: true, state: { model: { provider: "test", id: "old-model" } } });
+  Object.assign(world.sessions.get("s1"), {
+    model: { provider: "test", modelId: "old-model" },
+    thinkingLevel: "low",
+  });
+  world.agents.set("s1", {
+    running: true,
+    state: { model: { provider: "test", id: "old-model" } },
+  });
   const w = await mountSession("s1");
-  await act(async () => { lastEs().open(); });
+  await act(async () => {
+    lastEs().open();
+  });
   await settle();
   assert.equal(w.latest.displayModel.modelId, "old-model");
   // A succeeds, but its state refresh is still out when B is picked.
   let releaseStaleRefresh;
   world.holds.push({
-    match: (method, url) => method === "GET" && /\/api\/sessions\/s1\/state/.test(url),
-    produce: () => new Promise((resolve) => { releaseStaleRefresh = resolve; }),
+    match: (method, url) =>
+      method === "GET" && /\/api\/sessions\/s1\/state/.test(url),
+    produce: () =>
+      new Promise((resolve) => {
+        releaseStaleRefresh = resolve;
+      }),
   });
   let failB;
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "set_model" && body.modelId === "model-b",
-    produce: () => new Promise((resolve) => { failB = () => resolve({ status: 500, value: { error: "refused" } }); }),
+    match: (method, _url, body) =>
+      method === "POST" &&
+      body?.type === "set_model" &&
+      body.modelId === "model-b",
+    produce: () =>
+      new Promise((resolve) => {
+        failB = () => resolve({ status: 500, value: { error: "refused" } });
+      }),
   });
   world.agents.get("s1").state = { model: { provider: "test", id: "model-a" } };
   let first;
   let second;
-  await act(async () => { first = w.latest.handleModelChange("test", "model-a"); await sleep(20); });
-  await act(async () => { second = w.latest.handleModelChange("test", "model-b"); await sleep(20); });
-  await act(async () => { failB(); await second; });
+  await act(async () => {
+    first = w.latest.handleModelChange("test", "model-a");
+    await sleep(20);
+  });
+  await act(async () => {
+    second = w.latest.handleModelChange("test", "model-b");
+    await sleep(20);
+  });
+  await act(async () => {
+    failB();
+    await second;
+  });
   await settle();
-  assert.equal(w.latest.displayModel.modelId, "model-a", "omp runs A after B was refused");
-  await act(async () => { releaseStaleRefresh({ value: { running: true, state: { model: { provider: "test", id: "old-model" } } } }); await first; });
+  assert.equal(
+    w.latest.displayModel.modelId,
+    "model-a",
+    "omp runs A after B was refused",
+  );
+  await act(async () => {
+    releaseStaleRefresh({
+      value: {
+        running: true,
+        state: { model: { provider: "test", id: "old-model" } },
+      },
+    });
+    await first;
+  });
   await settle();
-  assert.equal(w.latest.displayModel.modelId, "model-a", "the superseded refresh cannot roll it back");
+  assert.equal(
+    w.latest.displayModel.modelId,
+    "model-a",
+    "the superseded refresh cannot roll it back",
+  );
 });
 
 test("a delayed pick response preserves a newer runtime model when refresh fails", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
-  world.agents.set("s1", { running: true, state: { model: SLOW_MODEL, slowModeSupported: true } });
+  world.agents.set("s1", {
+    running: true,
+    state: { model: SLOW_MODEL, slowModeSupported: true },
+  });
   const w = await mountSession("s1");
-  await act(async () => { lastEs().open(); });
+  await act(async () => {
+    lastEs().open();
+  });
   await settle();
   assert.equal(w.latest.slowModeSupported, true);
   let finishPick;
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "set_model",
-    produce: () => new Promise((resolve) => { finishPick = resolve; }),
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "set_model",
+    produce: () =>
+      new Promise((resolve) => {
+        finishPick = resolve;
+      }),
   });
   let command;
-  await act(async () => { command = w.latest.handleModelChange("test", "picked"); await sleep(20); });
+  await act(async () => {
+    command = w.latest.handleModelChange("test", "picked");
+    await sleep(20);
+  });
   assert.equal(w.latest.displayModel.modelId, "picked");
-  assert.equal(w.latest.slowModeSupported, false, "old model controls are unavailable during the switch");
-  await act(async () => { lastEs().emit({ type: "config_update", model: { provider: "test", id: "runtime" } }); });
+  assert.equal(
+    w.latest.slowModeSupported,
+    false,
+    "old model controls are unavailable during the switch",
+  );
+  await act(async () => {
+    lastEs().emit({
+      type: "config_update",
+      model: { provider: "test", id: "runtime" },
+    });
+  });
   world.holds.push({
-    match: (method, url) => method === "GET" && /\/api\/sessions\/s1\/state/.test(url),
+    match: (method, url) =>
+      method === "GET" && /\/api\/sessions\/s1\/state/.test(url),
     produce: async () => ({ status: 503, value: {} }),
   });
-  await act(async () => { finishPick({ value: {} }); await command; });
+  await act(async () => {
+    finishPick({ value: {} });
+    await command;
+  });
   await settle();
   assert.equal(w.latest.displayModel.modelId, "runtime");
 });
@@ -6001,21 +10829,43 @@ test("a failed pick cannot invalidate a newer cycle refresh", async () => {
   const w = await mountSession("s1");
   let failPick;
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "set_model",
-    produce: () => new Promise((resolve) => { failPick = resolve; }),
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "set_model",
+    produce: () =>
+      new Promise((resolve) => {
+        failPick = resolve;
+      }),
   });
   let pick;
-  await act(async () => { pick = w.latest.handleModelChange("test", "picked"); await sleep(20); });
+  await act(async () => {
+    pick = w.latest.handleModelChange("test", "picked");
+    await sleep(20);
+  });
   let finishRefresh;
   world.holds.push({
-    match: (method, url) => method === "GET" && /\/api\/sessions\/s1\/state/.test(url),
-    produce: () => new Promise((resolve) => { finishRefresh = resolve; }),
+    match: (method, url) =>
+      method === "GET" && /\/api\/sessions\/s1\/state/.test(url),
+    produce: () =>
+      new Promise((resolve) => {
+        finishRefresh = resolve;
+      }),
   });
   let cycle;
-  await act(async () => { cycle = w.latest.handleCycleModel(); await sleep(20); });
-  await act(async () => { failPick({ status: 500, value: { error: "refused" } }); await pick; });
   await act(async () => {
-    finishRefresh({ value: { running: true, state: { model: { provider: "test", id: "cycled" } } } });
+    cycle = w.latest.handleCycleModel();
+    await sleep(20);
+  });
+  await act(async () => {
+    failPick({ status: 500, value: { error: "refused" } });
+    await pick;
+  });
+  await act(async () => {
+    finishRefresh({
+      value: {
+        running: true,
+        state: { model: { provider: "test", id: "cycled" } },
+      },
+    });
     await cycle;
   });
   await settle();
@@ -6030,15 +10880,26 @@ test("idle catch-up cannot overwrite a pending thinking command", async () => {
   let releaseCommand;
   world.holds.push({
     match: (method, url) => method === "POST" && url === "/api/agent/s1",
-    produce: () => new Promise((resolve) => { releaseCommand = () => resolve({ value: { success: true, data: {} } }); }),
+    produce: () =>
+      new Promise((resolve) => {
+        releaseCommand = () => resolve({ value: { success: true, data: {} } });
+      }),
   });
   let command;
-  await act(async () => { command = w.latest.handleThinkingLevelChange("high"); await sleep(20); });
-  await act(async () => { publishSessionsChanged(["s1"]); });
+  await act(async () => {
+    command = w.latest.handleThinkingLevelChange("high");
+    await sleep(20);
+  });
+  await act(async () => {
+    publishSessionsChanged(["s1"]);
+  });
   await settle();
   assert.equal(w.latest.thinkingLevel, "high");
   world.agents.set("s1", { running: true, state: { thinkingLevel: "high" } });
-  await act(async () => { releaseCommand(); await command; });
+  await act(async () => {
+    releaseCommand();
+    await command;
+  });
   assert.equal(w.latest.thinkingLevel, "high");
 });
 
@@ -6046,14 +10907,26 @@ test("failed cold-read reconnects never issue process-starting registrations", a
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   const w = await mountSession("s1");
-  world.live.set("s1", { ...liveSnapshot("s1", 1, null), isStreaming: false, isPromptRunning: false });
-  await act(async () => { publishSessionsChanged(["s1"]); });
+  world.live.set("s1", {
+    ...liveSnapshot("s1", 1, null),
+    isStreaming: false,
+    isPromptRunning: false,
+  });
+  await act(async () => {
+    publishSessionsChanged(["s1"]);
+  });
   await settle();
   const source = lastEs();
   world.live.delete("s1"); // wrapper vanished before the observer subscription
   t.mock.timers.enable({ apis: ["setTimeout"] });
-  await act(async () => { source.failFatal(); t.mock.timers.tick(1000); });
-  await act(async () => { lastEs().failFatal(); t.mock.timers.tick(2000); });
+  await act(async () => {
+    source.failFatal();
+    t.mock.timers.tick(1000);
+  });
+  await act(async () => {
+    lastEs().failFatal();
+    t.mock.timers.tick(2000);
+  });
   assert.equal(w.latest.agentRunning, false);
   assert.equal(callsTo("POST", "/api/agent/").length, 0);
 });
@@ -6062,15 +10935,27 @@ test("unmount before replacement open cannot restore stale wrapper registrations
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   const { w } = await startStreamingRun("s1");
-  world.live.set("s1", { ...liveSnapshot("s1", 1, null), cursor: { streamId: "replacement", sequence: 1 } });
-  await act(async () => { publishSessionsChanged(["s1"]); });
+  world.live.set("s1", {
+    ...liveSnapshot("s1", 1, null),
+    cursor: { streamId: "replacement", sequence: 1 },
+  });
+  await act(async () => {
+    publishSessionsChanged(["s1"]);
+  });
   await settle();
   const replacement = lastEs();
-  await act(async () => { w.unmount(); });
+  await act(async () => {
+    w.unmount();
+  });
   const before = world.calls.length;
   // The worker's open for the replacement lands after unmount closed it.
-  await act(async () => { replacement.deliver({ type: "open" }); });
-  assert.equal(world.calls.slice(before).some((c) => c.method === "POST"), false);
+  await act(async () => {
+    replacement.deliver({ type: "open" });
+  });
+  assert.equal(
+    world.calls.slice(before).some((c) => c.method === "POST"),
+    false,
+  );
 });
 
 test("the answering tab keeps its dialog mounted during a synchronized cancel hand-off", async () => {
@@ -6078,15 +10963,27 @@ test("the answering tab keeps its dialog mounted during a synchronized cancel ha
   primeSession("s1", [userMsg("u0", "q")]);
   const { w, es } = await startStreamingRun("s1");
   await act(async () => {
-    es.emit({ type: "ui_request", id: "question", method: "confirm", args: ["Keep going?", ""] });
+    es.emit({
+      type: "ui_request",
+      id: "question",
+      method: "confirm",
+      args: ["Keep going?", ""],
+    });
   });
   assert.equal(w.latest.extensionDialog?.id, "question");
   await act(async () => {
-    const response = w.latest.respondToExtensionUi(w.latest.extensionDialog, true);
+    const response = w.latest.respondToExtensionUi(
+      w.latest.extensionDialog,
+      true,
+    );
     es.emit({ type: "ui_end", id: "question" });
     await response;
   });
-  assert.equal(w.latest.extensionDialog?.id, "question", "the local hand-off window must survive its own synchronized cancel");
+  assert.equal(
+    w.latest.extensionDialog?.id,
+    "question",
+    "the local hand-off window must survive its own synchronized cancel",
+  );
   await settle(300);
   assert.equal(w.latest.extensionDialog, null);
 });
@@ -6095,13 +10992,27 @@ test("a vanished session's permanent outbox refusal remains a failed held bubble
   resetWorld();
   const sid = "gone";
   const w = await mountSession(sid);
-  await act(async () => { assert.deepEqual(await w.latest.handleSend("anyone there?"), { status: "accepted" }); });
+  await act(async () => {
+    assert.deepEqual(await w.latest.handleSend("anyone there?"), {
+      status: "accepted",
+    });
+  });
   const entry = world.outbox[0];
-  await act(() => workerPort.onmessage({ data: { outbox: [{ ...entry, state: "failed", error: "Session not found" }] } }));
+  await act(() =>
+    workerPort.onmessage({
+      data: {
+        outbox: [{ ...entry, state: "failed", error: "Session not found" }],
+      },
+    }),
+  );
   assert.equal(w.latest.agentRunning, false);
   assert.equal(w.latest.heldMessages[0].state, "failed");
   assert.equal(w.latest.heldMessages[0].error, "Session not found");
-  assert.deepEqual(w.latest.notices, [], "the held bubble owns permanent delivery errors");
+  assert.deepEqual(
+    w.latest.notices,
+    [],
+    "the held bubble owns permanent delivery errors",
+  );
 });
 
 // The incident behind abort_and_restore_queue: a promoted steer was still in
@@ -6117,24 +11028,47 @@ test("Stop takes queued input back through omp in one step, including a steer th
   world.abortRestoreQueue = {
     steering: [{ text: "steer the snapshot missed" }, { text: "[Image]" }],
     followUp: [
-      { text: "later follow-up", images: [{ type: "image", data: "x", mimeType: "image/png" }] },
-      { text: "[Image]", images: [{ type: "image", data: "y", mimeType: "image/webp" }] },
+      {
+        text: "later follow-up",
+        images: [{ type: "image", data: "x", mimeType: "image/png" }],
+      },
+      {
+        text: "[Image]",
+        images: [{ type: "image", data: "y", mimeType: "image/webp" }],
+      },
     ],
   };
 
-  await act(async () => { await w.latest.handleAbort(); });
+  await act(async () => {
+    await w.latest.handleAbort();
+  });
 
   const commands = world.calls.map((c) => c.body?.type).filter(Boolean);
-  assert.equal(commands.filter((type) => type === "abort_and_restore_queue").length, 1);
-  assert.equal(commands.includes("abort"), false, "omp's own abort already stopped the run");
+  assert.equal(
+    commands.filter((type) => type === "abort_and_restore_queue").length,
+    1,
+  );
+  assert.equal(
+    commands.includes("abort"),
+    false,
+    "omp's own abort already stopped the run",
+  );
   assert.equal(commands.includes("remove_queued_message"), false);
-  assert.equal(getDraft("abort-atomic")?.value, "steer the snapshot missed\n\n[Image]\n\nlater follow-up", "only an image-only message's label is dropped");
-  assert.deepEqual(getDraft("abort-atomic")?.images, [{ data: "x", mimeType: "image/png" }, { data: "y", mimeType: "image/webp" }]);
+  assert.equal(
+    getDraft("abort-atomic")?.value,
+    "steer the snapshot missed\n\n[Image]\n\nlater follow-up",
+    "only an image-only message's label is dropped",
+  );
+  assert.deepEqual(getDraft("abort-atomic")?.images, [
+    { data: "x", mimeType: "image/png" },
+    { data: "y", mimeType: "image/webp" },
+  ]);
   assert.deepEqual(w.latest.notices, []);
   clearDraft("abort-atomic");
 });
 
-const isAtomicStop = (method, _url, body) => method === "POST" && body?.type === "abort_and_restore_queue";
+const isAtomicStop = (method, _url, body) =>
+  method === "POST" && body?.type === "abort_and_restore_queue";
 
 test("a failed atomic Stop is retried once and restores what omp still held", async () => {
   const { getDraft, clearDraft } = await import("@/lib/draft-store");
@@ -6142,14 +11076,26 @@ test("a failed atomic Stop is retried once and restores what omp still held", as
   clearDraft("abort-atomic-retry");
   primeSession("abort-atomic-retry", [userMsg("u0", "loaded question")]);
   const { w } = await startRun("abort-atomic-retry", "hello agent");
-  world.holds.push({ match: isAtomicStop, produce: async () => ({ status: 502, value: { error: "Bad Gateway" } }) });
+  world.holds.push({
+    match: isAtomicStop,
+    produce: async () => ({ status: 502, value: { error: "Bad Gateway" } }),
+  });
   world.abortRestoreQueue = { steering: [{ text: "retry me" }], followUp: [] };
 
-  await act(async () => { await w.latest.handleAbort(); });
+  await act(async () => {
+    await w.latest.handleAbort();
+  });
 
   const commands = world.calls.map((c) => c.body?.type).filter(Boolean);
-  assert.equal(commands.filter((type) => type === "abort_and_restore_queue").length, 2);
-  assert.equal(commands.includes("abort"), false, "a failure is not mistaken for an omp without the command");
+  assert.equal(
+    commands.filter((type) => type === "abort_and_restore_queue").length,
+    2,
+  );
+  assert.equal(
+    commands.includes("abort"),
+    false,
+    "a failure is not mistaken for an omp without the command",
+  );
   assert.equal(commands.includes("remove_queued_message"), false);
   assert.equal(getDraft("abort-atomic-retry")?.value, "retry me");
   assert.deepEqual(w.latest.notices, []);
@@ -6161,13 +11107,24 @@ test("an atomic Stop whose texts were lost with a failed response warns", async 
   primeSession("abort-atomic-lost", [userMsg("u0", "loaded question")]);
   const { w } = await startRun("abort-atomic-lost", "hello agent");
   // omp withdrew and aborted, but the answer never arrived; the queue is empty now.
-  world.holds.push({ match: isAtomicStop, produce: async () => ({ status: 502, value: { error: "Bad Gateway" } }) });
+  world.holds.push({
+    match: isAtomicStop,
+    produce: async () => ({ status: 502, value: { error: "Bad Gateway" } }),
+  });
   world.abortRestoreQueue = { steering: [], followUp: [] };
 
-  await act(async () => { await w.latest.handleAbort(); });
+  await act(async () => {
+    await w.latest.handleAbort();
+  });
 
-  assert.equal(world.calls.some((c) => c.body?.type === "abort"), false);
-  assert.deepEqual(w.latest.notices.map((n) => n.type), ["warning"]);
+  assert.equal(
+    world.calls.some((c) => c.body?.type === "abort"),
+    false,
+  );
+  assert.deepEqual(
+    w.latest.notices.map((n) => n.type),
+    ["warning"],
+  );
 });
 
 test("a failed atomic Stop never retries into a run started after the click", async () => {
@@ -6175,26 +11132,54 @@ test("a failed atomic Stop never retries into a run started after the click", as
   primeSession("abort-atomic-fenced", [userMsg("u0", "loaded question")]);
   const { w, es } = await startRun("abort-atomic-fenced", "hello agent");
   let release;
-  world.holds.push({ match: isAtomicStop, produce: () => new Promise((resolve) => { release = resolve; }) });
+  world.holds.push({
+    match: isAtomicStop,
+    produce: () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  });
   world.abortRestoreQueue = { steering: [], followUp: [] };
   let stop;
-  await act(async () => { stop = w.latest.handleAbort(); });
+  await act(async () => {
+    stop = w.latest.handleAbort();
+  });
   await act(async () => {
     es.emit({ type: "message_end", message: assistantMsg("a1", "answer") });
     es.emit({ type: "agent_end", isTerminal: true });
   });
   await settle();
   let sending;
-  await act(async () => { sending = w.latest.handleSend("next prompt"); await sleep(30); });
-  await act(async () => { lastEs().open(); await sending; });
+  await act(async () => {
+    sending = w.latest.handleSend("next prompt");
+    await sleep(30);
+  });
+  await act(async () => {
+    lastEs().open();
+    await sending;
+  });
   await act(async () => {
     release({ status: 502, value: { error: "Bad Gateway" } });
     await stop;
   });
 
-  assert.equal(world.calls.some((c) => c.body?.type === "prompt" && c.body?.message === "next prompt"), true);
-  assert.equal(world.calls.filter((c) => c.body?.type === "abort_and_restore_queue").length, 1, "no retry into the new run");
-  assert.equal(world.calls.some((c) => c.body?.type === "abort"), false, "nor a fallback abort");
+  assert.equal(
+    world.calls.some(
+      (c) => c.body?.type === "prompt" && c.body?.message === "next prompt",
+    ),
+    true,
+  );
+  assert.equal(
+    world.calls.filter((c) => c.body?.type === "abort_and_restore_queue")
+      .length,
+    1,
+    "no retry into the new run",
+  );
+  assert.equal(
+    world.calls.some((c) => c.body?.type === "abort"),
+    false,
+    "nor a fallback abort",
+  );
 });
 
 test("overlapping Stops share one atomic withdrawal; an image-only entry does not come back as text", async () => {
@@ -6204,13 +11189,24 @@ test("overlapping Stops share one atomic withdrawal; an image-only entry does no
   primeSession("abort-atomic-twice", [userMsg("u0", "loaded question")]);
   const { w } = await startRun("abort-atomic-twice", "hello agent");
   world.abortRestoreQueue = {
-    steering: [{ text: "[Image]", images: [{ type: "image", data: "x", mimeType: "image/png" }] }],
+    steering: [
+      {
+        text: "[Image]",
+        images: [{ type: "image", data: "x", mimeType: "image/png" }],
+      },
+    ],
     followUp: [{ text: "words" }],
   };
 
-  await act(async () => { await Promise.all([w.latest.handleAbort(), w.latest.handleAbort()]); });
+  await act(async () => {
+    await Promise.all([w.latest.handleAbort(), w.latest.handleAbort()]);
+  });
 
-  assert.equal(world.calls.filter((c) => c.body?.type === "abort_and_restore_queue").length, 1);
+  assert.equal(
+    world.calls.filter((c) => c.body?.type === "abort_and_restore_queue")
+      .length,
+    1,
+  );
   assert.equal(getDraft("abort-atomic-twice")?.value, "words");
   clearDraft("abort-atomic-twice");
 });
@@ -6221,7 +11217,10 @@ test("a fresh chat's first prompt attaches one event stream instead of an observ
     match: (method, url) => method === "POST" && url === "/api/agent/new",
     produce: async () => ({ value: { sessionId: "fresh-send" } }),
   });
-  const w = await mountSession(null, undefined, { newSessionCwd: "/workspace", onSessionCreated: () => {} });
+  const w = await mountSession(null, undefined, {
+    newSessionCwd: "/workspace",
+    onSessionCreated: () => {},
+  });
   let sent;
   await act(async () => {
     sent = w.latest.handleSend("first prompt");
@@ -6238,7 +11237,12 @@ test("a fresh chat's first prompt attaches one event stream instead of an observ
   assert.equal(delivered.status, "accepted");
   assert.equal(streamsBeforeOpen, 1, "the prompt owns the only stream");
   assert.equal(world.esInstances.length, 1);
-  assert.equal(callsTo("POST", "/api/agent/fresh-send").some((call) => call.body?.type === "prompt"), true);
+  assert.equal(
+    callsTo("POST", "/api/agent/fresh-send").some(
+      (call) => call.body?.type === "prompt",
+    ),
+    true,
+  );
 });
 
 test("upload continuity: a fresh chat sends completion proof only with its direct prompt", async () => {
@@ -6247,19 +11251,35 @@ test("upload continuity: a fresh chat sends completion proof only with its direc
     match: (method, url) => method === "POST" && url === "/api/agent/new",
     produce: async () => ({ value: { sessionId: "proof-fresh" } }),
   });
-  const w = await mountSession(null, undefined, { newSessionCwd: "/workspace", onSessionCreated() {} });
+  const w = await mountSession(null, undefined, {
+    newSessionCwd: "/workspace",
+    onSessionCreated() {},
+  });
   let sending;
   await act(async () => {
-    sending = w.latest.handleSend("first file", undefined, ["fresh-upload"], { "fresh-upload": "fresh-completion-proof" });
+    sending = w.latest.handleSend("first file", undefined, ["fresh-upload"], {
+      "fresh-upload": "fresh-completion-proof",
+    });
     await sleep(30);
   });
   let receipt;
-  await act(async () => { lastEs().open(); receipt = await sending; });
+  await act(async () => {
+    lastEs().open();
+    receipt = await sending;
+  });
   assert.equal(receipt.status, "accepted");
-  assert.equal("uploadProofs" in callsTo("POST", "/api/agent/new")[0].body, false, "runtime creation has no attachment authority");
-  const prompt = callsTo("POST", "/api/agent/proof-fresh").find((call) => call.body?.type === "prompt");
+  assert.equal(
+    "uploadProofs" in callsTo("POST", "/api/agent/new")[0].body,
+    false,
+    "runtime creation has no attachment authority",
+  );
+  const prompt = callsTo("POST", "/api/agent/proof-fresh").find(
+    (call) => call.body?.type === "prompt",
+  );
   assert.deepEqual(prompt?.body.uploads, ["fresh-upload"]);
-  assert.deepEqual(prompt?.body.uploadProofs, { "fresh-upload": "fresh-completion-proof" });
+  assert.deepEqual(prompt?.body.uploadProofs, {
+    "fresh-upload": "fresh-completion-proof",
+  });
 });
 
 test("a fresh chat's /btw question attaches one event stream instead of an observer plus its own", async () => {
@@ -6268,8 +11288,13 @@ test("a fresh chat's /btw question attaches one event stream instead of an obser
     match: (method, url) => method === "POST" && url === "/api/agent/new",
     produce: async () => ({ value: { sessionId: "fresh-btw" } }),
   });
-  holdBtwCommand("btw", async () => ({ value: { success: true, data: { record: btwRecord() } } }));
-  const w = await mountSession(null, undefined, { newSessionCwd: "/workspace", onSessionCreated: () => {} });
+  holdBtwCommand("btw", async () => ({
+    value: { success: true, data: { record: btwRecord() } },
+  }));
+  const w = await mountSession(null, undefined, {
+    newSessionCwd: "/workspace",
+    onSessionCreated: () => {},
+  });
   let asked;
   await act(async () => {
     asked = w.latest.handleBuiltinSlashCommand("/btw what is 2+2");
@@ -6296,15 +11321,33 @@ test("a first prompt rejected after promotion identifies the real-session recove
     produce: async () => ({ value: { sessionId: sid } }),
   });
   world.holds.push({
-    match: (method, url, body) => method === "POST" && url.includes(`/api/agent/${sid}`) && body?.type === "prompt",
-    produce: async () => ({ status: 400, value: { error: "Wait for the history edit to finish", code: "session_busy" } }),
+    match: (method, url, body) =>
+      method === "POST" &&
+      url.includes(`/api/agent/${sid}`) &&
+      body?.type === "prompt",
+    produce: async () => ({
+      status: 400,
+      value: {
+        error: "Wait for the history edit to finish",
+        code: "session_busy",
+      },
+    }),
   });
   const promoted = [];
-  const w = await mountSession(null, undefined, { newSessionCwd: "/workspace", onSessionCreated: (session) => promoted.push(session.id) });
+  const w = await mountSession(null, undefined, {
+    newSessionCwd: "/workspace",
+    onSessionCreated: (session) => promoted.push(session.id),
+  });
   let sending;
-  await act(async () => { sending = w.latest.handleSend("first question"); await sleep(30); });
+  await act(async () => {
+    sending = w.latest.handleSend("first question");
+    await sleep(30);
+  });
   let receipt;
-  await act(async () => { lastEs().open(); receipt = await sending; });
+  await act(async () => {
+    lastEs().open();
+    receipt = await sending;
+  });
   assert.deepEqual(promoted, [sid]);
   assert.deepEqual(receipt, { status: "rejected", recoveryKey: sid });
   assert.equal(w.latest.agentRunning, false);
@@ -6317,30 +11360,75 @@ test("a late dispatcher failure cannot reject a stored send or reset a newer fra
   let release;
   t.after(() => release?.());
   world.holds.push({
-    match: (method, url, body) => method === "POST" && url.includes(`/api/agent/${sid}`) && body?.type === "prompt" && body.message === "first prompt",
-    produce: () => new Promise((resolve) => { release = () => resolve({ status: 502, value: { error: "late failed response" } }); }),
+    match: (method, url, body) =>
+      method === "POST" &&
+      url.includes(`/api/agent/${sid}`) &&
+      body?.type === "prompt" &&
+      body.message === "first prompt",
+    produce: () =>
+      new Promise((resolve) => {
+        release = () =>
+          resolve({ status: 502, value: { error: "late failed response" } });
+      }),
   });
   const w = await mountSession(sid);
   let first;
-  await act(async () => { first = w.latest.handleSend("first prompt"); await sleep(30); });
+  await act(async () => {
+    first = w.latest.handleSend("first prompt");
+    await sleep(30);
+  });
   const es = lastEs();
-  await act(async () => { es.open(); await sleep(30); });
+  await act(async () => {
+    es.open();
+    await sleep(30);
+  });
   await act(async () => {
     es.emit({ type: "agent_start" });
-    es.emit({ type: "message_end", message: userMsg("completed-u", "first prompt") });
-    es.emit({ type: "message_end", message: assistantMsg("completed-a", "first answer") });
+    es.emit({
+      type: "message_end",
+      message: userMsg("completed-u", "first prompt"),
+    });
+    es.emit({
+      type: "message_end",
+      message: assistantMsg("completed-a", "first answer"),
+    });
     es.emit({ type: "agent_end", isTerminal: true, messages: [] });
     await sleep(30);
   });
   let second;
-  await act(async () => { second = w.latest.handleSend("second prompt"); await sleep(30); });
-  if (lastEs() !== es) await act(async () => { lastEs().open(); });
-  await act(async () => { await second; lastEs().emit({ type: "agent_start" }); });
+  await act(async () => {
+    second = w.latest.handleSend("second prompt");
+    await sleep(30);
+  });
+  if (lastEs() !== es)
+    await act(async () => {
+      lastEs().open();
+    });
+  await act(async () => {
+    await second;
+    lastEs().emit({ type: "agent_start" });
+  });
   let receipt;
-  await act(async () => { release(); receipt = await first; });
-  assert.deepEqual(receipt, { status: "accepted" }, "the tab receipt is independent of the dispatcher's reply");
-  assert.equal(w.latest.agentRunning, true, "the stale response cannot reset the newer run");
-  assert.equal(w.latest.notices.some((notice) => notice.message.includes("late failed response")), false);
+  await act(async () => {
+    release();
+    receipt = await first;
+  });
+  assert.deepEqual(
+    receipt,
+    { status: "accepted" },
+    "the tab receipt is independent of the dispatcher's reply",
+  );
+  assert.equal(
+    w.latest.agentRunning,
+    true,
+    "the stale response cannot reset the newer run",
+  );
+  assert.equal(
+    w.latest.notices.some((notice) =>
+      notice.message.includes("late failed response"),
+    ),
+    false,
+  );
 });
 
 test("host_status frames report the session's host going offline and coming back", async () => {
@@ -6348,10 +11436,18 @@ test("host_status frames report the session's host going offline and coming back
   primeSession("remote-link", [userMsg("u0", "q")]);
   const { w, es } = await startRun("remote-link", "hello");
   assert.equal(w.latest.hostStatus, null, "no change reported yet");
-  await act(() => es.emit({ type: "host_status", hostId: "h1", status: "offline" }));
+  await act(() =>
+    es.emit({ type: "host_status", hostId: "h1", status: "offline" }),
+  );
   assert.equal(w.latest.hostStatus, "offline");
-  assert.equal(w.latest.agentRunning, true, "the run continues on the host while its link is down");
-  await act(() => es.emit({ type: "host_status", hostId: "h1", status: "online" }));
+  assert.equal(
+    w.latest.agentRunning,
+    true,
+    "the run continues on the host while its link is down",
+  );
+  await act(() =>
+    es.emit({ type: "host_status", hostId: "h1", status: "online" }),
+  );
   assert.equal(w.latest.hostStatus, "online");
 });
 
@@ -6360,7 +11456,11 @@ test("a send to an offline host is accepted and held without a toast or recovere
   toastCalls.length = 0;
   world.outboxHold = true;
   const w = await mountSession("remote-off");
-  await act(async () => { assert.deepEqual(await w.latest.handleSend("keep me"), { status: "accepted" }); });
+  await act(async () => {
+    assert.deepEqual(await w.latest.handleSend("keep me"), {
+      status: "accepted",
+    });
+  });
   assert.equal(w.latest.heldMessages[0].message, "keep me");
   assert.equal(w.latest.heldMessages[0].state, "sending");
   assert.equal(w.latest.agentRunning, false);
@@ -6373,14 +11473,36 @@ test("a rejected saved profile is shown on a fresh chat and leaves the draft rec
   resetWorld();
   world.holds.push({
     match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: async () => ({ status: 400, value: { code: "stored_invalid_profile", error: "Invalid saved workspace profile" } }),
+    produce: async () => ({
+      status: 400,
+      value: {
+        code: "stored_invalid_profile",
+        error: "Invalid saved workspace profile",
+      },
+    }),
   });
-  const w = await mountSession(null, undefined, { newSessionCwd: "/workspace" });
+  const w = await mountSession(null, undefined, {
+    newSessionCwd: "/workspace",
+  });
   let receipt;
-  await act(async () => { receipt = await w.latest.handleSend("keep this draft"); });
-  assert.deepEqual(receipt, { status: "rejected", recoveryKey: "new:/workspace" });
-  assert.ok(w.latest.notices.some((notice) => notice.type === "error" && notice.message.includes(translate("errors.stored_invalid_profile"))));
-  assert.equal(world.calls.some((call) => call.body?.type === "prompt"), false);
+  await act(async () => {
+    receipt = await w.latest.handleSend("keep this draft");
+  });
+  assert.deepEqual(receipt, {
+    status: "rejected",
+    recoveryKey: "new:/workspace",
+  });
+  assert.ok(
+    w.latest.notices.some(
+      (notice) =>
+        notice.type === "error" &&
+        notice.message.includes(translate("errors.stored_invalid_profile")),
+    ),
+  );
+  assert.equal(
+    world.calls.some((call) => call.body?.type === "prompt"),
+    false,
+  );
 });
 
 test("a fresh chat on a remote host creates its session there and toasts when that host is offline", async () => {
@@ -6388,14 +11510,36 @@ test("a fresh chat on a remote host creates its session there and toasts when th
   toastCalls.length = 0;
   world.holds.push({
     match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: async () => ({ status: 503, value: { error: "Build box is offline", code: "host_offline", hostOffline: true } }),
+    produce: async () => ({
+      status: 503,
+      value: {
+        error: "Build box is offline",
+        code: "host_offline",
+        hostOffline: true,
+      },
+    }),
   });
-  const w = await mountSession(null, undefined, { newSessionCwd: "/remote/work", newSessionHostId: "h1" });
+  const w = await mountSession(null, undefined, {
+    newSessionCwd: "/remote/work",
+    newSessionHostId: "h1",
+  });
   let receipt;
-  await act(async () => { receipt = await w.latest.handleSend("first"); await sleep(30); });
+  await act(async () => {
+    receipt = await w.latest.handleSend("first");
+    await sleep(30);
+  });
   // Drafts for one path on two hosts must not share a composer key.
-  assert.deepEqual(receipt, { status: "rejected", recoveryKey: "new:h1:/remote/work" });
-  assert.deepEqual(callsTo("POST", "/api/agent/new").map((call) => [call.body.cwd, call.body.hostId]), [["/remote/work", "h1"]]);
+  assert.deepEqual(receipt, {
+    status: "rejected",
+    recoveryKey: "new:h1:/remote/work",
+  });
+  assert.deepEqual(
+    callsTo("POST", "/api/agent/new").map((call) => [
+      call.body.cwd,
+      call.body.hostId,
+    ]),
+    [["/remote/work", "h1"]],
+  );
   assert.equal(toastCalls[0]?.[0], "error");
   assert.equal(w.latest.notices.length, 0);
 });
@@ -6405,20 +11549,51 @@ test("a fresh chat whose host drops after the spawn adopts the kept session, so 
   toastCalls.length = 0;
   world.holds.push({
     match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: async () => ({ status: 503, value: { error: "Build box is offline", code: "host_offline", hostOffline: true, delivery: "refused", sessionId: "kept-remote" } }),
+    produce: async () => ({
+      status: 503,
+      value: {
+        error: "Build box is offline",
+        code: "host_offline",
+        hostOffline: true,
+        delivery: "refused",
+        sessionId: "kept-remote",
+      },
+    }),
   });
-  const w = await mountSession(null, undefined, { newSessionCwd: "/remote/work", newSessionHostId: "h1", onSessionCreated: () => {} });
+  const w = await mountSession(null, undefined, {
+    newSessionCwd: "/remote/work",
+    newSessionHostId: "h1",
+    onSessionCreated: () => {},
+  });
   let first;
-  await act(async () => { first = await w.latest.handleSend("first"); await sleep(30); });
+  await act(async () => {
+    first = await w.latest.handleSend("first");
+    await sleep(30);
+  });
   assert.equal(first.status, "rejected");
   assert.equal(toastCalls[0]?.[0], "error");
   let retry;
-  await act(async () => { retry = w.latest.handleSend("first"); await sleep(30); });
-  await act(async () => { lastEs()?.open(); retry = await retry; });
+  await act(async () => {
+    retry = w.latest.handleSend("first");
+    await sleep(30);
+  });
+  await act(async () => {
+    lastEs()?.open();
+    retry = await retry;
+  });
   w.unmount();
   assert.equal(retry.status, "accepted");
-  assert.equal(callsTo("POST", "/api/agent/new").length, 1, "the retry reuses the kept session");
-  assert.equal(callsTo("POST", "/api/agent/kept-remote").some((call) => call.body?.type === "prompt"), true);
+  assert.equal(
+    callsTo("POST", "/api/agent/new").length,
+    1,
+    "the retry reuses the kept session",
+  );
+  assert.equal(
+    callsTo("POST", "/api/agent/kept-remote").some(
+      (call) => call.body?.type === "prompt",
+    ),
+    true,
+  );
 });
 
 test("a lost pooled creation response retries the original identity and frozen initialization, then adopts its owner", async () => {
@@ -6429,108 +11604,232 @@ test("a lost pooled creation response retries the original identity and frozen i
   const create = async () => {
     const request = callsTo("POST", "/api/agent/new").at(-1).body;
     if (!journal.has(request.creationId)) {
-      journal.set(request.creationId, { sessionId: "pooled-original", hostId: "h2", cwd: "/worker-2/worktrees/original" });
+      journal.set(request.creationId, {
+        sessionId: "pooled-original",
+        hostId: "h2",
+        cwd: "/worker-2/worktrees/original",
+      });
       primeSession("pooled-original", []);
     }
     if (loseResponse) {
       loseResponse = false;
       throw new TypeError("Response lost after creation");
     }
-    return { value: { success: true, ...journal.get(request.creationId), data: {} } };
+    return {
+      value: { success: true, ...journal.get(request.creationId), data: {} },
+    };
   };
   world.holds.push(
-    { match: (method, url) => method === "POST" && url === "/api/agent/new", produce: create },
-    { match: (method, url) => method === "POST" && url === "/api/agent/new", produce: create },
+    {
+      match: (method, url) => method === "POST" && url === "/api/agent/new",
+      produce: create,
+    },
+    {
+      match: (method, url) => method === "POST" && url === "/api/agent/new",
+      produce: create,
+    },
   );
   const promoted = [];
   const w = await mountSession(null, undefined, {
-    newSessionCwd: "/diagnostic/representative", newSessionHostId: "h1",
-    newSessionCreationId: creationId, newSessionPoolId: "workers", newSessionProjectId: "app",
+    newSessionCwd: "/diagnostic/representative",
+    newSessionHostId: "h1",
+    newSessionCreationId: creationId,
+    newSessionPoolId: "workers",
+    newSessionProjectId: "app",
     onSessionCreated: (session) => promoted.push(session),
   });
-  await act(async () => { await w.latest.loadSlashCommands().catch(() => []); });
+  await act(async () => {
+    await w.latest.loadSlashCommands().catch(() => []);
+  });
   await act(async () => {
     await w.latest.handleModelChange("anthropic", "changed-after-loss");
     await w.latest.handleThinkingLevelChange("high");
     await w.latest.handleToolPresetChange("none");
     w.latest.handleAdvisorChange(true);
   });
-  await act(async () => { await w.latest.loadSlashCommands(); });
+  await act(async () => {
+    await w.latest.loadSlashCommands();
+  });
   let sending;
-  await act(async () => { sending = w.latest.handleSend("first prompt"); await sleep(30); });
+  await act(async () => {
+    sending = w.latest.handleSend("first prompt");
+    await sleep(30);
+  });
   let receipt;
-  await act(async () => { lastEs()?.open(); receipt = await sending; });
+  await act(async () => {
+    lastEs()?.open();
+    receipt = await sending;
+  });
   w.unmount();
   const requests = callsTo("POST", "/api/agent/new").map((call) => call.body);
   assert.equal(requests.length, 2);
   assert.equal(requests[0].creationId, creationId);
   assert.equal(requests[0].poolId, "workers");
   assert.equal(requests[0].projectId, "app");
-  assert.equal("cwd" in requests[0], false, "a representative checkout is not a creation target");
+  assert.equal(
+    "cwd" in requests[0],
+    false,
+    "a representative checkout is not a creation target",
+  );
   assert.equal("hostId" in requests[0], false);
-  assert.deepEqual(requests[1], requests[0], "a retry must not change an already-journaled initialization");
-  assert.equal(requests[1].type, "ensure_session", "the first prompt uses the owner route, not a changed creation intent");
+  assert.deepEqual(
+    requests[1],
+    requests[0],
+    "a retry must not change an already-journaled initialization",
+  );
+  assert.equal(
+    requests[1].type,
+    "ensure_session",
+    "the first prompt uses the owner route, not a changed creation intent",
+  );
   assert.equal(journal.size, 1);
   assert.equal(receipt.status, "accepted");
-  assert.deepEqual(promoted.map(({ id, hostId, cwd, poolId, projectId }) => ({ id, hostId, cwd, poolId, projectId })), [
-    { id: "pooled-original", hostId: "h2", cwd: "/worker-2/worktrees/original", poolId: "workers", projectId: "app" },
-  ]);
-  assert.equal(callsTo("POST", "/api/agent/pooled-original").filter((call) => call.body?.type === "prompt").length, 1);
+  assert.deepEqual(
+    promoted.map(({ id, hostId, cwd, poolId, projectId }) => ({
+      id,
+      hostId,
+      cwd,
+      poolId,
+      projectId,
+    })),
+    [
+      {
+        id: "pooled-original",
+        hostId: "h2",
+        cwd: "/worker-2/worktrees/original",
+        poolId: "workers",
+        projectId: "app",
+      },
+    ],
+  );
+  assert.equal(
+    callsTo("POST", "/api/agent/pooled-original").filter(
+      (call) => call.body?.type === "prompt",
+    ).length,
+    1,
+  );
 });
 
 test("pooled creation uncertainty with a known id adopts the owner without resending the initial command", async () => {
   resetWorld();
-  const owner = { sessionId: "uncertain-owner", hostId: "h2", cwd: "/worker-2/worktrees/uncertain" };
+  const owner = {
+    sessionId: "uncertain-owner",
+    hostId: "h2",
+    cwd: "/worker-2/worktrees/uncertain",
+  };
   primeSession(owner.sessionId, []);
   world.holds.push({
     match: (method, url) => method === "POST" && url === "/api/agent/new",
     produce: async () => ({
       status: 503,
-      value: { ...owner, error: "The initialization answer was lost", code: "pool_delivery_unknown", delivery: "unknown" },
+      value: {
+        ...owner,
+        error: "The initialization answer was lost",
+        code: "pool_delivery_unknown",
+        delivery: "unknown",
+      },
     }),
   });
   const promoted = [];
   const w = await mountSession(null, undefined, {
-    newSessionCwd: "/diagnostic/representative", newSessionHostId: "h1",
-    newSessionCreationId: "9eaaed5b-773b-419a-b03e-9b07866623a1", newSessionPoolId: "workers", newSessionProjectId: "app",
+    newSessionCwd: "/diagnostic/representative",
+    newSessionHostId: "h1",
+    newSessionCreationId: "9eaaed5b-773b-419a-b03e-9b07866623a1",
+    newSessionPoolId: "workers",
+    newSessionProjectId: "app",
     onSessionCreated: (session) => promoted.push(session),
   });
   let first;
-  await act(async () => { first = await w.latest.handleSend("do not resend automatically"); await sleep(30); });
+  await act(async () => {
+    first = await w.latest.handleSend("do not resend automatically");
+    await sleep(30);
+  });
   assert.equal(first.status, "rejected");
   assert.equal(w.latest.sessionIdRef.current, owner.sessionId);
-  assert.equal(callsTo("POST", `/api/agent/${owner.sessionId}`).filter((call) => call.body?.type === "prompt").length, 0);
+  assert.equal(
+    callsTo("POST", `/api/agent/${owner.sessionId}`).filter(
+      (call) => call.body?.type === "prompt",
+    ).length,
+    0,
+  );
   let retry;
-  await act(async () => { retry = w.latest.handleSend("explicit retry"); await sleep(30); });
-  await act(async () => { lastEs()?.open(); retry = await retry; });
+  await act(async () => {
+    retry = w.latest.handleSend("explicit retry");
+    await sleep(30);
+  });
+  await act(async () => {
+    lastEs()?.open();
+    retry = await retry;
+  });
   w.unmount();
   assert.equal(retry.status, "accepted");
-  assert.equal(callsTo("POST", "/api/agent/new").length, 1, "a known owner is never placed again");
-  assert.deepEqual(promoted.map(({ hostId, cwd }) => ({ hostId, cwd })), [{ hostId: "h2", cwd: owner.cwd }]);
-  assert.deepEqual(callsTo("POST", `/api/agent/${owner.sessionId}`).filter((call) => call.body?.type === "prompt").map((call) => call.body.message), ["explicit retry"]);
+  assert.equal(
+    callsTo("POST", "/api/agent/new").length,
+    1,
+    "a known owner is never placed again",
+  );
+  assert.deepEqual(
+    promoted.map(({ hostId, cwd }) => ({ hostId, cwd })),
+    [{ hostId: "h2", cwd: owner.cwd }],
+  );
+  assert.deepEqual(
+    callsTo("POST", `/api/agent/${owner.sessionId}`)
+      .filter((call) => call.body?.type === "prompt")
+      .map((call) => call.body.message),
+    ["explicit retry"],
+  );
 });
 
 test("a pooled session whose owner is offline never creates on another target", async () => {
   resetWorld();
   world.holds.push({
     match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: async () => ({ status: 503, value: {
-      sessionId: "offline-pool-owner", hostId: "h2", cwd: "/worker-2/worktrees/offline",
-      error: "Owner is offline", code: "host_offline", delivery: "refused",
-    } }),
+    produce: async () => ({
+      status: 503,
+      value: {
+        sessionId: "offline-pool-owner",
+        hostId: "h2",
+        cwd: "/worker-2/worktrees/offline",
+        error: "Owner is offline",
+        code: "host_offline",
+        delivery: "refused",
+      },
+    }),
   });
   const w = await mountSession(null, undefined, {
-    newSessionCwd: "/diagnostic/representative", newSessionHostId: "h1",
-    newSessionCreationId: "3af9fe09-0719-4942-b105-755ed9b0c5ec", newSessionPoolId: "workers", newSessionProjectId: "app",
+    newSessionCwd: "/diagnostic/representative",
+    newSessionHostId: "h1",
+    newSessionCreationId: "3af9fe09-0719-4942-b105-755ed9b0c5ec",
+    newSessionPoolId: "workers",
+    newSessionProjectId: "app",
   });
-  await act(async () => { await w.latest.handleSend("first"); });
+  await act(async () => {
+    await w.latest.handleSend("first");
+  });
   world.holds.push({
-    match: (method, url, body) => method === "POST" && url.includes("/api/agent/offline-pool-owner") && body?.type === "prompt",
-    produce: async () => ({ status: 503, value: { error: "Owner is offline", code: "host_offline", hostOffline: true, delivery: "refused" } }),
+    match: (method, url, body) =>
+      method === "POST" &&
+      url.includes("/api/agent/offline-pool-owner") &&
+      body?.type === "prompt",
+    produce: async () => ({
+      status: 503,
+      value: {
+        error: "Owner is offline",
+        code: "host_offline",
+        hostOffline: true,
+        delivery: "refused",
+      },
+    }),
   });
   let retry;
-  await act(async () => { retry = w.latest.handleSend("retry"); await sleep(30); });
-  await act(async () => { lastEs()?.open(); retry = await retry; });
+  await act(async () => {
+    retry = w.latest.handleSend("retry");
+    await sleep(30);
+  });
+  await act(async () => {
+    lastEs()?.open();
+    retry = await retry;
+  });
   w.unmount();
   assert.equal(retry.status, "rejected");
   assert.equal(w.latest.sessionIdRef.current, "offline-pool-owner");
@@ -6539,104 +11838,235 @@ test("a pooled session whose owner is offline never creates on another target", 
 
 test("choosing a different logical project starts a distinct creation intent without a representative path", async () => {
   resetWorld();
-  const ids = ["a0f374af-d4cd-4ce0-8d24-e417fa5ad60c", "b2317aee-c4a0-411e-bd6e-49837012ae96"];
+  const ids = [
+    "a0f374af-d4cd-4ce0-8d24-e417fa5ad60c",
+    "b2317aee-c4a0-411e-bd6e-49837012ae96",
+  ];
   for (const [index, projectId] of ["app", "other-app"].entries()) {
     world.holds.push({
       match: (method, url) => method === "POST" && url === "/api/agent/new",
-      produce: async () => ({ status: 503, value: { error: "No capacity", code: "pool_unavailable" } }),
+      produce: async () => ({
+        status: 503,
+        value: { error: "No capacity", code: "pool_unavailable" },
+      }),
     });
     const w = await mountSession(null, undefined, {
-      newSessionCwd: null, newSessionCreationId: ids[index], newSessionPoolId: "workers", newSessionProjectId: projectId,
+      newSessionCwd: null,
+      newSessionCreationId: ids[index],
+      newSessionPoolId: "workers",
+      newSessionProjectId: projectId,
     });
-    await act(async () => { await w.latest.loadSlashCommands().catch(() => []); });
+    await act(async () => {
+      await w.latest.loadSlashCommands().catch(() => []);
+    });
     w.unmount();
   }
-  assert.deepEqual(callsTo("POST", "/api/agent/new").map(({ body }) => ({
-    creationId: body.creationId, poolId: body.poolId, projectId: body.projectId,
-  })), [
-    { creationId: ids[0], poolId: "workers", projectId: "app" },
-    { creationId: ids[1], poolId: "workers", projectId: "other-app" },
-  ]);
+  assert.deepEqual(
+    callsTo("POST", "/api/agent/new").map(({ body }) => ({
+      creationId: body.creationId,
+      poolId: body.poolId,
+      projectId: body.projectId,
+    })),
+    [
+      { creationId: ids[0], poolId: "workers", projectId: "app" },
+      { creationId: ids[1], poolId: "workers", projectId: "other-app" },
+    ],
+  );
 });
 
 test("reopening a pending pooled composer reuses its frozen creation body instead of new defaults", async () => {
   resetWorld();
   const creationId = "183df38f-688a-4b72-b8e7-0d6dc95407e9";
-  const target = { newSessionCwd: null, newSessionCreationId: creationId, newSessionPoolId: "workers", newSessionProjectId: "app" };
+  const target = {
+    newSessionCwd: null,
+    newSessionCreationId: creationId,
+    newSessionPoolId: "workers",
+    newSessionProjectId: "app",
+  };
   let initialization;
   world.holds.push({
     match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: async () => { throw new TypeError("Response lost after creation"); },
+    produce: async () => {
+      throw new TypeError("Response lost after creation");
+    },
   });
-  const first = await mountSession(null, undefined, { ...target, onNewSessionInitialization: (body) => { initialization = body; } });
-  await act(async () => { await first.latest.handleModelChange("anthropic", "original-model"); });
-  await act(async () => { await first.latest.loadSlashCommands().catch(() => []); });
+  const first = await mountSession(null, undefined, {
+    ...target,
+    onNewSessionInitialization: (body) => {
+      initialization = body;
+    },
+  });
+  await act(async () => {
+    await first.latest.handleModelChange("anthropic", "original-model");
+  });
+  await act(async () => {
+    await first.latest.loadSlashCommands().catch(() => []);
+  });
   first.unmount();
   world.holds.push({
     match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: async () => ({ value: { success: true, sessionId: "reopened-original", hostId: "h2", cwd: "/worker-2/original", data: {} } }),
+    produce: async () => ({
+      value: {
+        success: true,
+        sessionId: "reopened-original",
+        hostId: "h2",
+        cwd: "/worker-2/original",
+        data: {},
+      },
+    }),
   });
-  const reopened = await mountSession(null, undefined, { ...target, newSessionInitialization: initialization });
-  await act(async () => { await reopened.latest.loadSlashCommands(); });
+  const reopened = await mountSession(null, undefined, {
+    ...target,
+    newSessionInitialization: initialization,
+  });
+  await act(async () => {
+    await reopened.latest.loadSlashCommands();
+  });
   const requests = callsTo("POST", "/api/agent/new").map(({ body }) => body);
-  assert.deepEqual(requests[1], requests[0], "navigation must not change the already-used creation intent");
+  assert.deepEqual(
+    requests[1],
+    requests[0],
+    "navigation must not change the already-used creation intent",
+  );
   assert.equal(reopened.latest.sessionIdRef.current, "reopened-original");
-  assert.equal(callsTo("POST", "/api/agent/reopened-original").some(({ body }) => body?.type === "prompt"), false);
+  assert.equal(
+    callsTo("POST", "/api/agent/reopened-original").some(
+      ({ body }) => body?.type === "prompt",
+    ),
+    false,
+  );
   reopened.unmount();
 });
 
 test("resolving a pooled file owner preserves the live composer until its first command sends the completed upload", async (t) => {
   resetWorld();
   const sid = "pooled-upload-first-command";
-  const file = new File([new Uint8Array([80, 75, 0, 0, 1, 2])], "before-first-prompt.zip", { type: "application/zip" });
+  const file = new File(
+    [new Uint8Array([80, 75, 0, 0, 1, 2])],
+    "before-first-prompt.zip",
+    { type: "application/zip" },
+  );
   primeSession(sid, []);
   let releaseCreation;
   let releaseUpload;
-  t.after(() => { releaseCreation?.(); releaseUpload?.(); });
-  world.holds.push({
-    match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: () => new Promise((resolve) => { releaseCreation = () => resolve({ value: { success: true, sessionId: sid, hostId: "h2", cwd: "/worker-2/owned", data: {} } }); }),
-  }, {
-    match: (method, url) => method === "PUT" && url.startsWith("/api/uploads/"),
-    produce: () => new Promise((resolve) => { releaseUpload = () => resolve({ value: { received: file.size, done: true } }); }),
+  t.after(() => {
+    releaseCreation?.();
+    releaseUpload?.();
   });
-  world.respond = (method, url) => url === "/api/uploads" && method === "POST" ? jsonResponse(200, { received: 0 }) : null;
+  world.holds.push(
+    {
+      match: (method, url) => method === "POST" && url === "/api/agent/new",
+      produce: () =>
+        new Promise((resolve) => {
+          releaseCreation = () =>
+            resolve({
+              value: {
+                success: true,
+                sessionId: sid,
+                hostId: "h2",
+                cwd: "/worker-2/owned",
+                data: {},
+              },
+            });
+        }),
+    },
+    {
+      match: (method, url) =>
+        method === "PUT" && url.startsWith("/api/uploads/"),
+      produce: () =>
+        new Promise((resolve) => {
+          releaseUpload = () =>
+            resolve({ value: { received: file.size, done: true } });
+        }),
+    },
+  );
+  world.respond = (method, url) =>
+    url === "/api/uploads" && method === "POST"
+      ? jsonResponse(200, { received: 0 })
+      : null;
   const chatInputRef = React.createRef();
   const promoted = [];
   function Shell() {
     const [session, setSession] = React.useState(null);
     return React.createElement(ChatWindow, {
-      session, newSessionCwd: null, chatInputRef,
-      ...(!session ? { newSessionPoolId: "workers", newSessionProjectId: "app", newSessionCreationId: "4c9dbe74-5d07-46b6-aa7b-87bf6ad55761" } : {}),
-      onSessionCreated(created) { promoted.push(created); setSession(created); },
+      session,
+      newSessionCwd: null,
+      chatInputRef,
+      ...(!session
+        ? {
+            newSessionPoolId: "workers",
+            newSessionProjectId: "app",
+            newSessionCreationId: "4c9dbe74-5d07-46b6-aa7b-87bf6ad55761",
+          }
+        : {}),
+      onSessionCreated(created) {
+        promoted.push(created);
+        setSession(created);
+      },
     });
   }
-  const view = ownRoot(render(React.createElement(Shell), { wrapper: TestRoot }));
+  const view = ownRoot(
+    render(React.createElement(Shell), { wrapper: TestRoot }),
+  );
   await settle();
   const composer = view.getByRole("textbox");
   await act(async () => {
-    fireEvent.change(composer, { target: { value: "Keep this draft with its upload" } });
+    fireEvent.change(composer, {
+      target: { value: "Keep this draft with its upload" },
+    });
     chatInputRef.current.addFiles([file]);
     await sleep(30);
   });
   assert.equal(callsTo("POST", "/api/agent/new").length, 1);
-  await act(async () => { releaseCreation(); await sleep(50); });
-  assert.equal(view.getByRole("textbox") === composer, true, "resolving ownership is not a view transition");
+  await act(async () => {
+    releaseCreation();
+    await sleep(50);
+  });
+  assert.equal(
+    view.getByRole("textbox") === composer,
+    true,
+    "resolving ownership is not a view transition",
+  );
   assert.equal(composer.value, "Keep this draft with its upload");
   assert.equal(view.queryAllByText(file.name).length, 1);
-  assert.deepEqual(promoted, [], "the owner is retained without promoting before the first command");
+  assert.deepEqual(
+    promoted,
+    [],
+    "the owner is retained without promoting before the first command",
+  );
   await until(() => releaseUpload, "the owned upload starts");
   const upload = callsTo("POST", "/api/uploads")[0].body;
   assert.equal(upload.host, "h2");
   assert.equal(callsTo("DELETE", "/api/uploads/").length, 0);
-  await act(async () => { lastEs()?.open(); releaseUpload(); await sleep(50); });
+  await act(async () => {
+    lastEs()?.open();
+    releaseUpload();
+    await sleep(50);
+  });
   assert.equal(composer.value, "Keep this draft with its upload");
-  await act(async () => { fireEvent.click(view.getByRole("button", { name: translate("chatInput.send") })); await sleep(50); lastEs()?.open(); });
-  await until(() => callsTo("POST", `/api/agent/${sid}`).some(({ body }) => body?.type === "prompt"), "the first prompt reaches its retained owner");
-  const prompt = callsTo("POST", `/api/agent/${sid}`).find(({ body }) => body?.type === "prompt").body;
+  await act(async () => {
+    fireEvent.click(
+      view.getByRole("button", { name: translate("chatInput.send") }),
+    );
+    await sleep(50);
+    lastEs()?.open();
+  });
+  await until(
+    () =>
+      callsTo("POST", `/api/agent/${sid}`).some(
+        ({ body }) => body?.type === "prompt",
+      ),
+    "the first prompt reaches its retained owner",
+  );
+  const prompt = callsTo("POST", `/api/agent/${sid}`).find(
+    ({ body }) => body?.type === "prompt",
+  ).body;
   assert.equal(prompt.message, "Keep this draft with its upload");
   assert.deepEqual(prompt.uploads, [upload.id]);
-  assert.deepEqual(promoted.map(({ id, hostId }) => ({ id, hostId })), [{ id: sid, hostId: "h2" }]);
+  assert.deepEqual(
+    promoted.map(({ id, hostId }) => ({ id, hostId })),
+    [{ id: sid, hostId: "h2" }],
+  );
   assert.equal(callsTo("POST", "/api/agent/new").length, 1);
   view.unmount();
 });
@@ -6644,70 +12074,163 @@ test("resolving a pooled file owner preserves the live composer until its first 
 test("nonprompt pooled placement failures are visible once while rejection and frozen retry intent are retained", async () => {
   resetWorld();
   toastCalls.length = 0;
-  const error = "Repository authentication failed on the worker. Configure access to git@example.invalid:app.git.";
+  const error =
+    "Repository authentication failed on the worker. Configure access to git@example.invalid:app.git.";
   let release;
   world.holds.push({
     match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: () => new Promise((resolve) => { release = () => resolve({ status: 503, value: { error, code: "pool_preparation_failed" } }); }),
+    produce: () =>
+      new Promise((resolve) => {
+        release = () =>
+          resolve({
+            status: 503,
+            value: { error, code: "pool_preparation_failed" },
+          });
+      }),
   });
   let systemPromptLoader;
-  const view = ownRoot(render(React.createElement(ChatWindow, {
-    session: null, newSessionCwd: null, newSessionPoolId: "workers", newSessionProjectId: "app",
-    newSessionCreationId: "49ad40e2-ed0d-497a-a7aa-5bc20751395e",
-    onSystemPromptLoaderChange: (loader) => { systemPromptLoader = loader; },
-  }), { wrapper: TestRoot }));
+  const view = ownRoot(
+    render(
+      React.createElement(ChatWindow, {
+        session: null,
+        newSessionCwd: null,
+        newSessionPoolId: "workers",
+        newSessionProjectId: "app",
+        newSessionCreationId: "49ad40e2-ed0d-497a-a7aa-5bc20751395e",
+        onSystemPromptLoaderChange: (loader) => {
+          systemPromptLoader = loader;
+        },
+      }),
+      { wrapper: TestRoot },
+    ),
+  );
   await settle();
-  await act(async () => { fireEvent.change(view.getByRole("textbox"), { target: { value: "/" } }); await sleep(30); });
+  await act(async () => {
+    fireEvent.change(view.getByRole("textbox"), { target: { value: "/" } });
+    await sleep(30);
+  });
   let systemResult;
   await act(async () => {
-    systemResult = systemPromptLoader().then(() => ({ accepted: true }), (failure) => ({ accepted: false, failure }));
+    systemResult = systemPromptLoader().then(
+      () => ({ accepted: true }),
+      (failure) => ({ accepted: false, failure }),
+    );
     release();
     await systemResult;
     await sleep(30);
   });
-  assert.equal((await systemResult).accepted, false, "nonprompt consumers still receive rejection");
-  assert.equal(callsTo("POST", "/api/agent/new").length, 1, "concurrent lazy consumers share one attempt");
-  const visibleErrors = view.queryAllByText(error, { exact: false }).length + toastCalls.filter((call) => String(call[1]).includes(error)).length;
-  assert.equal(visibleErrors, 1, "the actionable server failure is displayed once, not only logged or swallowed");
-  assert.equal(callsTo("POST", "/api/agent/").some(({ url, body }) => url !== "/api/agent/new" && body?.type === "prompt"), false);
+  assert.equal(
+    (await systemResult).accepted,
+    false,
+    "nonprompt consumers still receive rejection",
+  );
+  assert.equal(
+    callsTo("POST", "/api/agent/new").length,
+    1,
+    "concurrent lazy consumers share one attempt",
+  );
+  const visibleErrors =
+    view.queryAllByText(error, { exact: false }).length +
+    toastCalls.filter((call) => String(call[1]).includes(error)).length;
+  assert.equal(
+    visibleErrors,
+    1,
+    "the actionable server failure is displayed once, not only logged or swallowed",
+  );
+  assert.equal(
+    callsTo("POST", "/api/agent/").some(
+      ({ url, body }) => url !== "/api/agent/new" && body?.type === "prompt",
+    ),
+    false,
+  );
   world.holds.push({
     match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: async () => ({ value: { success: true, sessionId: "prepared-after-explicit-retry", hostId: "h2", cwd: "/worker-2/prepared", data: {} } }),
+    produce: async () => ({
+      value: {
+        success: true,
+        sessionId: "prepared-after-explicit-retry",
+        hostId: "h2",
+        cwd: "/worker-2/prepared",
+        data: {},
+      },
+    }),
   });
-  await act(async () => { await systemPromptLoader(); });
+  await act(async () => {
+    await systemPromptLoader();
+  });
   const attempts = callsTo("POST", "/api/agent/new").map(({ body }) => body);
-  assert.equal(attempts.length, 2, "only the explicit later action retries placement");
+  assert.equal(
+    attempts.length,
+    2,
+    "only the explicit later action retries placement",
+  );
   assert.deepEqual(attempts[1], attempts[0]);
-  assert.equal(callsTo("POST", "/api/agent/").some(({ body }) => body?.type === "prompt"), false);
+  assert.equal(
+    callsTo("POST", "/api/agent/").some(({ body }) => body?.type === "prompt"),
+    false,
+  );
   view.unmount();
 });
 
 test("known-ID upload uncertainty retains the pending composer and retries the bound owner without another placement", async () => {
   resetWorld();
   const sid = "known-upload-owner";
-  const file = new File([new Uint8Array([80, 75, 0, 0])], "uncertain-upload.zip", { type: "application/zip" });
+  const file = new File(
+    [new Uint8Array([80, 75, 0, 0])],
+    "uncertain-upload.zip",
+    { type: "application/zip" },
+  );
   world.holds.push({
     match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: async () => ({ status: 503, value: { sessionId: sid, hostId: "h2", cwd: "/worker-2/known", delivery: "unknown", code: "pool_delivery_unknown", error: "The initialization answer was lost; inspect the retained owner." } }),
+    produce: async () => ({
+      status: 503,
+      value: {
+        sessionId: sid,
+        hostId: "h2",
+        cwd: "/worker-2/known",
+        delivery: "unknown",
+        code: "pool_delivery_unknown",
+        error:
+          "The initialization answer was lost; inspect the retained owner.",
+      },
+    }),
   });
-  world.respond = (method, url) => url === "/api/uploads" && method === "POST"
-    ? jsonResponse(200, { received: 0 })
-    : method === "PUT" && url.startsWith("/api/uploads/") ? jsonResponse(200, { received: file.size, done: true }) : null;
+  world.respond = (method, url) =>
+    url === "/api/uploads" && method === "POST"
+      ? jsonResponse(200, { received: 0 })
+      : method === "PUT" && url.startsWith("/api/uploads/")
+        ? jsonResponse(200, { received: file.size, done: true })
+        : null;
   const inputRef = React.createRef();
   const promoted = [];
   function Shell() {
     const [session, setSession] = React.useState(null);
     return React.createElement(ChatWindow, {
-      session, newSessionCwd: null, chatInputRef: inputRef,
-      ...(!session ? { newSessionPoolId: "workers", newSessionProjectId: "app", newSessionCreationId: "080bc04b-0806-4f4d-ae4e-a354608d9cc0" } : {}),
-      onSessionCreated(created) { promoted.push(created); setSession(created); },
+      session,
+      newSessionCwd: null,
+      chatInputRef: inputRef,
+      ...(!session
+        ? {
+            newSessionPoolId: "workers",
+            newSessionProjectId: "app",
+            newSessionCreationId: "080bc04b-0806-4f4d-ae4e-a354608d9cc0",
+          }
+        : {}),
+      onSessionCreated(created) {
+        promoted.push(created);
+        setSession(created);
+      },
     });
   }
-  const view = ownRoot(render(React.createElement(Shell), { wrapper: TestRoot }));
+  const view = ownRoot(
+    render(React.createElement(Shell), { wrapper: TestRoot }),
+  );
   await settle();
   const composer = view.getByRole("textbox");
   await act(async () => {
-    fireEvent.change(composer, { target: { value: "Keep the uncertain owner's draft" } });
+    fireEvent.change(composer, {
+      target: { value: "Keep the uncertain owner's draft" },
+    });
     inputRef.current.addFiles([file]);
     await sleep(50);
   });
@@ -6716,11 +12239,24 @@ test("known-ID upload uncertainty retains the pending composer and retries the b
   assert.ok(view.queryByText(file.name));
   assert.deepEqual(promoted, []);
   assert.equal(callsTo("POST", "/api/uploads").length, 0);
-  await act(async () => { fireEvent.click(view.getByRole("button", { name: translate("chatInput.uploadRetry") })); await sleep(50); });
-  await until(() => callsTo("POST", "/api/uploads").length === 1, "the explicit upload retry uses its retained owner");
+  await act(async () => {
+    fireEvent.click(
+      view.getByRole("button", { name: translate("chatInput.uploadRetry") }),
+    );
+    await sleep(50);
+  });
+  await until(
+    () => callsTo("POST", "/api/uploads").length === 1,
+    "the explicit upload retry uses its retained owner",
+  );
   assert.equal(callsTo("POST", "/api/uploads")[0].body.host, "h2");
   assert.equal(callsTo("POST", "/api/agent/new").length, 1);
-  assert.equal(callsTo("POST", `/api/agent/${sid}`).some(({ body }) => body?.type === "prompt"), false);
+  assert.equal(
+    callsTo("POST", `/api/agent/${sid}`).some(
+      ({ body }) => body?.type === "prompt",
+    ),
+    false,
+  );
   view.unmount();
 });
 
@@ -6728,28 +12264,67 @@ test("the rendered sidebar keeps member-owned legacy sessions accessible beside 
   resetWorld();
   servePooledWorkspace();
   const selected = [];
-  const view = ownRoot(render(React.createElement(SessionSidebar, {
-    selectedSessionId: null, onSelectSession: (session) => selected.push(session),
-    addProjectOpen: false, setAddProjectOpen() {}, usageVisible: false,
-  }), { wrapper: TestRoot }));
+  const view = ownRoot(
+    render(
+      React.createElement(SessionSidebar, {
+        selectedSessionId: null,
+        onSelectSession: (session) => selected.push(session),
+        addProjectOpen: false,
+        setAddProjectOpen() {},
+        usageVisible: false,
+      }),
+      { wrapper: TestRoot },
+    ),
+  );
   await settle();
-  await until(() => view.queryByText("Pool app"), "the configured logical project renders");
+  await until(
+    () => view.queryByText("Pool app"),
+    "the configured logical project renders",
+  );
   assert.equal(view.queryAllByText("Pool app").length, 1);
   assert.ok(view.queryByText("Worker one conversation"));
   assert.ok(view.queryByText("Worker two conversation"));
   assert.ok(view.queryByText("Mac conversation"));
-  assert.ok(view.queryByText("Worker legacy conversation"), "a member's unmatched physical workspace remains reachable");
-  assert.equal(view.queryByRole("button", { name: translate("hosts.addWorkspaceOn", { host: "Worker 1" }) }), null, "existing-session presentation must not expose a member creation target");
-  await act(async () => { fireEvent.click(view.getByRole("button", { name: translate("sessionSidebar.search") })); });
-  await until(() => view.queryByRole("textbox", { name: translate("sessionSidebar.search") }), "the user-opened search field commits");
+  assert.ok(
+    view.queryByText("Worker legacy conversation"),
+    "a member's unmatched physical workspace remains reachable",
+  );
+  assert.equal(
+    view.queryByRole("button", {
+      name: translate("hosts.addWorkspaceOn", { host: "Worker 1" }),
+    }),
+    null,
+    "existing-session presentation must not expose a member creation target",
+  );
   await act(async () => {
-    fireEvent.change(view.getByRole("textbox", { name: translate("sessionSidebar.search") }), { target: { value: "legacy" } });
+    fireEvent.click(
+      view.getByRole("button", { name: translate("sessionSidebar.search") }),
+    );
+  });
+  await until(
+    () =>
+      view.queryByRole("textbox", { name: translate("sessionSidebar.search") }),
+    "the user-opened search field commits",
+  );
+  await act(async () => {
+    fireEvent.change(
+      view.getByRole("textbox", { name: translate("sessionSidebar.search") }),
+      { target: { value: "legacy" } },
+    );
     await sleep(30);
   });
-  await act(async () => { fireEvent.click(view.getByText("Worker legacy conversation")); });
-  assert.deepEqual(selected.map(({ id, hostId, cwd, poolId }) => ({ id, hostId, cwd, poolId })), [
-    { id: "legacy", hostId: "h1", cwd: "/legacy", poolId: undefined },
-  ]);
+  await act(async () => {
+    fireEvent.click(view.getByText("Worker legacy conversation"));
+  });
+  assert.deepEqual(
+    selected.map(({ id, hostId, cwd, poolId }) => ({
+      id,
+      hostId,
+      cwd,
+      poolId,
+    })),
+    [{ id: "legacy", hostId: "h1", cwd: "/legacy", poolId: undefined }],
+  );
   view.unmount();
 });
 
@@ -6758,14 +12333,36 @@ test("a selected remote session can browse its owner files without reading a sam
   servePooledWorkspace();
   window.history.replaceState(null, "", "?session=worker-one");
   t.after(() => window.history.replaceState(null, "", "/"));
-  const view = ownRoot(render(React.createElement(AppShell, { appName: "ompweb" }), { wrapper: TestRoot }));
+  const view = ownRoot(
+    render(React.createElement(AppShell, { appName: "ompweb" }), {
+      wrapper: TestRoot,
+    }),
+  );
   await settle();
-  await until(() => view.queryByRole("button", { name: translate("appShell.showFilePanel") }), "the restored remote session's panel control appears");
-  await act(async () => { fireEvent.click(view.getByRole("button", { name: translate("appShell.showFilePanel") })); await sleep(60); });
-  await until(() => view.queryByText("owner-only.txt"), "the remote owner's directory renders");
+  await until(
+    () =>
+      view.queryByRole("button", { name: translate("appShell.showFilePanel") }),
+    "the restored remote session's panel control appears",
+  );
+  await act(async () => {
+    fireEvent.click(
+      view.getByRole("button", { name: translate("appShell.showFilePanel") }),
+    );
+    await sleep(60);
+  });
+  await until(
+    () => view.queryByText("owner-only.txt"),
+    "the remote owner's directory renders",
+  );
   assert.equal(view.queryByText("central-decoy.txt"), null);
-  await act(async () => { fireEvent.click(view.getByText("owner-only.txt")); await sleep(60); });
-  await until(() => view.queryByText("FIRST OWNER CONTENT"), "the file opens against the same real owner");
+  await act(async () => {
+    fireEvent.click(view.getByText("owner-only.txt"));
+    await sleep(60);
+  });
+  await until(
+    () => view.queryByText("FIRST OWNER CONTENT"),
+    "the file opens against the same real owner",
+  );
   assert.equal(view.queryByText("CENTRAL DECOY CONTENT"), null);
   view.unmount();
 });
@@ -6775,27 +12372,75 @@ test("equal-path file tabs retain their originating session when the selected ow
   servePooledWorkspace();
   window.history.replaceState(null, "", "?session=worker-one");
   t.after(() => window.history.replaceState(null, "", "/"));
-  const view = ownRoot(render(React.createElement(AppShell, { appName: "ompweb" }), { wrapper: TestRoot }));
+  const view = ownRoot(
+    render(React.createElement(AppShell, { appName: "ompweb" }), {
+      wrapper: TestRoot,
+    }),
+  );
   await settle();
-  const stream = world.esInstances.find(({ channel }) => channel.kind === "host-tools");
+  const stream = world.esInstances.find(
+    ({ channel }) => channel.kind === "host-tools",
+  );
   assert.ok(stream);
-  await until(() => view.queryByRole("button", { name: translate("appShell.showFilePanel") }), "the first owner is selected");
+  await until(
+    () =>
+      view.queryByRole("button", { name: translate("appShell.showFilePanel") }),
+    "the first owner is selected",
+  );
   await act(async () => {
-    stream.emit({ type: "host_tool_call", id: "first-open", sessionId: "worker-one", hostId: "h1", cwd: "/shared", toolName: "open_file", arguments: { path: "/shared/report.txt" } });
+    stream.emit({
+      type: "host_tool_call",
+      id: "first-open",
+      sessionId: "worker-one",
+      hostId: "h1",
+      cwd: "/shared",
+      toolName: "open_file",
+      arguments: { path: "/shared/report.txt" },
+    });
     await sleep(60);
   });
-  await until(() => view.queryByText("FIRST OWNER CONTENT"), "the first owner file opens");
-  await act(async () => { fireEvent.click(view.getByText("Worker two conversation")); await sleep(60); });
+  await until(
+    () => view.queryByText("FIRST OWNER CONTENT"),
+    "the first owner file opens",
+  );
   await act(async () => {
-    stream.emit({ type: "host_tool_call", id: "second-open", sessionId: "worker-two", hostId: "h2", cwd: "/shared", toolName: "open_file", arguments: { path: "/shared/report.txt" } });
+    fireEvent.click(view.getByText("Worker two conversation"));
     await sleep(60);
   });
-  await until(() => view.queryByText("SECOND OWNER CONTENT"), "the equal path opens on the second owner");
+  await act(async () => {
+    stream.emit({
+      type: "host_tool_call",
+      id: "second-open",
+      sessionId: "worker-two",
+      hostId: "h2",
+      cwd: "/shared",
+      toolName: "open_file",
+      arguments: { path: "/shared/report.txt" },
+    });
+    await sleep(60);
+  });
+  await until(
+    () => view.queryByText("SECOND OWNER CONTENT"),
+    "the equal path opens on the second owner",
+  );
   const tabs = view.getAllByRole("tab", { name: /report\.txt/ });
-  assert.equal(tabs.length, 2, "equal physical paths on different owners are different tabs");
-  await act(async () => { fireEvent.click(tabs[0]); await sleep(30); });
-  const visibleFirst = view.queryAllByText("FIRST OWNER CONTENT").some((element) => !element.closest('[style*="display: none"]'));
-  assert.equal(visibleFirst, true, "returning to the first tab still displays its original owner");
+  assert.equal(
+    tabs.length,
+    2,
+    "equal physical paths on different owners are different tabs",
+  );
+  await act(async () => {
+    fireEvent.click(tabs[0]);
+    await sleep(30);
+  });
+  const visibleFirst = view
+    .queryAllByText("FIRST OWNER CONTENT")
+    .some((element) => !element.closest('[style*="display: none"]'));
+  assert.equal(
+    visibleFirst,
+    true,
+    "returning to the first tab still displays its original owner",
+  );
   assert.equal(view.queryByText("CENTRAL DECOY CONTENT"), null);
   view.unmount();
 });
@@ -6805,35 +12450,104 @@ test("a retained foreign-source tab cannot mention its path into the selected wo
   servePooledWorkspace();
   window.history.replaceState(null, "", "?session=worker-one");
   t.after(() => window.history.replaceState(null, "", "/"));
-  const view = ownRoot(render(React.createElement(AppShell, { appName: "ompweb" }), { wrapper: TestRoot }));
+  const view = ownRoot(
+    render(React.createElement(AppShell, { appName: "ompweb" }), {
+      wrapper: TestRoot,
+    }),
+  );
   await settle();
-  const stream = world.esInstances.find(({ channel }) => channel.kind === "host-tools");
+  const stream = world.esInstances.find(
+    ({ channel }) => channel.kind === "host-tools",
+  );
   assert.ok(stream);
-  await until(() => view.queryByRole("button", { name: translate("appShell.showFilePanel") }), "the source conversation is selected");
+  await until(
+    () =>
+      view.queryByRole("button", { name: translate("appShell.showFilePanel") }),
+    "the source conversation is selected",
+  );
   await act(async () => {
-    fireEvent.change(view.getByRole("textbox"), { target: { value: "Worker one draft" } });
-    stream.emit({ type: "host_tool_call", id: "mention-first-open", sessionId: "worker-one", hostId: "h1", cwd: "/shared", toolName: "open_file", arguments: { path: "/shared/report.txt" } });
+    fireEvent.change(view.getByRole("textbox"), {
+      target: { value: "Worker one draft" },
+    });
+    stream.emit({
+      type: "host_tool_call",
+      id: "mention-first-open",
+      sessionId: "worker-one",
+      hostId: "h1",
+      cwd: "/shared",
+      toolName: "open_file",
+      arguments: { path: "/shared/report.txt" },
+    });
     await sleep(60);
   });
-  await until(() => view.queryByText("FIRST OWNER CONTENT"), "the first owner's file opens");
-  await act(async () => { fireEvent.click(view.getByText("Worker two conversation")); await sleep(60); });
+  await until(
+    () => view.queryByText("FIRST OWNER CONTENT"),
+    "the first owner's file opens",
+  );
   await act(async () => {
-    fireEvent.change(view.getByRole("textbox"), { target: { value: "Worker two draft" } });
-    stream.emit({ type: "host_tool_call", id: "mention-second-open", sessionId: "worker-two", hostId: "h2", cwd: "/shared", toolName: "open_file", arguments: { path: "/shared/report.txt" } });
+    fireEvent.click(view.getByText("Worker two conversation"));
     await sleep(60);
   });
-  await until(() => view.queryByText("SECOND OWNER CONTENT"), "the selected worker's equal-path file opens separately");
+  await act(async () => {
+    fireEvent.change(view.getByRole("textbox"), {
+      target: { value: "Worker two draft" },
+    });
+    stream.emit({
+      type: "host_tool_call",
+      id: "mention-second-open",
+      sessionId: "worker-two",
+      hostId: "h2",
+      cwd: "/shared",
+      toolName: "open_file",
+      arguments: { path: "/shared/report.txt" },
+    });
+    await sleep(60);
+  });
+  await until(
+    () => view.queryByText("SECOND OWNER CONTENT"),
+    "the selected worker's equal-path file opens separately",
+  );
   const tabs = view.getAllByRole("tab", { name: /report\.txt/ });
   assert.equal(tabs.length, 2);
-  await act(async () => { fireEvent.click(tabs[0]); await sleep(30); });
-  assert.equal(view.queryAllByText("FIRST OWNER CONTENT").some((element) => !element.closest('[style*="display: none"]')), true);
-  const foreignMention = view.queryByRole("button", { name: translate("appShell.mentionFileInChat") });
-  if (foreignMention) await act(async () => { fireEvent.click(foreignMention); });
-  assert.equal(view.getByRole("textbox").value, "Worker two draft", "a source-relative path must not be inserted into another worker's composer");
-  assert.equal(foreignMention === null || foreignMention.disabled, true, "the foreign-source action is unavailable");
-  await act(async () => { fireEvent.click(view.getByText("Worker one conversation")); await sleep(60); });
-  const sourceMention = view.getByRole("button", { name: translate("appShell.mentionFileInChat") });
-  assert.equal(sourceMention.disabled, false, "returning to the source session restores the action");
+  await act(async () => {
+    fireEvent.click(tabs[0]);
+    await sleep(30);
+  });
+  assert.equal(
+    view
+      .queryAllByText("FIRST OWNER CONTENT")
+      .some((element) => !element.closest('[style*="display: none"]')),
+    true,
+  );
+  const foreignMention = view.queryByRole("button", {
+    name: translate("appShell.mentionFileInChat"),
+  });
+  if (foreignMention)
+    await act(async () => {
+      fireEvent.click(foreignMention);
+    });
+  assert.equal(
+    view.getByRole("textbox").value,
+    "Worker two draft",
+    "a source-relative path must not be inserted into another worker's composer",
+  );
+  assert.equal(
+    foreignMention === null || foreignMention.disabled,
+    true,
+    "the foreign-source action is unavailable",
+  );
+  await act(async () => {
+    fireEvent.click(view.getByText("Worker one conversation"));
+    await sleep(60);
+  });
+  const sourceMention = view.getByRole("button", {
+    name: translate("appShell.mentionFileInChat"),
+  });
+  assert.equal(
+    sourceMention.disabled,
+    false,
+    "returning to the source session restores the action",
+  );
   await act(async () => {
     const composer = view.getByRole("textbox");
     composer.focus();
@@ -6841,7 +12555,10 @@ test("a retained foreign-source tab cannot mention its path into the selected wo
     fireEvent.click(sourceMention);
   });
   assert.equal(view.getByRole("textbox").value.includes("@report.txt"), true);
-  assert.equal(view.getByRole("textbox").value.startsWith("Worker one draft"), true);
+  assert.equal(
+    view.getByRole("textbox").value.startsWith("Worker one draft"),
+    true,
+  );
   view.unmount();
 });
 
@@ -6849,49 +12566,124 @@ test("a populated local pool member keeps legacy access without a physical add-w
   for (const localMember of [false, true]) {
     resetWorld();
     const { pools } = servePooledWorkspace();
-    if (localMember) pools[0].members.push({ hostId: "local", projectsRoot: "/projects", provisioned: true, draining: false });
+    if (localMember)
+      pools[0].members.push({
+        hostId: "local",
+        projectsRoot: "/projects",
+        provisioned: true,
+        draining: false,
+      });
     const selected = [];
-    const view = ownRoot(render(React.createElement(SessionSidebar, {
-      selectedSessionId: null, onSelectSession: (session) => selected.push(session),
-      addProjectOpen: false, setAddProjectOpen() {}, usageVisible: false,
-    }), { wrapper: TestRoot }));
+    const view = ownRoot(
+      render(
+        React.createElement(SessionSidebar, {
+          selectedSessionId: null,
+          onSelectSession: (session) => selected.push(session),
+          addProjectOpen: false,
+          setAddProjectOpen() {},
+          usageVisible: false,
+        }),
+        { wrapper: TestRoot },
+      ),
+    );
     await settle();
-    await until(() => view.queryByText("Mac conversation"), "the local host's unmatched conversation remains reachable");
-    const add = view.queryByRole("button", { name: translate("hosts.addWorkspaceOn", { host: "Mac" }) });
-    if (localMember) assert.equal(add, null, "membership takes precedence over the reserved local host ID");
-    else assert.equal(add?.disabled, false, "a standalone non-member Mac keeps its add-workspace action");
-    await act(async () => { fireEvent.click(view.getByText("Mac conversation")); });
-    assert.deepEqual(selected.map(({ id, hostId, cwd, poolId }) => ({ id, hostId, cwd, poolId })), [
-      { id: "mac", hostId: "local", cwd: "/shared", poolId: undefined },
-    ]);
+    await until(
+      () => view.queryByText("Mac conversation"),
+      "the local host's unmatched conversation remains reachable",
+    );
+    const add = view.queryByRole("button", {
+      name: translate("hosts.addWorkspaceOn", { host: "Mac" }),
+    });
+    if (localMember)
+      assert.equal(
+        add,
+        null,
+        "membership takes precedence over the reserved local host ID",
+      );
+    else
+      assert.equal(
+        add?.disabled,
+        false,
+        "a standalone non-member Mac keeps its add-workspace action",
+      );
+    await act(async () => {
+      fireEvent.click(view.getByText("Mac conversation"));
+    });
+    assert.deepEqual(
+      selected.map(({ id, hostId, cwd, poolId }) => ({
+        id,
+        hostId,
+        cwd,
+        poolId,
+      })),
+      [{ id: "mac", hostId: "local", cwd: "/shared", poolId: undefined }],
+    );
     view.unmount();
   }
 });
 
 test("local artifact images rendered from an assistant reply retain the reply's originating session", async () => {
   resetWorld();
-  const view = ownRoot(render(React.createElement(MessageView, {
-    message: assistantMsg("image-reply", "![worker screenshot](/var/tmp/owner-shot.png)"),
-    cwd: "/shared", sessionId: "worker-one", onOpenFile() {},
-  }), { wrapper: TestRoot }));
+  const view = ownRoot(
+    render(
+      React.createElement(MessageView, {
+        message: assistantMsg(
+          "image-reply",
+          "![worker screenshot](/var/tmp/owner-shot.png)",
+        ),
+        cwd: "/shared",
+        sessionId: "worker-one",
+        onOpenFile() {},
+      }),
+      { wrapper: TestRoot },
+    ),
+  );
   await settle();
   const image = view.getByRole("img", { name: "worker screenshot" });
   const url = new URL(image.getAttribute("src"), "https://omp.test");
   assert.equal(url.pathname.startsWith("/api/files/"), true);
-  assert.equal(url.searchParams.get("sessionId"), "worker-one", "the browser must not fetch the central machine's same-looking image");
-  assert.equal(url.searchParams.get("hostId"), null, "without physical context the remote session derives its owner, never a guessed local hint");
+  assert.equal(
+    url.searchParams.get("sessionId"),
+    "worker-one",
+    "the browser must not fetch the central machine's same-looking image",
+  );
+  assert.equal(
+    url.searchParams.get("hostId"),
+    null,
+    "without physical context the remote session derives its owner, never a guessed local hint",
+  );
   view.unmount();
 });
 
 test("workspace file search stays in its source session rather than a same-path central directory", async () => {
   resetWorld();
   servePooledWorkspace();
-  const view = ownRoot(render(React.createElement(FileExplorer, {
-    cwd: "/shared", hostId: "h1", sourceSessionId: "worker-one", fileSearchOpen: true, onOpenFile() {},
-  }), { wrapper: TestRoot }));
+  const view = ownRoot(
+    render(
+      React.createElement(FileExplorer, {
+        cwd: "/shared",
+        hostId: "h1",
+        sourceSessionId: "worker-one",
+        fileSearchOpen: true,
+        onOpenFile() {},
+      }),
+      { wrapper: TestRoot },
+    ),
+  );
   await settle();
-  await act(async () => { fireEvent.change(view.getByRole("textbox", { name: translate("fileExplorer.searchFiles") }), { target: { value: "worker" } }); await sleep(200); });
-  await until(() => view.queryByText("worker-search-result.txt"), "the owner-scoped index result renders");
+  await act(async () => {
+    fireEvent.change(
+      view.getByRole("textbox", {
+        name: translate("fileExplorer.searchFiles"),
+      }),
+      { target: { value: "worker" } },
+    );
+    await sleep(200);
+  });
+  await until(
+    () => view.queryByText("worker-search-result.txt"),
+    "the owner-scoped index result renders",
+  );
   assert.equal(view.queryByText("central-decoy.txt"), null);
   view.unmount();
 });
@@ -6902,11 +12694,19 @@ test("a fresh local chat sends no host id and keeps the pre-hosts draft key", as
     match: (method, url) => method === "POST" && url === "/api/agent/new",
     produce: async () => ({ status: 500, value: { error: "stop here" } }),
   });
-  const w = await mountSession(null, undefined, { newSessionCwd: "/workspace" });
+  const w = await mountSession(null, undefined, {
+    newSessionCwd: "/workspace",
+  });
   let receipt;
-  await act(async () => { receipt = await w.latest.handleSend("first"); await sleep(30); });
+  await act(async () => {
+    receipt = await w.latest.handleSend("first");
+    await sleep(30);
+  });
   assert.equal("hostId" in callsTo("POST", "/api/agent/new")[0].body, false);
-  assert.deepEqual(receipt, { status: "rejected", recoveryKey: "new:/workspace" });
+  assert.deepEqual(receipt, {
+    status: "rejected",
+    recoveryKey: "new:/workspace",
+  });
 });
 
 for (const [name, method, mode, message] of [
@@ -6921,7 +12721,9 @@ for (const [name, method, mode, message] of [
     const sid = `remote-queue-${name}`;
     primeSession(sid, [userMsg("u0", "q")]);
     const w = await mountSession(sid);
-    await act(async () => { assert.equal(await w.latest[method](message), true); });
+    await act(async () => {
+      assert.equal(await w.latest[method](message), true);
+    });
     assert.equal(w.latest.heldMessages[0].message, message);
     assert.equal(w.latest.heldMessages[0].mode, mode);
     assert.equal(w.latest.heldMessages[0].state, "sending");
@@ -6940,9 +12742,25 @@ test("an unknown delivery outcome stays in the server outbox as failed and never
   toastCalls.length = 0;
   world.outboxHold = true;
   const w = await mountSession(sid);
-  await act(async () => { assert.deepEqual(await w.latest.handleSend("maybe sent"), { status: "accepted" }); });
+  await act(async () => {
+    assert.deepEqual(await w.latest.handleSend("maybe sent"), {
+      status: "accepted",
+    });
+  });
   const entry = world.outbox[0];
-  await act(() => lastEs().emit({ type: "outbox_update", entries: [{ ...entry, state: "failed", error: "Build box is offline", mayHaveBeenSent: true }] }));
+  await act(() =>
+    lastEs().emit({
+      type: "outbox_update",
+      entries: [
+        {
+          ...entry,
+          state: "failed",
+          error: "Build box is offline",
+          mayHaveBeenSent: true,
+        },
+      ],
+    }),
+  );
   assert.equal(w.latest.heldMessages[0].state, "failed");
   assert.equal(w.latest.heldMessages[0].mayHaveBeenSent, true);
   assert.equal(w.latest.agentRunning, false);
@@ -6955,13 +12773,25 @@ test("a slash command held during a run dispatches as a prompt with its streamin
   resetWorld();
   primeSession("slash-outbox", [userMsg("u0", "q")]);
   const { w } = await startRun("slash-outbox", "run");
-  await act(async () => { assert.equal(await w.latest.handleFollowUp("/skill queued text"), true); });
-  const command = callsTo("POST", "/api/agent/slash-outbox").find((call) => call.body?.message === "/skill queued text");
-  assert.deepEqual(command?.body, { type: "prompt", message: "/skill queued text", streamingBehavior: "followUp" });
+  await act(async () => {
+    assert.equal(await w.latest.handleFollowUp("/skill queued text"), true);
+  });
+  const command = callsTo("POST", "/api/agent/slash-outbox").find(
+    (call) => call.body?.message === "/skill queued text",
+  );
+  assert.deepEqual(command?.body, {
+    type: "prompt",
+    message: "/skill queued text",
+    streamingBehavior: "followUp",
+  });
 });
 
 // What the worker answers when the session socket dropped after sending a command (spec D5).
-const SOCKET_LOST = { error: "The connection to omp-web dropped before the answer arrived; the command may have run.", code: "transport_lost" };
+const SOCKET_LOST = {
+  error:
+    "The connection to omp-web dropped before the answer arrived; the command may have run.",
+  code: "transport_lost",
+};
 
 /** Runs a test with the worker in WebSocket mode, so agent commands go to it instead of fetch. */
 async function inWebSocketMode(run) {
@@ -6983,12 +12813,20 @@ test("a prompt is stored in the outbox even when the session socket cannot answe
     world.outboxHold = true;
     world.socketAnswer = () => ({ status: 503, body: SOCKET_LOST });
     const w = await mountSession("socket-lost");
-    await act(async () => { assert.deepEqual(await w.latest.handleSend("maybe sent"), { status: "accepted" }); });
+    await act(async () => {
+      assert.deepEqual(await w.latest.handleSend("maybe sent"), {
+        status: "accepted",
+      });
+    });
     assert.equal(w.latest.heldMessages[0].message, "maybe sent");
     assert.equal(w.latest.agentRunning, false);
     assert.deepEqual(toastCalls, []);
     assert.deepEqual(w.latest.notices, []);
-    assert.deepEqual(callsTo("POST", "/api/agent/socket-lost"), [], "the tab stores, not dispatches");
+    assert.deepEqual(
+      callsTo("POST", "/api/agent/socket-lost"),
+      [],
+      "the tab stores, not dispatches",
+    );
   });
 });
 
@@ -6998,11 +12836,25 @@ test("a `!` command whose session socket dropped before the answer toasts that i
     toastCalls.length = 0;
     primeSession("socket-lost-bash", [userMsg("u0", "q")]);
     const offered = [];
-    const w = await mountSession("socket-lost-bash", undefined, { chatInputRef: { current: { insertIfEmpty: (text) => offered.push(text) } } });
-    world.socketAnswer = (command) => command.type === "bash" ? { status: 503, body: SOCKET_LOST } : null;
-    await act(async () => { await w.latest.handleSend("!touch /tmp/once"); await sleep(30); });
-    assert.deepEqual(offered, [], "the composer must not bring the command back: it may run twice");
-    assert.deepEqual(toastCalls, [["info", translate("agentSession.transportLostMaybeSent")]]);
+    const w = await mountSession("socket-lost-bash", undefined, {
+      chatInputRef: {
+        current: { insertIfEmpty: (text) => offered.push(text) },
+      },
+    });
+    world.socketAnswer = (command) =>
+      command.type === "bash" ? { status: 503, body: SOCKET_LOST } : null;
+    await act(async () => {
+      await w.latest.handleSend("!touch /tmp/once");
+      await sleep(30);
+    });
+    assert.deepEqual(
+      offered,
+      [],
+      "the composer must not bring the command back: it may run twice",
+    );
+    assert.deepEqual(toastCalls, [
+      ["info", translate("agentSession.transportLostMaybeSent")],
+    ]);
     assert.equal(w.latest.notices.length, 0);
   });
 });
@@ -7013,56 +12865,122 @@ test("a `!` command the route refused is offered back to the composer with an er
     toastCalls.length = 0;
     primeSession("socket-refused-bash", [userMsg("u0", "q")]);
     const offered = [];
-    const w = await mountSession("socket-refused-bash", undefined, { chatInputRef: { current: { insertIfEmpty: (text) => offered.push(text) } } });
-    world.socketAnswer = (command) => command.type === "bash" ? { status: 400, body: { error: "Shell is busy" } } : null;
-    await act(async () => { await w.latest.handleSend("!touch /tmp/once"); await sleep(30); });
-    assert.deepEqual(offered, ["!touch /tmp/once"], "it never ran, so the composer gets it back");
+    const w = await mountSession("socket-refused-bash", undefined, {
+      chatInputRef: {
+        current: { insertIfEmpty: (text) => offered.push(text) },
+      },
+    });
+    world.socketAnswer = (command) =>
+      command.type === "bash"
+        ? { status: 400, body: { error: "Shell is busy" } }
+        : null;
+    await act(async () => {
+      await w.latest.handleSend("!touch /tmp/once");
+      await sleep(30);
+    });
+    assert.deepEqual(
+      offered,
+      ["!touch /tmp/once"],
+      "it never ran, so the composer gets it back",
+    );
     assert.deepEqual(toastCalls, []);
-    assert.deepEqual(w.latest.notices.map((notice) => notice.type), ["error"]);
+    assert.deepEqual(
+      w.latest.notices.map((notice) => notice.type),
+      ["error"],
+    );
   });
 });
 
 test("a `!` command during a run runs at once and its held-back output shows until the transcript has it", async () => {
   await inWebSocketMode(async () => {
     resetWorld();
-    const run = (timestamp) => ({ role: "bashExecution", command: "echo hi", output: "hi\n", exitCode: 0, timestamp });
+    const run = (timestamp) => ({
+      role: "bashExecution",
+      command: "echo hi",
+      output: "hi\n",
+      exitCode: 0,
+      timestamp,
+    });
     primeSession("midrun-bash", [userMsg("u0", "q")]);
     const { w, es } = await startRun("midrun-bash", "q1");
-    await act(async () => { es.emit({ type: "agent_start" }); await Promise.resolve(); });
-    const result = { output: "hi\n", exitCode: 0, cancelled: false, truncated: false, deferred: true };
-    world.socketAnswer = (command) => command.type === "bash" ? { status: 200, body: { success: true, data: result } } : null;
+    await act(async () => {
+      es.emit({ type: "agent_start" });
+      await Promise.resolve();
+    });
+    const result = {
+      output: "hi\n",
+      exitCode: 0,
+      cancelled: false,
+      truncated: false,
+      deferred: true,
+    };
+    world.socketAnswer = (command) =>
+      command.type === "bash"
+        ? { status: 200, body: { success: true, data: result } }
+        : null;
     let receipt;
-    await act(async () => { receipt = await w.latest.handleSend("!echo hi"); await sleep(30); });
+    await act(async () => {
+      receipt = await w.latest.handleSend("!echo hi");
+      await sleep(30);
+    });
     assert.deepEqual(receipt, { status: "accepted" });
     assert.equal(w.latest.agentRunning, true, "the turn keeps running");
     assert.deepEqual(
-      w.latest.deferredBash.map(({ command, output, exitCode }) => ({ command, output, exitCode })),
+      w.latest.deferredBash.map(({ command, output, exitCode }) => ({
+        command,
+        output,
+        exitCode,
+      })),
       [{ command: "echo hi", output: "hi\n", exitCode: 0 }],
     );
 
-    await act(async () => { es.emit({ type: "agent_end", isTerminal: true, messages: [] }); await sleep(30); });
+    await act(async () => {
+      es.emit({ type: "agent_end", isTerminal: true, messages: [] });
+      await sleep(30);
+    });
     await settle();
-    assert.equal(w.latest.deferredBash.length, 1, "omp still holds it after the turn");
+    assert.equal(
+      w.latest.deferredBash.length,
+      1,
+      "omp still holds it after the turn",
+    );
 
     // An older run of the same command comes into view (e.g. pre-compaction history): it is not this one.
     const before = world.sessions.get("midrun-bash").messages;
     saveSession("midrun-bash", [...before, run(1)]);
-    await act(async () => { publishSessionsChanged(["midrun-bash"]); });
+    await act(async () => {
+      publishSessionsChanged(["midrun-bash"]);
+    });
     await settle();
-    assert.equal(w.latest.messages.filter((message) => message.role === "bashExecution").length, 1);
-    assert.equal(w.latest.deferredBash.length, 1, "an older run does not count as this one");
+    assert.equal(
+      w.latest.messages.filter((message) => message.role === "bashExecution")
+        .length,
+      1,
+    );
+    assert.equal(
+      w.latest.deferredBash.length,
+      1,
+      "an older run does not count as this one",
+    );
 
     // omp writes it when a later prompt starts, stamped after everything before it.
     saveSession("midrun-bash", [...before, run(1), run(5)]);
-    await act(async () => { publishSessionsChanged(["midrun-bash"]); });
+    await act(async () => {
+      publishSessionsChanged(["midrun-bash"]);
+    });
     await settle();
     assert.deepEqual(w.latest.deferredBash, []);
 
     // Compaction drops it from the context: the shown output must not come back.
     saveSession("midrun-bash", [userMsg("u0", "q")]);
-    await act(async () => { publishSessionsChanged(["midrun-bash"]); });
+    await act(async () => {
+      publishSessionsChanged(["midrun-bash"]);
+    });
     await settle();
-    assert.equal(w.latest.messages.some((message) => message.role === "bashExecution"), false);
+    assert.equal(
+      w.latest.messages.some((message) => message.role === "bashExecution"),
+      false,
+    );
     assert.deepEqual(w.latest.deferredBash, []);
   });
 });
@@ -7070,23 +12988,53 @@ test("a `!` command during a run runs at once and its held-back output shows unt
 test("two held runs of the same `!` command each wait for their own recorded run", async () => {
   await inWebSocketMode(async () => {
     resetWorld();
-    const run = (timestamp) => ({ role: "bashExecution", command: "git status", output: "clean\n", exitCode: 0, timestamp });
+    const run = (timestamp) => ({
+      role: "bashExecution",
+      command: "git status",
+      output: "clean\n",
+      exitCode: 0,
+      timestamp,
+    });
     primeSession("midrun-twice", [userMsg("u0", "q")]);
     const { w, es } = await startRun("midrun-twice", "q1");
-    await act(async () => { es.emit({ type: "agent_start" }); await Promise.resolve(); });
-    const result = { output: "clean\n", exitCode: 0, cancelled: false, truncated: false, deferred: true };
-    world.socketAnswer = (command) => command.type === "bash" ? { status: 200, body: { success: true, data: result } } : null;
-    for (let i = 0; i < 2; i++) await act(async () => { await w.latest.handleSend("!git status"); await sleep(30); });
+    await act(async () => {
+      es.emit({ type: "agent_start" });
+      await Promise.resolve();
+    });
+    const result = {
+      output: "clean\n",
+      exitCode: 0,
+      cancelled: false,
+      truncated: false,
+      deferred: true,
+    };
+    world.socketAnswer = (command) =>
+      command.type === "bash"
+        ? { status: 200, body: { success: true, data: result } }
+        : null;
+    for (let i = 0; i < 2; i++)
+      await act(async () => {
+        await w.latest.handleSend("!git status");
+        await sleep(30);
+      });
     assert.equal(w.latest.deferredBash.length, 2);
 
     const before = world.sessions.get("midrun-twice").messages;
     saveSession("midrun-twice", [...before, run(5)]);
-    await act(async () => { publishSessionsChanged(["midrun-twice"]); });
+    await act(async () => {
+      publishSessionsChanged(["midrun-twice"]);
+    });
     await settle();
-    assert.equal(w.latest.deferredBash.length, 1, "one recorded run settles one held run");
+    assert.equal(
+      w.latest.deferredBash.length,
+      1,
+      "one recorded run settles one held run",
+    );
 
     saveSession("midrun-twice", [...before, run(5), run(6)]);
-    await act(async () => { publishSessionsChanged(["midrun-twice"]); });
+    await act(async () => {
+      publishSessionsChanged(["midrun-twice"]);
+    });
     await settle();
     assert.deepEqual(w.latest.deferredBash, []);
   });
@@ -7097,21 +13045,57 @@ test("Stop during a run with a `!` command beside it stops the turn, not the com
     resetWorld();
     primeSession("midrun-stop", [userMsg("u0", "q")]);
     const { w, es } = await startRun("midrun-stop", "q1");
-    await act(async () => { es.emit({ type: "agent_start" }); await Promise.resolve(); });
+    await act(async () => {
+      es.emit({ type: "agent_start" });
+      await Promise.resolve();
+    });
     const sent = [];
     let finishBash;
     world.socketAnswer = (command) => {
       sent.push(command.type);
       if (command.type !== "bash") return null;
-      return new Promise((resolve) => { finishBash = () => resolve({ status: 200, body: { success: true, data: { output: "", exitCode: 0, cancelled: false, truncated: false, deferred: true } } }); });
+      return new Promise((resolve) => {
+        finishBash = () =>
+          resolve({
+            status: 200,
+            body: {
+              success: true,
+              data: {
+                output: "",
+                exitCode: 0,
+                cancelled: false,
+                truncated: false,
+                deferred: true,
+              },
+            },
+          });
+      });
     };
     let bash;
-    await act(async () => { bash = w.latest.handleSend("!sleep 5"); await sleep(30); });
+    await act(async () => {
+      bash = w.latest.handleSend("!sleep 5");
+      await sleep(30);
+    });
     assert.equal(w.latest.bashRunning, true);
-    await act(async () => { void w.latest.handleAbort(); await sleep(30); });
-    assert.equal(sent.includes("abort_bash"), false, "the shell command keeps running");
-    assert.ok(sent.some((type) => type === "abort_and_restore_queue" || type === "abort"), "the turn is stopped");
-    await act(async () => { finishBash(); await bash; });
+    await act(async () => {
+      void w.latest.handleAbort();
+      await sleep(30);
+    });
+    assert.equal(
+      sent.includes("abort_bash"),
+      false,
+      "the shell command keeps running",
+    );
+    assert.ok(
+      sent.some(
+        (type) => type === "abort_and_restore_queue" || type === "abort",
+      ),
+      "the turn is stopped",
+    );
+    await act(async () => {
+      finishBash();
+      await bash;
+    });
   });
 });
 
@@ -7121,9 +13105,13 @@ test("a steer is stored without consulting the session socket", async () => {
     toastCalls.length = 0;
     primeSession("socket-lost-steer", [userMsg("u0", "q")]);
     const w = await mountSession("socket-lost-steer");
-    world.socketAnswer = (command) => command.type === "steer" ? { status: 503, body: SOCKET_LOST } : null;
+    world.socketAnswer = (command) =>
+      command.type === "steer" ? { status: 503, body: SOCKET_LOST } : null;
     let accepted;
-    await act(async () => { accepted = await w.latest.handleSteer("steer text"); await sleep(30); });
+    await act(async () => {
+      accepted = await w.latest.handleSteer("steer text");
+      await sleep(30);
+    });
     assert.equal(accepted, true, "the composer drops the text: it may run");
     assert.deepEqual(toastCalls, []);
     assert.equal(w.latest.heldMessages[0].mode, "steer");
@@ -7138,15 +13126,24 @@ test("an existing-session send never waits for a pre-prompt get_state reply", as
     toastCalls.length = 0;
     primeSession("socket-lost-state", [userMsg("u0", "q")]);
     const w = await mountSession("socket-lost-state");
-    world.socketAnswer = (command) => command.type === "get_state" ? { status: 503, body: SOCKET_LOST } : null;
+    world.socketAnswer = (command) =>
+      command.type === "get_state" ? { status: 503, body: SOCKET_LOST } : null;
     let receipt;
-    await act(async () => { receipt = await w.latest.handleSend("never sent"); await sleep(30); });
+    await act(async () => {
+      receipt = await w.latest.handleSend("never sent");
+      await sleep(30);
+    });
     assert.deepEqual(receipt, { status: "accepted" });
     assert.deepEqual(toastCalls, []);
     assert.deepEqual(w.latest.notices, []);
     assert.equal(w.latest.heldMessages[0].message, "never sent");
     assert.equal(w.latest.agentRunning, false);
-    assert.equal(callsTo("POST", "/api/agent/socket-lost-state").some((call) => call.body?.type === "prompt"), false);
+    assert.equal(
+      callsTo("POST", "/api/agent/socket-lost-state").some(
+        (call) => call.body?.type === "prompt",
+      ),
+      false,
+    );
   });
 });
 
@@ -7156,19 +13153,44 @@ test("an interrupt-and-reply whose abort_and_prompt reply was lost is reported a
     toastCalls.length = 0;
     primeSession("socket-lost-interrupt", [userMsg("u0", "q")]);
     const offered = [];
-    const { w, es } = await startRun("socket-lost-interrupt", "q1", false, { chatInputRef: { current: { insertIfEmpty: (text) => offered.push(text) } } });
-    await act(async () => { es.emit({ type: "agent_start" }); await Promise.resolve(); });
-    world.socketAnswer = (command) => command.type === "abort_and_prompt" ? { status: 503, body: SOCKET_LOST } : null;
+    const { w, es } = await startRun("socket-lost-interrupt", "q1", false, {
+      chatInputRef: {
+        current: { insertIfEmpty: (text) => offered.push(text) },
+      },
+    });
+    await act(async () => {
+      es.emit({ type: "agent_start" });
+      await Promise.resolve();
+    });
+    world.socketAnswer = (command) =>
+      command.type === "abort_and_prompt"
+        ? { status: 503, body: SOCKET_LOST }
+        : null;
     let interrupt;
-    await act(async () => { interrupt = w.latest.handleInterruptAndReply("replacement"); await sleep(30); });
+    await act(async () => {
+      interrupt = w.latest.handleInterruptAndReply("replacement");
+      await sleep(30);
+    });
     let accepted;
-    await act(async () => { lastEs().open(); accepted = await interrupt; });
-    assert.equal(accepted, true, "the replacement may be running: the composer drops the text");
-    assert.deepEqual(offered, [], "a resend would interrupt the replacement turn");
-    assert.deepEqual(toastCalls, [["info", translate("agentSession.transportLostMaybeSent")]]);
+    await act(async () => {
+      lastEs().open();
+      accepted = await interrupt;
+    });
+    assert.equal(
+      accepted,
+      true,
+      "the replacement may be running: the composer drops the text",
+    );
+    assert.deepEqual(
+      offered,
+      [],
+      "a resend would interrupt the replacement turn",
+    );
+    assert.deepEqual(toastCalls, [
+      ["info", translate("agentSession.transportLostMaybeSent")],
+    ]);
   });
 });
-
 
 test("the hosts channel decides the offline banner; a frame only speaks before its first snapshot", async () => {
   resetWorld();
@@ -7176,55 +13198,100 @@ test("the hosts channel decides the offline banner; a frame only speaks before i
   world.agents.set("remote-banner", { running: true, state: {} }); // a running chat attaches its stream on load
   const bannerText = translate("hosts.offlineBanner", { host: "Build box" });
   const mount = async (hostStatus) => {
-    const view = ownRoot(render(React.createElement(ChatWindow, {
-      session: { ...sessionInfo("remote-banner"), hostId: "h1" }, newSessionCwd: null, hostLabel: "Build box", ...(hostStatus ? { hostStatus } : {}),
-    }), { wrapper: TestRoot }));
+    const view = ownRoot(
+      render(
+        React.createElement(ChatWindow, {
+          session: { ...sessionInfo("remote-banner"), hostId: "h1" },
+          newSessionCwd: null,
+          hostLabel: "Build box",
+          ...(hostStatus ? { hostStatus } : {}),
+        }),
+        { wrapper: TestRoot },
+      ),
+    );
     await settle();
-    await act(async () => { lastEs()?.open(); });
+    await act(async () => {
+      lastEs()?.open();
+    });
     await settle();
     return view;
   };
   const withChannel = await mount("online");
-  await act(async () => { lastEs().emit({ type: "host_status", hostId: "h1", status: "offline" }); });
-  assert.equal(withChannel.queryByText(bannerText), null, "a frame cannot override the channel's online status");
+  await act(async () => {
+    lastEs().emit({ type: "host_status", hostId: "h1", status: "offline" });
+  });
+  assert.equal(
+    withChannel.queryByText(bannerText),
+    null,
+    "a frame cannot override the channel's online status",
+  );
   withChannel.unmount();
 
   resetWorld();
   primeSession("remote-banner", [userMsg("u0", "q")]);
   world.agents.set("remote-banner", { running: true, state: {} }); // a running chat attaches its stream on load
   const beforeSnapshot = await mount(undefined);
-  await act(async () => { lastEs().emit({ type: "host_status", hostId: "h1", status: "offline" }); });
-  assert.ok(beforeSnapshot.queryByText(bannerText), "without a channel snapshot the frame shows the banner");
+  await act(async () => {
+    lastEs().emit({ type: "host_status", hostId: "h1", status: "offline" });
+  });
+  assert.ok(
+    beforeSnapshot.queryByText(bannerText),
+    "without a channel snapshot the frame shows the banner",
+  );
   beforeSnapshot.unmount();
 
   resetWorld();
   primeSession("remote-banner", [userMsg("u0", "q")]);
   world.agents.set("remote-banner", { running: true, state: {} }); // a running chat attaches its stream on load
   const offlineChannel = await mount("offline");
-  assert.ok(offlineChannel.queryByText(bannerText), "a chat opened during an outage shows the banner from the channel");
+  assert.ok(
+    offlineChannel.queryByText(bannerText),
+    "a chat opened during an outage shows the banner from the channel",
+  );
 });
 
 // omp's delta message updates (lib/message-delta.ts, lib/message-update-coalescer.ts).
-const recordedFrames = readFileSync(new URL("../tests/fixtures/omp-delta-stream.ndjson", import.meta.url), "utf8")
-  .trim().split("\n").map((line) => JSON.parse(line)).filter((frame) => frame.type !== "response");
+const recordedFrames = readFileSync(
+  new URL("../tests/fixtures/omp-delta-stream.ndjson", import.meta.url),
+  "utf8",
+)
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line))
+  .filter((frame) => frame.type !== "response");
 
 /** What omp's full mode sends for the same run, at each block end: the message as streamed so far. */
 function fullFramesOf(frames) {
   const open = new Map();
   const out = [];
   for (const frame of frames) {
-    if (frame.type === "message_start") open.set(frame.messageId, structuredClone(frame.message));
+    if (frame.type === "message_start")
+      open.set(frame.messageId, structuredClone(frame.message));
     if (frame.type !== "message_update") {
       out.push(frame);
       continue;
     }
     const message = open.get(frame.messageId);
     const event = frame.assistantMessageEvent;
-    if (event.type === "text_end") message.content[event.contentIndex] = { ...event.block, text: event.content };
-    else if (event.type === "thinking_end") message.content[event.contentIndex] = { ...event.block, thinking: event.content };
-    else if (event.type === "toolcall_end") message.content[event.contentIndex] = event.toolCall;
+    if (event.type === "text_end")
+      message.content[event.contentIndex] = {
+        ...event.block,
+        text: event.content,
+      };
+    else if (event.type === "thinking_end")
+      message.content[event.contentIndex] = {
+        ...event.block,
+        thinking: event.content,
+      };
+    else if (event.type === "toolcall_end")
+      message.content[event.contentIndex] = event.toolCall;
     else continue;
-    out.push({ type: "message_update", messageId: frame.messageId, message: structuredClone(message), assistantMessageEvent: { ...event, partial: message } });
+    out.push({
+      type: "message_update",
+      messageId: frame.messageId,
+      message: structuredClone(message),
+      assistantMessageEvent: { ...event, partial: message },
+    });
   }
   return out;
 }
@@ -7232,19 +13299,34 @@ function fullFramesOf(frames) {
 async function streamRecorded(frames) {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
-  const { w, es } = await startRun("s1", recordedFrames[0].message.content[0].text);
-  await act(async () => { es.emit({ type: "agent_start" }); });
+  const { w, es } = await startRun(
+    "s1",
+    recordedFrames[0].message.content[0].text,
+  );
+  await act(async () => {
+    es.emit({ type: "agent_start" });
+  });
   const shown = [];
   let toolArguments;
   for (const frame of frames) {
     if (frame.type === "message_end" && frame.message.role === "assistant") {
       await settle(90);
-      shown.push(structuredClone(w.latest.streamState.streamingMessage?.content));
+      shown.push(
+        structuredClone(w.latest.streamState.streamingMessage?.content),
+      );
     }
-    await act(async () => { es.emit(frame); await Promise.resolve(); });
-    if (frame.assistantMessageEvent?.type === "toolcall_delta" && toolArguments === undefined) {
+    await act(async () => {
+      es.emit(frame);
+      await Promise.resolve();
+    });
+    if (
+      frame.assistantMessageEvent?.type === "toolcall_delta" &&
+      toolArguments === undefined
+    ) {
       await settle(90);
-      toolArguments = structuredClone(w.latest.streamState.streamingMessage?.content[2]);
+      toolArguments = structuredClone(
+        w.latest.streamState.streamingMessage?.content[2],
+      );
     }
   }
   await settle(90);
@@ -7255,31 +13337,65 @@ test("a run streamed as omp's delta updates renders exactly what its full update
   const deltas = await streamRecorded(recordedFrames);
   const full = await streamRecorded(fullFramesOf(recordedFrames));
   assert.equal(deltas.shown.length, 2);
-  assert.deepEqual(deltas.shown, full.shown, "each reply as it stood before message_end");
+  assert.deepEqual(
+    deltas.shown,
+    full.shown,
+    "each reply as it stood before message_end",
+  );
   assert.deepEqual(deltas.messages, full.messages, "the committed transcript");
-  assert.deepEqual(deltas.shown[0].map((block) => block.type), ["thinking", "text", "toolCall"]);
-  assert.equal(deltas.toolArguments.toolName, "read", "a streaming tool call shows its name from its first delta");
-  assert.deepEqual(deltas.toolArguments.input, { path: "note.txt" }, "and the arguments streamed so far");
+  assert.deepEqual(
+    deltas.shown[0].map((block) => block.type),
+    ["thinking", "text", "toolCall"],
+  );
+  assert.equal(
+    deltas.toolArguments.toolName,
+    "read",
+    "a streaming tool call shows its name from its first delta",
+  );
+  assert.deepEqual(
+    deltas.toolArguments.input,
+    { path: "note.txt" },
+    "and the arguments streamed so far",
+  );
 });
 
 test("deltas that reach a tab without their message wait for the server's snapshot, then apply on top of it", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   const { w, es } = await startRun("s1", "go");
-  await act(async () => { es.emit({ type: "agent_start" }); });
+  await act(async () => {
+    es.emit({ type: "agent_start" });
+  });
   await settle(90);
   world.agents.set("s1", { running: true, state: { isStreaming: true } });
   const sequence = world.streams.get("s1").sequence;
-  world.live.set("s1", { ...liveSnapshot("s1", sequence, { role: "assistant", content: [{ type: "text", text: "hello" }] }), streamingMessageId: "msg-2" });
+  world.live.set("s1", {
+    ...liveSnapshot("s1", sequence, {
+      role: "assistant",
+      content: [{ type: "text", text: "hello" }],
+    }),
+    streamingMessageId: "msg-2",
+  });
   const syncs = callsTo("GET", "/api/sessions/s1/context").length;
-  const delta = (text) => ({ type: "message_update", messageId: "msg-2", message: { role: "assistant" }, assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: text } });
+  const delta = (text) => ({
+    type: "message_update",
+    messageId: "msg-2",
+    message: { role: "assistant" },
+    assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: text },
+  });
   await act(async () => {
     es.emit(delta(" there"));
     es.emit(delta("!"));
   });
   await settle(150);
-  assert.ok(callsTo("GET", "/api/sessions/s1/context").length > syncs, "a delta without its message asks for the snapshot");
-  assert.equal(w.latest.streamState.streamingMessage?.content[0].text, "hello there!");
+  assert.ok(
+    callsTo("GET", "/api/sessions/s1/context").length > syncs,
+    "a delta without its message asks for the snapshot",
+  );
+  assert.equal(
+    w.latest.streamState.streamingMessage?.content[0].text,
+    "hello there!",
+  );
 });
 
 test("an outbox prompt moves from browser sending to waiting_host and hands off to its echo without a gap", async () => {
@@ -7288,66 +13404,151 @@ test("an outbox prompt moves from browser sending to waiting_host and hands off 
   primeSession(sid, [userMsg("u0", "before")]);
   world.outboxHold = true;
   const w = await mountSession(sid);
-  await act(async () => { assert.deepEqual(await w.latest.handleSend("held message"), { status: "accepted" }); });
+  await act(async () => {
+    assert.deepEqual(await w.latest.handleSend("held message"), {
+      status: "accepted",
+    });
+  });
   assert.equal(w.latest.agentRunning, false);
-  assert.deepEqual(w.latest.messages.map((message) => message.content), ["before"]);
+  assert.deepEqual(
+    w.latest.messages.map((message) => message.content),
+    ["before"],
+  );
   assert.equal(w.latest.heldMessages.length, 1);
   const held = w.latest.heldMessages[0];
   assert.equal(held.state, "sending");
   assert.equal(held.local, true);
-  assert.equal(world.outbox[0].scope, "test-scope", "the worker entry stays bound to the server-issued authorization scope");
+  assert.equal(
+    world.outbox[0].scope,
+    "test-scope",
+    "the worker entry stays bound to the server-issued authorization scope",
+  );
   const es = lastEs();
-  await act(() => es.emit({ type: "outbox_update", entries: [{ ...world.outbox[0], state: "waiting_host" }] }));
-  assert.equal(w.latest.heldMessages.length, 1, "server and browser copies merge by id");
+  await act(() =>
+    es.emit({
+      type: "outbox_update",
+      entries: [{ ...world.outbox[0], state: "waiting_host" }],
+    }),
+  );
+  assert.equal(
+    w.latest.heldMessages.length,
+    1,
+    "server and browser copies merge by id",
+  );
   assert.equal(w.latest.heldMessages[0].id, held.id);
   assert.equal(w.latest.heldMessages[0].state, "waiting_host");
   assert.equal(w.latest.heldMessages[0].local, false);
   const echo = { ...userMsg("echo", "held message"), clientMessageId: held.id };
   await act(async () => {
     es.emit({ type: "agent_start" });
-    es.emit({ type: "message_end", message: userMsg("echo", "held message"), clientMessageId: held.id }, { persist: false });
-    es.emit({ type: "outbox_update", entries: [], settledIds: [held.id], nativeSettledIds: [held.id] });
+    es.emit(
+      {
+        type: "message_end",
+        message: userMsg("echo", "held message"),
+        clientMessageId: held.id,
+      },
+      { persist: false },
+    );
+    es.emit({
+      type: "outbox_update",
+      entries: [],
+      settledIds: [held.id],
+      nativeSettledIds: [held.id],
+    });
   });
   assert.deepEqual(w.latest.heldMessages, []);
-  assert.deepEqual(w.latest.messages.at(-1), echo, "omp's echo bridges the not-yet-saved transcript");
+  assert.deepEqual(
+    w.latest.messages.at(-1),
+    echo,
+    "omp's echo bridges the not-yet-saved transcript",
+  );
   appendEntry(sid, echo);
-  await act(() => es.emit({ type: "session_history_changed", leafId: world.sessions.get(sid).leafId }));
+  await act(() =>
+    es.emit({
+      type: "session_history_changed",
+      leafId: world.sessions.get(sid).leafId,
+    }),
+  );
   await settle();
-  assert.equal(w.latest.messages.filter((message) => message.content === "held message").length, 1, "the saved copy replaces rather than duplicates the echo");
+  assert.equal(
+    w.latest.messages.filter((message) => message.content === "held message")
+      .length,
+    1,
+    "the saved copy replaces rather than duplicates the echo",
+  );
 });
 
 test("a delivered native worker receipt preserves the original intent before a local sending row commits", async () => {
   resetWorld();
   const sid = "outbox-delivered-receipt-native";
   primeSession(sid, [userMsg("u0", "before")]);
-  world.agents.set(sid, { running: true, state: { isStreaming: true, supportsClientMessageIds: true } });
+  world.agents.set(sid, {
+    running: true,
+    state: { isStreaming: true, supportsClientMessageIds: true },
+  });
   const w = await mountSession(sid);
   const es = lastEs();
   await act(() => es.open());
   await settle();
   const entry = {
-    id: "receipt-before-local", sessionId: sid, mode: "prompt", message: "original intent",
-    images: [{ type: "image", data: "aW1hZ2U=", mimeType: "image/png" }], uploads: ["original-upload"],
-    state: "delivered", settlement: "native", createdAt: 2,
+    id: "receipt-before-local",
+    sessionId: sid,
+    mode: "prompt",
+    message: "original intent",
+    images: [{ type: "image", data: "aW1hZ2U=", mimeType: "image/png" }],
+    uploads: ["original-upload"],
+    state: "delivered",
+    settlement: "native",
+    createdAt: 2,
   };
   // The peer's child cannot answer the selective read yet (an answer finding no trace is "unresolved": Not sent).
-  world.clientMessageStatuses.set(sid, { status: 503, error: "host unavailable" });
+  world.clientMessageStatuses.set(sid, {
+    status: 503,
+    error: "host unavailable",
+  });
   await act(() => {
     workerPort.onmessage({ data: { outboxStored: entry } });
     workerPort.onmessage({ data: { outbox: [] } });
   });
-  assert.equal(w.latest.heldMessages[0]?.id, entry.id, "server delivery is not proof of a local native replacement");
+  assert.equal(
+    w.latest.heldMessages[0]?.id,
+    entry.id,
+    "server delivery is not proof of a local native replacement",
+  );
   assert.equal(w.latest.heldMessages[0].message, "original intent");
   assert.deepEqual(w.latest.heldMessages[0].images, entry.images);
   assert.deepEqual(w.latest.heldMessages[0].uploads, ["original-upload"]);
-  await act(() => es.emit({ type: "outbox_update", entries: [], settledIds: [entry.id], nativeSettledIds: [entry.id] }));
+  await act(() =>
+    es.emit({
+      type: "outbox_update",
+      entries: [],
+      settledIds: [entry.id],
+      nativeSettledIds: [entry.id],
+    }),
+  );
   await settle();
-  assert.equal(w.latest.heldMessages[0]?.id, entry.id, "the matching tombstone cannot silently discard the receipt payload");
-  const message = { role: "user", content: [{ type: "text", text: "Actual expanded native intent" }], timestamp: 3 };
-  await act(() => es.emit({ type: "message_end", message, clientMessageId: entry.id }, { persist: false }));
+  assert.equal(
+    w.latest.heldMessages[0]?.id,
+    entry.id,
+    "the matching tombstone cannot silently discard the receipt payload",
+  );
+  const message = {
+    role: "user",
+    content: [{ type: "text", text: "Actual expanded native intent" }],
+    timestamp: 3,
+  };
+  await act(() =>
+    es.emit(
+      { type: "message_end", message, clientMessageId: entry.id },
+      { persist: false },
+    ),
+  );
   await settle();
   assert.deepEqual(w.latest.heldMessages, []);
-  assert.deepEqual(w.latest.messages.at(-1), { ...message, clientMessageId: entry.id });
+  assert.deepEqual(w.latest.messages.at(-1), {
+    ...message,
+    clientMessageId: entry.id,
+  });
 });
 
 test("an uncorrelated receipt from an older OMP retires its row at once, as before correlation", async () => {
@@ -7359,14 +13560,26 @@ test("an uncorrelated receipt from an older OMP retires its row at once, as befo
   const es = lastEs();
   await act(() => es.open());
   await settle();
-  const entry = { id: "receipt-uncorrelated", sessionId: sid, mode: "prompt", message: "older omp", state: "delivered", settlement: "uncorrelated", createdAt: 2 };
+  const entry = {
+    id: "receipt-uncorrelated",
+    sessionId: sid,
+    mode: "prompt",
+    message: "older omp",
+    state: "delivered",
+    settlement: "uncorrelated",
+    createdAt: 2,
+  };
   await act(() => {
     workerPort.onmessage({ data: { outboxStored: entry } });
     workerPort.onmessage({ data: { outbox: [] } });
   });
   await settle();
   assert.deepEqual(w.latest.heldMessages, []);
-  assert.equal(world.calls.some((call) => call.body?.type === "get_client_message_status"), false, "nothing waits on a correlation an older OMP cannot give");
+  assert.equal(
+    world.calls.some((call) => call.body?.type === "get_client_message_status"),
+    false,
+    "nothing waits on a correlation an older OMP cannot give",
+  );
 });
 
 for (const loss of ["unresolved", "child gone"]) {
@@ -7374,28 +13587,74 @@ for (const loss of ["unresolved", "child gone"]) {
     resetWorld();
     const sid = `outbox-lost-bridge-${loss.replace(" ", "-")}`;
     primeSession(sid, [userMsg("u0", "before")]);
-    world.agents.set(sid, { running: true, state: { isStreaming: true, supportsClientMessageIds: true } });
+    world.agents.set(sid, {
+      running: true,
+      state: { isStreaming: true, supportsClientMessageIds: true },
+    });
     const w = await mountSession(sid);
     const es = lastEs();
     await act(() => es.open());
     await settle();
-    const entry = { id: "lost-bridge", sessionId: sid, mode: "followUp", message: "lost when the child died", state: "delivering", createdAt: 1 };
-    if (loss === "unresolved") world.clientMessageStatuses.set(sid, clientMessageStatus({ unresolvedClientMessageIds: ["lost-bridge"] }));
-    else world.clientMessageStatuses.set(sid, { error: "No live omp child", code: "handoff_child_unavailable", status: 409 });
+    const entry = {
+      id: "lost-bridge",
+      sessionId: sid,
+      mode: "followUp",
+      message: "lost when the child died",
+      state: "delivering",
+      createdAt: 1,
+    };
+    if (loss === "unresolved")
+      world.clientMessageStatuses.set(
+        sid,
+        clientMessageStatus({ unresolvedClientMessageIds: ["lost-bridge"] }),
+      );
+    else
+      world.clientMessageStatuses.set(sid, {
+        error: "No live omp child",
+        code: "handoff_child_unavailable",
+        status: 409,
+      });
     await act(() => {
       es.emit({ type: "outbox_update", entries: [entry], settledIds: [] });
-      es.emit({ type: "outbox_update", entries: [], settledIds: [entry.id], nativeSettledIds: [entry.id] });
+      es.emit({
+        type: "outbox_update",
+        entries: [],
+        settledIds: [entry.id],
+        nativeSettledIds: [entry.id],
+      });
     });
     await settle();
-    await act(async () => { await sleep(50); });
+    await act(async () => {
+      await sleep(50);
+    });
     assert.equal(w.latest.heldMessages[0]?.state, "failed");
     assert.equal(w.latest.heldMessages[0]?.mayHaveBeenSent, true);
-    const reads = world.calls.filter((call) => call.body?.type === "get_client_message_status").length;
-    await act(async () => { await sleep(2_200); });
-    assert.equal(world.calls.filter((call) => call.body?.type === "get_client_message_status").length, reads, "a lost bridge is not polled again");
-    await act(async () => { await w.latest.deleteHeldMessage(entry.id); });
+    const reads = world.calls.filter(
+      (call) => call.body?.type === "get_client_message_status",
+    ).length;
+    await act(async () => {
+      await sleep(2_200);
+    });
+    assert.equal(
+      world.calls.filter(
+        (call) => call.body?.type === "get_client_message_status",
+      ).length,
+      reads,
+      "a lost bridge is not polled again",
+    );
+    await act(async () => {
+      await w.latest.deleteHeldMessage(entry.id);
+    });
     assert.deepEqual(w.latest.heldMessages, []);
-    assert.equal(world.calls.some((call) => ["prompt", "steer", "follow_up", "outbox_remove"].includes(call.body?.type)), false, "dismissal neither resends nor touches the server row");
+    assert.equal(
+      world.calls.some((call) =>
+        ["prompt", "steer", "follow_up", "outbox_remove"].includes(
+          call.body?.type,
+        ),
+      ),
+      false,
+      "dismissal neither resends nor touches the server row",
+    );
   });
 }
 
@@ -7403,127 +13662,287 @@ test("a native history rewind drops a correlated echo the delayed catch-up was s
   resetWorld();
   const sid = "outbox-rewound-echo";
   primeSession(sid, [userMsg("u0", "first"), assistantMsg("a0", "answer")]);
-  world.agents.set(sid, { running: true, state: { isStreaming: true, supportsClientMessageIds: true } });
+  world.agents.set(sid, {
+    running: true,
+    state: { isStreaming: true, supportsClientMessageIds: true },
+  });
   const w = await mountSession(sid);
   const es = lastEs();
   await act(() => es.open());
   await settle();
   // The saved history cannot be read yet, so only the correlated echo shows this message.
   world.contextUnavailable = true;
-  const echo = { role: "user", content: [{ type: "text", text: "rewound later" }], timestamp: 5 };
-  await act(() => es.emit({ type: "message_end", message: echo, clientMessageId: "rewound-intent" }, { persist: false }));
+  const echo = {
+    role: "user",
+    content: [{ type: "text", text: "rewound later" }],
+    timestamp: 5,
+  };
+  await act(() =>
+    es.emit(
+      { type: "message_end", message: echo, clientMessageId: "rewound-intent" },
+      { persist: false },
+    ),
+  );
   await settle();
-  assert.ok(w.latest.messages.some((message) => message.clientMessageId === "rewound-intent"));
+  assert.ok(
+    w.latest.messages.some(
+      (message) => message.clientMessageId === "rewound-intent",
+    ),
+  );
   // An edit elsewhere rewinds native history to before "first"'s answer; the echo is not in the new tail.
   world.contextUnavailable = false;
   saveSession(sid, [userMsg("u0", "first edited")], ["e-edited"]);
-  await act(() => es.emit({ type: "session_history_changed", leafId: "e-edited" }));
+  await act(() =>
+    es.emit({ type: "session_history_changed", leafId: "e-edited" }),
+  );
   await settle();
-  assert.deepEqual(w.latest.messages.map((message) => message.id), ["u0"]);
-  assert.equal(w.latest.messages.some((message) => message.clientMessageId === "rewound-intent"), false, "the rewound echo is gone");
+  assert.deepEqual(
+    w.latest.messages.map((message) => message.id),
+    ["u0"],
+  );
+  assert.equal(
+    w.latest.messages.some(
+      (message) => message.clientMessageId === "rewound-intent",
+    ),
+    false,
+    "the rewound echo is gone",
+  );
 });
 
 test("a failed history reload keeps the correlated echo until a readable history replaces it", async () => {
   resetWorld();
   const sid = "outbox-rewind-reload-fails";
   primeSession(sid, [userMsg("u0", "first"), assistantMsg("a0", "answer")]);
-  world.agents.set(sid, { running: true, state: { isStreaming: true, supportsClientMessageIds: true } });
+  world.agents.set(sid, {
+    running: true,
+    state: { isStreaming: true, supportsClientMessageIds: true },
+  });
   const w = await mountSession(sid);
   const es = lastEs();
   await act(() => es.open());
   await settle();
   world.contextUnavailable = true;
-  const echo = { role: "user", content: [{ type: "text", text: "rewound later" }], timestamp: 5 };
-  await act(() => es.emit({ type: "message_end", message: echo, clientMessageId: "rewound-intent" }, { persist: false }));
+  const echo = {
+    role: "user",
+    content: [{ type: "text", text: "rewound later" }],
+    timestamp: 5,
+  };
+  await act(() =>
+    es.emit(
+      { type: "message_end", message: echo, clientMessageId: "rewound-intent" },
+      { persist: false },
+    ),
+  );
   await settle();
   // The rewind reload cannot read history: nothing yet proves the echo is gone from the new tail.
-  await act(() => es.emit({ type: "session_history_changed", leafId: "e-edited" }));
+  await act(() =>
+    es.emit({ type: "session_history_changed", leafId: "e-edited" }),
+  );
   await settle();
-  assert.ok(w.latest.messages.some((message) => message.clientMessageId === "rewound-intent"), "the echo survives the failed reload");
+  assert.ok(
+    w.latest.messages.some(
+      (message) => message.clientMessageId === "rewound-intent",
+    ),
+    "the echo survives the failed reload",
+  );
   world.contextUnavailable = false;
   saveSession(sid, [userMsg("u0", "first edited")], ["e-edited"]);
   await act(() => es.open());
   await settle();
-  assert.deepEqual(w.latest.messages.map((message) => message.id), ["u0"]);
-  assert.equal(w.latest.messages.some((message) => message.clientMessageId === "rewound-intent"), false, "the rewound echo is gone once the history is readable");
+  assert.deepEqual(
+    w.latest.messages.map((message) => message.id),
+    ["u0"],
+  );
+  assert.equal(
+    w.latest.messages.some(
+      (message) => message.clientMessageId === "rewound-intent",
+    ),
+    false,
+    "the rewound echo is gone once the history is readable",
+  );
 });
 
 test("a rewind prunes only the echoes received before it began, not a continuation's echo received while its history was unreadable", async () => {
   resetWorld();
   const sid = "outbox-rewind-new-echo";
   primeSession(sid, [userMsg("u0", "first"), assistantMsg("a0", "answer")]);
-  world.agents.set(sid, { running: true, state: { isStreaming: true, supportsClientMessageIds: true } });
+  world.agents.set(sid, {
+    running: true,
+    state: { isStreaming: true, supportsClientMessageIds: true },
+  });
   const w = await mountSession(sid);
   const es = lastEs();
   await act(() => es.open());
   await settle();
   world.contextUnavailable = true;
-  const oldEcho = { role: "user", content: [{ type: "text", text: "old tail" }], timestamp: 5 };
-  await act(() => es.emit({ type: "message_end", message: oldEcho, clientMessageId: "old-intent" }, { persist: false }));
+  const oldEcho = {
+    role: "user",
+    content: [{ type: "text", text: "old tail" }],
+    timestamp: 5,
+  };
+  await act(() =>
+    es.emit(
+      { type: "message_end", message: oldEcho, clientMessageId: "old-intent" },
+      { persist: false },
+    ),
+  );
   await settle();
   // The rewind begins; its history cannot be read yet.
-  await act(() => es.emit({ type: "session_history_changed", leafId: "e-edited" }));
+  await act(() =>
+    es.emit({ type: "session_history_changed", leafId: "e-edited" }),
+  );
   await settle();
   // The continuation's first message is echoed before the rewound history is readable.
-  const newEcho = { role: "user", content: [{ type: "text", text: "continuation" }], timestamp: 6 };
-  await act(() => es.emit({ type: "message_end", message: newEcho, clientMessageId: "new-intent" }, { persist: false }));
+  const newEcho = {
+    role: "user",
+    content: [{ type: "text", text: "continuation" }],
+    timestamp: 6,
+  };
+  await act(() =>
+    es.emit(
+      { type: "message_end", message: newEcho, clientMessageId: "new-intent" },
+      { persist: false },
+    ),
+  );
   await settle();
   world.contextUnavailable = false;
   saveSession(sid, [userMsg("u0", "first edited")], ["e-edited"]);
   await act(() => es.open());
   await settle();
-  assert.equal(w.latest.messages.some((message) => message.clientMessageId === "old-intent"), false, "the old tail's echo is gone");
-  assert.ok(w.latest.messages.some((message) => message.clientMessageId === "new-intent"), "the continuation's echo is still shown");
+  assert.equal(
+    w.latest.messages.some(
+      (message) => message.clientMessageId === "old-intent",
+    ),
+    false,
+    "the old tail's echo is gone",
+  );
+  assert.ok(
+    w.latest.messages.some(
+      (message) => message.clientMessageId === "new-intent",
+    ),
+    "the continuation's echo is still shown",
+  );
 });
 
-for (const [name, savedTimestamp, expected] of [["the same native timestamp replaces the echo", 777, 1], ["another native timestamp keeps both", 778, 2]]) {
+for (const [name, savedTimestamp, expected] of [
+  ["the same native timestamp replaces the echo", 777, 1],
+  ["another native timestamp keeps both", 778, 2],
+]) {
   test(`a saved copy without clientMessageId (older daemon) with ${name}`, async () => {
     resetWorld();
     const sid = `outbox-legacy-saved-copy-${savedTimestamp}`;
     primeSession(sid, [userMsg("u0", "before")]);
-    world.agents.set(sid, { running: true, state: { isStreaming: true, supportsClientMessageIds: true } });
+    world.agents.set(sid, {
+      running: true,
+      state: { isStreaming: true, supportsClientMessageIds: true },
+    });
     const w = await mountSession(sid);
     const es = lastEs();
     await act(() => es.open());
     await settle();
     world.contextUnavailable = true;
-    const echo = { role: "user", content: [{ type: "text", text: "legacy echo" }], timestamp: 777 };
-    await act(() => es.emit({ type: "message_end", message: echo, clientMessageId: "legacy-intent" }, { persist: false }));
+    const echo = {
+      role: "user",
+      content: [{ type: "text", text: "legacy echo" }],
+      timestamp: 777,
+    };
+    await act(() =>
+      es.emit(
+        {
+          type: "message_end",
+          message: echo,
+          clientMessageId: "legacy-intent",
+        },
+        { persist: false },
+      ),
+    );
     await settle();
-    const shown = () => w.latest.messages.filter((message) => message.role === "user" && JSON.stringify(message.content).includes("legacy echo"));
-    assert.equal(shown().length, 1, "only the echo shows this message while history is unreadable");
+    const shown = () =>
+      w.latest.messages.filter(
+        (message) =>
+          message.role === "user" &&
+          JSON.stringify(message.content).includes("legacy echo"),
+      );
+    assert.equal(
+      shown().length,
+      1,
+      "only the echo shows this message while history is unreadable",
+    );
     // An older daemon saves the same message without the outer clientMessageId.
     world.contextUnavailable = false;
-    appendEntry(sid, { role: "user", id: "u1", content: [{ type: "text", text: "legacy echo" }], timestamp: savedTimestamp });
+    appendEntry(sid, {
+      role: "user",
+      id: "u1",
+      content: [{ type: "text", text: "legacy echo" }],
+      timestamp: savedTimestamp,
+    });
     await act(() => es.open());
     await settle();
     assert.equal(shown().length, expected);
-    assert.ok(w.latest.messages.some((message) => message.id === "u1"), "the saved copy is shown");
+    assert.ok(
+      w.latest.messages.some((message) => message.id === "u1"),
+      "the saved copy is shown",
+    );
   });
 }
 
-for (const [name, savedData, expected] of [["the same image replaces the echo", "AAAA", 1], ["another image keeps both", "BBBB", 2]]) {
+for (const [name, savedData, expected] of [
+  ["the same image replaces the echo", "AAAA", 1],
+  ["another image keeps both", "BBBB", 2],
+]) {
   test(`a saved copy without clientMessageId (older daemon) with the same timestamp and text but ${name}`, async () => {
     resetWorld();
     const sid = `outbox-legacy-saved-image-${savedData}`;
     primeSession(sid, [userMsg("u0", "before")]);
-    world.agents.set(sid, { running: true, state: { isStreaming: true, supportsClientMessageIds: true } });
+    world.agents.set(sid, {
+      running: true,
+      state: { isStreaming: true, supportsClientMessageIds: true },
+    });
     const w = await mountSession(sid);
     const es = lastEs();
     await act(() => es.open());
     await settle();
     world.contextUnavailable = true;
-    const content = (data) => [{ type: "text", text: "look at this" }, { type: "image", data, mimeType: "image/png" }];
-    await act(() => es.emit({ type: "message_end", message: { role: "user", content: content("AAAA"), timestamp: 888 }, clientMessageId: "image-intent" }, { persist: false }));
+    const content = (data) => [
+      { type: "text", text: "look at this" },
+      { type: "image", data, mimeType: "image/png" },
+    ];
+    await act(() =>
+      es.emit(
+        {
+          type: "message_end",
+          message: { role: "user", content: content("AAAA"), timestamp: 888 },
+          clientMessageId: "image-intent",
+        },
+        { persist: false },
+      ),
+    );
     await settle();
-    const shown = () => w.latest.messages.filter((message) => message.role === "user" && JSON.stringify(message.content).includes("look at this"));
-    assert.equal(shown().length, 1, "only the echo shows this message while history is unreadable");
+    const shown = () =>
+      w.latest.messages.filter(
+        (message) =>
+          message.role === "user" &&
+          JSON.stringify(message.content).includes("look at this"),
+      );
+    assert.equal(
+      shown().length,
+      1,
+      "only the echo shows this message while history is unreadable",
+    );
     world.contextUnavailable = false;
-    appendEntry(sid, { role: "user", id: "u1", content: content(savedData), timestamp: 888 });
+    appendEntry(sid, {
+      role: "user",
+      id: "u1",
+      content: content(savedData),
+      timestamp: 888,
+    });
     await act(() => es.open());
     await settle();
     assert.equal(shown().length, expected);
-    assert.ok(w.latest.messages.some((message) => message.id === "u1"), "the saved copy is shown");
+    assert.ok(
+      w.latest.messages.some((message) => message.id === "u1"),
+      "the saved copy is shown",
+    );
   });
 }
 
@@ -7544,77 +13963,204 @@ for (const catchUp of ["unchanged history", "HTTP failure"]) {
     test(`peer native settlement keeps a known prompt across ${catchUp} until its ${replacement}`, async (t) => {
       resetWorld();
       const sid = `peer-handoff-${catchUp}-${replacement}`;
-      primeSession(sid, [{ ...userMsg("u0", "held message"), clientMessageId: "older-identical-intent" }]);
+      primeSession(sid, [
+        {
+          ...userMsg("u0", "held message"),
+          clientMessageId: "older-identical-intent",
+        },
+      ]);
       const native = attachNativeWrapper(t, sid);
       world.streams.set(sid, native.wrapper.getStreamSnapshot().cursor);
       const entry = {
-        id: "peer-delivering", sessionId: sid, mode: "prompt", message: "held message",
-        state: "delivering", previousEntryIds: ["e0"], createdAt: 1,
+        id: "peer-delivering",
+        sessionId: sid,
+        mode: "prompt",
+        message: "held message",
+        state: "delivering",
+        previousEntryIds: ["e0"],
+        createdAt: 1,
       };
       // This is omp's actual expanded representation, not a copy of the submitted text.
-      const echo = replacement === "native echo"
-        ? { role: "user", id: "expanded-native", content: [{ type: "text", text: "Expanded skill instructions" }], timestamp: 2 }
-        : { role: "custom", id: "expanded-native", customType: "skill-expansion", content: "Native skill expansion", display: true, details: {}, timestamp: 2 };
+      const echo =
+        replacement === "native echo"
+          ? {
+              role: "user",
+              id: "expanded-native",
+              content: [{ type: "text", text: "Expanded skill instructions" }],
+              timestamp: 2,
+            }
+          : {
+              role: "custom",
+              id: "expanded-native",
+              customType: "skill-expansion",
+              content: "Native skill expansion",
+              display: true,
+              details: {},
+              timestamp: 2,
+            };
       const displayed = { ...echo, clientMessageId: entry.id };
       // The selective read cannot answer yet: the bridge must wait, not guess.
-      world.clientMessageStatuses.set(sid, { status: 503, error: "host unavailable" });
+      world.clientMessageStatuses.set(sid, {
+        status: 503,
+        error: "host unavailable",
+      });
       const commits = [];
-      const w = await mountSession(sid, undefined, {}, false, (state) => commits.push(state));
+      const w = await mountSession(sid, undefined, {}, false, (state) =>
+        commits.push(state),
+      );
       const es = lastEs();
       await act(() => es.open());
       await settle();
       await act(() => {
         native.emit({ type: "agent_start" });
-        es.emit({ type: "outbox_update", entries: [entry], settledIds: [], nativeSettledIds: [] });
+        es.emit({
+          type: "outbox_update",
+          entries: [entry],
+          settledIds: [],
+          nativeSettledIds: [],
+        });
       });
       assert.equal(w.latest.heldMessages[0]?.id, entry.id);
       const beforeSettlement = commits.length;
       // The origin accepted the intent, but this peer has neither its echo nor its later disk append.
       if (catchUp === "HTTP failure") world.contextUnavailable = true;
-      await act(() => es.emit({ type: "outbox_update", entries: [], settledIds: [entry.id], nativeSettledIds: [entry.id] }));
+      await act(() =>
+        es.emit({
+          type: "outbox_update",
+          entries: [],
+          settledIds: [entry.id],
+          nativeSettledIds: [entry.id],
+        }),
+      );
       await act(() => publishSessionsChanged([sid]));
       await settle();
       assert.deepEqual(w.latest.entryIds, ["e0"]);
-      assert.equal(w.latest.heldMessages[0]?.id, entry.id, "older identical text and a tombstone cannot replace this intent");
-      assert.equal(w.latest.messages.some((message) => message.id === echo.id), false, "do not invent a native echo");
-      const reads = world.calls.filter((call) => call.body?.type === "get_client_message_status");
-      assert.ok(reads.length > 0, "outstanding native bridges need a selective read");
-      assert.ok(reads.every((call) => JSON.stringify(call.body.clientMessageIds) === JSON.stringify([entry.id])), "query only the outstanding ID");
+      assert.equal(
+        w.latest.heldMessages[0]?.id,
+        entry.id,
+        "older identical text and a tombstone cannot replace this intent",
+      );
+      assert.equal(
+        w.latest.messages.some((message) => message.id === echo.id),
+        false,
+        "do not invent a native echo",
+      );
+      const reads = world.calls.filter(
+        (call) => call.body?.type === "get_client_message_status",
+      );
+      assert.ok(
+        reads.length > 0,
+        "outstanding native bridges need a selective read",
+      );
+      assert.ok(
+        reads.every(
+          (call) =>
+            JSON.stringify(call.body.clientMessageIds) ===
+            JSON.stringify([entry.id]),
+        ),
+        "query only the outstanding ID",
+      );
       world.contextUnavailable = false;
       if (replacement === "native echo") {
         await act(() => {
-          native.emit({ type: "message_start", message: echo, clientMessageId: entry.id });
-          native.emit({ type: "message_end", message: echo, clientMessageId: entry.id });
+          native.emit({
+            type: "message_start",
+            message: echo,
+            clientMessageId: entry.id,
+          });
+          native.emit({
+            type: "message_end",
+            message: echo,
+            clientMessageId: entry.id,
+          });
         });
       } else {
-        world.clientMessageStatuses.set(sid, clientMessageStatus({ messages: [{ clientMessageId: entry.id, message: echo }] }));
+        world.clientMessageStatuses.set(
+          sid,
+          clientMessageStatus({
+            messages: [{ clientMessageId: entry.id, message: echo }],
+          }),
+        );
         await act(() => es.open());
       }
       await settle();
       assert.deepEqual(w.latest.heldMessages, []);
-      assert.deepEqual(w.latest.messages.at(-1), displayed, "handoff uses the actual expanded native representation");
-      assert.ok(commits.slice(beforeSettlement).every((state) =>
-        state.heldMessages.some((held) => held.id === entry.id) ||
-        state.messages.some((message) => message.clientMessageId === entry.id)),
-      "every committed render has either the bridge or its exact native replacement");
+      assert.deepEqual(
+        w.latest.messages.at(-1),
+        displayed,
+        "handoff uses the actual expanded native representation",
+      );
+      assert.ok(
+        commits
+          .slice(beforeSettlement)
+          .every(
+            (state) =>
+              state.heldMessages.some((held) => held.id === entry.id) ||
+              state.messages.some(
+                (message) => message.clientMessageId === entry.id,
+              ),
+          ),
+        "every committed render has either the bridge or its exact native replacement",
+      );
       if (replacement === "selective native read") {
-        await act(() => native.emit({ type: "message_end", message: echo, clientMessageId: entry.id }));
+        await act(() =>
+          native.emit({
+            type: "message_end",
+            message: echo,
+            clientMessageId: entry.id,
+          }),
+        );
         await settle();
-        assert.equal(w.latest.messages.filter((message) => message.clientMessageId === entry.id).length, 1, "a delayed real echo dedupes the selective native representation");
+        assert.equal(
+          w.latest.messages.filter(
+            (message) => message.clientMessageId === entry.id,
+          ).length,
+          1,
+          "a delayed real echo dedupes the selective native representation",
+        );
         await act(() => native.emit({ type: "agent_end", isTerminal: true }));
         await settle();
-        assert.equal(w.latest.agentRunning, false, "branch navigation becomes available after the active turn settles");
-        world.views.set(`${sid}:branch:false`, { leafId: "branch", messages: [userMsg("historical", "past branch")], entryIds: ["branch-entry"] });
-        await act(async () => { await w.changeLeaf("branch"); });
-        assert.deepEqual(w.latest.messages.map((message) => message.id), ["historical"]);
-        assert.deepEqual(w.latest.heldMessages, [], "history navigation cannot resurrect the represented bridge");
-        await act(async () => { await w.changeLeaf(null); });
-        assert.deepEqual(w.latest.messages.at(-1), displayed, "returning live retains the actual native representation before disk append");
+        assert.equal(
+          w.latest.agentRunning,
+          false,
+          "branch navigation becomes available after the active turn settles",
+        );
+        world.views.set(`${sid}:branch:false`, {
+          leafId: "branch",
+          messages: [userMsg("historical", "past branch")],
+          entryIds: ["branch-entry"],
+        });
+        await act(async () => {
+          await w.changeLeaf("branch");
+        });
+        assert.deepEqual(
+          w.latest.messages.map((message) => message.id),
+          ["historical"],
+        );
+        assert.deepEqual(
+          w.latest.heldMessages,
+          [],
+          "history navigation cannot resurrect the represented bridge",
+        );
+        await act(async () => {
+          await w.changeLeaf(null);
+        });
+        assert.deepEqual(
+          w.latest.messages.at(-1),
+          displayed,
+          "returning live retains the actual native representation before disk append",
+        );
       }
       appendEntry(sid, displayed);
       await act(() => publishSessionsChanged([sid]));
       await settle();
-      assert.equal(w.latest.messages.filter((message) => message.clientMessageId === entry.id).length, 1, "disk append dedupes the correlated echo");
+      assert.equal(
+        w.latest.messages.filter(
+          (message) => message.clientMessageId === entry.id,
+        ).length,
+        1,
+        "disk append dedupes the correlated echo",
+      );
     });
   }
 }
@@ -7623,52 +14169,115 @@ test("selective persisted-only handoff waits for successful history catch-up; ex
   resetWorld();
   const sid = "peer-persisted-withdrawn";
   primeSession(sid, [userMsg("u0", "before")]);
-  world.agents.set(sid, { running: true, state: { isStreaming: true, supportsClientMessageIds: true } });
+  world.agents.set(sid, {
+    running: true,
+    state: { isStreaming: true, supportsClientMessageIds: true },
+  });
   const w = await mountSession(sid);
   const es = lastEs();
   await act(() => es.open());
   await settle();
-  const entries = ["persisted", "compacted", "withdrawn", "consumed", "deleted", "unknown"].map((id) => ({
-    id, sessionId: sid, mode: "prompt", message: `submitted ${id}`, state: "delivering", createdAt: 1,
+  const entries = [
+    "persisted",
+    "compacted",
+    "withdrawn",
+    "consumed",
+    "deleted",
+    "unknown",
+  ].map((id) => ({
+    id,
+    sessionId: sid,
+    mode: "prompt",
+    message: `submitted ${id}`,
+    state: "delivering",
+    createdAt: 1,
   }));
-  world.clientMessageStatuses.set(sid, clientMessageStatus({
-    persistedClientMessageIds: ["persisted", "compacted"],
-    resolvedClientMessageIds: ["withdrawn"],
-    unresolvedClientMessageIds: ["unknown"],
-  }));
-  await act(() => es.emit({ type: "outbox_update", entries, settledIds: [], nativeSettledIds: [] }));
+  world.clientMessageStatuses.set(
+    sid,
+    clientMessageStatus({
+      persistedClientMessageIds: ["persisted", "compacted"],
+      resolvedClientMessageIds: ["withdrawn"],
+      unresolvedClientMessageIds: ["unknown"],
+    }),
+  );
+  await act(() =>
+    es.emit({
+      type: "outbox_update",
+      entries,
+      settledIds: [],
+      nativeSettledIds: [],
+    }),
+  );
   world.contextUnavailable = true;
-  await act(() => es.emit({
-    type: "outbox_update", entries: [], settledIds: entries.map((entry) => entry.id),
-    nativeSettledIds: ["persisted", "compacted", "withdrawn", "unknown"],
-  }));
+  await act(() =>
+    es.emit({
+      type: "outbox_update",
+      entries: [],
+      settledIds: entries.map((entry) => entry.id),
+      nativeSettledIds: ["persisted", "compacted", "withdrawn", "unknown"],
+    }),
+  );
   await settle();
-  assert.deepEqual(w.latest.heldMessages.map((entry) => entry.id), ["persisted", "compacted", "unknown"],
-    "consumed/deleted settlements and explicit native withdrawals need no message; failed disk catch-up proves nothing");
-  assert.deepEqual(w.latest.messages.map((message) => message.id), ["u0"]);
+  assert.deepEqual(
+    w.latest.heldMessages.map((entry) => entry.id),
+    ["persisted", "compacted", "unknown"],
+    "consumed/deleted settlements and explicit native withdrawals need no message; failed disk catch-up proves nothing",
+  );
+  assert.deepEqual(
+    w.latest.messages.map((message) => message.id),
+    ["u0"],
+  );
   world.contextUnavailable = false;
   await act(() => es.open());
   await settle();
-  assert.deepEqual(w.latest.heldMessages.map((entry) => entry.id), ["persisted", "compacted", "unknown"],
-    "a successful but unchanged peer catch-up still has no replacement for the persisted IDs");
-  const saved = { ...userMsg("saved-native", "Native persisted expansion"), clientMessageId: "persisted", timestamp: 2 };
+  assert.deepEqual(
+    w.latest.heldMessages.map((entry) => entry.id),
+    ["persisted", "compacted", "unknown"],
+    "a successful but unchanged peer catch-up still has no replacement for the persisted IDs",
+  );
+  const saved = {
+    ...userMsg("saved-native", "Native persisted expansion"),
+    clientMessageId: "persisted",
+    timestamp: 2,
+  };
   appendEntry(sid, saved);
-  world.sessions.get(sid).persistedClientMessageIds = ["persisted", "compacted"];
+  world.sessions.get(sid).persistedClientMessageIds = [
+    "persisted",
+    "compacted",
+  ];
   world.contextUnavailable = false;
   await act(() => es.open());
   await settle();
-  assert.deepEqual(w.latest.heldMessages.map((entry) => entry.id), ["unknown"]);
+  assert.deepEqual(
+    w.latest.heldMessages.map((entry) => entry.id),
+    ["unknown"],
+  );
   assert.deepEqual(w.latest.messages.at(-1), saved);
-  assert.equal(w.latest.messages.some((message) => message.clientMessageId === "compacted"), false, "compacted persistence metadata retires the bridge without fabricating a message");
+  assert.equal(
+    w.latest.messages.some(
+      (message) => message.clientMessageId === "compacted",
+    ),
+    false,
+    "compacted persistence metadata retires the bridge without fabricating a message",
+  );
   const unknown = w.latest.heldMessages.find((entry) => entry.id === "unknown");
-  assert.equal(unknown.state, "failed", "omp reported no trace of it: Not sent, it may have been sent");
+  assert.equal(
+    unknown.state,
+    "failed",
+    "omp reported no trace of it: Not sent, it may have been sent",
+  );
   assert.equal(unknown.mayHaveBeenSent, true);
   const afterResolution = world.calls.length;
   world.clientMessageStatuses.set(sid, clientMessageStatus());
   await act(() => es.open());
   await settle();
-  assert.equal(world.calls.slice(afterResolution).some((call) => call.body?.type === "get_client_message_status"), false,
-    "every bridge is resolved or given up: nothing is polled again");
+  assert.equal(
+    world.calls
+      .slice(afterResolution)
+      .some((call) => call.body?.type === "get_client_message_status"),
+    false,
+    "every bridge is resolved or given up: nothing is polled again",
+  );
 });
 
 for (const failure of ["HTTP failure", "unsupported native query"]) {
@@ -7676,24 +14285,60 @@ for (const failure of ["HTTP failure", "unsupported native query"]) {
     resetWorld();
     const sid = `peer-query-${failure}`;
     primeSession(sid, [userMsg("u0", "before")]);
-    world.agents.set(sid, { running: true, state: { isStreaming: true, supportsClientMessageIds: true } });
+    world.agents.set(sid, {
+      running: true,
+      state: { isStreaming: true, supportsClientMessageIds: true },
+    });
     const w = await mountSession(sid);
     const es = lastEs();
     await act(() => es.open());
     await settle();
-    const entry = { id: "unresolved", sessionId: sid, mode: "prompt", message: "keep this intent", state: "delivering", createdAt: 1 };
+    const entry = {
+      id: "unresolved",
+      sessionId: sid,
+      mode: "prompt",
+      message: "keep this intent",
+      state: "delivering",
+      createdAt: 1,
+    };
     if (failure === "HTTP failure") {
       world.holds.push({
-        match: (method, _url, body) => method === "POST" && body?.type === "get_client_message_status",
-        produce: async () => ({ status: 503, value: { error: "host unavailable" } }),
+        match: (method, _url, body) =>
+          method === "POST" && body?.type === "get_client_message_status",
+        produce: async () => ({
+          status: 503,
+          value: { error: "host unavailable" },
+        }),
       });
     }
-    await act(() => es.emit({ type: "outbox_update", entries: [entry], settledIds: [], nativeSettledIds: [] }));
-    await act(() => es.emit({ type: "outbox_update", entries: [], settledIds: [entry.id], nativeSettledIds: [entry.id] }));
+    await act(() =>
+      es.emit({
+        type: "outbox_update",
+        entries: [entry],
+        settledIds: [],
+        nativeSettledIds: [],
+      }),
+    );
+    await act(() =>
+      es.emit({
+        type: "outbox_update",
+        entries: [],
+        settledIds: [entry.id],
+        nativeSettledIds: [entry.id],
+      }),
+    );
     await settle();
     assert.equal(w.latest.heldMessages[0]?.id, entry.id);
-    assert.deepEqual(w.latest.messages.map((message) => message.id), ["u0"]);
-    assert.ok(world.calls.some((call) => call.body?.type === "get_client_message_status"), "exercise the failed selective read");
+    assert.deepEqual(
+      w.latest.messages.map((message) => message.id),
+      ["u0"],
+    );
+    assert.ok(
+      world.calls.some(
+        (call) => call.body?.type === "get_client_message_status",
+      ),
+      "exercise the failed selective read",
+    );
   });
 }
 
@@ -7701,36 +14346,91 @@ test("correlated native queue snapshots replace only their exact handoff IDs and
   resetWorld();
   const sid = "peer-correlated-queue";
   primeSession(sid, [userMsg("u0", "before")]);
-  world.agents.set(sid, { running: true, state: { isStreaming: true, supportsClientMessageIds: true } });
+  world.agents.set(sid, {
+    running: true,
+    state: { isStreaming: true, supportsClientMessageIds: true },
+  });
   const w = await mountSession(sid);
   const es = lastEs();
   await act(() => es.open());
   await settle();
   const entries = ["queued", "same-text-unresolved"].map((id) => ({
-    id, sessionId: sid, mode: "followUp", message: "identical text", state: "delivering", createdAt: 1,
+    id,
+    sessionId: sid,
+    mode: "followUp",
+    message: "identical text",
+    state: "delivering",
+    createdAt: 1,
   }));
   const queuedMessages = {
-    steering: [], followUp: ["identical text"],
+    steering: [],
+    followUp: ["identical text"],
     clientMessageIds: { steering: [], followUp: ["queued"] },
   };
-  world.clientMessageStatuses.set(sid, clientMessageStatus({ queuedMessages, unresolvedClientMessageIds: ["same-text-unresolved"] }));
-  await act(() => es.emit({ type: "outbox_update", entries, settledIds: [], nativeSettledIds: [] }));
-  await act(() => es.emit({
-    type: "outbox_update", entries: [], settledIds: ["queued", "same-text-unresolved"], nativeSettledIds: ["queued", "same-text-unresolved"],
-  }));
+  world.clientMessageStatuses.set(
+    sid,
+    clientMessageStatus({
+      queuedMessages,
+      unresolvedClientMessageIds: ["same-text-unresolved"],
+    }),
+  );
+  await act(() =>
+    es.emit({
+      type: "outbox_update",
+      entries,
+      settledIds: [],
+      nativeSettledIds: [],
+    }),
+  );
+  await act(() =>
+    es.emit({
+      type: "outbox_update",
+      entries: [],
+      settledIds: ["queued", "same-text-unresolved"],
+      nativeSettledIds: ["queued", "same-text-unresolved"],
+    }),
+  );
   await settle();
-  assert.deepEqual(w.latest.queuedMessages, queuedMessages, "selective reconciliation applies the real correlated queue");
-  assert.deepEqual(w.latest.heldMessages.map((entry) => entry.id), ["same-text-unresolved"], "text equality is not native identity");
-  await act(() => es.emit({ type: "queue_update", steering: [], followUp: [], clientMessageIds: { steering: [], followUp: [] } }));
+  assert.deepEqual(
+    w.latest.queuedMessages,
+    queuedMessages,
+    "selective reconciliation applies the real correlated queue",
+  );
+  assert.deepEqual(
+    w.latest.heldMessages.map((entry) => entry.id),
+    ["same-text-unresolved"],
+    "text equality is not native identity",
+  );
+  await act(() =>
+    es.emit({
+      type: "queue_update",
+      steering: [],
+      followUp: [],
+      clientMessageIds: { steering: [], followUp: [] },
+    }),
+  );
   world.clientMessageStatuses.set(sid, clientMessageStatus());
   await act(() => {
-    es.emit({ type: "outbox_update", entries: [], settledIds: ["queued", "same-text-unresolved"], nativeSettledIds: ["queued", "same-text-unresolved"] });
+    es.emit({
+      type: "outbox_update",
+      entries: [],
+      settledIds: ["queued", "same-text-unresolved"],
+      nativeSettledIds: ["queued", "same-text-unresolved"],
+    });
     workerPort.onmessage({ data: { outboxStored: entries[0] } });
-    workerPort.onmessage({ data: { outbox: [{ ...entries[0], scope: "test-scope", state: "sending" }] } });
+    workerPort.onmessage({
+      data: {
+        outbox: [{ ...entries[0], scope: "test-scope", state: "sending" }],
+      },
+    });
   });
   await settle();
   assert.deepEqual(w.latest.queuedMessages.followUp, []);
-  assert.deepEqual(w.latest.heldMessages.map((entry) => entry.id), ["same-text-unresolved"], "ever-represented IDs survive native drain and late receipts");
+  assert.deepEqual(
+    w.latest.heldMessages.map((entry) => entry.id),
+    ["same-text-unresolved"],
+    "ever-represented IDs survive native drain and late receipts",
+  );
 });
 
 for (const newer of ["queue snapshot", "history navigation"]) {
@@ -7738,46 +14438,117 @@ for (const newer of ["queue snapshot", "history navigation"]) {
     resetWorld();
     const sid = `peer-selective-stale-${newer}`;
     primeSession(sid, [userMsg("u0", "before")]);
-    world.agents.set(sid, { running: true, state: { isStreaming: false, supportsClientMessageIds: true } });
+    world.agents.set(sid, {
+      running: true,
+      state: { isStreaming: false, supportsClientMessageIds: true },
+    });
     const w = await mountSession(sid);
     const es = lastEs();
     await act(() => es.open());
     await settle();
-    const entry = { id: "late-read", sessionId: sid, mode: "followUp", message: "held", state: "delivering", createdAt: 1 };
+    const entry = {
+      id: "late-read",
+      sessionId: sid,
+      mode: "followUp",
+      message: "held",
+      state: "delivering",
+      createdAt: 1,
+    };
     let release;
     world.holds.push({
-      match: (method, _url, body) => method === "POST" && body?.type === "get_client_message_status",
-      produce: () => new Promise((resolve) => { release = resolve; }),
+      match: (method, _url, body) =>
+        method === "POST" && body?.type === "get_client_message_status",
+      produce: () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
     });
     world.clientMessageStatuses.set(sid, clientMessageStatus());
-    await act(() => es.emit({ type: "outbox_update", entries: [entry], settledIds: [], nativeSettledIds: [] }));
-    await act(() => es.emit({ type: "outbox_update", entries: [], settledIds: [entry.id], nativeSettledIds: [entry.id] }));
-    await until(() => typeof release === "function", "selective reconciliation must start");
+    await act(() =>
+      es.emit({
+        type: "outbox_update",
+        entries: [entry],
+        settledIds: [],
+        nativeSettledIds: [],
+      }),
+    );
+    await act(() =>
+      es.emit({
+        type: "outbox_update",
+        entries: [],
+        settledIds: [entry.id],
+        nativeSettledIds: [entry.id],
+      }),
+    );
+    await until(
+      () => typeof release === "function",
+      "selective reconciliation must start",
+    );
     if (newer === "queue snapshot") {
       // A metadata-only update is newer too: both snapshots have the same text.
-      await act(() => es.emit({
-        type: "queue_update", steering: [], followUp: ["same text"],
-        clientMessageIds: { steering: [], followUp: ["different-intent"] },
-      }));
+      await act(() =>
+        es.emit({
+          type: "queue_update",
+          steering: [],
+          followUp: ["same text"],
+          clientMessageIds: { steering: [], followUp: ["different-intent"] },
+        }),
+      );
     } else {
-      world.views.set(`${sid}:branch:false`, { leafId: "branch", messages: [userMsg("branch-user", "historical branch")], entryIds: ["branch-entry"] });
-      await act(async () => { await w.changeLeaf("branch"); });
-      assert.equal(w.latest.activeLeafId, "branch", "the idle fixture must actually navigate before the selective read completes");
+      world.views.set(`${sid}:branch:false`, {
+        leafId: "branch",
+        messages: [userMsg("branch-user", "historical branch")],
+        entryIds: ["branch-entry"],
+      });
+      await act(async () => {
+        await w.changeLeaf("branch");
+      });
+      assert.equal(
+        w.latest.activeLeafId,
+        "branch",
+        "the idle fixture must actually navigate before the selective read completes",
+      );
     }
-    const staleMessage = { ...userMsg("late-native", "native expanded content"), timestamp: 2 };
+    const staleMessage = {
+      ...userMsg("late-native", "native expanded content"),
+      timestamp: 2,
+    };
     await act(async () => {
-      release({ value: { success: true, data: clientMessageStatus({
-        messages: newer === "history navigation" ? [{ clientMessageId: entry.id, message: staleMessage }] : [],
-        queuedMessages: { steering: [], followUp: ["same text"], clientMessageIds: { steering: [], followUp: [entry.id] } },
-      }) } });
+      release({
+        value: {
+          success: true,
+          data: clientMessageStatus({
+            messages:
+              newer === "history navigation"
+                ? [{ clientMessageId: entry.id, message: staleMessage }]
+                : [],
+            queuedMessages: {
+              steering: [],
+              followUp: ["same text"],
+              clientMessageIds: { steering: [], followUp: [entry.id] },
+            },
+          }),
+        },
+      });
       await sleep(30);
     });
     await settle();
     if (newer === "queue snapshot") {
-      assert.deepEqual(w.latest.queuedMessages.clientMessageIds, { steering: [], followUp: ["different-intent"] });
-      assert.equal(w.latest.heldMessages[0]?.id, entry.id, "a rejected stale queue cannot count as a represented ID");
+      assert.deepEqual(w.latest.queuedMessages.clientMessageIds, {
+        steering: [],
+        followUp: ["different-intent"],
+      });
+      assert.equal(
+        w.latest.heldMessages[0]?.id,
+        entry.id,
+        "a rejected stale queue cannot count as a represented ID",
+      );
     } else {
-      assert.deepEqual(w.latest.messages.map((message) => message.id), ["branch-user"], "late native content cannot enter the historical view");
+      assert.deepEqual(
+        w.latest.messages.map((message) => message.id),
+        ["branch-user"],
+        "late native content cannot enter the historical view",
+      );
       assert.deepEqual(w.latest.entryIds, ["branch-entry"]);
     }
   });
@@ -7791,35 +14562,67 @@ test("a 409 deleting a dispatched outbox message shows a notice and keeps the bu
   t.after(() => clearDraft(sid));
   primeSession(sid, [userMsg("u0", "before")]);
   const w = await mountSession(sid);
-  await act(async () => { await w.latest.handleSend("open channel"); });
-  const entry = { id: "already-dispatched", sessionId: sid, mode: "prompt", message: "must not resend", state: "held", createdAt: 1 };
+  await act(async () => {
+    await w.latest.handleSend("open channel");
+  });
+  const entry = {
+    id: "already-dispatched",
+    sessionId: sid,
+    mode: "prompt",
+    message: "must not resend",
+    state: "held",
+    createdAt: 1,
+  };
   await act(() => lastEs().emit({ type: "outbox_update", entries: [entry] }));
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "outbox_remove",
-    produce: async () => ({ status: 409, value: { error: "outbox_dispatched" } }),
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "outbox_remove",
+    produce: async () => ({
+      status: 409,
+      value: { error: "outbox_dispatched" },
+    }),
   });
-  await act(async () => { await w.latest.deleteHeldMessage(entry.id); });
+  await act(async () => {
+    await w.latest.deleteHeldMessage(entry.id);
+  });
   assert.equal(getDraft(sid), null);
   assert.equal(w.latest.notices.length, 1);
   assert.equal(w.latest.notices[0].type, "error");
   assert.match(w.latest.notices[0].message, /outbox_dispatched/);
-  assert.equal(w.latest.heldMessages.some((held) => held.id === entry.id), true);
+  assert.equal(
+    w.latest.heldMessages.some((held) => held.id === entry.id),
+    true,
+  );
 });
 
 test("mounting a session with an outbox snapshot subscribes without starting omp and shows its held messages", async () => {
   resetWorld();
   const sid = "outbox-mount";
   primeSession(sid, [userMsg("u0", "before")]);
-  const entry = { id: "waiting-on-mount", sessionId: sid, mode: "steer", message: "waiting", state: "waiting_host", createdAt: 1 };
+  const entry = {
+    id: "waiting-on-mount",
+    sessionId: sid,
+    mode: "steer",
+    message: "waiting",
+    state: "waiting_host",
+    createdAt: 1,
+  };
   world.holds.push({
-    match: (method, url) => method === "GET" && url === `/api/sessions/${sid}/state`,
-    produce: async () => ({ value: { running: false, outbox: [entry], outboxScope: "test-scope" } }),
+    match: (method, url) =>
+      method === "GET" && url === `/api/sessions/${sid}/state`,
+    produce: async () => ({
+      value: { running: false, outbox: [entry], outboxScope: "test-scope" },
+    }),
   });
   const w = await mountSession(sid);
   assert.deepEqual(lastEs()?.channel, { kind: "session", sessionId: sid });
   assert.deepEqual(w.latest.heldMessages, [{ ...entry, local: false }]);
   await act(() => lastEs().deliver({ type: "open" }));
-  assert.deepEqual(callsTo("POST", "/api/agent/"), [], "an outbox-only stream must wait for connected before talking to omp");
+  assert.deepEqual(
+    callsTo("POST", "/api/agent/"),
+    [],
+    "an outbox-only stream must wait for connected before talking to omp",
+  );
   assert.equal(w.latest.agentRunning, false);
 });
 
@@ -7828,16 +14631,41 @@ test("an outbox stored ACK survives an older empty channel snapshot until its id
   const sid = "outbox-ack-before-snapshot";
   primeSession(sid, [userMsg("u0", "before")]);
   const w = await mountSession(sid);
-  const entry = { id: "ack-first", sessionId: sid, mode: "prompt", message: "still held", state: "held", createdAt: 1 };
+  const entry = {
+    id: "ack-first",
+    sessionId: sid,
+    mode: "prompt",
+    message: "still held",
+    state: "held",
+    createdAt: 1,
+  };
   await act(() => workerPort.onmessage({ data: { outboxStored: entry } }));
   assert.deepEqual(w.latest.heldMessages, [{ ...entry, local: false }]);
   const es = lastEs();
-  await act(() => es.emit({ type: "outbox_update", entries: [], settledIds: [] }));
-  assert.deepEqual(w.latest.heldMessages, [{ ...entry, local: false }], "an empty snapshot that never saw this id cannot retire its ACK bridge");
-  await act(() => es.emit({ type: "outbox_update", entries: [{ ...entry, state: "delivering" }], settledIds: [] }));
+  await act(() =>
+    es.emit({ type: "outbox_update", entries: [], settledIds: [] }),
+  );
+  assert.deepEqual(
+    w.latest.heldMessages,
+    [{ ...entry, local: false }],
+    "an empty snapshot that never saw this id cannot retire its ACK bridge",
+  );
+  await act(() =>
+    es.emit({
+      type: "outbox_update",
+      entries: [{ ...entry, state: "delivering" }],
+      settledIds: [],
+    }),
+  );
   assert.equal(w.latest.heldMessages.length, 1);
-  assert.equal(w.latest.heldMessages[0].state, "delivering", "the channel snapshot supersedes the ACK bridge");
-  await act(() => es.emit({ type: "outbox_update", entries: [], settledIds: [entry.id] }));
+  assert.equal(
+    w.latest.heldMessages[0].state,
+    "delivering",
+    "the channel snapshot supersedes the ACK bridge",
+  );
+  await act(() =>
+    es.emit({ type: "outbox_update", entries: [], settledIds: [entry.id] }),
+  );
   assert.deepEqual(w.latest.heldMessages, []);
 });
 
@@ -7845,22 +14673,46 @@ test("a stored ACK arriving after delivering and removal snapshots cannot resurr
   resetWorld();
   const sid = "outbox-late-ack";
   primeSession(sid, [userMsg("u0", "before")]);
-  const entry = { id: "already-delivered", sessionId: sid, mode: "prompt", message: "done", state: "held", createdAt: 1 };
+  const entry = {
+    id: "already-delivered",
+    sessionId: sid,
+    mode: "prompt",
+    message: "done",
+    state: "held",
+    createdAt: 1,
+  };
   world.holds.push({
-    match: (method, url) => method === "GET" && url === `/api/sessions/${sid}/state`,
-    produce: async () => ({ value: { running: false, outbox: [entry], outboxScope: "test-scope" } }),
+    match: (method, url) =>
+      method === "GET" && url === `/api/sessions/${sid}/state`,
+    produce: async () => ({
+      value: { running: false, outbox: [entry], outboxScope: "test-scope" },
+    }),
   });
   const w = await mountSession(sid);
   const es = lastEs();
-  await act(() => es.emit({ type: "outbox_update", entries: [{ ...entry, state: "delivering" }], settledIds: [] }));
+  await act(() =>
+    es.emit({
+      type: "outbox_update",
+      entries: [{ ...entry, state: "delivering" }],
+      settledIds: [],
+    }),
+  );
   assert.equal(w.latest.heldMessages[0].state, "delivering");
-  await act(() => es.emit({ type: "outbox_update", entries: [], settledIds: [entry.id] }));
+  await act(() =>
+    es.emit({ type: "outbox_update", entries: [], settledIds: [entry.id] }),
+  );
   assert.deepEqual(w.latest.heldMessages, []);
   await act(() => {
-    workerPort.onmessage({ data: { outbox: [{ ...entry, scope: "test-scope", state: "sending" }] } });
+    workerPort.onmessage({
+      data: { outbox: [{ ...entry, scope: "test-scope", state: "sending" }] },
+    });
     workerPort.onmessage({ data: { outboxStored: entry } });
   });
-  assert.deepEqual(w.latest.heldMessages, [], "neither the browser copy nor a late stored ACK can undo the removal");
+  assert.deepEqual(
+    w.latest.heldMessages,
+    [],
+    "neither the browser copy nor a late stored ACK can undo the removal",
+  );
 });
 
 for (const source of ["state", "channel"]) {
@@ -7868,23 +14720,56 @@ for (const source of ["state", "channel"]) {
     resetWorld();
     const sid = `outbox-cold-settled-${source}`;
     primeSession(sid, [userMsg("u0", "before")]);
-    const entry = { id: "settled-before-subscribe", sessionId: sid, mode: "followUp", message: "already handed off", state: "held", createdAt: 1 };
+    const entry = {
+      id: "settled-before-subscribe",
+      sessionId: sid,
+      mode: "followUp",
+      message: "already handed off",
+      state: "held",
+      createdAt: 1,
+    };
     if (source === "state") {
       world.holds.push({
-        match: (method, url) => method === "GET" && url === `/api/sessions/${sid}/state`,
-        produce: async () => ({ value: { running: false, outbox: [], outboxSettledIds: [entry.id], outboxScope: "test-scope" } }),
+        match: (method, url) =>
+          method === "GET" && url === `/api/sessions/${sid}/state`,
+        produce: async () => ({
+          value: {
+            running: false,
+            outbox: [],
+            outboxSettledIds: [entry.id],
+            outboxScope: "test-scope",
+          },
+        }),
       });
     } else {
       world.agents.set(sid, { running: true, state: {} });
     }
     const w = await mountSession(sid);
     if (source === "channel") {
-      await act(() => lastEs().emit({ type: "outbox_update", entries: [], settledIds: [entry.id] }));
+      await act(() =>
+        lastEs().emit({
+          type: "outbox_update",
+          entries: [],
+          settledIds: [entry.id],
+        }),
+      );
     }
-    await act(() => workerPort.onmessage({ data: { outbox: [{ ...entry, scope: "test-scope", state: "sending" }] } }));
-    assert.deepEqual(w.latest.heldMessages, [], "the settled browser copy must never appear");
+    await act(() =>
+      workerPort.onmessage({
+        data: { outbox: [{ ...entry, scope: "test-scope", state: "sending" }] },
+      }),
+    );
+    assert.deepEqual(
+      w.latest.heldMessages,
+      [],
+      "the settled browser copy must never appear",
+    );
     await act(() => workerPort.onmessage({ data: { outboxStored: entry } }));
-    assert.deepEqual(w.latest.heldMessages, [], "the settled ACK must never appear");
+    assert.deepEqual(
+      w.latest.heldMessages,
+      [],
+      "the settled ACK must never appear",
+    );
   });
 }
 
@@ -7895,12 +14780,24 @@ test("an existing-session ChatWindow clears only after worker commit and remount
   primeSession(sid, [userMsg("u0", "before")]);
   world.outboxHold = true;
   let commit;
-  world.outboxCommit = (complete) => { commit = complete; };
-  t.after(async () => { await act(async () => { commit?.(); }); });
+  world.outboxCommit = (complete) => {
+    commit = complete;
+  };
+  t.after(async () => {
+    await act(async () => {
+      commit?.();
+    });
+  });
   const mountChat = async () => {
-    const view = ownRoot(render(React.createElement(ChatWindow, {
-      session: sessionInfo(sid), newSessionCwd: null,
-    }), { wrapper: TestRoot }));
+    const view = ownRoot(
+      render(
+        React.createElement(ChatWindow, {
+          session: sessionInfo(sid),
+          newSessionCwd: null,
+        }),
+        { wrapper: TestRoot },
+      ),
+    );
     await settle();
     return view;
   };
@@ -7912,22 +14809,69 @@ test("an existing-session ChatWindow clears only after worker commit and remount
     await sleep(20);
   });
   assert.equal(typeof commit, "function");
-  assert.equal(composer.value, message, "the draft remains until the worker commits");
-  assert.equal(first.container.querySelectorAll("[data-held-message]").length, 0);
-  await act(async () => { const complete = commit; commit = null; complete(); await sleep(20); });
-  assert.equal(composer.value, "", "the committed receipt clears the submitted composer");
-  assert.equal(first.container.querySelectorAll('[data-held-message="sending"]').length, 1);
+  assert.equal(
+    composer.value,
+    message,
+    "the draft remains until the worker commits",
+  );
+  assert.equal(
+    first.container.querySelectorAll("[data-held-message]").length,
+    0,
+  );
+  await act(async () => {
+    const complete = commit;
+    commit = null;
+    complete();
+    await sleep(20);
+  });
+  assert.equal(
+    composer.value,
+    "",
+    "the committed receipt clears the submitted composer",
+  );
+  assert.equal(
+    first.container.querySelectorAll('[data-held-message="sending"]').length,
+    1,
+  );
   assert.equal(first.getAllByText(message).length, 1);
-  assert.equal(first.queryByRole("button", { name: translate("chatInput.stop") }), null, "holding a message does not start a turn");
+  assert.equal(
+    first.queryByRole("button", { name: translate("chatInput.stop") }),
+    null,
+    "holding a message does not start a turn",
+  );
   const held = [...world.outbox];
   await act(() => first.unmount());
   const second = await mountChat();
-  await act(() => workerPort.onmessage({ data: { outbox: held.map((entry) => ({ ...entry, state: "sending" })) } }));
-  assert.equal(second.getByRole("textbox").value, "", "the already-submitted text does not return as a draft");
-  assert.equal(second.container.querySelectorAll('[data-held-message="sending"]').length, 1);
-  assert.equal(second.getAllByText(message).length, 1, "worker replay and cached state do not duplicate the bubble");
-  assert.equal(second.queryByRole("button", { name: translate("chatInput.stop") }), null);
-  assert.equal(callsTo("POST", `/api/agent/${sid}`).some((call) => call.body?.type === "prompt"), false, "the tab still has no delivery or run to invent");
+  await act(() =>
+    workerPort.onmessage({
+      data: { outbox: held.map((entry) => ({ ...entry, state: "sending" })) },
+    }),
+  );
+  assert.equal(
+    second.getByRole("textbox").value,
+    "",
+    "the already-submitted text does not return as a draft",
+  );
+  assert.equal(
+    second.container.querySelectorAll('[data-held-message="sending"]').length,
+    1,
+  );
+  assert.equal(
+    second.getAllByText(message).length,
+    1,
+    "worker replay and cached state do not duplicate the bubble",
+  );
+  assert.equal(
+    second.queryByRole("button", { name: translate("chatInput.stop") }),
+    null,
+  );
+  assert.equal(
+    callsTo("POST", `/api/agent/${sid}`).some(
+      (call) => call.body?.type === "prompt",
+    ),
+    false,
+    "the tab still has no delivery or run to invent",
+  );
 });
 
 test("offline history and state 503s still hydrate held messages and scope while ChatWindow keeps its composer and retry", async () => {
@@ -7936,36 +14880,100 @@ test("offline history and state 503s still hydrate held messages and scope while
   primeSession(sid, [userMsg("u0", "saved history")]);
   world.contextUnavailable = true;
   world.outboxHold = true;
-  const entry = { id: "offline-server-held", sessionId: sid, mode: "followUp", message: "waiting on the offline host", state: "waiting_host", createdAt: 1 };
+  const entry = {
+    id: "offline-server-held",
+    sessionId: sid,
+    mode: "followUp",
+    message: "waiting on the offline host",
+    state: "waiting_host",
+    createdAt: 1,
+  };
   world.holds.push({
-    match: (method, url) => method === "GET" && url === `/api/sessions/${sid}/state`,
-    produce: async () => ({ status: 503, value: { running: false, hostOffline: true, error: "Build box is offline", outbox: [entry], outboxScope: "offline-scope" } }),
+    match: (method, url) =>
+      method === "GET" && url === `/api/sessions/${sid}/state`,
+    produce: async () => ({
+      status: 503,
+      value: {
+        running: false,
+        hostOffline: true,
+        error: "Build box is offline",
+        outbox: [entry],
+        outboxScope: "offline-scope",
+      },
+    }),
   });
-  const view = ownRoot(render(React.createElement(ChatWindow, {
-    session: { ...sessionInfo(sid), hostId: "h1" }, newSessionCwd: null, hostStatus: "offline", hostLabel: "Build box",
-  }), { wrapper: TestRoot }));
+  const view = ownRoot(
+    render(
+      React.createElement(ChatWindow, {
+        session: { ...sessionInfo(sid), hostId: "h1" },
+        newSessionCwd: null,
+        hostStatus: "offline",
+        hostLabel: "Build box",
+      }),
+      { wrapper: TestRoot },
+    ),
+  );
   await settle();
-  assert.equal(callsTo("GET", `/api/sessions/${sid}/state`).length, 1, "outbox hydration is independent of failed history");
-  assert.equal(view.container.querySelectorAll('[data-held-message="waiting_host"]').length, 1);
+  assert.equal(
+    callsTo("GET", `/api/sessions/${sid}/state`).length,
+    1,
+    "outbox hydration is independent of failed history",
+  );
+  assert.equal(
+    view.container.querySelectorAll('[data-held-message="waiting_host"]')
+      .length,
+    1,
+  );
   assert.ok(view.getByText(entry.message));
-  assert.match(view.getByRole("alert").textContent, /HTTP 503/, "the history error remains visible instead of being swallowed");
+  assert.match(
+    view.getByRole("alert").textContent,
+    /HTTP 503/,
+    "the history error remains visible instead of being swallowed",
+  );
   const composer = view.getByRole("textbox");
-  await act(() => fireEvent.change(composer, { target: { value: "send while offline" } }));
-  await act(async () => { fireEvent.keyDown(composer, { key: "Enter", code: "Enter" }); await sleep(20); });
+  await act(() =>
+    fireEvent.change(composer, { target: { value: "send while offline" } }),
+  );
+  await act(async () => {
+    fireEvent.keyDown(composer, { key: "Enter", code: "Enter" });
+    await sleep(20);
+  });
   assert.equal(composer.value, "");
-  assert.equal(world.outbox[0]?.scope, "offline-scope", "the failing state response still supplies authorization scope");
-  assert.equal(view.container.querySelectorAll("[data-held-message]").length, 2);
-  assert.equal(callsTo("POST", `/api/agent/${sid}`).some((call) => call.body?.type === "prompt"), false);
+  assert.equal(
+    world.outbox[0]?.scope,
+    "offline-scope",
+    "the failing state response still supplies authorization scope",
+  );
+  assert.equal(
+    view.container.querySelectorAll("[data-held-message]").length,
+    2,
+  );
+  assert.equal(
+    callsTo("POST", `/api/agent/${sid}`).some(
+      (call) => call.body?.type === "prompt",
+    ),
+    false,
+  );
   world.contextUnavailable = false;
   world.holds.push({
-    match: (method, url) => method === "GET" && url === `/api/sessions/${sid}/state`,
-    produce: async () => ({ value: { running: false, outbox: [entry], outboxScope: "offline-scope" } }),
+    match: (method, url) =>
+      method === "GET" && url === `/api/sessions/${sid}/state`,
+    produce: async () => ({
+      value: { running: false, outbox: [entry], outboxScope: "offline-scope" },
+    }),
   });
-  await act(() => fireEvent.click(view.getByRole("button", { name: translate("chatWindow.retry") })));
+  await act(() =>
+    fireEvent.click(
+      view.getByRole("button", { name: translate("chatWindow.retry") }),
+    ),
+  );
   await settle();
   assert.equal(view.queryByRole("alert"), null);
   assert.ok(view.getByText("saved history"));
-  assert.equal(view.container.querySelectorAll("[data-held-message]").length, 2);
+  assert.equal(
+    view.container.querySelectorAll("[data-held-message]").length,
+    2,
+  );
 });
 
 test("a history failure without held messages or an offline host keeps the existing blocking error screen", async () => {
@@ -7973,9 +14981,16 @@ test("a history failure without held messages or an offline host keeps the exist
   const sid = "outbox-unavailable-history";
   primeSession(sid, [userMsg("u0", "saved history")]);
   world.contextUnavailable = true;
-  const view = ownRoot(render(React.createElement(ChatWindow, {
-    session: sessionInfo(sid), newSessionCwd: null, hostStatus: "online",
-  }), { wrapper: TestRoot }));
+  const view = ownRoot(
+    render(
+      React.createElement(ChatWindow, {
+        session: sessionInfo(sid),
+        newSessionCwd: null,
+        hostStatus: "online",
+      }),
+      { wrapper: TestRoot },
+    ),
+  );
   await settle();
   assert.match(view.getByText(/HTTP 503/).textContent, /HTTP 503/);
   assert.equal(view.queryByRole("textbox"), null);
@@ -7992,34 +15007,85 @@ for (const changed of [false, true]) {
     primeSession(sid, [userMsg("u0", "before")]);
     world.outboxHold = true;
     let commit;
-    world.outboxCommit = (complete) => { commit = complete; };
-    t.after(async () => { await act(async () => { commit?.(); }); });
+    world.outboxCommit = (complete) => {
+      commit = complete;
+    };
+    t.after(async () => {
+      await act(async () => {
+        commit?.();
+      });
+    });
     const chatInputRef = React.createRef();
     const mountChat = async () => {
-      const view = ownRoot(render(React.createElement(ChatWindow, {
-        session: sessionInfo(sid), newSessionCwd: null, chatInputRef,
-      }), { wrapper: TestRoot }));
+      const view = ownRoot(
+        render(
+          React.createElement(ChatWindow, {
+            session: sessionInfo(sid),
+            newSessionCwd: null,
+            chatInputRef,
+          }),
+          { wrapper: TestRoot },
+        ),
+      );
       await settle();
       return view;
     };
     const first = await mountChat();
-    await act(() => fireEvent.change(first.getByRole("textbox"), { target: { value: "submitted before unmount" } }));
-    await act(async () => { fireEvent.keyDown(first.getByRole("textbox"), { key: "Enter", code: "Enter" }); await sleep(20); });
+    await act(() =>
+      fireEvent.change(first.getByRole("textbox"), {
+        target: { value: "submitted before unmount" },
+      }),
+    );
+    await act(async () => {
+      fireEvent.keyDown(first.getByRole("textbox"), {
+        key: "Enter",
+        code: "Enter",
+      });
+      await sleep(20);
+    });
     assert.equal(typeof commit, "function");
     await act(() => first.unmount());
     const second = await mountChat();
-    assert.equal(second.getByRole("textbox").value, "submitted before unmount", "the uncommitted submission remains recoverable");
+    assert.equal(
+      second.getByRole("textbox").value,
+      "submitted before unmount",
+      "the uncommitted submission remains recoverable",
+    );
     if (changed) {
       await act(() => {
-        fireEvent.change(second.getByRole("textbox"), { target: { value: "newer unsent draft" } });
-        chatInputRef.current.addFiles([new File(["new context"], "new-context.txt", { type: "text/plain" })]);
+        fireEvent.change(second.getByRole("textbox"), {
+          target: { value: "newer unsent draft" },
+        });
+        chatInputRef.current.addFiles([
+          new File(["new context"], "new-context.txt", { type: "text/plain" }),
+        ]);
       });
-      await until(() => getDraft(sid)?.files.length === 1, "the remounted composer's new attachment must finish reading");
+      await until(
+        () => getDraft(sid)?.files.length === 1,
+        "the remounted composer's new attachment must finish reading",
+      );
     }
-    await act(async () => { const complete = commit; commit = null; complete(); await sleep(20); });
-    assert.equal(within(second.getByRole("log")).getAllByText("submitted before unmount").length, 1, "the stored message is represented once by its held bubble");
-    assert.equal(second.container.querySelectorAll('[data-held-message="sending"]').length, 1);
-    assert.equal(second.getByRole("textbox").value, changed ? "newer unsent draft" : "", "a committed submission must not look unsent or erase a newer draft");
+    await act(async () => {
+      const complete = commit;
+      commit = null;
+      complete();
+      await sleep(20);
+    });
+    assert.equal(
+      within(second.getByRole("log")).getAllByText("submitted before unmount")
+        .length,
+      1,
+      "the stored message is represented once by its held bubble",
+    );
+    assert.equal(
+      second.container.querySelectorAll('[data-held-message="sending"]').length,
+      1,
+    );
+    assert.equal(
+      second.getByRole("textbox").value,
+      changed ? "newer unsent draft" : "",
+      "a committed submission must not look unsent or erase a newer draft",
+    );
     if (changed) {
       assert.equal(getDraft(sid)?.value, "newer unsent draft");
       assert.equal(getDraft(sid)?.files[0]?.name, "new-context.txt");
@@ -8037,18 +15103,42 @@ test("deleting a server-held message sends one plain outbox_remove per click bur
   clearDraft(sid);
   t.after(() => clearDraft(sid));
   primeSession(sid, [userMsg("u0", "before")]);
-  const entry = { id: "delete-with-upload", sessionId: sid, mode: "prompt", message: "delete me", uploads: ["staged-upload"], state: "held", createdAt: 1 };
+  const entry = {
+    id: "delete-with-upload",
+    sessionId: sid,
+    mode: "prompt",
+    message: "delete me",
+    uploads: ["staged-upload"],
+    state: "held",
+    createdAt: 1,
+  };
   world.holds.push({
-    match: (method, url) => method === "GET" && url === `/api/sessions/${sid}/state`,
-    produce: async () => ({ value: { running: false, outbox: [entry], outboxScope: "test-scope" } }),
+    match: (method, url) =>
+      method === "GET" && url === `/api/sessions/${sid}/state`,
+    produce: async () => ({
+      value: { running: false, outbox: [entry], outboxScope: "test-scope" },
+    }),
   });
   const w = await mountSession(sid);
   world.holds.push({
-    match: (method, _url, body) => method === "POST" && body?.type === "outbox_remove",
-    produce: async () => ({ value: { success: true, data: { removed: true, entry } } }),
+    match: (method, _url, body) =>
+      method === "POST" && body?.type === "outbox_remove",
+    produce: async () => ({
+      value: { success: true, data: { removed: true, entry } },
+    }),
   });
-  await act(async () => { await Promise.all([w.latest.deleteHeldMessage(entry.id), w.latest.deleteHeldMessage(entry.id)]); });
-  assert.deepEqual(callsTo("POST", `/api/agent/${sid}`).filter((call) => call.body?.type === "outbox_remove").map((call) => call.body), [{ type: "outbox_remove", id: entry.id }]);
+  await act(async () => {
+    await Promise.all([
+      w.latest.deleteHeldMessage(entry.id),
+      w.latest.deleteHeldMessage(entry.id),
+    ]);
+  });
+  assert.deepEqual(
+    callsTo("POST", `/api/agent/${sid}`)
+      .filter((call) => call.body?.type === "outbox_remove")
+      .map((call) => call.body),
+    [{ type: "outbox_remove", id: entry.id }],
+  );
   assert.equal(getDraft(sid), null);
   assert.deepEqual(w.latest.notices, []);
 });
@@ -8058,37 +15148,74 @@ test("send captures saved entries newer than the last rendered transcript throug
   const sid = "outbox-stale-render-boundary";
   primeSession(sid, [userMsg("u0", "old question")]);
   const { w, es } = await startRun(sid, "question");
-  primeSession(sid, [userMsg("u0", "old question"), userMsg("u1", "question"), assistantMsg("a1", "Previous answer")]);
+  primeSession(sid, [
+    userMsg("u0", "old question"),
+    userMsg("u1", "question"),
+    assistantMsg("a1", "Previous answer"),
+  ]);
   let release;
   t.after(() => release?.());
   world.holds.push({
-    match: (method, url) => method === "GET" && url.startsWith(`/api/sessions/${sid}?`),
-    produce: () => new Promise((resolve) => {
-      const file = structuredClone(world.sessions.get(sid));
-      release = () => resolve({ value: { sessionId: sid, leafId: file.leafId, tree: [], context: { ...file, todoPhases: [] } } });
-    }),
+    match: (method, url) =>
+      method === "GET" && url.startsWith(`/api/sessions/${sid}?`),
+    produce: () =>
+      new Promise((resolve) => {
+        const file = structuredClone(world.sessions.get(sid));
+        release = () =>
+          resolve({
+            value: {
+              sessionId: sid,
+              leafId: file.leafId,
+              tree: [],
+              context: { ...file, todoPhases: [] },
+            },
+          });
+      }),
   });
   await act(() => {
-    es.emit({ type: "message_update", message: assistantMsg("a1", "Previous answer") });
+    es.emit({
+      type: "message_update",
+      message: assistantMsg("a1", "Previous answer"),
+    });
     es.emit({ type: "agent_end", isTerminal: true });
   });
   assert.equal(w.latest.agentRunning, false);
   assert.equal(typeof release, "function");
-  assert.deepEqual(w.latest.entryIds, ["e0"], "the terminal transcript refresh is still held");
+  assert.deepEqual(
+    w.latest.entryIds,
+    ["e0"],
+    "the terminal transcript refresh is still held",
+  );
   world.outboxHold = true;
-  await act(async () => { assert.deepEqual(await w.latest.handleSend("question"), { status: "accepted" }); });
+  await act(async () => {
+    assert.deepEqual(await w.latest.handleSend("question"), {
+      status: "accepted",
+    });
+  });
   const entry = world.outbox[0];
-  assert.equal(w.latest.agentRunning, false, "holding the next send does not start its run");
+  assert.equal(
+    w.latest.agentRunning,
+    false,
+    "holding the next send does not start its run",
+  );
   const previousEntryIds = [...world.sessions.get(sid).entryIds];
   await act(async () => {
-    es.emit({ type: "outbox_update", entries: [{ ...entry, state: "delivering", previousEntryIds }], settledIds: [] });
+    es.emit({
+      type: "outbox_update",
+      entries: [{ ...entry, state: "delivering", previousEntryIds }],
+      settledIds: [],
+    });
     world.outboxHold = false;
     await dispatchOutbox();
     es.emit({ type: "agent_start" });
     es.emit({ type: "outbox_update", entries: [], settledIds: [entry.id] });
     release();
   });
-  assert.equal(callsTo("GET", `/api/sessions/${sid}/context?boundary=1`).length, 0, "the tab never fetches a late pre-send boundary");
+  assert.equal(
+    callsTo("GET", `/api/sessions/${sid}/context?boundary=1`).length,
+    0,
+    "the tab never fetches a late pre-send boundary",
+  );
   // This new run saves neither a user message nor an answer.
   await act(async () => {
     visibilityState = "visible";
@@ -8097,7 +15224,11 @@ test("send captures saved entries newer than the last rendered transcript throug
   });
   await settle();
   assert.equal(w.latest.agentRunning, false);
-  assert.equal(w.latest.notices.filter((notice) => notice.type === "error").length, 1, "previous answer must not count as replacement success");
+  assert.equal(
+    w.latest.notices.filter((notice) => notice.type === "error").length,
+    1,
+    "previous answer must not count as replacement success",
+  );
 });
 
 for (const outcome of ["failed", "delivered"]) {
@@ -8110,20 +15241,37 @@ for (const outcome of ["failed", "delivered"]) {
     const es = lastEs();
     await act(() => es.open());
     const entry = {
-      id: "no-run-attempt", sessionId: sid, mode: "prompt", message: "/local-command",
-      state: "delivering", previousEntryIds: ["e0"], createdAt: 1,
+      id: "no-run-attempt",
+      sessionId: sid,
+      mode: "prompt",
+      message: "/local-command",
+      state: "delivering",
+      previousEntryIds: ["e0"],
+      createdAt: 1,
     };
     await act(() => {
       es.emit({ type: "outbox_update", entries: [entry], settledIds: [] });
       es.emit({
         type: "outbox_update",
-        entries: outcome === "failed" ? [{ ...entry, state: "failed", error: "Refused" }] : [],
+        entries:
+          outcome === "failed"
+            ? [{ ...entry, state: "failed", error: "Refused" }]
+            : [],
         settledIds: outcome === "delivered" ? [entry.id] : [],
       });
     });
     // Saved work from elsewhere arrives after the attempt, but before a separate new turn.
-    saveSession(sid, [userMsg("u0", "old question"), userMsg("u1", "intervening question"), assistantMsg("a1", "Earlier answer")]);
-    await act(() => es.emit({ type: "message_end", message: userMsg("u1", "intervening question") }, { persist: false }));
+    saveSession(sid, [
+      userMsg("u0", "old question"),
+      userMsg("u1", "intervening question"),
+      assistantMsg("a1", "Earlier answer"),
+    ]);
+    await act(() =>
+      es.emit(
+        { type: "message_end", message: userMsg("u1", "intervening question") },
+        { persist: false },
+      ),
+    );
     await settle();
     assert.deepEqual(w.latest.entryIds, ["e0", "e1", "e2"]);
     await act(() => {
@@ -8132,7 +15280,11 @@ for (const outcome of ["failed", "delivered"]) {
     });
     await settle();
     assert.equal(w.latest.agentRunning, false);
-    assert.equal(w.latest.notices.filter((notice) => notice.type === "error").length, 1, "the intervening saved answer is not a response to the empty new turn");
+    assert.equal(
+      w.latest.notices.filter((notice) => notice.type === "error").length,
+      1,
+      "the intervening saved answer is not a response to the empty new turn",
+    );
   });
 }
 
@@ -8145,8 +15297,13 @@ test("a peer republishing a delivering entry after its agent_start cannot lend t
   const es = lastEs();
   await act(() => es.open());
   const entry = {
-    id: "peer-republished", sessionId: sid, mode: "prompt", message: "held question",
-    state: "delivering", previousEntryIds: ["e0"], createdAt: 1,
+    id: "peer-republished",
+    sessionId: sid,
+    mode: "prompt",
+    message: "held question",
+    state: "delivering",
+    previousEntryIds: ["e0"],
+    createdAt: 1,
   };
   await act(() => {
     es.emit({ type: "outbox_update", entries: [entry], settledIds: [] });
@@ -8154,14 +15311,28 @@ test("a peer republishing a delivering entry after its agent_start cannot lend t
     // A peer's 250 ms poll republishes the same delivering row after its run started.
     es.emit({ type: "outbox_update", entries: [entry], settledIds: [] });
   });
-  saveSession(sid, [userMsg("u0", "old question"), userMsg("u1", "held question"), assistantMsg("a1", "Answer")]);
+  saveSession(sid, [
+    userMsg("u0", "old question"),
+    userMsg("u1", "held question"),
+    assistantMsg("a1", "Answer"),
+  ]);
   await act(() => {
-    es.emit({ type: "message_end", message: userMsg("u1", "held question") }, { persist: false });
-    es.emit({ type: "message_end", message: assistantMsg("a1", "Answer") }, { persist: false });
+    es.emit(
+      { type: "message_end", message: userMsg("u1", "held question") },
+      { persist: false },
+    );
+    es.emit(
+      { type: "message_end", message: assistantMsg("a1", "Answer") },
+      { persist: false },
+    );
     es.emit({ type: "agent_end", isTerminal: true });
   });
   await settle();
-  assert.equal(w.latest.notices.filter((notice) => notice.type === "error").length, 0, "the delivered turn answered");
+  assert.equal(
+    w.latest.notices.filter((notice) => notice.type === "error").length,
+    0,
+    "the delivered turn answered",
+  );
   await act(() => {
     es.emit({ type: "agent_start" });
     es.emit({ type: "agent_end", isTerminal: true });
@@ -8170,7 +15341,11 @@ test("a peer republishing a delivering entry after its agent_start cannot lend t
   });
   await settle();
   assert.equal(w.latest.agentRunning, false);
-  assert.equal(w.latest.notices.filter((notice) => notice.type === "error").length, 1, "the earlier answer is not a response to the empty new turn");
+  assert.equal(
+    w.latest.notices.filter((notice) => notice.type === "error").length,
+    1,
+    "the earlier answer is not a response to the empty new turn",
+  );
 });
 
 test("deleting a failed browser-held message removes it only after the durable IndexedDB delete commits", async (t) => {
@@ -8179,17 +15354,41 @@ test("deleting a failed browser-held message removes it only after the durable I
   primeSession(sid, [userMsg("u0", "before")]);
   world.outboxHold = true;
   const w = await mountSession(sid);
-  await act(async () => { await w.latest.handleSend("locally held"); });
-  const entry = { ...world.outbox[0], state: "failed", error: "Upload refused" };
+  await act(async () => {
+    await w.latest.handleSend("locally held");
+  });
+  const entry = {
+    ...world.outbox[0],
+    state: "failed",
+    error: "Upload refused",
+  };
   world.outbox[0] = entry;
   await act(() => workerPort.onmessage({ data: { outbox: [entry] } }));
   let commit;
-  t.after(async () => { await act(async () => { commit?.(); }); });
-  world.outboxDrop = (complete) => { commit = complete; };
+  t.after(async () => {
+    await act(async () => {
+      commit?.();
+    });
+  });
+  world.outboxDrop = (complete) => {
+    commit = complete;
+  };
   let deleting;
-  await act(async () => { deleting = w.latest.deleteHeldMessage(entry.id); await Promise.resolve(); });
-  assert.equal(w.latest.heldMessages[0].id, entry.id, "the bubble stays until IndexedDB commits the delete");
-  await act(async () => { const complete = commit; commit = null; complete(); await deleting; });
+  await act(async () => {
+    deleting = w.latest.deleteHeldMessage(entry.id);
+    await Promise.resolve();
+  });
+  assert.equal(
+    w.latest.heldMessages[0].id,
+    entry.id,
+    "the bubble stays until IndexedDB commits the delete",
+  );
+  await act(async () => {
+    const complete = commit;
+    commit = null;
+    complete();
+    await deleting;
+  });
   assert.deepEqual(w.latest.heldMessages, []);
   assert.deepEqual(w.latest.notices, []);
 });
@@ -8202,11 +15401,21 @@ test("a failed durable browser deletion keeps the held message and shows a notic
   t.after(() => clearDraft(sid));
   primeSession(sid, [userMsg("u0", "before")]);
   const w = await mountSession(sid);
-  const entry = { id: "local-delete-fails", sessionId: sid, scope: "test-scope", mode: "prompt", message: "still held", state: "failed", createdAt: 1 };
+  const entry = {
+    id: "local-delete-fails",
+    sessionId: sid,
+    scope: "test-scope",
+    mode: "prompt",
+    message: "still held",
+    state: "failed",
+    createdAt: 1,
+  };
   world.outbox.push(entry);
   await act(() => workerPort.onmessage({ data: { outbox: [entry] } }));
   world.outboxDrop = (complete) => complete("IndexedDB deletion failed");
-  await act(async () => { await w.latest.deleteHeldMessage(entry.id); });
+  await act(async () => {
+    await w.latest.deleteHeldMessage(entry.id);
+  });
   assert.equal(getDraft(sid), null);
   assert.equal(w.latest.heldMessages[0].id, entry.id);
   assert.equal(w.latest.notices[0].type, "error");
@@ -8217,41 +15426,99 @@ test("dismissing an uncertain bridge deletes the browser copy the worker still h
   resetWorld();
   const sid = "outbox-uncertain-local-copy";
   primeSession(sid, [userMsg("u0", "before")]);
-  world.agents.set(sid, { running: true, state: { isStreaming: true, supportsClientMessageIds: true } });
+  world.agents.set(sid, {
+    running: true,
+    state: { isStreaming: true, supportsClientMessageIds: true },
+  });
   world.outboxHold = true;
   const w = await mountSession(sid);
   const es = lastEs();
   await act(() => es.open());
   await settle();
-  world.clientMessageStatuses.set(sid, clientMessageStatus({ unresolvedClientMessageIds: ["uncertain-with-copy"] }));
-  const entry = { id: "uncertain-with-copy", sessionId: sid, mode: "followUp", message: "settled before its receipt", state: "delivering", createdAt: 1 };
+  world.clientMessageStatuses.set(
+    sid,
+    clientMessageStatus({
+      unresolvedClientMessageIds: ["uncertain-with-copy"],
+    }),
+  );
+  const entry = {
+    id: "uncertain-with-copy",
+    sessionId: sid,
+    mode: "followUp",
+    message: "settled before its receipt",
+    state: "delivering",
+    createdAt: 1,
+  };
   // The server settled the id before the worker saw its outbox_add receipt: the worker still holds, and would retry, its copy.
   const copy = { ...entry, scope: "test-scope", state: "sending" };
   world.outbox.push(copy);
   await act(() => workerPort.onmessage({ data: { outbox: [copy] } }));
   await act(() => {
     es.emit({ type: "outbox_update", entries: [entry], settledIds: [] });
-    es.emit({ type: "outbox_update", entries: [], settledIds: [entry.id], nativeSettledIds: [entry.id] });
+    es.emit({
+      type: "outbox_update",
+      entries: [],
+      settledIds: [entry.id],
+      nativeSettledIds: [entry.id],
+    });
   });
   await settle();
-  await act(async () => { await sleep(50); });
+  await act(async () => {
+    await sleep(50);
+  });
   assert.equal(w.latest.heldMessages[0]?.state, "failed");
   assert.equal(w.latest.heldMessages[0]?.mayHaveBeenSent, true);
   world.outboxDrop = (complete) => complete("IndexedDB deletion failed");
-  await act(async () => { await w.latest.deleteHeldMessage(entry.id); });
-  assert.equal(w.latest.heldMessages[0]?.id, entry.id, "a failed durable delete keeps the row");
+  await act(async () => {
+    await w.latest.deleteHeldMessage(entry.id);
+  });
+  assert.equal(
+    w.latest.heldMessages[0]?.id,
+    entry.id,
+    "a failed durable delete keeps the row",
+  );
   assert.match(w.latest.notices[0]?.message, /IndexedDB deletion failed/);
   let commit;
-  t.after(async () => { await act(async () => { commit?.(); }); });
-  world.outboxDrop = (complete) => { commit = complete; };
+  t.after(async () => {
+    await act(async () => {
+      commit?.();
+    });
+  });
+  world.outboxDrop = (complete) => {
+    commit = complete;
+  };
   let deleting;
-  await act(async () => { deleting = w.latest.deleteHeldMessage(entry.id); await Promise.resolve(); });
+  await act(async () => {
+    deleting = w.latest.deleteHeldMessage(entry.id);
+    await Promise.resolve();
+  });
   assert.ok(commit, "the worker was asked to delete its copy");
-  assert.equal(w.latest.heldMessages[0]?.id, entry.id, "the row stays until IndexedDB commits the delete");
-  await act(async () => { const complete = commit; commit = null; complete(); await deleting; });
+  assert.equal(
+    w.latest.heldMessages[0]?.id,
+    entry.id,
+    "the row stays until IndexedDB commits the delete",
+  );
+  await act(async () => {
+    const complete = commit;
+    commit = null;
+    complete();
+    await deleting;
+  });
   assert.deepEqual(w.latest.heldMessages, []);
-  assert.equal(world.outbox.some((held) => held.id === entry.id), false, "the browser copy is gone, so a reload cannot bring the row back");
-  assert.equal(world.calls.some((call) => ["prompt", "steer", "follow_up", "outbox_remove"].includes(call.body?.type)), false, "dismissal neither resends nor touches the server row");
+  assert.equal(
+    world.outbox.some((held) => held.id === entry.id),
+    false,
+    "the browser copy is gone, so a reload cannot bring the row back",
+  );
+  assert.equal(
+    world.calls.some((call) =>
+      ["prompt", "steer", "follow_up", "outbox_remove"].includes(
+        call.body?.type,
+      ),
+    ),
+    false,
+    "dismissal neither resends nor touches the server row",
+  );
 });
 
 test("an offline send follows its held bubble when the worker list arrives before the commit ACK", async () => {
@@ -8263,18 +15530,40 @@ test("an offline send follows its held bubble when the worker list arrives befor
   const container = document.createElement("div");
   const end = document.createElement("div");
   let followed = 0;
-  Object.defineProperty(end, "scrollIntoView", { value: () => { followed++; }, configurable: true });
+  Object.defineProperty(end, "scrollIntoView", {
+    value: () => {
+      followed++;
+    },
+    configurable: true,
+  });
   w.latest.scrollContainerRef.current = container;
   w.latest.messagesEndRef.current = end;
   w.latest.holdScrollPosition();
   world.outboxCommit = () => {};
   let send;
-  await act(async () => { send = w.latest.handleSend("held while scrolled up"); await sleep(20); });
+  await act(async () => {
+    send = w.latest.handleSend("held while scrolled up");
+    await sleep(20);
+  });
   const { n, entry } = world.lastOutboxAdd;
-  await act(() => workerPort.onmessage({ data: { outbox: [{ ...entry, state: "sending" }] } }));
+  await act(() =>
+    workerPort.onmessage({
+      data: { outbox: [{ ...entry, state: "sending" }] },
+    }),
+  );
   assert.equal(w.latest.heldMessages.length, 1);
-  assert.equal(followed, 0, "manual scroll remains respected before the submission is accepted");
-  await act(async () => { workerPort.onmessage({ data: { outboxAdded: n } }); await send; await sleep(40); });
-  assert.ok(followed > 0, "a committed Send follows the held bubble without waiting for another server frame");
+  assert.equal(
+    followed,
+    0,
+    "manual scroll remains respected before the submission is accepted",
+  );
+  await act(async () => {
+    workerPort.onmessage({ data: { outboxAdded: n } });
+    await send;
+    await sleep(40);
+  });
+  assert.ok(
+    followed > 0,
+    "a committed Send follows the held bubble without waiting for another server frame",
+  );
 });
-

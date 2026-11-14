@@ -12,10 +12,19 @@ export function isToolPreset(value: unknown): value is ToolPreset {
 
 export const PRESET_NONE: string[] = [];
 export const PRESET_DEFAULT: string[] = ["read", "bash", "edit", "write"];
-export const PRESET_FULL: string[] = ["bash", "read", "edit", "write", "grep", "find", "ls"];
+export const PRESET_FULL: string[] = [
+  "bash",
+  "read",
+  "edit",
+  "write",
+  "grep",
+  "find",
+  "ls",
+];
 
-export function getToolNamesForPreset(preset: ToolPreset): string[] | undefined {
-
+export function getToolNamesForPreset(
+  preset: ToolPreset,
+): string[] | undefined {
   if (preset === "none") return [...PRESET_NONE];
   if (preset === "full") return undefined;
   return [...PRESET_DEFAULT];

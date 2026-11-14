@@ -20,13 +20,13 @@ Measured with the experiment's modes: a command's `ack` queued behind event fram
 
 The browser link uses the host link's primitives from `lib/hosts/link-protocol.ts` (pure, no I/O; the worker bundles it):
 
-| Piece | Use |
-|---|---|
-| `LINK_LIMITS.pieceBytes` (256 KiB), `unackedBytes` (512 KiB), `pingMs` (15 s), `offlineMs` (30 s), `flushMs` (16 ms) | same values, both directions |
-| `LinkSender` | per-key FIFO, round-robin, one unit (a whole line ≤ 256 KiB or one `part`) per turn, lines numbered as they go out, one key at a time part-way through a line |
-| `PartJoiner` | joins `part`s; gains a `maxChars` constructor argument (default `maxLineBytes`, so the host link is unchanged) because a browser command is up to 8 MiB plus its envelope |
-| `SeqWindow`, `Outbox` | dedupe by `seq`, keep sent lines until acked, resend after a reconnect |
-| `withSeq`, new `queuedLine(json)` | a JSON object's text as a line `LinkSender` numbers (`encodeQueued` stays the host's typed variant) |
+| Piece                                                                                                                | Use                                                                                                                                                                       |
+| -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LINK_LIMITS.pieceBytes` (256 KiB), `unackedBytes` (512 KiB), `pingMs` (15 s), `offlineMs` (30 s), `flushMs` (16 ms) | same values, both directions                                                                                                                                              |
+| `LinkSender`                                                                                                         | per-key FIFO, round-robin, one unit (a whole line ≤ 256 KiB or one `part`) per turn, lines numbered as they go out, one key at a time part-way through a line             |
+| `PartJoiner`                                                                                                         | joins `part`s; gains a `maxChars` constructor argument (default `maxLineBytes`, so the host link is unchanged) because a browser command is up to 8 MiB plus its envelope |
+| `SeqWindow`, `Outbox`                                                                                                | dedupe by `seq`, keep sent lines until acked, resend after a reconnect                                                                                                    |
+| `withSeq`, new `queuedLine(json)`                                                                                    | a JSON object's text as a line `LinkSender` numbers (`encodeQueued` stays the host's typed variant)                                                                       |
 
 The pacing loops stay per endpoint, as hub and daemon already differ: the server mirrors the hub's `flush` (Bun `send` → `-1` → `drain`), the worker mirrors the daemon's (`bufferedAmount` under 2 pieces, polled every `flushMs`). No host link code path, message or test changes. Risk: these two loops are copies, so a fix to the hub's or the daemon's loop (window accounting, the resend from `sentSeq`, drain handling) must be carried over by hand; `lib/browser-link.integration.test.mjs` runs the real worker against the real server end to catch a divergence that breaks delivery.
 
@@ -36,26 +36,26 @@ Text frames carry the messages, one line per frame, both directions. Messages ar
 
 Browser → server:
 
-| Message | Seq | Key | Meaning |
-|---|---|---|---|
-| `hello {v: 1, token, ack}` | no | — | first frame of every socket; `token` null on a fresh start; `ack` the highest down `seq` applied |
-| `ack {ack}` | no | — | highest down `seq` applied, sent within `flushMs` of applying, at once past a piece of applied data |
-| `ping {c}` | no | — | clock ping (on open and in answer to every server `ping`); also liveness |
-| `sub {id, channel}`, `unsub {id}` | yes | subscription id | (un)subscribe, as `POST /api/events` |
-| `cmd {rid, session, advisor, command}` | yes | `cmd:<session>` | an agent command; `command` is the tab's JSON body, embedded unparsed by the worker |
-| `up_start {id, n, host, name, size, mime}`, `up_abort {id}` | yes | `up:<id>` | open or resume (`n`: the worker's per-open counter), or cancel, a composer upload (uploads spec, U4) |
+| Message                                                     | Seq | Key             | Meaning                                                                                              |
+| ----------------------------------------------------------- | --- | --------------- | ---------------------------------------------------------------------------------------------------- |
+| `hello {v: 1, token, ack}`                                  | no  | —               | first frame of every socket; `token` null on a fresh start; `ack` the highest down `seq` applied     |
+| `ack {ack}`                                                 | no  | —               | highest down `seq` applied, sent within `flushMs` of applying, at once past a piece of applied data  |
+| `ping {c}`                                                  | no  | —               | clock ping (on open and in answer to every server `ping`); also liveness                             |
+| `sub {id, channel}`, `unsub {id}`                           | yes | subscription id | (un)subscribe, as `POST /api/events`                                                                 |
+| `cmd {rid, session, advisor, command}`                      | yes | `cmd:<session>` | an agent command; `command` is the tab's JSON body, embedded unparsed by the worker                  |
+| `up_start {id, n, host, name, size, mime}`, `up_abort {id}` | yes | `up:<id>`       | open or resume (`n`: the worker's per-open counter), or cancel, a composer upload (uploads spec, U4) |
 
 Server → browser:
 
-| Message | Seq | Key | Meaning |
-|---|---|---|---|
-| `welcome {v, token, serverId, resumed, ack}` | no | — | answer to `hello`; `ack` the highest up `seq` applied |
-| `ack {ack}` | no | — | after every applied frame |
-| `ping {at}` | no | — | every `pingMs` |
-| `pong {c, at}` | no | — | answer to a clock ping |
-| `e {name, at, data}` | yes | subscription id (`mux` frames: their `sub`, else `mux`) | one `EventStreamConnection` frame, exactly what SSE writes as `event: name / id: at / data: data`; `data` is the raw frame JSON |
-| `reply {rid, status, recvAt, at, deduped, data}` | yes | `cmd:<session>` | a command's answer; `data` the route's JSON body, `recvAt` when the `cmd` was applied, `at` when the reply was queued |
-| `up_ack {id, received, done, start?}`, `up_error {id, status, code, message}` | yes | `up:<id>` | an upload's progress (`start: n` on the answer to `up_start` `n`) or failure (uploads spec, U4) |
+| Message                                                                       | Seq | Key                                                     | Meaning                                                                                                                         |
+| ----------------------------------------------------------------------------- | --- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `welcome {v, token, serverId, resumed, ack}`                                  | no  | —                                                       | answer to `hello`; `ack` the highest up `seq` applied                                                                           |
+| `ack {ack}`                                                                   | no  | —                                                       | after every applied frame                                                                                                       |
+| `ping {at}`                                                                   | no  | —                                                       | every `pingMs`                                                                                                                  |
+| `pong {c, at}`                                                                | no  | —                                                       | answer to a clock ping                                                                                                          |
+| `e {name, at, data}`                                                          | yes | subscription id (`mux` frames: their `sub`, else `mux`) | one `EventStreamConnection` frame, exactly what SSE writes as `event: name / id: at / data: data`; `data` is the raw frame JSON |
+| `reply {rid, status, recvAt, at, deduped, data}`                              | yes | `cmd:<session>`                                         | a command's answer; `data` the route's JSON body, `recvAt` when the `cmd` was applied, `at` when the reply was queued           |
+| `up_ack {id, received, done, start?}`, `up_error {id, status, code, message}` | yes | `up:<id>`                                               | an upload's progress (`start: n` on the answer to `up_start` `n`) or failure (uploads spec, U4)                                 |
 
 `data` is always the last field before `seq`, so the worker reads the header with one small `JSON.parse` and passes `data` on as the substring it is (no parse of a large snapshot in the worker, as with SSE). A `part` line is parsed whole (≤ 256 KiB).
 

@@ -1,8 +1,22 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
 import { resolve } from "path";
 import { getAgentDir } from "./omp/paths";
-import { BROWSER_TRANSPORTS, type BrowserTransport, type BrowserTransportState } from "./event-stream-protocol";
-import { DEFAULT_UPLOAD_RETENTION_DAYS, isUploadRetentionDays } from "./upload-limits";
+import {
+  BROWSER_TRANSPORTS,
+  type BrowserTransport,
+  type BrowserTransportState,
+} from "./event-stream-protocol";
+import {
+  DEFAULT_UPLOAD_RETENTION_DAYS,
+  isUploadRetentionDays,
+} from "./upload-limits";
 import { isRecord } from "./type-guards";
 
 /** omp-web's own server-side settings (omp's config.yml stays omp's). */
@@ -38,7 +52,9 @@ const DEFAULTS: WebServerSettings = {
 };
 
 /** What every hello and `transport` frame tells the browser. */
-export function browserTransportState(settings = loadWebServerSettings()): BrowserTransportState {
+export function browserTransportState(
+  settings = loadWebServerSettings(),
+): BrowserTransportState {
   return { transport: settings.browserTransport };
 }
 
@@ -58,7 +74,8 @@ function settingsPath(): string {
 
 declare global {
   // Survives `bun --hot` re-evaluation, which creates fresh module instances.
-  var __ompWebSettingsCache: { path: string; settings: WebServerSettings } | undefined;
+  var __ompWebSettingsCache:
+    { path: string; settings: WebServerSettings } | undefined;
 }
 
 export function loadWebServerSettings(): WebServerSettings {
@@ -74,8 +91,13 @@ export function loadWebServerSettings(): WebServerSettings {
           autoResumeSessions: raw.autoResumeSessions === true,
           agentToolsEnabled: raw.agentToolsEnabled === true,
           agentEnv: readAgentEnvRecord(raw.agentEnv),
-          browserTransport: BROWSER_TRANSPORTS.find((transport) => transport === raw.browserTransport) ?? "ws",
-          uploadRetentionDays: isUploadRetentionDays(raw.uploadRetentionDays) ? raw.uploadRetentionDays : DEFAULT_UPLOAD_RETENTION_DAYS,
+          browserTransport:
+            BROWSER_TRANSPORTS.find(
+              (transport) => transport === raw.browserTransport,
+            ) ?? "ws",
+          uploadRetentionDays: isUploadRetentionDays(raw.uploadRetentionDays)
+            ? raw.uploadRetentionDays
+            : DEFAULT_UPLOAD_RETENTION_DAYS,
         };
       }
     }
@@ -87,13 +109,18 @@ export function loadWebServerSettings(): WebServerSettings {
 }
 
 /** Atomic write (temp file + rename), like the project registry. Private to its user: it holds agentEnv. */
-export function saveWebServerSettings(patch: Partial<WebServerSettings>): WebServerSettings {
+export function saveWebServerSettings(
+  patch: Partial<WebServerSettings>,
+): WebServerSettings {
   const path = settingsPath();
   const settings = { ...loadWebServerSettings(), ...patch };
   mkdirSync(resolve(path, ".."), { recursive: true });
   const temp = `${path}.tmp-${process.pid}-${Date.now()}`;
   try {
-    writeFileSync(temp, `${JSON.stringify(settings, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    writeFileSync(temp, `${JSON.stringify(settings, null, 2)}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
     renameSync(temp, path);
   } finally {
     try {

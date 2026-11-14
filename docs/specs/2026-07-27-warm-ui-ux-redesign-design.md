@@ -12,16 +12,16 @@ omp-web 是 oh-my-pi 的 Web 界面（Next.js 16 + React 19 + Tailwind CSS 4 + �
 
 ## 2. 已确认的决策（拷问结论）
 
-| 决策点 | 结论 |
-|---|---|
-| 优化范围 | 视觉打磨 + 聊天主流程 + 配置表单 + 反馈状态系统（四项全做） |
-| 风格走向 | 个性重塑（非克制进化） |
-| 品牌质感 | 温暖人文（Notion/Readwise 方向：纸感、暖灰、衬线标题） |
-| 深色模式 | 暖深色（暖炭灰/墨黑背景 + 暖白文字，深浅同气质） |
-| 字体策略 | 衬线标题 + 无衬线正文（Source Serif 4 + Noto Serif SC / 系统 sans / 现有 mono） |
+| 决策点   | 结论                                                                                       |
+| -------- | ------------------------------------------------------------------------------------------ |
+| 优化范围 | 视觉打磨 + 聊天主流程 + 配置表单 + 反馈状态系统（四项全做）                                |
+| 风格走向 | 个性重塑（非克制进化）                                                                     |
+| 品牌质感 | 温暖人文（Notion/Readwise 方向：纸感、暖灰、衬线标题）                                     |
+| 深色模式 | 暖深色（暖炭灰/墨黑背景 + 暖白文字，深浅同气质）                                           |
+| 字体策略 | 衬线标题 + 无衬线正文（Source Serif 4 + Noto Serif SC / 系统 sans / 现有 mono）            |
 | 改动边界 | 深度重构可接受；既有功能、数据流、快捷键、路由不变（新增 ⌘K 命令面板等纯前端交互增强除外） |
-| 推进方式 | 令牌先行 + 分批落地；Phase 0 用聊天主界面做视觉验证 |
-| 组件库 | shadcn/ui（Base UI 变体）+ cmdk + lucide-react + motion |
+| 推进方式 | 令牌先行 + 分批落地；Phase 0 用聊天主界面做视觉验证                                        |
+| 组件库   | shadcn/ui（Base UI 变体）+ cmdk + lucide-react + motion                                    |
 
 ## 3. 设计令牌体系
 
@@ -31,31 +31,31 @@ omp-web 是 oh-my-pi 的 Web 界面（Next.js 16 + React 19 + Tailwind CSS 4 + �
 
 浅色 · 纸感（paper）：
 
-| 令牌 | 值 | 用途 |
-|---|---|---|
-| `--bg` | `#FAF9F6` | 页面背景（暖纸白） |
-| `--bg-panel` | `#F2F0EA` | 侧栏/面板/工具栏 |
-| `--bg-hover` | `#EAE7DF` | 悬停 |
-| `--bg-selected` | `#E5E0D4` | 选中 |
-| `--border` | `#E2DDD2` | 边框 |
-| `--text` | `#2B2823` | 正文（暖墨黑） |
-| `--text-muted` | `#6E6860` | 次要文字 |
-| `--text-dim` | `#948D82` | 弱化文字 |
-| `--accent` | `#C24A2E` | 赭红主色（按钮/链接/焦点环） |
-| `--accent-hover` | `#A83D24` | 主色悬停 |
-| `--user-bg` | `#F5EDE1` | 用户消息气泡（奶油） |
+| 令牌             | 值        | 用途                         |
+| ---------------- | --------- | ---------------------------- |
+| `--bg`           | `#FAF9F6` | 页面背景（暖纸白）           |
+| `--bg-panel`     | `#F2F0EA` | 侧栏/面板/工具栏             |
+| `--bg-hover`     | `#EAE7DF` | 悬停                         |
+| `--bg-selected`  | `#E5E0D4` | 选中                         |
+| `--border`       | `#E2DDD2` | 边框                         |
+| `--text`         | `#2B2823` | 正文（暖墨黑）               |
+| `--text-muted`   | `#6E6860` | 次要文字                     |
+| `--text-dim`     | `#948D82` | 弱化文字                     |
+| `--accent`       | `#C24A2E` | 赭红主色（按钮/链接/焦点环） |
+| `--accent-hover` | `#A83D24` | 主色悬停                     |
+| `--user-bg`      | `#F5EDE1` | 用户消息气泡（奶油）         |
 
 深色 · 暖炭（ember）：
 
-| 令牌 | 值 |
-|---|---|
-| `--bg` | `#1B1916` |
-| `--bg-panel` | `#231F1B` |
-| `--border` | `#38322B` |
-| `--text` | `#EBE6DC` |
+| 令牌           | 值        |
+| -------------- | --------- |
+| `--bg`         | `#1B1916` |
+| `--bg-panel`   | `#231F1B` |
+| `--border`     | `#38322B` |
+| `--text`       | `#EBE6DC` |
 | `--text-muted` | `#A39B8E` |
-| `--accent` | `#E07B54` |
-| `--user-bg` | `#2C2721` |
+| `--accent`     | `#E07B54` |
+| `--user-bg`    | `#2C2721` |
 
 深色未列出的令牌按同原则推导（悬停/选中在面板色上提亮一档）。所有文字/背景组合满足 WCAG AA（≥4.5:1），在 globals.css 注释标注实测比值。
 
@@ -74,13 +74,13 @@ omp-web 是 oh-my-pi 的 Web 界面（Next.js 16 + React 19 + Tailwind CSS 4 + �
 
 ## 4. 组件栈
 
-| 库 | 用途 | 备注 |
-|---|---|---|
-| shadcn/ui（Base UI 变体） | Dialog/AlertDialog/DropdownMenu/Tooltip/Tabs/ScrollArea/Field/Form/Popover/Collapsible 等基元 | 源码拷入 `components/ui/`，可自由改造；主题契约即 CSS 变量 |
-| Base UI Toast（随 shadcn） | 全局通知 | 不引 Sonner |
-| cmdk | ⌘K 命令面板 | React 19 社区验证可用，接入前先冒烟测试 |
-| lucide-react | 统一图标，替换全部内联 SVG | tree-shaken |
-| motion | 弹窗/Toast 进出、布局动画 | 悬停/聚焦仍用纯 CSS |
+| 库                         | 用途                                                                                          | 备注                                                       |
+| -------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| shadcn/ui（Base UI 变体）  | Dialog/AlertDialog/DropdownMenu/Tooltip/Tabs/ScrollArea/Field/Form/Popover/Collapsible 等基元 | 源码拷入 `components/ui/`，可自由改造；主题契约即 CSS 变量 |
+| Base UI Toast（随 shadcn） | 全局通知                                                                                      | 不引 Sonner                                                |
+| cmdk                       | ⌘K 命令面板                                                                                   | React 19 社区验证可用，接入前先冒烟测试                    |
+| lucide-react               | 统一图标，替换全部内联 SVG                                                                    | tree-shaken                                                |
+| motion                     | 弹窗/Toast 进出、布局动画                                                                     | 悬停/聚焦仍用纯 CSS                                        |
 
 不引入 Radix Themes（定制美学受限）、React Aria（i18n 价值重复、更重）。
 

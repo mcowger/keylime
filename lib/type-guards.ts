@@ -11,5 +11,7 @@ export function asString(value: unknown): string | undefined {
 }
 
 export function asNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }

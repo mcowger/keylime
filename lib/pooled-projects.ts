@@ -19,7 +19,11 @@ const preparations = new Map<string, Promise<void>>();
 const exec = promisify(execFile);
 
 class PreparationError extends Error {
-  constructor(readonly code: string, message: string, readonly status = 409) {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly status = 409,
+  ) {
     super(message);
   }
 }
@@ -32,14 +36,41 @@ export async function preparePoolProject(input: {
   creationId: string;
   ref?: string;
 }): Promise<OpResult<PreparedPoolProject>> {
-  if (!CREATION_ID.test(input.creationId) || !PROJECT_ID.test(input.projectId)) {
-    return { ok: false, status: 400, code: "invalid_pool_project_id", error: "Invalid project or creation ID" };
+  if (
+    !CREATION_ID.test(input.creationId) ||
+    !PROJECT_ID.test(input.projectId)
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      code: "invalid_pool_project_id",
+      error: "Invalid project or creation ID",
+    };
   }
-  if (!cloneDirectoryName(input.origin) || input.origin !== input.origin.trim() || hasHttpsCredentials(input.origin)) {
-    return { ok: false, status: 400, code: "invalid_git_url", error: "A registered HTTPS or SSH origin without embedded HTTPS credentials is required" };
+  if (
+    !cloneDirectoryName(input.origin) ||
+    input.origin !== input.origin.trim() ||
+    hasHttpsCredentials(input.origin)
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      code: "invalid_git_url",
+      error:
+        "A registered HTTPS or SSH origin without embedded HTTPS credentials is required",
+    };
   }
-  if (!isAbsolute(input.cloneRoot) || resolve(input.cloneRoot) !== input.cloneRoot || dirname(input.cloneRoot) === input.cloneRoot) {
-    return { ok: false, status: 400, code: "invalid_clone_root", error: "An absolute confined clone root is required" };
+  if (
+    !isAbsolute(input.cloneRoot) ||
+    resolve(input.cloneRoot) !== input.cloneRoot ||
+    dirname(input.cloneRoot) === input.cloneRoot
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      code: "invalid_clone_root",
+      error: "An absolute confined clone root is required",
+    };
   }
   const previous = preparations.get(input.cloneRoot);
   const gate = Promise.withResolvers<void>();
@@ -48,11 +79,23 @@ export async function preparePoolProject(input: {
   try {
     return { ok: true, value: await prepare(input) };
   } catch (error) {
-    if (error instanceof PreparationError) return { ok: false, status: error.status, code: error.code, error: error.message };
-    return { ok: false, status: 500, code: "pool_prepare_failed", error: "Could not prepare project repository" };
+    if (error instanceof PreparationError)
+      return {
+        ok: false,
+        status: error.status,
+        code: error.code,
+        error: error.message,
+      };
+    return {
+      ok: false,
+      status: 500,
+      code: "pool_prepare_failed",
+      error: "Could not prepare project repository",
+    };
   } finally {
     gate.resolve();
-    if (preparations.get(input.cloneRoot) === gate.promise) preparations.delete(input.cloneRoot);
+    if (preparations.get(input.cloneRoot) === gate.promise)
+      preparations.delete(input.cloneRoot);
   }
 }
 
@@ -70,14 +113,22 @@ async function git(cwd: string, ...args: string[]): Promise<string> {
   const { stdout } = await exec("git", ["-C", cwd, ...args], {
     encoding: "utf8",
     maxBuffer: 1024 * 1024,
-    env: createGitEnvironment({ GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "", SSH_ASKPASS: "", GIT_ALLOW_PROTOCOL: "https:ssh" }),
+    env: createGitEnvironment({
+      GIT_TERMINAL_PROMPT: "0",
+      GIT_ASKPASS: "",
+      SSH_ASKPASS: "",
+      GIT_ALLOW_PROTOCOL: "https:ssh",
+    }),
   });
   return stdout.trim();
 }
 
 /** True at the toplevel of a worktree: --show-cdup is empty there, and also in a bare repository. */
 async function atWorktreeTop(cwd: string): Promise<boolean> {
-  return await git(cwd, "rev-parse", "--is-inside-work-tree", "--show-cdup") === "true";
+  return (
+    (await git(cwd, "rev-parse", "--is-inside-work-tree", "--show-cdup")) ===
+    "true"
+  );
 }
 
 /** A fetch must also lose the controlling terminal: empty askpass alone does not stop SSH /dev/tty prompts. */
@@ -85,13 +136,29 @@ async function fetchRemoteRef(cwd: string, ref: string): Promise<void> {
   const { promise, resolve, reject } = Promise.withResolvers<void>();
   const child = spawn("git", ["-C", cwd, "fetch", "--no-tags", "origin", ref], {
     stdio: "ignore",
-    env: createGitEnvironment({ GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "", SSH_ASKPASS: "", GIT_ALLOW_PROTOCOL: "https:ssh" }),
+    env: createGitEnvironment({
+      GIT_TERMINAL_PROMPT: "0",
+      GIT_ASKPASS: "",
+      SSH_ASKPASS: "",
+      GIT_ALLOW_PROTOCOL: "https:ssh",
+    }),
     detached: true,
   });
-  child.on("error", () => reject(new PreparationError("pool_fetch_failed", "Could not run git fetch", 500)));
+  child.on("error", () =>
+    reject(
+      new PreparationError("pool_fetch_failed", "Could not run git fetch", 500),
+    ),
+  );
   child.on("close", (code) => {
     if (code === 0) resolve();
-    else reject(new PreparationError("pool_fetch_failed", "Could not fetch the registered project ref", 502));
+    else
+      reject(
+        new PreparationError(
+          "pool_fetch_failed",
+          "Could not fetch the registered project ref",
+          502,
+        ),
+      );
   });
   return promise;
 }
@@ -110,7 +177,10 @@ async function directoryExists(path: string): Promise<boolean> {
       throw error;
     }
     if (stat.isSymbolicLink() || !stat.isDirectory()) {
-      throw new PreparationError("pool_path_conflict", `Unsafe project path: ${current}`);
+      throw new PreparationError(
+        "pool_path_conflict",
+        `Unsafe project path: ${current}`,
+      );
     }
   }
   return true;
@@ -125,93 +195,224 @@ async function prepare(input: {
 }): Promise<PreparedPoolProject> {
   const { cloneRoot, origin, creationId, projectId, ref } = input;
   const parent = dirname(cloneRoot);
-  const sessionRoot = join(parent, `.${basename(cloneRoot)}_worktrees`, "session");
+  const sessionRoot = join(
+    parent,
+    `.${basename(cloneRoot)}_worktrees`,
+    "session",
+  );
   const name = creationId;
   const cwd = join(sessionRoot, name);
   const branch = `session/${name}`;
   const metadataKey = `branch.${branch}.ompwebPoolProject`;
-  if (!await directoryExists(parent)) throw new PreparationError("invalid_clone_root", "Clone parent does not exist", 400);
+  if (!(await directoryExists(parent)))
+    throw new PreparationError(
+      "invalid_clone_root",
+      "Clone parent does not exist",
+      400,
+    );
   const existingWorktree = await directoryExists(cwd);
   const existingClone = await directoryExists(cloneRoot);
-  if (existingWorktree && !existingClone) throw new PreparationError("pool_worktree_conflict", "Worktree target already exists");
+  if (existingWorktree && !existingClone)
+    throw new PreparationError(
+      "pool_worktree_conflict",
+      "Worktree target already exists",
+    );
   if (ref !== undefined) {
-    if (!ref || ref.startsWith("-") || /\s/.test(ref)) throw new PreparationError("invalid_project_ref", "Invalid pushed ref", 400);
-    await git(parent, "check-ref-format", ref.startsWith("refs/") ? ref : `refs/heads/${ref}`);
+    if (!ref || ref.startsWith("-") || /\s/.test(ref))
+      throw new PreparationError(
+        "invalid_project_ref",
+        "Invalid pushed ref",
+        400,
+      );
+    await git(
+      parent,
+      "check-ref-format",
+      ref.startsWith("refs/") ? ref : `refs/heads/${ref}`,
+    );
   }
 
   if (!existingClone) {
     // Clone into the helper's exclusively mkdir-acquired final root. A rename
     // cannot publish safely here: POSIX rename may replace somebody else's empty reservation.
     const cloned = await cloneRepository({ origin, target: cloneRoot });
-    if (!cloned.ok) throw new PreparationError(cloned.code, cloned.error, cloned.status);
+    if (!cloned.ok)
+      throw new PreparationError(cloned.code, cloned.error, cloned.status);
   }
 
   // The clone helper has released its reservation after success. Reacquire it
   // without nesting before inspecting or consuming any existing checkout.
-  const reserved = await withProjectReservation<PreparedPoolProject>(cloneRoot, async () => {
-    if (!await directoryExists(cloneRoot)) throw new PreparationError("pool_clone_conflict", "Clone target disappeared");
-    const currentWorktree = await directoryExists(cwd);
-    const gitDirectory = join(cloneRoot, ".git");
-    let gitStat;
-    try {
-      gitStat = await lstat(gitDirectory);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new PreparationError("pool_clone_conflict", "Clone target is not a completed repository");
-      throw error;
-    }
-    // At the toplevel of a worktree (a bare repository has none), with no comparison between Git's and the
-    // caller's path spelling (8.3 names, separators).
-    if (!gitStat.isDirectory() || gitStat.isSymbolicLink() || !await atWorktreeTop(cloneRoot)) {
-      throw new PreparationError("pool_clone_conflict", "Clone root must be an independent repository");
-    }
-    // Reject multiple literal URLs: Git fetches the first, whereas config --get returns the last.
-    // remote get-url expands insteadOf rewrites and cannot verify the registered literal origin.
-    const origins = (await git(cloneRoot, "config", "--null", "--get-all", "remote.origin.url")).split("\0").slice(0, -1);
-    // The registered literal first: repositoryKey has no key for some origins Git accepts (an IPv6 SSH host).
-    const key = repositoryKey(origin);
-    if (origins.length !== 1 || (origins[0] !== origin && (key === null || repositoryKey(origins[0]) !== key))) {
-      throw new PreparationError("pool_origin_mismatch", "Clone must have exactly one origin matching the registered project");
-    }
-    try {
-      await git(cloneRoot, "rev-parse", "--verify", "HEAD^{commit}");
-    } catch {
-      throw new PreparationError("pool_clone_incomplete", "Clone target has no completed checkout");
-    }
-
-    if (currentWorktree) {
-      const dotGit = await lstat(join(cwd, ".git"));
-      if (!dotGit.isFile() || dotGit.isSymbolicLink()
-        || !await atWorktreeTop(cwd)
-        || await realpath(await git(cwd, "rev-parse", "--path-format=absolute", "--git-common-dir")) !== await realpath(gitDirectory)
-        || await git(cwd, "symbolic-ref", "--quiet", "--short", "HEAD") !== branch) {
-        throw new PreparationError("pool_worktree_conflict", "Worktree target is owned by another checkout");
-      }
-      let metadata: { projectId?: string; ref?: string | null; baseCommit?: string };
+  const reserved = await withProjectReservation<PreparedPoolProject>(
+    cloneRoot,
+    async () => {
+      if (!(await directoryExists(cloneRoot)))
+        throw new PreparationError(
+          "pool_clone_conflict",
+          "Clone target disappeared",
+        );
+      const currentWorktree = await directoryExists(cwd);
+      const gitDirectory = join(cloneRoot, ".git");
+      let gitStat;
       try {
-        metadata = JSON.parse(await git(cloneRoot, "config", "--get", metadataKey));
+        gitStat = await lstat(gitDirectory);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT")
+          throw new PreparationError(
+            "pool_clone_conflict",
+            "Clone target is not a completed repository",
+          );
+        throw error;
+      }
+      // At the toplevel of a worktree (a bare repository has none), with no comparison between Git's and the
+      // caller's path spelling (8.3 names, separators).
+      if (
+        !gitStat.isDirectory() ||
+        gitStat.isSymbolicLink() ||
+        !(await atWorktreeTop(cloneRoot))
+      ) {
+        throw new PreparationError(
+          "pool_clone_conflict",
+          "Clone root must be an independent repository",
+        );
+      }
+      // Reject multiple literal URLs: Git fetches the first, whereas config --get returns the last.
+      // remote get-url expands insteadOf rewrites and cannot verify the registered literal origin.
+      const origins = (
+        await git(
+          cloneRoot,
+          "config",
+          "--null",
+          "--get-all",
+          "remote.origin.url",
+        )
+      )
+        .split("\0")
+        .slice(0, -1);
+      // The registered literal first: repositoryKey has no key for some origins Git accepts (an IPv6 SSH host).
+      const key = repositoryKey(origin);
+      if (
+        origins.length !== 1 ||
+        (origins[0] !== origin &&
+          (key === null || repositoryKey(origins[0]) !== key))
+      ) {
+        throw new PreparationError(
+          "pool_origin_mismatch",
+          "Clone must have exactly one origin matching the registered project",
+        );
+      }
+      try {
+        await git(cloneRoot, "rev-parse", "--verify", "HEAD^{commit}");
       } catch {
-        throw new PreparationError("pool_worktree_conflict", "Worktree has no matching pool preparation record");
+        throw new PreparationError(
+          "pool_clone_incomplete",
+          "Clone target has no completed checkout",
+        );
       }
-      if (!metadata || typeof metadata !== "object" || metadata.projectId !== projectId || metadata.ref !== (ref ?? null)
-        || typeof metadata.baseCommit !== "string" || !/^[a-f0-9]{40,64}$/.test(metadata.baseCommit)) {
-        throw new PreparationError("pool_worktree_conflict", "Creation ID was already used for a different project or ref");
-      }
-      await git(cloneRoot, "cat-file", "-e", `${metadata.baseCommit}^{commit}`);
-      return { ok: true, value: { cwd, projectRoot: cloneRoot, baseCommit: metadata.baseCommit } };
-    }
 
-    // Fetch the remote ref itself, not a possibly unpublished local branch. Never reset or clean.
-    await fetchRemoteRef(cloneRoot, ref ?? "HEAD");
-    const baseCommit = await git(cloneRoot, "rev-parse", "--verify", "FETCH_HEAD^{commit}");
-    await mkdir(sessionRoot, { recursive: true });
-    if (!await directoryExists(sessionRoot) || await directoryExists(cwd)) {
-      throw new PreparationError("pool_worktree_conflict", "Worktree target already exists");
-    }
-    await git(cloneRoot, "worktree", "add", "-b", branch, "--", cwd, baseCommit);
-    // Persist the original base before returning; retries never rebase a dirty or committed session.
-    await git(cloneRoot, "config", metadataKey, JSON.stringify({ projectId, ref: ref ?? null, baseCommit }));
-    return { ok: true, value: { cwd, projectRoot: cloneRoot, baseCommit } };
-  });
-  if (!reserved.ok) throw new PreparationError(reserved.code, reserved.error, reserved.status);
+      if (currentWorktree) {
+        const dotGit = await lstat(join(cwd, ".git"));
+        if (
+          !dotGit.isFile() ||
+          dotGit.isSymbolicLink() ||
+          !(await atWorktreeTop(cwd)) ||
+          (await realpath(
+            await git(
+              cwd,
+              "rev-parse",
+              "--path-format=absolute",
+              "--git-common-dir",
+            ),
+          )) !== (await realpath(gitDirectory)) ||
+          (await git(cwd, "symbolic-ref", "--quiet", "--short", "HEAD")) !==
+            branch
+        ) {
+          throw new PreparationError(
+            "pool_worktree_conflict",
+            "Worktree target is owned by another checkout",
+          );
+        }
+        let metadata: {
+          projectId?: string;
+          ref?: string | null;
+          baseCommit?: string;
+        };
+        try {
+          metadata = JSON.parse(
+            await git(cloneRoot, "config", "--get", metadataKey),
+          );
+        } catch {
+          throw new PreparationError(
+            "pool_worktree_conflict",
+            "Worktree has no matching pool preparation record",
+          );
+        }
+        if (
+          !metadata ||
+          typeof metadata !== "object" ||
+          metadata.projectId !== projectId ||
+          metadata.ref !== (ref ?? null) ||
+          typeof metadata.baseCommit !== "string" ||
+          !/^[a-f0-9]{40,64}$/.test(metadata.baseCommit)
+        ) {
+          throw new PreparationError(
+            "pool_worktree_conflict",
+            "Creation ID was already used for a different project or ref",
+          );
+        }
+        await git(
+          cloneRoot,
+          "cat-file",
+          "-e",
+          `${metadata.baseCommit}^{commit}`,
+        );
+        return {
+          ok: true,
+          value: {
+            cwd,
+            projectRoot: cloneRoot,
+            baseCommit: metadata.baseCommit,
+          },
+        };
+      }
+
+      // Fetch the remote ref itself, not a possibly unpublished local branch. Never reset or clean.
+      await fetchRemoteRef(cloneRoot, ref ?? "HEAD");
+      const baseCommit = await git(
+        cloneRoot,
+        "rev-parse",
+        "--verify",
+        "FETCH_HEAD^{commit}",
+      );
+      await mkdir(sessionRoot, { recursive: true });
+      if (
+        !(await directoryExists(sessionRoot)) ||
+        (await directoryExists(cwd))
+      ) {
+        throw new PreparationError(
+          "pool_worktree_conflict",
+          "Worktree target already exists",
+        );
+      }
+      await git(
+        cloneRoot,
+        "worktree",
+        "add",
+        "-b",
+        branch,
+        "--",
+        cwd,
+        baseCommit,
+      );
+      // Persist the original base before returning; retries never rebase a dirty or committed session.
+      await git(
+        cloneRoot,
+        "config",
+        metadataKey,
+        JSON.stringify({ projectId, ref: ref ?? null, baseCommit }),
+      );
+      return { ok: true, value: { cwd, projectRoot: cloneRoot, baseCommit } };
+    },
+  );
+  if (!reserved.ok)
+    throw new PreparationError(reserved.code, reserved.error, reserved.status);
   return reserved.value;
 }

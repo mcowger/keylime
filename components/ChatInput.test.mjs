@@ -4,22 +4,31 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { JSDOM } from "jsdom";
 
-const { ChatInput, ModelErrorBanner, filterModelOptions } = await import("./ChatInput.tsx");
+const { ChatInput, ModelErrorBanner, filterModelOptions } =
+  await import("./ChatInput.tsx");
 const { setDraft, clearDraft } = await import("@/lib/draft-store");
 
 test("provider-defined reasoning levels appear once in the trigger", () => {
   for (const thinkingLevel of ["ultra", "ultrathink-extended", "constructor"]) {
-    const html = renderToStaticMarkup(React.createElement(ChatInput, {
-      async onSend() { return { status: "accepted" }; },
-      onThinkingLevelChange() {},
-      thinkingLevel,
-      isStreaming: false,
-    }));
+    const html = renderToStaticMarkup(
+      React.createElement(ChatInput, {
+        async onSend() {
+          return { status: "accepted" };
+        },
+        onThinkingLevelChange() {},
+        thinkingLevel,
+        isStreaming: false,
+      }),
+    );
     const dom = new JSDOM(html);
     try {
-      const trigger = dom.window.document.querySelector(".composer-thinking-control > button");
+      const trigger = dom.window.document.querySelector(
+        ".composer-thinking-control > button",
+      );
       assert.equal(trigger.textContent, thinkingLevel);
-      assert.ok(trigger.getAttribute("aria-label").endsWith(`: ${thinkingLevel}`));
+      assert.ok(
+        trigger.getAttribute("aria-label").endsWith(`: ${thinkingLevel}`),
+      );
     } finally {
       dom.window.close();
     }
@@ -28,11 +37,17 @@ test("provider-defined reasoning levels appear once in the trigger", () => {
 
 test("shows Queue instead of Stop for typed text during a run", () => {
   const draftKey = "chat-input-queue-action-test";
-  setDraft(draftKey, { value: "Continue after the current run", images: [], files: [] });
+  setDraft(draftKey, {
+    value: "Continue after the current run",
+    images: [],
+    files: [],
+  });
   try {
     const html = renderToStaticMarkup(
       React.createElement(ChatInput, {
-        async onSend() { return { status: "accepted" }; },
+        async onSend() {
+          return { status: "accepted" };
+        },
         onAbort() {},
         onFollowUp() {},
         isStreaming: true,
@@ -41,7 +56,10 @@ test("shows Queue instead of Stop for typed text during a run", () => {
     );
 
     assert.match(html, />(Queue|chatInput\.queue)</);
-    assert.match(html, /title="(Queue this message after the agent finishes|chatInput\.queueMessage)"/);
+    assert.match(
+      html,
+      /title="(Queue this message after the agent finishes|chatInput\.queueMessage)"/,
+    );
     assert.doesNotMatch(html, />(Stop|chatInput\.stop)</);
   } finally {
     clearDraft(draftKey);
@@ -51,7 +69,8 @@ test("shows Queue instead of Stop for typed text during a run", () => {
 test("renders the upstream model error", () => {
   const html = renderToStaticMarkup(
     React.createElement(ModelErrorBanner, {
-      error: "Invalid models.json schema:\nproviders.custom.models.0.id must not be empty",
+      error:
+        "Invalid models.json schema:\nproviders.custom.models.0.id must not be empty",
     }),
   );
 
@@ -62,40 +81,87 @@ test("renders the upstream model error", () => {
 });
 
 test("does not render an empty model error", () => {
-  assert.equal(renderToStaticMarkup(React.createElement(ModelErrorBanner, { error: null })), "");
+  assert.equal(
+    renderToStaticMarkup(
+      React.createElement(ModelErrorBanner, { error: null }),
+    ),
+    "",
+  );
 });
 
 test("formats structured Claude low-priority state in the browser locale", () => {
   const resetsAtSec = Math.floor(Date.now() / 1000) + 3_600;
-  const time = new Date(resetsAtSec * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const time = new Date(resetsAtSec * 1000).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
-      async onSend() { return { status: "accepted" }; },
+      async onSend() {
+        return { status: "accepted" };
+      },
       isStreaming: false,
-      usageLimit: { stage: "low_priority", resetsAtSec, allowanceLeftPercent: 62 },
+      usageLimit: {
+        stage: "low_priority",
+        resetsAtSec,
+        allowanceLeftPercent: 62,
+      },
     }),
   );
-  assert.match(html, new RegExp(`low priority until ${time.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")} · 62% left`));
+  assert.match(
+    html,
+    new RegExp(
+      `low priority until ${time.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")} · 62% left`,
+    ),
+  );
 });
 
 test("formats every Claude usage-limit stage", () => {
   const nowSec = Math.floor(Date.now() / 1000);
   const shortReset = nowSec + 3_600;
   const longReset = nowSec + 86_400;
-  const shortTime = new Date(shortReset * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const longTime = new Date(longReset * 1000).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
+  const shortTime = new Date(shortReset * 1000).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const longTime = new Date(longReset * 1000).toLocaleString([], {
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   const rows = [
-    [{ stage: "low_priority", resetsAtSec: shortReset }, `low priority until ${shortTime}`],
+    [
+      { stage: "low_priority", resetsAtSec: shortReset },
+      `low priority until ${shortTime}`,
+    ],
     [{ stage: "wrap_up", extraUsage: false }, "limit reached · wrapping up"],
-    [{ stage: "wrap_up", resetsAtSec: shortReset, extraUsage: false }, `limit reached · wrapping up · resets ${shortTime}`],
-    [{ stage: "wrap_up", extraUsage: true }, "limit reached · wrap-up, then extra usage"],
-    [{ stage: "low_priority", resetsAtSec: longReset }, `low priority until ${longTime}`],
+    [
+      { stage: "wrap_up", resetsAtSec: shortReset, extraUsage: false },
+      `limit reached · wrapping up · resets ${shortTime}`,
+    ],
+    [
+      { stage: "wrap_up", extraUsage: true },
+      "limit reached · wrap-up, then extra usage",
+    ],
+    [
+      { stage: "low_priority", resetsAtSec: longReset },
+      `low priority until ${longTime}`,
+    ],
   ];
   for (const [usageLimit, label] of rows) {
     const html = renderToStaticMarkup(
-      React.createElement(ChatInput, { async onSend() { return { status: "accepted" }; }, isStreaming: false, usageLimit }),
+      React.createElement(ChatInput, {
+        async onSend() {
+          return { status: "accepted" };
+        },
+        isStreaming: false,
+        usageLimit,
+      }),
     );
-    assert.ok(html.includes(label), `${JSON.stringify(usageLimit)} should render ${label}`);
+    assert.ok(
+      html.includes(label),
+      `${JSON.stringify(usageLimit)} should render ${label}`,
+    );
   }
 });
 
@@ -103,8 +169,16 @@ test("never renders a null percentage, an invalid date, or a past reset clock", 
   const nowSec = Math.floor(Date.now() / 1000);
   const pastSec = nowSec - 3_600;
   const rows = [
-    { stage: "low_priority", resetsAtSec: nowSec + 3_600, allowanceLeftPercent: null },
-    { stage: "low_priority", resetsAtSec: nowSec + 3_600, allowanceLeftPercent: Number.NaN },
+    {
+      stage: "low_priority",
+      resetsAtSec: nowSec + 3_600,
+      allowanceLeftPercent: null,
+    },
+    {
+      stage: "low_priority",
+      resetsAtSec: nowSec + 3_600,
+      allowanceLeftPercent: Number.NaN,
+    },
     { stage: "low_priority", resetsAtSec: null, allowanceLeftPercent: 62 },
     { stage: "low_priority", resetsAtSec: undefined, allowanceLeftPercent: 62 },
     { stage: "low_priority", resetsAtSec: null },
@@ -114,27 +188,49 @@ test("never renders a null percentage, an invalid date, or a past reset clock", 
   ];
   for (const usageLimit of rows) {
     const html = renderToStaticMarkup(
-      React.createElement(ChatInput, { async onSend() { return { status: "accepted" }; }, isStreaming: false, usageLimit }),
+      React.createElement(ChatInput, {
+        async onSend() {
+          return { status: "accepted" };
+        },
+        isStreaming: false,
+        usageLimit,
+      }),
     );
     const label = `${JSON.stringify(usageLimit)} -> ${html}`;
     // "null" / "NaN" / "Invalid Date" reaching the label is the bug this pins:
     // every one of them is a value the user would plan their session around.
-    assert.ok(!html.includes("Invalid Date"), `invalid date rendered: ${label}`);
+    assert.ok(
+      !html.includes("Invalid Date"),
+      `invalid date rendered: ${label}`,
+    );
     assert.ok(!html.includes("null%"), `null percentage rendered: ${label}`);
     assert.ok(!html.includes("NaN%"), `NaN percentage rendered: ${label}`);
     // A reset already in the past must not render a plausible wrong clock.
     if (usageLimit.resetsAtSec === pastSec) {
-      assert.ok(!html.includes(new Date(pastSec * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })),
-        `past reset clock rendered: ${label}`);
+      assert.ok(
+        !html.includes(
+          new Date(pastSec * 1000).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        ),
+        `past reset clock rendered: ${label}`,
+      );
     }
   }
   // The allowance is still worth showing when the reset time is unusable.
   assert.match(
     renderToStaticMarkup(
       React.createElement(ChatInput, {
-        async onSend() { return { status: "accepted" }; },
+        async onSend() {
+          return { status: "accepted" };
+        },
         isStreaming: false,
-        usageLimit: { stage: "low_priority", resetsAtSec: null, allowanceLeftPercent: 62 },
+        usageLimit: {
+          stage: "low_priority",
+          resetsAtSec: null,
+          allowanceLeftPercent: 62,
+        },
       }),
     ),
     /low priority · 62% left/,
@@ -143,7 +239,9 @@ test("never renders a null percentage, an invalid date, or a past reset clock", 
   assert.match(
     renderToStaticMarkup(
       React.createElement(ChatInput, {
-        async onSend() { return { status: "accepted" }; },
+        async onSend() {
+          return { status: "accepted" };
+        },
         isStreaming: false,
         usageLimit: { stage: "low_priority", resetsAtSec: null },
       }),
@@ -153,11 +251,22 @@ test("never renders a null percentage, an invalid date, or a past reset clock", 
 });
 
 test("shows the Slow toggle only when omp reports /slow applies, pressed when enabled", () => {
-  const render = (props) => renderToStaticMarkup(
-    React.createElement(ChatInput, { async onSend() { return { status: "accepted" }; }, isStreaming: false, onSlowModeChange() {}, ...props }),
-  );
+  const render = (props) =>
+    renderToStaticMarkup(
+      React.createElement(ChatInput, {
+        async onSend() {
+          return { status: "accepted" };
+        },
+        isStreaming: false,
+        onSlowModeChange() {},
+        ...props,
+      }),
+    );
   // Older omp omits the field; an unsupported model reports false.
-  for (const props of [{}, { slowModeSupported: false, slowModeEnabled: true }]) {
+  for (const props of [
+    {},
+    { slowModeSupported: false, slowModeEnabled: true },
+  ]) {
     assert.doesNotMatch(render(props), /composer-slow-control/);
   }
   assert.match(
@@ -169,7 +278,9 @@ test("shows the Slow toggle only when omp reports /slow applies, pressed when en
 test("keeps the model selector visible when a model error leaves no options", () => {
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
-      async onSend() { return { status: "accepted" }; },
+      async onSend() {
+        return { status: "accepted" };
+      },
       onAbort() {},
       onModelChange() {},
       isStreaming: false,
@@ -180,19 +291,25 @@ test("keeps the model selector visible when a model error leaves no options", ()
   );
 
   assert.match(html, />(No models|chatInput\.noModels)</);
-  assert.match(html, /title="(No available models|chatInput\.noAvailableModels)"/);
+  assert.match(
+    html,
+    /title="(No available models|chatInput\.noAvailableModels)"/,
+  );
 });
-
 
 test("renders goal, planning, and advisor indicators at the composer", () => {
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
-      async onSend() { return { status: "accepted" }; },
+      async onSend() {
+        return { status: "accepted" };
+      },
       onAbort() {},
       onModelChange() {},
       isStreaming: false,
       model: { provider: "test", modelId: "model" },
-      modelList: [{ provider: "test", modelId: "model", id: "model", name: "Test model" }],
+      modelList: [
+        { provider: "test", modelId: "model", id: "model", name: "Test model" },
+      ],
       modelNames: {},
       activeGoal: { objective: "Ship the active goal bar", startedAt: 0 },
       activePlan: { objective: "Plan the implementation" },
@@ -212,7 +329,9 @@ test("renders goal, planning, and advisor indicators at the composer", () => {
 test("shows the advisor thunder indicator with the reviewing model and reasoning", () => {
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
-      async onSend() { return { status: "accepted" }; },
+      async onSend() {
+        return { status: "accepted" };
+      },
       onAbort() {},
       isStreaming: true,
       advisorActive: true,
@@ -226,7 +345,11 @@ test("shows the advisor thunder indicator with the reviewing model and reasoning
 test("filters model options by display name, identifier, and provider", () => {
   const options = [
     { provider: "OpenAI", modelId: "gpt-5.2", name: "GPT-5.2" },
-    { provider: "Anthropic", modelId: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" },
+    {
+      provider: "Anthropic",
+      modelId: "claude-sonnet-4-5",
+      name: "Claude Sonnet 4.5",
+    },
   ];
 
   assert.deepEqual(filterModelOptions(options, "sonnet", "en"), [options[1]]);
@@ -238,7 +361,9 @@ test("filters model options by display name, identifier, and provider", () => {
 test("renders single queued prompt in compact bar", () => {
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
-      async onSend() { return { status: "accepted" }; },
+      async onSend() {
+        return { status: "accepted" };
+      },
       onAbort() {},
       isStreaming: true,
       queuedMessages: {
@@ -257,7 +382,9 @@ test("renders single queued prompt in compact bar", () => {
 test("keeps editing and deletion but hides Steer for a single queued steer", () => {
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
-      async onSend() { return { status: "accepted" }; },
+      async onSend() {
+        return { status: "accepted" };
+      },
       onAbort() {},
       onPromoteQueuedToSteer() {},
       isStreaming: true,
@@ -277,7 +404,9 @@ test("keeps editing and deletion but hides Steer for a single queued steer", () 
 test("renders multiple queued prompts with count and expand action", () => {
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
-      async onSend() { return { status: "accepted" }; },
+      async onSend() {
+        return { status: "accepted" };
+      },
       onAbort() {},
       isStreaming: true,
       queuedMessages: {
@@ -288,13 +417,16 @@ test("renders multiple queued prompts with count and expand action", () => {
   );
 
   assert.match(html, /\(3\)/);
-  assert.match(html, />(Show all queued prompts|Show all|chatInput\.expandQueued)</);
+  assert.match(
+    html,
+    />(Show all queued prompts|Show all|chatInput\.expandQueued)</,
+  );
   assert.match(html, /First task/);
 });
 
-
 test("nested model picker groups by provider and pins the current provider first", async () => {
-  const { groupModelOptionsByProvider, orderProviderGroups } = await import("./ChatInput-model-picker.tsx");
+  const { groupModelOptionsByProvider, orderProviderGroups } =
+    await import("./ChatInput-model-picker.tsx");
   const options = [
     { provider: "anthropic", modelId: "claude", name: "Claude" },
     { provider: "openai", modelId: "gpt-5.6-sol", name: "GPT-5.6 Sol" },
@@ -302,11 +434,17 @@ test("nested model picker groups by provider and pins the current provider first
     { provider: "pi", modelId: "pi-1", name: "Pi" },
   ];
   const grouped = groupModelOptionsByProvider(options);
-  assert.deepEqual(grouped.map((g) => g.provider), ["anthropic", "openai", "pi"]);
+  assert.deepEqual(
+    grouped.map((g) => g.provider),
+    ["anthropic", "openai", "pi"],
+  );
   assert.equal(grouped[1].options.length, 2);
 
   const ordered = orderProviderGroups(grouped, "openai");
-  assert.deepEqual(ordered.map((g) => g.provider), ["openai", "anthropic", "pi"]);
+  assert.deepEqual(
+    ordered.map((g) => g.provider),
+    ["openai", "anthropic", "pi"],
+  );
 });
 
 test("model picker panel renders providers rail, models pane, and Add Providers", async () => {
@@ -341,11 +479,12 @@ test("model picker panel renders providers rail, models pane, and Add Providers"
   assert.match(html, />(Add Providers|chatInput\.addProviders)</);
 });
 
-
 test("exposes tool presets through the plus menu when a handler is provided", () => {
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
-      async onSend() { return { status: "accepted" }; },
+      async onSend() {
+        return { status: "accepted" };
+      },
       onAbort() {},
       isStreaming: false,
       toolPreset: "full",
@@ -362,7 +501,9 @@ test("exposes tool presets through the plus menu when a handler is provided", ()
 test("plus trigger renders without change handlers", () => {
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
-      async onSend() { return { status: "accepted" }; },
+      async onSend() {
+        return { status: "accepted" };
+      },
       onAbort() {},
       isStreaming: false,
     }),
@@ -375,7 +516,9 @@ test("plus trigger renders without change handlers", () => {
 test("renders live status bar attached to the composer top edge when statusText is provided", () => {
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
-      async onSend() { return { status: "accepted" }; },
+      async onSend() {
+        return { status: "accepted" };
+      },
       onAbort() {},
       isStreaming: true,
       statusText: "Waiting for model...",
@@ -390,7 +533,9 @@ test("renders live status bar attached to the composer top edge when statusText 
 test("omits live status bar when statusText is absent or null", () => {
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
-      async onSend() { return { status: "accepted" }; },
+      async onSend() {
+        return { status: "accepted" };
+      },
       onAbort() {},
       isStreaming: false,
       statusText: null,
@@ -404,7 +549,9 @@ test("omits live status bar when statusText is absent or null", () => {
 test("renders both queued prompts and attached status bar together", () => {
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
-      async onSend() { return { status: "accepted" }; },
+      async onSend() {
+        return { status: "accepted" };
+      },
       onAbort() {},
       isStreaming: true,
       statusText: "Waiting for model...",
@@ -424,7 +571,9 @@ test("renders retry banner with countdown when delayMs and startedAt are provide
   const now = Date.now();
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {
-      async onSend() { return { status: "accepted" }; },
+      async onSend() {
+        return { status: "accepted" };
+      },
       retryInfo: {
         attempt: 2,
         maxAttempts: 5,

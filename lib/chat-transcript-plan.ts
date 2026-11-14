@@ -1,6 +1,12 @@
 import { stripAnsi } from "./ansi";
 import { getDisplayableAssistantBlocks, isReplyBlock } from "./message-display";
-import type { AgentMessage, AssistantContentBlock, AssistantMessage, CustomMessage, ToolResultMessage } from "./types";
+import type {
+  AgentMessage,
+  AssistantContentBlock,
+  AssistantMessage,
+  CustomMessage,
+  ToolResultMessage,
+} from "./types";
 
 /**
  * Lightweight transcript row planner for ChatWindow's committed transcript.
@@ -24,12 +30,27 @@ export type ActivityPiece = { index: number; blocks?: AssistantContentBlock[] };
 export type TranscriptSegment =
   /** Visible agent text/images from one assistant message. `last` marks text
    *  that ends its message; only that segment carries usage and the error. */
-  | { kind: "text"; index: number; blocks: AssistantContentBlock[]; last: boolean }
-  | { kind: "activity"; pieces: ActivityPiece[]; stepCount: number; toolCallCount: number };
+  | {
+      kind: "text";
+      index: number;
+      blocks: AssistantContentBlock[];
+      last: boolean;
+    }
+  | {
+      kind: "activity";
+      pieces: ActivityPiece[];
+      stepCount: number;
+      toolCallCount: number;
+    };
 
 export type TranscriptRow =
   | { kind: "message"; index: number }
-  | { kind: "group"; userIndex: number; endIndex: number; segments: TranscriptSegment[] };
+  | {
+      kind: "group";
+      userIndex: number;
+      endIndex: number;
+      segments: TranscriptSegment[];
+    };
 
 export interface PlanOptions {
   /** Mirrors omp's `hideThinkingBlock`: drop thinking blocks entirely. */
@@ -50,7 +71,10 @@ export interface PlanOptions {
 // post-compaction message renders standalone and never folds.
 export function isGroupAnchor(message: AgentMessage): boolean {
   if (message.role === "user") return true;
-  return message.role === "custom" && (message as CustomMessage).customType === "compaction";
+  return (
+    message.role === "custom" &&
+    (message as CustomMessage).customType === "compaction"
+  );
 }
 
 /** Split one anchored turn into text and folded-activity segments. */
@@ -64,7 +88,12 @@ export function planTurnSegments(
   let activity: Extract<TranscriptSegment, { kind: "activity" }> | null = null;
   const addActivity = (piece: ActivityPiece, toolCalls: number) => {
     if (!activity) {
-      activity = { kind: "activity", pieces: [], stepCount: 0, toolCallCount: 0 };
+      activity = {
+        kind: "activity",
+        pieces: [],
+        stepCount: 0,
+        toolCallCount: 0,
+      };
       segments.push(activity);
     }
     activity.pieces.push(piece);
@@ -78,7 +107,12 @@ export function planTurnSegments(
     if (msg.role === "toolResult") continue;
     // Mount notices never render; counting them would show an empty fold.
     // Passive tool context rides on its tool card instead of being a row.
-    if (msg.role === "custom" && ((msg as CustomMessage).customType === "xdev-mount-notice" || isPassiveToolContext(msg))) continue;
+    if (
+      msg.role === "custom" &&
+      ((msg as CustomMessage).customType === "xdev-mount-notice" ||
+        isPassiveToolContext(msg))
+    )
+      continue;
     if (msg.role !== "assistant") {
       // Job results, reminders, and other notices are activity, as in the TUI.
       addActivity({ index: idx }, 0);
@@ -86,7 +120,8 @@ export function planTurnSegments(
     }
     const assistant = msg as AssistantMessage;
     let blocks = getDisplayableAssistantBlocks(assistant);
-    if (options.hideThinking) blocks = blocks.filter((block) => block.type !== "thinking");
+    if (options.hideThinking)
+      blocks = blocks.filter((block) => block.type !== "thinking");
     let lastText: Extract<TranscriptSegment, { kind: "text" }> | null = null;
     let text: AssistantContentBlock[] = [];
     let other: AssistantContentBlock[] = [];
@@ -99,11 +134,18 @@ export function planTurnSegments(
     };
     const flushOther = () => {
       if (other.length === 0) return;
-      addActivity({ index: idx, blocks: other }, other.filter((block) => block.type === "toolCall").length);
+      addActivity(
+        { index: idx, blocks: other },
+        other.filter((block) => block.type === "toolCall").length,
+      );
       other = [];
     };
     for (const block of blocks) {
-      if (isReplyBlock(block) || (block.type === "thinking" && options.showThinking) || (block.type === "toolCall" && options.showToolCalls)) {
+      if (
+        isReplyBlock(block) ||
+        (block.type === "thinking" && options.showThinking) ||
+        (block.type === "toolCall" && options.showToolCalls)
+      ) {
         flushOther();
         text.push(block);
       } else if (block.type !== "text") {
@@ -121,7 +163,8 @@ export function planTurnSegments(
       activity = null;
     }
     // Text that ends its message carries the message's usage and error.
-    if (lastText && segments.at(-1) === lastText) (lastText as Extract<TranscriptSegment, { kind: "text" }>).last = true;
+    if (lastText && segments.at(-1) === lastText)
+      (lastText as Extract<TranscriptSegment, { kind: "text" }>).last = true;
   }
   return segments;
 }
@@ -146,7 +189,12 @@ export function looksLikeRunningTurn(messages: AgentMessage[]): boolean {
   if (last.role === "toolResult") return true;
   if (last.role !== "assistant") return false;
   // A failed or cancelled turn is finished however its blocks are shaped.
-  if (last.errorMessage || last.stopReason === "aborted" || last.stopReason === "error") return false;
+  if (
+    last.errorMessage ||
+    last.stopReason === "aborted" ||
+    last.stopReason === "error"
+  )
+    return false;
   const blocks = getDisplayableAssistantBlocks(last as AssistantMessage);
   for (let i = blocks.length - 1; i >= 0; i -= 1) {
     const block = blocks[i];
@@ -165,7 +213,10 @@ export function looksLikeRunningTurn(messages: AgentMessage[]): boolean {
 export const PASSIVE_TOOL_CONTEXT = "passive-tool-context";
 
 export function isPassiveToolContext(message: AgentMessage): boolean {
-  return message.role === "custom" && (message as CustomMessage).customType === PASSIVE_TOOL_CONTEXT;
+  return (
+    message.role === "custom" &&
+    (message as CustomMessage).customType === PASSIVE_TOOL_CONTEXT
+  );
 }
 
 // Long enough for any real guidance; bounds what one hostile entry puts in the DOM.
@@ -178,15 +229,25 @@ const PASSIVE_TOOL_CONTEXT_MAX = 2000;
  * Tolerates malformed content from imported or hand-edited session files.
  */
 export function sanitizePassiveToolContext(content: unknown): string {
-  const text = typeof content === "string"
-    ? content
-    : Array.isArray(content)
-      ? content.flatMap((block) => (block?.type === "text" && typeof block.text === "string" ? [block.text] : [])).join("\n")
-      : "";
+  const text =
+    typeof content === "string"
+      ? content
+      : Array.isArray(content)
+        ? content
+            .flatMap((block) =>
+              block?.type === "text" && typeof block.text === "string"
+                ? [block.text]
+                : [],
+            )
+            .join("\n")
+        : "";
   // split/trimEnd, not a `\s+$`-style regex: those backtrack quadratically on long
   // whitespace runs, and session files are untrusted input.
   return stripAnsi(text)
-    .replace(/[\x00-\x08\x0B-\x1F\x7F-\x9F\u200B-\u200F\u202A-\u202E\u2066-\u2069]/g, "")
+    .replace(
+      /[\x00-\x08\x0B-\x1F\x7F-\x9F\u200B-\u200F\u202A-\u202E\u2066-\u2069]/g,
+      "",
+    )
     .split("\n")
     .map((line) => line.trimEnd())
     .join("\n")
@@ -208,7 +269,9 @@ const resultsWithContext = new WeakMap<ToolResultMessage, ToolResultMessage>();
  * other message closes it, so context after a non-tool message is dropped
  * instead of landing on an earlier, unrelated card.
  */
-export function collectToolResults(messages: AgentMessage[]): Map<string, ToolResultMessage> {
+export function collectToolResults(
+  messages: AgentMessage[],
+): Map<string, ToolResultMessage> {
   const results = new Map<string, ToolResultMessage>();
   let lastToolCallId: string | undefined;
   for (const message of messages) {
@@ -225,7 +288,8 @@ export function collectToolResults(messages: AgentMessage[]): Map<string, ToolRe
       }
       continue;
     }
-    const result = lastToolCallId === undefined ? undefined : results.get(lastToolCallId);
+    const result =
+      lastToolCallId === undefined ? undefined : results.get(lastToolCallId);
     lastToolCallId = undefined;
     if (!result || !isPassiveToolContext(message)) continue;
     const text = sanitizePassiveToolContext((message as CustomMessage).content);
@@ -244,7 +308,10 @@ export function collectToolResults(messages: AgentMessage[]): Map<string, ToolRe
  * Plan the transcript into lightweight row descriptors WITHOUT creating
  * React elements. O(history) but allocates only small objects.
  */
-export function planTranscriptRows(messages: AgentMessage[], options: PlanOptions = {}): TranscriptRow[] {
+export function planTranscriptRows(
+  messages: AgentMessage[],
+  options: PlanOptions = {},
+): TranscriptRow[] {
   const rows: TranscriptRow[] = [];
   for (let idx = 0; idx < messages.length;) {
     if (!isGroupAnchor(messages[idx])) {
@@ -254,16 +321,25 @@ export function planTranscriptRows(messages: AgentMessage[], options: PlanOption
     }
     const userIdx = idx;
     let endIdx = userIdx + 1;
-    while (endIdx < messages.length && !isGroupAnchor(messages[endIdx])) endIdx += 1;
+    while (endIdx < messages.length && !isGroupAnchor(messages[endIdx]))
+      endIdx += 1;
     // "Never fold" plans standalone rows, so the render window counts every message.
-    const segments = options.neverFold ? [] : planTurnSegments(messages, userIdx, endIdx, options);
+    const segments = options.neverFold
+      ? []
+      : planTurnSegments(messages, userIdx, endIdx, options);
     if (segments.some((segment) => segment.kind === "activity")) {
-      rows.push({ kind: "group", userIndex: userIdx, endIndex: endIdx, segments });
+      rows.push({
+        kind: "group",
+        userIndex: userIdx,
+        endIndex: endIdx,
+        segments,
+      });
     } else {
       // Nothing to fold: render the anchor and the rest as standalone messages.
       // Tool results render under their tool call, as in the fold, so they get no row.
       for (let renderIdx = userIdx; renderIdx < endIdx; renderIdx++) {
-        if (messages[renderIdx].role !== "toolResult") rows.push({ kind: "message", index: renderIdx });
+        if (messages[renderIdx].role !== "toolResult")
+          rows.push({ kind: "message", index: renderIdx });
       }
     }
     idx = endIdx;

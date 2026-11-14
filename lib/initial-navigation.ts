@@ -4,12 +4,16 @@ export interface InitialNavigation {
   hostId?: string;
 }
 
-export function getInitialNavigation(searchParams: Pick<URLSearchParams, "get">): InitialNavigation {
+export function getInitialNavigation(
+  searchParams: Pick<URLSearchParams, "get">,
+): InitialNavigation {
   const requestedCwd = searchParams.get("cwd")?.trim() || null;
 
   return {
     requestedCwd,
     sessionId: requestedCwd ? null : searchParams.get("session"),
-    ...(requestedCwd && searchParams.get("hostId") !== null ? { hostId: searchParams.get("hostId")! } : {}),
+    ...(requestedCwd && searchParams.get("hostId") !== null
+      ? { hostId: searchParams.get("hostId")! }
+      : {}),
   };
 }

@@ -4,7 +4,7 @@ import { disposeUtilityRpc } from "@/lib/omp/rpc-utility";
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { provider?: unknown };
+    const body = (await request.json()) as { provider?: unknown };
     if (typeof body.provider !== "string" || !body.provider.trim()) {
       return Response.json({ error: "provider is required" }, { status: 400 });
     }

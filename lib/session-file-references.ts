@@ -23,10 +23,22 @@ async function isPathReferencedBySession(
   }
 }
 
-export function isFilePathReferencedBySession(filePath: string, sessionId: string | null): Promise<boolean> {
-  return isPathReferencedBySession(filePath, sessionId, (p, entries) => isFilePathReferencedByEntries(p, entries, homedir()));
+export function isFilePathReferencedBySession(
+  filePath: string,
+  sessionId: string | null,
+): Promise<boolean> {
+  return isPathReferencedBySession(filePath, sessionId, (p, entries) =>
+    isFilePathReferencedByEntries(p, entries, homedir()),
+  );
 }
 
-export function isBashOutputPathReferencedBySession(filePath: string, sessionId: string | null): Promise<boolean> {
-  return isPathReferencedBySession(filePath, sessionId, isBashOutputPathReferencedByEntries);
+export function isBashOutputPathReferencedBySession(
+  filePath: string,
+  sessionId: string | null,
+): Promise<boolean> {
+  return isPathReferencedBySession(
+    filePath,
+    sessionId,
+    isBashOutputPathReferencedByEntries,
+  );
 }

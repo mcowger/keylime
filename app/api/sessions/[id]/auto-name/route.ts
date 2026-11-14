@@ -1,9 +1,19 @@
-import { deriveSessionTitleFromFirstMessage, sanitizeSessionTitle } from "@/lib/session-title";
+import {
+  deriveSessionTitleFromFirstMessage,
+  sanitizeSessionTitle,
+} from "@/lib/session-title";
 import { getRpcSession, startRpcSession, WebRpcError } from "@/lib/rpc-manager";
-import { invalidateHostSessionList, sessionSpawnTarget } from "@/lib/hosts/session-index";
+import {
+  invalidateHostSessionList,
+  sessionSpawnTarget,
+} from "@/lib/hosts/session-index";
 import { HostOpError } from "@/lib/hosts/link-protocol";
 import { invalidateSessionCaches } from "@/lib/session-reader";
-import { apiErrorResponse, opErrorResponse, resolveSessionHostOr404 } from "@/lib/api-utils";
+import {
+  apiErrorResponse,
+  opErrorResponse,
+  resolveSessionHostOr404,
+} from "@/lib/api-utils";
 
 /**
  * POST /api/sessions/[id]/auto-name
@@ -32,7 +42,18 @@ export async function POST(
       try {
         const target = await sessionSpawnTarget(id, resolved.host);
         if (target) {
-          rpc = (await startRpcSession(id, target.sessionFile, target.cwd, undefined, undefined, target.recordedCwd, undefined, resolved.host)).session;
+          rpc = (
+            await startRpcSession(
+              id,
+              target.sessionFile,
+              target.cwd,
+              undefined,
+              undefined,
+              target.recordedCwd,
+              undefined,
+              resolved.host,
+            )
+          ).session;
         }
       } catch {
         rpc = undefined; // Fall through to the fallback title.
@@ -41,16 +62,25 @@ export async function POST(
 
     if (rpc?.isAlive?.()) {
       try {
-        const generated = sanitizeSessionTitle((await rpc.generateTitle()) ?? undefined);
+        const generated = sanitizeSessionTitle(
+          (await rpc.generateTitle()) ?? undefined,
+        );
         if (generated) {
           invalidateSessionCaches(rpc.sessionFile);
-          return Response.json({ title: generated, generated: true, usage: null });
+          return Response.json({
+            title: generated,
+            generated: true,
+            usage: null,
+          });
         }
       } catch (error) {
         // A busy/restarting session reports a typed error the UI can show; any
         // other failure degrades to the fallback below.
         if (error instanceof WebRpcError) {
-          return Response.json({ error: error.message, code: error.code }, { status: 409 });
+          return Response.json(
+            { error: error.message, code: error.code },
+            { status: 409 },
+          );
         }
       }
     }
@@ -59,23 +89,35 @@ export async function POST(
     if ("response" in resolved) return resolved.response;
     const { sessionOps } = resolved.host;
 
-    const info = (await sessionOps.listSessions()).find((session) => session.id === id);
+    const info = (await sessionOps.listSessions()).find(
+      (session) => session.id === id,
+    );
     const storedTitle = sanitizeSessionTitle(info?.name);
     if (storedTitle) {
-      return Response.json({ title: storedTitle, generated: false, usage: null });
+      return Response.json({
+        title: storedTitle,
+        generated: false,
+        usage: null,
+      });
     }
 
     const derived = deriveSessionTitleFromFirstMessage(info?.firstMessage);
     if (!derived) {
       return Response.json(
-        { error: "The session has no user messages to name", code: "session_no_messages_to_name" },
+        {
+          error: "The session has no user messages to name",
+          code: "session_no_messages_to_name",
+        },
         { status: 409 },
       );
     }
 
     // Title generation/path resolution yielded; Edit may now own this session.
     if (getRpcSession(id)?.isEditingHistory()) {
-      return Response.json({ error: "Wait for the history edit to finish", code: "session_busy" }, { status: 409 });
+      return Response.json(
+        { error: "Wait for the history edit to finish", code: "session_busy" },
+        { status: 409 },
+      );
     }
 
     // Save title both to disk and through the live process so it persists immediately.

@@ -1,6 +1,13 @@
 "use client";
 
-import { memo, useCallback, useEffect, useState, type Ref, type RefObject } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useState,
+  type Ref,
+  type RefObject,
+} from "react";
 import {
   AtSign,
   ChevronsDownUp,
@@ -29,7 +36,8 @@ import { useI18n } from "@/lib/i18n";
 import { getFileName } from "@/lib/file-paths";
 import type { WorkspaceFileSource } from "@/lib/workspace-types";
 
-export type RightPanelView = "explorer" | "git" | "notifications" | "worktrees" | "connection" | "file";
+export type RightPanelView =
+  "explorer" | "git" | "notifications" | "worktrees" | "connection" | "file";
 
 interface Props {
   fileTabs: Tab[];
@@ -62,7 +70,11 @@ interface Props {
   explorerRefreshing: boolean;
   isMobile: boolean;
   isCompactOverlay: boolean;
-  onOpenFile: (filePath: string, fileName: string, source: WorkspaceFileSource) => void;
+  onOpenFile: (
+    filePath: string,
+    fileName: string,
+    source: WorkspaceFileSource,
+  ) => void;
   onSelectFileTab: (id: string) => void;
   onCloseFileTab: (id: string) => void;
   onCloseOtherFileTabs: () => void;
@@ -75,7 +87,11 @@ interface Props {
   onExplorerRefreshDone: () => void;
   onAtMention: (relativePath: string, isDir: boolean) => void;
   onAtMentions: (relativePaths: string[]) => void;
-  onMentionLines: (relativePath: string, startLine: number, endLine: number) => void;
+  onMentionLines: (
+    relativePath: string,
+    startLine: number,
+    endLine: number,
+  ) => void;
   onExplorerGitStatus: (changedCount: number, isRepo: boolean) => void;
   onResetRightPanelWidth: () => void;
   onRightPanelResizeStart: (e: React.MouseEvent) => void;
@@ -136,14 +152,26 @@ export const RightPanel = memo(function RightPanel({
   onRightPanelResizeKey,
 }: Props) {
   const { t } = useI18n();
-  const openWorkspaceFile = useCallback((filePath: string, fileName: string) => {
-    onOpenFile(filePath, fileName, { hostId, sessionId: sourceSessionId ?? null, cwd: explorerCwd });
-  }, [onOpenFile, hostId, sourceSessionId, explorerCwd]);
-  const activeFileTab = fileTabs.find((tab) => tab.id === activeFileTabId) ?? null;
-  const activeFileMatchesSource = activeFileTab?.hostId === hostId && (activeFileTab?.sourceSessionId ?? null) === (sourceSessionId ?? null);
+  const openWorkspaceFile = useCallback(
+    (filePath: string, fileName: string) => {
+      onOpenFile(filePath, fileName, {
+        hostId,
+        sessionId: sourceSessionId ?? null,
+        cwd: explorerCwd,
+      });
+    },
+    [onOpenFile, hostId, sourceSessionId, explorerCwd],
+  );
+  const activeFileTab =
+    fileTabs.find((tab) => tab.id === activeFileTabId) ?? null;
+  const activeFileMatchesSource =
+    activeFileTab?.hostId === hostId &&
+    (activeFileTab?.sourceSessionId ?? null) === (sourceSessionId ?? null);
   const gitBadge = explorerIsRepo ? explorerGitCount : 0;
   const unreadNotifications = useUnreadNotificationCount();
-  const [visitedViews, setVisitedViews] = useState<Set<RightPanelView>>(() => new Set(["explorer"]));
+  const [visitedViews, setVisitedViews] = useState<Set<RightPanelView>>(
+    () => new Set(["explorer"]),
+  );
   useEffect(() => {
     setVisitedViews((previous) => {
       if (previous.has(rightView)) return previous;
@@ -177,10 +205,20 @@ export const RightPanel = memo(function RightPanel({
             outline: "none",
             transition: "background var(--dur-fast) var(--ease-out-warm)",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "color-mix(in srgb, var(--accent) 35%, transparent)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-          onFocus={(e) => { e.currentTarget.style.background = "color-mix(in srgb, var(--accent) 35%, transparent)"; }}
-          onBlur={(e) => { e.currentTarget.style.background = "transparent"; }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background =
+              "color-mix(in srgb, var(--accent) 35%, transparent)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.background =
+              "color-mix(in srgb, var(--accent) 35%, transparent)";
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.background = "transparent";
+          }}
         />
       )}
       {/* Right panel: file viewer — always mounted, width animated via CSS */}
@@ -200,15 +238,34 @@ export const RightPanel = memo(function RightPanel({
           borderLeft: "1px solid var(--border)",
           background: "var(--bg)",
           zIndex: isCompactOverlay ? 210 : undefined,
-          ...(!isMobile && rightPanelWidth !== null ? { "--right-panel-width": `${rightPanelWidth}px` } : {}),
+          ...(!isMobile && rightPanelWidth !== null
+            ? { "--right-panel-width": `${rightPanelWidth}px` }
+            : {}),
         }}
       >
         {/* Right panel toolbar: tabs + editor integrations (chat, path, explorer) */}
-        <div className="right-panel-toolbar" style={{ display: "flex", alignItems: "center", flexShrink: 0, background: "var(--bg-panel)", borderBottom: "1px solid var(--border)", minHeight: "var(--shell-topbar-height)", flexWrap: "wrap" }}>
-          <div style={{ flex: isMobile ? "1 0 100%" : "1 1 160px", overflow: "hidden", minWidth: 0 }}>
+        <div
+          className="right-panel-toolbar"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            flexShrink: 0,
+            background: "var(--bg-panel)",
+            borderBottom: "1px solid var(--border)",
+            minHeight: "var(--shell-topbar-height)",
+            flexWrap: "wrap",
+          }}
+        >
+          <div
+            style={{
+              flex: isMobile ? "1 0 100%" : "1 1 160px",
+              overflow: "hidden",
+              minWidth: 0,
+            }}
+          >
             <TabBar
               tabs={fileTabs}
-              activeTabId={rightView === "file" ? activeFileTabId ?? "" : ""}
+              activeTabId={rightView === "file" ? (activeFileTabId ?? "") : ""}
               onSelectTab={onSelectFileTab}
               onCloseTab={onCloseFileTab}
               explorerSelected={rightView === "explorer"}
@@ -218,146 +275,422 @@ export const RightPanel = memo(function RightPanel({
               onSelectGit={() => onSelectView("git")}
               gitBadge={gitBadge}
               notificationsSelected={rightView === "notifications"}
-              onSelectNotifications={isMobile ? () => onSelectView("notifications") : undefined}
+              onSelectNotifications={
+                isMobile ? () => onSelectView("notifications") : undefined
+              }
               notificationsBadge={unreadNotifications}
               worktreesSelected={rightView === "worktrees"}
               onSelectWorktrees={() => onSelectView("worktrees")}
               connectionSelected={rightView === "connection"}
-              onSelectConnection={connectionDiagnosticsOn ? () => onSelectView("connection") : undefined}
+              onSelectConnection={
+                connectionDiagnosticsOn
+                  ? () => onSelectView("connection")
+                  : undefined
+              }
             />
           </div>
           {rightView === "explorer" ? (
             explorerCwd && (
-            <div style={{ display: "flex", alignItems: "center", flexShrink: 0, padding: "0 2px" }} role="toolbar" aria-label={t("sessionSidebar.explorer")}>
-              <button
-                onClick={onToggleFileSearch}
-                title={t("fileExplorer.searchFiles")}
-                aria-label={t("fileExplorer.searchFiles")}
-                aria-pressed={fileSearchOpen}
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, padding: 0, background: fileSearchOpen ? "var(--bg-hover)" : "none", border: "none", borderRadius: "var(--radius-control)", color: fileSearchOpen ? "var(--accent)" : "var(--text-dim)", cursor: "pointer" }}
-                onMouseEnter={(e) => { if (fileSearchOpen) return; e.currentTarget.style.color = "var(--text-muted)"; e.currentTarget.style.background = "var(--bg-hover)"; }}
-                onMouseLeave={(e) => { if (fileSearchOpen) return; e.currentTarget.style.color = "var(--text-dim)"; e.currentTarget.style.background = "none"; }}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  flexShrink: 0,
+                  padding: "0 2px",
+                }}
+                role="toolbar"
+                aria-label={t("sessionSidebar.explorer")}
               >
-                <Search size={13} strokeWidth={2} aria-hidden="true" />
-              </button>
-              <button
-                onClick={() => fileExplorerRef.current?.openUploadPicker()}
-                disabled={explorerUploadBusy}
-                title={t("sessionSidebar.uploadFilesTitle")}
-                aria-label={t("sessionSidebar.uploadFiles")}
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, padding: 0, background: "none", border: "none", borderRadius: "var(--radius-control)", color: "var(--text-dim)", cursor: explorerUploadBusy ? "default" : "pointer", opacity: explorerUploadBusy ? 0.6 : 1 }}
-                onMouseEnter={(e) => { if (explorerUploadBusy) return; e.currentTarget.style.color = "var(--text-muted)"; e.currentTarget.style.background = "var(--bg-hover)"; }}
-                onMouseLeave={(e) => { if (explorerUploadBusy) return; e.currentTarget.style.color = "var(--text-dim)"; e.currentTarget.style.background = "none"; }}
-              >
-                <Upload size={13} strokeWidth={2} aria-hidden="true" />
-              </button>
-              <button
-                onClick={() => fileExplorerRef.current?.collapseAll()}
-                title={t("sessionSidebar.collapseExplorer")}
-                aria-label={t("sessionSidebar.collapseExplorer")}
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: isMobile ? "auto" : 26, height: 26, padding: isMobile ? "0 8px" : 0, background: "none", border: "none", borderRadius: "var(--radius-control)", color: "var(--text-muted)", cursor: "pointer", fontSize: 11 }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; e.currentTarget.style.background = "var(--bg-hover)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; e.currentTarget.style.background = "none"; }}
-              >
-                <ChevronsDownUp size={isMobile ? 16 : 13} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0 }} />
-                {isMobile && <span>{t("sessionSidebar.collapseExplorer")}</span>}
-              </button>
-              <button
-                aria-label={t("sessionSidebar.refreshExplorer")}
-                onClick={onExplorerRefresh}
-                title={t("sessionSidebar.refreshExplorer")}
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, padding: 0, background: "none", border: "none", borderRadius: "var(--radius-control)", color: explorerRefreshing ? "var(--accent)" : "var(--text-dim)", cursor: "pointer" }}
-                onMouseEnter={(e) => { if (explorerRefreshing) return; e.currentTarget.style.color = "var(--text-muted)"; e.currentTarget.style.background = "var(--bg-hover)"; }}
-                onMouseLeave={(e) => { if (explorerRefreshing) return; e.currentTarget.style.color = "var(--text-dim)"; e.currentTarget.style.background = "none"; }}
-              >
-                <RefreshCw size={13} strokeWidth={2} aria-hidden="true" className={explorerRefreshing ? "icon-spin" : undefined} />
-              </button>
-            </div>
+                <button
+                  onClick={onToggleFileSearch}
+                  title={t("fileExplorer.searchFiles")}
+                  aria-label={t("fileExplorer.searchFiles")}
+                  aria-pressed={fileSearchOpen}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 26,
+                    height: 26,
+                    padding: 0,
+                    background: fileSearchOpen ? "var(--bg-hover)" : "none",
+                    border: "none",
+                    borderRadius: "var(--radius-control)",
+                    color: fileSearchOpen ? "var(--accent)" : "var(--text-dim)",
+                    cursor: "pointer",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (fileSearchOpen) return;
+                    e.currentTarget.style.color = "var(--text-muted)";
+                    e.currentTarget.style.background = "var(--bg-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (fileSearchOpen) return;
+                    e.currentTarget.style.color = "var(--text-dim)";
+                    e.currentTarget.style.background = "none";
+                  }}
+                >
+                  <Search size={13} strokeWidth={2} aria-hidden="true" />
+                </button>
+                <button
+                  onClick={() => fileExplorerRef.current?.openUploadPicker()}
+                  disabled={explorerUploadBusy}
+                  title={t("sessionSidebar.uploadFilesTitle")}
+                  aria-label={t("sessionSidebar.uploadFiles")}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 26,
+                    height: 26,
+                    padding: 0,
+                    background: "none",
+                    border: "none",
+                    borderRadius: "var(--radius-control)",
+                    color: "var(--text-dim)",
+                    cursor: explorerUploadBusy ? "default" : "pointer",
+                    opacity: explorerUploadBusy ? 0.6 : 1,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (explorerUploadBusy) return;
+                    e.currentTarget.style.color = "var(--text-muted)";
+                    e.currentTarget.style.background = "var(--bg-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (explorerUploadBusy) return;
+                    e.currentTarget.style.color = "var(--text-dim)";
+                    e.currentTarget.style.background = "none";
+                  }}
+                >
+                  <Upload size={13} strokeWidth={2} aria-hidden="true" />
+                </button>
+                <button
+                  onClick={() => fileExplorerRef.current?.collapseAll()}
+                  title={t("sessionSidebar.collapseExplorer")}
+                  aria-label={t("sessionSidebar.collapseExplorer")}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                    width: isMobile ? "auto" : 26,
+                    height: 26,
+                    padding: isMobile ? "0 8px" : 0,
+                    background: "none",
+                    border: "none",
+                    borderRadius: "var(--radius-control)",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    fontSize: 11,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = "var(--text)";
+                    e.currentTarget.style.background = "var(--bg-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = "var(--text-muted)";
+                    e.currentTarget.style.background = "none";
+                  }}
+                >
+                  <ChevronsDownUp
+                    size={isMobile ? 16 : 13}
+                    strokeWidth={2}
+                    aria-hidden="true"
+                    style={{ flexShrink: 0 }}
+                  />
+                  {isMobile && (
+                    <span>{t("sessionSidebar.collapseExplorer")}</span>
+                  )}
+                </button>
+                <button
+                  aria-label={t("sessionSidebar.refreshExplorer")}
+                  onClick={onExplorerRefresh}
+                  title={t("sessionSidebar.refreshExplorer")}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 26,
+                    height: 26,
+                    padding: 0,
+                    background: "none",
+                    border: "none",
+                    borderRadius: "var(--radius-control)",
+                    color: explorerRefreshing
+                      ? "var(--accent)"
+                      : "var(--text-dim)",
+                    cursor: "pointer",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (explorerRefreshing) return;
+                    e.currentTarget.style.color = "var(--text-muted)";
+                    e.currentTarget.style.background = "var(--bg-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (explorerRefreshing) return;
+                    e.currentTarget.style.color = "var(--text-dim)";
+                    e.currentTarget.style.background = "none";
+                  }}
+                >
+                  <RefreshCw
+                    size={13}
+                    strokeWidth={2}
+                    aria-hidden="true"
+                    className={explorerRefreshing ? "icon-spin" : undefined}
+                  />
+                </button>
+              </div>
             )
           ) : rightView === "git" ? (
             explorerCwd && (
-            <div style={{ display: "flex", alignItems: "center", flexShrink: 0, padding: "0 2px" }} role="toolbar" aria-label={t("tabBar.git")}>
-              <button
-                aria-label={t("gitChanges.refreshChanges")}
-                onClick={onExplorerRefresh}
-                title={t("gitChanges.refreshChanges")}
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, padding: 0, background: "none", border: "none", borderRadius: "var(--radius-control)", color: explorerRefreshing ? "var(--accent)" : "var(--text-dim)", cursor: "pointer" }}
-                onMouseEnter={(e) => { if (explorerRefreshing) return; e.currentTarget.style.color = "var(--text-muted)"; e.currentTarget.style.background = "var(--bg-hover)"; }}
-                onMouseLeave={(e) => { if (explorerRefreshing) return; e.currentTarget.style.color = "var(--text-dim)"; e.currentTarget.style.background = "none"; }}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  flexShrink: 0,
+                  padding: "0 2px",
+                }}
+                role="toolbar"
+                aria-label={t("tabBar.git")}
               >
-                <RefreshCw size={13} strokeWidth={2} aria-hidden="true" className={explorerRefreshing ? "icon-spin" : undefined} />
-              </button>
-            </div>
+                <button
+                  aria-label={t("gitChanges.refreshChanges")}
+                  onClick={onExplorerRefresh}
+                  title={t("gitChanges.refreshChanges")}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 26,
+                    height: 26,
+                    padding: 0,
+                    background: "none",
+                    border: "none",
+                    borderRadius: "var(--radius-control)",
+                    color: explorerRefreshing
+                      ? "var(--accent)"
+                      : "var(--text-dim)",
+                    cursor: "pointer",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (explorerRefreshing) return;
+                    e.currentTarget.style.color = "var(--text-muted)";
+                    e.currentTarget.style.background = "var(--bg-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (explorerRefreshing) return;
+                    e.currentTarget.style.color = "var(--text-dim)";
+                    e.currentTarget.style.background = "none";
+                  }}
+                >
+                  <RefreshCw
+                    size={13}
+                    strokeWidth={2}
+                    aria-hidden="true"
+                    className={explorerRefreshing ? "icon-spin" : undefined}
+                  />
+                </button>
+              </div>
             )
           ) : rightView === "notifications" ? (
             <NotificationActions />
-          ) : rightView === "file" && activeFileTab && (
-            <div style={{ display: "flex", alignItems: "center", flexShrink: 0, padding: "0 2px" }} role="toolbar" aria-label={activeFileTab.filePath}>
-              <button
-                onClick={onMentionActiveFile}
-                disabled={!activeFileMatchesSource}
-                title={t("appShell.mentionFileInChat")}
-                aria-label={t("appShell.mentionFileInChat")}
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, padding: 0, background: "none", border: "none", borderRadius: "var(--radius-control)", color: "var(--accent)", cursor: activeFileMatchesSource ? "pointer" : "default", opacity: activeFileMatchesSource ? 1 : 0.45 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
+          ) : (
+            rightView === "file" &&
+            activeFileTab && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  flexShrink: 0,
+                  padding: "0 2px",
+                }}
+                role="toolbar"
+                aria-label={activeFileTab.filePath}
               >
-                <AtSign size={13} strokeWidth={2.2} aria-hidden="true" />
-              </button>
-              <button
-                onClick={onCopyActiveFilePath}
-                title={t("appShell.copyFilePath")}
-                aria-label={t("appShell.copyFilePath")}
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, padding: 0, background: "none", border: "none", borderRadius: "var(--radius-control)", color: "var(--text-dim)", cursor: "pointer" }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; e.currentTarget.style.background = "var(--bg-hover)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-dim)"; e.currentTarget.style.background = "none"; }}
-              >
-                <Copy size={13} strokeWidth={2} aria-hidden="true" />
-              </button>
-              <button
-                onClick={onRevealActiveFile}
-                disabled={!activeFileMatchesSource}
-                title={t(activeFileMatchesSource ? "appShell.revealInExplorer" : "appShell.revealSourceSession")}
-                aria-label={t("appShell.revealInExplorer")}
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, padding: 0, background: revealPath ? "var(--bg-hover)" : "none", border: "none", borderRadius: "var(--radius-control)", color: revealPath ? "var(--accent)" : "var(--text-dim)", cursor: activeFileMatchesSource ? "pointer" : "not-allowed", opacity: activeFileMatchesSource ? 1 : 0.5 }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; e.currentTarget.style.background = "var(--bg-hover)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = revealPath ? "var(--accent)" : "var(--text-dim)"; e.currentTarget.style.background = revealPath ? "var(--bg-hover)" : "none"; }}
-              >
-                <LocateFixed size={13} strokeWidth={2} aria-hidden="true" />
-              </button>
-              <button
-                onClick={onDownloadActiveFile}
-                title={t("fileExplorer.downloadFile")}
-                aria-label={t("fileExplorer.downloadFile")}
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, padding: 0, background: "none", border: "none", borderRadius: "var(--radius-control)", color: "var(--text-dim)", cursor: "pointer" }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; e.currentTarget.style.background = "var(--bg-hover)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-dim)"; e.currentTarget.style.background = "none"; }}
-              >
-                <Download size={13} strokeWidth={2} aria-hidden="true" />
-              </button>
-              {fileTabs.length > 1 && (
                 <button
-                  onClick={onCloseOtherFileTabs}
-                  title={t("appShell.closeOtherTabs")}
-                  aria-label={t("appShell.closeOtherTabs")}
-                  style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 26, padding: "0 7px", background: "none", border: "none", borderRadius: "var(--radius-control)", color: "var(--text-dim)", cursor: "pointer", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; e.currentTarget.style.background = "var(--bg-hover)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-dim)"; e.currentTarget.style.background = "none"; }}
+                  onClick={onMentionActiveFile}
+                  disabled={!activeFileMatchesSource}
+                  title={t("appShell.mentionFileInChat")}
+                  aria-label={t("appShell.mentionFileInChat")}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 26,
+                    height: 26,
+                    padding: 0,
+                    background: "none",
+                    border: "none",
+                    borderRadius: "var(--radius-control)",
+                    color: "var(--accent)",
+                    cursor: activeFileMatchesSource ? "pointer" : "default",
+                    opacity: activeFileMatchesSource ? 1 : 0.45,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "var(--bg-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "none";
+                  }}
                 >
-                  {t("appShell.closeOthers")}
+                  <AtSign size={13} strokeWidth={2.2} aria-hidden="true" />
                 </button>
-              )}
-              <button
-                onClick={onCloseAllFileTabs}
-                title={t("appShell.closeAllTabs")}
-                aria-label={t("appShell.closeAllTabs")}
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, padding: 0, background: "none", border: "none", borderRadius: "var(--radius-control)", color: "var(--text-dim)", cursor: "pointer" }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; e.currentTarget.style.background = "var(--bg-hover)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-dim)"; e.currentTarget.style.background = "none"; }}
-              >
-                <FileX size={13} strokeWidth={2} aria-hidden="true" />
-              </button>
-            </div>
+                <button
+                  onClick={onCopyActiveFilePath}
+                  title={t("appShell.copyFilePath")}
+                  aria-label={t("appShell.copyFilePath")}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 26,
+                    height: 26,
+                    padding: 0,
+                    background: "none",
+                    border: "none",
+                    borderRadius: "var(--radius-control)",
+                    color: "var(--text-dim)",
+                    cursor: "pointer",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = "var(--text)";
+                    e.currentTarget.style.background = "var(--bg-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = "var(--text-dim)";
+                    e.currentTarget.style.background = "none";
+                  }}
+                >
+                  <Copy size={13} strokeWidth={2} aria-hidden="true" />
+                </button>
+                <button
+                  onClick={onRevealActiveFile}
+                  disabled={!activeFileMatchesSource}
+                  title={t(
+                    activeFileMatchesSource
+                      ? "appShell.revealInExplorer"
+                      : "appShell.revealSourceSession",
+                  )}
+                  aria-label={t("appShell.revealInExplorer")}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 26,
+                    height: 26,
+                    padding: 0,
+                    background: revealPath ? "var(--bg-hover)" : "none",
+                    border: "none",
+                    borderRadius: "var(--radius-control)",
+                    color: revealPath ? "var(--accent)" : "var(--text-dim)",
+                    cursor: activeFileMatchesSource ? "pointer" : "not-allowed",
+                    opacity: activeFileMatchesSource ? 1 : 0.5,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = "var(--text)";
+                    e.currentTarget.style.background = "var(--bg-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = revealPath
+                      ? "var(--accent)"
+                      : "var(--text-dim)";
+                    e.currentTarget.style.background = revealPath
+                      ? "var(--bg-hover)"
+                      : "none";
+                  }}
+                >
+                  <LocateFixed size={13} strokeWidth={2} aria-hidden="true" />
+                </button>
+                <button
+                  onClick={onDownloadActiveFile}
+                  title={t("fileExplorer.downloadFile")}
+                  aria-label={t("fileExplorer.downloadFile")}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 26,
+                    height: 26,
+                    padding: 0,
+                    background: "none",
+                    border: "none",
+                    borderRadius: "var(--radius-control)",
+                    color: "var(--text-dim)",
+                    cursor: "pointer",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = "var(--text)";
+                    e.currentTarget.style.background = "var(--bg-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = "var(--text-dim)";
+                    e.currentTarget.style.background = "none";
+                  }}
+                >
+                  <Download size={13} strokeWidth={2} aria-hidden="true" />
+                </button>
+                {fileTabs.length > 1 && (
+                  <button
+                    onClick={onCloseOtherFileTabs}
+                    title={t("appShell.closeOtherTabs")}
+                    aria-label={t("appShell.closeOtherTabs")}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      height: 26,
+                      padding: "0 7px",
+                      background: "none",
+                      border: "none",
+                      borderRadius: "var(--radius-control)",
+                      color: "var(--text-dim)",
+                      cursor: "pointer",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      whiteSpace: "nowrap",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = "var(--text)";
+                      e.currentTarget.style.background = "var(--bg-hover)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = "var(--text-dim)";
+                      e.currentTarget.style.background = "none";
+                    }}
+                  >
+                    {t("appShell.closeOthers")}
+                  </button>
+                )}
+                <button
+                  onClick={onCloseAllFileTabs}
+                  title={t("appShell.closeAllTabs")}
+                  aria-label={t("appShell.closeAllTabs")}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 26,
+                    height: 26,
+                    padding: 0,
+                    background: "none",
+                    border: "none",
+                    borderRadius: "var(--radius-control)",
+                    color: "var(--text-dim)",
+                    cursor: "pointer",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = "var(--text)";
+                    e.currentTarget.style.background = "var(--bg-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = "var(--text-dim)";
+                    e.currentTarget.style.background = "none";
+                  }}
+                >
+                  <FileX size={13} strokeWidth={2} aria-hidden="true" />
+                </button>
+              </div>
+            )
           )}
           <button
             type="button"
@@ -371,134 +704,369 @@ export const RightPanel = memo(function RightPanel({
         </div>
 
         {/* Explorer tab view — kept mounted so expansion survives tab switches. */}
-        <div id="workspace-file-panel-explorer" role="tabpanel" aria-label={t("sessionSidebar.explorer")} style={{ display: rightView === "explorer" ? "flex" : "none", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
-          {visitedViews.has("explorer") && (explorerCwd ? (
-            <>
+        <div
+          id="workspace-file-panel-explorer"
+          role="tabpanel"
+          aria-label={t("sessionSidebar.explorer")}
+          style={{
+            display: rightView === "explorer" ? "flex" : "none",
+            flexDirection: "column",
+            flex: 1,
+            minHeight: 0,
+            overflow: "hidden",
+          }}
+        >
+          {visitedViews.has("explorer") &&
+            (explorerCwd ? (
+              <>
+                <div
+                  title={explorerCwd}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 7,
+                    margin: "8px 8px 4px",
+                    padding: "5px 8px",
+                    background: "var(--bg-subtle)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-control)",
+                    color: "var(--text-muted)",
+                    minWidth: 0,
+                    flexShrink: 0,
+                  }}
+                >
+                  <Folder
+                    size={13}
+                    strokeWidth={2}
+                    aria-hidden="true"
+                    style={{ flexShrink: 0, color: "var(--accent)" }}
+                  />
+                  <span style={{ minWidth: 0, flex: 1 }}>
+                    <span
+                      style={{
+                        display: "block",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: "var(--text)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {getFileName(explorerCwd)}
+                    </span>
+                    <span
+                      style={{
+                        display: "block",
+                        fontSize: 10,
+                        color: "var(--text-dim)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        fontFamily: "var(--font-mono)",
+                      }}
+                    >
+                      {explorerCwd}
+                    </span>
+                  </span>
+                  {explorerIsRepo && (
+                    <span
+                      title={
+                        explorerGitCount > 0
+                          ? t("sessionSidebar.explorerChanged", {
+                              count: explorerGitCount,
+                            })
+                          : t("sessionSidebar.explorerClean")
+                      }
+                      style={{
+                        width: 7,
+                        height: 7,
+                        borderRadius: "50%",
+                        flexShrink: 0,
+                        background:
+                          explorerGitCount > 0
+                            ? "var(--status-modified)"
+                            : "var(--status-success)",
+                      }}
+                    />
+                  )}
+                </div>
+                <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+                  <FileExplorer
+                    key={`${hostId}:${sourceSessionId ?? ""}:${explorerCwd}`}
+                    ref={fileExplorerRef}
+                    hostId={hostId}
+                    cwd={explorerCwd}
+                    sourceSessionId={sourceSessionId}
+                    onOpenFile={openWorkspaceFile}
+                    refreshKey={explorerRefreshKey}
+                    onAtMention={onAtMention}
+                    onAtMentions={onAtMentions}
+                    onUploadBusyChange={onUploadBusyChange}
+                    onRefreshDone={onExplorerRefreshDone}
+                    fileSearchOpen={fileSearchOpen}
+                    onFileSearchOpenChange={onFileSearchOpenChange}
+                    activeFilePath={
+                      activeFileMatchesSource
+                        ? (activeFileTab?.filePath ?? null)
+                        : null
+                    }
+                    revealPath={revealPath}
+                    onRevealDone={onRevealDone}
+                    onGitStatusChange={onExplorerGitStatus}
+                  />
+                </div>
+              </>
+            ) : (
               <div
-                title={explorerCwd}
                 style={{
+                  height: "100%",
                   display: "flex",
+                  flexDirection: "column",
                   alignItems: "center",
-                  gap: 7,
-                  margin: "8px 8px 4px",
-                  padding: "5px 8px",
-                  background: "var(--bg-subtle)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--radius-control)",
-                  color: "var(--text-muted)",
-                  minWidth: 0,
-                  flexShrink: 0,
+                  justifyContent: "center",
+                  gap: 8,
+                  padding: 24,
+                  textAlign: "center",
                 }}
               >
-                <Folder size={13} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0, color: "var(--accent)" }} />
-                <span style={{ minWidth: 0, flex: 1 }}>
-                  <span style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {getFileName(explorerCwd)}
-                  </span>
-                  <span style={{ display: "block", fontSize: 10, color: "var(--text-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--font-mono)" }}>
-                    {explorerCwd}
-                  </span>
-                </span>
-                {explorerIsRepo && (
-                  <span
-                    title={explorerGitCount > 0 ? t("sessionSidebar.explorerChanged", { count: explorerGitCount }) : t("sessionSidebar.explorerClean")}
-                    style={{
-                      width: 7,
-                      height: 7,
-                      borderRadius: "50%",
-                      flexShrink: 0,
-                      background: explorerGitCount > 0 ? "var(--status-modified)" : "var(--status-success)",
-                    }}
-                  />
-                )}
-              </div>
-              <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
-                <FileExplorer
-                  key={`${hostId}:${sourceSessionId ?? ""}:${explorerCwd}`}
-                  ref={fileExplorerRef}
-                  hostId={hostId}
-                  cwd={explorerCwd}
-                  sourceSessionId={sourceSessionId}
-                  onOpenFile={openWorkspaceFile}
-                  refreshKey={explorerRefreshKey}
-                  onAtMention={onAtMention}
-                  onAtMentions={onAtMentions}
-                  onUploadBusyChange={onUploadBusyChange}
-                  onRefreshDone={onExplorerRefreshDone}
-                  fileSearchOpen={fileSearchOpen}
-                  onFileSearchOpenChange={onFileSearchOpenChange}
-                  activeFilePath={activeFileMatchesSource ? activeFileTab?.filePath ?? null : null}
-                  revealPath={revealPath}
-                  onRevealDone={onRevealDone}
-                  onGitStatusChange={onExplorerGitStatus}
+                <Folder
+                  size={26}
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                  style={{ color: "var(--text-dim)" }}
                 />
+                <div
+                  style={{
+                    color: "var(--text)",
+                    fontSize: 13,
+                    fontWeight: 600,
+                  }}
+                >
+                  {t("sessionSidebar.explorer")}
+                </div>
+                <div
+                  style={{
+                    color: "var(--text-dim)",
+                    fontSize: 11,
+                    lineHeight: 1.6,
+                    maxWidth: 260,
+                  }}
+                >
+                  {t("sessionSidebar.selectProjectFirst")}
+                </div>
               </div>
-            </>
-          ) : (
-            <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, padding: 24, textAlign: "center" }}>
-              <Folder size={26} strokeWidth={1.5} aria-hidden="true" style={{ color: "var(--text-dim)" }} />
-              <div style={{ color: "var(--text)", fontSize: 13, fontWeight: 600 }}>{t("sessionSidebar.explorer")}</div>
-              <div style={{ color: "var(--text-dim)", fontSize: 11, lineHeight: 1.6, maxWidth: 260 }}>{t("sessionSidebar.selectProjectFirst")}</div>
-            </div>
-          ))}
+            ))}
         </div>
         {/* Git changes tab view — kept mounted so selection survives tab switches. */}
-        <div id="workspace-file-panel-git" role="tabpanel" aria-label={t("tabBar.git")} style={{ display: rightView === "git" ? "flex" : "none", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
-          {visitedViews.has("git") && (explorerCwd ? (
-            <GitChangesPanel
-              key={`${hostId}:${sourceSessionId ?? ""}:${explorerCwd}`}
-              hostId={hostId}
-              cwd={explorerCwd}
-              sourceSessionId={sourceSessionId}
-              refreshKey={explorerRefreshKey}
-              onOpenFile={openWorkspaceFile}
-              onAtMention={onAtMention}
-              onRefreshDone={onExplorerRefreshDone}
-            />
-          ) : (
-            <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, padding: 24, textAlign: "center" }}>
-              <GitBranch size={26} strokeWidth={1.5} aria-hidden="true" style={{ color: "var(--text-dim)" }} />
-              <div style={{ color: "var(--text)", fontSize: 13, fontWeight: 600 }}>{t("tabBar.git")}</div>
-              <div style={{ color: "var(--text-dim)", fontSize: 11, lineHeight: 1.6, maxWidth: 260 }}>{t("sessionSidebar.selectProjectFirst")}</div>
-            </div>
-          ))}
+        <div
+          id="workspace-file-panel-git"
+          role="tabpanel"
+          aria-label={t("tabBar.git")}
+          style={{
+            display: rightView === "git" ? "flex" : "none",
+            flexDirection: "column",
+            flex: 1,
+            minHeight: 0,
+            overflow: "hidden",
+          }}
+        >
+          {visitedViews.has("git") &&
+            (explorerCwd ? (
+              <GitChangesPanel
+                key={`${hostId}:${sourceSessionId ?? ""}:${explorerCwd}`}
+                hostId={hostId}
+                cwd={explorerCwd}
+                sourceSessionId={sourceSessionId}
+                refreshKey={explorerRefreshKey}
+                onOpenFile={openWorkspaceFile}
+                onAtMention={onAtMention}
+                onRefreshDone={onExplorerRefreshDone}
+              />
+            ) : (
+              <div
+                style={{
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  padding: 24,
+                  textAlign: "center",
+                }}
+              >
+                <GitBranch
+                  size={26}
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                  style={{ color: "var(--text-dim)" }}
+                />
+                <div
+                  style={{
+                    color: "var(--text)",
+                    fontSize: 13,
+                    fontWeight: 600,
+                  }}
+                >
+                  {t("tabBar.git")}
+                </div>
+                <div
+                  style={{
+                    color: "var(--text-dim)",
+                    fontSize: 11,
+                    lineHeight: 1.6,
+                    maxWidth: 260,
+                  }}
+                >
+                  {t("sessionSidebar.selectProjectFirst")}
+                </div>
+              </div>
+            ))}
         </div>
-        <div id="workspace-file-panel-notifications" role="tabpanel" tabIndex={-1} aria-label={t("appShell.notifications")} className="ui-focus-ring" style={{ display: rightView === "notifications" ? "flex" : "none", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden", outline: "none" }}>
-          {isMobile && visitedViews.has("notifications") && <NotificationList />}
+        <div
+          id="workspace-file-panel-notifications"
+          role="tabpanel"
+          tabIndex={-1}
+          aria-label={t("appShell.notifications")}
+          className="ui-focus-ring"
+          style={{
+            display: rightView === "notifications" ? "flex" : "none",
+            flexDirection: "column",
+            flex: 1,
+            minHeight: 0,
+            overflow: "hidden",
+            outline: "none",
+          }}
+        >
+          {isMobile && visitedViews.has("notifications") && (
+            <NotificationList />
+          )}
         </div>
-        <div id="workspace-file-panel-worktrees" role="tabpanel" aria-label={t("tabBar.worktrees")} style={{ display: rightView === "worktrees" ? "flex" : "none", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
+        <div
+          id="workspace-file-panel-worktrees"
+          role="tabpanel"
+          aria-label={t("tabBar.worktrees")}
+          style={{
+            display: rightView === "worktrees" ? "flex" : "none",
+            flexDirection: "column",
+            flex: 1,
+            minHeight: 0,
+            overflow: "hidden",
+          }}
+        >
           {/* Keyed by repository so a draft branch or pending confirmation never carries over to another repo. */}
-          {visitedViews.has("worktrees") && <WorktreesPanel key={worktrees ? `${worktrees.hostId}:${worktrees.projectRoot}` : ""} ctx={worktrees} />}
+          {visitedViews.has("worktrees") && (
+            <WorktreesPanel
+              key={
+                worktrees ? `${worktrees.hostId}:${worktrees.projectRoot}` : ""
+              }
+              ctx={worktrees}
+            />
+          )}
         </div>
         {connectionDiagnosticsOn && (
-          <div id="workspace-file-panel-connection" role="tabpanel" aria-label={t("tabBar.connection")} style={{ display: rightView === "connection" ? "flex" : "none", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
-            <ConnectionDiagnosticsPanel active={rightView === "connection" && rightPanelOpen} />
+          <div
+            id="workspace-file-panel-connection"
+            role="tabpanel"
+            aria-label={t("tabBar.connection")}
+            style={{
+              display: rightView === "connection" ? "flex" : "none",
+              flexDirection: "column",
+              flex: 1,
+              minHeight: 0,
+              overflow: "hidden",
+            }}
+          >
+            <ConnectionDiagnosticsPanel
+              active={rightView === "connection" && rightPanelOpen}
+            />
           </div>
         )}
         {/* Keep open viewers mounted so switching tabs preserves scroll and preview state. */}
-        <div id="workspace-file-panel-file" role="tabpanel" aria-label={activeFileTab?.filePath ?? t("appShell.filePanel")} style={{ display: rightView === "file" ? "block" : "none", flex: 1, minHeight: 0, overflow: "hidden" }}>
-          {fileTabs.length > 0 ? fileTabs.map((tab) => (
-            <div key={tab.id} style={{ display: tab.id === activeFileTabId ? "block" : "none", height: "100%" }}>
-              <FileViewer
-                filePath={tab.filePath}
-                hostId={tab.hostId}
-                cwd={tab.sourceCwd ?? undefined}
-                sourceSessionId={tab.sourceSessionId}
-                gitRefreshKey={explorerRefreshKey}
-                active={tab.id === activeFileTabId && rightPanelOpen && rightView === "file"}
-                onMentionLines={tab.id === activeFileTabId && rightPanelOpen && rightView === "file" && activeFileMatchesSource ? onMentionLines : undefined}
-                onOpenFile={(filePath) => onOpenFile(
-                  filePath,
-                  getFileName(filePath),
-                  { hostId: tab.hostId, cwd: tab.sourceCwd, sessionId: tab.sourceSessionId ?? null },
-                )}
+        <div
+          id="workspace-file-panel-file"
+          role="tabpanel"
+          aria-label={activeFileTab?.filePath ?? t("appShell.filePanel")}
+          style={{
+            display: rightView === "file" ? "block" : "none",
+            flex: 1,
+            minHeight: 0,
+            overflow: "hidden",
+          }}
+        >
+          {fileTabs.length > 0 ? (
+            fileTabs.map((tab) => (
+              <div
+                key={tab.id}
+                style={{
+                  display: tab.id === activeFileTabId ? "block" : "none",
+                  height: "100%",
+                }}
+              >
+                <FileViewer
+                  filePath={tab.filePath}
+                  hostId={tab.hostId}
+                  cwd={tab.sourceCwd ?? undefined}
+                  sourceSessionId={tab.sourceSessionId}
+                  gitRefreshKey={explorerRefreshKey}
+                  active={
+                    tab.id === activeFileTabId &&
+                    rightPanelOpen &&
+                    rightView === "file"
+                  }
+                  onMentionLines={
+                    tab.id === activeFileTabId &&
+                    rightPanelOpen &&
+                    rightView === "file" &&
+                    activeFileMatchesSource
+                      ? onMentionLines
+                      : undefined
+                  }
+                  onOpenFile={(filePath) =>
+                    onOpenFile(filePath, getFileName(filePath), {
+                      hostId: tab.hostId,
+                      cwd: tab.sourceCwd,
+                      sessionId: tab.sourceSessionId ?? null,
+                    })
+                  }
+                />
+              </div>
+            ))
+          ) : (
+            <div
+              style={{
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                padding: 24,
+                textAlign: "center",
+              }}
+            >
+              <Files
+                size={26}
+                strokeWidth={1.5}
+                aria-hidden="true"
+                style={{ color: "var(--text-dim)" }}
               />
-            </div>
-          )) : (
-            <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, padding: 24, textAlign: "center" }}>
-              <Files size={26} strokeWidth={1.5} aria-hidden="true" style={{ color: "var(--text-dim)" }} />
-              <div style={{ color: "var(--text)", fontSize: 13, fontWeight: 600 }}>{t("appShell.noFileOpen")}</div>
-              <div style={{ color: "var(--text-dim)", fontSize: 11, lineHeight: 1.6, maxWidth: 260 }}>{t("appShell.noFileOpenHint")}</div>
+              <div
+                style={{ color: "var(--text)", fontSize: 13, fontWeight: 600 }}
+              >
+                {t("appShell.noFileOpen")}
+              </div>
+              <div
+                style={{
+                  color: "var(--text-dim)",
+                  fontSize: 11,
+                  lineHeight: 1.6,
+                  maxWidth: 260,
+                }}
+              >
+                {t("appShell.noFileOpenHint")}
+              </div>
             </div>
           )}
         </div>

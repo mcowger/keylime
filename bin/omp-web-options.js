@@ -1,29 +1,33 @@
 "use strict";
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { parseArgs } = require("util");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { hashPassword, isPasswordHash } = require("./omp-web-password-hash");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { isLoopbackHost } = require("./network-addresses");
 
 const TRUE_VALUES = new Set(["1", "true", "yes", "on"]);
 
 function isEnabled(value) {
-  return typeof value === "string" && TRUE_VALUES.has(value.trim().toLowerCase());
+  return (
+    typeof value === "string" && TRUE_VALUES.has(value.trim().toLowerCase())
+  );
 }
 
 /** Legacy plaintext credential: detected so `ompweb` can migrate (env) or refuse (flag) it. */
 function legacyPassword(args, env) {
-  const flagIndex = args.findIndex((arg) => arg === "--password" || arg.startsWith("--password="));
+  const flagIndex = args.findIndex(
+    (arg) => arg === "--password" || arg.startsWith("--password="),
+  );
   if (flagIndex !== -1) {
     const arg = args[flagIndex];
-    const inline = arg.startsWith("--password=") ? arg.slice("--password=".length) : undefined;
+    const inline = arg.startsWith("--password=")
+      ? arg.slice("--password=".length)
+      : undefined;
     const value = inline !== undefined ? inline : (args[flagIndex + 1] ?? "");
     return { value, source: "flag" };
   }
   const fromEnv = env.OMP_WEB_PASSWORD;
-  if (typeof fromEnv === "string" && fromEnv.length > 0) return { value: fromEnv, source: "env" };
+  if (typeof fromEnv === "string" && fromEnv.length > 0)
+    return { value: fromEnv, source: "env" };
   return undefined;
 }
 
@@ -70,19 +74,22 @@ function parseLaunchOptions(args = process.argv.slice(2), env = process.env) {
   const { values: cliArgs } = parseArgs({
     args,
     options: {
-      port:      { type: "string", short: "p" },
-      hostname:  { type: "string", short: "H" },
-      help:      { type: "boolean", short: "h" },
-      version:   { type: "boolean" },
-      "no-open":         { type: "boolean" },
-      "install-tray":    { type: "boolean" },
-      "uninstall-tray":  { type: "boolean" },
-      tray:              { type: "boolean" },
+      port: { type: "string", short: "p" },
+      hostname: { type: "string", short: "H" },
+      help: { type: "boolean", short: "h" },
+      version: { type: "boolean" },
+      "no-open": { type: "boolean" },
+      "install-tray": { type: "boolean" },
+      "uninstall-tray": { type: "boolean" },
+      tray: { type: "boolean" },
     },
     strict: false,
   });
 
-  const passwordHash = typeof env.OMP_WEB_PASSWORD_HASH === "string" ? env.OMP_WEB_PASSWORD_HASH.trim() : undefined;
+  const passwordHash =
+    typeof env.OMP_WEB_PASSWORD_HASH === "string"
+      ? env.OMP_WEB_PASSWORD_HASH.trim()
+      : undefined;
   const legacy = legacyPassword(args, env);
 
   const port = String(cliArgs.port ?? env.PORT ?? "30177");
@@ -96,15 +103,18 @@ function parseLaunchOptions(args = process.argv.slice(2), env = process.env) {
     installTray: Boolean(cliArgs["install-tray"]),
     uninstallTray: Boolean(cliArgs["uninstall-tray"]),
     tray: Boolean(cliArgs.tray),
-    ...(/^\d{1,5}$/.test(port) && Number(port) <= 65535 ? {} : { error: `Invalid port: ${port}. Use an integer from 0 to 65535.` }),
+    ...(/^\d{1,5}$/.test(port) && Number(port) <= 65535
+      ? {}
+      : { error: `Invalid port: ${port}. Use an integer from 0 to 65535.` }),
   };
 
   if (cliArgs.version) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const pkg = require("../package.json");
       console.log(pkg.version ?? "0.0.0");
-    } catch { console.log("0.0.0"); }
+    } catch {
+      console.log("0.0.0");
+    }
     return { ...shared, version: true };
   }
   // Expose help flag without exiting here — caller (bin/omp-web.js) decides
@@ -130,46 +140,58 @@ function checkLaunchSecurity(launchOptions) {
     passwordHash = hashPassword(process.env.OMP_WEB_PASSWORD);
     process.env.OMP_WEB_PASSWORD_HASH = passwordHash;
     delete process.env.OMP_WEB_PASSWORD;
-    console.warn([
-      "Warning: OMP_WEB_PASSWORD holds a plaintext password. This option has been deprecated and is marked for removal.",
-      "",
-      "Every omp session inherits omp-web's environment, so an agent could print",
-      "the password into its transcript. ompweb hashed it and kept it out of the",
-      "server's environment, but agents can still read it from this launcher",
-      "process, and a new hash is made on every start, which signs every browser",
-      "out on each restart.",
-      "",
-      "Remove OMP_WEB_PASSWORD and set this instead:",
-      "",
-      `  OMP_WEB_PASSWORD_HASH='${passwordHash}'`,
-    ].join("\n"));
+    console.warn(
+      [
+        "Warning: OMP_WEB_PASSWORD holds a plaintext password. This option has been deprecated and is marked for removal.",
+        "",
+        "Every omp session inherits omp-web's environment, so an agent could print",
+        "the password into its transcript. ompweb hashed it and kept it out of the",
+        "server's environment, but agents can still read it from this launcher",
+        "process, and a new hash is made on every start, which signs every browser",
+        "out on each restart.",
+        "",
+        "Remove OMP_WEB_PASSWORD and set this instead:",
+        "",
+        `  OMP_WEB_PASSWORD_HASH='${passwordHash}'`,
+      ].join("\n"),
+    );
   } else if (launchOptions.legacyPasswordSource === "env") {
-    console.error("OMP_WEB_PASSWORD_HASH and the plaintext OMP_WEB_PASSWORD are both set. Remove OMP_WEB_PASSWORD.");
+    console.error(
+      "OMP_WEB_PASSWORD_HASH and the plaintext OMP_WEB_PASSWORD are both set. Remove OMP_WEB_PASSWORD.",
+    );
     process.exit(1);
   } else if (launchOptions.legacyPassword !== undefined) {
-    console.error([
-      "ompweb no longer accepts a plaintext password: the --password flag was removed.",
-      "Every omp session inherits this process's environment, so an agent could",
-      "print the password into its transcript.",
-      "",
-      "Create a hash and use that instead:",
-      "",
-      "  ompweb hash-password",
-      "  OMP_WEB_PASSWORD_HASH='scrypt$...' ompweb",
-    ].join("\n"));
+    console.error(
+      [
+        "ompweb no longer accepts a plaintext password: the --password flag was removed.",
+        "Every omp session inherits this process's environment, so an agent could",
+        "print the password into its transcript.",
+        "",
+        "Create a hash and use that instead:",
+        "",
+        "  ompweb hash-password",
+        "  OMP_WEB_PASSWORD_HASH='scrypt$...' ompweb",
+      ].join("\n"),
+    );
     process.exit(1);
   }
   if (passwordHash !== undefined && !isPasswordHash(passwordHash)) {
-    console.error(`OMP_WEB_PASSWORD_HASH is not a valid password hash.\n\nGenerate one with: ompweb hash-password`);
+    console.error(
+      `OMP_WEB_PASSWORD_HASH is not a valid password hash.\n\nGenerate one with: ompweb hash-password`,
+    );
     process.exit(1);
   }
   const { hostname } = launchOptions;
   if (!isLoopbackHost(hostname)) {
     if (passwordHash === undefined) {
-      console.error(`Refusing to listen on ${hostname} without a password hash. Run: ompweb hash-password, then set OMP_WEB_PASSWORD_HASH. Or bind to 127.0.0.1.`);
+      console.error(
+        `Refusing to listen on ${hostname} without a password hash. Run: ompweb hash-password, then set OMP_WEB_PASSWORD_HASH. Or bind to 127.0.0.1.`,
+      );
       process.exit(1);
     }
-    console.warn(`Warning: ompweb is listening on ${hostname} over HTTP. Use HTTPS or a trusted VPN to protect the password and session cookie in transit.`);
+    console.warn(
+      `Warning: ompweb is listening on ${hostname} over HTTP. Use HTTPS or a trusted VPN to protect the password and session cookie in transit.`,
+    );
   }
   return passwordHash;
 }

@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import test, { afterEach } from "node:test";
 import { act, createElement, createRef, useState } from "react";
 import { mock } from "bun:test";
-const { cleanup, fireEvent, render, screen } = await import("@testing-library/react/pure.js");
+const { cleanup, fireEvent, render, screen } =
+  await import("@testing-library/react/pure.js");
 globalThis.CSS ??= { escape: (value) => value }; // TabBar's active-tab scroll uses CSS.escape; jsdom has none (as in TabBar.test.mjs)
 
 // Real exports first, then the one function the panel polls: the contract function is stubbed per test.
@@ -17,7 +18,8 @@ mock.module("@/lib/event-stream", () => ({
 
 const { RightPanel } = await import("./RightPanel");
 const { ConnectionDiagnosticsPanel } = await import("./ConnectionDiagnostics");
-const { setConnectionDiagnosticsEnabled, useConnectionDiagnosticsEnabled } = await import("@/lib/connection-diagnostics-prefs");
+const { setConnectionDiagnosticsEnabled, useConnectionDiagnosticsEnabled } =
+  await import("@/lib/connection-diagnostics-prefs");
 
 afterEach(() => {
   cleanup();
@@ -40,7 +42,18 @@ const wsDiagnostics = {
   clockRttMs: 12,
   effectiveType: "4g",
   windowMs: 1800000,
-  stats: [{ transport: "ws", metric: "transportMs", count: 10, mean: 20.4, p50: 18, p95: 30, p999: null, max: 41 }],
+  stats: [
+    {
+      transport: "ws",
+      metric: "transportMs",
+      count: 10,
+      mean: 20.4,
+      p50: 18,
+      p95: 30,
+      p999: null,
+      max: 41,
+    },
+  ],
 };
 
 function rightPanelProps(overrides) {
@@ -95,7 +108,15 @@ function rightPanelProps(overrides) {
 function Harness({ isMobile = false }) {
   const on = useConnectionDiagnosticsEnabled();
   const [rightView, onSelectView] = useState("explorer");
-  return createElement(RightPanel, rightPanelProps({ connectionDiagnosticsOn: on, isMobile, rightView, onSelectView }));
+  return createElement(
+    RightPanel,
+    rightPanelProps({
+      connectionDiagnosticsOn: on,
+      isMobile,
+      rightView,
+      onSelectView,
+    }),
+  );
 }
 
 /** The value cell paired with a state row's label. */
@@ -109,12 +130,17 @@ function selectConnection() {
 
 function deferred() {
   let resolve;
-  const promise = new Promise((done) => { resolve = done; });
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
   return { promise, resolve };
 }
 
 function setVisible(visible) {
-  Object.defineProperty(document, "visibilityState", { configurable: true, value: visible ? "visible" : "hidden" });
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    value: visible ? "visible" : "hidden",
+  });
   act(() => document.dispatchEvent(new Event("visibilitychange")));
 }
 
@@ -150,7 +176,9 @@ test("the panel says so when the connection worker gives no diagnostics", async 
   diagnostics = null;
   render(createElement(Harness));
   selectConnection();
-  assert.ok(await screen.findByText("No diagnostics from the connection worker yet."));
+  assert.ok(
+    await screen.findByText("No diagnostics from the connection worker yet."),
+  );
 });
 
 test("turning the setting on while the panel is mounted adds the Connection tab", async () => {
@@ -175,7 +203,9 @@ test("the mobile right panel opens diagnostics when its Connection tab is select
 test("an active visible panel replaces its displayed snapshot on the next poll", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   diagnostics = wsDiagnostics;
-  await act(async () => render(createElement(ConnectionDiagnosticsPanel, { active: true })));
+  await act(async () =>
+    render(createElement(ConnectionDiagnosticsPanel, { active: true })),
+  );
   assert.equal(valueOf("Clock RTT").textContent, "12 ms");
 
   diagnostics = { ...wsDiagnostics, clockRttMs: 3 };
@@ -186,11 +216,15 @@ test("an active visible panel replaces its displayed snapshot on the next poll",
 test("inactive diagnostics retain the old snapshot, ignore a late response, and refresh on activation", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   diagnostics = wsDiagnostics;
-  const panel = render(createElement(ConnectionDiagnosticsPanel, { active: false }));
+  const panel = render(
+    createElement(ConnectionDiagnosticsPanel, { active: false }),
+  );
   await act(async () => t.mock.timers.tick(5000));
   assert.ok(screen.getByText("No diagnostics from the connection worker yet."));
 
-  await act(async () => panel.rerender(createElement(ConnectionDiagnosticsPanel, { active: true })));
+  await act(async () =>
+    panel.rerender(createElement(ConnectionDiagnosticsPanel, { active: true })),
+  );
   assert.equal(valueOf("Clock RTT").textContent, "12 ms");
   const late = deferred();
   requestDiagnostics = () => late.promise;
@@ -202,7 +236,9 @@ test("inactive diagnostics retain the old snapshot, ignore a late response, and 
   await act(async () => t.mock.timers.tick(5000));
   assert.equal(valueOf("Clock RTT").textContent, "12 ms");
 
-  await act(async () => panel.rerender(createElement(ConnectionDiagnosticsPanel, { active: true })));
+  await act(async () =>
+    panel.rerender(createElement(ConnectionDiagnosticsPanel, { active: true })),
+  );
   assert.equal(valueOf("Clock RTT").textContent, "7 ms");
 });
 
@@ -234,7 +270,9 @@ test("a response from an unmounted panel cannot replace the new panel's snapshot
   t.mock.timers.enable({ apis: ["setTimeout"] });
   diagnostics = wsDiagnostics;
   let panel;
-  await act(async () => { panel = render(createElement(ConnectionDiagnosticsPanel, { active: true })); });
+  await act(async () => {
+    panel = render(createElement(ConnectionDiagnosticsPanel, { active: true }));
+  });
   assert.equal(valueOf("Clock RTT").textContent, "12 ms");
   const late = deferred();
   requestDiagnostics = () => late.promise;
@@ -243,7 +281,9 @@ test("a response from an unmounted panel cannot replace the new panel's snapshot
 
   diagnostics = { ...wsDiagnostics, clockRttMs: 11 };
   requestDiagnostics = async () => diagnostics;
-  await act(async () => render(createElement(ConnectionDiagnosticsPanel, { active: true })));
+  await act(async () =>
+    render(createElement(ConnectionDiagnosticsPanel, { active: true })),
+  );
   assert.equal(valueOf("Clock RTT").textContent, "11 ms");
   await flushResponse(late, { ...wsDiagnostics, clockRttMs: 99 });
   assert.equal(valueOf("Clock RTT").textContent, "11 ms");
@@ -254,7 +294,11 @@ test("turning the setting on in another tab adds the Connection tab here", async
   assert.equal(screen.queryByRole("tab", { name: "Connection" }), null);
   act(() => {
     localStorage.setItem("omp-web:connection-diagnostics", "on");
-    window.dispatchEvent(Object.assign(new Event("storage"), { key: "omp-web:connection-diagnostics" }));
+    window.dispatchEvent(
+      Object.assign(new Event("storage"), {
+        key: "omp-web:connection-diagnostics",
+      }),
+    );
   });
   assert.ok(await screen.findByRole("tab", { name: "Connection" }));
 });
@@ -263,7 +307,9 @@ test("with storage refusing writes, the choice still holds for this page load", 
   // On the prototype: assigning localStorage.setItem would just store an item named "setItem".
   const proto = Object.getPrototypeOf(localStorage);
   const setItem = proto.setItem;
-  proto.setItem = () => { throw new Error("quota exceeded"); };
+  proto.setItem = () => {
+    throw new Error("quota exceeded");
+  };
   try {
     render(createElement(Harness));
     act(() => setConnectionDiagnosticsEnabled(true));

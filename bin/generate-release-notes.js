@@ -1,15 +1,13 @@
 "use strict";
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { execFileSync } = require("node:child_process");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { readFileSync, existsSync, writeFileSync } = require("node:fs");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { resolve } = require("node:path");
 
 // `owner/name` from package.json's repository (lib/release-repo.ts does the same for the TypeScript side).
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const DEFAULT_REPO = /github\.com[/:]([\w.-]+\/[\w.-]+?)(?:\.git)?$/.exec(require("../package.json").repository.url)[1];
+const DEFAULT_REPO = /github\.com[/:]([\w.-]+\/[\w.-]+?)(?:\.git)?$/.exec(
+  require("../package.json").repository.url,
+)[1];
 
 const IGNORED_CONTRIBUTORS = new Set([
   "kahme247",
@@ -30,7 +28,7 @@ function extractFromChangelog(changelogContent, tag) {
 
   const regex = new RegExp(
     `^##\\s*\\[?(?:v?${cleanTag.slice(1)}|${rawTag})\\]?(?:\\s*-\\s*\\d{4}-\\d{2}-\\d{2})?\\s*$`,
-    "im"
+    "im",
   );
 
   const match = regex.exec(changelogContent);
@@ -44,7 +42,10 @@ function extractFromChangelog(changelogContent, tag) {
     ? remaining.slice(0, nextSectionMatch.index)
     : remaining;
 
-  sectionContent = sectionContent.trim().replace(/\n---\s*$/, "").trim();
+  sectionContent = sectionContent
+    .trim()
+    .replace(/\n---\s*$/, "")
+    .trim();
   return sectionContent || null;
 }
 
@@ -53,7 +54,11 @@ function parseGitLog(rawLog) {
   const rawCommits = rawLog.split("---END-COMMIT---");
 
   for (const block of rawCommits) {
-    const lines = block.trim().split("\n").map((l) => l.trim()).filter(Boolean);
+    const lines = block
+      .trim()
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
     if (lines.length < 3) continue;
 
     const hash = lines[0];
@@ -64,9 +69,14 @@ function parseGitLog(rawLog) {
 
     const coAuthors = [];
     for (const bodyLine of bodyLines) {
-      const coAuthorMatch = bodyLine.match(/^Co-authored-by:\s*(.+?)\s*<([^>]+)>/i);
+      const coAuthorMatch = bodyLine.match(
+        /^Co-authored-by:\s*(.+?)\s*<([^>]+)>/i,
+      );
       if (coAuthorMatch) {
-        coAuthors.push({ name: coAuthorMatch[1].trim(), email: coAuthorMatch[2].trim() });
+        coAuthors.push({
+          name: coAuthorMatch[1].trim(),
+          email: coAuthorMatch[2].trim(),
+        });
       }
     }
 
@@ -84,13 +94,19 @@ function parseGitLog(rawLog) {
 function cleanSubject(subject, repo = DEFAULT_REPO) {
   let cleaned = subject.trim();
 
-  cleaned = cleaned.replace(/^(?:feat|fix|perf|refactor|style|security|docs|chore|test|ci|build)(?:\([^)]+\))?!?:?\s*/i, "");
+  cleaned = cleaned.replace(
+    /^(?:feat|fix|perf|refactor|style|security|docs|chore|test|ci|build)(?:\([^)]+\))?!?:?\s*/i,
+    "",
+  );
 
   if (cleaned.length > 0) {
     cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
   }
 
-  cleaned = cleaned.replace(/\(#(\d+)\)/g, `([#$1](https://github.com/${repo}/pull/$1))`);
+  cleaned = cleaned.replace(
+    /\(#(\d+)\)/g,
+    `([#$1](https://github.com/${repo}/pull/$1))`,
+  );
 
   return cleaned;
 }
@@ -98,13 +114,19 @@ function cleanSubject(subject, repo = DEFAULT_REPO) {
 function extractUsername(name, email) {
   if (!name && !email) return null;
 
-  const ghMatch = (email || "").match(/^(?:\d+\+)?([a-zA-Z0-9-]+)@users\.noreply\.github\.com$/i);
+  const ghMatch = (email || "").match(
+    /^(?:\d+\+)?([a-zA-Z0-9-]+)@users\.noreply\.github\.com$/i,
+  );
   if (ghMatch) {
     return ghMatch[1];
   }
 
   const cleanName = (name || "").replace(/^@/, "").trim();
-  if (/^[a-zA-Z0-9_-]+$/.test(cleanName) && cleanName.length >= 2 && cleanName.length <= 39) {
+  if (
+    /^[a-zA-Z0-9_-]+$/.test(cleanName) &&
+    cleanName.length >= 2 &&
+    cleanName.length <= 39
+  ) {
     return cleanName;
   }
 
@@ -139,7 +161,9 @@ function extractContributors(commits) {
     }
   }
 
-  return Array.from(contributorMap.keys()).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  return Array.from(contributorMap.keys()).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: "base" }),
+  );
 }
 
 function formatReleaseNotes({
@@ -161,14 +185,19 @@ function formatReleaseNotes({
 
     for (const c of commits) {
       const s = c.subject.trim();
-      if (/^(?:chore: )?release( ompweb)? v?[0-9]/i.test(s) || /^v?[0-9]+\.[0-9]+\.[0-9]+$/i.test(s)) {
+      if (
+        /^(?:chore: )?release( ompweb)? v?[0-9]/i.test(s) ||
+        /^v?[0-9]+\.[0-9]+\.[0-9]+$/i.test(s)
+      ) {
         continue;
       }
 
       const cleaned = cleanSubject(s, repo);
       if (/^feat(?:\([^)]+\))?!?:/i.test(s)) {
         features.push(cleaned);
-      } else if (/^(?:fix|perf|refactor|style|security)(?:\([^)]+\))?!?:/i.test(s)) {
+      } else if (
+        /^(?:fix|perf|refactor|style|security)(?:\([^)]+\))?!?:/i.test(s)
+      ) {
         fixes.push(cleaned);
       } else {
         others.push(cleaned);
@@ -202,7 +231,9 @@ function formatReleaseNotes({
     const contributors = extractContributors(commits);
     if (contributors.length > 0) {
       lines.push("## Contributors\n");
-      lines.push("Thank you to the contributors who made this release possible:");
+      lines.push(
+        "Thank you to the contributors who made this release possible:",
+      );
       for (const contributor of contributors) {
         lines.push(`- ${contributor}`);
       }
@@ -252,7 +283,7 @@ function generateReleaseNotes({
     previousTag = execFileSync(
       "git",
       ["describe", "--tags", "--abbrev=0", `${cleanTag}^`, "--match", "v*"],
-      { cwd, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }
+      { cwd, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] },
     ).trim();
   } catch {
     previousTag = "";
@@ -264,7 +295,7 @@ function generateReleaseNotes({
     const rawLog = execFileSync(
       "git",
       ["log", range, "--format=%H%n%an%n%ae%n%s%n%b%n---END-COMMIT---"],
-      { cwd, encoding: "utf8" }
+      { cwd, encoding: "utf8" },
     );
     commits = parseGitLog(rawLog, repo);
   } catch {
@@ -311,7 +342,9 @@ if (require.main === module) {
   }
 
   if (!tag) {
-    console.error("Usage: generate-release-notes.js --tag <tag> [--output <file>] [--repo <owner/repo>]");
+    console.error(
+      "Usage: generate-release-notes.js --tag <tag> [--output <file>] [--repo <owner/repo>]",
+    );
     process.exit(1);
   }
 

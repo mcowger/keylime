@@ -286,7 +286,7 @@ behavior, not blindly the implementation.
 
 Releases are independent:
 
-1. Run typecheck, lint, relevant tests, and a production build.
+1. Run `bun run typecheck` (Bun checks the root project and runner), relevant tests, and a production build.
 2. Confirm `bun pm pack` contains the built `dist/` output and exposes
    the `ompweb` binary.
 3. Publish `@kahme247/ompweb@<version>` to the npm registry through the

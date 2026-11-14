@@ -27,7 +27,13 @@ export default function OmpWebLogo({
         </linearGradient>
       </defs>
       <rect width="64" height="64" rx="15" fill="#0f0a14" />
-      <g fill="none" stroke={`url(#${g})`} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round">
+      <g
+        fill="none"
+        stroke={`url(#${g})`}
+        strokeWidth="5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M49 17A23 23 0 1 0 55 34" />
         <path d="M21 24H43M26 24V39M37 24V44" />
       </g>

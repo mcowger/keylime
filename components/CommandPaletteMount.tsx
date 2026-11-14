@@ -4,7 +4,9 @@ import dynamic from "@/lib/dynamic";
 import { useEffect, useState } from "react";
 import type { SessionInfo } from "@/lib/types";
 
-const CommandPalette = dynamic(() => import("./CommandPalette").then((module) => module.CommandPalette));
+const CommandPalette = dynamic(() =>
+  import("./CommandPalette").then((module) => module.CommandPalette),
+);
 
 type Props = {
   onSelectSession: (session: SessionInfo) => void;
@@ -41,9 +43,16 @@ export function CommandPaletteMount(props: Props) {
       setOpenRequest((request) => request + 1);
     };
     window.addEventListener("omp:open-command-palette", onOpenRequest);
-    return () => window.removeEventListener("omp:open-command-palette", onOpenRequest);
+    return () =>
+      window.removeEventListener("omp:open-command-palette", onOpenRequest);
   }, []);
 
   if (!loaded) return null;
-  return <CommandPalette {...props} initialOpen={openRequest > 0} openRequest={openRequest} />;
+  return (
+    <CommandPalette
+      {...props}
+      initialOpen={openRequest > 0}
+      openRequest={openRequest}
+    />
+  );
 }

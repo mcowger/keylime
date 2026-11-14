@@ -18,7 +18,11 @@ import { isRecord } from "./type-guards";
  */
 
 /** Tools the server answers itself. Browser-routed tools are unaffected. */
-export const AGENT_TOOL_NAMES = new Set(["list_sessions", "new_session", "send_to_session"]);
+export const AGENT_TOOL_NAMES = new Set([
+  "list_sessions",
+  "new_session",
+  "send_to_session",
+]);
 
 export const AGENT_TOOL_DEFINITIONS: HostToolDefinition[] = [
   {
@@ -34,14 +38,43 @@ export const AGENT_TOOL_DEFINITIONS: HostToolDefinition[] = [
     parameters: {
       type: "object",
       properties: {
-        cwd: { type: "string", description: "Project directory. Defaults to the calling session's directory." },
-        prompt: { type: "string", description: "First message for the new session. If omitted, the session is created idle." },
-        model: { type: "string", description: "Model as \"provider/modelId\", e.g. \"anthropic/claude-sonnet-4-5\"." },
-        provider: { type: "string", description: "Model provider, used with modelId instead of model." },
-        modelId: { type: "string", description: "Model ID, used with provider instead of model." },
-        name: { type: "string", description: "Display name for the new session." },
-        host: { type: "string", description: "Explicit host id or label from list_sessions. Omit to place independent pooled work automatically; standalone projects stay on the calling session's host." },
-        shareWorkspace: { type: "boolean", description: "Keep the new session on the calling session's host and exact directory when it depends on unpublished parent work. Defaults to false." },
+        cwd: {
+          type: "string",
+          description:
+            "Project directory. Defaults to the calling session's directory.",
+        },
+        prompt: {
+          type: "string",
+          description:
+            "First message for the new session. If omitted, the session is created idle.",
+        },
+        model: {
+          type: "string",
+          description:
+            'Model as "provider/modelId", e.g. "anthropic/claude-sonnet-4-5".',
+        },
+        provider: {
+          type: "string",
+          description: "Model provider, used with modelId instead of model.",
+        },
+        modelId: {
+          type: "string",
+          description: "Model ID, used with provider instead of model.",
+        },
+        name: {
+          type: "string",
+          description: "Display name for the new session.",
+        },
+        host: {
+          type: "string",
+          description:
+            "Explicit host id or label from list_sessions. Omit to place independent pooled work automatically; standalone projects stay on the calling session's host.",
+        },
+        shareWorkspace: {
+          type: "boolean",
+          description:
+            "Keep the new session on the calling session's host and exact directory when it depends on unpublished parent work. Defaults to false.",
+        },
       },
     },
   },
@@ -52,12 +85,18 @@ export const AGENT_TOOL_DEFINITIONS: HostToolDefinition[] = [
     parameters: {
       type: "object",
       properties: {
-        sessionId: { type: "string", description: "Target session ID (see list_sessions)." },
-        message: { type: "string", description: "Message to deliver to the target session." },
+        sessionId: {
+          type: "string",
+          description: "Target session ID (see list_sessions).",
+        },
+        message: {
+          type: "string",
+          description: "Message to deliver to the target session.",
+        },
         delivery: {
           type: "string",
           description:
-            "How to deliver while the target is running: \"prompt\" starts a new turn (only when the target is idle), \"steer\" steers the running turn, \"followUp\" queues after it. Defaults to \"prompt\".",
+            'How to deliver while the target is running: "prompt" starts a new turn (only when the target is idle), "steer" steers the running turn, "followUp" queues after it. Defaults to "prompt".',
           enum: ["prompt", "steer", "followUp"],
         },
         wait: {
@@ -65,7 +104,11 @@ export const AGENT_TOOL_DEFINITIONS: HostToolDefinition[] = [
           description:
             "When true, wait for the target turn to finish (up to waitTimeoutMs) and return its final assistant text. When false, return as soon as the target accepts the message.",
         },
-        waitTimeoutMs: { type: "number", description: "Maximum wait for a waited delivery, in milliseconds. Defaults to 120000, capped at 300000." },
+        waitTimeoutMs: {
+          type: "number",
+          description:
+            "Maximum wait for a waited delivery, in milliseconds. Defaults to 120000, capped at 300000.",
+        },
       },
       required: ["sessionId", "message"],
     },
@@ -95,7 +138,9 @@ export interface AgentToolSessionSummary {
 }
 
 /** A session as the ops layer lists it; executeAgentTool names its host. */
-export type AgentToolSessionRow = Omit<AgentToolSessionSummary, "host"> & { hostId: string };
+export type AgentToolSessionRow = Omit<AgentToolSessionSummary, "host"> & {
+  hostId: string;
+};
 
 /** A machine sessions can start on; this machine has id "local". */
 export interface AgentToolHost {
@@ -142,7 +187,10 @@ export interface AgentToolSessionOps {
   listSessions(): Promise<AgentToolSessionRow[]>;
   listHosts(): AgentToolHost[];
   /** Authorize the actual physical owner before any preparation or spawn. */
-  createSession(input: AgentToolCreateSessionInput, authorize: (host: AgentToolHost) => Promise<boolean>): Promise<{ sessionId: string }>;
+  createSession(
+    input: AgentToolCreateSessionInput,
+    authorize: (host: AgentToolHost) => Promise<boolean>,
+  ): Promise<{ sessionId: string }>;
   deliver(input: AgentToolDeliverInput): Promise<AgentToolDeliverResult>;
   /** The host a session lives on; null when no host has it. */
   sessionHostId(sessionId: string): Promise<string | null>;
@@ -179,7 +227,9 @@ export class AgentToolGuard {
   /** Throws when the source already used its per-minute budget. */
   checkRate(sourceSessionId: string): void {
     const now = this.now();
-    const recent = (this.callsBySource.get(sourceSessionId) ?? []).filter((t) => now - t < 60_000);
+    const recent = (this.callsBySource.get(sourceSessionId) ?? []).filter(
+      (t) => now - t < 60_000,
+    );
     if (recent.length >= MAX_AGENT_TOOL_CALLS_PER_MINUTE) {
       throw new Error(
         `Agent tool rate limit exceeded for this session (${MAX_AGENT_TOOL_CALLS_PER_MINUTE} calls per minute).`,
@@ -222,83 +272,123 @@ export class AgentToolGuard {
 /** Attribution that lands in the target transcript itself, so any reader
  * (user or target agent) can see where the message came from. The full
  * source ID is kept so it can be found in the sidebar. */
-export function formatAttributedMessage(sourceSessionId: string, message: string): string {
+export function formatAttributedMessage(
+  sourceSessionId: string,
+  message: string,
+): string {
   return `[From session ${sourceSessionId} via omp-web agent tools]: ${message}`;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  if (!isRecord(value)) throw new Error("Agent tool arguments must be an object.");
+  if (!isRecord(value))
+    throw new Error("Agent tool arguments must be an object.");
   return value;
 }
 
 function requiredString(args: Record<string, unknown>, field: string): string {
   const value = args[field];
-  if (typeof value !== "string" || !value.trim()) throw new Error(`Agent tool argument "${field}" is required and must be a non-empty string.`);
+  if (typeof value !== "string" || !value.trim())
+    throw new Error(
+      `Agent tool argument "${field}" is required and must be a non-empty string.`,
+    );
   return value.trim();
 }
 
-function optionalString(args: Record<string, unknown>, field: string): string | undefined {
+function optionalString(
+  args: Record<string, unknown>,
+  field: string,
+): string | undefined {
   const value = args[field];
   if (value === undefined || value === null) return undefined;
-  if (typeof value !== "string" || !value.trim()) throw new Error(`Agent tool argument "${field}" must be a non-empty string when provided.`);
+  if (typeof value !== "string" || !value.trim())
+    throw new Error(
+      `Agent tool argument "${field}" must be a non-empty string when provided.`,
+    );
   return value.trim();
 }
 
 function parseSessionId(value: string): string {
   if (value.length > 200 || /[\s/\\]/.test(value)) {
-    throw new Error("Agent tool argument \"sessionId\" is not a valid session ID.");
+    throw new Error(
+      'Agent tool argument "sessionId" is not a valid session ID.',
+    );
   }
   return value;
 }
 
-function parseModel(args: Record<string, unknown>): { provider?: string; modelId?: string } {
+function parseModel(args: Record<string, unknown>): {
+  provider?: string;
+  modelId?: string;
+} {
   const model = optionalString(args, "model");
   const provider = optionalString(args, "provider");
   const modelId = optionalString(args, "modelId");
   if (model) {
     const slash = model.indexOf("/");
     if (slash <= 0 || slash === model.length - 1) {
-      throw new Error("Agent tool argument \"model\" must be \"provider/modelId\".");
+      throw new Error(
+        'Agent tool argument "model" must be "provider/modelId".',
+      );
     }
     if (provider && provider !== model.slice(0, slash)) {
-      throw new Error("Agent tool arguments \"model\" and \"provider\" disagree.");
+      throw new Error('Agent tool arguments "model" and "provider" disagree.');
     }
     if (modelId && modelId !== model.slice(slash + 1)) {
-      throw new Error("Agent tool arguments \"model\" and \"modelId\" disagree.");
+      throw new Error('Agent tool arguments "model" and "modelId" disagree.');
     }
     return { provider: model.slice(0, slash), modelId: model.slice(slash + 1) };
   }
   if ((provider && !modelId) || (!provider && modelId)) {
-    throw new Error("Agent tool arguments \"provider\" and \"modelId\" must be provided together.");
+    throw new Error(
+      'Agent tool arguments "provider" and "modelId" must be provided together.',
+    );
   }
   return { provider, modelId };
 }
 
-function parseDelivery(args: Record<string, unknown>): "prompt" | "steer" | "followUp" {
+function parseDelivery(
+  args: Record<string, unknown>,
+): "prompt" | "steer" | "followUp" {
   const delivery = args.delivery;
   if (delivery === undefined || delivery === null) return "prompt";
-  if (delivery === "prompt" || delivery === "steer" || delivery === "followUp") return delivery;
-  throw new Error("Agent tool argument \"delivery\" must be \"prompt\", \"steer\", or \"followUp\".");
+  if (delivery === "prompt" || delivery === "steer" || delivery === "followUp")
+    return delivery;
+  throw new Error(
+    'Agent tool argument "delivery" must be "prompt", "steer", or "followUp".',
+  );
 }
 
-function parseWait(args: Record<string, unknown>): { wait: boolean; waitTimeoutMs: number } {
+function parseWait(args: Record<string, unknown>): {
+  wait: boolean;
+  waitTimeoutMs: number;
+} {
   const wait = args.wait;
   if (wait !== undefined && typeof wait !== "boolean") {
-    throw new Error("Agent tool argument \"wait\" must be a boolean.");
+    throw new Error('Agent tool argument "wait" must be a boolean.');
   }
   const timeout = args.waitTimeoutMs;
-  if (timeout !== undefined && (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout <= 0)) {
-    throw new Error("Agent tool argument \"waitTimeoutMs\" must be a positive number.");
+  if (
+    timeout !== undefined &&
+    (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout <= 0)
+  ) {
+    throw new Error(
+      'Agent tool argument "waitTimeoutMs" must be a positive number.',
+    );
   }
   return {
     wait: wait === true,
-    waitTimeoutMs: Math.min(MAX_WAIT_TIMEOUT_MS, Math.floor(timeout ?? DEFAULT_WAIT_TIMEOUT_MS)),
+    waitTimeoutMs: Math.min(
+      MAX_WAIT_TIMEOUT_MS,
+      Math.floor(timeout ?? DEFAULT_WAIT_TIMEOUT_MS),
+    ),
   };
 }
 
 function checkMessageLength(message: string, field: string): void {
   if (message.length > MAX_AGENT_TOOL_MESSAGE_CHARS) {
-    throw new Error(`Agent tool argument "${field}" exceeds ${MAX_AGENT_TOOL_MESSAGE_CHARS} characters.`);
+    throw new Error(
+      `Agent tool argument "${field}" exceeds ${MAX_AGENT_TOOL_MESSAGE_CHARS} characters.`,
+    );
   }
 }
 
@@ -306,20 +396,33 @@ function checkMessageLength(message: string, field: string): void {
 function resolveHost(hosts: AgentToolHost[], host: string): AgentToolHost {
   const wanted = host.toLowerCase();
   // "This machine" keeps working after the user renames it.
-  const byId = hosts.find((h) => h.id.toLowerCase() === (wanted === "this machine" ? "local" : wanted));
-  const labelled = byId ? [] : hosts.filter((h) => h.label.toLowerCase() === wanted);
+  const byId = hosts.find(
+    (h) =>
+      h.id.toLowerCase() === (wanted === "this machine" ? "local" : wanted),
+  );
+  const labelled = byId
+    ? []
+    : hosts.filter((h) => h.label.toLowerCase() === wanted);
   if (labelled.length > 1) {
-    throw new Error(`"${host}" matches more than one host (ids: ${labelled.map((h) => h.id).join(", ")}). Pass one of those ids as host.`);
+    throw new Error(
+      `"${host}" matches more than one host (ids: ${labelled.map((h) => h.id).join(", ")}). Pass one of those ids as host.`,
+    );
   }
   const match = byId ?? labelled[0];
-  if (!match) throw new Error(`Unknown host "${host}". Known hosts: ${hosts.map((h) => h.label).join(", ")}.`);
+  if (!match)
+    throw new Error(
+      `Unknown host "${host}". Known hosts: ${hosts.map((h) => h.label).join(", ")}.`,
+    );
   if (!match.online) throw new Error(`${match.label} is offline.`);
   return match;
 }
 
 /** A host's allowAgentStart covers its agents' calls; a remote caller always asks before reaching this machine. */
 function startsUnasked(target: AgentToolHost, sourceHostId: string): boolean {
-  return target.allowAgentStart && !(target.id === "local" && sourceHostId !== "local");
+  return (
+    target.allowAgentStart &&
+    !(target.id === "local" && sourceHostId !== "local")
+  );
 }
 
 /**
@@ -335,9 +438,12 @@ export async function executeAgentTool(
   ctx: AgentToolContext,
 ): Promise<unknown> {
   if (!ctx.enabled) {
-    throw new Error("Agent tools are disabled. Enable \"Agent tools\" in omp-web Settings (System) first.");
+    throw new Error(
+      'Agent tools are disabled. Enable "Agent tools" in omp-web Settings (System) first.',
+    );
   }
-  if (!AGENT_TOOL_NAMES.has(toolName)) throw new Error(`Unknown agent tool: ${toolName}.`);
+  if (!AGENT_TOOL_NAMES.has(toolName))
+    throw new Error(`Unknown agent tool: ${toolName}.`);
   const record = asRecord(args);
 
   if (toolName === "list_sessions") {
@@ -345,38 +451,64 @@ export async function executeAgentTool(
     const labels = new Map(ops.listHosts().map((h) => [h.id, h.label]));
     const sessions = await ops.listSessions();
     return {
-      sessions: sessions.map(({ hostId, ...session }) => ({ ...session, host: labels.get(hostId) ?? hostId })),
+      sessions: sessions.map(({ hostId, ...session }) => ({
+        ...session,
+        host: labels.get(hostId) ?? hostId,
+      })),
     };
   }
 
   if (toolName === "new_session") {
     ctx.guard.checkRate(ctx.sourceSessionId);
     const depth = ctx.guard.checkChainDepth(ctx.sourceSessionId);
-    if (record.shareWorkspace !== undefined && typeof record.shareWorkspace !== "boolean") {
-      throw new Error('Agent tool argument "shareWorkspace" must be a boolean.');
+    if (
+      record.shareWorkspace !== undefined &&
+      typeof record.shareWorkspace !== "boolean"
+    ) {
+      throw new Error(
+        'Agent tool argument "shareWorkspace" must be a boolean.',
+      );
     }
     const shareWorkspace = record.shareWorkspace === true;
     const cwd = optionalString(record, "cwd") ?? ctx.sourceCwd;
-    if (shareWorkspace && cwd !== ctx.sourceCwd) throw new Error("shareWorkspace requires the calling session's directory.");
-    if (!cwd) throw new Error("Agent tool argument \"cwd\" is required when the calling session has no directory.");
+    if (shareWorkspace && cwd !== ctx.sourceCwd)
+      throw new Error(
+        "shareWorkspace requires the calling session's directory.",
+      );
+    if (!cwd)
+      throw new Error(
+        'Agent tool argument "cwd" is required when the calling session has no directory.',
+      );
     const prompt = optionalString(record, "prompt");
     if (prompt) checkMessageLength(prompt, "prompt");
     const { provider, modelId } = parseModel(record);
     const name = optionalString(record, "name");
-    if (name && name.length > 200) throw new Error("Agent tool argument \"name\" exceeds 200 characters.");
+    if (name && name.length > 200)
+      throw new Error('Agent tool argument "name" exceeds 200 characters.');
     const requestedHost = optionalString(record, "host");
-    const host = resolveHost(ops.listHosts(), requestedHost ?? ctx.sourceHostId);
-    if (shareWorkspace && host.id !== ctx.sourceHostId) throw new Error("shareWorkspace requires the calling session's host.");
-    const created = await ops.createSession({
-      cwd,
-      hostId: host.id,
-      explicitHost: requestedHost !== undefined,
-      shareWorkspace,
-      prompt: prompt ? formatAttributedMessage(ctx.sourceSessionId, prompt) : null,
-      provider,
-      modelId,
-      name,
-    }, async (target) => startsUnasked(target, ctx.sourceHostId) || ctx.confirm(`Start a session on ${target.label} in ${cwd}?`));
+    const host = resolveHost(
+      ops.listHosts(),
+      requestedHost ?? ctx.sourceHostId,
+    );
+    if (shareWorkspace && host.id !== ctx.sourceHostId)
+      throw new Error("shareWorkspace requires the calling session's host.");
+    const created = await ops.createSession(
+      {
+        cwd,
+        hostId: host.id,
+        explicitHost: requestedHost !== undefined,
+        shareWorkspace,
+        prompt: prompt
+          ? formatAttributedMessage(ctx.sourceSessionId, prompt)
+          : null,
+        provider,
+        modelId,
+        name,
+      },
+      async (target) =>
+        startsUnasked(target, ctx.sourceHostId) ||
+        ctx.confirm(`Start a session on ${target.label} in ${cwd}?`),
+    );
     ctx.guard.setDepth(created.sessionId, depth);
     return { sessionId: created.sessionId };
   }
@@ -385,7 +517,9 @@ export async function executeAgentTool(
   ctx.guard.checkRate(ctx.sourceSessionId);
   const sessionId = parseSessionId(requiredString(record, "sessionId"));
   if (sessionId === ctx.sourceSessionId) {
-    throw new Error("Agent tool \"send_to_session\" cannot target the calling session itself.");
+    throw new Error(
+      'Agent tool "send_to_session" cannot target the calling session itself.',
+    );
   }
   const message = requiredString(record, "message");
   checkMessageLength(message, "message");
@@ -398,10 +532,20 @@ export async function executeAgentTool(
     if (!targetHostId) throw new Error(`Session not found: ${sessionId}`);
     const hosts = ops.listHosts();
     const target = hosts.find((h) => h.id === targetHostId);
-    if (targetHostId !== ctx.sourceHostId && !(target && startsUnasked(target, ctx.sourceHostId))) {
-      const sourceLabel = hosts.find((h) => h.id === ctx.sourceHostId)?.label ?? ctx.sourceHostId;
-      if (!(await ctx.confirm(`Send a message from a session on ${sourceLabel} to session ${sessionId} on ${target?.label ?? targetHostId}?`))) {
-        throw new Error(`The user declined to send a message to session ${sessionId}.`);
+    if (
+      targetHostId !== ctx.sourceHostId &&
+      !(target && startsUnasked(target, ctx.sourceHostId))
+    ) {
+      const sourceLabel =
+        hosts.find((h) => h.id === ctx.sourceHostId)?.label ?? ctx.sourceHostId;
+      if (
+        !(await ctx.confirm(
+          `Send a message from a session on ${sourceLabel} to session ${sessionId} on ${target?.label ?? targetHostId}?`,
+        ))
+      ) {
+        throw new Error(
+          `The user declined to send a message to session ${sessionId}.`,
+        );
       }
     }
   }

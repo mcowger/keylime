@@ -1,5 +1,15 @@
 import { createReadStream, createWriteStream } from "fs";
-import { linkSync, lstatSync, mkdirSync, readdirSync, realpathSync, renameSync, rmdirSync, statSync, unlinkSync } from "fs";
+import {
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  realpathSync,
+  renameSync,
+  rmdirSync,
+  statSync,
+  unlinkSync,
+} from "fs";
 import { lstat, mkdir, mkdtemp, open, realpath, rm } from "fs/promises";
 import { randomUUID } from "crypto";
 import { Transform } from "stream";
@@ -9,7 +19,12 @@ import path from "path";
 import type { Dirent } from "fs";
 import type { ArchivedSessionInfo, SessionHeader } from "../types";
 import { getArchivedSessionsDir, getSessionsDir } from "./paths";
-import { invalidateSessionFileListCache, parseTitleSlotLine, SESSION_TITLE_SLOT_BYTES, type SessionStatus } from "./session-files";
+import {
+  invalidateSessionFileListCache,
+  parseTitleSlotLine,
+  SESSION_TITLE_SLOT_BYTES,
+  type SessionStatus,
+} from "./session-files";
 import { isValidSessionId } from "../session-file-references-core";
 
 export interface ArchivedSessionRecord {
@@ -37,9 +52,16 @@ function archiveRootPath(root: string): string {
 }
 
 function normalizeArchiveKey(key: string): string {
-  if (!key || key.includes("\\") || path.isAbsolute(key)) throw new Error("Invalid archive key");
+  if (!key || key.includes("\\") || path.isAbsolute(key))
+    throw new Error("Invalid archive key");
   const normalized = path.posix.normalize(key);
-  if (normalized === "." || normalized.startsWith("../") || normalized.includes("/../") || normalized.endsWith("/..") || !normalized.endsWith(".jsonl.gz")) {
+  if (
+    normalized === "." ||
+    normalized.startsWith("../") ||
+    normalized.includes("/../") ||
+    normalized.endsWith("/..") ||
+    !normalized.endsWith(".jsonl.gz")
+  ) {
     throw new Error("Invalid archive key");
   }
   return normalized;
@@ -49,7 +71,11 @@ function normalizeArchiveKey(key: string): string {
  * physical key and are explicitly discovery-only, never aliases of an ordinary archive's actionable key. */
 function capturedArchiveOriginalName(filePath: string): string | null {
   // Basename only, with a newline-safe stem: this parser serves both discovery evidence and artifact-directory pairing.
-  return /^([\s\S]*\.jsonl\.gz)\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.restore-consume$/i.exec(path.basename(filePath))?.[1] ?? null;
+  return (
+    /^([\s\S]*\.jsonl\.gz)\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.restore-consume$/i.exec(
+      path.basename(filePath),
+    )?.[1] ?? null
+  );
 }
 
 function collectArchives(directory: string, files: string[] = []): string[] {
@@ -68,18 +94,29 @@ function collectArchives(directory: string, files: string[] = []): string[] {
   const artifacts = new Set<string>();
   for (const entry of entries) {
     if (!entry.isFile()) continue;
-    const original = entry.name.endsWith(".jsonl.gz") ? entry.name : capturedArchiveOriginalName(entry.name);
+    const original = entry.name.endsWith(".jsonl.gz")
+      ? entry.name
+      : capturedArchiveOriginalName(entry.name);
     if (original) artifacts.add(original.slice(0, -".gz".length));
   }
   for (const entry of entries) {
     const fullPath = path.join(directory, entry.name);
-    if (entry.isDirectory() && !artifacts.has(entry.name)) collectArchives(fullPath, files);
-    else if (entry.isFile() && (entry.name.endsWith(".jsonl.gz") || capturedArchiveOriginalName(entry.name))) files.push(fullPath);
+    if (entry.isDirectory() && !artifacts.has(entry.name))
+      collectArchives(fullPath, files);
+    else if (
+      entry.isFile() &&
+      (entry.name.endsWith(".jsonl.gz") ||
+        capturedArchiveOriginalName(entry.name))
+    )
+      files.push(fullPath);
   }
   return files;
 }
 
-async function readGzipPrefix(filePath: string, limit: number): Promise<Buffer> {
+async function readGzipPrefix(
+  filePath: string,
+  limit: number,
+): Promise<Buffer> {
   const { promise, resolve, reject } = Promise.withResolvers<Buffer>();
   const input = createReadStream(filePath);
   const gunzip = createGunzip();
@@ -121,14 +158,24 @@ function textFromContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content
-    .filter((block): block is { type?: unknown; text?: unknown } => typeof block === "object" && block !== null)
+    .filter(
+      (block): block is { type?: unknown; text?: unknown } =>
+        typeof block === "object" && block !== null,
+    )
     .filter((block) => block.type === "text" && typeof block.text === "string")
     .map((block) => block.text as string)
     .join(" ");
 }
 
-function parseArchivePrefix(prefix: Buffer, filePath: string, archiveRoot: string): ArchivedSessionRecord | undefined {
-  const lines = prefix.toString("utf8").split(/\r?\n/).filter((line) => line.trim());
+function parseArchivePrefix(
+  prefix: Buffer,
+  filePath: string,
+  archiveRoot: string,
+): ArchivedSessionRecord | undefined {
+  const lines = prefix
+    .toString("utf8")
+    .split(/\r?\n/)
+    .filter((line) => line.trim());
   if (lines.length === 0) return undefined;
   let title: string | undefined;
   let headerIndex = 0;
@@ -139,26 +186,35 @@ function parseArchivePrefix(prefix: Buffer, filePath: string, archiveRoot: strin
       headerIndex = 1;
     }
     const header = JSON.parse(lines[headerIndex]) as SessionHeader;
-    if (header.type !== "session" || typeof header.id !== "string") return undefined;
+    if (header.type !== "session" || typeof header.id !== "string")
+      return undefined;
     let messageCount = 0;
     let firstMessage = "";
     for (const line of lines.slice(headerIndex + 1)) {
       try {
-        const entry = JSON.parse(line) as { type?: string; message?: { role?: string; content?: unknown } };
+        const entry = JSON.parse(line) as {
+          type?: string;
+          message?: { role?: string; content?: unknown };
+        };
         if (entry.type !== "message" || !entry.message) continue;
         messageCount++;
-        if (!firstMessage && entry.message.role === "user") firstMessage = textFromContent(entry.message.content);
+        if (!firstMessage && entry.message.role === "user")
+          firstMessage = textFromContent(entry.message.content);
       } catch {
         // The final prefix line may be truncated; earlier metadata remains valid.
       }
     }
     const fileStat = statSync(filePath);
-    const created = header.timestamp && !Number.isNaN(new Date(header.timestamp).getTime()) ? new Date(header.timestamp) : fileStat.mtime;
+    const created =
+      header.timestamp && !Number.isNaN(new Date(header.timestamp).getTime())
+        ? new Date(header.timestamp)
+        : fileStat.mtime;
     return {
       key: path.relative(archiveRoot, filePath).split(path.sep).join("/"),
       id: header.id,
       cwd: typeof header.cwd === "string" ? header.cwd : "",
-      title: title ?? (typeof header.title === "string" ? header.title : undefined),
+      title:
+        title ?? (typeof header.title === "string" ? header.title : undefined),
       created,
       archivedAt: fileStat.mtime,
       messageCount,
@@ -171,33 +227,57 @@ function parseArchivePrefix(prefix: Buffer, filePath: string, archiveRoot: strin
   }
 }
 
-export async function listArchivedSessions(archiveRoot = getArchivedSessionsDir()): Promise<ArchivedSessionRecord[]> {
+export async function listArchivedSessions(
+  archiveRoot = getArchivedSessionsDir(),
+): Promise<ArchivedSessionRecord[]> {
   const root = archiveRootPath(archiveRoot);
-  const snapshot = () => new Map(collectArchives(root).map((file) => {
-    const stat = lstatSync(file, { bigint: true });
-    if (!stat.isFile()) throw new Error("Archive changed during listing; retry discovery");
-    return [file, `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}`] as const;
-  }));
+  const snapshot = () =>
+    new Map(
+      collectArchives(root).map((file) => {
+        const stat = lstatSync(file, { bigint: true });
+        if (!stat.isFile())
+          throw new Error("Archive changed during listing; retry discovery");
+        return [
+          file,
+          `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}`,
+        ] as const;
+      }),
+    );
   // Verify both names AND generations after reading. A successful read can be replacement B, while capture A was added
   // after enumeration: merely rescanning on ENOENT silently drops A and falsely proves that session absent.
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const before = snapshot();
-      const records = await Promise.all([...before.keys()].map(async (filePath) => {
-        if (statSync(filePath).size > MAX_ARCHIVE_COMPRESSED_BYTES) return undefined;
-        const record = parseArchivePrefix(await readGzipPrefix(filePath, ARCHIVE_PREFIX_BYTES), filePath, root);
-        if (record && capturedArchiveOriginalName(filePath)) record.restorePending = true;
-        return record;
-      }));
+      const records = await Promise.all(
+        [...before.keys()].map(async (filePath) => {
+          if (statSync(filePath).size > MAX_ARCHIVE_COMPRESSED_BYTES)
+            return undefined;
+          const record = parseArchivePrefix(
+            await readGzipPrefix(filePath, ARCHIVE_PREFIX_BYTES),
+            filePath,
+            root,
+          );
+          if (record && capturedArchiveOriginalName(filePath))
+            record.restorePending = true;
+          return record;
+        }),
+      );
       const after = snapshot();
-      const stable = before.size === after.size && [...before].every(([file, generation]) => after.get(file) === generation);
+      const stable =
+        before.size === after.size &&
+        [...before].every(
+          ([file, generation]) => after.get(file) === generation,
+        );
       if (!stable) {
         if (attempt === 0) continue;
         throw new Error("Archive changed during listing; retry discovery");
       }
       // A captured entry keeps its unique physical key. It must never alias an ordinary archive's actionable key, even when
       // both compressed headers have the same session ID.
-      return records.filter((record): record is ArchivedSessionRecord => record !== undefined)
+      return records
+        .filter(
+          (record): record is ArchivedSessionRecord => record !== undefined,
+        )
         .sort((a, b) => b.archivedAt.getTime() - a.archivedAt.getTime());
     } catch (error) {
       if (errnoCode(error) === "ENOENT") {
@@ -213,7 +293,9 @@ export async function listArchivedSessions(archiveRoot = getArchivedSessionsDir(
 }
 
 /** The Archived Sessions browser's entries (dates as ISO strings): also what a host sends over its link. */
-export async function listArchivedSessionInfos(archiveRoot = getArchivedSessionsDir()): Promise<ArchivedSessionInfo[]> {
+export async function listArchivedSessionInfos(
+  archiveRoot = getArchivedSessionsDir(),
+): Promise<ArchivedSessionInfo[]> {
   return (await listArchivedSessions(archiveRoot)).map((archive) => ({
     key: archive.key,
     id: archive.id,
@@ -231,12 +313,30 @@ export async function listArchivedSessionInfos(archiveRoot = getArchivedSessions
 
 /** HTTP status for a `restoreArchivedSession` failure message. */
 export function restoreFailureStatus(message: string): number {
-  return message.includes("already exists") || message.includes("generation changed") ? 409 : message.includes("Invalid archive key") || message.includes("Invalid archived session ID") || message.includes("required") ? 400 : message.includes("not found") ? 404 : 500;
+  return message.includes("already exists") ||
+    message.includes("generation changed")
+    ? 409
+    : message.includes("Invalid archive key") ||
+        message.includes("Invalid archived session ID") ||
+        message.includes("required")
+      ? 400
+      : message.includes("not found")
+        ? 404
+        : 500;
 }
 
-async function validateRestorePath(root: string, target: string): Promise<void> {
+async function validateRestorePath(
+  root: string,
+  target: string,
+): Promise<void> {
   const relative = path.relative(root, target);
-  if (!relative || relative.startsWith(`..${path.sep}`) || relative === ".." || path.isAbsolute(relative)) throw new Error("Invalid archive key");
+  if (
+    !relative ||
+    relative.startsWith(`..${path.sep}`) ||
+    relative === ".." ||
+    path.isAbsolute(relative)
+  )
+    throw new Error("Invalid archive key");
   let ancestor = root;
   const missing: string[] = [];
   while (true) {
@@ -285,14 +385,25 @@ async function validateRestorePath(root: string, target: string): Promise<void> 
 /** Whether `canonical` is the root itself or outside it (both refused: a restore touches only what is strictly inside). */
 function escapesRoot(canonicalRoot: string, canonical: string): boolean {
   const relative = path.relative(canonicalRoot, canonical);
-  return !relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
+  return (
+    !relative ||
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  );
 }
 
 /** `validateRestorePath`, synchronously, for the commit: the async checks before it can be a thread-pool turn stale, and
  * another process can swap a directory for a link in that time. Run last, under the caller's guard, right before the moves. */
 function validateRestorePathSync(root: string, target: string): void {
   const relative = path.relative(root, target);
-  if (!relative || relative.startsWith(`..${path.sep}`) || relative === ".." || path.isAbsolute(relative)) throw new Error("Invalid archive key");
+  if (
+    !relative ||
+    relative.startsWith(`..${path.sep}`) ||
+    relative === ".." ||
+    path.isAbsolute(relative)
+  )
+    throw new Error("Invalid archive key");
   let ancestor = root;
   const missing: string[] = [];
   while (true) {
@@ -343,7 +454,11 @@ async function lstatIfExists(filePath: string) {
 }
 
 function errnoCode(error: unknown): string | undefined {
-  return error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : undefined;
+  return error instanceof Error &&
+    "code" in error &&
+    typeof error.code === "string"
+    ? error.code
+    : undefined;
 }
 
 function lstatSyncIfExists(filePath: string) {
@@ -374,9 +489,14 @@ function moveDirectoryNoReplace(from: string, to: string): void {
   try {
     renameSync(from, to);
   } catch (error) {
-    try { rmdirSync(to); } catch { /* content was put in it: not ours to remove */ }
+    try {
+      rmdirSync(to);
+    } catch {
+      /* content was put in it: not ours to remove */
+    }
     // `from` gone: another restore consumed it.
-    if (["ENOTEMPTY", "EEXIST", "ENOENT"].includes(errnoCode(error) ?? "")) throw taken();
+    if (["ENOTEMPTY", "EEXIST", "ENOENT"].includes(errnoCode(error) ?? ""))
+      throw taken();
     throw error;
   }
 }
@@ -398,7 +518,10 @@ function isSameFile(first: string, second: string): boolean {
  * its own, so the identity check and the removal are of that one file and not of a path another process can swap; a file
  * that is not ours is linked back, exclusively. Returns the path a file this call could not put right is left at, or null.
  */
-function takeBackTranscript(destination: string, tempFile: string): string | null {
+function takeBackTranscript(
+  destination: string,
+  tempFile: string,
+): string | null {
   const taken = `${destination}.${randomUUID()}.rollback`;
   try {
     renameSync(destination, taken);
@@ -406,7 +529,12 @@ function takeBackTranscript(destination: string, tempFile: string): string | nul
     return errnoCode(error) === "ENOENT" ? null : destination;
   }
   if (isSameFile(taken, tempFile)) {
-    try { unlinkSync(taken); return null; } catch { return taken; }
+    try {
+      unlinkSync(taken);
+      return null;
+    } catch {
+      return taken;
+    }
   }
   try {
     linkSync(taken, destination);
@@ -437,15 +565,28 @@ function takeBackTranscript(destination: string, tempFile: string): string | nul
  * covered: nothing here calls fsync or keeps a journal, so which directory operations reached disk is not guaranteed.
  */
 
-type ArchiveGeneration = { dev: bigint; ino: bigint; size: bigint; mtimeNs: bigint };
+type ArchiveGeneration = {
+  dev: bigint;
+  ino: bigint;
+  size: bigint;
+  mtimeNs: bigint;
+};
 
 /** The pin retains the inode until staging and commit end, so an unlinked generation cannot have its inode reused. Size and
  * mtime also reject in-place changes; normal archive publication replaces the inode atomically. */
-function matchesArchiveGeneration(file: string, expected: ArchiveGeneration): boolean {
+function matchesArchiveGeneration(
+  file: string,
+  expected: ArchiveGeneration,
+): boolean {
   try {
     const actual = lstatSync(file, { bigint: true });
-    return actual.isFile() && actual.dev === expected.dev && actual.ino === expected.ino
-      && actual.size === expected.size && actual.mtimeNs === expected.mtimeNs;
+    return (
+      actual.isFile() &&
+      actual.dev === expected.dev &&
+      actual.ino === expected.ino &&
+      actual.size === expected.size &&
+      actual.mtimeNs === expected.mtimeNs
+    );
   } catch (error) {
     if (errnoCode(error) === "ENOENT") return false;
     throw error;
@@ -454,7 +595,10 @@ function matchesArchiveGeneration(file: string, expected: ArchiveGeneration): bo
 
 /** Restore a captured pathname without overwriting a replacement installed meanwhile. On conflict keep the captured entry
  * at its recovery name, never silently delete either generation. */
-function returnCapturedArchive(captured: string, source: string): string | null {
+function returnCapturedArchive(
+  captured: string,
+  source: string,
+): string | null {
   try {
     linkSync(captured, source);
     unlinkSync(captured);
@@ -467,14 +611,26 @@ function returnCapturedArchive(captured: string, source: string): string | null 
  * observations cannot safely coordinate it: another process may move artifacts between those observations, and a loser
  * can then publish the transcript before the mover does, causing the mover to roll the winner's artifacts back.
  * Never expire this claim: a suspended holder can still publish. A killed holder requires manual recovery. */
-function commitRestore(plan: { archiveBase: string; activeRoot: string; source: string; sourceArtifacts: string; destination: string; destinationArtifacts: string; tempFile: string; generation: ArchiveGeneration }): void {
+function commitRestore(plan: {
+  archiveBase: string;
+  activeRoot: string;
+  source: string;
+  sourceArtifacts: string;
+  destination: string;
+  destinationArtifacts: string;
+  tempFile: string;
+  generation: ArchiveGeneration;
+}): void {
   validateRestorePathSync(plan.activeRoot, plan.destination);
   const claim = `${plan.destination}.restore-lock`;
   validateRestorePathSync(plan.activeRoot, claim);
   try {
     mkdirSync(claim);
   } catch (error) {
-    if (errnoCode(error) === "EEXIST") throw new Error(`Active session destination already exists (restore commit claimed at ${claim}; if its owner was killed, manual recovery is required)`);
+    if (errnoCode(error) === "EEXIST")
+      throw new Error(
+        `Active session destination already exists (restore commit claimed at ${claim}; if its owner was killed, manual recovery is required)`,
+      );
     throw error;
   }
   const identity = lstatSync(claim, { bigint: true });
@@ -482,27 +638,52 @@ function commitRestore(plan: { archiveBase: string; activeRoot: string; source: 
     commitRestoreOwned(plan);
   } finally {
     const current = lstatSync(claim, { bigint: true });
-    if (current.dev !== identity.dev || current.ino !== identity.ino) throw new Error(`Restore claim changed at ${claim}; manual recovery is required`);
+    if (current.dev !== identity.dev || current.ino !== identity.ino)
+      throw new Error(
+        `Restore claim changed at ${claim}; manual recovery is required`,
+      );
     rmdirSync(claim);
   }
 }
 
-function commitRestoreOwned({ archiveBase, activeRoot, source, sourceArtifacts, destination, destinationArtifacts, tempFile, generation }: { archiveBase: string; activeRoot: string; source: string; sourceArtifacts: string; destination: string; destinationArtifacts: string; tempFile: string; generation: ArchiveGeneration }): void {
+function commitRestoreOwned({
+  archiveBase,
+  activeRoot,
+  source,
+  sourceArtifacts,
+  destination,
+  destinationArtifacts,
+  tempFile,
+  generation,
+}: {
+  archiveBase: string;
+  activeRoot: string;
+  source: string;
+  sourceArtifacts: string;
+  destination: string;
+  destinationArtifacts: string;
+  tempFile: string;
+  generation: ArchiveGeneration;
+}): void {
   validateRestorePathSync(archiveBase, source);
   validateRestorePathSync(archiveBase, sourceArtifacts);
   validateRestorePathSync(activeRoot, destination);
   validateRestorePathSync(activeRoot, destinationArtifacts);
   // Staging happened before ownership was acquired: a previous owner may already have consumed the archive.
   if (!lstatSyncIfExists(source)?.isFile()) {
-    if (lstatSyncIfExists(destination)) throw new Error("Active session destination already exists");
+    if (lstatSyncIfExists(destination))
+      throw new Error("Active session destination already exists");
     throw new Error("Archived session not found");
   }
-  if (!matchesArchiveGeneration(source, generation)) throw new Error("Archived session generation changed; retry restore");
+  if (!matchesArchiveGeneration(source, generation))
+    throw new Error("Archived session generation changed; retry restore");
   const artifacts = lstatSyncIfExists(sourceArtifacts);
-  if (artifacts && !artifacts.isDirectory()) throw new Error("Archived artifacts are invalid");
+  if (artifacts && !artifacts.isDirectory())
+    throw new Error("Archived artifacts are invalid");
   // The active artifacts directory is the session's own: one already there belongs to another session, or to a restore
   // of this one that is running elsewhere.
-  if (lstatSyncIfExists(destinationArtifacts)) throw new Error("Active session destination already exists");
+  if (lstatSyncIfExists(destinationArtifacts))
+    throw new Error("Active session destination already exists");
   let movedArtifacts = false;
   let published = false;
   // A check followed by unlink(source) can delete a newer archive. Take the pathname atomically first, verify what was
@@ -510,7 +691,8 @@ function commitRestoreOwned({ archiveBase, activeRoot, source, sourceArtifacts, 
   const captured = `${source}.${randomUUID()}.restore-consume`;
   renameSync(source, captured);
   try {
-    if (!matchesArchiveGeneration(captured, generation)) throw new Error("Archived session generation changed; retry restore");
+    if (!matchesArchiveGeneration(captured, generation))
+      throw new Error("Archived session generation changed; retry restore");
     if (artifacts) {
       moveDirectoryNoReplace(sourceArtifacts, destinationArtifacts);
       movedArtifacts = true;
@@ -519,7 +701,8 @@ function commitRestoreOwned({ archiveBase, activeRoot, source, sourceArtifacts, 
     try {
       linkSync(tempFile, destination);
     } catch (error) {
-      if (errnoCode(error) === "EEXIST") throw new Error("Active session destination already exists");
+      if (errnoCode(error) === "EEXIST")
+        throw new Error("Active session destination already exists");
       throw error;
     }
     published = true;
@@ -531,21 +714,36 @@ function commitRestoreOwned({ archiveBase, activeRoot, source, sourceArtifacts, 
       if (left) stranded.push(left);
     }
     if (movedArtifacts) {
-      try { moveDirectoryNoReplace(destinationArtifacts, sourceArtifacts); } catch { stranded.push(destinationArtifacts); }
+      try {
+        moveDirectoryNoReplace(destinationArtifacts, sourceArtifacts);
+      } catch {
+        stranded.push(destinationArtifacts);
+      }
     }
     const left = returnCapturedArchive(captured, source);
     if (left) stranded.push(left);
-    if (stranded.length > 0 && error instanceof Error) error.message += `; the restore could not be undone at ${stranded.join(" and ")}`;
+    if (stranded.length > 0 && error instanceof Error)
+      error.message += `; the restore could not be undone at ${stranded.join(" and ")}`;
     throw error;
   }
 }
 
-function archiveSizeLimit(kind: "compressed" | "expanded", limit: number): Transform {
+function archiveSizeLimit(
+  kind: "compressed" | "expanded",
+  limit: number,
+): Transform {
   let bytes = 0;
   return new Transform({
     transform(chunk: Buffer, _encoding, callback) {
       bytes += chunk.length;
-      callback(bytes > limit ? new Error(`Archived session ${kind} size exceeds 256 MiB limit; archive was not consumed`) : null, bytes > limit ? undefined : chunk);
+      callback(
+        bytes > limit
+          ? new Error(
+              `Archived session ${kind} size exceeds 256 MiB limit; archive was not consumed`,
+            )
+          : null,
+        bytes > limit ? undefined : chunk,
+      );
     },
   });
 }
@@ -564,15 +762,18 @@ async function readArchivedSessionId(filePath: string): Promise<string> {
   }
   const lines = prefix.split("\n");
   const headerIndex = parseTitleSlotLine(lines[0] ?? "") ? 1 : 0;
-  if (lines.length <= headerIndex + 1 && bytesRead === maxHeaderBytes) throw new Error("Archived session header is invalid");
+  if (lines.length <= headerIndex + 1 && bytesRead === maxHeaderBytes)
+    throw new Error("Archived session header is invalid");
   let header: SessionHeader;
   try {
     header = JSON.parse(lines[headerIndex] ?? "") as SessionHeader;
   } catch {
     throw new Error("Archived session header is invalid");
   }
-  if (!header || header.type !== "session") throw new Error("Archived session header is invalid");
-  if (typeof header.id !== "string" || !isValidSessionId(header.id)) throw new Error("Invalid archived session ID");
+  if (!header || header.type !== "session")
+    throw new Error("Archived session header is invalid");
+  if (typeof header.id !== "string" || !isValidSessionId(header.id))
+    throw new Error("Invalid archived session ID");
   return header.id;
 }
 
@@ -580,13 +781,21 @@ async function readArchivedSessionId(filePath: string): Promise<string> {
 function throwMissingArchive(activeRoot: string, destination: string): never {
   const claim = `${destination}.restore-lock`;
   validateRestorePathSync(activeRoot, claim);
-  if (lstatSyncIfExists(claim)) throw new Error(`Active session destination already exists (restore commit claimed at ${claim}; if its owner was killed, manual recovery is required)`);
+  if (lstatSyncIfExists(claim))
+    throw new Error(
+      `Active session destination already exists (restore commit claimed at ${claim}; if its owner was killed, manual recovery is required)`,
+    );
   throw new Error("Archived session not found");
 }
 
 /** `publish` wraps the restore's whole commit (see `commitRestore`) as one synchronous step: a caller holding a lock across it
  * must never have to await there, and one whose claim may have lapsed refuses in it, before anything moves. */
-export async function restoreArchivedSession(key: string, sessionsRoot = getSessionsDir(), archiveRoot = getArchivedSessionsDir(), publish: <T>(run: () => T) => T = (run) => run()): Promise<string> {
+export async function restoreArchivedSession(
+  key: string,
+  sessionsRoot = getSessionsDir(),
+  archiveRoot = getArchivedSessionsDir(),
+  publish: <T>(run: () => T) => T = (run) => run(),
+): Promise<string> {
   const activeRoot = archiveRootPath(sessionsRoot);
   const archiveBase = archiveRootPath(archiveRoot);
   const relative = normalizeArchiveKey(key);
@@ -600,21 +809,33 @@ export async function restoreArchivedSession(key: string, sessionsRoot = getSess
   await validateRestorePath(activeRoot, destinationArtifacts);
   const sourceStat = await lstatIfExists(source);
   if (!sourceStat?.isFile()) throwMissingArchive(activeRoot, destination);
-  if (await lstatIfExists(destination) || await lstatIfExists(destinationArtifacts)) throw new Error("Active session destination already exists");
+  if (
+    (await lstatIfExists(destination)) ||
+    (await lstatIfExists(destinationArtifacts))
+  )
+    throw new Error("Active session destination already exists");
 
-  if (sourceStat.size > MAX_ARCHIVE_COMPRESSED_BYTES) throw new Error("Archived session compressed size exceeds 256 MiB limit; archive was not consumed");
+  if (sourceStat.size > MAX_ARCHIVE_COMPRESSED_BYTES)
+    throw new Error(
+      "Archived session compressed size exceeds 256 MiB limit; archive was not consumed",
+    );
   await mkdir(path.dirname(destination), { recursive: true });
   await validateRestorePath(activeRoot, destination);
   await validateRestorePath(activeRoot, destinationArtifacts);
-  const tempDir = await mkdtemp(path.join(path.dirname(destination), ".omp-web-restore-"));
+  const tempDir = await mkdtemp(
+    path.join(path.dirname(destination), ".omp-web-restore-"),
+  );
   const tempFile = path.join(tempDir, path.basename(destination));
   // Same filesystem as the archive, independent of the sessions filesystem. Reading this private hard link pins exactly
   // the source generation staged here, even if another restorer consumes and later re-archives the same pathname.
   const pin = `${source}.${randomUUID()}.restore-pin`;
   try {
     validateRestorePathSync(archiveBase, source);
-    try { linkSync(source, pin); } catch (error) {
-      if (errnoCode(error) === "ENOENT") throwMissingArchive(activeRoot, destination);
+    try {
+      linkSync(source, pin);
+    } catch (error) {
+      if (errnoCode(error) === "ENOENT")
+        throwMissingArchive(activeRoot, destination);
       throw error;
     }
     const generation = lstatSync(pin, { bigint: true });
@@ -630,7 +851,8 @@ export async function restoreArchivedSession(key: string, sessionsRoot = getSess
       );
     } catch (error) {
       // Another restore consumed the archive between the check above and this read: it is gone, not unreadable.
-      if (errnoCode(error) === "ENOENT" && !lstatSyncIfExists(source)) throw new Error("Archived session not found");
+      if (errnoCode(error) === "ENOENT" && !lstatSyncIfExists(source))
+        throw new Error("Archived session not found");
       throw error;
     }
     const sessionId = await readArchivedSessionId(tempFile);
@@ -639,11 +861,26 @@ export async function restoreArchivedSession(key: string, sessionsRoot = getSess
     await validateRestorePath(activeRoot, destination);
     await validateRestorePath(activeRoot, destinationArtifacts);
     await validateRestorePath(archiveBase, sourceArtifacts);
-    publish(() => commitRestore({ archiveBase, activeRoot, source, sourceArtifacts, destination, destinationArtifacts, tempFile, generation }));
+    publish(() =>
+      commitRestore({
+        archiveBase,
+        activeRoot,
+        source,
+        sourceArtifacts,
+        destination,
+        destinationArtifacts,
+        tempFile,
+        generation,
+      }),
+    );
     invalidateSessionFileListCache();
     return sessionId;
   } finally {
-    try { unlinkSync(pin); } catch (error) { if (errnoCode(error) !== "ENOENT") throw error; }
+    try {
+      unlinkSync(pin);
+    } catch (error) {
+      if (errnoCode(error) !== "ENOENT") throw error;
+    }
     await rm(tempDir, { recursive: true, force: true });
   }
 }

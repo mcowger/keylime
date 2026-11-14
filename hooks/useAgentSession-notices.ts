@@ -26,7 +26,10 @@ export const NOTICE_ERROR_VISIBLE_MS = 30000;
 export const NOTICE_EXIT_ANIMATION_MS = 180;
 
 export function createNoticeId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return crypto.randomUUID();
   }
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -35,12 +38,15 @@ export function createNoticeId(): string {
 export function markOldestNoticeExiting(notices: NoticeItem[]): NoticeItem[] {
   const index = notices.findIndex((notice) => !notice.exiting);
   if (index === -1) return notices;
-  return notices.map((notice, i) => (
-    i === index ? { ...notice, exiting: true } : notice
-  ));
+  return notices.map((notice, i) =>
+    i === index ? { ...notice, exiting: true } : notice,
+  );
 }
 
-export function fillPendingNotices(visible: NoticeItem[], pending: NoticeItem[]): NoticeState {
+export function fillPendingNotices(
+  visible: NoticeItem[],
+  pending: NoticeItem[],
+): NoticeState {
   let nextVisible = visible;
   let nextPending = pending;
   while (nextPending.length > 0 && nextVisible.length < MAX_NOTICES) {
@@ -54,10 +60,16 @@ export function fillPendingNotices(visible: NoticeItem[], pending: NoticeItem[])
   return { visible: nextVisible, pending: nextPending };
 }
 
-export function noticeReducer(state: NoticeState, action: NoticeAction): NoticeState {
+export function noticeReducer(
+  state: NoticeState,
+  action: NoticeAction,
+): NoticeState {
   switch (action.type) {
     case "add": {
-      if (state.visible.some((notice) => notice.exiting) || state.visible.length >= MAX_NOTICES) {
+      if (
+        state.visible.some((notice) => notice.exiting) ||
+        state.visible.length >= MAX_NOTICES
+      ) {
         return {
           visible: state.visible.some((notice) => notice.exiting)
             ? state.visible
@@ -71,7 +83,10 @@ export function noticeReducer(state: NoticeState, action: NoticeAction): NoticeS
       return { ...state, visible: markOldestNoticeExiting(state.visible) };
     case "remove": {
       const visible = state.visible.filter((notice) => notice.id !== action.id);
-      return fillPendingNotices(visible, state.pending.filter((notice) => notice.id !== action.id));
+      return fillPendingNotices(
+        visible,
+        state.pending.filter((notice) => notice.id !== action.id),
+      );
     }
     default:
       return state;

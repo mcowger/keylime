@@ -1,6 +1,5 @@
 "use strict";
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const os = require("node:os");
 
 const forwardedSignals = ["SIGINT", "SIGTERM"];
@@ -28,12 +27,16 @@ function killChildTree(child, force, gracefulSignal = "SIGTERM") {
     } catch {}
   }
 
-  try { child.kill(signal); } catch {}
+  try {
+    child.kill(signal);
+  } catch {}
 }
 
 function childHasExited(child) {
-  return (child.exitCode !== null && child.exitCode !== undefined)
-    || (child.signalCode !== null && child.signalCode !== undefined);
+  return (
+    (child.exitCode !== null && child.exitCode !== undefined) ||
+    (child.signalCode !== null && child.signalCode !== undefined)
+  );
 }
 
 function waitForChildExit(child, timeoutMs) {
@@ -58,7 +61,12 @@ async function terminateChildProcess(child, timeoutMs = STOP_TIMEOUT_MS) {
   return exited;
 }
 
-function wireChildProcessLifecycle(child, parentProcess = process, timeoutMs = shutdownTimeoutMs, handleChildExit) {
+function wireChildProcessLifecycle(
+  child,
+  parentProcess = process,
+  timeoutMs = shutdownTimeoutMs,
+  handleChildExit,
+) {
   const signalHandlers = new Map();
   let shutdownTimer;
   const forceKill = () => killChildTree(child, true);

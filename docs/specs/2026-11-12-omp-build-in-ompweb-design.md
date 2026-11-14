@@ -12,11 +12,11 @@ Current state: `runner/omp-build.json` pins the fork release `v18.20.0-int.20261
 
 ## Three places
 
-| Where | Owns after cut-over | Secrets |
-|---|---|---|
+| Where                            | Owns after cut-over                                                                                                                                                                                                                         | Secrets                                                                                                                                                                       |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ompweb-dev/oh-my-pi` (the fork) | the omp round on branch `fork-ci` (workflows, config, fixups, repair prompt, helper scripts); releases `v<upstream>-int.<stamp>.g<sha7>` with binaries and an npm package zip; `integration-release`; `apple-sdk` mirror; escalation issues | Environment `omp-round` (only `fork-ci`): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OMP_FORK_TOKEN` (fallback only, F3). Everything else uses the workflow's own `GITHUB_TOKEN` |
-| `ompweb-dev/ompweb` | `runner/` pinned to one fork release's packages; every (pre)release re-pins to the newest `integration-release` build; the omp row follows ompweb | none |
-| `andrebrait/integration-ci` | the `integration` script (single copy); graphify, superpowers and ompweb builds; its omp workflows, scripts, config, fixups, releases and omp secrets are deleted after cut-over | omp secrets removed |
+| `ompweb-dev/ompweb`              | `runner/` pinned to one fork release's packages; every (pre)release re-pins to the newest `integration-release` build; the omp row follows ompweb                                                                                           | none                                                                                                                                                                          |
+| `andrebrait/integration-ci`      | the `integration` script (single copy); graphify, superpowers and ompweb builds; its omp workflows, scripts, config, fixups, releases and omp secrets are deleted after cut-over                                                            | omp secrets removed                                                                                                                                                           |
 
 ## Fork
 
@@ -55,13 +55,13 @@ What the default-branch switch changes:
 
 Secrets live in Environment `omp-round` with deployment branches `fork-ci` only; every job that reads one declares `environment: omp-round`, so upstream's workflows (on `main`, tags, PR branches) can never read them.
 
-| Write | Token |
-|---|---|
-| escalation issues | `GITHUB_TOKEN`, `issues: write` |
-| fixup commits to `fork-ci` | `GITHUB_TOKEN`, `contents: write` |
-| `gh workflow disable` (F2) | `GITHUB_TOKEN`, `actions: write` |
-| release creation, asset uploads, prune, rolling `oh-my-pi` release | `GITHUB_TOKEN`, `contents: write`; release creation retries with the PAT like below |
-| PR branch pushes (`rebase`, `rebase-repair-push`, `build-repair-push`), `integration-candidate`, `integration-release` | `GITHUB_TOKEN`, `contents: write`; retry with the PAT |
+| Write                                                                                                                  | Token                                                                               |
+| ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| escalation issues                                                                                                      | `GITHUB_TOKEN`, `issues: write`                                                     |
+| fixup commits to `fork-ci`                                                                                             | `GITHUB_TOKEN`, `contents: write`                                                   |
+| `gh workflow disable` (F2)                                                                                             | `GITHUB_TOKEN`, `actions: write`                                                    |
+| release creation, asset uploads, prune, rolling `oh-my-pi` release                                                     | `GITHUB_TOKEN`, `contents: write`; release creation retries with the PAT like below |
+| PR branch pushes (`rebase`, `rebase-repair-push`, `build-repair-push`), `integration-candidate`, `integration-release` | `GITHUB_TOKEN`, `contents: write`; retry with the PAT                               |
 
 Push with `GITHUB_TOKEN` first, then retry once with `OMP_FORK_TOKEN` (fine-grained, this repository, Contents + Workflows write) only when GitHub refuses the write for the `workflows` permission (decided; no separate spike). That refusal is expected when a ref moves across an upstream release that changed `.github/workflows/`, because `GITHUB_TOKEN` can never hold that permission [INFERENCE for the refs API and release tag creation]. The retry lives in `scripts/push-rebased.sh`, `scripts/publish-round.sh` and the `release`/`integration-release` step, matching the error text, and logs which token succeeded so the PAT can be removed later if the fallback never fires.
 
@@ -69,16 +69,16 @@ Push with `GITHUB_TOKEN` first, then retry once with `OMP_FORK_TOKEN` (fine-grai
 
 ### F4. RPC drops (`config/root--git--oh-my-pi.sh`)
 
-| Item | Change |
-|---|---|
-| `EXTRA_PRS` | `'7851=carry/pr-7851'` (drops `18646=carry/pr-18646`); comment loses the 18646 line |
-| `SKIP_PRS` (new) | `'18668'` — RPC-only (decided); `runner/src/correlation.ts` rebuilds the contract from public API |
-| `TEST_CMD` (line 23 list) | remove `rpc-queued-message`, `rpc-cancel-subagent`, `rpc-steer-subagent` |
-| `TEST_CMD` (line 25 list) | remove `rpc-native-input`, `rpc-input-frame`, `rpc-prompt-result`, `rpc-skill-command`, `rpc-compatible-primitives`, `rpc-extension-ui`; comment loses "and host RPC contracts" |
-| `TEST_CMD` (lines 59–60) | delete "Carried PR #18646 (RPC form dialog) contract tests" and its separate `bun test …rpc-extension-ui.test.ts packages/tui/test/html-form.test.ts` process |
-| fixups | `18668-prompt-claim-optional.patch`, `18668-resolve.patch`, `18668-skill-command-client-message-id.patch` are not copied to `fork-ci` |
-| `CI_REPO` / `CI_WORKFLOW` / `CI_CONFIG_REF` | `ompweb-dev/oh-my-pi` / `omp.yml` / `origin/fork-ci` (F8) |
-| `STACKED_PRS` | unchanged |
+| Item                                        | Change                                                                                                                                                                          |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EXTRA_PRS`                                 | `'7851=carry/pr-7851'` (drops `18646=carry/pr-18646`); comment loses the 18646 line                                                                                             |
+| `SKIP_PRS` (new)                            | `'18668'` — RPC-only (decided); `runner/src/correlation.ts` rebuilds the contract from public API                                                                               |
+| `TEST_CMD` (line 23 list)                   | remove `rpc-queued-message`, `rpc-cancel-subagent`, `rpc-steer-subagent`                                                                                                        |
+| `TEST_CMD` (line 25 list)                   | remove `rpc-native-input`, `rpc-input-frame`, `rpc-prompt-result`, `rpc-skill-command`, `rpc-compatible-primitives`, `rpc-extension-ui`; comment loses "and host RPC contracts" |
+| `TEST_CMD` (lines 59–60)                    | delete "Carried PR #18646 (RPC form dialog) contract tests" and its separate `bun test …rpc-extension-ui.test.ts packages/tui/test/html-form.test.ts` process                   |
+| fixups                                      | `18668-prompt-claim-optional.patch`, `18668-resolve.patch`, `18668-skill-command-client-message-id.patch` are not copied to `fork-ci`                                           |
+| `CI_REPO` / `CI_WORKFLOW` / `CI_CONFIG_REF` | `ompweb-dev/oh-my-pi` / `omp.yml` / `origin/fork-ci` (F8)                                                                                                                       |
+| `STACKED_PRS`                               | unchanged                                                                                                                                                                       |
 
 10 `packages/coding-agent/test/rpc-*.test.ts` occurrences (`rpc-extension-ui` twice). Merged upstream RPC work (#18929, #18930, earlier `feat(rpc)` PRs) is in the base release. #14148, #14458 (stacked on #14148) and #14608 stay (decided). Resolution patches written with #18668/#18646 present may stop applying; the first round's `integrate-repair` or a local `integration rebuild` refreshes them.
 
@@ -136,18 +136,18 @@ Release contract (from the update-source note; `feat/configurable-update-source`
 Build step (each `binaries` matrix job), verbatim from the note:
 
 ```yaml
-         - name: Build release binary
-           shell: bash
-           env:
-              RELEASE_TARGETS: ${{ matrix.target }}
-              PI_UPDATE_REPO: ompweb-dev/oh-my-pi
-              SHA: ${{ inputs.sha }}
-           run: |
-              set -euo pipefail
-              stamp="$(TZ=UTC git show -s --format=%cd --date=format-local:%Y%m%d%H%M "$SHA")"
-              jq --arg s "$stamp.g${SHA:0:7}" '.version += "-int." + $s' packages/utils/package.json > "$RUNNER_TEMP/utils.json"
-              mv "$RUNNER_TEMP/utils.json" packages/utils/package.json
-              bun run ci:release:build-binaries
+- name: Build release binary
+  shell: bash
+  env:
+    RELEASE_TARGETS: ${{ matrix.target }}
+    PI_UPDATE_REPO: ompweb-dev/oh-my-pi
+    SHA: ${{ inputs.sha }}
+  run: |
+    set -euo pipefail
+    stamp="$(TZ=UTC git show -s --format=%cd --date=format-local:%Y%m%d%H%M "$SHA")"
+    jq --arg s "$stamp.g${SHA:0:7}" '.version += "-int." + $s' packages/utils/package.json > "$RUNNER_TEMP/utils.json"
+    mv "$RUNNER_TEMP/utils.json" packages/utils/package.json
+    bun run ci:release:build-binaries
 ```
 
 Release tag (`release`, and the `version` job's output), verbatim from the note:
@@ -179,7 +179,7 @@ rel="v$version-int.$stamp.g${SHA:0:7}"
 - `runner/scripts/use-omp-build.ts`:
   - no argument: download the pinned release's zip, unzip into `runner/vendor/` (fetch only; then `bun install --frozen-lockfile`);
   - `<tag>`: re-pin — fetch that release's zip, rewrite `omp-build.json`, the `file:` dependencies and overrides from its `index.json`, run `bun install` (lockfile updated).
-  Pin bumps are manual ompweb PRs (decided).
+    Pin bumps are manual ompweb PRs (decided).
 - Every runner install calls the fetch first: `verify-pr.yml`, `omp-runner.yml`, `scripts/build-release-binaries.sh`, and integration-ci's `ompweb.yml` and `config/root--git--ompweb.sh` `BUILD_CMD` (guarded by `[ -f runner/scripts/use-omp-build.ts ]` for older commits).
 - `runner/scripts/build-binary.ts` is unchanged: same `node_modules` layout; `bun install --os='*' --cpu='*'` installs every leaf from `vendor/`. Measured on linux-x64: install 1 s, build 88 s, binary 245 MB, `--version` and `--smoke-test` and headless `hello` work, extracted addon byte-identical to the fork's build. Cross-target builds with fork leaves were not run by the spike.
 

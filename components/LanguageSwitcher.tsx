@@ -24,7 +24,10 @@ export function LanguageSwitcher() {
   const baseId = useId();
   const listboxId = `${baseId}-listbox`;
 
-  const index = Math.max(0, LOCALES.findIndex((l) => l.value === locale));
+  const index = Math.max(
+    0,
+    LOCALES.findIndex((l) => l.value === locale),
+  );
   const current = LOCALES[index];
 
   // Keep the highlighted item in sync with the chosen locale when closed.
@@ -55,7 +58,12 @@ export function LanguageSwitcher() {
   };
 
   const onTriggerKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " " || e.key === "ArrowUp") {
+    if (
+      e.key === "ArrowDown" ||
+      e.key === "Enter" ||
+      e.key === " " ||
+      e.key === "ArrowUp"
+    ) {
       e.preventDefault();
       setOpen(true);
       setActiveIndex(e.key === "ArrowUp" ? LOCALES.length - 1 : index);
@@ -164,15 +172,24 @@ export function LanguageSwitcher() {
             const selected = l.value === locale;
             return (
               <li key={l.value} role="none">
-                <button className="dropdown-item"
-                  ref={(el) => { itemRefs.current[i] = el; }}
+                <button
+                  className="dropdown-item"
+                  ref={(el) => {
+                    itemRefs.current[i] = el;
+                  }}
                   type="button"
                   role="menuitem"
                   tabIndex={-1}
                   aria-current={selected || undefined}
                   onClick={() => choose(l.value)}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = selected ? "var(--bg-selected)" : "transparent"; }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "var(--bg-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = selected
+                      ? "var(--bg-selected)"
+                      : "transparent";
+                  }}
                   onKeyDown={(e) => onItemKeyDown(e, i)}
                   style={{
                     width: "100%",
@@ -188,12 +205,23 @@ export function LanguageSwitcher() {
                     cursor: "pointer",
                     fontSize: 12,
                     textAlign: "left",
-                    transition: "background-color var(--dur-fast) var(--ease-out-warm), color var(--dur-fast) var(--ease-out-warm)",
+                    transition:
+                      "background-color var(--dur-fast) var(--ease-out-warm), color var(--dur-fast) var(--ease-out-warm)",
                   }}
                 >
                   <span>{l.label}</span>
                   {selected && (
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
                       <path d="m3 8 3.5 3.5L13 5" />
                     </svg>
                   )}

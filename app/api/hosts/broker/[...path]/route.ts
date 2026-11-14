@@ -1,4 +1,7 @@
-import { readBodyWithinLimit, RequestBodyTooLargeError } from "@/lib/bounded-form-data";
+import {
+  readBodyWithinLimit,
+  RequestBodyTooLargeError,
+} from "@/lib/bounded-form-data";
 import { sharesCredentials } from "@/lib/hosts/cluster";
 import { loadPools } from "@/lib/hosts/pools";
 import { hostFromBearer } from "@/lib/hosts/host-bearer";
@@ -10,23 +13,40 @@ import { AuthBrokerUnavailableError, brokerFetch } from "@/lib/omp/auth-broker";
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const noStore = { "cache-control": "no-store" };
-const fail = (error: string, status: number) => Response.json({ error }, { status, headers: noStore });
+const fail = (error: string, status: number) =>
+  Response.json({ error }, { status, headers: noStore });
 
 // Anything not listed is 404, including POST /v1/credential: a host cannot add or replace a credential.
 const ALLOWED: readonly (readonly [method: string, path: RegExp])[] = [
-  ["GET", /^\/v1\/(?:healthz|snapshot|snapshot\/stream|credentials\/disabled|usage|usage\/history|usage\/clients)$/],
+  [
+    "GET",
+    /^\/v1\/(?:healthz|snapshot|snapshot\/stream|credentials\/disabled|usage|usage\/history|usage\/clients)$/,
+  ],
   ["POST", /^\/v1\/credential\/\d+\/(?:refresh|disable|block)$/],
   ["DELETE", /^\/v1\/credential\/\d+\/blocks?$/],
   ["POST", /^\/v1\/usage\/(?:observed|stale)$/],
 ];
-const REQUEST_HEADERS = ["content-type", "accept", "if-none-match", "omp-auth-broker-capabilities"];
+const REQUEST_HEADERS = [
+  "content-type",
+  "accept",
+  "if-none-match",
+  "omp-auth-broker-capabilities",
+];
 const RESPONSE_HEADERS = ["content-type", "etag", "cache-control", "vary"];
 // A path the allow-list has not vetted reaches the log only as plain `/v1/` text.
 const PLAIN_PATH = /^\/v1\/[A-Za-z0-9/_-]*$/;
 
 /** Never a token, a query, a body or an error message: a broker failure names only its class. */
-function log(hostId: string, method: string, path: string, status: number, reason?: string) {
-  console.log(`[omp-web] broker ${hostId} ${method} ${path} ${status}${reason ? ` ${reason}` : ""}`);
+function log(
+  hostId: string,
+  method: string,
+  path: string,
+  status: number,
+  reason?: string,
+) {
+  console.log(
+    `[omp-web] broker ${hostId} ${method} ${path} ${status}${reason ? ` ${reason}` : ""}`,
+  );
 }
 
 function only(source: Headers, names: readonly string[]): Headers {
@@ -47,7 +67,13 @@ function admit(request: Request, path: string): HostRecord | Response {
   try {
     shares = host.id !== LOCAL_HOST_ID && sharesCredentials(host, loadPools());
   } catch {
-    log(host.id, request.method, PLAIN_PATH.test(path) ? path : "-", 503, "pools_unreadable");
+    log(
+      host.id,
+      request.method,
+      PLAIN_PATH.test(path) ? path : "-",
+      503,
+      "pools_unreadable",
+    );
     return fail("The host pool configuration cannot be read", 503);
   }
   if (!shares) {
@@ -57,11 +83,21 @@ function admit(request: Request, path: string): HostRecord | Response {
   return host;
 }
 
-async function forward(request: Request, { params, disableIdleTimeout }: { params: Promise<{ path: string[] }>; disableIdleTimeout: () => void }) {
+async function forward(
+  request: Request,
+  {
+    params,
+    disableIdleTimeout,
+  }: { params: Promise<{ path: string[] }>; disableIdleTimeout: () => void },
+) {
   const path = `/${(await params).path.join("/")}`;
   const first = admit(request, path);
   if (first instanceof Response) return first;
-  if (!ALLOWED.some(([method, allowed]) => method === request.method && allowed.test(path))) {
+  if (
+    !ALLOWED.some(
+      ([method, allowed]) => method === request.method && allowed.test(path),
+    )
+  ) {
     log(first.id, request.method, PLAIN_PATH.test(path) ? path : "-", 404);
     return fail("Not found", 404);
   }
@@ -73,7 +109,8 @@ async function forward(request: Request, { params, disableIdleTimeout }: { param
     try {
       body = (await readBodyWithinLimit(request, MAX_BODY_BYTES)).buffer;
     } catch (error) {
-      if (error instanceof RequestBodyTooLargeError) return fail("Request body is too large", 413);
+      if (error instanceof RequestBodyTooLargeError)
+        return fail("Request body is too large", 413);
       throw error;
     }
   }
@@ -93,14 +130,23 @@ async function forward(request: Request, { params, disableIdleTimeout }: { param
     });
   } catch (error) {
     const unavailable = error instanceof AuthBrokerUnavailableError;
-    const reason = unavailable ? (error.reason ?? "fetch_failed")
-      // The host disconnected, or abortBrokerRequests cut it off.
-      : request.signal.aborted || (error instanceof Error && error.name === "AbortError") ? "aborted" : "fetch_failed";
+    const reason = unavailable
+      ? (error.reason ?? "fetch_failed")
+      : // The host disconnected, or abortBrokerRequests cut it off.
+        request.signal.aborted ||
+          (error instanceof Error && error.name === "AbortError")
+        ? "aborted"
+        : "fetch_failed";
     log(host.id, request.method, path, unavailable ? 503 : 502, reason);
-    return unavailable ? fail("The auth broker is unavailable", 503) : fail("The auth broker request failed", 502);
+    return unavailable
+      ? fail("The auth broker is unavailable", 503)
+      : fail("The auth broker request failed", 502);
   }
   log(host.id, request.method, path, upstream.status);
-  return new Response(upstream.body, { status: upstream.status, headers: only(upstream.headers, RESPONSE_HEADERS) });
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: only(upstream.headers, RESPONSE_HEADERS),
+  });
 }
 
 export const GET = forward;

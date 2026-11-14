@@ -26,7 +26,9 @@ export interface SlashQueryMatch {
  * URLs (e.g. `http://`, `https://`, `file:///`, or word/word) are never matched.
  * Trailing whitespace after '/' closes the lookup (returns null).
  */
-export function extractSlashQuery(textBeforeCursor: string): SlashQueryMatch | null {
+export function extractSlashQuery(
+  textBeforeCursor: string,
+): SlashQueryMatch | null {
   if (!textBeforeCursor) return null;
 
   // Check if this is a leading slash command:

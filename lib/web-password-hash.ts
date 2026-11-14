@@ -50,20 +50,30 @@ export const PASSWORD_HASH_P: number = passwordHash.DEFAULT_P;
 export const PASSWORD_HASH_MIN_LOG_N: number = passwordHash.MIN_LOG_N;
 
 /** Hash a password for `OMP_WEB_PASSWORD_HASH`. */
-export const hashPassword = passwordHash.hashPassword as (password: string, options?: PasswordHashOptions) => string;
+export const hashPassword = passwordHash.hashPassword as (
+  password: string,
+  options?: PasswordHashOptions,
+) => string;
 
 /**
  * Parse a stored hash without verifying anything. Returns null when the text
  * is not a plausible hash — callers use this to reject a plaintext password
  * before it can be mistaken for one.
  */
-export const parsePasswordHash = passwordHash.parsePasswordHash as (value: unknown) => ParsedPasswordHash | null;
+export const parsePasswordHash = passwordHash.parsePasswordHash as (
+  value: unknown,
+) => ParsedPasswordHash | null;
 
 /** True when the value is a hash this build is willing to verify. */
-export const isPasswordHash = passwordHash.isPasswordHash as (value: unknown) => value is string;
+export const isPasswordHash = passwordHash.isPasswordHash as (
+  value: unknown,
+) => value is string;
 
 /**
  * Check a candidate password against a stored hash. A malformed or too-weak
  * hash never matches: configured-but-unusable must fail closed, not open.
  */
-export const verifyPassword = passwordHash.verifyPassword as (candidate: string, stored: string) => boolean;
+export const verifyPassword = passwordHash.verifyPassword as (
+  candidate: string,
+  stored: string,
+) => boolean;

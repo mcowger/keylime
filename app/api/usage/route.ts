@@ -12,13 +12,28 @@ export async function GET(req: Request) {
     const toParam = url.searchParams.get("to");
     const refreshParam = url.searchParams.get("refresh");
 
-    const validRanges: UsageTimeRange[] = ["today", "7d", "30d", "90d", "month", "all"];
-    const range: UsageTimeRange = validRanges.includes(rangeParam as UsageTimeRange)
+    const validRanges: UsageTimeRange[] = [
+      "today",
+      "7d",
+      "30d",
+      "90d",
+      "month",
+      "all",
+    ];
+    const range: UsageTimeRange = validRanges.includes(
+      rangeParam as UsageTimeRange,
+    )
       ? (rangeParam as UsageTimeRange)
       : "30d";
 
-    const validGranularities: UsageGranularity[] = ["daily", "monthly", "projects"];
-    const granularity: UsageGranularity = validGranularities.includes(granularityParam as UsageGranularity)
+    const validGranularities: UsageGranularity[] = [
+      "daily",
+      "monthly",
+      "projects",
+    ];
+    const granularity: UsageGranularity = validGranularities.includes(
+      granularityParam as UsageGranularity,
+    )
       ? (granularityParam as UsageGranularity)
       : "daily";
 

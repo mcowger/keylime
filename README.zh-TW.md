@@ -73,8 +73,8 @@ bunx --bun @kahme247/ompweb@latest
 bun add -g @kahme247/ompweb
 ompweb
 ```
-**或下載單一二進位檔**（無需安裝 Bun）：請參閱[單一二進位檔](#單一二進位檔)。
 
+**或下載單一二進位檔**（無需安裝 Bun）：請參閱[單一二進位檔](#單一二進位檔)。
 
 在瀏覽器中開啟 [http://127.0.0.1:30177](http://127.0.0.1:30177)。
 
@@ -192,8 +192,7 @@ systemctl --user daemon-reload
 systemctl --user enable --now ompweb ompweb-host
 ```
 
-  在 macOS 上，編寫兩個 launchd agent（`ProgramArguments` 為 `…/ompweb --no-open` 與 `…/ompweb host`，搭配 `RunAtLoad` 與 `KeepAlive`）可達到相同效果。
-
+在 macOS 上，編寫兩個 launchd agent（`ProgramArguments` 為 `…/ompweb --no-open` 與 `…/ompweb host`，搭配 `RunAtLoad` 與 `KeepAlive`）可達到相同效果。
 
 ### 作為 macOS 服務執行（launchd）
 
@@ -230,6 +229,7 @@ OMP_WEB_PASSWORD_HASH='<hash>' bunx --bun --package=@kahme247/ompweb@latest ompw
 ```bash
 bunx --bun --package=@kahme247/ompweb@latest ompweb-systemd install
 ```
+
 安裝程式會自動建立權限為 `600` 的 `~/.omp/agent/web-service.env`；無需手動建立檔案。明確指定 `--package` 參數可確保 `bunx` 執行所選套件內的 systemd 執行檔。
 
 若要將服務繫結至所有 IPv4 介面以供區網存取，請先以互動方式產生密碼雜湊，並於安裝時透過 `OMP_WEB_PASSWORD_HASH` 設定（避免將密碼明文留在 shell 歷史紀錄中）：
@@ -299,6 +299,7 @@ bunx --bun --package=@kahme247/ompweb@latest ompweb-tray --uninstall    # 移除
    ```
 
    出現提示時貼上權杖（或透過管道輸入）。設定會以 `600` 權限儲存至 `~/.omp/agent/omp-web/host.json`。
+
 3. 啟動連線並保持其持續執行：
 
    ```bash
@@ -389,7 +390,6 @@ done
 
 在 tmux 視窗中執行 `ompweb-host-run`；按下 Ctrl-C 可停止守護行程及其對話。重新開機或登出後請再次啟動。若登入鑰匙圈因閒置或睡眠而自動上鎖，SSH 金鑰通行碼與簽署功能將會失敗，直到您重新啟動它為止。
 
-
 ## 功能特色
 
 - **互動式聊天**：與本機 `omp` 代理進行即時串流交談——完整呈現工具呼叫、思考深度等級、Token 計數、成本花費、上下文容量量表、佇列控制，以及中斷與重試功能。
@@ -415,20 +415,20 @@ done
 
 ## 環境變數
 
-| 變數 | 說明 | 預設值 |
-| --- | --- | --- |
-| `PORT` | 伺服器連線埠 | `30177` |
-| `OMP_WEB_HOSTNAME` | 伺服器繫結主機位址 | `127.0.0.1` |
-| `OMP_WEB_PASSWORD_HASH` | 選用，來自 `ompweb hash-password` 的網頁登入密碼 scrypt 雜湊值。繫結至非 loopback 位址時為必填 | _無（停用身分驗證）_ |
-| `OMP_WEB_TRUSTED_HEADER_SHA256` | 受信任反向代理於 `X-Omp-Web-Auth` 標頭中傳遞的金鑰 SHA-256 十六進位雜湊摘要，用於略過該請求的密碼驗證；請參閱[在受信任的網路中略過密碼驗證](#在受信任的網路中略過密碼驗證) | _無（已停用）_ |
-| `OMP_WEB_NO_OPEN` | 設為 `1` 可防止自動開啟瀏覽器 | `0` |
-| `OMP_WEB_DISABLE_AUTOUPDATE` | 設為 `1` 可停用更新檢查與應用程式內更新；變更後需重新啟動 | `0` |
-| `OMP_WEB_NAME` | 顯示於瀏覽器分頁與已安裝應用程式的名稱。若設為 `url`、`host` 或 `domain`（不分大小寫），則採用瀏覽器連線的主機名稱（不含連接埠）；localhost 與 IP 位址仍會保持 `omp web`。其他任何值將原樣採用。變更後需重新啟動 | `omp web` |
-| `OMP_WEB_OMP_BIN` | 用於取代下載版本的 `ompweb-omp` 建置版本路徑（無法連線至 GitHub 的機器上為發行版本中 `ompweb-omp-<os>-<arch>` 的副本，原始碼檢出中為 `runner/release/ompweb-omp-<os>-<arch>`）。一般的 `omp` 不支援 ompweb 的通道，無法使用。服務安裝程式僅在你設定它時才會寫入服務環境 | _下載的 `ompweb-omp`_ |
-| `PI_CODING_AGENT_DIR` | 自訂 omp 代理目錄 | `~/.omp/agent` |
-| `OMP_WEB_STT_ENDPOINT` | 相容於 OpenAI 的語音轉文字（STT）端點網址。若保留未設定，則會透過 omp 自身的憑證搭配 `OMP_WEB_STT_MODEL` 進行轉錄 | _無_ |
-| `OMP_WEB_STT_KEY` | STT 端點的選用 API 金鑰 | _無_ |
-| `OMP_WEB_STT_MODEL` | STT 端點的模型名稱。未設定端點時：使用 omp 登入身分執行的語音轉文字模型，例如 `openai-codex/codex-transcribe`（ChatGPT 訂閱方案；需搭配支援該模型的 omp 版本） | _無（未設定端點時為停用）_ |
+| 變數                            | 說明                                                                                                                                                                                                                                                                    | 預設值                     |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `PORT`                          | 伺服器連線埠                                                                                                                                                                                                                                                            | `30177`                    |
+| `OMP_WEB_HOSTNAME`              | 伺服器繫結主機位址                                                                                                                                                                                                                                                      | `127.0.0.1`                |
+| `OMP_WEB_PASSWORD_HASH`         | 選用，來自 `ompweb hash-password` 的網頁登入密碼 scrypt 雜湊值。繫結至非 loopback 位址時為必填                                                                                                                                                                          | _無（停用身分驗證）_       |
+| `OMP_WEB_TRUSTED_HEADER_SHA256` | 受信任反向代理於 `X-Omp-Web-Auth` 標頭中傳遞的金鑰 SHA-256 十六進位雜湊摘要，用於略過該請求的密碼驗證；請參閱[在受信任的網路中略過密碼驗證](#在受信任的網路中略過密碼驗證)                                                                                              | _無（已停用）_             |
+| `OMP_WEB_NO_OPEN`               | 設為 `1` 可防止自動開啟瀏覽器                                                                                                                                                                                                                                           | `0`                        |
+| `OMP_WEB_DISABLE_AUTOUPDATE`    | 設為 `1` 可停用更新檢查與應用程式內更新；變更後需重新啟動                                                                                                                                                                                                               | `0`                        |
+| `OMP_WEB_NAME`                  | 顯示於瀏覽器分頁與已安裝應用程式的名稱。若設為 `url`、`host` 或 `domain`（不分大小寫），則採用瀏覽器連線的主機名稱（不含連接埠）；localhost 與 IP 位址仍會保持 `omp web`。其他任何值將原樣採用。變更後需重新啟動                                                        | `omp web`                  |
+| `OMP_WEB_OMP_BIN`               | 用於取代下載版本的 `ompweb-omp` 建置版本路徑（無法連線至 GitHub 的機器上為發行版本中 `ompweb-omp-<os>-<arch>` 的副本，原始碼檢出中為 `runner/release/ompweb-omp-<os>-<arch>`）。一般的 `omp` 不支援 ompweb 的通道，無法使用。服務安裝程式僅在你設定它時才會寫入服務環境 | _下載的 `ompweb-omp`_      |
+| `PI_CODING_AGENT_DIR`           | 自訂 omp 代理目錄                                                                                                                                                                                                                                                       | `~/.omp/agent`             |
+| `OMP_WEB_STT_ENDPOINT`          | 相容於 OpenAI 的語音轉文字（STT）端點網址。若保留未設定，則會透過 omp 自身的憑證搭配 `OMP_WEB_STT_MODEL` 進行轉錄                                                                                                                                                       | _無_                       |
+| `OMP_WEB_STT_KEY`               | STT 端點的選用 API 金鑰                                                                                                                                                                                                                                                 | _無_                       |
+| `OMP_WEB_STT_MODEL`             | STT 端點的模型名稱。未設定端點時：使用 omp 登入身分執行的語音轉文字模型，例如 `openai-codex/codex-transcribe`（ChatGPT 訂閱方案；需搭配支援該模型的 omp 版本）                                                                                                          | _無（未設定端點時為停用）_ |
 
 **`OMP_WEB_NAME` 與已安裝的應用程式。** 已安裝的應用程式（PWA）名稱通常取自安裝時的頁面名稱。若你之後修改了 `OMP_WEB_NAME`，或者在 `OMP_WEB_NAME` 設為 `url`、`host` 或 `domain` 的情況下從不同位址連入 omp-web，作業系統可能會連帶重新命名該已安裝的應用程式。建議將 `OMP_WEB_NAME` 保留為空，或是設定一個無論透過何種網域名稱或位址連入皆能辨識此 omp-web 伺服器的固定名稱。
 
@@ -521,10 +521,13 @@ bun run dev
 ### 檢查與測試
 
 ```bash
-bun run typecheck   # 型別檢查（TypeScript）
-bun run lint        # ESLint 程式碼檢查
-bun run test            # 執行測試套件（bun test）
+bun run typecheck   # 使用 bun check 檢查根專案與 runner 的型別
+bun fmt             # 格式化
+bun fmt --check     # 檢查格式
+bun run test        # 執行測試套件（bun test）
 ```
+
+lint 已移除：固定版本 Bun 1.4.4 沒有內建 linter，專案也不使用 ESLint 或 `tsc`。由於繼承的程式碼尚未統一格式，CI 不強制檢查格式。
 
 ## 授權條款與致謝
 

@@ -14,7 +14,12 @@ import { disposeUtilityRpc } from "@/lib/omp/rpc-utility";
  * `login_input_response` frame.
  */
 
-const LOGIN_EXTRA_ARGS = ["--no-session", "--no-extensions", "--no-skills", "--no-lsp"];
+const LOGIN_EXTRA_ARGS = [
+  "--no-session",
+  "--no-extensions",
+  "--no-skills",
+  "--no-lsp",
+];
 const READY_TIMEOUT_MS = 60_000;
 const LOGIN_TIMEOUT_MS = 15 * 60_000;
 const HEARTBEAT_MS = 30_000;
@@ -38,24 +43,36 @@ function getLoginRegistry(): Map<string, PendingLogin> {
 // POST /api/auth/login/[provider] — frontend sends redirect URL or auth code
 export async function POST(
   req: Request,
-  { params }: { params: Promise<{ provider: string }> }
+  { params }: { params: Promise<{ provider: string }> },
 ) {
   const { provider } = await params;
-  const { token, code } = (await req.json()) as { token?: string; code?: string };
+  const { token, code } = (await req.json()) as {
+    token?: string;
+    code?: string;
+  };
 
   if (!token || !code) {
-    return Response.json({ error: "token and code required", code: "login_token_code_required" }, { status: 400 });
+    return Response.json(
+      { error: "token and code required", code: "login_token_code_required" },
+      { status: 400 },
+    );
   }
   const pending = getLoginRegistry().get(token);
   if (!pending) {
-    return Response.json({ error: "No pending login for token", code: "login_no_pending" }, { status: 404 });
+    return Response.json(
+      { error: "No pending login for token", code: "login_no_pending" },
+      { status: 404 },
+    );
   }
   // Exact provider association: the registry records the provider a token was
   // created for. A prefix check on the token alone is unsafe because provider
   // ids may share prefixes (e.g. "openai" vs "openai-codex"), which would let
   // a token for one provider be submitted against another provider's route.
   if (pending.provider !== provider) {
-    return Response.json({ error: "Token does not match provider", code: "login_token_mismatch" }, { status: 400 });
+    return Response.json(
+      { error: "Token does not match provider", code: "login_token_mismatch" },
+      { status: 400 },
+    );
   }
 
   pending.submit(code);
@@ -65,7 +82,10 @@ export async function POST(
 // GET /api/auth/login/[provider] — SSE stream for the login flow
 export async function GET(
   req: Request,
-  { params, disableIdleTimeout }: { params: Promise<{ provider: string }>; disableIdleTimeout: () => void }
+  {
+    params,
+    disableIdleTimeout,
+  }: { params: Promise<{ provider: string }>; disableIdleTimeout: () => void },
 ) {
   disableIdleTimeout();
   const { provider } = await params;
@@ -79,7 +99,9 @@ export async function GET(
       const send = (data: unknown) => {
         if (closed) return;
         try {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify(data)}\n\n`),
+          );
         } catch {
           closed = true;
         }
@@ -106,35 +128,61 @@ export async function GET(
           send({
             type: "auth",
             url: String(frame.url ?? ""),
-            instructions: typeof frame.instructions === "string" ? frame.instructions : null,
+            instructions:
+              typeof frame.instructions === "string"
+                ? frame.instructions
+                : null,
             token,
           });
-        } else if (frame.type === "login_input" && typeof frame.id === "number") {
+        } else if (
+          frame.type === "login_input" &&
+          typeof frame.id === "number"
+        ) {
           if (bufferedValue !== null) {
             const value = bufferedValue;
             bufferedValue = null;
-            proc?.sendFrame({ type: "login_input_response", id: frame.id, value });
+            proc?.sendFrame({
+              type: "login_input_response",
+              id: frame.id,
+              value,
+            });
           } else {
             pendingInputId = frame.id;
             send({
               type: "prompt_request",
-              message: typeof frame.prompt === "string" ? frame.prompt : "Enter the authorization code",
-              placeholder: typeof frame.placeholder === "string" ? frame.placeholder : null,
+              message:
+                typeof frame.prompt === "string"
+                  ? frame.prompt
+                  : "Enter the authorization code",
+              placeholder:
+                typeof frame.placeholder === "string"
+                  ? frame.placeholder
+                  : null,
               token,
             });
           }
         } else if (frame.type === "login_progress") {
-          if (typeof frame.message === "string") send({ type: "progress", message: frame.message });
+          if (typeof frame.message === "string")
+            send({ type: "progress", message: frame.message });
         }
       };
 
       try {
-        proc = new RpcProcess({ cwd: homedir(), extraArgs: LOGIN_EXTRA_ARGS, onFrame: handleFrame });
+        proc = new RpcProcess({
+          cwd: homedir(),
+          extraArgs: LOGIN_EXTRA_ARGS,
+          onFrame: handleFrame,
+        });
       } catch (error) {
-        send({ type: "error", message: error instanceof Error ? error.message : String(error) });
+        send({
+          type: "error",
+          message: error instanceof Error ? error.message : String(error),
+        });
         clearInterval(heartbeat);
         closed = true;
-        try { controller.close(); } catch {}
+        try {
+          controller.close();
+        } catch {}
         return;
       }
       const child = proc;
@@ -161,7 +209,10 @@ export async function GET(
 
       try {
         await child.waitReady(READY_TIMEOUT_MS);
-        await child.sendCommand({ type: "login", providerId: provider }, LOGIN_TIMEOUT_MS);
+        await child.sendCommand(
+          { type: "login", providerId: provider },
+          LOGIN_TIMEOUT_MS,
+        );
         enableProvider(provider);
         invalidateModelsCache();
         disposeUtilityRpc();
@@ -170,12 +221,17 @@ export async function GET(
         if (req.signal.aborted) {
           send({ type: "cancelled" });
         } else {
-          send({ type: "error", message: error instanceof Error ? error.message : String(error) });
+          send({
+            type: "error",
+            message: error instanceof Error ? error.message : String(error),
+          });
         }
       } finally {
         cleanup();
         closed = true;
-        try { controller.close(); } catch {}
+        try {
+          controller.close();
+        } catch {}
       }
     },
   });

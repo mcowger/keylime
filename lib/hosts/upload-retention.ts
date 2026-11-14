@@ -5,7 +5,11 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { lstat, readdir, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { getAgentDir, getArchivedSessionsDir, getSessionsDir } from "../omp/paths";
+import {
+  getAgentDir,
+  getArchivedSessionsDir,
+  getSessionsDir,
+} from "../omp/paths";
 import { isRecord } from "../type-guards";
 import { isUploadRetentionDays } from "../upload-limits";
 import { HostOpError } from "./link-protocol";
@@ -22,16 +26,22 @@ export interface RetentionRoots {
 
 function defaultRoots(): RetentionRoots {
   return {
-    sessions: getSessionsDir(), archive: getArchivedSessionsDir(),
+    sessions: getSessionsDir(),
+    archive: getArchivedSessionsDir(),
   };
 }
 
 /** The directories (never symlinks) directly in `dir`; empty when it cannot be read. */
 async function subdirs(dir: string): Promise<string[]> {
   try {
-    return (await readdir(dir, { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => join(dir, entry.name));
+    return (await readdir(dir, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join(dir, entry.name));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") console.error(`[ompweb host] upload retention: cannot read ${dir}: ${(error as Error).message}`);
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+      console.error(
+        `[ompweb host] upload retention: cannot read ${dir}: ${(error as Error).message}`,
+      );
     return [];
   }
 }
@@ -47,12 +57,18 @@ async function isRealDir(path: string): Promise<boolean> {
 /** Delete the regular files in `dir` last modified before the cutoff `cutoff()` returns at that moment (null: stop). A
  * symlink, directory or anything else is left alone; an entry that fails (gone, not ours to delete) is skipped and tried
  * at the next sweep. Returns false once the policy says stop. */
-async function sweepDir(dir: string, cutoff: () => number | null): Promise<boolean> {
+async function sweepDir(
+  dir: string,
+  cutoff: () => number | null,
+): Promise<boolean> {
   let names: string[];
   try {
     names = await readdir(dir);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") console.error(`[ompweb host] upload retention: cannot read ${dir}: ${(error as Error).message}`);
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+      console.error(
+        `[ompweb host] upload retention: cannot read ${dir}: ${(error as Error).message}`,
+      );
     return true;
   }
   for (const name of names) {
@@ -81,7 +97,11 @@ async function sweepDir(dir: string, cutoff: () => number | null): Promise<boole
  * The symlink checks see each directory as it is when checked: a directory swapped for a link during the sweep is not
  * caught (Node has no `unlinkat`), which only a process already running as this user can do. `days` may be a function,
  * read before each delete, so a sweep follows a setting changed while it runs (null: stop). */
-export async function sweepSentUploads(days: number | (() => number | null), now = Date.now(), roots: RetentionRoots = defaultRoots()): Promise<void> {
+export async function sweepSentUploads(
+  days: number | (() => number | null),
+  now = Date.now(),
+  roots: RetentionRoots = defaultRoots(),
+): Promise<void> {
   const cutoff = () => {
     const current = typeof days === "function" ? days() : days;
     return current === null ? null : now - current * DAY_MS;
@@ -92,12 +112,13 @@ export async function sweepSentUploads(days: number | (() => number | null), now
       for (const session of await subdirs(project)) {
         // A symlinked `local` would lead the sweep out of the session.
         const local = join(session, "local");
-        if (await isRealDir(local)) folders.push(join(local, UPLOADS_LOCAL_DIR));
+        if (await isRealDir(local))
+          folders.push(join(local, UPLOADS_LOCAL_DIR));
       }
     }
   }
   for (const folder of folders) {
-    if (await isRealDir(folder) && !(await sweepDir(folder, cutoff))) return;
+    if ((await isRealDir(folder)) && !(await sweepDir(folder, cutoff))) return;
   }
 }
 
@@ -105,7 +126,8 @@ export async function sweepSentUploads(days: number | (() => number | null), now
 function readStored(file: string): number | null | undefined {
   try {
     const stored: unknown = JSON.parse(readFileSync(file, "utf8"));
-    if (isRecord(stored) && isUploadRetentionDays(stored.days)) return stored.days;
+    if (isRecord(stored) && isUploadRetentionDays(stored.days))
+      return stored.days;
   } catch {
     // Absent or unreadable: no sweep until main sends the setting.
   }
@@ -117,10 +139,16 @@ export class UploadRetention {
   private days: number | null | undefined;
   private timer: NodeJS.Timeout | undefined;
   private active = 0;
-  busy(): boolean { return this.active > 0; }
+  busy(): boolean {
+    return this.active > 0;
+  }
 
   constructor(
-    private readonly file: string = join(getAgentDir(), "omp-web", "upload-retention.json"),
+    private readonly file: string = join(
+      getAgentDir(),
+      "omp-web",
+      "upload-retention.json",
+    ),
     private readonly roots: RetentionRoots = defaultRoots(),
   ) {
     this.days = readStored(file);
@@ -143,15 +171,27 @@ export class UploadRetention {
   async sweep(now = Date.now()): Promise<void> {
     if (typeof this.days !== "number") return;
     this.active++;
-    try { await sweepSentUploads(() => (typeof this.days === "number" ? this.days : null), now, this.roots); }
-    finally { this.active--; }
+    try {
+      await sweepSentUploads(
+        () => (typeof this.days === "number" ? this.days : null),
+        now,
+        this.roots,
+      );
+    } finally {
+      this.active--;
+    }
   }
 
   /** Op setUploadRetention: keep `days` (null: for ever), then sweep without holding up the answer. The same value as
    * the last one does nothing, so a daemon that links over and over does not walk every session each time. The file is
    * not secret, and one that is corrupt reads as none (main sends the value again at every hello): a plain write. */
   set(days: unknown): null {
-    if (!isUploadRetentionDays(days)) throw new HostOpError(400, "invalid_request", "days must be a whole number from 1 to 3650, or null");
+    if (!isUploadRetentionDays(days))
+      throw new HostOpError(
+        400,
+        "invalid_request",
+        "days must be a whole number from 1 to 3650, or null",
+      );
     if (days === this.days) return null;
     mkdirSync(dirname(this.file), { recursive: true });
     writeFileSync(this.file, `${JSON.stringify({ days })}\n`);

@@ -19,15 +19,15 @@ import { declareWorkerHostEntry } from "@oh-my-pi/pi-utils/worker-host";
 import Launch from "./launch";
 
 if (Bun.isMainThread) {
-	const launch = commands.find(entry => entry.name === "launch");
-	if (!launch) throw new Error("omp has no launch command to replace");
-	launch.load = async () => Launch;
+  const launch = commands.find((entry) => entry.name === "launch");
+  if (!launch) throw new Error("omp has no launch command to replace");
+  launch.load = async () => Launch;
 
-	if (process.env.PI_COMPILED !== "true") {
-		declareWorkerHostEntry();
-		installSqliteLockShim();
-		postmortem.installProcessHandlers();
-		postmortem.registerStdioDisconnectHandling();
-		runCli(process.argv.slice(2)).catch(error => postmortem.fatal(error));
-	}
+  if (process.env.PI_COMPILED !== "true") {
+    declareWorkerHostEntry();
+    installSqliteLockShim();
+    postmortem.installProcessHandlers();
+    postmortem.registerStdioDisconnectHandling();
+    runCli(process.argv.slice(2)).catch((error) => postmortem.fatal(error));
+  }
 }

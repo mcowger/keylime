@@ -27,19 +27,19 @@ Not goals:
 
 From the master's omp agent directory (`~/.omp/agent`) unless another place is named:
 
-| Part | Files |
-|---|---|
-| Settings | `config.yml`, without the keys of K2 |
-| Models | `models.yml` |
-| MCP servers (user level) | `mcp.json`, `.mcp.json` |
-| Skills | `skills/`, and `~/.agents/skills/` (where the interface installs them) |
-| Task agents | `agents/` |
-| Rules and context | `AGENTS.md`, `RULES.md`, `SYSTEM.md`, `APPEND_SYSTEM.md`, `TITLE_SYSTEM.md`, `rules/`, `instructions/` |
-| Commands and prompts | `commands/`, `prompts/` |
-| Hooks, extensions, custom tools | `hooks/`, `extensions/`, `tools/` |
-| Secret obfuscation | `secrets.yml` |
-| Environment | `.env` in the agent directory, and the "agent environment variables" of Settings → System |
-| Plugins | the set of installed plugins and whether each is enabled (K5) |
+| Part                            | Files                                                                                                  |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Settings                        | `config.yml`, without the keys of K2                                                                   |
+| Models                          | `models.yml`                                                                                           |
+| MCP servers (user level)        | `mcp.json`, `.mcp.json`                                                                                |
+| Skills                          | `skills/`, and `~/.agents/skills/` (where the interface installs them)                                 |
+| Task agents                     | `agents/`                                                                                              |
+| Rules and context               | `AGENTS.md`, `RULES.md`, `SYSTEM.md`, `APPEND_SYSTEM.md`, `TITLE_SYSTEM.md`, `rules/`, `instructions/` |
+| Commands and prompts            | `commands/`, `prompts/`                                                                                |
+| Hooks, extensions, custom tools | `hooks/`, `extensions/`, `tools/`                                                                      |
+| Secret obfuscation              | `secrets.yml`                                                                                          |
+| Environment                     | `.env` in the agent directory, and the "agent environment variables" of Settings → System              |
+| Plugins                         | the set of installed plugins and whether each is enabled (K5)                                          |
 
 A mirrored directory becomes equal to the master's: files that exist only on the member are removed from it. The member's backup (K6) holds its configuration as it was at the first apply; a file added on the member later is removed at the next apply and is not backed up.
 

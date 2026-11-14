@@ -70,14 +70,19 @@ export interface AgentEnvErrorLabels {
 const DEFAULT_LABELS: Required<AgentEnvErrorLabels> = {
   missingSeparator: (line) => `Line ${line}: expected KEY=VALUE`,
   emptyName: (line) => `Line ${line}: missing variable name`,
-  invalidName: (line, name) => `Line ${line}: "${name}" is not a valid variable name`,
-  deniedName: (line, name) => `Line ${line}: "${name}" is reserved by omp-web and cannot be set`,
+  invalidName: (line, name) =>
+    `Line ${line}: "${name}" is not a valid variable name`,
+  deniedName: (line, name) =>
+    `Line ${line}: "${name}" is reserved by omp-web and cannot be set`,
 };
 
 /** True when the name is reserved by omp-web and may not be overridden. */
 export function isDeniedAgentEnvName(name: string): boolean {
   const comparable = name.toUpperCase();
-  return DENIED_NAMES.has(comparable) || DENIED_PREFIXES.some((prefix) => comparable.startsWith(prefix));
+  return (
+    DENIED_NAMES.has(comparable) ||
+    DENIED_PREFIXES.some((prefix) => comparable.startsWith(prefix))
+  );
 }
 
 /**
@@ -87,7 +92,10 @@ export function isDeniedAgentEnvName(name: string): boolean {
  * assignment wins, matching shell semantics. Rejected lines are reported and excluded
  * from `values` — the caller decides whether to block the save.
  */
-export function parseAgentEnvText(raw: string, labels?: AgentEnvErrorLabels): AgentEnvParseResult {
+export function parseAgentEnvText(
+  raw: string,
+  labels?: AgentEnvErrorLabels,
+): AgentEnvParseResult {
   const message = { ...DEFAULT_LABELS, ...labels };
   const values: Record<string, string> = {};
   const errors: string[] = [];
@@ -126,7 +134,10 @@ export function parseAgentEnvText(raw: string, labels?: AgentEnvErrorLabels): Ag
  * rules as {@link parseAgentEnvText}. Non-string values are dropped; denied names are
  * reported as errors so callers can surface them, and never reach `values`.
  */
-export function sanitizeAgentEnvValues(input: unknown, labels?: AgentEnvErrorLabels): AgentEnvParseResult {
+export function sanitizeAgentEnvValues(
+  input: unknown,
+  labels?: AgentEnvErrorLabels,
+): AgentEnvParseResult {
   if (!isRecord(input)) return { values: {}, errors: [] };
   const text = Object.entries(input)
     .filter(([, value]) => typeof value === "string")

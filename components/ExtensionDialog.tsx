@@ -1,9 +1,23 @@
 "use client";
 
-import { createElement, Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
+import {
+  createElement,
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { Eye, EyeOff } from "lucide-react";
 import type { HtmlFormData } from "@/lib/pi-types";
-import type { UiApprovalAnswer, UiDialogRequest, UiDialogValue } from "@/lib/types";
+import type {
+  UiApprovalAnswer,
+  UiDialogRequest,
+  UiDialogValue,
+} from "@/lib/types";
 import { useI18n } from "@/lib/i18n";
 import { useModalDialog } from "@/hooks/useModalDialog";
 import { matchMobileViewport } from "@/hooks/useIsMobile";
@@ -11,7 +25,11 @@ import { matchMobileViewport } from "@/hooks/useIsMobile";
 // The Other text lives as long as the question: choosing a regular option only
 // unchooses it, so the text is still in its row when Other is chosen again.
 type AskDraft = { selected: string[]; other: string; otherChosen: boolean };
-const EMPTY_ASK_DRAFT: AskDraft = { selected: [], other: "", otherChosen: false };
+const EMPTY_ASK_DRAFT: AskDraft = {
+  selected: [],
+  other: "",
+  otherChosen: false,
+};
 // Fields that raise the on-screen keyboard: every input but a radio/checkbox.
 const TEXT_ENTRY = "input:not([type=radio]):not([type=checkbox]), textarea";
 
@@ -32,10 +50,13 @@ const KEYBOARD_POLL_MS = 400;
 function readPanelMaxHeight(): number | undefined {
   if (typeof window === "undefined") return undefined;
   const visual = window.visualViewport?.height;
-  const height = typeof visual === "number" && visual > 0
-    ? Math.min(visual, window.innerHeight)
-    : window.innerHeight;
-  return height > 0 ? Math.max(180, Math.round(height - VIEWPORT_BLEED)) : undefined;
+  const height =
+    typeof visual === "number" && visual > 0
+      ? Math.min(visual, window.innerHeight)
+      : window.innerHeight;
+  return height > 0
+    ? Math.max(180, Math.round(height - VIEWPORT_BLEED))
+    : undefined;
 }
 
 function subscribeViewport(onChange: () => void): () => void {
@@ -60,7 +81,11 @@ function subscribeViewport(onChange: () => void): () => void {
  * applies unchanged.
  */
 function useViewportMaxHeight(): number | undefined {
-  return useSyncExternalStore(subscribeViewport, readPanelMaxHeight, () => undefined);
+  return useSyncExternalStore(
+    subscribeViewport,
+    readPanelMaxHeight,
+    () => undefined,
+  );
 }
 
 /** Height of the visible area, falling back to the layout viewport. */
@@ -82,7 +107,10 @@ function visibleHeight(): number {
  * that focused a field will raise one even before the browser has repainted.
  * A slow re-check covers mobile browsers that resize nothing on focus.
  */
-function useMobileInputOpen(panelRef: RefObject<HTMLDivElement | null>, attached: boolean) {
+function useMobileInputOpen(
+  panelRef: RefObject<HTMLDivElement | null>,
+  attached: boolean,
+) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (!attached) {
@@ -102,7 +130,9 @@ function useMobileInputOpen(panelRef: RefObject<HTMLDivElement | null>, attached
     // `pointerType` of the latest press anywhere: a hybrid laptop's primary
     // pointer is fine, yet a touch tap there still raises a soft keyboard.
     let lastPointer: string | null = null;
-    const onPointerDown = (event: PointerEvent) => { lastPointer = event.pointerType; };
+    const onPointerDown = (event: PointerEvent) => {
+      lastPointer = event.pointerType;
+    };
     const update = () => {
       const height = visibleHeight();
       const touch = lastPointer ? lastPointer !== "mouse" : touchPointer();
@@ -124,7 +154,8 @@ function useMobileInputOpen(panelRef: RefObject<HTMLDivElement | null>, attached
         // Collapsing the keyboard (back button, swipe) keeps the text field
         // focused, and the next tap anywhere would raise it again for a
         // moment. A closed keyboard means the user is done typing.
-        if (focused && document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        if (focused && document.activeElement instanceof HTMLElement)
+          document.activeElement.blur();
       } else {
         keyboardLow = Math.min(keyboardLow, height);
       }
@@ -135,12 +166,18 @@ function useMobileInputOpen(panelRef: RefObject<HTMLDivElement | null>, attached
     };
     const onFocusIn = (event: FocusEvent) => {
       const target = event.target;
-      focused = target instanceof Element && target.matches(TEXT_ENTRY) && Boolean(panelRef.current?.contains(target));
+      focused =
+        target instanceof Element &&
+        target.matches(TEXT_ENTRY) &&
+        Boolean(panelRef.current?.contains(target));
       update();
     };
     const onFocusOut = (event: FocusEvent) => {
       const next = event.relatedTarget;
-      focused = next instanceof Element && next.matches(TEXT_ENTRY) && Boolean(panelRef.current?.contains(next));
+      focused =
+        next instanceof Element &&
+        next.matches(TEXT_ENTRY) &&
+        Boolean(panelRef.current?.contains(next));
       update();
     };
     update();
@@ -172,7 +209,8 @@ function useMobileInputOpen(panelRef: RefObject<HTMLDivElement | null>, attached
  * phone keyboard. Exported for the regression tests (#235).
  */
 export function shouldDeferAttachedFocus(): boolean {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function")
+    return false;
   return touchPointer() || matchMobileViewport();
 }
 
@@ -180,14 +218,20 @@ export function shouldDeferAttachedFocus(): boolean {
  * mouse/trackpad, the same one `lib/composer-prefs.ts` uses for word
  * completion, so an unanswerable media query never counts as touch. */
 function touchPointer(): boolean {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function")
+    return false;
   return !window.matchMedia("(pointer: fine)").matches;
 }
 
-const SENSITIVE_PATTERN = /\b(passwords?|passphrases?|secrets?|tokens?|api[_\s-]?keys?|access[_\s-]?tokens?|private[_\s-]?keys?|auth[_\s-]?tokens?|credentials?)\b/i;
-const NON_SECRET_METADATA_PATTERN = /\b(token\s+(?:name|count|limit|budget|usage)|max\s+tokens)\b/i;
+const SENSITIVE_PATTERN =
+  /\b(passwords?|passphrases?|secrets?|tokens?|api[_\s-]?keys?|access[_\s-]?tokens?|private[_\s-]?keys?|auth[_\s-]?tokens?|credentials?)\b/i;
+const NON_SECRET_METADATA_PATTERN =
+  /\b(token\s+(?:name|count|limit|budget|usage)|max\s+tokens)\b/i;
 
-export function isSensitivePrompt(title?: string, placeholder?: string): boolean {
+export function isSensitivePrompt(
+  title?: string,
+  placeholder?: string,
+): boolean {
   const titleText = (title ?? "").trim();
   const placeholderText = (placeholder ?? "").trim();
   const fullText = `${titleText} ${placeholderText}`.trim();
@@ -202,8 +246,15 @@ export function isSensitivePrompt(title?: string, placeholder?: string): boolean
 function initialAskDrafts(request: UiDialogRequest): AskDraft[] {
   if (request.method !== "askDialog") return [];
   return request.args[0].map((question) => {
-    const recommended = question.multi || question.recommended === undefined ? undefined : question.options[question.recommended];
-    return { selected: recommended ? [recommended.label] : [], other: "", otherChosen: false };
+    const recommended =
+      question.multi || question.recommended === undefined
+        ? undefined
+        : question.options[question.recommended];
+    return {
+      selected: recommended ? [recommended.label] : [],
+      other: "",
+      otherChosen: false,
+    };
   });
 }
 
@@ -220,11 +271,17 @@ function dialogTitle(request: UiDialogRequest, askTitle: string): string {
 }
 
 /** omp's approval choices, in its order: this call, the session, each grant, then no. */
-function approvalChoices(request: Extract<UiDialogRequest, { method: "approve" }>, allow: string, deny: string): { label: string; value: UiApprovalAnswer }[] {
+function approvalChoices(
+  request: Extract<UiDialogRequest, { method: "approve" }>,
+  allow: string,
+  deny: string,
+): { label: string; value: UiApprovalAnswer }[] {
   const [prompt] = request.args;
   return [
     { label: allow, value: "once" },
-    ...(prompt.session ? [{ label: prompt.session, value: "session" as const }] : []),
+    ...(prompt.session
+      ? [{ label: prompt.session, value: "session" as const }]
+      : []),
     ...(prompt.grants ?? []).flatMap((grant) => [
       { label: grant.label, value: { grant: grant.scope, always: false } },
       { label: grant.alwaysLabel, value: { grant: grant.scope, always: true } },
@@ -236,19 +293,71 @@ function approvalChoices(request: Extract<UiDialogRequest, { method: "approve" }
 // The agent's form markup becomes React elements: these tags render as themselves with only the
 // attributes copied below; others contribute just their text, and dropped ones nothing at all.
 const FORM_TAGS: Record<string, true> = {
-  fieldset: true, legend: true, p: true, label: true, div: true, span: true, section: true, strong: true, em: true, b: true, i: true,
-  code: true, pre: true, small: true, br: true, hr: true, ul: true, ol: true, li: true, h1: true, h2: true, h3: true, h4: true, h5: true, h6: true,
-  input: true, select: true, option: true, optgroup: true, textarea: true,
+  fieldset: true,
+  legend: true,
+  p: true,
+  label: true,
+  div: true,
+  span: true,
+  section: true,
+  strong: true,
+  em: true,
+  b: true,
+  i: true,
+  code: true,
+  pre: true,
+  small: true,
+  br: true,
+  hr: true,
+  ul: true,
+  ol: true,
+  li: true,
+  h1: true,
+  h2: true,
+  h3: true,
+  h4: true,
+  h5: true,
+  h6: true,
+  input: true,
+  select: true,
+  option: true,
+  optgroup: true,
+  textarea: true,
 };
 const DROPPED_TAGS: Record<string, true> = {
-  script: true, style: true, template: true, noscript: true, button: true, iframe: true, object: true, embed: true, img: true, svg: true, math: true,
+  script: true,
+  style: true,
+  template: true,
+  noscript: true,
+  button: true,
+  iframe: true,
+  object: true,
+  embed: true,
+  img: true,
+  svg: true,
+  math: true,
 };
 const INPUT_TYPES: Record<string, true> = {
-  radio: true, checkbox: true, text: true, number: true, range: true, email: true, url: true, tel: true, search: true, date: true, time: true, hidden: true,
+  radio: true,
+  checkbox: true,
+  text: true,
+  number: true,
+  range: true,
+  email: true,
+  url: true,
+  tel: true,
+  search: true,
+  date: true,
+  time: true,
+  hidden: true,
 };
 
 /** A radio/checkbox group that offers a free-text "Other" answer, as omp's html-form adds one. */
-interface OtherGroup { type: string; name: string; required: boolean }
+interface OtherGroup {
+  type: string;
+  name: string;
+  required: boolean;
+}
 interface FormCtx {
   prefix: string;
   otherLabel: string;
@@ -267,18 +376,33 @@ const choiceType = (element: Element) => {
 };
 
 // A control named "elements", "querySelectorAll", ... shadows that property on its form, so read the DOM through the prototypes.
-const queryAll = <T extends Element>(form: HTMLFormElement, selector: string) => Array.from(Element.prototype.querySelectorAll.call(form, selector)) as T[];
+const queryAll = <T extends Element>(form: HTMLFormElement, selector: string) =>
+  Array.from(Element.prototype.querySelectorAll.call(form, selector)) as T[];
 
 const namedInputs = (form: HTMLFormElement, name: string, type: string) =>
-  queryAll<HTMLInputElement>(form, "input").filter((input) => input.name === name && input.type === type);
+  queryAll<HTMLInputElement>(form, "input").filter(
+    (input) => input.name === name && input.type === type,
+  );
 
 // Mirrors omp's parser: a named radio/checkbox group of two or more options gets an Other answer
 // unless one of its options is already labelled "Other".
-function planForm(root: ParentNode, prefix: string, otherLabel: string): FormCtx {
-  const ctx: FormCtx = { prefix, otherLabel, others: new Map(), grouped: new Set(), rows: new Map(), adopted: new Set() };
+function planForm(
+  root: ParentNode,
+  prefix: string,
+  otherLabel: string,
+): FormCtx {
+  const ctx: FormCtx = {
+    prefix,
+    otherLabel,
+    others: new Map(),
+    grouped: new Set(),
+    rows: new Map(),
+    adopted: new Set(),
+  };
   const labelFor = new Map<string, Element>();
   for (const label of root.querySelectorAll("label[for]")) {
-    if (!labelFor.has(label.getAttribute("for")!)) labelFor.set(label.getAttribute("for")!, label);
+    if (!labelFor.has(label.getAttribute("for")!))
+      labelFor.set(label.getAttribute("for")!, label);
   }
   const groups = new Map<string, { input: Element; label?: Element }[]>();
   for (const input of root.querySelectorAll("input")) {
@@ -298,10 +422,21 @@ function planForm(root: ParentNode, prefix: string, otherLabel: string): FormCtx
     }
   }
   for (const [key, options] of groups) {
-    if (options.length < 2 || options.some(({ label }) => /^\s*other\b/i.test(label?.textContent ?? ""))) continue;
+    if (
+      options.length < 2 ||
+      options.some(({ label }) => /^\s*other\b/i.test(label?.textContent ?? ""))
+    )
+      continue;
     const [type, name] = key.split("\0");
     const last = options[options.length - 1].input;
-    ctx.others.set(ctx.rows.has(last) ? last : last.closest("label") ?? last, { type, name, required: options.some(({ input }) => input.hasAttribute("required")) });
+    ctx.others.set(
+      ctx.rows.has(last) ? last : (last.closest("label") ?? last),
+      {
+        type,
+        name,
+        required: options.some(({ input }) => input.hasAttribute("required")),
+      },
+    );
     for (const { input } of options) ctx.grouped.add(input);
   }
   return ctx;
@@ -311,12 +446,26 @@ function planForm(root: ParentNode, prefix: string, otherLabel: string): FormCtx
 function syncOtherValidity(form: HTMLFormElement) {
   for (const other of queryAll<HTMLInputElement>(form, "input[data-other]")) {
     const { other: name, otherType: type = "" } = other.dataset;
-    const answered = other.value.trim() !== "" || namedInputs(form, name!, type).some((input) => input.checked && !input.disabled);
-    other.setCustomValidity(other.dataset.required && !answered ? (type === "checkbox" ? "Select at least one" : "Required") : "");
+    const answered =
+      other.value.trim() !== "" ||
+      namedInputs(form, name!, type).some(
+        (input) => input.checked && !input.disabled,
+      );
+    other.setCustomValidity(
+      other.dataset.required && !answered
+        ? type === "checkbox"
+          ? "Select at least one"
+          : "Required"
+        : "",
+    );
   }
 }
 
-function otherBox({ type, name, required }: OtherGroup, ctx: FormCtx, key: string) {
+function otherBox(
+  { type, name, required }: OtherGroup,
+  ctx: FormCtx,
+  key: string,
+) {
   return createElement("input", {
     key,
     type: "text",
@@ -328,7 +477,9 @@ function otherBox({ type, name, required }: OtherGroup, ctx: FormCtx, key: strin
     // Typing a radio group's own answer drops the picked option, as in omp.
     onInput: (event: { currentTarget: HTMLInputElement }) => {
       const box = event.currentTarget;
-      if (type === "radio" && box.value.trim() !== "" && box.form) for (const radio of namedInputs(box.form, name, type)) radio.checked = false;
+      if (type === "radio" && box.value.trim() !== "" && box.form)
+        for (const radio of namedInputs(box.form, name, type))
+          radio.checked = false;
       if (box.form) syncOtherValidity(box.form);
     },
     className: "extension-field",
@@ -344,63 +495,126 @@ function formNode(node: ChildNode, ctx: FormCtx, key: string): ReactNode {
   let out = formElement(element, ctx, key);
   const label = ctx.rows.get(element);
   if (label) {
-    out = createElement("div", { key, className: "extension-choice" }, out, formElement(label, ctx, `${key}.label`));
+    out = createElement(
+      "div",
+      { key, className: "extension-choice" },
+      out,
+      formElement(label, ctx, `${key}.label`),
+    );
   }
   const other = ctx.others.get(element);
-  return other ? createElement(Fragment, { key }, out, otherBox(other, ctx, `${key}.other`)) : out;
+  return other
+    ? createElement(
+        Fragment,
+        { key },
+        out,
+        otherBox(other, ctx, `${key}.other`),
+      )
+    : out;
 }
 
 function formElement(element: Element, ctx: FormCtx, key: string): ReactNode {
   const tag = element.localName;
   if (DROPPED_TAGS[tag]) return null;
-  const children = Array.from(element.childNodes, (child, index) => formNode(child, ctx, `${key}.${index}`));
+  const children = Array.from(element.childNodes, (child, index) =>
+    formNode(child, ctx, `${key}.${index}`),
+  );
   if (!FORM_TAGS[tag]) return createElement(Fragment, { key }, ...children);
   const attr = (name: string) => element.getAttribute(name) ?? undefined;
-  const length = (name: string) => element.hasAttribute(name) ? Number(element.getAttribute(name)) : undefined;
+  const length = (name: string) =>
+    element.hasAttribute(name) ? Number(element.getAttribute(name)) : undefined;
   const props: Record<string, unknown> = { key };
   const id = attr("id");
   if (id) props.id = `${ctx.prefix}-${id}`;
   if (tag === "pre") props.tabIndex = 0;
-  if (tag === "label" && attr("for")) props.htmlFor = `${ctx.prefix}-${attr("for")}`;
+  if (tag === "label" && attr("for"))
+    props.htmlFor = `${ctx.prefix}-${attr("for")}`;
   // Each radio/checkbox option sits on its own row, its control spaced from its label. The row is a
   // flex container, so everything but the control goes into one text block: on their own, each text
   // run and each <code> or <strong> would become a column of its own.
-  if (tag === "label" && Array.from(element.querySelectorAll("input")).some(choiceType)) {
+  if (
+    tag === "label" &&
+    Array.from(element.querySelectorAll("input")).some(choiceType)
+  ) {
     const nodes = Array.from(element.childNodes);
-    const isControl = (index: number) => nodes[index].nodeType === 1 && (nodes[index] as Element).localName === "input" && choiceType(nodes[index] as Element) !== undefined;
+    const isControl = (index: number) =>
+      nodes[index].nodeType === 1 &&
+      (nodes[index] as Element).localName === "input" &&
+      choiceType(nodes[index] as Element) !== undefined;
     return createElement(
       "label",
       { ...props, className: "extension-choice" },
       ...children.filter((_, index) => isControl(index)),
-      createElement("span", { key: `${key}.text`, className: "extension-choice-text" }, ...children.filter((_, index) => !isControl(index))),
+      createElement(
+        "span",
+        { key: `${key}.text`, className: "extension-choice-text" },
+        ...children.filter((_, index) => !isControl(index)),
+      ),
     );
   }
   if (tag === "input" || tag === "select" || tag === "textarea") {
-    Object.assign(props, { name: attr("name"), required: element.hasAttribute("required") && !ctx.grouped.has(element), disabled: element.hasAttribute("disabled") });
+    Object.assign(props, {
+      name: attr("name"),
+      required: element.hasAttribute("required") && !ctx.grouped.has(element),
+      disabled: element.hasAttribute("disabled"),
+    });
   }
   if (tag === "input") {
     const rawType = attr("type")?.toLowerCase() ?? "text";
     const type = INPUT_TYPES[rawType] ? rawType : "text";
-    Object.assign(props, { type, placeholder: attr("placeholder"), min: attr("min"), max: attr("max"), step: attr("step"), pattern: attr("pattern"), minLength: length("minlength"), maxLength: length("maxlength") });
+    Object.assign(props, {
+      type,
+      placeholder: attr("placeholder"),
+      min: attr("min"),
+      max: attr("max"),
+      step: attr("step"),
+      pattern: attr("pattern"),
+      minLength: length("minlength"),
+      maxLength: length("maxlength"),
+    });
     if (type === "radio" || type === "checkbox") {
-      Object.assign(props, { value: attr("value") ?? "on", defaultChecked: element.hasAttribute("checked") });
+      Object.assign(props, {
+        value: attr("value") ?? "on",
+        defaultChecked: element.hasAttribute("checked"),
+      });
     } else {
-      Object.assign(props, { defaultValue: attr("value") ?? "", className: "extension-field" });
+      Object.assign(props, {
+        defaultValue: attr("value") ?? "",
+        className: "extension-field",
+      });
     }
     return createElement("input", props);
   }
   if (tag === "textarea") {
-    Object.assign(props, { placeholder: attr("placeholder"), rows: length("rows"), minLength: length("minlength"), maxLength: length("maxlength"), defaultValue: element.textContent ?? "", className: "extension-field", style: { width: "100%", resize: "vertical" } });
+    Object.assign(props, {
+      placeholder: attr("placeholder"),
+      rows: length("rows"),
+      minLength: length("minlength"),
+      maxLength: length("maxlength"),
+      defaultValue: element.textContent ?? "",
+      className: "extension-field",
+      style: { width: "100%", resize: "vertical" },
+    });
     return createElement("textarea", props);
   }
   if (tag === "select") {
     const multiple = element.hasAttribute("multiple");
     const selected = Array.from(element.querySelectorAll("option"))
       .filter((option) => option.hasAttribute("selected"))
-      .map((option) => option.getAttribute("value") ?? option.textContent ?? "");
-    Object.assign(props, { multiple, defaultValue: multiple ? selected : selected[0], className: "extension-field" });
+      .map(
+        (option) => option.getAttribute("value") ?? option.textContent ?? "",
+      );
+    Object.assign(props, {
+      multiple,
+      defaultValue: multiple ? selected : selected[0],
+      className: "extension-field",
+    });
   }
-  if (tag === "option") Object.assign(props, { value: attr("value") ?? element.textContent ?? "", disabled: element.hasAttribute("disabled") });
+  if (tag === "option")
+    Object.assign(props, {
+      value: attr("value") ?? element.textContent ?? "",
+      disabled: element.hasAttribute("disabled"),
+    });
   if (tag === "optgroup") props.label = attr("label");
   if (tag === "br" || tag === "hr") return createElement(tag, props);
   return createElement(tag, props, ...children);
@@ -409,12 +623,18 @@ function formElement(element: Element, ctx: FormCtx, key: string): ReactNode {
 /** What the form submits, as omp's html-form reports it (see HtmlFormData). */
 export function readFormData(form: HTMLFormElement): HtmlFormData {
   const data: HtmlFormData = {};
-  const controls = queryAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(form, "input, select, textarea").filter((control) => control.name && !control.disabled);
+  const controls = queryAll<
+    HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+  >(form, "input, select, textarea").filter(
+    (control) => control.name && !control.disabled,
+  );
   for (const control of controls) {
     const { name } = control;
     if (control.tagName === "SELECT") {
       const select = control as HTMLSelectElement;
-      const values = Array.from(select.selectedOptions).filter((option) => !option.disabled).map((option) => option.value);
+      const values = Array.from(select.selectedOptions)
+        .filter((option) => !option.disabled)
+        .map((option) => option.value);
       if (select.multiple) data[name] = values;
       else if (values[0] !== undefined) data[name] = values[0];
       continue;
@@ -422,14 +642,23 @@ export function readFormData(form: HTMLFormElement): HtmlFormData {
     const { type, value } = control as HTMLInputElement;
     if (type === "radio" || type === "checkbox") {
       const options = namedInputs(form, name, type);
-      const checked = options.filter((input) => input.checked && !input.disabled).map((input) => input.value);
-      const other = queryAll<HTMLInputElement>(form, "input[data-other]").find((box) => box.dataset.other === name && box.dataset.otherType === type);
+      const checked = options
+        .filter((input) => input.checked && !input.disabled)
+        .map((input) => input.value);
+      const other = queryAll<HTMLInputElement>(form, "input[data-other]").find(
+        (box) => box.dataset.other === name && box.dataset.otherType === type,
+      );
       const typed = other?.value.trim();
       // Other's text joins a checkbox group's array; it stands in for a radio group's value only while no option is picked.
-      if (type === "checkbox" && options.length > 1) data[name] = typed ? [...checked, typed] : checked;
+      if (type === "checkbox" && options.length > 1)
+        data[name] = typed ? [...checked, typed] : checked;
       else if (checked[0] !== undefined) data[name] = checked[0];
       else if (typed) data[name] = typed;
-    } else if ((type === "number" || type === "range") && value.trim() !== "" && Number.isFinite(Number(value))) {
+    } else if (
+      (type === "number" || type === "range") &&
+      value.trim() !== "" &&
+      Number.isFinite(Number(value))
+    ) {
       data[name] = Number(value);
     } else {
       data[name] = value;
@@ -455,12 +684,17 @@ export function ExtensionDialog({
 }: {
   request: UiDialogRequest;
   /** Answers with omp's return value (`undefined` cancels); resolves `false` when it could not be sent. */
-  onRespond: (request: UiDialogRequest, value: UiDialogValue | undefined) => void | Promise<boolean>;
+  onRespond: (
+    request: UiDialogRequest,
+    value: UiDialogValue | undefined,
+  ) => void | Promise<boolean>;
   /** Render as a composer panel instead of a full-chat overlay. */
   attached?: boolean;
 }) {
   const { t } = useI18n();
-  const [value, setValue] = useState(request.method === "editor" ? request.args[1] ?? "" : "");
+  const [value, setValue] = useState(
+    request.method === "editor" ? (request.args[1] ?? "") : "",
+  );
   const [showPassword, setShowPassword] = useState(false);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const requestIdRef = useRef(request.id);
@@ -469,7 +703,9 @@ export function ExtensionDialog({
   const pressPointerRef = useRef<string | null>(null);
   // omp takes one answer per request id and the panel stays up until the next request arrives, so the
   // select controls are disabled in that window instead of sending a tap omp would silently drop.
-  const [answeredId, setAnsweredId] = useState<UiDialogRequest["id"] | null>(null);
+  const [answeredId, setAnsweredId] = useState<UiDialogRequest["id"] | null>(
+    null,
+  );
   const awaitingNext = request.method === "select" && answeredId === request.id;
   const [askDrafts, setAskDrafts] = useState(() => initialAskDrafts(request));
   const viewportMaxHeight = useViewportMaxHeight();
@@ -478,10 +714,15 @@ export function ExtensionDialog({
   const otherLabel = t("chatWindow.askOther");
   const formContent = useMemo(() => {
     if (request.method !== "formDialog") return null;
-    const doc = new window.DOMParser().parseFromString(request.args[0], "text/html");
+    const doc = new window.DOMParser().parseFromString(
+      request.args[0],
+      "text/html",
+    );
     const root = doc.querySelector("form") ?? doc.body;
     const ctx = planForm(root, `form-${request.id}`, otherLabel);
-    return Array.from(root.childNodes, (node, index) => formNode(node, ctx, String(index)));
+    return Array.from(root.childNodes, (node, index) =>
+      formNode(node, ctx, String(index)),
+    );
   }, [request, otherLabel]);
   // Required groups with an Other answer are validated through that answer's text box.
   useEffect(() => {
@@ -492,23 +733,33 @@ export function ExtensionDialog({
     // SSE reconnects replay the same request as a fresh object, not a new question.
     if (requestIdRef.current === request.id) return;
     requestIdRef.current = request.id;
-    setValue(request.method === "editor" ? request.args[1] ?? "" : "");
+    setValue(request.method === "editor" ? (request.args[1] ?? "") : "");
     setShowPassword(false);
     setSelectedOption(null);
     setAskDrafts(initialAskDrafts(request));
   }, [request]);
 
   const askDraftAt = (index: number) => askDrafts[index] ?? EMPTY_ASK_DRAFT;
-  const updateAskDraft = (index: number, update: (draft: AskDraft) => AskDraft) =>
-    setAskDrafts((drafts) => drafts.map((draft, i) => i === index ? update(draft) : draft));
+  const updateAskDraft = (
+    index: number,
+    update: (draft: AskDraft) => AskDraft,
+  ) =>
+    setAskDrafts((drafts) =>
+      drafts.map((draft, i) => (i === index ? update(draft) : draft)),
+    );
   // A chosen Other counts only with text. Multi-select may stay empty;
   // single-select needs a choice or an answer.
-  const canSubmit = request.method === "askDialog"
-    ? request.args[0].every((question, index) => {
-      const { selected, other, otherChosen } = askDraftAt(index);
-      return question.multi || selected.length > 0 || (otherChosen && other.trim() !== "");
-    })
-    : request.method !== "select" || selectedOption !== null;
+  const canSubmit =
+    request.method === "askDialog"
+      ? request.args[0].every((question, index) => {
+          const { selected, other, otherChosen } = askDraftAt(index);
+          return (
+            question.multi ||
+            selected.length > 0 ||
+            (otherChosen && other.trim() !== "")
+          );
+        })
+      : request.method !== "select" || selectedOption !== null;
   const title = dialogTitle(request, t("chatWindow.askTitle"));
 
   // Answering removes the panel. Release its text field first, in the same
@@ -520,10 +771,12 @@ export function ExtensionDialog({
       setAnsweredId(request.id);
     }
     const active = document.activeElement;
-    if (active instanceof HTMLElement && panelRef.current?.contains(active)) active.blur();
+    if (active instanceof HTMLElement && panelRef.current?.contains(active))
+      active.blur();
     const id = request.id;
     void Promise.resolve(onRespond(request, response)).then((sent) => {
-      if (sent === false) setAnsweredId((current) => current === id ? null : current);
+      if (sent === false)
+        setAnsweredId((current) => (current === id ? null : current));
     });
   };
   const cancel = () => respond(undefined);
@@ -539,9 +792,10 @@ export function ExtensionDialog({
   // While the keyboard is up the panel fills the visible area instead of the
   // taller layout-viewport cap, so the footer with Cancel / Submit stays in
   // reach (#236).
-  const attachedMaxHeight = keyboardOpen && viewportMaxHeight !== undefined
-    ? `${viewportMaxHeight}px`
-    : DEFAULT_PANEL_MAX_HEIGHT;
+  const attachedMaxHeight =
+    keyboardOpen && viewportMaxHeight !== undefined
+      ? `${viewportMaxHeight}px`
+      : DEFAULT_PANEL_MAX_HEIGHT;
 
   useEffect(() => {
     if (!attached) return;
@@ -583,7 +837,9 @@ export function ExtensionDialog({
             question: question.question,
             options,
             multi: question.multi ?? false,
-            selectedOptions: options.filter((label) => draft.selected.includes(label)),
+            selectedOptions: options.filter((label) =>
+              draft.selected.includes(label),
+            ),
             ...(customInput ? { customInput } : {}),
           };
         }),
@@ -591,7 +847,8 @@ export function ExtensionDialog({
     } else if (request.method === "formDialog") {
       const form = formRef.current;
       if (form) syncOtherValidity(form);
-      if (form && Object.getPrototypeOf(form).reportValidity.call(form)) respond({ data: readFormData(form) });
+      if (form && Object.getPrototypeOf(form).reportValidity.call(form))
+        respond({ data: readFormData(form) });
     } else if (request.method !== "approve") {
       respond(value);
     }
@@ -600,21 +857,29 @@ export function ExtensionDialog({
   return (
     <div
       className={attached ? undefined : "animate-fade-in"}
-      onMouseDown={attached ? undefined : (event) => {
-        // Close when the pointer goes down on the backdrop itself (not when
-        // the press starts inside the panel and is dragged out).
-        if (event.target === event.currentTarget) cancel();
-      }}
-      style={attached ? { width: "100%", flexShrink: 0 } : {
-        position: "absolute",
-        inset: 0,
-        zIndex: 90,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
-        background: "var(--overlay-backdrop)",
-      }}
+      onMouseDown={
+        attached
+          ? undefined
+          : (event) => {
+              // Close when the pointer goes down on the backdrop itself (not when
+              // the press starts inside the panel and is dragged out).
+              if (event.target === event.currentTarget) cancel();
+            }
+      }
+      style={
+        attached
+          ? { width: "100%", flexShrink: 0 }
+          : {
+              position: "absolute",
+              inset: 0,
+              zIndex: 90,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 20,
+              background: "var(--overlay-backdrop)",
+            }
+      }
     >
       <div
         ref={panelRef}
@@ -629,11 +894,19 @@ export function ExtensionDialog({
         // once the click lands, so the keyboard closes after the choice.
         // Touch and pen only, judged per press (a hybrid laptop has both): a
         // mouse keeps text selection and radio arrow keys.
-        onPointerDown={(event) => { pressPointerRef.current = event.pointerType; }}
+        onPointerDown={(event) => {
+          pressPointerRef.current = event.pointerType;
+        }}
         onMouseDown={(event) => {
           const target = event.target as Element;
           const pointer = pressPointerRef.current;
-          if (pointer && pointer !== "mouse" && document.activeElement?.matches(TEXT_ENTRY) && event.currentTarget.contains(document.activeElement) && !target.closest(TEXT_ENTRY)) {
+          if (
+            pointer &&
+            pointer !== "mouse" &&
+            document.activeElement?.matches(TEXT_ENTRY) &&
+            event.currentTarget.contains(document.activeElement) &&
+            !target.closest(TEXT_ENTRY)
+          ) {
             event.preventDefault();
           }
         }}
@@ -656,278 +929,552 @@ export function ExtensionDialog({
           maxHeight: attached ? attachedMaxHeight : "100%",
         }}
       >
-        <div className="extension-dialog-content" style={{ minWidth: 0, minHeight: 0, overflowY: "auto", overflowX: "hidden", overflowWrap: "anywhere" }}>
-        <div className="extension-dialog-header">
-          <div style={{ color: "var(--text)", fontSize: 14, lineHeight: "20px", fontWeight: 650, whiteSpace: "pre-wrap" }}>{title}</div>
-          <div style={{ marginTop: 2, color: "var(--text-dim)", fontSize: 11, lineHeight: "16px", fontFamily: "var(--font-mono)" }}>{t("chatWindow.extensionRequest")}</div>
-        </div>
-
-        <div className="extension-dialog-body">
-          {request.method === "confirm" && (
-            <div style={{ color: "var(--text-muted)", fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{request.args[1]}</div>
-          )}
-          {request.method === "approve" && (
-            <div style={{ display: "grid", gap: 6 }}>
-              <div style={{ marginBottom: 6, padding: "8px 12px", borderRadius: 8, background: "var(--tool-bg)", color: "var(--text-muted)", fontSize: 12, lineHeight: "18px", whiteSpace: "pre-wrap", fontFamily: "var(--font-mono)" }}>
-                {request.args[0].full.split("\n").slice(1).join("\n")}
-              </div>
-              {approvalChoices(request, t("settingsConfig.allow"), t("settingsConfig.deny")).map((choice) => (
-                <button key={choice.label} className="extension-choice" onClick={() => respond(choice.value)}>
-                  {choice.label}
-                </button>
-              ))}
-            </div>
-          )}
-          {request.method === "select" && (() => {
-            const [, items, dialogOptions] = request.args;
-            return (
-            <div style={{ display: "grid", gap: 6 }}>
-              {items.map((item, index) => {
-                const option = typeof item === "string" ? item : item.label;
-                const selected = selectedOption === option;
-                const markable = dialogOptions?.selectionMarker === "checkbox";
-                const checkbox = markable && index < (dialogOptions.markableCount ?? items.length);
-                const checked = checkbox && (dialogOptions.checkedIndices?.includes(index) ?? false);
-                // A checkbox toggle goes out at once even when attached: staging it for Next would let the
-                // next row (often "Done selecting") silently replace it, and a stray toggle is undone by one tap.
-                const stage = attached && !checkbox;
-                return (
-                  <button
-                    key={option}
-                    // A row past omp's markable ones ("Done selecting") is an action, not an answer.
-                    className={markable && !checkbox ? "extension-choice extension-choice-action" : "extension-choice"}
-                    data-checked={selected || checked || undefined}
-                    onClick={() => stage ? setSelectedOption(option) : respond(option)}
-                    disabled={awaitingNext}
-                    aria-pressed={stage ? selected : undefined}
-                  >
-                    {checkbox && <span aria-hidden="true" className="extension-choice-mark">{checked ? "☑" : "☐"}</span>}
-                    <span style={{ minWidth: 0 }}>
-                      {option}
-                      {typeof item !== "string" && item.description && (
-                        <span style={{ display: "block", marginTop: 2, color: "var(--text-muted)", fontSize: 12, lineHeight: "18px" }}>{item.description}</span>
-                      )}
-                      {checkbox && <span className="sr-only">, {t(checked ? "chatWindow.optionChecked" : "chatWindow.optionUnchecked")}</span>}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            );
-          })()}
-          {request.method === "input" && (() => {
-            const [inputTitle, placeholder, dialogOptions] = request.args;
-            const isSensitive = Boolean(dialogOptions?.secret) ||
-              (dialogOptions?.secret !== false && isSensitivePrompt(inputTitle, placeholder ?? undefined));
-            return (
-              <div style={{ position: "relative", width: "100%" }}>
-                <input
-                  autoFocus
-                  type={isSensitive && !showPassword ? "password" : "text"}
-                  autoComplete={isSensitive ? "off" : undefined}
-                  autoCorrect={isSensitive ? "off" : undefined}
-                  autoCapitalize={isSensitive ? "off" : undefined}
-                  spellCheck={isSensitive ? false : undefined}
-                  data-1p-ignore={isSensitive ? "true" : undefined}
-                  aria-label={inputTitle || placeholder || "Input value"}
-                  value={value}
-                  placeholder={placeholder ?? undefined}
-                  onChange={(e) => setValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") submitValue();
-                  }}
-                  className="extension-field"
-                  style={{ width: "100%", paddingRight: isSensitive ? 36 : undefined }}
-                />
-                {isSensitive && (
-                  <button
-                    type="button"
-                    aria-label={showPassword ? t("chatWindow.hidePassword") : t("chatWindow.showPassword")}
-                    title={showPassword ? t("chatWindow.hidePassword") : t("chatWindow.showPassword")}
-                    onClick={() => setShowPassword((prev) => !prev)}
-                    style={{
-                      position: "absolute",
-                      right: 8,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      width: 24,
-                      height: 24,
-                      padding: 0,
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      color: "var(--text-muted)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderRadius: 4,
-                    }}
-                  >
-                    {showPassword ? <EyeOff size={14} aria-hidden="true" /> : <Eye size={14} aria-hidden="true" />}
-                  </button>
-                )}
-              </div>
-            );
-          })()}
-          {request.method === "editor" && (
-            <textarea
-              autoFocus
-              aria-label={request.args[0] || "Input value"}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={(e) => {
-                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submitValue();
-              }}
-              className="extension-field"
+        <div
+          className="extension-dialog-content"
+          style={{
+            minWidth: 0,
+            minHeight: 0,
+            overflowY: "auto",
+            overflowX: "hidden",
+            overflowWrap: "anywhere",
+          }}
+        >
+          <div className="extension-dialog-header">
+            <div
               style={{
-                width: "100%",
-                height: "min(220px, 30dvh)",
-                minHeight: 80,
-                resize: "vertical",
-                fontSize: request.args[3]?.promptStyle ? "var(--chat-font-size)" : 13,
-                lineHeight: 1.55,
-                fontFamily: request.args[3]?.promptStyle ? "inherit" : "var(--font-mono)",
+                color: "var(--text)",
+                fontSize: 14,
+                lineHeight: "20px",
+                fontWeight: 650,
+                whiteSpace: "pre-wrap",
               }}
-            />
-          )}
-          {request.method === "askDialog" && (
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 20 }}>
-              {request.args[0].map((question, index) => {
-                const draft = askDraftAt(index);
-                const chooseKeptOther = () => {
-                  if (draft.otherChosen || !draft.other.trim()) return;
-                  updateAskDraft(index, (current) => ({ ...current, selected: question.multi ? current.selected : [], otherChosen: true }));
-                };
+            >
+              {title}
+            </div>
+            <div
+              style={{
+                marginTop: 2,
+                color: "var(--text-dim)",
+                fontSize: 11,
+                lineHeight: "16px",
+                fontFamily: "var(--font-mono)",
+              }}
+            >
+              {t("chatWindow.extensionRequest")}
+            </div>
+          </div>
+
+          <div className="extension-dialog-body">
+            {request.method === "confirm" && (
+              <div
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: 13,
+                  lineHeight: 1.6,
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {request.args[1]}
+              </div>
+            )}
+            {request.method === "approve" && (
+              <div style={{ display: "grid", gap: 6 }}>
+                <div
+                  style={{
+                    marginBottom: 6,
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    background: "var(--tool-bg)",
+                    color: "var(--text-muted)",
+                    fontSize: 12,
+                    lineHeight: "18px",
+                    whiteSpace: "pre-wrap",
+                    fontFamily: "var(--font-mono)",
+                  }}
+                >
+                  {request.args[0].full.split("\n").slice(1).join("\n")}
+                </div>
+                {approvalChoices(
+                  request,
+                  t("settingsConfig.allow"),
+                  t("settingsConfig.deny"),
+                ).map((choice) => (
+                  <button
+                    key={choice.label}
+                    className="extension-choice"
+                    onClick={() => respond(choice.value)}
+                  >
+                    {choice.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {request.method === "select" &&
+              (() => {
+                const [, items, dialogOptions] = request.args;
                 return (
-                  <fieldset key={question.id} style={{ margin: 0, padding: 0, border: "none", minWidth: 0, display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 6 }}>
-                    <legend style={{ padding: 0, marginBottom: 8, color: "var(--text)", fontSize: 13, fontWeight: 600, lineHeight: "20px" }}>
-                      {question.header && (
-                        <span style={{ display: "inline-block", marginRight: 8, padding: "0 6px", borderRadius: 4, background: "var(--bg-hover)", color: "var(--text-muted)", fontSize: 11, lineHeight: "18px", fontWeight: 500, verticalAlign: "1px" }}>
-                          {question.header}
-                        </span>
-                      )}
-                      <span style={{ whiteSpace: "pre-wrap" }}>{question.question}</span>
-                    </legend>
-                    {question.options.map((option, optionIndex) => {
-                      const checked = draft.selected.includes(option.label);
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {items.map((item, index) => {
+                      const option =
+                        typeof item === "string" ? item : item.label;
+                      const selected = selectedOption === option;
+                      const markable =
+                        dialogOptions?.selectionMarker === "checkbox";
+                      const checkbox =
+                        markable &&
+                        index < (dialogOptions.markableCount ?? items.length);
+                      const checked =
+                        checkbox &&
+                        (dialogOptions.checkedIndices?.includes(index) ??
+                          false);
+                      // A checkbox toggle goes out at once even when attached: staging it for Next would let the
+                      // next row (often "Done selecting") silently replace it, and a stray toggle is undone by one tap.
+                      const stage = attached && !checkbox;
                       return (
-                        <label key={option.label} className="extension-choice">
-                          <input
-                            type={question.multi ? "checkbox" : "radio"}
-                            name={`ask-${request.id}-${index}`}
-                            checked={checked}
-                            onChange={(event) => {
-                              // A tap on the radio itself, unlike one on its label, does
-                              // not focus it once the press keeps focus in Other. Focus it
-                              // so the keyboard closes and further typing cannot pick Other.
-                              event.currentTarget.focus();
-                              updateAskDraft(index, (current) => question.multi
-                                ? { ...current, selected: current.selected.includes(option.label) ? current.selected.filter((label) => label !== option.label) : [...current.selected, option.label] }
-                                : { ...current, selected: [option.label], otherChosen: false });
-                            }}
-                          />
-                          <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
-                            {option.label}
-                            {optionIndex === question.recommended && (
-                              <span style={{ marginLeft: 6, color: "var(--accent)", fontSize: 11, fontWeight: 600 }}>{t("chatWindow.askRecommended")}</span>
+                        <button
+                          key={option}
+                          // A row past omp's markable ones ("Done selecting") is an action, not an answer.
+                          className={
+                            markable && !checkbox
+                              ? "extension-choice extension-choice-action"
+                              : "extension-choice"
+                          }
+                          data-checked={selected || checked || undefined}
+                          onClick={() =>
+                            stage ? setSelectedOption(option) : respond(option)
+                          }
+                          disabled={awaitingNext}
+                          aria-pressed={stage ? selected : undefined}
+                        >
+                          {checkbox && (
+                            <span
+                              aria-hidden="true"
+                              className="extension-choice-mark"
+                            >
+                              {checked ? "☑" : "☐"}
+                            </span>
+                          )}
+                          <span style={{ minWidth: 0 }}>
+                            {option}
+                            {typeof item !== "string" && item.description && (
+                              <span
+                                style={{
+                                  display: "block",
+                                  marginTop: 2,
+                                  color: "var(--text-muted)",
+                                  fontSize: 12,
+                                  lineHeight: "18px",
+                                }}
+                              >
+                                {item.description}
+                              </span>
                             )}
-                            {option.description && (
-                              <span style={{ display: "block", marginTop: 2, color: "var(--text-muted)", fontSize: 12, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{option.description}</span>
-                            )}
-                            {option.preview && (
-                              <span style={{ display: "block", marginTop: 6, padding: 8, border: "1px solid var(--border)", borderRadius: 6, background: "var(--tool-bg)", color: "var(--text)", fontFamily: "var(--font-mono)", fontSize: 12, lineHeight: 1.5, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{option.preview}</span>
+                            {checkbox && (
+                              <span className="sr-only">
+                                ,{" "}
+                                {t(
+                                  checked
+                                    ? "chatWindow.optionChecked"
+                                    : "chatWindow.optionUnchecked",
+                                )}
+                              </span>
                             )}
                           </span>
-                        </label>
+                        </button>
                       );
                     })}
-                    {/* The Other option: its text box is the option, so what was
-                        typed stays in place while another option is chosen. */}
-                    <div className="extension-choice" data-checked={draft.otherChosen || undefined}>
-                      <input
-                        type={question.multi ? "checkbox" : "radio"}
-                        name={`ask-${request.id}-${index}`}
-                        aria-label={t("chatWindow.askOther")}
-                        checked={draft.otherChosen}
-                        onChange={(e) => {
-                          const chosen = e.target.checked;
-                          updateAskDraft(index, (current) => ({ ...current, selected: chosen && !question.multi ? [] : current.selected, otherChosen: chosen }));
-                          if (chosen) document.getElementById(`ask-${request.id}-${index}-other`)?.focus();
-                        }}
-                      />
-                      <textarea
-                        id={`ask-${request.id}-${index}-other`}
-                        aria-label={t("chatWindow.askOther")}
-                        placeholder={t("chatWindow.askOther")}
-                        value={draft.other}
-                        // Going back into kept text means answering with it again.
-                        // A tap counts too: unticking Other by touch keeps focus in
-                        // this box, so tapping back into it fires no focus event.
-                        onFocus={chooseKeptOther}
-                        onClick={chooseKeptOther}
-                        rows={1}
-                        onChange={(e) => {
-                          const other = e.target.value;
-                          // Typing chooses Other (replacing a single-select choice);
-                          // clearing it unchooses, so a blank answer never blocks Submit.
-                          updateAskDraft(index, (current) => other.trim()
-                            ? { selected: question.multi ? current.selected : [], other, otherChosen: true }
-                            : { ...current, other, otherChosen: false });
-                        }}
-                        onKeyDown={(e) => {
-                          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submitValue();
-                        }}
-                        style={{
-                          flex: 1,
-                          minWidth: 0,
-                          padding: 0,
-                          border: "none",
-                          background: "none",
-                          color: "var(--text)",
-                          outline: "none",
-                          resize: "none",
-                          fontSize: "var(--chat-font-size)",
-                          lineHeight: 1.55,
-                          fontFamily: "inherit",
-                          fieldSizing: "content",
-                          minHeight: "1.55em",
-                          maxHeight: 200,
-                        }}
-                      />
-                    </div>
-                  </fieldset>
+                  </div>
                 );
-              })}
-            </div>
-          )}
-          {request.method === "formDialog" && (
-            <form
-              key={request.id}
-              ref={formRef}
-              onChange={(event) => syncOtherValidity(event.currentTarget)}
-              onSubmit={(event) => { event.preventDefault(); submitValue(); }}
-              className="extension-dialog-form"
-            >
-              {formContent}
-            </form>
-          )}
-        </div>
+              })()}
+            {request.method === "input" &&
+              (() => {
+                const [inputTitle, placeholder, dialogOptions] = request.args;
+                const isSensitive =
+                  Boolean(dialogOptions?.secret) ||
+                  (dialogOptions?.secret !== false &&
+                    isSensitivePrompt(inputTitle, placeholder ?? undefined));
+                return (
+                  <div style={{ position: "relative", width: "100%" }}>
+                    <input
+                      autoFocus
+                      type={isSensitive && !showPassword ? "password" : "text"}
+                      autoComplete={isSensitive ? "off" : undefined}
+                      autoCorrect={isSensitive ? "off" : undefined}
+                      autoCapitalize={isSensitive ? "off" : undefined}
+                      spellCheck={isSensitive ? false : undefined}
+                      data-1p-ignore={isSensitive ? "true" : undefined}
+                      aria-label={inputTitle || placeholder || "Input value"}
+                      value={value}
+                      placeholder={placeholder ?? undefined}
+                      onChange={(e) => setValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") submitValue();
+                      }}
+                      className="extension-field"
+                      style={{
+                        width: "100%",
+                        paddingRight: isSensitive ? 36 : undefined,
+                      }}
+                    />
+                    {isSensitive && (
+                      <button
+                        type="button"
+                        aria-label={
+                          showPassword
+                            ? t("chatWindow.hidePassword")
+                            : t("chatWindow.showPassword")
+                        }
+                        title={
+                          showPassword
+                            ? t("chatWindow.hidePassword")
+                            : t("chatWindow.showPassword")
+                        }
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        style={{
+                          position: "absolute",
+                          right: 8,
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          width: 24,
+                          height: 24,
+                          padding: 0,
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          color: "var(--text-muted)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          borderRadius: 4,
+                        }}
+                      >
+                        {showPassword ? (
+                          <EyeOff size={14} aria-hidden="true" />
+                        ) : (
+                          <Eye size={14} aria-hidden="true" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+            {request.method === "editor" && (
+              <textarea
+                autoFocus
+                aria-label={request.args[0] || "Input value"}
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter")
+                    submitValue();
+                }}
+                className="extension-field"
+                style={{
+                  width: "100%",
+                  height: "min(220px, 30dvh)",
+                  minHeight: 80,
+                  resize: "vertical",
+                  fontSize: request.args[3]?.promptStyle
+                    ? "var(--chat-font-size)"
+                    : 13,
+                  lineHeight: 1.55,
+                  fontFamily: request.args[3]?.promptStyle
+                    ? "inherit"
+                    : "var(--font-mono)",
+                }}
+              />
+            )}
+            {request.method === "askDialog" && (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1fr)",
+                  gap: 20,
+                }}
+              >
+                {request.args[0].map((question, index) => {
+                  const draft = askDraftAt(index);
+                  const chooseKeptOther = () => {
+                    if (draft.otherChosen || !draft.other.trim()) return;
+                    updateAskDraft(index, (current) => ({
+                      ...current,
+                      selected: question.multi ? current.selected : [],
+                      otherChosen: true,
+                    }));
+                  };
+                  return (
+                    <fieldset
+                      key={question.id}
+                      style={{
+                        margin: 0,
+                        padding: 0,
+                        border: "none",
+                        minWidth: 0,
+                        display: "grid",
+                        gridTemplateColumns: "minmax(0, 1fr)",
+                        gap: 6,
+                      }}
+                    >
+                      <legend
+                        style={{
+                          padding: 0,
+                          marginBottom: 8,
+                          color: "var(--text)",
+                          fontSize: 13,
+                          fontWeight: 600,
+                          lineHeight: "20px",
+                        }}
+                      >
+                        {question.header && (
+                          <span
+                            style={{
+                              display: "inline-block",
+                              marginRight: 8,
+                              padding: "0 6px",
+                              borderRadius: 4,
+                              background: "var(--bg-hover)",
+                              color: "var(--text-muted)",
+                              fontSize: 11,
+                              lineHeight: "18px",
+                              fontWeight: 500,
+                              verticalAlign: "1px",
+                            }}
+                          >
+                            {question.header}
+                          </span>
+                        )}
+                        <span style={{ whiteSpace: "pre-wrap" }}>
+                          {question.question}
+                        </span>
+                      </legend>
+                      {question.options.map((option, optionIndex) => {
+                        const checked = draft.selected.includes(option.label);
+                        return (
+                          <label
+                            key={option.label}
+                            className="extension-choice"
+                          >
+                            <input
+                              type={question.multi ? "checkbox" : "radio"}
+                              name={`ask-${request.id}-${index}`}
+                              checked={checked}
+                              onChange={(event) => {
+                                // A tap on the radio itself, unlike one on its label, does
+                                // not focus it once the press keeps focus in Other. Focus it
+                                // so the keyboard closes and further typing cannot pick Other.
+                                event.currentTarget.focus();
+                                updateAskDraft(index, (current) =>
+                                  question.multi
+                                    ? {
+                                        ...current,
+                                        selected: current.selected.includes(
+                                          option.label,
+                                        )
+                                          ? current.selected.filter(
+                                              (label) => label !== option.label,
+                                            )
+                                          : [...current.selected, option.label],
+                                      }
+                                    : {
+                                        ...current,
+                                        selected: [option.label],
+                                        otherChosen: false,
+                                      },
+                                );
+                              }}
+                            />
+                            <span
+                              style={{ minWidth: 0, overflowWrap: "anywhere" }}
+                            >
+                              {option.label}
+                              {optionIndex === question.recommended && (
+                                <span
+                                  style={{
+                                    marginLeft: 6,
+                                    color: "var(--accent)",
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  {t("chatWindow.askRecommended")}
+                                </span>
+                              )}
+                              {option.description && (
+                                <span
+                                  style={{
+                                    display: "block",
+                                    marginTop: 2,
+                                    color: "var(--text-muted)",
+                                    fontSize: 12,
+                                    lineHeight: 1.5,
+                                    whiteSpace: "pre-wrap",
+                                  }}
+                                >
+                                  {option.description}
+                                </span>
+                              )}
+                              {option.preview && (
+                                <span
+                                  style={{
+                                    display: "block",
+                                    marginTop: 6,
+                                    padding: 8,
+                                    border: "1px solid var(--border)",
+                                    borderRadius: 6,
+                                    background: "var(--tool-bg)",
+                                    color: "var(--text)",
+                                    fontFamily: "var(--font-mono)",
+                                    fontSize: 12,
+                                    lineHeight: 1.5,
+                                    whiteSpace: "pre-wrap",
+                                    overflowWrap: "anywhere",
+                                  }}
+                                >
+                                  {option.preview}
+                                </span>
+                              )}
+                            </span>
+                          </label>
+                        );
+                      })}
+                      {/* The Other option: its text box is the option, so what was
+                        typed stays in place while another option is chosen. */}
+                      <div
+                        className="extension-choice"
+                        data-checked={draft.otherChosen || undefined}
+                      >
+                        <input
+                          type={question.multi ? "checkbox" : "radio"}
+                          name={`ask-${request.id}-${index}`}
+                          aria-label={t("chatWindow.askOther")}
+                          checked={draft.otherChosen}
+                          onChange={(e) => {
+                            const chosen = e.target.checked;
+                            updateAskDraft(index, (current) => ({
+                              ...current,
+                              selected:
+                                chosen && !question.multi
+                                  ? []
+                                  : current.selected,
+                              otherChosen: chosen,
+                            }));
+                            if (chosen)
+                              document
+                                .getElementById(
+                                  `ask-${request.id}-${index}-other`,
+                                )
+                                ?.focus();
+                          }}
+                        />
+                        <textarea
+                          id={`ask-${request.id}-${index}-other`}
+                          aria-label={t("chatWindow.askOther")}
+                          placeholder={t("chatWindow.askOther")}
+                          value={draft.other}
+                          // Going back into kept text means answering with it again.
+                          // A tap counts too: unticking Other by touch keeps focus in
+                          // this box, so tapping back into it fires no focus event.
+                          onFocus={chooseKeptOther}
+                          onClick={chooseKeptOther}
+                          rows={1}
+                          onChange={(e) => {
+                            const other = e.target.value;
+                            // Typing chooses Other (replacing a single-select choice);
+                            // clearing it unchooses, so a blank answer never blocks Submit.
+                            updateAskDraft(index, (current) =>
+                              other.trim()
+                                ? {
+                                    selected: question.multi
+                                      ? current.selected
+                                      : [],
+                                    other,
+                                    otherChosen: true,
+                                  }
+                                : { ...current, other, otherChosen: false },
+                            );
+                          }}
+                          onKeyDown={(e) => {
+                            if ((e.metaKey || e.ctrlKey) && e.key === "Enter")
+                              submitValue();
+                          }}
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            padding: 0,
+                            border: "none",
+                            background: "none",
+                            color: "var(--text)",
+                            outline: "none",
+                            resize: "none",
+                            fontSize: "var(--chat-font-size)",
+                            lineHeight: 1.55,
+                            fontFamily: "inherit",
+                            fieldSizing: "content",
+                            minHeight: "1.55em",
+                            maxHeight: 200,
+                          }}
+                        />
+                      </div>
+                    </fieldset>
+                  );
+                })}
+              </div>
+            )}
+            {request.method === "formDialog" && (
+              <form
+                key={request.id}
+                ref={formRef}
+                onChange={(event) => syncOtherValidity(event.currentTarget)}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  submitValue();
+                }}
+                className="extension-dialog-form"
+              >
+                {formContent}
+              </form>
+            )}
+          </div>
         </div>
 
-        <div className="extension-dialog-footer" style={{ display: "flex", flexShrink: 0, justifyContent: "flex-end", gap: 8, padding: "10px 16px", borderTop: "1px solid var(--border)", background: "var(--bg-panel)" }}>
+        <div
+          className="extension-dialog-footer"
+          style={{
+            display: "flex",
+            flexShrink: 0,
+            justifyContent: "flex-end",
+            gap: 8,
+            padding: "10px 16px",
+            borderTop: "1px solid var(--border)",
+            background: "var(--bg-panel)",
+          }}
+        >
           <button className="extension-dialog-button" onClick={cancel}>
             {t("chatWindow.cancel")}
           </button>
           {request.method === "confirm" ? (
-            <button className="extension-dialog-button extension-dialog-button-primary" onClick={submitValue}>
+            <button
+              className="extension-dialog-button extension-dialog-button-primary"
+              onClick={submitValue}
+            >
               {t("chatWindow.confirm")}
             </button>
-          ) : (request.method === "select" && attached) || request.method === "askDialog" ? (
-            <button className="extension-dialog-button extension-dialog-button-primary" onClick={submitValue} disabled={!canSubmit || awaitingNext}>
-              {request.method === "askDialog" ? t("chatWindow.submit") : t("chatWindow.next")}
+          ) : (request.method === "select" && attached) ||
+            request.method === "askDialog" ? (
+            <button
+              className="extension-dialog-button extension-dialog-button-primary"
+              onClick={submitValue}
+              disabled={!canSubmit || awaitingNext}
+            >
+              {request.method === "askDialog"
+                ? t("chatWindow.submit")
+                : t("chatWindow.next")}
             </button>
           ) : request.method !== "select" && request.method !== "approve" ? (
-            <button className="extension-dialog-button extension-dialog-button-primary" onClick={submitValue}>
+            <button
+              className="extension-dialog-button extension-dialog-button-primary"
+              onClick={submitValue}
+            >
               {t("chatWindow.submit")}
             </button>
           ) : null}

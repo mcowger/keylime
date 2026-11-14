@@ -1,7 +1,8 @@
 import "../tests/setup-dom.mjs";
 import assert from "node:assert/strict";
 import test, { afterEach, beforeEach } from "node:test";
-const { act, cleanup, renderHook } = await import("@testing-library/react/pure.js");
+const { act, cleanup, renderHook } =
+  await import("@testing-library/react/pure.js");
 
 // hooks/useBtw.ts had no test at all: lib/btw.test.mjs covers the pure merges,
 // but the ordering decisions the hook itself makes live only here. The one that
@@ -15,7 +16,15 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** A record in `status` with `answer`; deltas only append to a running turn. */
 function record(answer, status = "running", updatedAt = T0) {
-  return { id: "r1", leafId: null, question: "2+2?", answer, status, createdAt: T0, updatedAt };
+  return {
+    id: "r1",
+    leafId: null,
+    question: "2+2?",
+    answer,
+    status,
+    createdAt: T0,
+    updatedAt,
+  };
 }
 
 let historyReply;
@@ -30,7 +39,10 @@ beforeEach(() => {
     assert.equal(url, "/api/agent/s1");
     return {
       ok: true,
-      json: async () => ({ success: true, data: body.type === "get_btw_history" ? historyReply : null }),
+      json: async () => ({
+        success: true,
+        data: body.type === "get_btw_history" ? historyReply : null,
+      }),
     };
   };
 });
@@ -61,7 +73,11 @@ test("a history snapshot never re-applies frames the queue is still holding", as
   // Frames arrive and queue; the display-rate flush has not fired yet.
   act(() => {
     view.current.applyEvent({ type: "btw_record", record: record("") });
-    view.current.applyEvent({ type: "btw_delta", recordId: "r1", delta: "Hel" });
+    view.current.applyEvent({
+      type: "btw_delta",
+      recordId: "r1",
+      delta: "Hel",
+    });
   });
   // omp is further ahead than the queued delta: its snapshot already holds it.
   historyReply = { records: [record("Hello world", "running", T0 + 50)] };
@@ -69,7 +85,11 @@ test("a history snapshot never re-applies frames the queue is still holding", as
   await act(async () => {
     await view.current.refreshHistory("s1");
   });
-  assert.equal(view.current.records[0].answer, "Hello world", "snapshot wins over older text");
+  assert.equal(
+    view.current.records[0].answer,
+    "Hello world",
+    "snapshot wins over older text",
+  );
 
   // Now let any queued flush fire. If the snapshot were merged BEFORE the queue
   // was drained, the delta would append onto the snapshot's text instead of
@@ -77,7 +97,11 @@ test("a history snapshot never re-applies frames the queue is still holding", as
   await act(async () => {
     await sleep(120);
   });
-  assert.equal(view.current.records[0].answer, "Hello world", "queued delta was applied twice");
+  assert.equal(
+    view.current.records[0].answer,
+    "Hello world",
+    "queued delta was applied twice",
+  );
   assert.equal(view.current.records.length, 1);
 });
 
@@ -95,7 +119,11 @@ test("deltas stream into a running record and stop once it settles", async () =>
     { type: "btw_record", record: record("4", "complete", T0 + 10) },
     { type: "btw_delta", recordId: "r1", delta: " more" },
   ]);
-  assert.equal(view.current.records[0].answer, "4", "a delta appended past a settled answer");
+  assert.equal(
+    view.current.records[0].answer,
+    "4",
+    "a delta appended past a settled answer",
+  );
 });
 
 test("asking opens the panel and a follow-up answers in its own turn", async () => {
@@ -103,25 +131,53 @@ test("asking opens the panel and a follow-up answers in its own turn", async () 
   globalThis.fetch = async (_url, init) => {
     const body = JSON.parse(init.body);
     commands.push(body.type);
-    if (body.type === "btw") return { ok: true, json: async () => ({ success: true, data: { record: record("4", "complete") } }) };
-    return { ok: true, json: async () => ({ success: true, data: { records: [] } }) };
+    if (body.type === "btw")
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: { record: record("4", "complete") },
+        }),
+      };
+    return {
+      ok: true,
+      json: async () => ({ success: true, data: { records: [] } }),
+    };
   };
   await act(async () => {
     assert.equal(await view.current.ask("s1", "2+2?", undefined), true);
   });
-  assert.equal(view.current.activeId, "r1", "asking a new topic opens its panel");
+  assert.equal(
+    view.current.activeId,
+    "r1",
+    "asking a new topic opens its panel",
+  );
   assert.equal(view.current.records[0].answer, "4");
 
-  await applyFrames(view, [{
-    type: "btw_record",
-    record: {
-      ...record("4", "complete", T0 + 10),
-      followUps: [{ question: "and 3+3?", answer: "6", status: "complete", createdAt: T0 + 10, updatedAt: T0 + 10 }],
+  await applyFrames(view, [
+    {
+      type: "btw_record",
+      record: {
+        ...record("4", "complete", T0 + 10),
+        followUps: [
+          {
+            question: "and 3+3?",
+            answer: "6",
+            status: "complete",
+            createdAt: T0 + 10,
+            updatedAt: T0 + 10,
+          },
+        ],
+      },
     },
-  }]);
+  ]);
   const latest = view.current.records[0].followUps.at(-1);
   assert.equal(latest.answer, "6", "a follow-up answers in its own turn");
-  assert.equal(view.current.records[0].answer, "4", "the first answer stays intact");
+  assert.equal(
+    view.current.records[0].answer,
+    "4",
+    "the first answer stays intact",
+  );
 });
 
 // LAST: `unsupportedUntil` is module-global by design (one old omp must not be
@@ -131,7 +187,11 @@ test("a background history refresh pauses on an omp without btw", async () => {
   let calls = 0;
   globalThis.fetch = async () => {
     calls += 1;
-    return { ok: false, status: 400, json: async () => ({ error: "Unknown command: get_btw_history" }) };
+    return {
+      ok: false,
+      status: 400,
+      json: async () => ({ error: "Unknown command: get_btw_history" }),
+    };
   };
   await act(async () => {
     await view.current.refreshHistory("s1");

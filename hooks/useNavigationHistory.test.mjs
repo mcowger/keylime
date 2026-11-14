@@ -1,7 +1,8 @@
 import "../tests/setup-dom.mjs";
 import assert from "node:assert/strict";
 import test, { afterEach } from "node:test";
-const { act, cleanup, renderHook } = await import("@testing-library/react/pure.js");
+const { act, cleanup, renderHook } =
+  await import("@testing-library/react/pure.js");
 
 // lib/navigation-history.test.mjs covers the pure stack arithmetic; this file
 // covers the React wrapper: recording from a view-change effect, the

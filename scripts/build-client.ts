@@ -40,23 +40,49 @@ const result = await Bun.build({
   splitting: true,
   sourcemap: "none",
   publicPath: "/",
-  naming: { entry: "[name].[ext]", chunk: "assets/[name]-[hash].[ext]", asset: "assets/[name]-[hash].[ext]" },
+  naming: {
+    entry: "[name].[ext]",
+    chunk: "assets/[name]-[hash].[ext]",
+    asset: "assets/[name]-[hash].[ext]",
+  },
   plugins: [tailwind, emitFonts],
   define: {
     "process.env.NODE_ENV": JSON.stringify("production"),
-    ...Object.fromEntries(Object.entries(clientEnv(root, worker)).map(([key, value]) => [`process.env.${key}`, JSON.stringify(value)])),
+    ...Object.fromEntries(
+      Object.entries(clientEnv(root, worker)).map(([key, value]) => [
+        `process.env.${key}`,
+        JSON.stringify(value),
+      ]),
+    ),
   },
   throw: false,
 });
 
 for (const log of result.logs) console.log(log);
 if (!result.success) process.exit(1);
-for (const [url, source] of fonts) await Bun.write(path.join(outdir, url), Bun.file(source));
+for (const [url, source] of fonts)
+  await Bun.write(path.join(outdir, url), Bun.file(source));
 await Bun.write(path.join(outdir, "event-stream-worker.js"), worker);
 const indexPath = path.join(outdir, "index.html");
 await Bun.write(indexPath, stylesheetFirst(await Bun.file(indexPath).text()));
 // Tailwind's plugin writes its CSS (preflight included) into the bundle, so the metafile never names tailwindcss.
-const tailwindcss = path.dirname(Bun.resolveSync("tailwindcss/package.json", root));
-const clientPackages = [...new Set([...bundledPackageDirs(result.metafile!, process.cwd()), tailwindcss])].sort();
-await Bun.write(path.join(root, "build", "client-packages.json"), `${JSON.stringify(clientPackages.map((dir) => path.relative(root, dir)), null, 2)}\n`);
-console.log(`built ${result.outputs.length + fonts.size + 1} files into ${path.relative(process.cwd(), outdir) || "."}`);
+const tailwindcss = path.dirname(
+  Bun.resolveSync("tailwindcss/package.json", root),
+);
+const clientPackages = [
+  ...new Set([
+    ...bundledPackageDirs(result.metafile!, process.cwd()),
+    tailwindcss,
+  ]),
+].sort();
+await Bun.write(
+  path.join(root, "build", "client-packages.json"),
+  `${JSON.stringify(
+    clientPackages.map((dir) => path.relative(root, dir)),
+    null,
+    2,
+  )}\n`,
+);
+console.log(
+  `built ${result.outputs.length + fonts.size + 1} files into ${path.relative(process.cwd(), outdir) || "."}`,
+);

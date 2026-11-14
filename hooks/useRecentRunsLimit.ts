@@ -41,7 +41,10 @@ export function clampLimit(val: number): number {
   return rounded;
 }
 
-export function resolvePresetLimit(preset: RecentRunsLimitPreset, customVal: number): number {
+export function resolvePresetLimit(
+  preset: RecentRunsLimitPreset,
+  customVal: number,
+): number {
   switch (preset) {
     case "10":
       return 10;
@@ -71,12 +74,16 @@ export function storedRecentRunsLimitState(): RecentRunsLimitState {
   try {
     const rawPreset = window.localStorage.getItem(STORAGE_KEY);
     const preset: RecentRunsLimitPreset =
-      rawPreset === "10" || rawPreset === "15" || rawPreset === "20" || rawPreset === "custom"
+      rawPreset === "10" ||
+      rawPreset === "15" ||
+      rawPreset === "20" ||
+      rawPreset === "custom"
         ? rawPreset
         : DEFAULT_PRESET;
 
     const rawCustom = window.localStorage.getItem(CUSTOM_STORAGE_KEY);
-    const parsedCustom = rawCustom !== null ? Number.parseInt(rawCustom, 10) : DEFAULT_LIMIT;
+    const parsedCustom =
+      rawCustom !== null ? Number.parseInt(rawCustom, 10) : DEFAULT_LIMIT;
     const customValue = clampLimit(parsedCustom);
 
     const limit = resolvePresetLimit(preset, customValue);
@@ -102,7 +109,8 @@ export function saveRecentRunsLimitState(
 ): void {
   const current = storedRecentRunsLimitState();
   const nextPreset = preset ?? current.preset;
-  const nextCustom = customValue !== undefined ? clampLimit(customValue) : current.customValue;
+  const nextCustom =
+    customValue !== undefined ? clampLimit(customValue) : current.customValue;
   const nextLimit = resolvePresetLimit(nextPreset, nextCustom);
 
   if (typeof window !== "undefined") {
@@ -116,12 +124,20 @@ export function saveRecentRunsLimitState(
     }
     window.dispatchEvent(
       new CustomEvent(RECENT_RUNS_LIMIT_CHANGE_EVENT, {
-        detail: { preset: nextPreset, limit: nextLimit, customValue: nextCustom },
+        detail: {
+          preset: nextPreset,
+          limit: nextLimit,
+          customValue: nextCustom,
+        },
       }),
     );
   }
 
-  cachedSnapshot = { preset: nextPreset, limit: nextLimit, customValue: nextCustom };
+  cachedSnapshot = {
+    preset: nextPreset,
+    limit: nextLimit,
+    customValue: nextCustom,
+  };
   notifyListeners();
 }
 
@@ -130,7 +146,11 @@ function getServerSnapshot(): RecentRunsLimitState {
 }
 
 export function useRecentRunsLimit() {
-  const state = useSyncExternalStore(subscribe, storedRecentRunsLimitState, getServerSnapshot);
+  const state = useSyncExternalStore(
+    subscribe,
+    storedRecentRunsLimitState,
+    getServerSnapshot,
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -150,7 +170,10 @@ export function useRecentRunsLimit() {
 
     return () => {
       window.removeEventListener("storage", handleStorage);
-      window.removeEventListener(RECENT_RUNS_LIMIT_CHANGE_EVENT, handleCustomEvent);
+      window.removeEventListener(
+        RECENT_RUNS_LIMIT_CHANGE_EVENT,
+        handleCustomEvent,
+      );
     };
   }, []);
 

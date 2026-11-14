@@ -11,14 +11,36 @@ const { OPEN_SESSION_EVENT } = await import("@/lib/notification-client");
 before(() => {
   window.Element.prototype.setPointerCapture = () => {};
   // The list syncs read marks and removals to the server; these tests only watch the list.
-  globalThis.fetch = async () => new Response(JSON.stringify({ ok: true }), { status: 200 });
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ ok: true }), { status: 200 });
 });
-afterEach(() => { cleanup(); notificationHistory.clear(); });
+afterEach(() => {
+  cleanup();
+  notificationHistory.clear();
+});
 
-function pointer(target, type, x, y, { pointerType = "touch", detail = 1 } = {}) {
-  const event = new window.MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, detail });
-  Object.defineProperties(event, { pointerId: { value: 1 }, pointerType: { value: pointerType } });
-  act(() => { target.dispatchEvent(event); });
+function pointer(
+  target,
+  type,
+  x,
+  y,
+  { pointerType = "touch", detail = 1 } = {},
+) {
+  const event = new window.MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX: x,
+    clientY: y,
+    button: 0,
+    detail,
+  });
+  Object.defineProperties(event, {
+    pointerId: { value: 1 },
+    pointerType: { value: pointerType },
+  });
+  act(() => {
+    target.dispatchEvent(event);
+  });
 }
 function drag(target, points, options) {
   const [first, ...rest] = points;
@@ -27,25 +49,60 @@ function drag(target, points, options) {
   pointer(target, "pointerup", ...points.at(-1), options);
 }
 function mount() {
-  act(() => { notificationHistory.add({ type: "error", sessionId: "n1-session", sessionName: "Agent finished", detail: "A long description" }); });
+  act(() => {
+    notificationHistory.add({
+      type: "error",
+      sessionId: "n1-session",
+      sessionName: "Agent finished",
+      detail: "A long description",
+    });
+  });
   const view = render(React.createElement(NotificationList));
-  return { row: () => view.container.querySelector("li"), description: () => view.container.querySelector("[aria-expanded]") };
+  return {
+    row: () => view.container.querySelector("li"),
+    description: () => view.container.querySelector("[aria-expanded]"),
+  };
 }
-const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 250)));
+const settle = () =>
+  act(() => new Promise((resolve) => setTimeout(resolve, 250)));
 
 test("only unread rows carry the unread marker", () => {
   act(() => {
-    notificationHistory.add({ type: "completed", sessionId: "old", sessionName: "Old" });
+    notificationHistory.add({
+      type: "completed",
+      sessionId: "old",
+      sessionName: "Old",
+    });
     notificationHistory.markAllRead();
-    notificationHistory.add({ type: "completed", sessionId: "new", sessionName: "New" });
+    notificationHistory.add({
+      type: "completed",
+      sessionId: "new",
+      sessionName: "New",
+    });
   });
   const view = render(React.createElement(NotificationList));
-  const markedRows = Array.from(view.container.querySelectorAll("li")).filter((li) => li.querySelector('[role="img"]'));
-  assert.deepEqual(markedRows.map((li) => li.querySelector(".display-serif").textContent), ["New"]);
+  const markedRows = Array.from(view.container.querySelectorAll("li")).filter(
+    (li) => li.querySelector('[role="img"]'),
+  );
+  assert.deepEqual(
+    markedRows.map((li) => li.querySelector(".display-serif").textContent),
+    ["New"],
+  );
 });
 
 test("a sideways touch swipe from anywhere on the row slides it out, then removes it, in either direction", async () => {
-  for (const points of [[[100, 50], [130, 54], [160, 58]], [[200, 50], [170, 46], [140, 44]]]) {
+  for (const points of [
+    [
+      [100, 50],
+      [130, 54],
+      [160, 58],
+    ],
+    [
+      [200, 50],
+      [170, 46],
+      [140, 44],
+    ],
+  ]) {
     const { row, description } = mount();
     drag(description(), points);
     assert.equal(row().style.opacity, "0", "the row slides out before it goes");
@@ -57,15 +114,47 @@ test("a sideways touch swipe from anywhere on the row slides it out, then remove
 
 test("short, mostly vertical, curved-into-vertical, mouse, and button-started drags keep the row", async () => {
   const { row, description } = mount();
-  drag(description(), [[100, 50], [115, 51], [130, 52]]);
-  drag(description(), [[100, 50], [120, 85], [150, 120]]);
+  drag(description(), [
+    [100, 50],
+    [115, 51],
+    [130, 52],
+  ]);
+  drag(description(), [
+    [100, 50],
+    [120, 85],
+    [150, 120],
+  ]);
   // Claimed sideways, then the thumb carries on mostly downward.
-  drag(description(), [[100, 50], [125, 52], [150, 120]]);
+  drag(description(), [
+    [100, 50],
+    [125, 52],
+    [150, 120],
+  ]);
   // Swiped out, then pulled back toward the start before letting go.
-  drag(description(), [[100, 50], [180, 52], [140, 52]]);
-  drag(description(), [[200, 50], [80, 52], [140, 52]]);
-  drag(description(), [[100, 50], [150, 51], [200, 52]], { pointerType: "mouse" });
-  drag(row().querySelector("button"), [[100, 50], [150, 51], [200, 52]]);
+  drag(description(), [
+    [100, 50],
+    [180, 52],
+    [140, 52],
+  ]);
+  drag(description(), [
+    [200, 50],
+    [80, 52],
+    [140, 52],
+  ]);
+  drag(
+    description(),
+    [
+      [100, 50],
+      [150, 51],
+      [200, 52],
+    ],
+    { pointerType: "mouse" },
+  );
+  drag(row().querySelector("button"), [
+    [100, 50],
+    [150, 51],
+    [200, 52],
+  ]);
   await settle();
   assert.equal(notificationHistory.get().length, 1);
   assert.equal(row().style.transform, "");
@@ -73,7 +162,12 @@ test("short, mostly vertical, curved-into-vertical, mouse, and button-started dr
 
 test("a swipe that turns back and then out again still dismisses", async () => {
   const { description } = mount();
-  drag(description(), [[100, 50], [180, 52], [140, 52], [190, 54]]);
+  drag(description(), [
+    [100, 50],
+    [180, 52],
+    [140, 52],
+    [190, 54],
+  ]);
   await settle();
   assert.equal(notificationHistory.get().length, 0);
 });
@@ -103,7 +197,16 @@ test("clicking or pressing Enter on a row marks it read and opens its session, b
   window.addEventListener(OPEN_SESSION_EVENT, onOpen);
   try {
     const { row } = mount();
-    const enter = (target) => act(() => { target.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })); });
+    const enter = (target) =>
+      act(() => {
+        target.dispatchEvent(
+          new window.KeyboardEvent("keydown", {
+            key: "Enter",
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      });
     act(() => row().querySelector(".display-serif").click());
     assert.deepEqual(opened, ["n1-session"]);
     assert.equal(notificationHistory.get()[0].read, true);
@@ -115,7 +218,9 @@ test("clicking or pressing Enter on a row marks it read and opens its session, b
     const description = row().querySelector("[aria-expanded]");
     act(() => description.click());
     assert.equal(description.getAttribute("aria-expanded"), "true");
-    window.getSelection().selectAllChildren(row().querySelector(".display-serif"));
+    window
+      .getSelection()
+      .selectAllChildren(row().querySelector(".display-serif"));
     act(() => row().querySelector(".display-serif").click());
     window.getSelection().removeAllRanges();
     enter(row().querySelector("button"));
@@ -130,8 +235,17 @@ test("clicking or pressing Enter on a row marks it read and opens its session, b
 });
 
 test("a row shows the event in the viewer's language, and its session name as the title", () => {
-  act(() => { notificationHistory.add({ type: "input", sessionId: "s9", sessionName: "Deploy", detail: "Ship it?" }); });
-  const row = render(React.createElement(NotificationList)).container.querySelector("li");
+  act(() => {
+    notificationHistory.add({
+      type: "input",
+      sessionId: "s9",
+      sessionName: "Deploy",
+      detail: "Ship it?",
+    });
+  });
+  const row = render(
+    React.createElement(NotificationList),
+  ).container.querySelector("li");
   assert.equal(row.querySelector(".display-serif").textContent, "Deploy");
   assert.match(row.textContent, /Ship it\?/);
 });
@@ -142,7 +256,15 @@ test("pressing Space on a row opens its session, like Enter", () => {
   window.addEventListener(OPEN_SESSION_EVENT, onOpen);
   try {
     const { row } = mount();
-    act(() => { row().dispatchEvent(new window.KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true })); });
+    act(() => {
+      row().dispatchEvent(
+        new window.KeyboardEvent("keydown", {
+          key: " ",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
     assert.deepEqual(opened, ["n1-session"]);
     assert.equal(notificationHistory.get()[0].read, true);
   } finally {
@@ -151,15 +273,34 @@ test("pressing Space on a row opens its session, like Enter", () => {
 });
 
 test("an entry whose session no longer exists still renders and opens by id", () => {
-  act(() => { notificationHistory.add({ type: "error", sessionId: "gone-session", sessionName: null }); });
-  const row = render(React.createElement(NotificationList)).container.querySelector("li");
-  assert.ok(row.querySelector(".display-serif").textContent.length > 0, "an untitled session still gets a title");
+  act(() => {
+    notificationHistory.add({
+      type: "error",
+      sessionId: "gone-session",
+      sessionName: null,
+    });
+  });
+  const row = render(
+    React.createElement(NotificationList),
+  ).container.querySelector("li");
+  assert.ok(
+    row.querySelector(".display-serif").textContent.length > 0,
+    "an untitled session still gets a title",
+  );
   assert.equal(row.tabIndex, 0);
 });
 
 test("an entry without a session is not focusable or clickable", () => {
-  act(() => { notificationHistory.add({ type: "completed", sessionId: "", sessionName: "omp web" }); });
-  const row = render(React.createElement(NotificationList)).container.querySelector("li");
+  act(() => {
+    notificationHistory.add({
+      type: "completed",
+      sessionId: "",
+      sessionName: "omp web",
+    });
+  });
+  const row = render(
+    React.createElement(NotificationList),
+  ).container.querySelector("li");
   assert.equal(row.hasAttribute("tabindex"), false);
   assert.equal(row.style.cursor, "");
 });

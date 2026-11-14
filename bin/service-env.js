@@ -4,16 +4,19 @@
 // Runtime settings live in ~/.omp/agent/web-service.env so changing the
 // port, bind address, or password does not require regenerating the unit.
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const fs = require("node:fs");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const os = require("node:os");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const path = require("node:path");
 
 function getServiceEnvPath(home = os.homedir()) {
-  const configuredDir = process.env.PI_CODING_AGENT_DIR?.replace(/^~(?=\/|$)/, home);
-  return path.join(configuredDir || path.join(home, ".omp", "agent"), "web-service.env");
+  const configuredDir = process.env.PI_CODING_AGENT_DIR?.replace(
+    /^~(?=\/|$)/,
+    home,
+  );
+  return path.join(
+    configuredDir || path.join(home, ".omp", "agent"),
+    "web-service.env",
+  );
 }
 
 // Escape a value for a double-quoted systemd env-file assignment.
@@ -47,7 +50,8 @@ function parseServiceEnv(text) {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
 
     let value = line.slice(separator + 1).trim();
-    const quoted = value.length >= 2 && value.startsWith('"') && value.endsWith('"');
+    const quoted =
+      value.length >= 2 && value.startsWith('"') && value.endsWith('"');
     if (quoted) value = value.slice(1, -1);
     entries[key] = value.replace(/\\(["\\])/g, "$1");
   }

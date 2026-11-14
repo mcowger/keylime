@@ -1,4 +1,8 @@
-import { apiErrorResponse, opErrorResponse, resolveHostOrError } from "@/lib/api-utils";
+import {
+  apiErrorResponse,
+  opErrorResponse,
+  resolveHostOrError,
+} from "@/lib/api-utils";
 import { allowFileRoot } from "@/lib/file-access";
 import { LOCAL_HOST_ID } from "@/lib/hosts/registry";
 import { comparableProjectPath } from "@/lib/comparable-path";
@@ -7,11 +11,14 @@ import { comparableProjectPath } from "@/lib/comparable-path";
 // Validates a candidate workspace on `hostId` (this machine when absent) before the UI selects it.
 export async function POST(req: Request) {
   try {
-    const body = await req.json() as { cwd?: unknown; hostId?: unknown };
+    const body = (await req.json()) as { cwd?: unknown; hostId?: unknown };
     const cwd = typeof body.cwd === "string" ? body.cwd.trim() : "";
 
     if (!cwd) {
-      return Response.json({ error: "Path is required", code: "path_required" }, { status: 400 });
+      return Response.json(
+        { error: "Path is required", code: "path_required" },
+        { status: 400 },
+      );
     }
 
     const target = resolveHostOrError(body.hostId);
@@ -24,7 +31,9 @@ export async function POST(req: Request) {
       success: true,
       cwd: result.value.cwd,
       projectRoot: result.value.projectRoot,
-      projectKey: result.value.projectKey ?? comparableProjectPath(result.value.projectRoot),
+      projectKey:
+        result.value.projectKey ??
+        comparableProjectPath(result.value.projectRoot),
     });
   } catch (error) {
     return apiErrorResponse(error);

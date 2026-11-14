@@ -17,8 +17,11 @@ const FOCUSABLE_SELECTOR = [
 ].join(", ");
 
 function focusableIn(container: HTMLElement): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
-    .filter((el) => el.getClientRects().length > 0 || el === document.activeElement);
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+  ).filter(
+    (el) => el.getClientRects().length > 0 || el === document.activeElement,
+  );
 }
 
 export interface ModalDialogOptions {
@@ -34,7 +37,10 @@ export interface ModalDialogOptions {
  * container. Attach the returned ref to the dialog panel and give that
  * element tabIndex={-1} (plus role="dialog" / aria-modal / a label).
  */
-export function useModalDialog<T extends HTMLElement>({ onClose, active = true }: ModalDialogOptions) {
+export function useModalDialog<T extends HTMLElement>({
+  onClose,
+  active = true,
+}: ModalDialogOptions) {
   const containerRef = useRef<T | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -43,7 +49,10 @@ export function useModalDialog<T extends HTMLElement>({ onClose, active = true }
     if (!active) return;
     const container = containerRef.current;
     if (!container) return;
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const opener =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     dialogStack.push(container);
 
     if (!container.contains(document.activeElement)) {

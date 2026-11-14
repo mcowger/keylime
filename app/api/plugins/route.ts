@@ -5,7 +5,10 @@ import { ANSI_RE, parseJsonLoose } from "@/lib/omp/plugins-cli";
 import { OMP_NOT_FOUND, resolveOmpBin } from "@/lib/omp/omp-cli";
 import { ensureAgentDir } from "@/lib/omp/paths";
 import { createChildProcessEnvironment } from "@/lib/project-command-env";
-import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
+import {
+  getAllowedFileRoots,
+  isExistingFilePathAllowed,
+} from "@/lib/file-access";
 import type {
   PluginDiagnostic,
   PluginPackageInfo,
@@ -84,8 +87,12 @@ function runOmp(
       },
       (error, stdout, stderr) => {
         if (error) {
-          const detail = (stderr || stdout || error.message).replace(ANSI_RE, "").trim();
-          reject(new Error(detail.slice(-600) || `omp ${args.join(" ")} failed`));
+          const detail = (stderr || stdout || error.message)
+            .replace(ANSI_RE, "")
+            .trim();
+          reject(
+            new Error(detail.slice(-600) || `omp ${args.join(" ")} failed`),
+          );
         } else {
           resolve({ stdout, stderr });
         }
@@ -96,7 +103,9 @@ function runOmp(
 
 /** Best-effort scan of a plugin's skills/ directory (omp discovers plugin-root
  * skills the same way) so the UI can show a resource count. */
-async function scanPluginSkills(pluginPath: string): Promise<PluginResourceInfo[]> {
+async function scanPluginSkills(
+  pluginPath: string,
+): Promise<PluginResourceInfo[]> {
   const skillsDir = join(pluginPath, "skills");
   let entries;
   try {
@@ -107,7 +116,11 @@ async function scanPluginSkills(pluginPath: string): Promise<PluginResourceInfo[
   }
   const resources: PluginResourceInfo[] = [];
   for (const entry of entries) {
-    if (entry.name.startsWith(".") || (!entry.isDirectory() && !entry.isSymbolicLink())) continue;
+    if (
+      entry.name.startsWith(".") ||
+      (!entry.isDirectory() && !entry.isSymbolicLink())
+    )
+      continue;
     const skillPath = join(skillsDir, entry.name, "SKILL.md");
     if (existsSync(skillPath)) {
       resources.push({
@@ -121,7 +134,10 @@ async function scanPluginSkills(pluginPath: string): Promise<PluginResourceInfo[
   return resources;
 }
 
-function manifestResources(pluginPath: string, manifest: OmpPluginManifest | undefined): PluginResourceInfo[] {
+function manifestResources(
+  pluginPath: string,
+  manifest: OmpPluginManifest | undefined,
+): PluginResourceInfo[] {
   const resources: PluginResourceInfo[] = [];
   const push = (kind: PluginResourceInfo["kind"], rel: string) => {
     const file = basename(rel);
@@ -141,7 +157,9 @@ function manifestResources(pluginPath: string, manifest: OmpPluginManifest | und
   return resources;
 }
 
-async function toNpmPackageInfo(plugin: OmpNpmPlugin): Promise<PluginPackageInfo> {
+async function toNpmPackageInfo(
+  plugin: OmpNpmPlugin,
+): Promise<PluginPackageInfo> {
   const resources = [
     ...manifestResources(plugin.path, plugin.manifest),
     ...(await scanPluginSkills(plugin.path)),
@@ -154,7 +172,8 @@ async function toNpmPackageInfo(plugin: OmpNpmPlugin): Promise<PluginPackageInfo
     else counts.themes += 1;
   }
   const installed = Boolean(plugin.path && existsSync(plugin.path));
-  const resourceCount = counts.extensions + counts.skills + counts.prompts + counts.themes;
+  const resourceCount =
+    counts.extensions + counts.skills + counts.prompts + counts.themes;
   return {
     source: plugin.name,
     scope: "global",
@@ -166,17 +185,20 @@ async function toNpmPackageInfo(plugin: OmpNpmPlugin): Promise<PluginPackageInfo
     configuredVersion: undefined,
     counts,
     resources,
-    status: plugin.enabled === false
-      ? "disabled"
-      : resourceCount > 0
-        ? "loaded"
-        : installed
-          ? "installed"
-          : "missing",
+    status:
+      plugin.enabled === false
+        ? "disabled"
+        : resourceCount > 0
+          ? "loaded"
+          : installed
+            ? "installed"
+            : "missing",
   };
 }
 
-async function toMarketplacePackageInfo(plugin: OmpMarketplacePlugin): Promise<PluginPackageInfo> {
+async function toMarketplacePackageInfo(
+  plugin: OmpMarketplacePlugin,
+): Promise<PluginPackageInfo> {
   const entry = plugin.entries?.[0];
   const installedPath = entry?.installPath;
   const installed = Boolean(installedPath && existsSync(installedPath));
@@ -195,7 +217,13 @@ async function toMarketplacePackageInfo(plugin: OmpMarketplacePlugin): Promise<P
     configuredVersion: undefined,
     counts,
     resources,
-    status: disabled ? "disabled" : resources.length > 0 ? "loaded" : installed ? "installed" : "missing",
+    status: disabled
+      ? "disabled"
+      : resources.length > 0
+        ? "loaded"
+        : installed
+          ? "installed"
+          : "missing",
   };
 }
 
@@ -207,7 +235,10 @@ async function readPlugins(cwd: string | null): Promise<PluginsResponse> {
   const totals = emptyCounts();
 
   try {
-    const { stdout } = await runOmp(["plugin", "list", "--json"], { cwd: cwd ?? ensureAgentDir(), timeout: 60_000 });
+    const { stdout } = await runOmp(["plugin", "list", "--json"], {
+      cwd: cwd ?? ensureAgentDir(),
+      timeout: 60_000,
+    });
     const list = parseJsonLoose<OmpPluginList>(stdout);
     if (!list) {
       diagnostics.push({
@@ -256,7 +287,10 @@ function readScope(scope: unknown): PluginScope {
 function pluginErrorResponse(error: unknown): Response {
   const message = error instanceof Error ? error.message : String(error);
   if (message.includes(OMP_NOT_FOUND)) {
-    return Response.json({ error: message, code: "omp_not_found" }, { status: 500 });
+    return Response.json(
+      { error: message, code: "omp_not_found" },
+      { status: 500 },
+    );
   }
   return Response.json({ error: message }, { status: 500 });
 }
@@ -267,7 +301,10 @@ export async function GET(req: Request) {
 
   try {
     if (cwd && !isExistingFilePathAllowed(cwd, await getAllowedFileRoots())) {
-      return Response.json({ error: "Access denied", code: "access_denied" }, { status: 403 });
+      return Response.json(
+        { error: "Access denied", code: "access_denied" },
+        { status: 403 },
+      );
     }
     return Response.json(await readPlugins(cwd));
   } catch (error) {
@@ -278,7 +315,7 @@ export async function GET(req: Request) {
 // POST /api/plugins body: { action, source?, scope?, cwd? }; without a cwd, global changes only.
 export async function POST(req: Request) {
   try {
-    const body = await req.json() as {
+    const body = (await req.json()) as {
       action?: PluginAction;
       source?: string;
       scope?: PluginScope;
@@ -286,10 +323,21 @@ export async function POST(req: Request) {
     };
     const cwd = body.cwd || null;
     const scope = readScope(body.scope);
-    if (!cwd && scope === "project") return Response.json({ error: "cwd required", code: "cwd_required" }, { status: 400 });
-    if (!body.action) return Response.json({ error: "action required", code: "action_required" }, { status: 400 });
+    if (!cwd && scope === "project")
+      return Response.json(
+        { error: "cwd required", code: "cwd_required" },
+        { status: 400 },
+      );
+    if (!body.action)
+      return Response.json(
+        { error: "action required", code: "action_required" },
+        { status: 400 },
+      );
     if (cwd && !isExistingFilePathAllowed(cwd, await getAllowedFileRoots())) {
-      return Response.json({ error: "Access denied", code: "access_denied" }, { status: 403 });
+      return Response.json(
+        { error: "Access denied", code: "access_denied" },
+        { status: 403 },
+      );
     }
 
     const source = body.source?.trim();
@@ -297,18 +345,48 @@ export async function POST(req: Request) {
     const dir = cwd ?? ensureAgentDir();
 
     if (body.action === "install") {
-      if (!source) return Response.json({ error: "source required", code: "source_required" }, { status: 400 });
-      await runOmp(["plugin", "install", source, "--json", ...scopeArgs], { cwd: dir, timeout: 300_000 });
+      if (!source)
+        return Response.json(
+          { error: "source required", code: "source_required" },
+          { status: 400 },
+        );
+      await runOmp(["plugin", "install", source, "--json", ...scopeArgs], {
+        cwd: dir,
+        timeout: 300_000,
+      });
     } else if (body.action === "remove") {
-      if (!source) return Response.json({ error: "source required", code: "source_required" }, { status: 400 });
-      await runOmp(["plugin", "uninstall", source, "--json", ...scopeArgs], { cwd: dir, timeout: 120_000 });
+      if (!source)
+        return Response.json(
+          { error: "source required", code: "source_required" },
+          { status: 400 },
+        );
+      await runOmp(["plugin", "uninstall", source, "--json", ...scopeArgs], {
+        cwd: dir,
+        timeout: 120_000,
+      });
     } else if (body.action === "update") {
-      await runOmp(["plugin", "upgrade", ...(source ? [source, ...scopeArgs] : [])], { cwd: dir, timeout: 300_000 });
+      await runOmp(
+        ["plugin", "upgrade", ...(source ? [source, ...scopeArgs] : [])],
+        { cwd: dir, timeout: 300_000 },
+      );
     } else if (body.action === "disable" || body.action === "enable") {
-      if (!source) return Response.json({ error: "source required", code: "source_required" }, { status: 400 });
-      await runOmp(["plugin", body.action, source, "--json", ...scopeArgs], { cwd: dir, timeout: 60_000 });
+      if (!source)
+        return Response.json(
+          { error: "source required", code: "source_required" },
+          { status: 400 },
+        );
+      await runOmp(["plugin", body.action, source, "--json", ...scopeArgs], {
+        cwd: dir,
+        timeout: 60_000,
+      });
     } else {
-      return Response.json({ error: `Unsupported action: ${body.action}`, code: "plugin_unsupported_action" }, { status: 400 });
+      return Response.json(
+        {
+          error: `Unsupported action: ${body.action}`,
+          code: "plugin_unsupported_action",
+        },
+        { status: 400 },
+      );
     }
 
     return Response.json(await readPlugins(cwd));

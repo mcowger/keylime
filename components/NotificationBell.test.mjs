@@ -2,32 +2,52 @@ import "../tests/setup-dom.mjs";
 import assert from "node:assert/strict";
 import test, { afterEach, before } from "node:test";
 import React from "react";
-const { act, cleanup, fireEvent, render, screen } = await import("@testing-library/react/pure.js");
+const { act, cleanup, fireEvent, render, screen } =
+  await import("@testing-library/react/pure.js");
 
 // Same specifiers as the component's own imports, so both see one history store.
 const { NotificationBell } = await import("@/components/NotificationBell");
 const { notificationHistory } = await import("@/lib/notification-history");
 
 before(() => {
-  globalThis.fetch = async () => new Response(JSON.stringify({ ok: true }), { status: 200 });
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ ok: true }), { status: 200 });
 });
-afterEach(() => { cleanup(); notificationHistory.clear(); });
+afterEach(() => {
+  cleanup();
+  notificationHistory.clear();
+});
 
 function renderBell() {
   const opens = [];
   function Harness() {
     const [open, setOpen] = React.useState(false);
-    return React.createElement(NotificationBell, { open, onOpenChange: (next) => { opens.push(next); setOpen(next); } });
+    return React.createElement(NotificationBell, {
+      open,
+      onOpenChange: (next) => {
+        opens.push(next);
+        setOpen(next);
+      },
+    });
   }
   render(React.createElement(Harness));
   return opens;
 }
-const flush = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+const flush = () =>
+  act(() => new Promise((resolve) => setTimeout(resolve, 50)));
 
 test("the bell shows the unread count and opens the list with its actions", async () => {
   act(() => {
-    notificationHistory.add({ type: "input", sessionId: "a", sessionName: "Alpha" });
-    notificationHistory.add({ type: "error", sessionId: "b", sessionName: "Beta" });
+    notificationHistory.add({
+      type: "input",
+      sessionId: "a",
+      sessionName: "Alpha",
+    });
+    notificationHistory.add({
+      type: "error",
+      sessionId: "b",
+      sessionName: "Beta",
+    });
   });
   renderBell();
   const bell = screen.getByRole("button", { name: "2 unread" });
@@ -41,7 +61,13 @@ test("the bell shows the unread count and opens the list with its actions", asyn
 });
 
 test("opening a notification's session closes the popover", async () => {
-  act(() => { notificationHistory.add({ type: "completed", sessionId: "a", sessionName: "Alpha" }); });
+  act(() => {
+    notificationHistory.add({
+      type: "completed",
+      sessionId: "a",
+      sessionName: "Alpha",
+    });
+  });
   const opens = renderBell();
   fireEvent.click(screen.getByRole("button", { name: "1 unread" }));
   await flush();
@@ -53,16 +79,31 @@ test("opening a notification's session closes the popover", async () => {
 
 test("dismissing a row keeps keyboard focus in the popover", async () => {
   act(() => {
-    notificationHistory.add({ type: "input", sessionId: "a", sessionName: "Alpha" });
-    notificationHistory.add({ type: "error", sessionId: "b", sessionName: "Beta" });
+    notificationHistory.add({
+      type: "input",
+      sessionId: "a",
+      sessionName: "Alpha",
+    });
+    notificationHistory.add({
+      type: "error",
+      sessionId: "b",
+      sessionName: "Beta",
+    });
   });
   renderBell();
   fireEvent.click(screen.getByRole("button", { name: "2 unread" }));
   await flush();
   const popup = screen.getByRole("dialog");
-  const dismiss = screen.getAllByRole("button", { name: "Dismiss notification" })[0];
-  act(() => { dismiss.focus(); });
+  const dismiss = screen.getAllByRole("button", {
+    name: "Dismiss notification",
+  })[0];
+  act(() => {
+    dismiss.focus();
+  });
   fireEvent.click(dismiss);
   await flush();
-  assert.ok(popup.contains(document.activeElement), `focus moved to ${document.activeElement?.tagName}`);
+  assert.ok(
+    popup.contains(document.activeElement),
+    `focus moved to ${document.activeElement?.tagName}`,
+  );
 });

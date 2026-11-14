@@ -16,7 +16,9 @@ export function getInstallName(
 ): string {
   const name = env.OMP_WEB_NAME?.trim();
   if (!name) return DEFAULT_NAME;
-  return FROM_REQUEST.includes(name.toLowerCase()) ? nameFromHost(headers.get("host")) : name;
+  return FROM_REQUEST.includes(name.toLowerCase())
+    ? nameFromHost(headers.get("host"))
+    : name;
 }
 
 function nameFromHost(host: string | null): string {
@@ -28,13 +30,15 @@ function nameFromHost(host: string | null): string {
   // Browsers resolve *.localhost to loopback, so it is localhost by another
   // name. (WHATWG already lowercases, so no case handling is needed here.)
   if (
-    !hostname
-    || hostname === "localhost"
-    || hostname === "localhost."
-    || hostname.endsWith(".localhost")
-    || hostname.endsWith(".localhost.")
+    !hostname ||
+    hostname === "localhost" ||
+    hostname === "localhost." ||
+    hostname.endsWith(".localhost") ||
+    hostname.endsWith(".localhost.")
   ) {
     return DEFAULT_NAME;
   }
-  return isIP(hostname.startsWith("[") ? hostname.slice(1, -1) : hostname) ? DEFAULT_NAME : hostname;
+  return isIP(hostname.startsWith("[") ? hostname.slice(1, -1) : hostname)
+    ? DEFAULT_NAME
+    : hostname;
 }

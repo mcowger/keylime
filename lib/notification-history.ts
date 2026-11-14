@@ -1,5 +1,8 @@
 import { useSyncExternalStore } from "react";
-import type { NotificationEvent, NotificationHistoryEntry } from "./notification-events";
+import type {
+  NotificationEvent,
+  NotificationHistoryEntry,
+} from "./notification-events";
 import { isRecord } from "./type-guards";
 
 /**
@@ -32,7 +35,13 @@ function change(next: NotificationHistoryEntry[]) {
 }
 
 const isEntry = (value: unknown): value is NotificationHistoryEntry =>
-  isRecord(value) && typeof value.id === "string" && isRecord(value.event) && typeof value.event.sessionId === "string" && typeof value.event.type === "string" && typeof value.at === "number" && typeof value.read === "boolean";
+  isRecord(value) &&
+  typeof value.id === "string" &&
+  isRecord(value.event) &&
+  typeof value.event.sessionId === "string" &&
+  typeof value.event.type === "string" &&
+  typeof value.at === "number" &&
+  typeof value.read === "boolean";
 
 function send(query: string, init: RequestInit) {
   requestsInFlight++;
@@ -41,7 +50,9 @@ function send(query: string, init: RequestInit) {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
     })
     // The server's list is the truth; drop the local change rather than show a state it does not have.
-    .catch(() => { reloadWhenSettled = true; })
+    .catch(() => {
+      reloadWhenSettled = true;
+    })
     .finally(() => {
       requestsInFlight--;
       if (requestsInFlight > 0 || !reloadWhenSettled) return;
@@ -50,12 +61,19 @@ function send(query: string, init: RequestInit) {
     });
 }
 
-const markRead = (ids: string[]) => send("", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+const markRead = (ids: string[]) =>
+  send("", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
 
 export const notificationHistory = {
   subscribe(listener: () => void) {
     listeners.add(listener);
-    return () => { listeners.delete(listener); };
+    return () => {
+      listeners.delete(listener);
+    };
   },
   get: () => entries,
   /** Replace the list with the server's; a failed request keeps the current one. */
@@ -76,23 +94,37 @@ export const notificationHistory = {
       else void notificationHistory.load();
       return;
     }
-    if (isRecord(body) && Array.isArray(body.entries)) set(body.entries.filter(isEntry));
+    if (isRecord(body) && Array.isArray(body.entries))
+      set(body.entries.filter(isEntry));
   },
   /** A notification delivered to this tab, already recorded by the server. */
   add(event: NotificationEvent) {
     const id = `${event.sessionId}:${event.type}`;
-    change([{ id, event, at: Date.now(), read: false }, ...entries.filter((entry) => entry.id !== id)].slice(0, LIMIT));
+    change(
+      [
+        { id, event, at: Date.now(), read: false },
+        ...entries.filter((entry) => entry.id !== id),
+      ].slice(0, LIMIT),
+    );
   },
   markRead(id: string) {
     if (!entries.some((entry) => entry.id === id && !entry.read)) return;
-    change(entries.map((entry) => (entry.id === id ? { ...entry, read: true } : entry)));
+    change(
+      entries.map((entry) =>
+        entry.id === id ? { ...entry, read: true } : entry,
+      ),
+    );
     markRead([id]);
   },
   /** Marks the entries this tab shows; ones that reached the server since stay unread. */
   markAllRead() {
-    const unread = entries.filter((entry) => !entry.read).map((entry) => entry.id);
+    const unread = entries
+      .filter((entry) => !entry.read)
+      .map((entry) => entry.id);
     if (unread.length === 0) return;
-    change(entries.map((entry) => (entry.read ? entry : { ...entry, read: true })));
+    change(
+      entries.map((entry) => (entry.read ? entry : { ...entry, read: true })),
+    );
     markRead(unread);
   },
   remove(id: string) {
@@ -106,11 +138,20 @@ export const notificationHistory = {
 };
 
 export function useNotificationHistory(): NotificationHistoryEntry[] {
-  return useSyncExternalStore(notificationHistory.subscribe, notificationHistory.get, notificationHistory.get);
+  return useSyncExternalStore(
+    notificationHistory.subscribe,
+    notificationHistory.get,
+    notificationHistory.get,
+  );
 }
 
-const unreadCount = () => entries.reduce((count, entry) => count + (entry.read ? 0 : 1), 0);
+const unreadCount = () =>
+  entries.reduce((count, entry) => count + (entry.read ? 0 : 1), 0);
 /** Unread entry count. A primitive snapshot, so callers re-render only when the count changes. */
 export function useUnreadNotificationCount(): number {
-  return useSyncExternalStore(notificationHistory.subscribe, unreadCount, unreadCount);
+  return useSyncExternalStore(
+    notificationHistory.subscribe,
+    unreadCount,
+    unreadCount,
+  );
 }

@@ -64,7 +64,12 @@ export interface ConnectionDiagnostics {
   status: "idle" | "connected" | "connecting" | "down";
   /** When the current connection attempt or outage began; null while idle or connected. */
   since: number | null;
-  lastReconnect: { at: number; trigger: string; outageMs: number; resumed: boolean | null } | null;
+  lastReconnect: {
+    at: number;
+    trigger: string;
+    outageMs: number;
+    resumed: boolean | null;
+  } | null;
   /** Within `windowMs`; resumes and resyncs are the browser link's. */
   reconnects: number;
   resumes: number;
@@ -87,12 +92,28 @@ export const COMMAND_DEDUPE_MS = 600_000;
  * answered by the web app itself when no omp child is alive (lib/agent-command.ts NO_SPAWN_REPLIES), or forwarded to
  * omp without awaiting its reply (lib/rpc-manager.ts dispatchCommand). */
 export const NO_OMP_REPLY_COMMANDS: ReadonlySet<string> = new Set([
-  "predict_word", "predict_word_feedback", "get_btw_history", "btw_cancel",
-  "host_tool_result", "host_uri_result", "ui_response", "ui_input",
-  "outbox_add", "outbox_remove", "outbox_scope",
+  "predict_word",
+  "predict_word_feedback",
+  "get_btw_history",
+  "btw_cancel",
+  "host_tool_result",
+  "host_uri_result",
+  "ui_response",
+  "ui_input",
+  "outbox_add",
+  "outbox_remove",
+  "outbox_scope",
 ]);
 
-const REPEATABLE_COMMANDS = ["predict_word", "predict_word_feedback", "set_host_tools", "set_host_uri_schemes", "outbox_add", "outbox_remove", "outbox_scope"];
+const REPEATABLE_COMMANDS = [
+  "predict_word",
+  "predict_word_feedback",
+  "set_host_tools",
+  "set_host_uri_schemes",
+  "outbox_add",
+  "outbox_remove",
+  "outbox_scope",
+];
 
 /** Commands that are repeatable by nature: `get_*` and `predict_word` only read, the outbox commands are idempotent by
  * their message id (lib/message-outbox.ts), and the others register or record the same thing again. Safe to send again
@@ -104,15 +125,28 @@ export function isIdempotentCommand(type: string): boolean {
 }
 
 export type MuxControlFrame =
-  | ({ type: "hello"; connectionId: string; serverId: string } & BrowserTransportState)
+  | ({
+      type: "hello";
+      connectionId: string;
+      serverId: string;
+    } & BrowserTransportState)
   | { type: "open"; sub: string }
   | { type: "end"; sub: string }
-  | { type: "refused"; sub: string; status: number; error: string; code: string }
+  | {
+      type: "refused";
+      sub: string;
+      status: number;
+      error: string;
+      code: string;
+    }
   /** The setting changed; the worker switches transport. */
   | ({ type: "transport" } & BrowserTransportState);
 
 export type EventStreamRequest =
-  | { connectionId: string; subscribe: { id: string; channel: EventStreamChannel } }
+  | {
+      connectionId: string;
+      subscribe: { id: string; channel: EventStreamChannel };
+    }
   | { connectionId: string; unsubscribe: string };
 
 const MAX_ID_LENGTH = 512;
@@ -122,41 +156,73 @@ function isBoundedString(value: unknown, max: number): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= max;
 }
 
-export function parseEventStreamChannel(value: unknown): EventStreamChannel | null {
+export function parseEventStreamChannel(
+  value: unknown,
+): EventStreamChannel | null {
   if (!value || typeof value !== "object") return null;
   const channel = value as Record<string, unknown>;
   switch (channel.kind) {
     case "running":
       return { kind: "running" };
     case "notifications":
-      return isValidNotificationId(channel.clientId) ? { kind: "notifications", clientId: channel.clientId } : null;
+      return isValidNotificationId(channel.clientId)
+        ? { kind: "notifications", clientId: channel.clientId }
+        : null;
     case "host-tools":
       return { kind: "host-tools" };
     case "hosts":
       return { kind: "hosts" };
     case "session":
-      return isBoundedString(channel.sessionId, MAX_ID_LENGTH) ? { kind: "session", sessionId: channel.sessionId } : null;
+      return isBoundedString(channel.sessionId, MAX_ID_LENGTH)
+        ? { kind: "session", sessionId: channel.sessionId }
+        : null;
     case "file": {
       if (!isBoundedString(channel.path, MAX_PATH_LENGTH)) return null;
       const sessionId = channel.sessionId ?? null;
-      if (sessionId !== null && !isBoundedString(sessionId, MAX_ID_LENGTH)) return null;
-      if (channel.hostId !== undefined && !isBoundedString(channel.hostId, MAX_ID_LENGTH)) return null;
-      return { kind: "file", path: channel.path, sessionId, ...(channel.hostId === undefined ? {} : { hostId: channel.hostId as string }) };
+      if (sessionId !== null && !isBoundedString(sessionId, MAX_ID_LENGTH))
+        return null;
+      if (
+        channel.hostId !== undefined &&
+        !isBoundedString(channel.hostId, MAX_ID_LENGTH)
+      )
+        return null;
+      return {
+        kind: "file",
+        path: channel.path,
+        sessionId,
+        ...(channel.hostId === undefined
+          ? {}
+          : { hostId: channel.hostId as string }),
+      };
     }
     default:
       return null;
   }
 }
 
-export function parseEventStreamRequest(value: unknown): EventStreamRequest | null {
+export function parseEventStreamRequest(
+  value: unknown,
+): EventStreamRequest | null {
   if (!value || typeof value !== "object") return null;
   const body = value as Record<string, unknown>;
   if (!isBoundedString(body.connectionId, MAX_ID_LENGTH)) return null;
   if (typeof body.unsubscribe === "string") {
-    return SUBSCRIPTION_ID_RE.test(body.unsubscribe) ? { connectionId: body.connectionId, unsubscribe: body.unsubscribe } : null;
+    return SUBSCRIPTION_ID_RE.test(body.unsubscribe)
+      ? { connectionId: body.connectionId, unsubscribe: body.unsubscribe }
+      : null;
   }
   const subscribe = body.subscribe as Record<string, unknown> | undefined;
-  if (!subscribe || typeof subscribe.id !== "string" || !SUBSCRIPTION_ID_RE.test(subscribe.id)) return null;
+  if (
+    !subscribe ||
+    typeof subscribe.id !== "string" ||
+    !SUBSCRIPTION_ID_RE.test(subscribe.id)
+  )
+    return null;
   const channel = parseEventStreamChannel(subscribe.channel);
-  return channel ? { connectionId: body.connectionId, subscribe: { id: subscribe.id, channel } } : null;
+  return channel
+    ? {
+        connectionId: body.connectionId,
+        subscribe: { id: subscribe.id, channel },
+      }
+    : null;
 }

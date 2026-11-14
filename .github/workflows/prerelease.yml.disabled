@@ -36,9 +36,10 @@ jobs:
       - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
 
       - run: bun install --frozen-lockfile
+      - run: bun run format:check
       - run: bun run build
       # The omp the runners compile against: the fork's newest integration build, not runner/omp-build.json's pin
-      # (not committed back). No such release or a runner that fails tsc against it fails the release.
+      # (not committed back). No such release or a runner that fails bun check against it fails the release.
       - name: Find the newest omp integration build
         env:
           GH_TOKEN: ${{ github.token }}
@@ -54,7 +55,7 @@ jobs:
           echo "OMP_TAG=$tag" >> "$GITHUB_ENV"
       # Without GH_TOKEN: bun install runs the omp packages' scripts.
       - name: Pin the runner to it
-        run: bun runner/scripts/use-omp-build.ts "$OMP_TAG" && (cd runner && bunx --bun tsc -p .)
+        run: bun runner/scripts/use-omp-build.ts "$OMP_TAG" && bun check -p runner
       - name: Build the release binaries
         run: sh scripts/build-release-binaries.sh
       - run: bun run smoke --binary release/ompweb-linux-x64/ompweb

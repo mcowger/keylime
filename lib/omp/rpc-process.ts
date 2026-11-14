@@ -36,7 +36,12 @@ export class RpcCommandTimeoutError extends Error {
   /** When the command went to the transport (or its wait started); a timer fires timeoutMs later. */
   readonly dispatchedAt: number;
 
-  constructor(command: string, timeoutMs: number, message?: string, dispatchedAt = Date.now() - timeoutMs) {
+  constructor(
+    command: string,
+    timeoutMs: number,
+    message?: string,
+    dispatchedAt = Date.now() - timeoutMs,
+  ) {
     super(message ?? `RPC command ${command} timed out after ${timeoutMs}ms`);
     this.name = "RpcCommandTimeoutError";
     this.command = command;
@@ -63,7 +68,11 @@ export interface RpcProcessOptions {
   /** Called for every non-response frame (events, extension UI, subagent frames). */
   onFrame?: (frame: RpcFrame) => void;
   /** Called once when the child exits, after pending commands are rejected. */
-  onExit?: (info: { code: number | null; signal: NodeJS.Signals | null; stderrTail: string }) => void;
+  onExit?: (info: {
+    code: number | null;
+    signal: NodeJS.Signals | null;
+    stderrTail: string;
+  }) => void;
   /** Byte transport to run over. Omitted → spawn ompweb's omp (see spawnLocalRpcTransport). */
   transport?: RpcTransport;
   /** The daemon already saw this child's hello, or it outlived its server: ready at once,
@@ -84,7 +93,11 @@ const STDERR_TAIL_LIMIT = 8 * 1024;
  */
 const MAX_INBOUND_LINE_BYTES = 32 * 1024 * 1024;
 /** Frames whose numeric `id` names the cmd they belong to; ompweb correlates them with `onReply`'s string id. */
-const COMMAND_ID_FRAMES = new Set(["prompt_result", "prompt_error", "bash_output"]);
+const COMMAND_ID_FRAMES = new Set([
+  "prompt_result",
+  "prompt_error",
+  "bash_output",
+]);
 
 /** A stdout line as JSON; undefined when blank or not JSON (never let a stray line kill the reader). */
 function parseLine(line: string): unknown {
@@ -97,9 +110,16 @@ function parseLine(line: string): unknown {
   }
 }
 
-const REQUEST_TYPES = new Set(["host_tool_call", "host_uri_request", "ui_request"]);
+const REQUEST_TYPES = new Set([
+  "host_tool_call",
+  "host_uri_request",
+  "ui_request",
+]);
 const requestId = (frame: RpcFrame) =>
-  REQUEST_TYPES.has(frame.type) && (typeof frame.id === "string" || typeof frame.id === "number") ? String(frame.id) : null;
+  REQUEST_TYPES.has(frame.type) &&
+  (typeof frame.id === "string" || typeof frame.id === "number")
+    ? String(frame.id)
+    : null;
 
 /** Spawns ompweb's omp headless with the sanitized child environment. */
 export function spawnOmpTransport(options: RpcProcessOptions): RpcTransport {
@@ -108,14 +128,28 @@ export function spawnOmpTransport(options: RpcProcessOptions): RpcTransport {
   if (!bin) {
     throw new Error(OMP_NOT_FOUND);
   }
-  const args = ["--headless", "--cwd", options.cwd, ...(options.extraArgs ?? [])];
+  const args = [
+    "--headless",
+    "--cwd",
+    options.cwd,
+    ...(options.extraArgs ?? []),
+  ];
   // omp-web ignores named profiles (OMP_PROFILE/PI_PROFILE): strip them so the
   // child resolves the same default agent dir. An explicit options.env entry
   // still wins (used to force the default profile for isolated test runs).
-  const env = sanitizeProjectCommandEnvironment({ ...process.env, ...options.env });
+  const env = sanitizeProjectCommandEnvironment({
+    ...process.env,
+    ...options.env,
+  });
   if (options.env?.OMP_PROFILE === undefined) delete env.OMP_PROFILE;
   if (options.env?.PI_PROFILE === undefined) delete env.PI_PROFILE;
-  return spawnLocalRpcTransport({ bin, args, cwd: options.cwd, env, spawn: options.dependencies?.spawn });
+  return spawnLocalRpcTransport({
+    bin,
+    args,
+    cwd: options.cwd,
+    env,
+    spawn: options.dependencies?.spawn,
+  });
 }
 
 export class RpcProcess {
@@ -138,7 +172,10 @@ export class RpcProcess {
   private nextId = 1;
   private stderrTail = "";
   private exited = false;
-  private exitInfo: { code: number | null; signal: NodeJS.Signals | null } | null = null;
+  private exitInfo: {
+    code: number | null;
+    signal: NodeJS.Signals | null;
+  } | null = null;
   // Lines are written one at a time so two of them cannot interleave on the pipe.
   private writeQueue: Promise<void> = Promise.resolve();
 
@@ -193,15 +230,24 @@ export class RpcProcess {
     return !this.exited;
   }
 
-  get exitDetails(): { code: number | null; signal: NodeJS.Signals | null; stderrTail: string } | null {
-    return this.exitInfo ? { ...this.exitInfo, stderrTail: this.stderrTail } : null;
+  get exitDetails(): {
+    code: number | null;
+    signal: NodeJS.Signals | null;
+    stderrTail: string;
+  } | null {
+    return this.exitInfo
+      ? { ...this.exitInfo, stderrTail: this.stderrTail }
+      : null;
   }
 
   /** Resolves with `{type:"ready", ...hello}`; rejects if the process dies first or the
    * timeout elapses. omp startup can take a few seconds (extensions, LSP). */
   waitReady(timeoutMs = 60_000): Promise<RpcFrame> {
     const timeout = new Promise<never>((_, reject) => {
-      const timer = setTimeout(() => reject(new Error(`omp ready timeout after ${timeoutMs}ms`)), timeoutMs);
+      const timer = setTimeout(
+        () => reject(new Error(`omp ready timeout after ${timeoutMs}ms`)),
+        timeoutMs,
+      );
       timer.unref?.();
       this.readyPromise.finally(() => clearTimeout(timer)).catch(() => {});
     });
@@ -245,7 +291,9 @@ export class RpcProcess {
     if (this.heldOverflow) return false;
     this.heldBytes += Buffer.byteLength(line);
     if (this.heldBytes <= LINK_LIMITS.channelBufferBytes) return true;
-    const overflow = new Error(`omp's output during adoption exceeded ${LINK_LIMITS.channelBufferBytes} bytes`);
+    const overflow = new Error(
+      `omp's output during adoption exceeded ${LINK_LIMITS.channelBufferBytes} bytes`,
+    );
     this.heldOverflow = overflow;
     this.heldFrames = [];
     for (const [, entry] of this.pending) {
@@ -268,10 +316,20 @@ export class RpcProcess {
         this.handleResponse(rest);
         return;
       case "event":
-        if (isRecord(rest.event) && typeof rest.event.type === "string") this.dispatch(rest.event as RpcFrame, replayed);
+        if (isRecord(rest.event) && typeof rest.event.type === "string")
+          this.dispatch(rest.event as RpcFrame, replayed);
         return;
       default:
-        this.dispatch({ type: t, ...rest, ...(COMMAND_ID_FRAMES.has(t) && typeof rest.id === "number" ? { id: String(rest.id) } : {}) }, replayed);
+        this.dispatch(
+          {
+            type: t,
+            ...rest,
+            ...(COMMAND_ID_FRAMES.has(t) && typeof rest.id === "number"
+              ? { id: String(rest.id) }
+              : {}),
+          },
+          replayed,
+        );
     }
   }
 
@@ -299,7 +357,11 @@ export class RpcProcess {
    * keeps the event loop alive on its own. `onReply` runs synchronously when
    * the response is read, before any frame after it is dispatched; it is told whether the command succeeded and its
    * wire id as a string (what `prompt_result`, `prompt_error` and `bash_output` name). */
-  sendCommand<T = unknown>(command: { type: string; [key: string]: unknown }, timeoutMs?: number, onReply?: (success: boolean, id: string) => void): Promise<T> {
+  sendCommand<T = unknown>(
+    command: { type: string; [key: string]: unknown },
+    timeoutMs?: number,
+    onReply?: (success: boolean, id: string) => void,
+  ): Promise<T> {
     if (this.exited) {
       return Promise.reject(new Error("omp process has exited"));
     }
@@ -321,7 +383,14 @@ export class RpcProcess {
           // spuriously reject.
           if (this.pending.get(id) === entry) {
             this.pending.delete(id);
-            reject(new RpcCommandTimeoutError(op, timeoutMs, undefined, dispatchedAt));
+            reject(
+              new RpcCommandTimeoutError(
+                op,
+                timeoutMs,
+                undefined,
+                dispatchedAt,
+              ),
+            );
           }
         }, timeoutMs);
         // A pending command timer must never keep the event loop alive on its own
@@ -349,26 +418,34 @@ export class RpcProcess {
     this.writeFrame({ t: type, ...rest }, () => {});
   }
 
-  private writeFrame(frame: { t: string; [key: string]: unknown }, callback: (error?: Error | null) => void): void {
+  private writeFrame(
+    frame: { t: string; [key: string]: unknown },
+    callback: (error?: Error | null) => void,
+  ): void {
     const line = `${JSON.stringify(frame)}\n`;
     if (Buffer.byteLength(line, "utf8") > MAX_INBOUND_LINE_BYTES) {
-      callback(new Error(`omp command exceeds the ${MAX_INBOUND_LINE_BYTES}-byte inbound transport limit`));
+      callback(
+        new Error(
+          `omp command exceeds the ${MAX_INBOUND_LINE_BYTES}-byte inbound transport limit`,
+        ),
+      );
       return;
     }
     // Serialized so two lines never interleave on the pipe and a failed write
     // cannot reorder the responses callers are awaiting.
     this.writeQueue = this.writeQueue.then(
-      () => new Promise<void>((resolve) => {
-        if (this.exited) {
-          callback(new Error("omp process is not running"));
-          resolve();
-          return;
-        }
-        this.transport.write(line, (error) => {
-          callback(error ?? null);
-          resolve();
-        });
-      }),
+      () =>
+        new Promise<void>((resolve) => {
+          if (this.exited) {
+            callback(new Error("omp process is not running"));
+            resolve();
+            return;
+          }
+          this.transport.write(line, (error) => {
+            callback(error ?? null);
+            resolve();
+          });
+        }),
     );
   }
 
@@ -383,7 +460,15 @@ export class RpcProcess {
     if (response.ok === true) {
       entry.resolve(response.data);
     } else {
-      entry.reject(new RpcCommandError(entry.command, typeof response.error === "string" ? response.error : "omp command failed", typeof response.code === "string" ? response.code : undefined));
+      entry.reject(
+        new RpcCommandError(
+          entry.command,
+          typeof response.error === "string"
+            ? response.error
+            : "omp command failed",
+          typeof response.code === "string" ? response.code : undefined,
+        ),
+      );
     }
   }
 

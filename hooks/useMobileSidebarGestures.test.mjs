@@ -2,30 +2,71 @@ import "../tests/setup-dom.mjs";
 import assert from "node:assert/strict";
 import test, { afterEach } from "node:test";
 import React from "react";
-const { act, cleanup, renderHook } = await import("@testing-library/react/pure.js");
+const { act, cleanup, renderHook } =
+  await import("@testing-library/react/pure.js");
 
-const { useMobileSidebarGestures } = await import("./useMobileSidebarGestures.ts");
-afterEach(() => { cleanup(); window.getSelection()?.removeAllRanges(); document.body.replaceChildren(); });
+const { useMobileSidebarGestures } =
+  await import("./useMobileSidebarGestures.ts");
+afterEach(() => {
+  cleanup();
+  window.getSelection()?.removeAllRanges();
+  document.body.replaceChildren();
+});
 
 function mount(initial = {}) {
-  return renderHook(({ enabled }) => {
-    const [leftOpen, onLeftOpenChange] = React.useState(initial.leftOpen ?? false);
-    const [rightOpen, onRightOpenChange] = React.useState(initial.rightOpen ?? false);
-    useMobileSidebarGestures({ enabled, leftOpen, rightOpen, onLeftOpenChange, onRightOpenChange });
-    return { leftOpen, rightOpen };
-  }, { initialProps: { enabled: true } });
+  return renderHook(
+    ({ enabled }) => {
+      const [leftOpen, onLeftOpenChange] = React.useState(
+        initial.leftOpen ?? false,
+      );
+      const [rightOpen, onRightOpenChange] = React.useState(
+        initial.rightOpen ?? false,
+      );
+      useMobileSidebarGestures({
+        enabled,
+        leftOpen,
+        rightOpen,
+        onLeftOpenChange,
+        onRightOpenChange,
+      });
+      return { leftOpen, rightOpen };
+    },
+    { initialProps: { enabled: true } },
+  );
 }
 
-function touch(type, x, y, { target = document.body, count = 1, identifier = 1, cancelable = true, onPreventDefault } = {}) {
+function touch(
+  type,
+  x,
+  y,
+  {
+    target = document.body,
+    count = 1,
+    identifier = 1,
+    cancelable = true,
+    onPreventDefault,
+  } = {},
+) {
   const point = { identifier, clientX: x, clientY: y };
   const event = new window.Event(type, { bubbles: true, cancelable });
   Object.defineProperties(event, {
-    touches: { value: type === "touchend" || type === "touchcancel" ? [] : Array.from({ length: count }, (_, index) => ({ ...point, identifier: identifier + index })) },
+    touches: {
+      value:
+        type === "touchend" || type === "touchcancel"
+          ? []
+          : Array.from({ length: count }, (_, index) => ({
+              ...point,
+              identifier: identifier + index,
+            })),
+    },
     changedTouches: { value: [point] },
   });
   if (onPreventDefault) {
     const preventDefault = event.preventDefault.bind(event);
-    event.preventDefault = () => { onPreventDefault(); preventDefault(); };
+    event.preventDefault = () => {
+      onPreventDefault();
+      preventDefault();
+    };
   }
   act(() => target.dispatchEvent(event));
   return event;
@@ -92,13 +133,19 @@ test("form editing and another visible dialog win over edge gestures", () => {
     const control = document.createElement(tag);
     if (tag === "div") control.setAttribute("contenteditable", "true");
     document.body.append(control);
-    assert.equal(swipe(140, 240, { target: control }).move.defaultPrevented, false);
+    assert.equal(
+      swipe(140, 240, { target: control }).move.defaultPrevented,
+      false,
+    );
     control.remove();
   }
   const topPanel = document.createElement("div");
   topPanel.setAttribute("data-top-panel", "");
   document.body.append(topPanel);
-  assert.equal(swipe(140, 240, { target: topPanel }).move.defaultPrevented, false);
+  assert.equal(
+    swipe(140, 240, { target: topPanel }).move.defaultPrevented,
+    false,
+  );
   topPanel.remove();
   const dialog = document.createElement("div");
   dialog.setAttribute("role", "dialog");
@@ -126,7 +173,11 @@ test("the foreground drawer owns the closing gesture, and disabling during a pul
   hook.rerender({ enabled: false });
   touch("touchend", window.innerWidth - 100, 302);
   assert.equal(hook.result.current.leftOpen, true);
-  assert.equal(swipe(window.innerWidth - 14, window.innerWidth - 100).move.defaultPrevented, false);
+  assert.equal(
+    swipe(window.innerWidth - 14, window.innerWidth - 100).move
+      .defaultPrevented,
+    false,
+  );
 });
 
 test("an edge tap preserves its click while a closed drawer does not block later swipes", () => {
@@ -218,7 +269,10 @@ test("native horizontal scrollers own their swipes while fitting or clipped cont
   const scroller = document.createElement("div");
   scroller.style.overflowX = "auto";
   // jsdom has no layout; declared widths cover fitting and overflowing scroll surfaces.
-  Object.defineProperties(scroller, { clientWidth: { value: 200 }, scrollWidth: { value: 200, writable: true } });
+  Object.defineProperties(scroller, {
+    clientWidth: { value: 200 },
+    scrollWidth: { value: 200, writable: true },
+  });
   const content = document.createElement("span");
   scroller.append(content);
   document.body.append(scroller);
@@ -227,10 +281,16 @@ test("native horizontal scrollers own their swipes while fitting or clipped cont
   swipe(240, 140, { target: scroller });
   assert.equal(hook.result.current.leftOpen, false);
   scroller.scrollWidth = 800;
-  assert.equal(swipe(140, 240, { target: content }).move.defaultPrevented, false);
+  assert.equal(
+    swipe(140, 240, { target: content }).move.defaultPrevented,
+    false,
+  );
   assert.equal(hook.result.current.leftOpen, false);
   scroller.style.overflowX = "scroll";
-  assert.equal(swipe(140, 240, { target: scroller }).move.defaultPrevented, false);
+  assert.equal(
+    swipe(140, 240, { target: scroller }).move.defaultPrevented,
+    false,
+  );
   assert.equal(hook.result.current.leftOpen, false);
   scroller.style.overflowX = "hidden";
   swipe(140, 240, { target: content });
@@ -271,14 +331,20 @@ test("text selection begun during a swipe cancels navigation before or after int
   };
   touch("touchstart", 140, 300, { target: text });
   select();
-  assert.equal(touch("touchmove", 240, 302, { target: text }).defaultPrevented, false);
+  assert.equal(
+    touch("touchmove", 240, 302, { target: text }).defaultPrevented,
+    false,
+  );
   touch("touchend", 240, 302, { target: text });
   assert.equal(hook.result.current.leftOpen, false);
   window.getSelection().removeAllRanges();
   touch("touchstart", 140, 300, { target: text });
   touch("touchmove", 180, 301, { target: text });
   select();
-  assert.equal(touch("touchmove", 240, 302, { target: text }).defaultPrevented, false);
+  assert.equal(
+    touch("touchmove", 240, 302, { target: text }).defaultPrevented,
+    false,
+  );
   touch("touchend", 240, 302, { target: text });
   assert.equal(hook.result.current.leftOpen, false);
 });
@@ -348,7 +414,12 @@ test("a curved swipe remains tracked when initial browser panning makes later mo
   touch("touchstart", 140, 300);
   touch("touchmove", 154, 316);
   let prevented = 0;
-  const ownedByBrowser = { cancelable: false, onPreventDefault: () => { prevented += 1; } };
+  const ownedByBrowser = {
+    cancelable: false,
+    onPreventDefault: () => {
+      prevented += 1;
+    },
+  };
   touch("touchmove", 182, 330, ownedByBrowser);
   touch("touchmove", 228, 362, ownedByBrowser);
   touch("touchend", 228, 362, ownedByBrowser);
@@ -361,7 +432,9 @@ test("an overlay dismissed by pointerdown still owns the following touch gesture
   const panel = document.createElement("div");
   panel.setAttribute("data-top-panel", "");
   document.body.append(panel);
-  document.addEventListener("pointerdown", () => panel.remove(), { once: true });
+  document.addEventListener("pointerdown", () => panel.remove(), {
+    once: true,
+  });
   const press = new window.Event("pointerdown", { bubbles: true });
   Object.defineProperty(press, "pointerType", { value: "touch" });
   act(() => document.body.dispatchEvent(press));

@@ -22,7 +22,15 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import { AlertCircle, Check as CheckIcon, Eye, EyeOff, Info, TriangleAlert, X } from "lucide-react";
+import {
+  AlertCircle,
+  Check as CheckIcon,
+  Eye,
+  EyeOff,
+  Info,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/primitives";
 
 /* ────────────────────────── Field wrapper ────────────────────────── */
@@ -39,9 +47,19 @@ interface FieldProps {
   id?: string;
 }
 
-export function Field({ label, hint, error, required, children, style, id }: FieldProps) {
+export function Field({
+  label,
+  hint,
+  error,
+  required,
+  children,
+  style,
+  id,
+}: FieldProps) {
   const autoId = useId();
-  const childId = isValidElement(children) ? (children.props as { id?: string }).id : undefined;
+  const childId = isValidElement(children)
+    ? (children.props as { id?: string }).id
+    : undefined;
   const fieldId = id || childId || autoId;
   const errorId = error ? `${fieldId}-error` : undefined;
   const hintId = !error && hint ? `${fieldId}-hint` : undefined;
@@ -49,14 +67,28 @@ export function Field({ label, hint, error, required, children, style, id }: Fie
 
   let enhancedChildren = children;
   if (isValidElement(children)) {
-    enhancedChildren = cloneElement(children as ReactElement<{ id?: string; "aria-describedby"?: string }>, {
-      id: childId || fieldId,
-      "aria-describedby": (children.props as { "aria-describedby"?: string })["aria-describedby"] || describedBy,
-    });
+    enhancedChildren = cloneElement(
+      children as ReactElement<{ id?: string; "aria-describedby"?: string }>,
+      {
+        id: childId || fieldId,
+        "aria-describedby":
+          (children.props as { "aria-describedby"?: string })[
+            "aria-describedby"
+          ] || describedBy,
+      },
+    );
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, ...style }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+        minWidth: 0,
+        ...style,
+      }}
+    >
       <label
         htmlFor={fieldId}
         style={{
@@ -76,7 +108,12 @@ export function Field({ label, hint, error, required, children, style, id }: Fie
       {error ? (
         <FieldError id={errorId}>{error}</FieldError>
       ) : hint ? (
-        <span id={hintId} style={{ fontSize: 10, color: "var(--text-dim)", lineHeight: 1.4 }}>{hint}</span>
+        <span
+          id={hintId}
+          style={{ fontSize: 10, color: "var(--text-dim)", lineHeight: 1.4 }}
+        >
+          {hint}
+        </span>
       ) : null}
     </div>
   );
@@ -120,9 +157,27 @@ export function Alert({
 }) {
   const isError = variant === "error";
   const isWarning = variant === "warning";
-  const Icon = isError ? AlertCircle : variant === "success" ? CheckIcon : isWarning ? TriangleAlert : Info;
-  const color = isError ? "var(--status-error)" : variant === "success" ? "var(--status-success)" : isWarning ? "var(--status-warning)" : "var(--text-muted)";
-  const borderColor = isError ? "var(--status-error)" : variant === "success" ? "var(--status-success)" : isWarning ? "var(--status-warning)" : "var(--border)";
+  const Icon = isError
+    ? AlertCircle
+    : variant === "success"
+      ? CheckIcon
+      : isWarning
+        ? TriangleAlert
+        : Info;
+  const color = isError
+    ? "var(--status-error)"
+    : variant === "success"
+      ? "var(--status-success)"
+      : isWarning
+        ? "var(--status-warning)"
+        : "var(--text-muted)";
+  const borderColor = isError
+    ? "var(--status-error)"
+    : variant === "success"
+      ? "var(--status-success)"
+      : isWarning
+        ? "var(--status-warning)"
+        : "var(--border)";
   const bg = isError
     ? "color-mix(in srgb, var(--status-error) 7%, var(--bg-panel))"
     : variant === "success"
@@ -147,10 +202,25 @@ export function Alert({
         ...style,
       }}
     >
-      <Icon size={13} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1, color }} />
+      <Icon
+        size={13}
+        aria-hidden="true"
+        style={{ flexShrink: 0, marginTop: 1, color }}
+      />
       <div style={{ flex: 1, minWidth: 0 }}>
         {title && <div style={{ fontWeight: 600, color }}>{title}</div>}
-        <div style={{ color: isError ? "var(--status-error)" : isWarning ? "var(--status-warning)" : "var(--text-muted)", overflowWrap: "anywhere" }}>{description}</div>
+        <div
+          style={{
+            color: isError
+              ? "var(--status-error)"
+              : isWarning
+                ? "var(--status-warning)"
+                : "var(--text-muted)",
+            overflowWrap: "anywhere",
+          }}
+        >
+          {description}
+        </div>
       </div>
       {onDismiss && (
         <button
@@ -215,7 +285,16 @@ export function FieldGroup({
       >
         {label}
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>{children}</div>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          minWidth: 0,
+        }}
+      >
+        {children}
+      </div>
     </section>
   );
 }
@@ -237,7 +316,8 @@ function inputShellStyle({ invalid }: InputShellStyleOptions): CSSProperties {
     outline: "none",
     width: "100%",
     boxSizing: "border-box",
-    transition: "border-color var(--dur-fast) var(--ease-out-warm), box-shadow var(--dur-fast) var(--ease-out-warm)",
+    transition:
+      "border-color var(--dur-fast) var(--ease-out-warm), box-shadow var(--dur-fast) var(--ease-out-warm)",
   };
 }
 
@@ -442,7 +522,11 @@ export function SecretInput({
           borderRadius: 4,
         }}
       >
-        {visible ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />}
+        {visible ? (
+          <EyeOff size={15} aria-hidden="true" />
+        ) : (
+          <Eye size={15} aria-hidden="true" />
+        )}
       </button>
     </div>
   );
@@ -476,46 +560,53 @@ export function Select({
   const [focused, setFocused] = useState(false);
   const isInvalid = Boolean(invalid || error);
   return (
-    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-    <select
-      id={id}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={disabled}
-      aria-invalid={isInvalid || undefined}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-      style={{
-        ...inputShellStyle({ invalid: isInvalid }),
-        ...focusGlowStyle(focused, isInvalid),
-        color: value ? "var(--text)" : "var(--text-dim)",
-        appearance: "none",
-        width: "100%",
-        paddingRight: 24,
-        opacity: disabled ? 0.6 : 1,
-      }}
+    <div
+      style={{ position: "relative", display: "flex", alignItems: "center" }}
     >
-      {!required && <option value="">{placeholder ?? ""}</option>}
-      {options.map((o) => (
-        <option key={o} value={o}>
-          {o}
-        </option>
-      ))}
-    </select>
-    <svg
-      width="10"
-      height="10"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      style={{ position: "absolute", right: 8, color: "var(--text-dim)", pointerEvents: "none" }}
-    >
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
+      <select
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        aria-invalid={isInvalid || undefined}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{
+          ...inputShellStyle({ invalid: isInvalid }),
+          ...focusGlowStyle(focused, isInvalid),
+          color: value ? "var(--text)" : "var(--text-dim)",
+          appearance: "none",
+          width: "100%",
+          paddingRight: 24,
+          opacity: disabled ? 0.6 : 1,
+        }}
+      >
+        {!required && <option value="">{placeholder ?? ""}</option>}
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+      <svg
+        width="10"
+        height="10"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          right: 8,
+          color: "var(--text-dim)",
+          pointerEvents: "none",
+        }}
+      >
+        <polyline points="6 9 12 15 18 9" />
+      </svg>
     </div>
   );
 }
@@ -547,7 +638,12 @@ export function Check({ label, checked, onChange, disabled }: CheckProps) {
         checked={checked}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
-        style={{ width: 14, height: 14, accentColor: "var(--accent)", cursor: disabled ? "not-allowed" : "pointer" }}
+        style={{
+          width: 14,
+          height: 14,
+          accentColor: "var(--accent)",
+          cursor: disabled ? "not-allowed" : "pointer",
+        }}
       />
       {label}
     </label>
@@ -611,7 +707,14 @@ export function ConfirmDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         ariaLabel={typeof title === "string" ? title : undefined}
-        style={{ width: 420, maxWidth: "min(92vw, 420px)", padding: 22, display: "flex", flexDirection: "column", overflow: "hidden" }}
+        style={{
+          width: 420,
+          maxWidth: "min(92vw, 420px)",
+          padding: 22,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
       >
         <DialogTitle>{title}</DialogTitle>
         <div style={{ height: 8 }} />
@@ -631,7 +734,16 @@ export function ConfirmDialog({
             {description}
           </p>
         )}
-        <div className="dialog-actions" style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexShrink: 0, paddingTop: 4 }}>
+        <div
+          className="dialog-actions"
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: 8,
+            flexShrink: 0,
+            paddingTop: 4,
+          }}
+        >
           <button
             type="button"
             className="dialog-action"
@@ -655,7 +767,9 @@ export function ConfirmDialog({
             onClick={onConfirm}
             style={{
               padding: "6px 14px",
-              background: danger ? "var(--status-error)" : "var(--accent-strong)",
+              background: danger
+                ? "var(--status-error)"
+                : "var(--accent-strong)",
               border: "none",
               borderRadius: "var(--radius-control)",
               color: "var(--on-accent)",
@@ -666,10 +780,16 @@ export function ConfirmDialog({
               transition: "background var(--dur-fast) var(--ease-out-warm)",
             }}
             onMouseEnter={(e) => {
-              if (!busy) e.currentTarget.style.background = danger ? "color-mix(in srgb, var(--status-error) 82%, black)" : "var(--accent-hover)";
+              if (!busy)
+                e.currentTarget.style.background = danger
+                  ? "color-mix(in srgb, var(--status-error) 82%, black)"
+                  : "var(--accent-hover)";
             }}
             onMouseLeave={(e) => {
-              if (!busy) e.currentTarget.style.background = danger ? "var(--status-error)" : "var(--accent-strong)";
+              if (!busy)
+                e.currentTarget.style.background = danger
+                  ? "var(--status-error)"
+                  : "var(--accent-strong)";
             }}
           >
             {confirmLabel}

@@ -1,5 +1,9 @@
 import { readBodyWithinLimit } from "@/lib/bounded-form-data";
-import { abortUpload, putUploadChunk, uploadErrorResponse } from "@/lib/uploads";
+import {
+  abortUpload,
+  putUploadChunk,
+  uploadErrorResponse,
+} from "@/lib/uploads";
 import { requestOwner } from "@/lib/web-auth";
 
 type Params = { params: Promise<{ id: string }> };
@@ -14,9 +18,15 @@ export async function PUT(req: Request, { params }: Params) {
     const { id } = await params;
     const raw = new URL(req.url).searchParams.get("offset") ?? "";
     const offset = Number(raw);
-    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(offset)) return Response.json({ error: "offset must be a byte offset", code: "invalid_request" }, { status: 400 });
+    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(offset))
+      return Response.json(
+        { error: "offset must be a byte offset", code: "invalid_request" },
+        { status: 400 },
+      );
     const body = await readBodyWithinLimit(req, MAX_CHUNK_BYTES);
-    return Response.json(await putUploadChunk(id, requestOwner(req), offset, body));
+    return Response.json(
+      await putUploadChunk(id, requestOwner(req), offset, body),
+    );
   } catch (error) {
     return uploadErrorResponse(error);
   }
@@ -26,6 +36,10 @@ export async function PUT(req: Request, { params }: Params) {
  * `host` reaches an upload this server no longer registers. */
 export async function DELETE(req: Request, { params }: Params) {
   const host = new URL(req.url).searchParams.get("host");
-  await abortUpload((await params).id, requestOwner(req), host && host.length <= 128 ? host : undefined);
+  await abortUpload(
+    (await params).id,
+    requestOwner(req),
+    host && host.length <= 128 ? host : undefined,
+  );
   return new Response(null, { status: 204 });
 }

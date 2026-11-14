@@ -51,9 +51,15 @@ function pathDepth(p: string): number {
   return depth;
 }
 
-const entryMetaCache = new WeakMap<FileIndexEntry, { lowerPath: string; depth: number }>();
+const entryMetaCache = new WeakMap<
+  FileIndexEntry,
+  { lowerPath: string; depth: number }
+>();
 
-function getEntryMeta(entry: FileIndexEntry): { lowerPath: string; depth: number } {
+function getEntryMeta(entry: FileIndexEntry): {
+  lowerPath: string;
+  depth: number;
+} {
   let meta = entryMetaCache.get(entry);
   if (!meta) {
     meta = {
@@ -84,7 +90,11 @@ export function buildEntriesFromFiles(files: string[]): FileIndexEntry[] {
     if (!f) continue;
     entries.push({ path: f, isDir: false });
   }
-  entries.sort((a, b) => getEntryMeta(a).depth - getEntryMeta(b).depth || a.path.localeCompare(b.path));
+  entries.sort(
+    (a, b) =>
+      getEntryMeta(a).depth - getEntryMeta(b).depth ||
+      a.path.localeCompare(b.path),
+  );
   return entries;
 }
 
@@ -158,10 +168,12 @@ export function filterFileEntries(
     const score = scoreEntry(entry, lowerQuery);
     if (score > 0) scored.push({ entry, score });
   }
-  scored.sort((a, b) =>
-    b.score - a.score
-    || getEntryMeta(a.entry).depth - getEntryMeta(b.entry).depth
-    || a.entry.path.localeCompare(b.entry.path));
+  scored.sort(
+    (a, b) =>
+      b.score - a.score ||
+      getEntryMeta(a.entry).depth - getEntryMeta(b.entry).depth ||
+      a.entry.path.localeCompare(b.entry.path),
+  );
   return scored.slice(0, limit).map((s) => s.entry);
 }
 
@@ -182,7 +194,11 @@ export interface AtInsertion {
  *   placed before the closing quote, so both further typing and manual
  *   completion keep the token well-formed.
  */
-export function buildAtInsertText(entryPath: string, isDir: boolean, forceQuotes = false): AtInsertion {
+export function buildAtInsertText(
+  entryPath: string,
+  isDir: boolean,
+  forceQuotes = false,
+): AtInsertion {
   const p = isDir ? `${entryPath}/` : entryPath;
   const needsQuotes = forceQuotes || p.includes(" ");
   if (isDir) {
@@ -204,14 +220,23 @@ export function buildAtMentionText(entryPath: string, isDir: boolean): string {
 }
 
 /** Closed file @mention scoped to one logical line or an inclusive line range. */
-export function buildFileLineMentionText(entryPath: string, startLine: number, endLine: number): string {
+export function buildFileLineMentionText(
+  entryPath: string,
+  startLine: number,
+  endLine: number,
+): string {
   const firstLine = Math.max(1, Math.min(startLine, endLine));
   const lastLine = Math.max(1, Math.max(startLine, endLine));
-  const pathMention = entryPath.includes(" ") ? `@"${entryPath}"` : `@${entryPath}`;
-  const lineSuffix = firstLine === lastLine ? `:${firstLine}` : `:${firstLine}-${lastLine}`;
+  const pathMention = entryPath.includes(" ")
+    ? `@"${entryPath}"`
+    : `@${entryPath}`;
+  const lineSuffix =
+    firstLine === lastLine ? `:${firstLine}` : `:${firstLine}-${lastLine}`;
   return `${pathMention}${lineSuffix} `;
 }
 
 export function buildFileAtMentionsText(entryPaths: string[]): string {
-  return entryPaths.map((entryPath) => buildAtMentionText(entryPath, false)).join("");
+  return entryPaths
+    .map((entryPath) => buildAtMentionText(entryPath, false))
+    .join("");
 }

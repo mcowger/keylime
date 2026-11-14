@@ -18,7 +18,10 @@ export const SIDEBAR_MAX_WIDTH = 520;
 export const SIDEBAR_DEFAULT_WIDTH = 260;
 
 export function clampSidebarWidth(width: number): number {
-  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Math.round(width)));
+  return Math.min(
+    SIDEBAR_MAX_WIDTH,
+    Math.max(SIDEBAR_MIN_WIDTH, Math.round(width)),
+  );
 }
 
 export function loadSidebarWidth(): number {
@@ -26,7 +29,9 @@ export function loadSidebarWidth(): number {
   try {
     const raw = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
     const width = raw ? Number(raw) : NaN;
-    return Number.isFinite(width) ? clampSidebarWidth(width) : SIDEBAR_DEFAULT_WIDTH;
+    return Number.isFinite(width)
+      ? clampSidebarWidth(width)
+      : SIDEBAR_DEFAULT_WIDTH;
   } catch {
     return SIDEBAR_DEFAULT_WIDTH;
   }
@@ -40,7 +45,10 @@ export const RIGHT_PANEL_MIN_WIDTH = 300;
 export const RIGHT_PANEL_MAX_WIDTH = 900;
 
 export function clampRightPanelWidth(width: number): number {
-  return Math.min(RIGHT_PANEL_MAX_WIDTH, Math.max(RIGHT_PANEL_MIN_WIDTH, Math.round(width)));
+  return Math.min(
+    RIGHT_PANEL_MAX_WIDTH,
+    Math.max(RIGHT_PANEL_MIN_WIDTH, Math.round(width)),
+  );
 }
 
 export function loadRightPanelWidth(): number | null {
@@ -69,7 +77,9 @@ export function WorkspaceState({
   return (
     <div
       className={`workspace-state workspace-state-${kind}`}
-      role={kind === "error" ? "alert" : kind === "loading" ? "status" : undefined}
+      role={
+        kind === "error" ? "alert" : kind === "loading" ? "status" : undefined
+      }
       aria-busy={kind === "loading" ? true : undefined}
       aria-label={kind === "loading" ? title : undefined}
     >
@@ -81,13 +91,25 @@ export function WorkspaceState({
             <span />
           </div>
         ) : kind === "error" ? (
-          <CircleAlert className="workspace-state-icon" size={18} strokeWidth={1.8} aria-hidden="true" />
+          <CircleAlert
+            className="workspace-state-icon"
+            size={18}
+            strokeWidth={1.8}
+            aria-hidden="true"
+          />
         ) : (
-          <MessageSquareText className="workspace-state-icon" size={18} strokeWidth={1.8} aria-hidden="true" />
+          <MessageSquareText
+            className="workspace-state-icon"
+            size={18}
+            strokeWidth={1.8}
+            aria-hidden="true"
+          />
         )}
         <div className="workspace-state-copy">
           <div className="workspace-state-title">{title}</div>
-          {detail ? <div className="workspace-state-detail">{detail}</div> : null}
+          {detail ? (
+            <div className="workspace-state-detail">{detail}</div>
+          ) : null}
         </div>
       </div>
     </div>

@@ -1,7 +1,8 @@
 import "../tests/setup-dom.mjs";
 import assert from "node:assert/strict";
 import test, { afterEach, beforeEach } from "node:test";
-const { act, cleanup, renderHook } = await import("@testing-library/react/pure.js");
+const { act, cleanup, renderHook } =
+  await import("@testing-library/react/pure.js");
 
 // These tests execute the dictation state machine against fake
 // getUserMedia/MediaRecorder/AudioContext implementations. They assert the
@@ -53,7 +54,9 @@ class FakeMediaRecorder {
     this.timeslice = timeslice ?? null;
   }
   requestData() {
-    this.ondataavailable?.({ data: new Blob(["chunk"], { type: this.mimeType }) });
+    this.ondataavailable?.({
+      data: new Blob(["chunk"], { type: this.mimeType }),
+    });
   }
   pause() {
     this.state = "paused";
@@ -63,7 +66,9 @@ class FakeMediaRecorder {
   }
   stop() {
     this.state = "inactive";
-    this.ondataavailable?.({ data: new Blob(["chunk"], { type: this.mimeType }) });
+    this.ondataavailable?.({
+      data: new Blob(["chunk"], { type: this.mimeType }),
+    });
     this.onstop?.();
   }
 }
@@ -115,8 +120,16 @@ class FakePreviewAudio {
 
 const overrides = [];
 function override(target, key, replacement) {
-  overrides.push({ target, key, original: Object.getOwnPropertyDescriptor(target, key) });
-  Object.defineProperty(target, key, { configurable: true, writable: true, value: replacement });
+  overrides.push({
+    target,
+    key,
+    original: Object.getOwnPropertyDescriptor(target, key),
+  });
+  Object.defineProperty(target, key, {
+    configurable: true,
+    writable: true,
+    value: replacement,
+  });
 }
 
 beforeEach(() => {
@@ -144,13 +157,23 @@ beforeEach(() => {
   // `owner` token, as the server does; each GET poll answers with the next
   // scripted response (the last one repeating); a claiming DELETE takes the
   // last polled body plus the kept intent; POST /api/stt/job-1 is a retry.
-  world.pollResponses = [{ ok: true, status: 200, json: async () => ({ status: "done", text: "transcribed words" }) }];
+  world.pollResponses = [
+    {
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "done", text: "transcribed words" }),
+    },
+  ];
   world.polls = 0;
   world.lastPoll = null;
   world.postedFiles = [];
   world.deletes = [];
   world.retries = 0;
-  world.retryResponse = { ok: true, status: 200, json: async () => ({ status: "pending" }) };
+  world.retryResponse = {
+    ok: true,
+    status: 200,
+    json: async () => ({ status: "pending" }),
+  };
   world.scopeJobs = [];
   world.audioUrls = [];
   world.uploadGate = null;
@@ -160,7 +183,12 @@ beforeEach(() => {
   // Optional scripted claim answers (shifted per claim) before the default.
   world.claimResponses = [];
   override(globalThis, "fetch", async (url, init) => {
-    if (url.startsWith("/api/stt?scope=")) return { ok: true, status: 200, json: async () => ({ jobs: world.scopeJobs }) };
+    if (url.startsWith("/api/stt?scope="))
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ jobs: world.scopeJobs }),
+      };
     if (init?.method === "POST" && url === "/api/stt") {
       world.postedFiles.push(init.body.get("file"));
       world.postedAfter = init.body.get("after");
@@ -178,13 +206,25 @@ beforeEach(() => {
       const claim = query.get("claim");
       if (claim) world.claims.push({ claim, owner: query.get("owner") });
       // As the server: only the job's owner gets the send/queue choice back.
-      const after = query.get("owner") === world.postedOwner ? world.postedAfter ?? undefined : undefined;
+      const after =
+        query.get("owner") === world.postedOwner
+          ? (world.postedAfter ?? undefined)
+          : undefined;
       const scripted = claim ? world.claimResponses.shift() : undefined;
-      const claimed = claim ? scripted ?? { ...(await world.lastPoll?.json()), after } : null;
-      return { ok: true, status: 200, json: async () => claimed ?? { status: "gone" } };
+      const claimed = claim
+        ? (scripted ?? { ...(await world.lastPoll?.json()), after })
+        : null;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => claimed ?? { status: "gone" },
+      };
     }
     assert.equal(url, "/api/stt/job-1");
-    world.lastPoll = world.pollResponses[Math.min(world.polls++, world.pollResponses.length - 1)];
+    world.lastPoll =
+      world.pollResponses[
+        Math.min(world.polls++, world.pollResponses.length - 1)
+      ];
     return world.lastPoll;
   });
 });
@@ -222,15 +262,34 @@ test("starting capture puts the hook in the recording state with a live analyser
   });
   await settle();
 
-  assert.equal(errors.length, 0, `unexpected dictation errors: ${errors.join(" | ")}`);
-  assert.equal(view.result.current.isRecording, true, "consumer must see isRecording after start");
+  assert.equal(
+    errors.length,
+    0,
+    `unexpected dictation errors: ${errors.join(" | ")}`,
+  );
+  assert.equal(
+    view.result.current.isRecording,
+    true,
+    "consumer must see isRecording after start",
+  );
   assert.equal(view.result.current.isPaused, false);
   assert.equal(view.result.current.isReviewing, false);
   assert.equal(world.recorders.length, 1);
   assert.equal(world.recorders[0].state, "recording");
-  assert.equal(world.recorders[0].timeslice, 100, "timeslice keeps chunks flowing for preview");
-  assert.notEqual(view.result.current.captureRef.current.analyser, null, "waveform needs a live analyser");
-  assert.ok(view.result.current.captureRef.current.startedAt > 0, "timer needs a start stamp");
+  assert.equal(
+    world.recorders[0].timeslice,
+    100,
+    "timeslice keeps chunks flowing for preview",
+  );
+  assert.notEqual(
+    view.result.current.captureRef.current.analyser,
+    null,
+    "waveform needs a live analyser",
+  );
+  assert.ok(
+    view.result.current.captureRef.current.startedAt > 0,
+    "timer needs a start stamp",
+  );
 });
 
 test("the meter's audio context is resumed inside the click, and again if the mic session suspends it", async () => {
@@ -287,29 +346,49 @@ test("a meter the browser suspends mid-recording or during a pause is resumed", 
   override(window, "AudioContext", TrackingAudioContext);
   override(globalThis, "AudioContext", TrackingAudioContext);
   const { view } = mountDictation();
-  await act(async () => { view.result.current.toggle(); });
+  await act(async () => {
+    view.result.current.toggle();
+  });
   await settle();
   const ctx = contexts[0];
   const before = resumes;
 
   ctx.state = "interrupted";
   ctx.onstatechange();
-  assert.equal(resumes, before + 1, "a mid-take interruption resumes the meter");
+  assert.equal(
+    resumes,
+    before + 1,
+    "a mid-take interruption resumes the meter",
+  );
   ctx.onstatechange();
   assert.equal(resumes, before + 1, "a running meter is not resumed again");
 
-  await act(async () => { view.result.current.togglePause(); });
+  await act(async () => {
+    view.result.current.togglePause();
+  });
   await settle(40);
   ctx.state = "suspended";
   ctx.onstatechange();
-  assert.equal(resumes, before + 2, "a meter suspended during the pause is resumed");
+  assert.equal(
+    resumes,
+    before + 2,
+    "a meter suspended during the pause is resumed",
+  );
   // A suspension the browser reported no change for (or a refused resume).
   ctx.state = "suspended";
-  await act(async () => { view.result.current.togglePause(); });
+  await act(async () => {
+    view.result.current.togglePause();
+  });
   await settle();
-  assert.equal(ctx.state, "running", "resuming the take resumes a suspended meter");
+  assert.equal(
+    ctx.state,
+    "running",
+    "resuming the take resumes a suspended meter",
+  );
 
-  await act(async () => { view.result.current.stop(); });
+  await act(async () => {
+    view.result.current.stop();
+  });
   await settle();
   const afterStop = resumes;
   ctx.state = "suspended";
@@ -342,10 +421,21 @@ test("pause then resume keeps the timer base and analyser while accumulating pau
 
   const capture = view.result.current.captureRef.current;
   assert.equal(view.result.current.isPaused, false);
-  assert.equal(capture.startedAt, startedAt, "resume must not reset the elapsed base");
-  assert.equal(capture.analyser, analyser, "resume must not drop the live analyser");
+  assert.equal(
+    capture.startedAt,
+    startedAt,
+    "resume must not reset the elapsed base",
+  );
+  assert.equal(
+    capture.analyser,
+    analyser,
+    "resume must not drop the live analyser",
+  );
   assert.equal(capture.pausedAt, null);
-  assert.ok(capture.pausedAccum > 0, "paused time must be subtracted from active elapsed time");
+  assert.ok(
+    capture.pausedAccum > 0,
+    "paused time must be subtracted from active elapsed time",
+  );
   assert.equal(world.recorders[0].state, "recording");
 });
 
@@ -364,8 +454,15 @@ test("stopping capture enters review with a playable preview, and confirming rel
 
   assert.equal(view.result.current.isReviewing, true);
   assert.equal(view.result.current.isRecording, false);
-  assert.equal(world.createdUrls.length, 1, "review mode needs a preview blob URL");
-  assert.ok(world.tracks[0].stopped, "microphone tracks must be released on stop");
+  assert.equal(
+    world.createdUrls.length,
+    1,
+    "review mode needs a preview blob URL",
+  );
+  assert.ok(
+    world.tracks[0].stopped,
+    "microphone tracks must be released on stop",
+  );
 
   await act(async () => {
     view.result.current.playPreview();
@@ -378,7 +475,11 @@ test("stopping capture enters review with a playable preview, and confirming rel
   });
   await waitUntil(() => transcripts.length === 1);
 
-  assert.deepEqual(world.revokedUrls, [world.createdUrls[0].url], "confirming must revoke the preview URL");
+  assert.deepEqual(
+    world.revokedUrls,
+    [world.createdUrls[0].url],
+    "confirming must revoke the preview URL",
+  );
   assert.equal(view.result.current.isReviewing, false);
   assert.deepEqual(transcripts, ["transcribed words"]);
 });
@@ -388,7 +489,11 @@ test("transcription keeps polling through pending and proxy error pages until th
   world.pollResponses = [
     { ok: true, status: 200, json: async () => ({ status: "pending" }) },
     { ok: false, status: 504, json: async () => JSON.parse("<!DOCTYPE html>") },
-    { ok: true, status: 200, json: async () => ({ status: "done", text: "slow words" }) },
+    {
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "done", text: "slow words" }),
+    },
   ];
 
   await act(async () => {
@@ -428,7 +533,13 @@ async function recordAndTranscribe(view) {
 
 test("retry reruns a failed job on the server with the audio it kept", async () => {
   const { view, transcripts, errors } = mountDictation();
-  world.pollResponses = [{ ok: true, status: 200, json: async () => ({ status: "error", error: "Transcription timed out" }) }];
+  world.pollResponses = [
+    {
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "error", error: "Transcription timed out" }),
+    },
+  ];
 
   await recordAndTranscribe(view);
 
@@ -436,31 +547,60 @@ test("retry reruns a failed job on the server with the audio it kept", async () 
   assert.deepEqual(errors, ["Transcription timed out"]);
   assert.equal(view.result.current.transcribeError, "Transcription timed out");
 
-  world.pollResponses = [{ ok: true, status: 200, json: async () => ({ status: "done", text: "second try" }) }];
+  world.pollResponses = [
+    {
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "done", text: "second try" }),
+    },
+  ];
   await act(async () => {
     view.result.current.retry();
   });
   await waitUntil(() => transcripts.length === 1);
 
   assert.equal(world.retries, 1);
-  assert.equal(world.postedFiles.length, 1, "the server's copy is retried, not a re-upload");
+  assert.equal(
+    world.postedFiles.length,
+    1,
+    "the server's copy is retried, not a re-upload",
+  );
   assert.deepEqual(transcripts, ["second try"]);
 });
 
 test("retry re-uploads the local recording when the server lost the job", async () => {
   const { view, transcripts } = mountDictation();
-  world.pollResponses = [{ ok: true, status: 200, json: async () => ({ status: "error", error: "boom" }) }];
+  world.pollResponses = [
+    {
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "error", error: "boom" }),
+    },
+  ];
   await recordAndTranscribe(view);
 
-  world.retryResponse = { ok: false, status: 404, json: async () => ({ error: "Transcription job not found" }) };
-  world.pollResponses = [{ ok: true, status: 200, json: async () => ({ status: "done", text: "re-uploaded" }) }];
+  world.retryResponse = {
+    ok: false,
+    status: 404,
+    json: async () => ({ error: "Transcription job not found" }),
+  };
+  world.pollResponses = [
+    {
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "done", text: "re-uploaded" }),
+    },
+  ];
   await act(async () => {
     view.result.current.retry();
   });
   await waitUntil(() => transcripts.length === 1);
 
   assert.equal(world.postedFiles.length, 2);
-  assert.equal(await world.postedFiles[1].text(), await world.postedFiles[0].text());
+  assert.equal(
+    await world.postedFiles[1].text(),
+    await world.postedFiles[0].text(),
+  );
   assert.deepEqual(transcripts, ["re-uploaded"]);
 });
 
@@ -476,15 +616,23 @@ test("another browser's job for the same scope shows up with server audio, and a
   assert.deepEqual(world.audioUrls, ["/api/stt/job-1/audio"]);
 
   // Retry here; meanwhile the recording browser claims the transcript first.
-  world.pollResponses = [{ ok: true, status: 200, json: async () => ({ status: "gone" }) }];
+  world.pollResponses = [
+    { ok: true, status: 200, json: async () => ({ status: "gone" }) },
+  ];
   await act(async () => {
     view.result.current.retry();
   });
-  await waitUntil(() => world.polls >= 1 && !view.result.current.isTranscribing);
+  await waitUntil(
+    () => world.polls >= 1 && !view.result.current.isTranscribing,
+  );
 
   assert.equal(world.retries, 1);
   assert.deepEqual(transcripts, []);
-  assert.deepEqual(errors, [], "losing the claim to another browser is not an error");
+  assert.deepEqual(
+    errors,
+    [],
+    "losing the claim to another browser is not an error",
+  );
   assert.equal(view.result.current.transcribeError, null);
   assert.equal(view.result.current.isTranscribing, false);
 });
@@ -494,7 +642,13 @@ test("a finished job is claimed without newer browser APIs, and only the claimed
   override(AbortSignal, "any", undefined);
   override(Promise, "withResolvers", undefined);
   world.scopeJobs = [{ id: "job-1", status: "pending" }];
-  world.pollResponses = [{ ok: true, status: 200, json: async () => ({ status: "done", text: "from the phone" }) }];
+  world.pollResponses = [
+    {
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "done", text: "from the phone" }),
+    },
+  ];
   const { view, transcripts } = mountDictation("session-1");
   await waitUntil(() => transcripts.length === 1);
 
@@ -506,7 +660,13 @@ test("a finished job is claimed without newer browser APIs, and only the claimed
 
 test("a permanent 4xx poll fails at once instead of polling until the deadline", async () => {
   const { view, transcripts, errors } = mountDictation();
-  world.pollResponses = [{ ok: false, status: 401, json: async () => ({ error: "Password required" }) }];
+  world.pollResponses = [
+    {
+      ok: false,
+      status: 401,
+      json: async () => ({ error: "Password required" }),
+    },
+  ];
 
   await recordAndTranscribe(view);
 
@@ -520,7 +680,11 @@ test("cancelling mid-transcription stops polling and drops a late result", async
   const { view, transcripts, errors } = mountDictation();
   world.pollResponses = [
     { ok: true, status: 200, json: async () => ({ status: "pending" }) },
-    { ok: true, status: 200, json: async () => ({ status: "done", text: "too late" }) },
+    {
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "done", text: "too late" }),
+    },
   ];
 
   await recordAndTranscribe(view);
@@ -533,7 +697,11 @@ test("cancelling mid-transcription stops polling and drops a late result", async
   await settle(1200);
 
   assert.equal(world.polls, 1, "no poll may run after cancel");
-  assert.deepEqual(world.deletes, ["/api/stt/job-1"], "discard must end the job for other browsers too");
+  assert.deepEqual(
+    world.deletes,
+    ["/api/stt/job-1"],
+    "discard must end the job for other browsers too",
+  );
   assert.deepEqual(transcripts, []);
   assert.deepEqual(errors, []);
   assert.equal(view.result.current.isTranscribing, false);
@@ -563,14 +731,20 @@ test("cancelling during capture clears state and releases the microphone", async
 
 test("unmounting while a job runs leaves the job for other browsers", async () => {
   const { view } = mountDictation("session-1");
-  world.pollResponses = [{ ok: true, status: 200, json: async () => ({ status: "pending" }) }];
+  world.pollResponses = [
+    { ok: true, status: 200, json: async () => ({ status: "pending" }) },
+  ];
   await recordAndTranscribe(view);
   assert.equal(view.result.current.isTranscribing, true);
 
   view.unmount();
   await settle(600);
 
-  assert.deepEqual(world.deletes, [], "navigating away must not discard the job");
+  assert.deepEqual(
+    world.deletes,
+    [],
+    "navigating away must not discard the job",
+  );
 });
 
 test("a job from another browser is not adopted over an active recording", async () => {
@@ -592,7 +766,13 @@ test("a job from another browser is not adopted over an active recording", async
 });
 
 test("a browser left open picks up a job started elsewhere without a focus change", async () => {
-  world.pollResponses = [{ ok: true, status: 200, json: async () => ({ status: "done", text: "started elsewhere" }) }];
+  world.pollResponses = [
+    {
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "done", text: "started elsewhere" }),
+    },
+  ];
   const { transcripts } = mountDictation("session-1");
   await settle(50);
   assert.deepEqual(transcripts, []);
@@ -604,11 +784,17 @@ test("a browser left open picks up a job started elsewhere without a focus chang
 
 test("switching sessions stops following the old job without discarding it", async () => {
   world.scopeJobs = [{ id: "job-1", status: "pending" }];
-  world.pollResponses = [{ ok: true, status: 200, json: async () => ({ status: "pending" }) }];
+  world.pollResponses = [
+    { ok: true, status: 200, json: async () => ({ status: "pending" }) },
+  ];
   const transcripts = [];
-  const view = renderHook(({ scope }) => useDictation({ scope, onTranscript: (text) => transcripts.push(text) }), {
-    initialProps: { scope: "session-a" },
-  });
+  const view = renderHook(
+    ({ scope }) =>
+      useDictation({ scope, onTranscript: (text) => transcripts.push(text) }),
+    {
+      initialProps: { scope: "session-a" },
+    },
+  );
   await waitUntil(() => world.polls >= 1);
   assert.equal(view.result.current.isTranscribing, true);
 
@@ -616,12 +802,26 @@ test("switching sessions stops following the old job without discarding it", asy
   view.rerender({ scope: "session-b" });
   await settle(50);
   const pollsAtSwitch = world.polls;
-  world.pollResponses = [{ ok: true, status: 200, json: async () => ({ status: "done", text: "for A" }) }];
+  world.pollResponses = [
+    {
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "done", text: "for A" }),
+    },
+  ];
   await settle(1200);
 
   assert.equal(view.result.current.isTranscribing, false);
-  assert.equal(world.polls, pollsAtSwitch, "session B must not keep polling A's job");
-  assert.deepEqual(transcripts, [], "A's transcript must not land in B's composer");
+  assert.equal(
+    world.polls,
+    pollsAtSwitch,
+    "session B must not keep polling A's job",
+  );
+  assert.deepEqual(
+    transcripts,
+    [],
+    "A's transcript must not land in B's composer",
+  );
   assert.deepEqual(world.deletes, [], "the job stays adoptable from session A");
 });
 
@@ -650,9 +850,13 @@ test("discarding during the upload ends the job once the server answers", async 
 
 test("switching sessions during the upload keeps the job but never delivers it here", async () => {
   const transcripts = [];
-  const view = renderHook(({ scope }) => useDictation({ scope, onTranscript: (text) => transcripts.push(text) }), {
-    initialProps: { scope: "session-a" },
-  });
+  const view = renderHook(
+    ({ scope }) =>
+      useDictation({ scope, onTranscript: (text) => transcripts.push(text) }),
+    {
+      initialProps: { scope: "session-a" },
+    },
+  );
   const release = holdUpload();
   await recordAndTranscribeUntilUpload(view);
 
@@ -686,8 +890,15 @@ async function recordAndTranscribeUntilUpload(view) {
 test("a send started before leaving the session is still sent after coming back", async () => {
   const delivered = [];
   const mount = () =>
-    renderHook(() => useDictation({ scope: "session-1", onTranscript: (text, after) => delivered.push([text, after]) }));
-  world.pollResponses = [{ ok: true, status: 200, json: async () => ({ status: "pending" }) }];
+    renderHook(() =>
+      useDictation({
+        scope: "session-1",
+        onTranscript: (text, after) => delivered.push([text, after]),
+      }),
+    );
+  world.pollResponses = [
+    { ok: true, status: 200, json: async () => ({ status: "pending" }) },
+  ];
 
   // Record and press send, then leave the session: AppShell remounts the
   // composer per session, so the hook instance is replaced.
@@ -706,24 +917,40 @@ test("a send started before leaving the session is still sent after coming back"
   // Come back: a fresh instance adopts the job and must still send it, as the
   // job's owner, without waiting out another browser's grace period.
   world.scopeJobs = [{ id: "job-1", status: "pending" }];
-  world.pollResponses = [{ ok: true, status: 200, json: async () => ({ status: "done", text: "spoken" }) }];
+  world.pollResponses = [
+    {
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "done", text: "spoken" }),
+    },
+  ];
   mount();
   await waitUntil(() => delivered.length === 1);
 
   assert.deepEqual(delivered, [["spoken", "send"]]);
   assert.equal(world.postedAfter, "send");
-  assert.deepEqual(world.claims.map((c) => c.owner), [world.postedOwner], "the tab keeps its owner token across remounts");
-  assert.notEqual(world.claims[0].claim, world.postedOwner, "claims use a per-composer token, never the shared tab token");
+  assert.deepEqual(
+    world.claims.map((c) => c.owner),
+    [world.postedOwner],
+    "the tab keeps its owner token across remounts",
+  );
+  assert.notEqual(
+    world.claims[0].claim,
+    world.postedOwner,
+    "claims use a per-composer token, never the shared tab token",
+  );
 });
 
 test("send from the review deck keeps the send choice, even when a retry has to re-upload", async () => {
   const delivered = [];
   const errors = [];
-  const view = renderHook(() => useDictation({
-    scope: "session-1",
-    onTranscript: (text, after) => delivered.push([text, after]),
-    onError: (message) => errors.push(message),
-  }));
+  const view = renderHook(() =>
+    useDictation({
+      scope: "session-1",
+      onTranscript: (text, after) => delivered.push([text, after]),
+      onError: (message) => errors.push(message),
+    }),
+  );
   await act(async () => {
     view.result.current.toggle();
   });
@@ -734,7 +961,13 @@ test("send from the review deck keeps the send choice, even when a retry has to 
   await settle();
   assert.equal(view.result.current.isReviewing, true);
 
-  world.pollResponses = [{ ok: true, status: 200, json: async () => ({ status: "error", error: "boom" }) }];
+  world.pollResponses = [
+    {
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "error", error: "boom" }),
+    },
+  ];
   await act(async () => {
     view.result.current.confirmTranscribe({ after: "send" });
   });
@@ -743,8 +976,18 @@ test("send from the review deck keeps the send choice, even when a retry has to 
 
   // The server lost the job: retry re-uploads the local copy, still as a send.
   world.postedAfter = null;
-  world.retryResponse = { ok: false, status: 404, json: async () => ({ error: "Transcription job not found" }) };
-  world.pollResponses = [{ ok: true, status: 200, json: async () => ({ status: "done", text: "resent" }) }];
+  world.retryResponse = {
+    ok: false,
+    status: 404,
+    json: async () => ({ error: "Transcription job not found" }),
+  };
+  world.pollResponses = [
+    {
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "done", text: "resent" }),
+    },
+  ];
   await act(async () => {
     view.result.current.retry();
   });
@@ -767,7 +1010,13 @@ test("a claim answered without text (another browser's grace window) keeps askin
 
 test("starting a new recording discards the job the deck was showing, for every browser", async () => {
   const { view } = mountDictation();
-  world.pollResponses = [{ ok: true, status: 200, json: async () => ({ status: "error", error: "boom" }) }];
+  world.pollResponses = [
+    {
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "error", error: "boom" }),
+    },
+  ];
   await recordAndTranscribe(view);
   await waitUntil(() => view.result.current.transcribeError === "boom");
   assert.deepEqual(world.deletes, []);
@@ -783,7 +1032,9 @@ test("starting a new recording discards the job the deck was showing, for every 
 
 test("a lost job is an error for the browser that recorded it", async () => {
   const { view, transcripts, errors } = mountDictation();
-  world.pollResponses = [{ ok: false, status: 404, json: async () => ({ error: "not found" }) }];
+  world.pollResponses = [
+    { ok: false, status: 404, json: async () => ({ error: "not found" }) },
+  ];
 
   await recordAndTranscribe(view);
 
@@ -797,7 +1048,9 @@ test("a job from another browser that vanishes stands down instead of erroring",
   // Adopted from the session's job list, then the server has forgotten it: its
   // tombstone was pruned, or another browser claimed it. Neither is this
   // browser's failure, and it has no audio to retry with.
-  world.pollResponses = [{ ok: false, status: 404, json: async () => ({ error: "not found" }) }];
+  world.pollResponses = [
+    { ok: false, status: 404, json: async () => ({ error: "not found" }) },
+  ];
   const { view, errors } = mountDictation("session-1");
   await settle(50);
 

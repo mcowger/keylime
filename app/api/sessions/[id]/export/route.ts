@@ -1,11 +1,15 @@
-import { apiErrorResponse, opErrorResponse, resolveSessionHostOr404 } from "@/lib/api-utils";
+import {
+  apiErrorResponse,
+  opErrorResponse,
+  resolveSessionHostOr404,
+} from "@/lib/api-utils";
 import { getContentDisposition } from "@/lib/content-disposition";
 import { LOCAL_HOST_ID } from "@/lib/hosts/registry";
 
 /** Render a session to self-contained HTML with the omp binary on its host (`omp --export`). */
 export async function GET(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   const inline = new URL(req.url).searchParams.get("inline") === "1";
@@ -20,7 +24,11 @@ export async function GET(
     return new Response(result.value.html, {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
-        "Content-Disposition": getContentDisposition(result.value.fileName, asInline, "session.html"),
+        "Content-Disposition": getContentDisposition(
+          result.value.fileName,
+          asInline,
+          "session.html",
+        ),
         "Cache-Control": "no-cache",
       },
     });

@@ -15,11 +15,13 @@ export interface RunBunxResult {
 }
 
 /** Invoke a package with Bun without interpreting user-controlled arguments as shell syntax. */
-export async function runBunx(args: string[], opts: RunBunxOptions = {}): Promise<RunBunxResult> {
+export async function runBunx(
+  args: string[],
+  opts: RunBunxOptions = {},
+): Promise<RunBunxResult> {
   return execFileAsync("bun", ["x", "--bun", ...args], {
     timeout: opts.timeout,
     cwd: opts.cwd,
     env: opts.env,
   });
 }
-

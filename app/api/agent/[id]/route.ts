@@ -15,7 +15,7 @@ function timed(receivedAt: number, res: Response): Response {
 // POST /api/agent/[id] - Send a command to an existing session
 export async function POST(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   // Once the body is in, as a socket's ack is stamped after its whole frame: proxies stream uploads through, so the
@@ -23,13 +23,19 @@ export async function POST(
   let receivedAt: number | undefined;
 
   try {
-    const body = await parseJsonWithinLimit<unknown>(req, MAX_AGENT_COMMAND_REQUEST_BYTES);
+    const body = await parseJsonWithinLimit<unknown>(
+      req,
+      MAX_AGENT_COMMAND_REQUEST_BYTES,
+    );
     receivedAt = Date.now();
     // The per-chat advisor choice rides on the query string (never the RPC
     // body, which is forwarded to omp verbatim) and only matters when this
     // request spawns or replaces the session's omp process.
     const advisor = new URL(req.url).searchParams.get("advisor") === "1";
-    return timed(receivedAt, await runAgentCommand(id, body, advisor, requestOwner(req)));
+    return timed(
+      receivedAt,
+      await runAgentCommand(id, body, advisor, requestOwner(req)),
+    );
   } catch (error) {
     return timed(receivedAt ?? Date.now(), commandErrorResponse(error));
   }
@@ -38,7 +44,7 @@ export async function POST(
 // GET /api/agent/[id] - Get current agent state
 export async function GET(
   _req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
 
@@ -51,7 +57,10 @@ export async function GET(
       const state = await session.send({ type: "get_state" });
       return Response.json({ running: true, state });
     } catch (error) {
-      if (error instanceof WebRpcError && error.code === "session_unresponsive") {
+      if (
+        error instanceof WebRpcError &&
+        error.code === "session_unresponsive"
+      ) {
         return Response.json({ running: false, recovered: true });
       }
       throw error;

@@ -9,13 +9,13 @@ Builds on: AGENTS.md "Live event stream: one socket per browser", "Queued messag
 
 An A/B experiment for the browser's live transport. Today one SharedWorker (`public/event-stream-worker.js`) holds one SSE stream (`GET /api/events`) carrying every tab's channel frames; subscriptions and every action are HTTP requests. This adds **WebSocket transports** behind a server-side switch, in three socket-assignment modes, measures all four transports with the same instrumentation, and stores the numbers on the server, so the user can use the phone, switch networks and ask the agent to flip the transport, and the agent compares p50/p95 without the user copying anything.
 
-| transport | sockets | question it answers |
-|---|---|---|
-| `sse` (default) | 1 EventSource + HTTP requests | today's baseline |
-| `ws-client` | 1 socket per browser, every channel and session | fewest connections; all sessions share one ordered pipe |
-| `ws-client-split` | 1 general socket + 1 socket shared by every session | sessions share one pipe; app traffic stays off it |
-| `ws-session` | 1 general socket + 1 per active session | full isolation between sessions; most connections |
-| `ws-pool` | 1..`maxSockets` sockets, sized from the active sessions | isolation per bucket at a bounded connection count |
+| transport         | sockets                                                 | question it answers                                     |
+| ----------------- | ------------------------------------------------------- | ------------------------------------------------------- |
+| `sse` (default)   | 1 EventSource + HTTP requests                           | today's baseline                                        |
+| `ws-client`       | 1 socket per browser, every channel and session         | fewest connections; all sessions share one ordered pipe |
+| `ws-client-split` | 1 general socket + 1 socket shared by every session     | sessions share one pipe; app traffic stays off it       |
+| `ws-session`      | 1 general socket + 1 per active session                 | full isolation between sessions; most connections       |
+| `ws-pool`         | 1..`maxSockets` sockets, sized from the active sessions | isolation per bucket at a bounded connection count      |
 
 SSE + HTTP stays the default and keeps working unchanged.
 
@@ -48,18 +48,19 @@ Non-goals: replacing SSE; moving any API besides the agent command path and chan
 
 Every browser socket is **multi-session**: frames already name their subscription, and commands name their session (D4), so any socket can carry any channel and any session's commands. The four WebSocket modes are only a worker-side policy, `socketKeyFor(sessionId | null) → key`, where `null` stands for every non-session channel (`running`, `notifications`, `host-tools`, `hosts`, `file`):
 
-| mode | non-session channels | session `s` (its `session` channel and its commands) |
-|---|---|---|
-| `ws-client` | `client` | `client` |
-| `ws-client-split` | `general` | `client-sessions` (one socket for every session) |
-| `ws-session` | `general` | `session:<s>` |
-| `ws-pool` | `pool:0` | `pool:<rank(s, N)>` |
+| mode              | non-session channels | session `s` (its `session` channel and its commands) |
+| ----------------- | -------------------- | ---------------------------------------------------- |
+| `ws-client`       | `client`             | `client`                                             |
+| `ws-client-split` | `general`            | `client-sessions` (one socket for every session)     |
+| `ws-session`      | `general`            | `session:<s>`                                        |
+| `ws-pool`         | `pool:0`             | `pool:<rank(s, N)>`                                  |
 
 The worker (same SharedWorker; the dedicated-Worker fallback unchanged, so on Chrome for Android each tab has its own worker, sockets and pool) dials a socket lazily, the first time its key is needed, at `GET /api/events/ws` (no query). Everything else stays HTTP in every mode: `GET /api/agent/[id]` (reconcile/state polls, 8 call sites), `POST /api/agent/new`, bash-output, file, settings, the metrics POST and the clock probe.
 
 **Active sessions** (this worker): sessions with a live `session` subscription or an unanswered command. Background sessions that no tab shows stay on the non-session `running` channel.
 
 **ws-pool sizing.** N = clamp(ceil(active / `perSocket`), 1, `maxSockets`).
+
 - Grows immediately when the target exceeds N.
 - Shrinks only when the target has stayed below N for `SESSION_LINGER_MS` = 30 s (hysteresis: a timer starts when the target first drops below N; any recompute with a target ≥ N cancels it; when it fires, N becomes the target of that moment). A settings change applies its new N at once in both directions.
 - `rank(s, N)` is rendezvous (highest-random-weight) hashing: the index `i` in `[0, N)` with the highest `score(i, s) = fmix32(fnv1a(i + ":" + s))` (lowest `i` on a tie). Growing N to N+1 moves only the sessions whose top score is the new index (about 1/(N+1) of them, all to the new socket); shrinking moves only the sessions of the removed indices, each to its next-best. Plain hash-mod-N would be enough for a fixed N, but with N following the session count it would move about N/(N+1) of the sessions on every change. Rendezvous is about ten lines and needs no ring.
@@ -68,6 +69,7 @@ The worker (same SharedWorker; the dedicated-Worker fallback unchanged, so on Ch
 **Linger.** A socket with no subscription and no unanswered command closes at once if it is `general` (like the EventSource today), or if the current policy can no longer produce its key (a pool index ≥ N, a key of another mode). Any other socket lingers 30 s, so tab switches reuse it.
 
 **Moves (make-before-break).** When the policy changes (a ws→ws mode switch, a pool resize, a settings change), every subscription whose key changes is moved:
+
 1. `sub` on the new socket (dialed if needed); the old socket keeps delivering.
 2. On the new socket's `open` for it: the tab gets CONNECTING then OPEN (the reconnect it already handles; the channel replays its snapshot), `unsub` goes to the old socket, and frames still arriving there for it are ignored.
 3. A `refused` or `end` from the new socket cancels the move; the subscription stays where it was and moves at the next policy change.
@@ -91,14 +93,14 @@ Commands: a session's unanswered commands sit on one socket (`connForCommand`: t
 
 **WebSocket, server → client:** text frames `"<name> <server ms>\n<json>"`, split at the first newline without parsing the payload:
 
-| name | payload | meaning |
-|---|---|---|
-| `mux` | `MuxControlFrame`: `hello {connectionId, serverId, transport, perSocket, maxSockets}`, `open {sub}`, `end {sub}`, `refused {sub, status, error, code}`, `transport {transport, perSocket, maxSockets}` | control; `refused` replaces the failed POST answer |
-| `s<n>` | the channel payload, exactly as SSE `data:` | one subscription's frame |
-| `ack` | `{rid}` | the command frame arrived; `at` = receive time |
-| `reply` | `{rid, status, body, deduped?}` | `status`/`body` exactly as the HTTP route answers; `at` = reply time |
-| `ping` | `{}` | server heartbeat every `WS_HEARTBEAT_MS` = 10 s |
-| `pong` | `{c}` | answer to a client clock ping |
+| name    | payload                                                                                                                                                                                                | meaning                                                              |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `mux`   | `MuxControlFrame`: `hello {connectionId, serverId, transport, perSocket, maxSockets}`, `open {sub}`, `end {sub}`, `refused {sub, status, error, code}`, `transport {transport, perSocket, maxSockets}` | control; `refused` replaces the failed POST answer                   |
+| `s<n>`  | the channel payload, exactly as SSE `data:`                                                                                                                                                            | one subscription's frame                                             |
+| `ack`   | `{rid}`                                                                                                                                                                                                | the command frame arrived; `at` = receive time                       |
+| `reply` | `{rid, status, body, deduped?}`                                                                                                                                                                        | `status`/`body` exactly as the HTTP route answers; `at` = reply time |
+| `ping`  | `{}`                                                                                                                                                                                                   | server heartbeat every `WS_HEARTBEAT_MS` = 10 s                      |
+| `pong`  | `{c}`                                                                                                                                                                                                  | answer to a client clock ping                                        |
 
 **WebSocket, client → server:** one JSON object per text frame:
 `{t:"sub", id, channel}` (id matches `SUBSCRIPTION_ID_RE`, channel through `parseEventStreamChannel`), `{t:"unsub", id}`, `{t:"cmd", rid, session, advisor, command}`, `{t:"ping", c}`. A `cmd` whose `session` is not a string of 1–512 chars is acked and answered `reply` 400 `invalid_event_stream_request` (the socket stays). Unparsable JSON, an unknown `t` or a bad `rid` (not a string of 1–64 chars) closes 1007; a frame over `MAX_AGENT_COMMAND_REQUEST_BYTES` + 64 KiB closes 1009 (the worker refuses oversize commands locally with the route's 413 `request_too_large` first, so this is a backstop). Request ids are unique per worker (random), so `ack`/`reply` match by `rid` on a multi-session socket.
@@ -124,16 +126,17 @@ Clock: offset = `serverNow − (c0 + c1) / 2`, RTT = `c1 − c0` (NTP-style); a 
 
 Every sample carries: `metric`; `transport` (the mode); `pool` (N in `ws-pool`, else `null`); `socket` (the key: `sse`, `http` for an HTTP command, a socket key, or `worker` for samples tied to no connection); `conn` (its kind: `sse`, `http`, `general`, `session`, `client`, `client-sessions`, `pool`, `worker`); `sockets` (sockets the worker holds, open or dialing; 1 in SSE mode while the EventSource exists); `clientId` (localStorage `omp-web:transport-client-id`); `effectiveType` (`navigator.connection.effectiveType` or `null`); `visible` (any tab of this worker visible). The server adds `serverAt` and `ua` (≤ 200 chars).
 
-| metric | fields | recorded by |
-|---|---|---|
-| `action` | `req, type, session, via ("ws"\|"http"), status, outcome ("ok"\|"error"\|"lost"\|"unavailable"), attempts, deduped, bytes, behindBytes, behindSameBytes, behindOtherBytes, replyBehindOtherBytes, sentAt, recvAt, repliedAt, gotAt, offset, offsetRtt` | tab (`lib/agent-client.ts`), every command (a POST that gets no response: `status: 0`, `outcome: "error"`). HTTP: `x-omp-received-at` (stamped once the body is read, as the WS `ack` is after its whole frame: proxies stream uploads through) and `x-omp-replied-at` response headers; WS: `ack`/`reply` times. The tab sends the command's `type` with the `cmd`, so the worker never parses a body |
-| `event` | `channel, at, gotAt, offset, offsetRtt, bytes, behindSameBytes, behindOtherBytes` | worker, at most one per connection per second (frames with `behindOtherBytes > 0` always); a connection's first frame before the worker's first clock is held for it (see Clock) |
-| `reconnect` | `trigger ("error"\|"close"\|"silence"\|"hang"\|"online"\|"network"\|"visible"), dropAt, startAt, firstFrameAt, batch, effectiveTypeBefore` | worker; `startAt` = last wake within 60 s before the drop, else the drop; ends at the first `open` or channel frame after the re-subscribe; `batch` = sockets whose reconnect started within ±2 s of this one (how many reconnected together); `effectiveTypeBefore` = the effective type before that wake (`effectiveType` is the one after) |
-| `rebalance` | `reason ("grow"\|"shrink"\|"setting"\|"mode"), fromPool, toPool, fromSockets, toSockets, active, moved, movedOther, settledMs` | worker, every policy change that moves at least one subscription or resizes the pool; `moved` = sessions whose socket changed (churn), `movedOther` = non-session subscriptions moved, `settledMs` = until the last move's `open` |
-| `hang` | `req, type, via, bytes, waitedMs` | WS: missed ack (worker); HTTP: the tab's same-formula timer fired before the response (HTTP unchanged otherwise). Not the same quantity (receipt vs completion): the summary classifies them (below) |
-| `dropped` | `count` | worker, when its buffer overflowed |
+| metric      | fields                                                                                                                                                                                                                                                 | recorded by                                                                                                                                                                                                                                                                                                                                                                                            |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `action`    | `req, type, session, via ("ws"\|"http"), status, outcome ("ok"\|"error"\|"lost"\|"unavailable"), attempts, deduped, bytes, behindBytes, behindSameBytes, behindOtherBytes, replyBehindOtherBytes, sentAt, recvAt, repliedAt, gotAt, offset, offsetRtt` | tab (`lib/agent-client.ts`), every command (a POST that gets no response: `status: 0`, `outcome: "error"`). HTTP: `x-omp-received-at` (stamped once the body is read, as the WS `ack` is after its whole frame: proxies stream uploads through) and `x-omp-replied-at` response headers; WS: `ack`/`reply` times. The tab sends the command's `type` with the `cmd`, so the worker never parses a body |
+| `event`     | `channel, at, gotAt, offset, offsetRtt, bytes, behindSameBytes, behindOtherBytes`                                                                                                                                                                      | worker, at most one per connection per second (frames with `behindOtherBytes > 0` always); a connection's first frame before the worker's first clock is held for it (see Clock)                                                                                                                                                                                                                       |
+| `reconnect` | `trigger ("error"\|"close"\|"silence"\|"hang"\|"online"\|"network"\|"visible"), dropAt, startAt, firstFrameAt, batch, effectiveTypeBefore`                                                                                                             | worker; `startAt` = last wake within 60 s before the drop, else the drop; ends at the first `open` or channel frame after the re-subscribe; `batch` = sockets whose reconnect started within ±2 s of this one (how many reconnected together); `effectiveTypeBefore` = the effective type before that wake (`effectiveType` is the one after)                                                          |
+| `rebalance` | `reason ("grow"\|"shrink"\|"setting"\|"mode"), fromPool, toPool, fromSockets, toSockets, active, moved, movedOther, settledMs`                                                                                                                         | worker, every policy change that moves at least one subscription or resizes the pool; `moved` = sessions whose socket changed (churn), `movedOther` = non-session subscriptions moved, `settledMs` = until the last move's `open`                                                                                                                                                                      |
+| `hang`      | `req, type, via, bytes, waitedMs`                                                                                                                                                                                                                      | WS: missed ack (worker); HTTP: the tab's same-formula timer fired before the response (HTTP unchanged otherwise). Not the same quantity (receipt vs completion): the summary classifies them (below)                                                                                                                                                                                                   |
+| `dropped`   | `count`                                                                                                                                                                                                                                                | worker, when its buffer overflowed                                                                                                                                                                                                                                                                                                                                                                     |
 
 **Cross-session blocking** (isolation between sessions sharing a pipe):
+
 - Downlink, every transport: per connection the worker keeps the frames ≥ `LARGE_FRAME_BYTES` = 64 KiB it received in the last 30 s as `{owner, bytes, at, gotAt}` (owner = the subscription's session id for a `session` channel or a command reply, else `app`). For a frame F, `behindOtherBytes` = Σ bytes of logged frames G with `G.owner ≠ F.owner`, `G.at ≤ F.at`, G arrived before F, and `G.gotAt + offset > F.at` (G was still arriving when F was written); `behindSameBytes` the same with `G.owner = F.owner`, G ≠ F. On a WebSocket `reply`, the same sum is the action's `replyBehindOtherBytes`; an HTTP reply shares the SSE stream's HTTP/2 connection, so the worker computes its `replyBehindOtherBytes` from the EventSource's log (`at` = `repliedAt`) when the tab's sample arrives. Needs a clock: `null` before one exists. Residual asymmetry: a large HTTP reply is not itself logged (the worker sees it only after it arrived), so an SSE frame behind one reads clear where a socket frame behind a large WS reply reads `other`/`same`.
 - Uplink: WS `behindBytes` = `ws.bufferedAmount` at send; `behindSameBytes`/`behindOtherBytes` = body bytes of earlier commands on this socket still waiting for their ack, of the same/another session, each capped at `behindBytes`. HTTP: `behindBytes` = `behindSameBytes` = this tab's unanswered POSTs of the same session; `behindOtherBytes` = of other sessions. fetch reports no upload progress and the server's receive time comes only with the response, so a POST counts until answered (even once its body is in, while the server runs it); the summary's 64 KiB floor (below) is what makes HTTP and WS comparable: a small command in flight ahead is never blocking in either.
 
@@ -142,6 +145,7 @@ Derived by the summary: `totalMs = gotAt − sentAt`, `serverMs = repliedAt − 
 Transport of samples: tabs post samples to the worker (`{op:"metric"}`; never constructs a worker just for that); the worker buffers (cap 2000, oldest dropped and counted) and flushes `POST /api/transport-metrics {samples}` every 30 s or at 200 (in a task of its own, never on the path that recorded the 200th sample, such as a frame's delivery), over HTTP in every mode; a failed POST keeps the buffer. A dedicated worker loses ≤ 30 s of samples when its tab closes. The route accepts ≤ 256 KiB and ≤ 1000 samples, keeps plain objects with a string `metric` (≤ 32 chars) whose JSON is ≤ 4 KiB, and appends JSONL to `<agent dir>/omp-web/transport-metrics.jsonl`, renamed to `.jsonl.1` (replacing it) once over 20 MiB (≤ 40 MiB on disk).
 
 Summary: `bun scripts/transport-metrics.ts [--since 2h|<ISO>] [--until <ISO>] [--client <id>] [--file <path>]` prints, per transport (`sse`, `ws-client`, `ws-client-split`, `ws-session`, `ws-pool`):
+
 - count/p50/p95/max of action `totalMs`, `transportMs`, `upMs` (all and per type);
 - event ms per channel and conn kind;
 - reconnect ms and `fromDropMs` per trigger family, with mean `batch`, so the rows line up across transports: `error/close` (EventSource `error`; a socket's `close`), `silence` and `hang` (a socket's own detectors, kept apart: SSE has neither, and both can fire on a healthy socket behind a large downlink frame, see Limitations), `network (type changed)` / `network (same type)` (`effectiveTypeBefore ≠ effectiveType` or not: `navigator.connection` `change` also fires on RTT or downlink drift, when WS redials healthy sockets and SSE does nothing), `online/visible`;

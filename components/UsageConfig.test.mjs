@@ -3,7 +3,6 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-
 const { UsageConfig } = await import("./UsageConfig.tsx");
 
 test("UsageConfig renders static markup without crashing", () => {

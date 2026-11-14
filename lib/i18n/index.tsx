@@ -46,7 +46,9 @@ const state: I18nState = (globalThis.__ompI18nState ??= {
 const listeners = state.listeners;
 const TRADITIONAL_ZH_RE = /^zh-(tw|hk|mo|hant)\b/i;
 
-export function resolveNavigatorLocale(language: string | undefined | null): Locale {
+export function resolveNavigatorLocale(
+  language: string | undefined | null,
+): Locale {
   if (!language) return "en";
   const lang = language.toLowerCase();
   if (lang.startsWith("zh")) {
@@ -56,12 +58,17 @@ export function resolveNavigatorLocale(language: string | undefined | null): Loc
   return "en";
 }
 
-
 function detectLocale(): Locale {
   try {
     if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored === "en" || stored === "zh-CN" || stored === "zh-TW" || stored === "ja") return stored;
+      if (
+        stored === "en" ||
+        stored === "zh-CN" ||
+        stored === "zh-TW" ||
+        stored === "ja"
+      )
+        return stored;
     }
   } catch {
     // storage unavailable (private mode etc.)
@@ -96,7 +103,10 @@ export function setLocale(locale: Locale): void {
 }
 
 /** Translate outside React (toasts, error helpers). Falls back key → en → key. */
-export function translate(key: string, vars?: Record<string, string | number>): string {
+export function translate(
+  key: string,
+  vars?: Record<string, string | number>,
+): string {
   const locale = getLocale();
   const template = dictionaries[locale]?.[key] ?? dictionaries.en[key] ?? key;
   if (!vars) return template;
@@ -125,7 +135,10 @@ export function translatePlural(
   count: number,
   vars?: Record<string, string | number>,
 ): string {
-  return translate(`${key}.${count === 1 ? "one" : "other"}`, { count, ...vars });
+  return translate(`${key}.${count === 1 ? "one" : "other"}`, {
+    count,
+    ...vars,
+  });
 }
 
 function subscribe(cb: () => void): () => void {
@@ -156,17 +169,16 @@ export function useI18n() {
   }, []);
 
   const t = useCallback(
-    (key: string, vars?: Record<string, string | number>) => translate(key, vars),
+    (key: string, vars?: Record<string, string | number>) =>
+      translate(key, vars),
     // translate() reads module state that only changes with `locale`; depending
     // on it keeps memoized consumers re-translating on switch.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [locale],
   );
 
   const tn = useCallback(
     (key: string, count: number, vars?: Record<string, string | number>) =>
       translatePlural(key, count, vars),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [locale],
   );
 

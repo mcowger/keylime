@@ -1,6 +1,12 @@
 export interface ModelsData {
   models: Record<string, string>;
-  modelList: { id: string; name: string; provider: string; supportsFastMode?: boolean; supportsSlowMode?: boolean }[];
+  modelList: {
+    id: string;
+    name: string;
+    provider: string;
+    supportsFastMode?: boolean;
+    supportsSlowMode?: boolean;
+  }[];
   defaultModel: { provider: string; modelId: string } | null;
   thinkingLevels: Record<string, string[]>;
   connectedProviders?: { id: string; name: string; disabled: boolean }[];
@@ -20,7 +26,8 @@ declare global {
 const MODELS_CACHE_TTL_MS = 60_000;
 const MAX_MODELS_CACHE_ENTRIES = 32;
 // Never expose caught provider/configuration details in a fallback response.
-const SAFE_MODEL_LOAD_FAILURE_MESSAGE = "Model list is temporarily unavailable. Check your configuration and try again.";
+const SAFE_MODEL_LOAD_FAILURE_MESSAGE =
+  "Model list is temporarily unavailable. Check your configuration and try again.";
 
 function getModelsCacheState(): ModelsCacheState {
   if (!globalThis.__piModelsCacheState) {
@@ -40,7 +47,10 @@ export function invalidateModelsCache(): void {
   state.inFlight.clear();
 }
 
-export function withModelRuntimeError(data: ModelsData, modelError: string | undefined): ModelsData {
+export function withModelRuntimeError(
+  data: ModelsData,
+  modelError: string | undefined,
+): ModelsData {
   return modelError ? { ...data, modelError } : data;
 }
 
@@ -48,10 +58,14 @@ export function withSafeModelLoadFailure(data: ModelsData): ModelsData {
   return { ...data, modelError: SAFE_MODEL_LOAD_FAILURE_MESSAGE };
 }
 
-export function loadModelsWithCache(cwd: string, loader: () => Promise<ModelsData>): Promise<ModelsData> {
+export function loadModelsWithCache(
+  cwd: string,
+  loader: () => Promise<ModelsData>,
+): Promise<ModelsData> {
   const state = getModelsCacheState();
   const cached = state.entries.get(cwd);
-  if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.data);
+  if (cached && cached.expiresAt > Date.now())
+    return Promise.resolve(cached.data);
 
   const load = state.inFlight.get(cwd) ?? startModelsLoad(state, cwd, loader);
 
@@ -78,7 +92,10 @@ function startModelsLoad(
   const loadPromise: Promise<ModelsData> = Promise.resolve()
     .then(loader)
     .then((data) => {
-      if (state.generation === generation && state.inFlight.get(cwd) === loadPromise) {
+      if (
+        state.generation === generation &&
+        state.inFlight.get(cwd) === loadPromise
+      ) {
         // Expired entries are kept (they back stale-while-revalidate serving);
         // the entry cap alone bounds the map.
         state.entries.delete(cwd);
@@ -87,7 +104,10 @@ function startModelsLoad(
           if (oldestKey === undefined) break;
           state.entries.delete(oldestKey);
         }
-        state.entries.set(cwd, { data, expiresAt: Date.now() + MODELS_CACHE_TTL_MS });
+        state.entries.set(cwd, {
+          data,
+          expiresAt: Date.now() + MODELS_CACHE_TTL_MS,
+        });
       }
       return data;
     })

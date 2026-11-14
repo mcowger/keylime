@@ -45,7 +45,11 @@ let mathMarkdownPluginsPromise: Promise<MarkdownPlugins> | null = null;
  * remark-math then decides what is actually math.
  */
 export function containsMathSyntax(markdown: string): boolean {
-  return markdown.includes("$") || markdown.includes("\\(") || markdown.includes("\\[");
+  return (
+    markdown.includes("$") ||
+    markdown.includes("\\(") ||
+    markdown.includes("\\[")
+  );
 }
 
 const RAW_CODE_CLOSE_PATTERNS: Record<string, RegExp> = {
@@ -123,7 +127,9 @@ export function useMarkdownPlugins(markdown: string): MarkdownPlugins {
     };
   }, [hasMath]);
 
-  return hasMath && mathMarkdownPlugins ? mathMarkdownPlugins : baseMarkdownPlugins;
+  return hasMath && mathMarkdownPlugins
+    ? mathMarkdownPlugins
+    : baseMarkdownPlugins;
 }
 
 export function normalizeDisplayMath(markdown: string): string {
@@ -164,7 +170,9 @@ export function normalizeDisplayMath(markdown: string): string {
     const rawCodeOpen = line.match(/<(code|pre|script|style)\b/i);
     if (rawCodeOpen) {
       const tag = rawCodeOpen[1].toLowerCase();
-      const remainder = line.slice((rawCodeOpen.index ?? 0) + rawCodeOpen[0].length);
+      const remainder = line.slice(
+        (rawCodeOpen.index ?? 0) + rawCodeOpen[0].length,
+      );
       if (!getRawCodeClosePattern(tag).test(remainder)) rawCodeTag = tag;
       inlineCodeMarkerSize = 0;
       normalized.push(line);
@@ -183,7 +191,9 @@ export function normalizeDisplayMath(markdown: string): string {
       continue;
     }
 
-    const bracketDisplayOneLine = line.match(/^([ ]{0,3})\\\[[ \t]*(.+?)[ \t]*\\\][ \t]*$/);
+    const bracketDisplayOneLine = line.match(
+      /^([ ]{0,3})\\\[[ \t]*(.+?)[ \t]*\\\][ \t]*$/,
+    );
     if (bracketDisplayOneLine) {
       const math = bracketDisplayOneLine[2].trim();
       if (math) {
@@ -205,9 +215,11 @@ export function normalizeDisplayMath(markdown: string): string {
       if (closingIndex !== -1) {
         normalized.push(
           `${bracketDisplayStart[1]}$$`,
-          ...lines.slice(index + 1, closingIndex).map((mathLine) =>
-            indentDisplayMathContent(mathLine, bracketDisplayStart[1]),
-          ),
+          ...lines
+            .slice(index + 1, closingIndex)
+            .map((mathLine) =>
+              indentDisplayMathContent(mathLine, bracketDisplayStart[1]),
+            ),
           `${bracketDisplayStart[1]}$$`,
         );
         index = closingIndex;
@@ -235,7 +247,12 @@ export function normalizeDisplayMath(markdown: string): string {
       const firstLine = displayMathMultiLine[2].trimEnd();
       // Keep `$$x$$ and text` inline; it is not a display block opener.
       if (firstLine && !firstLine.includes("$$")) {
-        const closing = findDisplayMathClose(lines, index + 1, indent, unmatchedDisplayMathUntil);
+        const closing = findDisplayMathClose(
+          lines,
+          index + 1,
+          indent,
+          unmatchedDisplayMathUntil,
+        );
         if (closing) {
           normalized.push(`${indent}$$`, `${indent}${firstLine}`);
           for (let j = index + 1; j < closing.index; j++) {
@@ -253,7 +270,12 @@ export function normalizeDisplayMath(markdown: string): string {
     const displayMathBareOpen = line.match(/^([ \t]{0,3})\$\$\s*$/);
     if (displayMathBareOpen) {
       const indent = displayMathBareOpen[1];
-      const closing = findDisplayMathClose(lines, index + 1, indent, unmatchedDisplayMathUntil);
+      const closing = findDisplayMathClose(
+        lines,
+        index + 1,
+        indent,
+        unmatchedDisplayMathUntil,
+      );
       if (closing && (closing.glued || indent !== "")) {
         normalized.push(`${indent}$$`);
         for (let j = index + 1; j < closing.index; j++) {
@@ -285,11 +307,13 @@ function findDisplayMathClose(
   unmatchedUntil: Map<string, number>,
 ): DisplayMathClose | null {
   const knownUnmatchedUntil = unmatchedUntil.get(indent);
-  if (knownUnmatchedUntil !== undefined && startIndex < knownUnmatchedUntil) return null;
+  if (knownUnmatchedUntil !== undefined && startIndex < knownUnmatchedUntil)
+    return null;
 
   for (let index = startIndex; index < lines.length; index++) {
     const line = lines[index];
-    if (isDisplayMathFence(line, indent)) return { index, content: "", glued: false };
+    if (isDisplayMathFence(line, indent))
+      return { index, content: "", glued: false };
     if (isDisplayMathBlockBoundary(line) || isDisplayMathOpeningLine(line)) {
       unmatchedUntil.set(indent, index);
       return null;
@@ -307,7 +331,10 @@ function isDisplayMathFence(line: string, indent: string): boolean {
   return line.startsWith(indent) && /^\$\$\s*$/.test(line.slice(indent.length));
 }
 
-function getDisplayMathGluedCloseContent(line: string, indent: string): string | null {
+function getDisplayMathGluedCloseContent(
+  line: string,
+  indent: string,
+): string | null {
   if (!line.startsWith(indent)) return null;
   const match = line.slice(indent.length).match(/^(.+?)\$\$\s*$/);
   if (!match) return null;
@@ -354,7 +381,10 @@ function findBracketDisplayClose(lines: string[], startIndex: number): number {
   return -1;
 }
 
-function updateInlineCodeMarker(line: string, initialMarkerSize: number): number {
+function updateInlineCodeMarker(
+  line: string,
+  initialMarkerSize: number,
+): number {
   let markerSize = initialMarkerSize;
   for (let cursor = 0; cursor < line.length;) {
     if (line[cursor] !== "`") {

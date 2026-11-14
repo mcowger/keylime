@@ -6,5 +6,4 @@
  * so the sidebar hook can call `stopImmediatePropagation()` on the native event
  * from inside this listener and preempt the router's traversal.
  */
-export const SIDEBAR_HISTORY_BRIDGE_SCRIPT =
-  `window.addEventListener("popstate",function(event){window.dispatchEvent(new CustomEvent("omp:sidebar-popstate",{detail:event}))});`;
+export const SIDEBAR_HISTORY_BRIDGE_SCRIPT = `window.addEventListener("popstate",function(event){window.dispatchEvent(new CustomEvent("omp:sidebar-popstate",{detail:event}))});`;

@@ -22,7 +22,12 @@ const execFileAsync = promisify(execFile);
 const GIT_TIMEOUT_MS = 10_000;
 const GIT_STATUS_MAX_BUFFER = 8 * 1024 * 1024;
 
-async function git(cwd: string, args: string[], maxBuffer = GIT_STATUS_MAX_BUFFER, input?: string): Promise<string> {
+async function git(
+  cwd: string,
+  args: string[],
+  maxBuffer = GIT_STATUS_MAX_BUFFER,
+  input?: string,
+): Promise<string> {
   const pending = execFileAsync("git", ["-C", cwd, ...args], {
     timeout: GIT_TIMEOUT_MS,
     maxBuffer,
@@ -40,7 +45,9 @@ async function git(cwd: string, args: string[], maxBuffer = GIT_STATUS_MAX_BUFFE
  * Null outside a worktree; a bare repository has a Git directory but no toplevel. */
 async function findRepositoryRoot(cwd: string): Promise<string | null> {
   try {
-    const [insideWorkTree, cdup = ""] = (await git(cwd, ["rev-parse", "--is-inside-work-tree", "--show-cdup"])).split("\n");
+    const [insideWorkTree, cdup = ""] = (
+      await git(cwd, ["rev-parse", "--is-inside-work-tree", "--show-cdup"])
+    ).split("\n");
     return insideWorkTree === "true" ? path.resolve(cwd, cdup.trim()) : null;
   } catch {
     return null;
@@ -49,14 +56,21 @@ async function findRepositoryRoot(cwd: string): Promise<string | null> {
 
 function isWithinPath(parent: string, target: string): boolean {
   const relative = path.relative(path.resolve(parent), path.resolve(target));
-  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+  return (
+    relative === "" ||
+    (!relative.startsWith(`..${path.sep}`) &&
+      relative !== ".." &&
+      !path.isAbsolute(relative))
+  );
 }
 
 function toGitPath(filePath: string): string {
   return filePath.split(path.sep).join("/");
 }
 
-async function readStatusEntries(repositoryRoot: string): Promise<GitPorcelainEntry[]> {
+async function readStatusEntries(
+  repositoryRoot: string,
+): Promise<GitPorcelainEntry[]> {
   const output = await git(repositoryRoot, [
     "status",
     "--porcelain=v1",
@@ -69,7 +83,10 @@ async function readStatusEntries(repositoryRoot: string): Promise<GitPorcelainEn
 // Honors .gitattributes, $GIT_DIR/info/attributes and core.attributesFile.
 // Paths go over stdin so large change sets cannot exceed the argv limit.
 // Marking is a presentation hint: on failure every file stays in the main list.
-async function readCollapseReasons(repositoryRoot: string, relativePaths: string[]): Promise<Map<string, GitCollapseReason>> {
+async function readCollapseReasons(
+  repositoryRoot: string,
+  relativePaths: string[],
+): Promise<Map<string, GitCollapseReason>> {
   if (relativePaths.length === 0) return new Map();
   try {
     const output = await git(
@@ -91,9 +108,13 @@ export async function getGitStatus(cwd: string): Promise<GitStatusResponse> {
     return { isGitRepository: false, repositoryRoot: null, files: [] };
   }
 
-  const entries = (await readStatusEntries(repositoryRoot))
-    .filter((entry) => isWithinPath(cwd, path.resolve(repositoryRoot, entry.path)));
-  const reasons = await readCollapseReasons(repositoryRoot, entries.map((entry) => entry.path));
+  const entries = (await readStatusEntries(repositoryRoot)).filter((entry) =>
+    isWithinPath(cwd, path.resolve(repositoryRoot, entry.path)),
+  );
+  const reasons = await readCollapseReasons(
+    repositoryRoot,
+    entries.map((entry) => entry.path),
+  );
   const files = entries.map((entry): GitFileStatus => ({
     filePath: path.resolve(repositoryRoot, entry.path),
     ...classifyGitStatus(entry),
@@ -114,9 +135,10 @@ function createAddedFilePatch(gitPath: string, content: string): string {
   const lines = content.split("\n");
   if (hasTrailingNewline) lines.pop();
   const body = lines.map((line) => `+${line}`).join("\n");
-  const noNewlineMarker = !hasTrailingNewline && lines.length > 0
-    ? "\n\\ No newline at end of file"
-    : "";
+  const noNewlineMarker =
+    !hasTrailingNewline && lines.length > 0
+      ? "\n\\ No newline at end of file"
+      : "";
   return [
     `diff --git a/${gitPath} b/${gitPath}`,
     "new file mode 100644",
@@ -132,27 +154,36 @@ async function createTrackedFilePatch(
   relativePath: string,
   originalPath?: string,
 ): Promise<string | null> {
-  const paths = originalPath && originalPath !== relativePath
-    ? [originalPath, relativePath]
-    : [relativePath];
+  const paths =
+    originalPath && originalPath !== relativePath
+      ? [originalPath, relativePath]
+      : [relativePath];
   try {
-    return await git(repositoryRoot, [
-      "diff",
-      "--no-color",
-      "--no-ext-diff",
-      "--unified=3",
-      "HEAD",
-      "--",
-      ...paths,
-    ], TEXT_PREVIEW_MAX_BYTES * 4);
+    return await git(
+      repositoryRoot,
+      [
+        "diff",
+        "--no-color",
+        "--no-ext-diff",
+        "--unified=3",
+        "HEAD",
+        "--",
+        ...paths,
+      ],
+      TEXT_PREVIEW_MAX_BYTES * 4,
+    );
   } catch {
     return null;
   }
 }
 
-export async function getGitFileDiff(cwd: string, filePath: string): Promise<GitFileDiffResponse> {
+export async function getGitFileDiff(
+  cwd: string,
+  filePath: string,
+): Promise<GitFileDiffResponse> {
   const repositoryRoot = await findRepositoryRoot(cwd);
-  if (!repositoryRoot || !isWithinPath(repositoryRoot, filePath)) return { supported: false };
+  if (!repositoryRoot || !isWithinPath(repositoryRoot, filePath))
+    return { supported: false };
 
   const resolvedFilePath = path.resolve(filePath);
   let stat: fs.Stats;
@@ -161,9 +192,12 @@ export async function getGitFileDiff(cwd: string, filePath: string): Promise<Git
   } catch {
     return { supported: false };
   }
-  if (!stat.isFile() || stat.size > TEXT_PREVIEW_MAX_BYTES) return { supported: false };
+  if (!stat.isFile() || stat.size > TEXT_PREVIEW_MAX_BYTES)
+    return { supported: false };
 
-  const relativePath = toGitPath(path.relative(repositoryRoot, resolvedFilePath));
+  const relativePath = toGitPath(
+    path.relative(repositoryRoot, resolvedFilePath),
+  );
   const entries = await readStatusEntries(repositoryRoot);
   const entry = entries.find((candidate) => candidate.path === relativePath);
   if (!entry) return { supported: false };
@@ -174,7 +208,11 @@ export async function getGitFileDiff(cwd: string, filePath: string): Promise<Git
   const currentBuffer = fs.readFileSync(resolvedFilePath);
   if (hasNullByte(currentBuffer)) return { supported: false };
   // `-diff` files: git itself prints no textual diff, so neither do we.
-  if ((await readCollapseReasons(repositoryRoot, [relativePath])).get(relativePath) === "no-diff") {
+  if (
+    (await readCollapseReasons(repositoryRoot, [relativePath])).get(
+      relativePath,
+    ) === "no-diff"
+  ) {
     return { supported: false };
   }
   const newContent = currentBuffer.toString("utf8");
@@ -183,7 +221,11 @@ export async function getGitFileDiff(cwd: string, filePath: string): Promise<Git
   if (status === "untracked") {
     patch = createAddedFilePatch(relativePath, newContent);
   } else {
-    const trackedPatch = await createTrackedFilePatch(repositoryRoot, relativePath, entry.originalPath);
+    const trackedPatch = await createTrackedFilePatch(
+      repositoryRoot,
+      relativePath,
+      entry.originalPath,
+    );
     if (trackedPatch === null) {
       if (status !== "added") return { supported: false };
       patch = createAddedFilePatch(relativePath, newContent);

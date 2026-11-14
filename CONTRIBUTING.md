@@ -38,10 +38,12 @@ afterwards and commit the graph.
 ## Checks (must pass before submitting)
 
 ```bash
-bun run typecheck                                  # type check
-bun run lint                                       # ESLint, zero warnings
-bun run test                                           # unit tests (bun test --parallel)
+bun run format:check # bun fmt --check
+bun run typecheck   # bun check for the root project and runner
+bun run test        # unit tests (bun test --parallel)
 ```
+
+Use `bun fmt` to format files. CI and release checks enforce `bun fmt --check`. Linting has been removed: pinned Bun 1.4.4 has no built-in linter, and the project uses neither ESLint nor `tsc`.
 
 `bun run build` bundles the browser app into `dist/` and `bun run smoke`
 starts the built server and checks it; the dev server never reads `dist/`.

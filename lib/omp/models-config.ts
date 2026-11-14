@@ -1,6 +1,20 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
 import { basename, dirname, join } from "path";
-import { isMap, isScalar, isSeq, parseDocument, stringify, type Document } from "yaml";
+import {
+  isMap,
+  isScalar,
+  isSeq,
+  parseDocument,
+  stringify,
+  type Document,
+} from "yaml";
 import { getModelsConfigPath } from "./paths";
 import { isRecord } from "../type-guards";
 
@@ -30,7 +44,12 @@ export interface ModelDefinition {
   contextWindow?: number;
   maxTokens?: number;
   headers?: Record<string, string>;
-  cost?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number };
+  cost?: {
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+  };
   compat?: Record<string, unknown>;
   [key: string]: unknown;
 }
@@ -60,14 +79,19 @@ export function validateModelsConfig(config: ModelsFileConfig): void {
   const providers = config.providers ?? {};
   if (!isRecord(providers)) throw new Error('"providers" must be an object');
   for (const [providerName, provider] of Object.entries(providers)) {
-    if (!isRecord(provider)) throw new Error(`Provider ${providerName}: must be an object`);
+    if (!isRecord(provider))
+      throw new Error(`Provider ${providerName}: must be an object`);
     const models = Array.isArray(provider.models) ? provider.models : [];
     if (models.length > 0) {
       if (!provider.baseUrl) {
-        throw new Error(`Provider ${providerName}: "baseUrl" is required when defining custom models.`);
+        throw new Error(
+          `Provider ${providerName}: "baseUrl" is required when defining custom models.`,
+        );
       }
       if (!provider.apiKey && (provider.auth ?? "apiKey") !== "none") {
-        throw new Error(`Provider ${providerName}: "apiKey" is required when defining custom models unless auth is "none".`);
+        throw new Error(
+          `Provider ${providerName}: "apiKey" is required when defining custom models unless auth is "none".`,
+        );
       }
     }
     for (const model of models) {
@@ -75,21 +99,34 @@ export function validateModelsConfig(config: ModelsFileConfig): void {
         throw new Error(`Provider ${providerName}: model missing "id"`);
       }
       if (!provider.api && !model.api) {
-        throw new Error(`Provider ${providerName}, model ${model.id}: no "api" specified. Set at provider or model level.`);
+        throw new Error(
+          `Provider ${providerName}, model ${model.id}: no "api" specified. Set at provider or model level.`,
+        );
       }
       if (typeof model.contextWindow === "number" && model.contextWindow <= 0) {
-        throw new Error(`Provider ${providerName}, model ${model.id}: invalid contextWindow`);
+        throw new Error(
+          `Provider ${providerName}, model ${model.id}: invalid contextWindow`,
+        );
       }
       if (typeof model.maxTokens === "number" && model.maxTokens <= 0) {
-        throw new Error(`Provider ${providerName}, model ${model.id}: invalid maxTokens`);
+        throw new Error(
+          `Provider ${providerName}, model ${model.id}: invalid maxTokens`,
+        );
       }
       // omp's schema requires all four cost fields whenever cost is present
       // (partial costs make omp reject the whole file), so refuse to write one.
       if (isRecord(model.cost)) {
-        for (const key of ["input", "output", "cacheRead", "cacheWrite"] as const) {
+        for (const key of [
+          "input",
+          "output",
+          "cacheRead",
+          "cacheWrite",
+        ] as const) {
           const value = model.cost[key];
           if (typeof value !== "number" || !Number.isFinite(value)) {
-            throw new Error(`Provider ${providerName}, model ${model.id}: cost.${key} is required (cost needs input, output, cacheRead, and cacheWrite)`);
+            throw new Error(
+              `Provider ${providerName}, model ${model.id}: cost.${key} is required (cost needs input, output, cacheRead, and cacheWrite)`,
+            );
           }
         }
       }
@@ -125,32 +162,50 @@ export interface ModelsConfigFile {
  * `id`. Malformed non-empty rows are retained so validation can report them. */
 function sanitizeModelsConfig(config: ModelsFileConfig): ModelsFileConfig {
   if (!isRecord(config.providers)) return config;
-  const providers = Object.fromEntries(Object.entries(config.providers).map(([providerId, provider]) => {
-    if (!isRecord(provider) || !Array.isArray(provider.models)) return [providerId, provider];
-    const models = provider.models.filter((model) => (
-      !isRecord(model) || typeof model.id !== "string" || model.id.trim().length > 0
-    ));
-    return [providerId, { ...provider, models }];
-  }));
+  const providers = Object.fromEntries(
+    Object.entries(config.providers).map(([providerId, provider]) => {
+      if (!isRecord(provider) || !Array.isArray(provider.models))
+        return [providerId, provider];
+      const models = provider.models.filter(
+        (model) =>
+          !isRecord(model) ||
+          typeof model.id !== "string" ||
+          model.id.trim().length > 0,
+      );
+      return [providerId, { ...provider, models }];
+    }),
+  );
   return { ...config, providers };
 }
 
 /** Read models.yml, reporting rather than swallowing parse failures. */
 export function readModelsConfigFile(): ModelsConfigFile {
   const path = getModelsConfigPath();
-  if (!existsSync(path)) return { path, exists: false, config: { providers: {} } };
+  if (!existsSync(path))
+    return { path, exists: false, config: { providers: {} } };
 
   let source: string;
   try {
     source = readFileSync(path, "utf8");
   } catch (error) {
-    return { path, exists: true, config: { providers: {} }, parseError: String(error) };
+    return {
+      path,
+      exists: true,
+      config: { providers: {} },
+      parseError: String(error),
+    };
   }
 
   // parseDocument collects syntax errors instead of throwing on the first one.
   const doc = parseDocument(source);
   if (doc.errors.length > 0) {
-    return { path, exists: true, source, config: { providers: {} }, parseError: doc.errors[0].message };
+    return {
+      path,
+      exists: true,
+      source,
+      config: { providers: {} },
+      parseError: doc.errors[0].message,
+    };
   }
   const parsed = doc.toJS() as unknown;
   if (parsed === null || parsed === undefined) {
@@ -165,7 +220,12 @@ export function readModelsConfigFile(): ModelsConfigFile {
       parseError: "the top level of models.yml must be a mapping",
     };
   }
-  return { path, exists: true, source, config: sanitizeModelsConfig(parsed as ModelsFileConfig) };
+  return {
+    path,
+    exists: true,
+    source,
+    config: sanitizeModelsConfig(parsed as ModelsFileConfig),
+  };
 }
 
 /** Tolerant read for consumers that only inspect the config (a broken file
@@ -182,16 +242,28 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 /** Comments live on the node they follow/precede, so a replaced node has to
  * inherit them or the user's annotations drift onto the wrong key. */
 function carryComments(from: unknown, to: unknown): void {
-  if (!from || !to || typeof from !== "object" || typeof to !== "object") return;
-  const src = from as { comment?: string | null; commentBefore?: string | null; spaceBefore?: boolean };
-  const dst = to as { comment?: string | null; commentBefore?: string | null; spaceBefore?: boolean };
+  if (!from || !to || typeof from !== "object" || typeof to !== "object")
+    return;
+  const src = from as {
+    comment?: string | null;
+    commentBefore?: string | null;
+    spaceBefore?: boolean;
+  };
+  const dst = to as {
+    comment?: string | null;
+    commentBefore?: string | null;
+    spaceBefore?: boolean;
+  };
   if (src.comment != null) dst.comment = src.comment;
   if (src.commentBefore != null) dst.commentBefore = src.commentBefore;
   if (src.spaceBefore) dst.spaceBefore = src.spaceBefore;
 }
 
 function scalarKey(key: unknown): string | undefined {
-  if (isScalar(key) && (typeof key.value === "string" || typeof key.value === "number")) {
+  if (
+    isScalar(key) &&
+    (typeof key.value === "string" || typeof key.value === "number")
+  ) {
     return String(key.value);
   }
   return typeof key === "string" ? key : undefined;
@@ -207,7 +279,9 @@ function itemId(item: unknown): string | undefined {
  * old and new agree — that reuse is what preserves comments and layout. */
 function mergeNode(doc: Document, node: unknown, value: unknown): unknown {
   if (isMap(node) && isPlainRecord(value)) {
-    const wanted = new Map(Object.entries(value).filter(([, v]) => v !== undefined));
+    const wanted = new Map(
+      Object.entries(value).filter(([, v]) => v !== undefined),
+    );
     // Keys with non-scalar (complex) keys are left alone rather than dropped.
     node.items = node.items.filter((pair) => {
       const key = scalarKey(pair.key);
@@ -231,7 +305,10 @@ function mergeNode(doc: Document, node: unknown, value: unknown): unknown {
       if (id !== undefined && !byId.has(id)) byId.set(id, item);
     }
     node.items = value.map((entry, index) => {
-      const id = isPlainRecord(entry) && typeof entry.id === "string" ? entry.id : undefined;
+      const id =
+        isPlainRecord(entry) && typeof entry.id === "string"
+          ? entry.id
+          : undefined;
       let old: unknown;
       if (id !== undefined) {
         old = byId.get(id);
@@ -260,8 +337,12 @@ function mergeNode(doc: Document, node: unknown, value: unknown): unknown {
 
 /** Serialize a config. When `existingSource` is a parseable document the edit
  * is applied onto it so hand-written comments and formatting survive. */
-export function serializeModelsConfig(config: ModelsFileConfig, existingSource?: string): string {
-  if (existingSource === undefined || existingSource.trim() === "") return stringify(config);
+export function serializeModelsConfig(
+  config: ModelsFileConfig,
+  existingSource?: string,
+): string {
+  if (existingSource === undefined || existingSource.trim() === "")
+    return stringify(config);
   const doc = parseDocument(existingSource);
   if (doc.errors.length > 0) return stringify(config);
   if (!isMap(doc.contents)) {
@@ -280,17 +361,26 @@ export interface WriteModelsConfigOptions {
   overwriteUnparseable?: boolean;
 }
 
-export function writeModelsConfig(config: ModelsFileConfig, options: WriteModelsConfigOptions = {}): void {
+export function writeModelsConfig(
+  config: ModelsFileConfig,
+  options: WriteModelsConfigOptions = {},
+): void {
   const current = readModelsConfigFile();
   if (current.parseError && !options.overwriteUnparseable) {
     throw new ModelsConfigParseError(current.path, current.parseError);
   }
-  const text = serializeModelsConfig(sanitizeModelsConfig(config), current.parseError ? undefined : current.source);
+  const text = serializeModelsConfig(
+    sanitizeModelsConfig(config),
+    current.parseError ? undefined : current.source,
+  );
   const dir = dirname(current.path);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   // Write-then-rename: a crash mid-write must not leave models.yml truncated,
   // which would disable every custom model until the user repairs it by hand.
-  const temp = join(dir, `.${basename(current.path)}.omp-web-${process.pid}-${Date.now()}.tmp`);
+  const temp = join(
+    dir,
+    `.${basename(current.path)}.omp-web-${process.pid}-${Date.now()}.tmp`,
+  );
   try {
     writeFileSync(temp, text, "utf8");
     renameSync(temp, current.path);

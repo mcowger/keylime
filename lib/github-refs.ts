@@ -7,7 +7,8 @@ export const GithubRepoContext = createContext<string | null>(null);
 
 // `#123` or `owner/repo#123`, GitHub-style. The lookbehind rejects references
 // glued to words or paths (`C#12`, `file.ts#12`, `a/b/c#12`, `&#123;`).
-const GITHUB_REF_RE = /(?<![\w./#&-])(?:([A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9._-]+))?#([1-9]\d{0,9})(?![\w-])/g;
+const GITHUB_REF_RE =
+  /(?<![\w./#&-])(?:([A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9._-]+))?#([1-9]\d{0,9})(?![\w-])/g;
 
 /**
  * Links GitHub issue/PR references in prose. `owner/repo#N` always links;
@@ -20,7 +21,11 @@ export function remarkGithubRefs({ repo }: { repo?: string | null } = {}) {
       tree,
       [
         GITHUB_REF_RE,
-        (match: string, slug: string | undefined, number: string): Link | false => {
+        (
+          match: string,
+          slug: string | undefined,
+          number: string,
+        ): Link | false => {
           const target = slug ?? repo;
           if (!target) return false;
           return {

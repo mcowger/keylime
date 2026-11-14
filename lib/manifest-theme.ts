@@ -12,6 +12,8 @@ export function manifestHref(hex: string | null | undefined): string {
 }
 
 /** `#RRGGBB` for a valid `RRGGBB` value, else undefined. */
-export function parseThemeColor(hex: string | null | undefined): string | undefined {
+export function parseThemeColor(
+  hex: string | null | undefined,
+): string | undefined {
   return hex && HEX.test(hex) ? `#${hex}` : undefined;
 }

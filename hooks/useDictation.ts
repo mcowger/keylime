@@ -25,7 +25,8 @@ const STT_POLL_REQUEST_TIMEOUT_MS = 10_000;
 const STT_ADOPT_INTERVAL_MS = 4_000;
 const STT_OWNER_TOKEN_KEY = "omp-web:stt-owner-token";
 const STT_MOVED_JOB_PREFIX = "omp-web:stt-moved-job:";
-const STT_RECOVERY_STORAGE_ERROR = "Transcription recovery could not be saved; keep this tab open to recover the recording.";
+const STT_RECOVERY_STORAGE_ERROR =
+  "Transcription recovery could not be saved; keep this tab open to recover the recording.";
 
 interface MovedSttJob {
   source: string;
@@ -50,10 +51,14 @@ function movedSttJobs(): Array<[string, MovedSttJob]> {
       const key = sessionStorage.key(i);
       if (!key?.startsWith(STT_MOVED_JOB_PREFIX)) continue;
       const job = JSON.parse(sessionStorage.getItem(key) ?? "null");
-      if (job && typeof job.source === "string" && typeof job.target === "string"
-        && (job.jobId === undefined || typeof job.jobId === "string")
-        && (job.error === undefined || typeof job.error === "string")
-        && (job.discard === undefined || typeof job.discard === "boolean")) {
+      if (
+        job &&
+        typeof job.source === "string" &&
+        typeof job.target === "string" &&
+        (job.jobId === undefined || typeof job.jobId === "string") &&
+        (job.error === undefined || typeof job.error === "string") &&
+        (job.discard === undefined || typeof job.discard === "boolean")
+      ) {
         jobs.set(key, job);
       }
     }
@@ -94,7 +99,9 @@ function forgetMovedSttJob(jobId: string): void {
 }
 
 function randomToken(): string {
-  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 /**
@@ -118,7 +125,12 @@ function normalizeErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-export function useDictation({ onTranscript, onError, scope, identityMove }: UseDictationOptions) {
+export function useDictation({
+  onTranscript,
+  onError,
+  scope,
+  identityMove,
+}: UseDictationOptions) {
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isReviewing, setIsReviewing] = useState(false);
@@ -140,7 +152,13 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
   const maxTimeoutRef = useRef<number | null>(null);
   const pausePreviewTimeoutRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const captureRef = useRef<DictationCapture>({ analyser: null, startedAt: 0, pausedAccum: 0, pausedAt: null, finalDurationMs: null });
+  const captureRef = useRef<DictationCapture>({
+    analyser: null,
+    startedAt: 0,
+    pausedAccum: 0,
+    pausedAt: null,
+    finalDurationMs: null,
+  });
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -148,13 +166,22 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
   const captureAfterRef = useRef<SttAfter | null>(null);
   // Audio kept after a failed/timed-out transcription so the user can retry
   // instead of losing the recording.
-  const pendingAudioRef = useRef<{ blob: Blob; ext: string; after?: SttAfter } | null>(null);
+  const pendingAudioRef = useRef<{
+    blob: Blob;
+    ext: string;
+    after?: SttAfter;
+  } | null>(null);
   // Server job the deck currently shows. The server keeps its audio, so it can
   // be played and retried even from a browser that never had the recording.
   const jobIdRef = useRef<string | null>(null);
   // The upload in flight, if any. Uploads are not aborted (see runTranscription);
   // these flags tell its completion whether to discard or just drop the job.
-  const uploadRef = useRef<{ discard: boolean; detached: boolean; source?: string; recoveryKey?: string } | null>(null);
+  const uploadRef = useRef<{
+    discard: boolean;
+    detached: boolean;
+    source?: string;
+    recoveryKey?: string;
+  } | null>(null);
   // This tab's lasting identity: it owns the jobs it uploads or retries
   // (first claim, and the only one told the send/queue choice). Kept in
   // sessionStorage because AppShell remounts the composer on every session
@@ -207,7 +234,13 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
   }, []);
 
   const resetCaptureState = useCallback(() => {
-    captureRef.current = { analyser: null, startedAt: 0, pausedAccum: 0, pausedAt: null, finalDurationMs: null };
+    captureRef.current = {
+      analyser: null,
+      startedAt: 0,
+      pausedAccum: 0,
+      pausedAt: null,
+      finalDurationMs: null,
+    };
   }, []);
   const clearMaxTimeout = useCallback(() => {
     if (maxTimeoutRef.current !== null) {
@@ -218,7 +251,10 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
 
   const cleanup = useCallback(() => {
     clearMaxTimeout();
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== "inactive"
+    ) {
       try {
         mediaRecorderRef.current.stop();
       } catch {}
@@ -275,175 +311,248 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
   // browser has the local audio to fall back on, so only it may report a lost
   // job as an error; a follower that is locked out of the transcript is
   // standing down by design.
-  const followJob = useCallback(async (jobId: string, mine = true) => {
-    abortControllerRef.current?.abort();
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
-    const { signal } = abortController;
-    const stale = () => cancelledRef.current || signal.aborted;
-    const deadline = Date.now() + STT_TIMEOUT_MS;
-    const jobUrl = `/api/stt/${encodeURIComponent(jobId)}`;
-    jobIdRef.current = jobId;
-    setTranscribeError(null);
-    setIsTranscribing(true);
+  const followJob = useCallback(
+    async (jobId: string, mine = true) => {
+      abortControllerRef.current?.abort();
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+      const { signal } = abortController;
+      const stale = () => cancelledRef.current || signal.aborted;
+      const deadline = Date.now() + STT_TIMEOUT_MS;
+      const jobUrl = `/api/stt/${encodeURIComponent(jobId)}`;
+      jobIdRef.current = jobId;
+      setTranscribeError(null);
+      setIsTranscribing(true);
 
-    // Once the job is done the loop claims it instead of polling. A claim
-    // whose response is lost is repeated with the same token, which returns
-    // the text again, so a dropped response never loses the transcript.
-    let claiming = false;
-    let delay = STT_POLL_INTERVAL_MS;
-    try {
-      while (true) {
-        if (Date.now() > deadline) {
-          failTranscription("Transcription timed out");
-          return;
-        }
-        await new Promise<void>((resolve) => window.setTimeout(resolve, delay));
-        delay = STT_POLL_INTERVAL_MS;
-        if (stale()) return;
-        const claimUrl = `${jobUrl}?claim=${encodeURIComponent((claimTokenRef.current ??= randomToken()))}&owner=${encodeURIComponent(ownerToken())}`;
-        // Per-request timeout: a stalled request must not freeze the loop past its deadline.
-        const requestController = new AbortController();
-        const abortRequest = () => requestController.abort();
-        signal.addEventListener("abort", abortRequest, { once: true });
-        const timeout = window.setTimeout(abortRequest, STT_POLL_REQUEST_TIMEOUT_MS);
-        const result = await fetch(claiming ? claimUrl : jobUrl, {
-          method: claiming ? "DELETE" : "GET",
-          signal: requestController.signal,
-          cache: "no-store",
-        }).then(async (res) => ({ res, job: await res.json().catch(() => null) }))
-          .catch((err: unknown) => {
-            if (signal.aborted) throw err;
-            return null;
-          }).finally(() => {
-            window.clearTimeout(timeout);
-            signal.removeEventListener("abort", abortRequest);
-          });
-        if (stale()) return;
-        if (!result) continue;
-        const { res, job } = result;
-        if (res.status === 404) {
-          // Server restarted, the job expired, or its tombstone was pruned
-          // after another browser took it. Only local audio can be retried,
-          // and only the recording browser has any.
-          forgetMovedSttJob(jobId);
-          jobIdRef.current = null;
-          if (!mine) {
+      // Once the job is done the loop claims it instead of polling. A claim
+      // whose response is lost is repeated with the same token, which returns
+      // the text again, so a dropped response never loses the transcript.
+      let claiming = false;
+      let delay = STT_POLL_INTERVAL_MS;
+      try {
+        while (true) {
+          if (Date.now() > deadline) {
+            failTranscription("Transcription timed out");
+            return;
+          }
+          await new Promise<void>((resolve) =>
+            window.setTimeout(resolve, delay),
+          );
+          delay = STT_POLL_INTERVAL_MS;
+          if (stale()) return;
+          const claimUrl = `${jobUrl}?claim=${encodeURIComponent((claimTokenRef.current ??= randomToken()))}&owner=${encodeURIComponent(ownerToken())}`;
+          // Per-request timeout: a stalled request must not freeze the loop past its deadline.
+          const requestController = new AbortController();
+          const abortRequest = () => requestController.abort();
+          signal.addEventListener("abort", abortRequest, { once: true });
+          const timeout = window.setTimeout(
+            abortRequest,
+            STT_POLL_REQUEST_TIMEOUT_MS,
+          );
+          const result = await fetch(claiming ? claimUrl : jobUrl, {
+            method: claiming ? "DELETE" : "GET",
+            signal: requestController.signal,
+            cache: "no-store",
+          })
+            .then(async (res) => ({
+              res,
+              job: await res.json().catch(() => null),
+            }))
+            .catch((err: unknown) => {
+              if (signal.aborted) throw err;
+              return null;
+            })
+            .finally(() => {
+              window.clearTimeout(timeout);
+              signal.removeEventListener("abort", abortRequest);
+            });
+          if (stale()) return;
+          if (!result) continue;
+          const { res, job } = result;
+          if (res.status === 404) {
+            // Server restarted, the job expired, or its tombstone was pruned
+            // after another browser took it. Only local audio can be retried,
+            // and only the recording browser has any.
+            forgetMovedSttJob(jobId);
+            jobIdRef.current = null;
+            if (!mine) {
+              releaseJob();
+              return;
+            }
+            failTranscription(
+              normalizeErrorMessage(job?.error, "Transcription job not found"),
+            );
+            return;
+          }
+          // 4xx (expired login, bad request) is final; 5xx/408/429 and proxy pages are transient.
+          if (
+            res.status >= 400 &&
+            res.status < 500 &&
+            res.status !== 408 &&
+            res.status !== 429
+          ) {
+            failTranscription(
+              normalizeErrorMessage(
+                job?.error,
+                `Transcription failed (HTTP ${res.status})`,
+              ),
+            );
+            return;
+          }
+          if (!res.ok || job?.status === "pending") continue;
+          if (job?.status === "error") {
+            failTranscription(
+              normalizeErrorMessage(job.error, "Transcription failed"),
+            );
+            return;
+          }
+          if (job?.status === "gone") {
             releaseJob();
             return;
           }
-          failTranscription(normalizeErrorMessage(job?.error, "Transcription job not found"));
+          if (job?.status !== "done") continue;
+          if (!claiming) {
+            claiming = true;
+            delay = 0;
+            continue;
+          }
+          // "done" without text: the recording browser still has first claim; ask again.
+          if (typeof job.text !== "string") continue;
+          forgetMovedSttJob(jobId);
+          jobIdRef.current = null;
+          teardownPreviewAudio();
+          pendingAudioRef.current = null;
+          callbacksRef.current.onTranscript(
+            job.text.trim(),
+            isSttAfter(job.after) ? job.after : undefined,
+          );
           return;
         }
-        // 4xx (expired login, bad request) is final; 5xx/408/429 and proxy pages are transient.
-        if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
-          failTranscription(normalizeErrorMessage(job?.error, `Transcription failed (HTTP ${res.status})`));
-          return;
+      } catch (err) {
+        if (stale()) return;
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        failTranscription(
+          err instanceof Error
+            ? err.message
+            : normalizeErrorMessage(err, "Transcription failed"),
+        );
+      } finally {
+        if (abortControllerRef.current === abortController) {
+          abortControllerRef.current = null;
+          setIsTranscribing(false);
         }
-        if (!res.ok || job?.status === "pending") continue;
-        if (job?.status === "error") {
-          failTranscription(normalizeErrorMessage(job.error, "Transcription failed"));
-          return;
-        }
-        if (job?.status === "gone") {
-          releaseJob();
-          return;
-        }
-        if (job?.status !== "done") continue;
-        if (!claiming) {
-          claiming = true;
-          delay = 0;
-          continue;
-        }
-        // "done" without text: the recording browser still has first claim; ask again.
-        if (typeof job.text !== "string") continue;
-        forgetMovedSttJob(jobId);
-        jobIdRef.current = null;
-        teardownPreviewAudio();
-        pendingAudioRef.current = null;
-        callbacksRef.current.onTranscript(job.text.trim(), isSttAfter(job.after) ? job.after : undefined);
-        return;
       }
-    } catch (err) {
-      if (stale()) return;
-      if (err instanceof DOMException && err.name === "AbortError") return;
-      failTranscription(err instanceof Error ? err.message : normalizeErrorMessage(err, "Transcription failed"));
-    } finally {
-      if (abortControllerRef.current === abortController) {
-        abortControllerRef.current = null;
-        setIsTranscribing(false);
-      }
-    }
-  }, [ownerToken, failTranscription, releaseJob, teardownPreviewAudio]);
+    },
+    [ownerToken, failTranscription, releaseJob, teardownPreviewAudio],
+  );
 
   // Uploads the recording; the server keeps it and transcribes in the background.
   // The upload is never aborted: once sent, the server may already have started
   // the job, so the 202 is always read. A discard during the upload then ends
   // that job; leaving the scope or unmounting leaves it adoptable.
-  const runTranscription = useCallback(async (blob: Blob, ext: string, after?: SttAfter) => {
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = null;
-    const upload: NonNullable<typeof uploadRef.current> = { discard: false, detached: false, source: scopeRef.current };
-    uploadRef.current = upload;
-    setIsTranscribing(true);
-    let jobId: string | null = null;
-    try {
-      const body = new FormData();
-      body.append("file", blob, ext);
-      // Capture may have started before a confirmed ownership relocation.
-      // New uploads use its current owner; existing jobs keep their server scope.
-      if (upload.source) body.append("scope", upload.source);
-      body.append("owner", ownerToken());
-      if (after) body.append("after", after);
-      const startRes = await fetch("/api/stt", { method: "POST", body });
-      const started = await startRes.json().catch(() => null);
-      // The component may already be gone. Its confirmed move must still learn
-      // this exact ID, rather than relying forever on a source-scope lookup.
-      const recovery = movedSttJobs().find(([key]) => key === upload.recoveryKey);
-      // Absence can mean another composer already claimed the job, or storage
-      // was unavailable. Only an explicit cancellation may delete a recording.
-      if (recovery?.[1].discard) upload.discard = true;
-      if (recovery) {
-        const error = !startRes.ok || typeof started?.jobId !== "string"
-          ? normalizeErrorMessage(started?.error, `Transcription failed (HTTP ${startRes.status})`)
-          : undefined;
-        if (!storeMovedSttJob(recovery[0], { ...recovery[1], jobId: error ? undefined : started.jobId, error })) {
+  const runTranscription = useCallback(
+    async (blob: Blob, ext: string, after?: SttAfter) => {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+      const upload: NonNullable<typeof uploadRef.current> = {
+        discard: false,
+        detached: false,
+        source: scopeRef.current,
+      };
+      uploadRef.current = upload;
+      setIsTranscribing(true);
+      let jobId: string | null = null;
+      try {
+        const body = new FormData();
+        body.append("file", blob, ext);
+        // Capture may have started before a confirmed ownership relocation.
+        // New uploads use its current owner; existing jobs keep their server scope.
+        if (upload.source) body.append("scope", upload.source);
+        body.append("owner", ownerToken());
+        if (after) body.append("after", after);
+        const startRes = await fetch("/api/stt", { method: "POST", body });
+        const started = await startRes.json().catch(() => null);
+        // The component may already be gone. Its confirmed move must still learn
+        // this exact ID, rather than relying forever on a source-scope lookup.
+        const recovery = movedSttJobs().find(
+          ([key]) => key === upload.recoveryKey,
+        );
+        // Absence can mean another composer already claimed the job, or storage
+        // was unavailable. Only an explicit cancellation may delete a recording.
+        if (recovery?.[1].discard) upload.discard = true;
+        if (recovery) {
+          const error =
+            !startRes.ok || typeof started?.jobId !== "string"
+              ? normalizeErrorMessage(
+                  started?.error,
+                  `Transcription failed (HTTP ${startRes.status})`,
+                )
+              : undefined;
+          if (
+            !storeMovedSttJob(recovery[0], {
+              ...recovery[1],
+              jobId: error ? undefined : started.jobId,
+              error,
+            })
+          ) {
+            callbacksRef.current.onError?.(STT_RECOVERY_STORAGE_ERROR);
+          }
+        }
+        if (upload.discard) {
+          if (upload.recoveryKey) removeMovedSttJob(upload.recoveryKey);
+          if (typeof started?.jobId === "string") {
+            void fetch(`/api/stt/${encodeURIComponent(started.jobId)}`, {
+              method: "DELETE",
+            }).catch(() => {});
+          }
+          return;
+        }
+        if (upload.detached || cancelledRef.current) return;
+        if (!startRes.ok || typeof started?.jobId !== "string") {
+          if (!startRes.ok && upload.recoveryKey)
+            removeMovedSttJob(upload.recoveryKey);
+          failTranscription(
+            normalizeErrorMessage(
+              started?.error,
+              `Transcription failed (HTTP ${startRes.status})`,
+            ),
+          );
+          return;
+        }
+        jobId = started.jobId;
+      } catch (err) {
+        const recovery = movedSttJobs().find(
+          ([key]) => key === upload.recoveryKey,
+        );
+        if (upload.discard || recovery?.[1].discard) {
+          if (upload.recoveryKey) removeMovedSttJob(upload.recoveryKey);
+          return;
+        }
+        if (
+          recovery &&
+          !storeMovedSttJob(recovery[0], {
+            ...recovery[1],
+            error: normalizeErrorMessage(err, "Transcription failed"),
+          })
+        ) {
           callbacksRef.current.onError?.(STT_RECOVERY_STORAGE_ERROR);
         }
-      }
-      if (upload.discard) {
-        if (upload.recoveryKey) removeMovedSttJob(upload.recoveryKey);
-        if (typeof started?.jobId === "string") {
-          void fetch(`/api/stt/${encodeURIComponent(started.jobId)}`, { method: "DELETE" }).catch(() => {});
+        if (upload.detached || cancelledRef.current) return;
+        failTranscription(
+          err instanceof Error
+            ? err.message
+            : normalizeErrorMessage(err, "Transcription failed"),
+        );
+      } finally {
+        if (uploadRef.current === upload) {
+          uploadRef.current = null;
+          if (!jobId) setIsTranscribing(false);
         }
-        return;
       }
-      if (upload.detached || cancelledRef.current) return;
-      if (!startRes.ok || typeof started?.jobId !== "string") {
-        if (!startRes.ok && upload.recoveryKey) removeMovedSttJob(upload.recoveryKey);
-        failTranscription(normalizeErrorMessage(started?.error, `Transcription failed (HTTP ${startRes.status})`));
-        return;
-      }
-      jobId = started.jobId;
-    } catch (err) {
-      const recovery = movedSttJobs().find(([key]) => key === upload.recoveryKey);
-      if (upload.discard || recovery?.[1].discard) {
-        if (upload.recoveryKey) removeMovedSttJob(upload.recoveryKey);
-        return;
-      }
-      if (recovery && !storeMovedSttJob(recovery[0], { ...recovery[1], error: normalizeErrorMessage(err, "Transcription failed") })) {
-        callbacksRef.current.onError?.(STT_RECOVERY_STORAGE_ERROR);
-      }
-      if (upload.detached || cancelledRef.current) return;
-      failTranscription(err instanceof Error ? err.message : normalizeErrorMessage(err, "Transcription failed"));
-    } finally {
-      if (uploadRef.current === upload) {
-        uploadRef.current = null;
-        if (!jobId) setIsTranscribing(false);
-      }
-    }
-    if (jobId) void followJob(jobId);
-  }, [ownerToken, failTranscription, followJob]);
+      if (jobId) void followJob(jobId);
+    },
+    [ownerToken, failTranscription, followJob],
+  );
 
   // Pick up this scope's job on mount, on focus or visibility, and every few
   // seconds while visible: a recording another browser sent (or this one
@@ -451,16 +560,28 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
   const idleRef = useRef(true);
   const adoptRef = useRef<((retry?: boolean) => Promise<void>) | null>(null);
   useEffect(() => {
-    idleRef.current = !isRecording && !isPaused && !isReviewing && !isTranscribing && !transcribeError;
+    idleRef.current =
+      !isRecording &&
+      !isPaused &&
+      !isReviewing &&
+      !isTranscribing &&
+      !transcribeError;
   });
   useEffect(() => {
     if (!scope) return;
     let disposed = false;
-    const canAdopt = () => !disposed && idleRef.current && !isStartingRef.current && !jobIdRef.current && !uploadRef.current;
+    const canAdopt = () =>
+      !disposed &&
+      idleRef.current &&
+      !isStartingRef.current &&
+      !jobIdRef.current &&
+      !uploadRef.current;
     const adopt = async (retry = false) => {
       if (!canAdopt() || document.visibilityState !== "visible") return;
       const associations = movedSttJobs();
-      const recovery = associations.find(([, job]) => job.target === scope && !job.discard);
+      const recovery = associations.find(
+        ([, job]) => job.target === scope && !job.discard,
+      );
       if (recovery?.[1].error && !retry) {
         failTranscription(recovery[1].error);
         return;
@@ -474,17 +595,30 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
       // is discoverable. Multiple jobs cannot be correlated by this API: keep
       // the association and report ambiguity instead of picking one at random.
       const source = recovery?.[1].source ?? scope;
-      const res = await fetch(`/api/stt?scope=${encodeURIComponent(source)}`, { cache: "no-store" }).catch(() => null);
+      const res = await fetch(`/api/stt?scope=${encodeURIComponent(source)}`, {
+        cache: "no-store",
+      }).catch(() => null);
       const data = res?.ok ? await res.json().catch(() => null) : null;
       if (!canAdopt()) return;
       if (recovery && (!res?.ok || !Array.isArray(data?.jobs))) {
-        failTranscription(normalizeErrorMessage(data?.error, `Transcription recovery failed (HTTP ${res?.status ?? "network"})`));
+        failTranscription(
+          normalizeErrorMessage(
+            data?.error,
+            `Transcription recovery failed (HTTP ${res?.status ?? "network"})`,
+          ),
+        );
         return;
       }
       const currentAssociations = movedSttJobs();
-      const currentRecovery = recovery && currentAssociations.find(([key]) => key === recovery[0]);
+      const currentRecovery =
+        recovery && currentAssociations.find(([key]) => key === recovery[0]);
       if (recovery) {
-        if (!currentRecovery || currentRecovery[1].target !== scope || currentRecovery[1].discard) return;
+        if (
+          !currentRecovery ||
+          currentRecovery[1].target !== scope ||
+          currentRecovery[1].discard
+        )
+          return;
         if (currentRecovery[1].jobId) {
           cancelledRef.current = false;
           void followJob(currentRecovery[1].jobId, false);
@@ -493,25 +627,42 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
       }
       // Never adopt a relocated job back into the old conversation. An upload
       // without an ID temporarily reserves its source's discovery for its target.
-      const jobs = Array.isArray(data?.jobs) ? data.jobs.filter((job: { id?: unknown }) => (
-        typeof job?.id === "string" && !currentAssociations.some(([, moved]) => (
-          (moved.discard || moved.target !== scope) && (moved.jobId === job.id || (!moved.jobId && moved.source === source))
-        ))
-      )) : [];
+      const jobs = Array.isArray(data?.jobs)
+        ? data.jobs.filter(
+            (job: { id?: unknown }) =>
+              typeof job?.id === "string" &&
+              !currentAssociations.some(
+                ([, moved]) =>
+                  (moved.discard || moved.target !== scope) &&
+                  (moved.jobId === job.id ||
+                    (!moved.jobId && moved.source === source)),
+              ),
+          )
+        : [];
       if (recovery && jobs.length > 1) {
-        failTranscription("Multiple transcription jobs match the previous conversation. Retry after the original upload finishes, or discard this recovery.");
+        failTranscription(
+          "Multiple transcription jobs match the previous conversation. Retry after the original upload finishes, or discard this recovery.",
+        );
         return;
       }
       const job = jobs[0];
       if (!job) {
-        if (currentRecovery?.[1].error) failTranscription(currentRecovery[1].error);
+        if (currentRecovery?.[1].error)
+          failTranscription(currentRecovery[1].error);
         return;
       }
-      if (currentRecovery) storeMovedSttJob(currentRecovery[0], { ...currentRecovery[1], jobId: job.id, error: undefined });
+      if (currentRecovery)
+        storeMovedSttJob(currentRecovery[0], {
+          ...currentRecovery[1],
+          jobId: job.id,
+          error: undefined,
+        });
       cancelledRef.current = false;
       if (job.status === "error") {
         jobIdRef.current = job.id;
-        setTranscribeError(normalizeErrorMessage(job.error, "Transcription failed"));
+        setTranscribeError(
+          normalizeErrorMessage(job.error, "Transcription failed"),
+        );
       } else {
         // Discovery holds no local audio; a pruned job is not retryable here.
         void followJob(job.id, false);
@@ -533,21 +684,31 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
       // Continue polling its exact ID with the existing owner/claim token;
       // changing the server scope or reuploading could duplicate delivery.
       const move = identityMoveRef.current;
-      if (move !== preservedIdentityMoveRef.current && move?.from === scope && move.to === scopeRef.current) {
+      if (
+        move !== preservedIdentityMoveRef.current &&
+        move?.from === scope &&
+        move.to === scopeRef.current
+      ) {
         preservedIdentityMoveRef.current = move;
         const associations = movedSttJobs();
         for (const [key, job] of associations) {
-          if (job.target === scope && !storeMovedSttJob(key, { ...job, target: move.to })) {
+          if (
+            job.target === scope &&
+            !storeMovedSttJob(key, { ...job, target: move.to })
+          ) {
             callbacksRef.current.onError?.(STT_RECOVERY_STORAGE_ERROR);
           }
         }
         const upload = uploadRef.current;
         const jobId = jobIdRef.current;
         if (upload || jobId) {
-          const previous = associations.find(([key, job]) => (
-            key === upload?.recoveryKey || (jobId !== null && job.jobId === jobId)
-          ));
-          const key = previous?.[0] ?? `${STT_MOVED_JOB_PREFIX}${randomToken()}`;
+          const previous = associations.find(
+            ([key, job]) =>
+              key === upload?.recoveryKey ||
+              (jobId !== null && job.jobId === jobId),
+          );
+          const key =
+            previous?.[0] ?? `${STT_MOVED_JOB_PREFIX}${randomToken()}`;
           const persisted = storeMovedSttJob(key, {
             source: previous?.[1].source ?? upload?.source ?? scope,
             target: move.to,
@@ -563,7 +724,11 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
       // Leaving the scope (session switch or unmount) stops following its job,
       // including one still uploading, without discarding it: the job stays
       // adoptable when the user returns.
-      if (jobIdRef.current || uploadRef.current || movedSttJobs().some(([, job]) => job.target === scope && !job.discard)) {
+      if (
+        jobIdRef.current ||
+        uploadRef.current ||
+        movedSttJobs().some(([, job]) => job.target === scope && !job.discard)
+      ) {
         if (uploadRef.current) uploadRef.current.detached = true;
         uploadRef.current = null;
         abortControllerRef.current?.abort();
@@ -588,49 +753,57 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
     const recorder = mediaRecorderRef.current;
     const mimeType = recorder?.mimeType || "audio/webm";
     const blob = new Blob(chunksRef.current, { type: mimeType });
-    const ext = mimeType.includes("mp4") ? "audio.mp4" : mimeType.includes("ogg") ? "audio.ogg" : "audio.webm";
+    const ext = mimeType.includes("mp4")
+      ? "audio.mp4"
+      : mimeType.includes("ogg")
+        ? "audio.ogg"
+        : "audio.webm";
     return { blob, ext };
   }, []);
 
   // Previews local audio (a Blob) or, for a job this browser did not record,
   // the copy the server kept (a URL).
-  const setupPreviewAudio = useCallback((source: Blob | string) => {
-    // Pause/detach any previous preview element before replacing it so a
-    // still-playing preview cannot outlive the controls that reference it.
-    teardownPreviewAudio();
-    try {
-      const url = typeof source === "string" ? source : URL.createObjectURL(source);
-      // Only object URLs are ours to revoke.
-      previewUrlRef.current = typeof source === "string" ? null : url;
-      const audio = new Audio(url);
-      audio.preload = "auto";
-      previewAudioRef.current = audio;
-      audio.ontimeupdate = () => {
-        setPreviewCurrentTime(audio.currentTime);
-      };
-      audio.onloadedmetadata = () => {
-        if (Number.isFinite(audio.duration)) {
-          setPreviewDuration(audio.duration);
-        }
-      };
-      audio.onended = () => {
-        setIsPlayingPreview(false);
-        setPreviewCurrentTime(0);
-      };
-      audio.onpause = () => {
-        setIsPlayingPreview(false);
-      };
-      audio.onplay = () => {
-        setIsPlayingPreview(true);
-      };
-      audio.onerror = () => {
-        setIsPlayingPreview(false);
-      };
-      return audio;
-    } catch {
-      return null;
-    }
-  }, [teardownPreviewAudio]);
+  const setupPreviewAudio = useCallback(
+    (source: Blob | string) => {
+      // Pause/detach any previous preview element before replacing it so a
+      // still-playing preview cannot outlive the controls that reference it.
+      teardownPreviewAudio();
+      try {
+        const url =
+          typeof source === "string" ? source : URL.createObjectURL(source);
+        // Only object URLs are ours to revoke.
+        previewUrlRef.current = typeof source === "string" ? null : url;
+        const audio = new Audio(url);
+        audio.preload = "auto";
+        previewAudioRef.current = audio;
+        audio.ontimeupdate = () => {
+          setPreviewCurrentTime(audio.currentTime);
+        };
+        audio.onloadedmetadata = () => {
+          if (Number.isFinite(audio.duration)) {
+            setPreviewDuration(audio.duration);
+          }
+        };
+        audio.onended = () => {
+          setIsPlayingPreview(false);
+          setPreviewCurrentTime(0);
+        };
+        audio.onpause = () => {
+          setIsPlayingPreview(false);
+        };
+        audio.onplay = () => {
+          setIsPlayingPreview(true);
+        };
+        audio.onerror = () => {
+          setIsPlayingPreview(false);
+        };
+        return audio;
+      } catch {
+        return null;
+      }
+    },
+    [teardownPreviewAudio],
+  );
 
   const playPreview = useCallback(() => {
     let audio = previewAudioRef.current;
@@ -638,13 +811,20 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
       // A job this browser holds no recording for plays the server's copy;
       // leftover chunks from an earlier recording must not stand in for it.
       const jobId = jobIdRef.current;
-      const captured = jobId && !pendingAudioRef.current ? null : getCapturedBlob();
+      const captured =
+        jobId && !pendingAudioRef.current ? null : getCapturedBlob();
       if (captured) audio = setupPreviewAudio(captured.blob);
-      else if (jobId) audio = setupPreviewAudio(`/api/stt/${encodeURIComponent(jobId)}/audio`);
+      else if (jobId)
+        audio = setupPreviewAudio(
+          `/api/stt/${encodeURIComponent(jobId)}/audio`,
+        );
       else return;
     }
     if (audio) {
-      if (audio.ended || (Number.isFinite(audio.duration) && audio.currentTime >= audio.duration)) {
+      if (
+        audio.ended ||
+        (Number.isFinite(audio.duration) && audio.currentTime >= audio.duration)
+      ) {
         audio.currentTime = 0;
       }
       audio.play().catch(() => {
@@ -671,33 +851,41 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
   // `after` choice) or review (without). Gates on the live MediaRecorder state
   // (not the isRecording closure) because the 5-minute cap timeout captures
   // this callback from the render that started the recording.
-  const finishCapture = useCallback((options?: { after?: SttAfter }) => {
-    clearMaxTimeout();
-    captureAfterRef.current = options?.after ?? null;
-    const recorder = mediaRecorderRef.current;
-    if (!recorder || recorder.state === "inactive") return;
-    const capture = captureRef.current;
-    const finalMs = Math.max(
-      0,
-      performance.now() - capture.startedAt - (capture.pausedAccum + (capture.pausedAt !== null ? performance.now() - capture.pausedAt : 0)),
-    );
-    capture.finalDurationMs = finalMs;
-    try {
-      recorder.stop();
-    } catch {}
-    if (audioContextRef.current) {
-      void audioContextRef.current.close().catch(() => {});
-      audioContextRef.current = null;
-    }
-    captureRef.current.analyser = null;
-    setIsRecording(false);
-    setIsPaused(false);
-    if (options?.after) {
-      setIsTranscribing(true);
-    } else {
-      setIsReviewing(true);
-    }
-  }, [clearMaxTimeout]);
+  const finishCapture = useCallback(
+    (options?: { after?: SttAfter }) => {
+      clearMaxTimeout();
+      captureAfterRef.current = options?.after ?? null;
+      const recorder = mediaRecorderRef.current;
+      if (!recorder || recorder.state === "inactive") return;
+      const capture = captureRef.current;
+      const finalMs = Math.max(
+        0,
+        performance.now() -
+          capture.startedAt -
+          (capture.pausedAccum +
+            (capture.pausedAt !== null
+              ? performance.now() - capture.pausedAt
+              : 0)),
+      );
+      capture.finalDurationMs = finalMs;
+      try {
+        recorder.stop();
+      } catch {}
+      if (audioContextRef.current) {
+        void audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
+      }
+      captureRef.current.analyser = null;
+      setIsRecording(false);
+      setIsPaused(false);
+      if (options?.after) {
+        setIsTranscribing(true);
+      } else {
+        setIsReviewing(true);
+      }
+    },
+    [clearMaxTimeout],
+  );
 
   const start = useCallback(async () => {
     if (isStartingRef.current || isRecording || isTranscribing) return;
@@ -714,7 +902,9 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
     // A new recording replaces the job the deck was showing.
     if (jobIdRef.current) {
       forgetMovedSttJob(jobIdRef.current);
-      void fetch(`/api/stt/${encodeURIComponent(jobIdRef.current)}`, { method: "DELETE" }).catch(() => {});
+      void fetch(`/api/stt/${encodeURIComponent(jobIdRef.current)}`, {
+        method: "DELETE",
+      }).catch(() => {});
       jobIdRef.current = null;
     }
     teardownPreviewAudio();
@@ -745,7 +935,11 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
         // keeps going: resume it, or the bars go flat for the rest of the take.
         const meter = ctx;
         meter.onstatechange = () => {
-          if (audioContextRef.current === meter && meter.state !== "running" && meter.state !== "closed") {
+          if (
+            audioContextRef.current === meter &&
+            meter.state !== "running" &&
+            meter.state !== "closed"
+          ) {
             void meter.resume().catch(() => {});
           }
         };
@@ -755,7 +949,12 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      captureRef.current = { analyser: null, startedAt: performance.now(), pausedAccum: 0, pausedAt: null };
+      captureRef.current = {
+        analyser: null,
+        startedAt: performance.now(),
+        pausedAccum: 0,
+        pausedAt: null,
+      };
       if (ctx) {
         try {
           // Safari can interrupt the context when the mic session starts.
@@ -797,7 +996,11 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
         }
         const mimeType = recorder.mimeType || "audio/webm";
         const blob = new Blob(chunksRef.current, { type: mimeType });
-        const ext = mimeType.includes("mp4") ? "audio.mp4" : mimeType.includes("ogg") ? "audio.ogg" : "audio.webm";
+        const ext = mimeType.includes("mp4")
+          ? "audio.mp4"
+          : mimeType.includes("ogg")
+            ? "audio.ogg"
+            : "audio.webm";
         const after = captureAfterRef.current ?? undefined;
         pendingAudioRef.current = { blob, ext, after };
         if (after) {
@@ -815,11 +1018,21 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
       }, MAX_RECORDING_MS);
     } catch (err) {
       cleanup();
-      onError?.(err instanceof Error ? err.message : "Microphone access denied");
+      onError?.(
+        err instanceof Error ? err.message : "Microphone access denied",
+      );
     } finally {
       isStartingRef.current = false;
     }
-  }, [isRecording, isTranscribing, cleanup, clearMaxTimeout, runTranscription, onError, finishCapture]);
+  }, [
+    isRecording,
+    isTranscribing,
+    cleanup,
+    clearMaxTimeout,
+    runTranscription,
+    onError,
+    finishCapture,
+  ]);
 
   const togglePause = useCallback(() => {
     const recorder = mediaRecorderRef.current;
@@ -848,30 +1061,48 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
       teardownPreviewAudio();
       const { pausedAt, pausedAccum } = captureRef.current;
       if (pausedAt !== null) {
-        captureRef.current.pausedAccum = pausedAccum + (performance.now() - pausedAt);
+        captureRef.current.pausedAccum =
+          pausedAccum + (performance.now() - pausedAt);
       }
       captureRef.current.pausedAt = null;
       recorder.resume();
       // Inside the click: resume a meter the browser suspended during the pause.
       const meter = audioContextRef.current;
-      if (meter && meter.state !== "running") void meter.resume().catch(() => {});
+      if (meter && meter.state !== "running")
+        void meter.resume().catch(() => {});
       setIsPaused(false);
     }
-  }, [isTranscribing, transcribeError, getCapturedBlob, setupPreviewAudio, pausePreview, teardownPreviewAudio]);
+  }, [
+    isTranscribing,
+    transcribeError,
+    getCapturedBlob,
+    setupPreviewAudio,
+    pausePreview,
+    teardownPreviewAudio,
+  ]);
 
   // From review: transcribe, then insert (no `after`) or send/queue. Also wired
   // straight to a click handler; a MouseEvent has no `after`, so it inserts.
-  const confirmTranscribe = useCallback((options?: { after?: SttAfter }) => {
-    const pending = pendingAudioRef.current || getCapturedBlob();
-    if (!pending || isTranscribing) return;
-    pausePreview();
-    teardownPreviewAudio();
-    setIsReviewing(false);
-    setTranscribeError(null);
-    // Keep the choice with the recording: a retry that re-uploads it sends too.
-    pendingAudioRef.current = { ...pending, after: options?.after };
-    void runTranscription(pending.blob, pending.ext, options?.after);
-  }, [getCapturedBlob, isTranscribing, pausePreview, teardownPreviewAudio, runTranscription]);
+  const confirmTranscribe = useCallback(
+    (options?: { after?: SttAfter }) => {
+      const pending = pendingAudioRef.current || getCapturedBlob();
+      if (!pending || isTranscribing) return;
+      pausePreview();
+      teardownPreviewAudio();
+      setIsReviewing(false);
+      setTranscribeError(null);
+      // Keep the choice with the recording: a retry that re-uploads it sends too.
+      pendingAudioRef.current = { ...pending, after: options?.after };
+      void runTranscription(pending.blob, pending.ext, options?.after);
+    },
+    [
+      getCapturedBlob,
+      isTranscribing,
+      pausePreview,
+      teardownPreviewAudio,
+      runTranscription,
+    ],
+  );
   const cancel = useCallback(() => {
     cancelledRef.current = true;
     if (abortControllerRef.current) {
@@ -879,15 +1110,20 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
       abortControllerRef.current = null;
     }
     pendingAudioRef.current = null;
-    const recovery = movedSttJobs().find(([key, job]) => (
-      key === uploadRef.current?.recoveryKey
-      || (jobIdRef.current ? job.jobId === jobIdRef.current : job.target === scopeRef.current && !job.discard)
-    ));
+    const recovery = movedSttJobs().find(
+      ([key, job]) =>
+        key === uploadRef.current?.recoveryKey ||
+        (jobIdRef.current
+          ? job.jobId === jobIdRef.current
+          : job.target === scopeRef.current && !job.discard),
+    );
     // Discard means discard everywhere: other browsers polling the job stand down.
     const discardedJobId = jobIdRef.current ?? recovery?.[1].jobId;
     if (discardedJobId) {
       forgetMovedSttJob(discardedJobId);
-      void fetch(`/api/stt/${encodeURIComponent(discardedJobId)}`, { method: "DELETE" }).catch(() => {});
+      void fetch(`/api/stt/${encodeURIComponent(discardedJobId)}`, {
+        method: "DELETE",
+      }).catch(() => {});
       jobIdRef.current = null;
     }
     // An upload in flight ends its job once the server answers with its id.
@@ -914,7 +1150,10 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
     const jobId = jobIdRef.current;
     if (jobId) {
       setIsTranscribing(true);
-      const res = await fetch(`/api/stt/${encodeURIComponent(jobId)}?owner=${encodeURIComponent(ownerToken())}`, { method: "POST" }).catch(() => null);
+      const res = await fetch(
+        `/api/stt/${encodeURIComponent(jobId)}?owner=${encodeURIComponent(ownerToken())}`,
+        { method: "POST" },
+      ).catch(() => null);
       const job = await res?.json().catch(() => null);
       // Discarded, or the user left this session, while the retry was in flight.
       if (cancelledRef.current || jobIdRef.current !== jobId) return;
@@ -928,21 +1167,41 @@ export function useDictation({ onTranscript, onError, scope, identityMove }: Use
         return;
       }
       if (res?.status !== 404) {
-        failTranscription(normalizeErrorMessage(job?.error, `Transcription failed (HTTP ${res?.status ?? "network"})`));
+        failTranscription(
+          normalizeErrorMessage(
+            job?.error,
+            `Transcription failed (HTTP ${res?.status ?? "network"})`,
+          ),
+        );
         return;
       }
       forgetMovedSttJob(jobId);
       jobIdRef.current = null;
     }
-    if (movedSttJobs().some(([, job]) => job.target === scopeRef.current && !job.discard) && adoptRef.current) {
+    if (
+      movedSttJobs().some(
+        ([, job]) => job.target === scopeRef.current && !job.discard,
+      ) &&
+      adoptRef.current
+    ) {
       idleRef.current = true;
       await adoptRef.current(true);
     } else {
       const pending = pendingAudioRef.current;
-      if (pending) void runTranscription(pending.blob, pending.ext, pending.after);
+      if (pending)
+        void runTranscription(pending.blob, pending.ext, pending.after);
       else failTranscription("Transcription job not found");
     }
-  }, [isTranscribing, pausePreview, teardownPreviewAudio, ownerToken, followJob, releaseJob, failTranscription, runTranscription]);
+  }, [
+    isTranscribing,
+    pausePreview,
+    teardownPreviewAudio,
+    ownerToken,
+    followJob,
+    releaseJob,
+    failTranscription,
+    runTranscription,
+  ]);
   const toggle = useCallback(() => {
     if (isRecording) finishCapture();
     else void start();

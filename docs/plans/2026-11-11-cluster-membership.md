@@ -40,10 +40,12 @@
 ### Task 1: the same-repository rule
 
 **Files:**
+
 - Modify: `lib/git-clone.ts` (next to `cloneDirectoryName`), `lib/pooled-projects.ts` (the `remote.origin.url` check)
 - Test: `lib/git-clone.test.mjs` (create if absent), the existing `lib/pooled-projects` test file
 
 **Interfaces:**
+
 - Produces: `export function repositoryKey(url: string): string | null` — `"<host>/<path>"`, or null for a URL `cloneDirectoryName` rejects.
 
 - [ ] **Step 1: Write the failing tests.**
@@ -61,10 +63,12 @@
 ### Task 2: the `gitOrigins` host operation
 
 **Files:**
+
 - Modify: `lib/workspace-types.ts` (`WorkspaceOps`, and `WORKSPACE_OP_PARAMS` — append as the last entry), `lib/hosts/workspace-ops.ts`
 - Test: the existing workspace-ops test file
 
 **Interfaces:**
+
 - Produces:
 
 ```ts
@@ -88,10 +92,12 @@ Behaviour: one answer per requested path, in order. At most 500 paths, else the 
 ### Task 3: join and leave as pure functions
 
 **Files:**
+
 - Create: `lib/hosts/cluster.ts`
 - Test: `lib/hosts/cluster.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `repositoryKey` (Task 1); `GitOrigin` (Task 2); `HostPool`, `PoolProject`, `isValidPoolOrigin`, `validatePools` (`./pools`); `ManagedProject` (`../types`); `LOCAL_HOST_ID`.
 - Produces:
 
@@ -110,6 +116,7 @@ export function leaveCluster(pools: readonly HostPool[], hostId: string): HostPo
 ```
 
 Rules the signatures do not fix:
+
 - `joinCluster` with no pool creates the cluster first. Only `pools[0]` changes; other pools are returned as the same objects.
 - A project moves when `mainCheckout`, `isValidPoolOrigin(origin)` and `repositoryKey(origin)` is not null. It binds to the cluster project with the same `repositoryKey`, unless that project already has a `clonePaths` entry for this host; then, and in every other case, the project is left alone (pinned). A bound project stays hidden only when the cluster project and the host project are both hidden (final review I1).
 - A created project: `id: newId()`, `name`: the host project's `name`, else its folder name (last path segment, split on `/` and `\`), else `cloneDirectoryName(origin)` (spec M3; corrected by final review I2, the origin's name renamed projects), `origin`, `addedAt: project.addedAt ?? now`, and the host project's `hidden` (default `false`), `alias`, `sortOrder`, `pinOrder`, `launchConfig`.
@@ -139,15 +146,18 @@ Rules the signatures do not fix:
 ### Task 4: the join and leave requests
 
 **Files:**
+
 - Create: `app/api/hosts/[id]/cluster/route.ts`
 - Modify: `server/routes.ts` (import and `"hosts/[id]/cluster"` entry), `lib/hosts/hub.ts` (the `hosts` channel payload), `hooks/useHostRows.ts`
 - Test: `lib/hosts/cluster-route.test.mjs`, the existing `useHostRows` test if there is one
 
 **Interfaces:**
+
 - Consumes: Task 3's functions; `loadPools`, `savePools`; `getHost`, `getHostLinkProtocol`, `notifyHostsChange`; `listProjectsAllHosts` (`lib/hosts/session-index.ts`); `Host.workspaceOps.gitOrigins`, `.home`, `Host.supportsWorkspaceOp`; `abortBrokerRequests` (`lib/omp/auth-broker.ts`).
 - Produces: `PUT /api/hosts/<id>/cluster` with JSON `{ "projectsRoot": "<absolute path>" }` → 200 `{ pools }`; `DELETE /api/hosts/<id>/cluster` → 200 `{ pools }`. Follow `app/api/hosts/[id]/updates/route.ts` for the origin check, the content type, the bounded body and the `{ error, code }` answers.
 
 `PUT`, in order:
+
 1. Unknown host, or `local` → 404 `unknown_host` (this machine is never joined by request).
 2. `projectsRoot` not a string that passes the pool's absolute-root rule → 400 `invalid_projects_root`.
 3. `loadPools()` throws → 503 `pool_storage_unavailable`.
@@ -177,10 +187,12 @@ The `hosts` channel payload gains `pools` (omitted when `pools.json` cannot be r
 ### Task 5: members share credentials
 
 **Files:**
+
 - Modify: `lib/hosts/cluster.ts`, `lib/hosts/hub.ts` (`RemoteHost.spawnRpc`), `app/api/hosts/broker/[...path]/route.ts` (`admit`)
 - Test: `lib/hosts/cluster.test.mjs`, `lib/hosts/hub-v7.test.mjs`, `lib/hosts/broker-route.test.mjs`
 
 **Interfaces:**
+
 - Produces: `export function sharesCredentials(record: { id: string; shareCredentials: boolean }, pools: readonly HostPool[]): boolean` — false for `local`; otherwise the record's flag or `isClusterMember`.
 
 Both callers replace their read of `record.shareCredentials` with `sharesCredentials(record, loadPools())`. A `loadPools()` that throws refuses: `spawnRpc` rejects with 503 `pool_storage_unavailable`, `admit` answers 503.
@@ -196,17 +208,31 @@ Both callers replace their read of `record.shareCredentials` with `sharesCredent
 ### Task 6: sidebar
 
 **Files:**
+
 - Modify: `lib/project-ordering.ts` (`projectTargetId`, `groupProjectsByHost`), `components/SessionSidebar.tsx` (the `hostList` memo and the group loop that computes `member` and `canAdd`)
 - Test: the existing `lib/project-ordering` and `components/SessionSidebar-helpers` test files
 
 **Interfaces:**
+
 - Produces:
 
 ```ts
-export type PoolMembers = readonly { id: string; members: readonly { hostId: string }[] }[];
+export type PoolMembers = readonly {
+  id: string;
+  members: readonly { hostId: string }[];
+}[];
 /** `pool:<id>` for a pool project and for a project of a host that is a member of `pools[0]`; else the host id. */
-export function projectTargetId(project: { poolId?: string; hostId?: string }, pools?: PoolMembers): string;
-export function groupProjectsByHost<T extends { hostId?: string; poolId?: string }>(projects: T[], hosts: { id: string; label: string }[], pools?: PoolMembers): { host: { id: string; label: string }; projects: T[] }[];
+export function projectTargetId(
+  project: { poolId?: string; hostId?: string },
+  pools?: PoolMembers,
+): string;
+export function groupProjectsByHost<
+  T extends { hostId?: string; poolId?: string },
+>(
+  projects: T[],
+  hosts: { id: string; label: string }[],
+  pools?: PoolMembers,
+): { host: { id: string; label: string }; projects: T[] }[];
 ```
 
 Within the cluster's group, pool projects keep their order and come first; the members' own projects follow. Each of those rows shows its node's name (the host label; the localized name for this machine) as a small label beside the project name, with an accessible name. A member host has no group. With no pool, every result is what it is today.
@@ -222,13 +248,16 @@ Within the cluster's group, pool projects keep their order and come first; the m
 ### Task 7: the Settings switch, strings and documentation
 
 **Files:**
+
 - Modify: `components/HostsConfig.tsx`, `lib/i18n/locales/en.json`, `ja.json`, `zh-CN.json`, `README.md`, `AGENTS.md`, `CHANGELOG.md`
 - Test: `components/HostsConfig.cluster.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `useHostRows()` (`hosts`, `pools`); the two requests of Task 4; `GET /api/home?hostId=<id>` for the folder's default; the row fields `status`, `hostVersion`, `workspaceOps`.
 
 Behaviour:
+
 - This machine's row shows the `clusterMaster` label when a cluster exists, and no switch.
 - A linked host's row has the switch. It is disabled, with the reason as its description, when the host is offline (`joinOffline`), speaks a protocol below 9 or lacks `gitOrigins` (`joinUpgrade`), or the pools could not be loaded (`poolsUnavailable`). A member's switch is never disabled for these reasons: leaving always works.
 - On → a dialog with the folder field (prefilled `<home>/ompweb-cluster`, required, absolute), the two notes and `joinConfirm`; a refused request shows the server's message and keeps the dialog open.
@@ -237,23 +266,23 @@ Behaviour:
 
 Strings (keys `hostsConfig.<name>`):
 
-| name | en | ja | zh-CN |
-|---|---|---|---|
-| `clusterMaster` | Cluster master | クラスターのマスター | 集群主节点 |
-| `inCluster` | In the cluster | クラスターに参加 | 加入集群 |
-| `inClusterAria` | {name} is in the cluster | {name} をクラスターに参加させる | {name} 加入集群 |
-| `joinTitle` | Add {name} to the cluster? | {name} をクラスターに追加しますか？ | 将 {name} 加入集群？ |
-| `joinFolder` | Folder on {name} for the cluster's checkouts | クラスターのチェックアウトを置く {name} 上のフォルダー | {name} 上用于存放集群检出的文件夹 |
-| `joinProjectsNote` | Its Git projects become cluster projects, and their sessions are listed together with the other members'. Projects without a Git remote stay on {name}. | このホストの Git プロジェクトはクラスターのプロジェクトになり、セッションは他のメンバーのものと一緒に表示されます。Git リモートのないプロジェクトは {name} に残ります。 | 该主机的 Git 项目将成为集群项目，其会话与其他成员的会话一起列出。没有 Git 远程的项目保留在 {name} 上。 |
-| `joinCredentialsNote` | {name} will use this machine's provider logins and can read their access tokens and stored API keys. | {name} はこのマシンのプロバイダーログインを使用し、アクセストークンと保存済みの API キーを読み取れます。 | {name} 将使用本机的提供商登录，并可读取其访问令牌和已保存的 API 密钥。 |
-| `joinConfirm` | Add to cluster | クラスターに追加 | 加入集群 |
-| `leaveTitle` | Remove {name} from the cluster? | {name} をクラスターから外しますか？ | 将 {name} 移出集群？ |
-| `leaveDescription` | It gets no new cluster sessions. Its own projects are listed under {name} again. Sessions the cluster started there stay under the cluster's projects. | 新しいクラスターセッションは割り当てられなくなります。このホスト自身のプロジェクトは再び {name} の下に表示されます。クラスターがそこで開始したセッションはクラスターのプロジェクトに残ります。 | 它将不再接收新的集群会话。它自己的项目会重新列在 {name} 下。集群在其上启动的会话仍保留在集群项目中。 |
-| `leaveConfirm` | Remove | 外す | 移出 |
-| `joinOffline` | The host is offline | ホストはオフラインです | 主机离线 |
-| `joinUpgrade` | Update ompweb on this host first | 先にこのホストの ompweb を更新してください | 请先更新该主机上的 ompweb |
-| `poolsUnavailable` | The cluster configuration could not be loaded | クラスター設定を読み込めませんでした | 无法加载集群配置 |
-| `shareForced` | On while the host is in the cluster | クラスター参加中は常にオン | 主机在集群中时始终开启 |
+| name                  | en                                                                                                                                                      | ja                                                                                                                                                                                             | zh-CN                                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `clusterMaster`       | Cluster master                                                                                                                                          | クラスターのマスター                                                                                                                                                                           | 集群主节点                                                                                             |
+| `inCluster`           | In the cluster                                                                                                                                          | クラスターに参加                                                                                                                                                                               | 加入集群                                                                                               |
+| `inClusterAria`       | {name} is in the cluster                                                                                                                                | {name} をクラスターに参加させる                                                                                                                                                                | {name} 加入集群                                                                                        |
+| `joinTitle`           | Add {name} to the cluster?                                                                                                                              | {name} をクラスターに追加しますか？                                                                                                                                                            | 将 {name} 加入集群？                                                                                   |
+| `joinFolder`          | Folder on {name} for the cluster's checkouts                                                                                                            | クラスターのチェックアウトを置く {name} 上のフォルダー                                                                                                                                         | {name} 上用于存放集群检出的文件夹                                                                      |
+| `joinProjectsNote`    | Its Git projects become cluster projects, and their sessions are listed together with the other members'. Projects without a Git remote stay on {name}. | このホストの Git プロジェクトはクラスターのプロジェクトになり、セッションは他のメンバーのものと一緒に表示されます。Git リモートのないプロジェクトは {name} に残ります。                        | 该主机的 Git 项目将成为集群项目，其会话与其他成员的会话一起列出。没有 Git 远程的项目保留在 {name} 上。 |
+| `joinCredentialsNote` | {name} will use this machine's provider logins and can read their access tokens and stored API keys.                                                    | {name} はこのマシンのプロバイダーログインを使用し、アクセストークンと保存済みの API キーを読み取れます。                                                                                       | {name} 将使用本机的提供商登录，并可读取其访问令牌和已保存的 API 密钥。                                 |
+| `joinConfirm`         | Add to cluster                                                                                                                                          | クラスターに追加                                                                                                                                                                               | 加入集群                                                                                               |
+| `leaveTitle`          | Remove {name} from the cluster?                                                                                                                         | {name} をクラスターから外しますか？                                                                                                                                                            | 将 {name} 移出集群？                                                                                   |
+| `leaveDescription`    | It gets no new cluster sessions. Its own projects are listed under {name} again. Sessions the cluster started there stay under the cluster's projects.  | 新しいクラスターセッションは割り当てられなくなります。このホスト自身のプロジェクトは再び {name} の下に表示されます。クラスターがそこで開始したセッションはクラスターのプロジェクトに残ります。 | 它将不再接收新的集群会话。它自己的项目会重新列在 {name} 下。集群在其上启动的会话仍保留在集群项目中。   |
+| `leaveConfirm`        | Remove                                                                                                                                                  | 外す                                                                                                                                                                                           | 移出                                                                                                   |
+| `joinOffline`         | The host is offline                                                                                                                                     | ホストはオフラインです                                                                                                                                                                         | 主机离线                                                                                               |
+| `joinUpgrade`         | Update ompweb on this host first                                                                                                                        | 先にこのホストの ompweb を更新してください                                                                                                                                                     | 请先更新该主机上的 ompweb                                                                              |
+| `poolsUnavailable`    | The cluster configuration could not be loaded                                                                                                           | クラスター設定を読み込めませんでした                                                                                                                                                           | 无法加载集群配置                                                                                       |
+| `shareForced`         | On while the host is in the cluster                                                                                                                     | クラスター参加中は常にオン                                                                                                                                                                     | 主机在集群中时始终开启                                                                                 |
 
 Documentation: `README.md` "Transparent host pools" (one cluster with this machine as master, the switch, what joining and leaving do, pinned projects, members' logins; correct the sentence that says existing workspaces of members stay under their host); `AGENTS.md` (file map for the new files, the cluster rules under "Remote hosts"); `CHANGELOG.md`.
 

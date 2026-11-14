@@ -1,4 +1,9 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
 import { deriveSessionSigningKey } from "./web-auth-secret";
 import { isPasswordHash, verifyPassword } from "./web-password-hash";
 
@@ -18,7 +23,9 @@ export const WEB_PASSWORD_HASH_VAR = "OMP_WEB_PASSWORD_HASH";
 export const WEB_PASSWORD_VAR = "OMP_WEB_PASSWORD";
 
 function hash(value: string): Buffer {
-  return createHmac("sha256", "omp-web-compare-v1").update(value, "utf8").digest();
+  return createHmac("sha256", "omp-web-compare-v1")
+    .update(value, "utf8")
+    .digest();
 }
 
 function equal(left: string, right: string): boolean {
@@ -30,7 +37,9 @@ function configuredHash(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 /** True when a usable password hash is configured. */
-export function isWebPasswordEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+export function isWebPasswordEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
   return isPasswordHash(configuredHash(env));
 }
 
@@ -41,19 +50,30 @@ export function isTrustedProxyRequest(
   digest = process.env.OMP_WEB_TRUSTED_HEADER_SHA256,
 ): boolean {
   if (!value || !digest || !/^[0-9a-f]{64}$/i.test(digest)) return false;
-  return timingSafeEqual(createHash("sha256").update(value, "utf8").digest(), Buffer.from(digest, "hex"));
+  return timingSafeEqual(
+    createHash("sha256").update(value, "utf8").digest(),
+    Buffer.from(digest, "hex"),
+  );
 }
 
 /** The web session a request belongs to (browser link spec B5): browser-link resumes and composer uploads are honored
  * only for the same one. */
 export function requestOwner(request: Request): string {
-  const cookie = new Bun.CookieMap(request.headers.get("cookie") ?? "").get(OMP_WEB_SESSION_COOKIE);
-  if (cookie) return `session:${createHash("sha256").update(cookie).digest("base64url")}`;
-  return isTrustedProxyRequest(request.headers.get(OMP_WEB_TRUSTED_HEADER)) ? "trusted" : "open";
+  const cookie = new Bun.CookieMap(request.headers.get("cookie") ?? "").get(
+    OMP_WEB_SESSION_COOKIE,
+  );
+  if (cookie)
+    return `session:${createHash("sha256").update(cookie).digest("base64url")}`;
+  return isTrustedProxyRequest(request.headers.get(OMP_WEB_TRUSTED_HEADER))
+    ? "trusted"
+    : "open";
 }
 
 /** Check a sign-in attempt against the configured hash. */
-export function isValidWebPassword(candidate: string, env: NodeJS.ProcessEnv = process.env): boolean {
+export function isValidWebPassword(
+  candidate: string,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
   const stored = configuredHash(env);
   return isPasswordHash(stored) && verifyPassword(candidate, stored);
 }
@@ -63,7 +83,9 @@ export function isValidWebPassword(candidate: string, env: NodeJS.ProcessEnv = p
  * Distinguishes "nothing configured" (open server, allowed on loopback) from
  * "configured but wrong" (must not silently run unprotected).
  */
-export function webPasswordConfigurationProblem(env: NodeJS.ProcessEnv = process.env): string | null {
+export function webPasswordConfigurationProblem(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
   const raw = (env[WEB_PASSWORD_HASH_VAR] ?? "").trim();
   const legacy = env[WEB_PASSWORD_VAR];
   const hasLegacy = typeof legacy === "string" && legacy.length > 0;
@@ -98,28 +120,42 @@ export function webPasswordConfigurationProblem(env: NodeJS.ProcessEnv = process
 }
 
 /** Human-readable failure for a broken configuration, or null when it is usable. */
-export function webPasswordConfigurationError(env: NodeJS.ProcessEnv = process.env): Error | null {
+export function webPasswordConfigurationError(
+  env: NodeJS.ProcessEnv = process.env,
+): Error | null {
   const problem = webPasswordConfigurationProblem(env);
   return problem ? new Error(problem) : null;
 }
 
 function signingKey(env: NodeJS.ProcessEnv = process.env): string {
   const stored = configuredHash(env);
-  if (!isPasswordHash(stored)) throw new Error("Password protection is not configured");
+  if (!isPasswordHash(stored))
+    throw new Error("Password protection is not configured");
   return deriveSessionSigningKey(stored);
 }
 
 /** Sign a session cookie. The key mixes the stored hash with a per-install random secret. */
-export function createWebSession(now = Date.now(), env: NodeJS.ProcessEnv = process.env): string {
+export function createWebSession(
+  now = Date.now(),
+  env: NodeJS.ProcessEnv = process.env,
+): string {
   const expiresAt = now + OMP_WEB_SESSION_MAX_AGE_SECONDS * 1000;
   const payload = `v1.${expiresAt}.${randomBytes(16).toString("base64url")}`;
-  const signature = createHmac("sha256", signingKey(env)).update(payload, "utf8").digest("base64url");
+  const signature = createHmac("sha256", signingKey(env))
+    .update(payload, "utf8")
+    .digest("base64url");
   return `${payload}.${signature}`;
 }
 
-export function isValidWebSession(session: string | undefined, now = Date.now(), env: NodeJS.ProcessEnv = process.env): boolean {
+export function isValidWebSession(
+  session: string | undefined,
+  now = Date.now(),
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
   if (!session) return false;
-  const match = /^v1\.(\d{13})\.([A-Za-z0-9_-]{22})\.([A-Za-z0-9_-]{43})$/.exec(session);
+  const match = /^v1\.(\d{13})\.([A-Za-z0-9_-]{22})\.([A-Za-z0-9_-]{43})$/.exec(
+    session,
+  );
   if (!match) return false;
 
   const expiresAt = Number(match[1]);
@@ -127,7 +163,9 @@ export function isValidWebSession(session: string | undefined, now = Date.now(),
   let expected: string;
   try {
     const payload = session.slice(0, session.lastIndexOf("."));
-    expected = createHmac("sha256", signingKey(env)).update(payload, "utf8").digest("base64url");
+    expected = createHmac("sha256", signingKey(env))
+      .update(payload, "utf8")
+      .digest("base64url");
   } catch {
     return false;
   }

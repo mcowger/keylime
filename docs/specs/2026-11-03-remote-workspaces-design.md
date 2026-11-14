@@ -23,15 +23,15 @@ below also records the current hidden-item behavior and search limits.
 
 ## Scope
 
-| Surface | Required parity |
-| --- | --- |
-| Explorer | Directory listing, Show hidden items toggle, search/file index, uploads, upload conflict checks and downloads |
-| File viewer | Text, images, audio, documents, DOCX preview, metadata, ranges, live changes, linked files and diff view |
+| Surface           | Required parity                                                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Explorer          | Directory listing, Show hidden items toggle, search/file index, uploads, upload conflict checks and downloads          |
+| File viewer       | Text, images, audio, documents, DOCX preview, metadata, ranges, live changes, linked files and diff view               |
 | Composer and chat | File suggestions, file mentions, relative/absolute file links, referenced bash output and GitHub repository resolution |
-| Git | Existing status and per-file diff views; no new Git actions |
-| Worktrees | Listing, current-worktree selection, create, remove with dirty confirmation, new-session selector and project grouping |
-| Directory picker | Host home, parent/child navigation, typed-path validation and default scratch directory |
-| Clone | Host-side clone with existing progress, cancellation, cleanup and project registration |
+| Git               | Existing status and per-file diff views; no new Git actions                                                            |
+| Worktrees         | Listing, current-worktree selection, create, remove with dirty confirmation, new-session selector and project grouping |
+| Directory picker  | Host home, parent/child navigation, typed-path validation and default scratch directory                                |
+| Clone             | Host-side clone with existing progress, cancellation, cleanup and project registration                                 |
 
 Search across session transcripts, usage, import, archive and config surfaces
 remain tracked by the parent issue and are not implemented by this sub-project.
@@ -158,15 +158,15 @@ binary result operations.
 
 Logical operation groups:
 
-| Group | Responsibility |
-| --- | --- |
+| Group     | Responsibility                                                                                         |
+| --------- | ------------------------------------------------------------------------------------------------------ |
 | Directory | Home, browse, default cwd; existing `validateCwd` also authorizes the selected directory on its daemon |
-| File | List, metadata, text read and file index; bounded read-transfer lifecycle for byte streams |
-| Upload | Reuse existing binary transfer/staging; add authorized workspace publication and conflict inspection |
-| Git | Status, diff and GitHub repository resolution using existing helpers |
-| Worktree | List, add and remove; owning-host cache invalidation |
-| Watch | Subscribe, unsubscribe and daemon-to-main change notifications |
-| Clone | Start, bounded progress reads and cancel; existing project op registers the confirmed result |
+| File      | List, metadata, text read and file index; bounded read-transfer lifecycle for byte streams             |
+| Upload    | Reuse existing binary transfer/staging; add authorized workspace publication and conflict inspection   |
+| Git       | Status, diff and GitHub repository resolution using existing helpers                                   |
+| Worktree  | List, add and remove; owning-host cache invalidation                                                   |
+| Watch     | Subscribe, unsubscribe and daemon-to-main change notifications                                         |
+| Clone     | Start, bounded progress reads and cancel; existing project op registers the confirmed result           |
 
 ## Authorization and trust boundaries
 

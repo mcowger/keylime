@@ -11,7 +11,11 @@ export interface ContextUsage {
 }
 
 export type UsageLimitState =
-  | { stage: "low_priority"; resetsAtSec: number; allowanceLeftPercent?: number }
+  | {
+      stage: "low_priority";
+      resetsAtSec: number;
+      allowanceLeftPercent?: number;
+    }
   | { stage: "wrap_up"; resetsAtSec?: number; extraUsage: boolean };
 
 export type SlowModeScope = "session" | "global";
@@ -62,7 +66,10 @@ export interface QueuedMessages {
   steering: string[];
   followUp: string[];
   /** Native intent IDs aligned with the visible queue slots; null denotes an older uncorrelated message. */
-  clientMessageIds?: { steering: (string | null)[]; followUp: (string | null)[] };
+  clientMessageIds?: {
+    steering: (string | null)[];
+    followUp: (string | null)[];
+  };
 }
 
 export interface ClientMessageStatus {
@@ -133,7 +140,11 @@ export interface WebSessionState {
   interruptMode: "immediate" | "wait";
   steeringMode: "all" | "one-at-a-time";
   followUpMode: "all" | "one-at-a-time";
-  model?: ModelLike & { name?: string; reasoning?: boolean; thinking?: { efforts?: string[] } };
+  model?: ModelLike & {
+    name?: string;
+    reasoning?: boolean;
+    thinking?: { efforts?: string[] };
+  };
   messageCount: number;
   queuedMessageCount: number;
   queuedMessages: QueuedMessages;
@@ -151,16 +162,15 @@ export interface WebSessionState {
   tokensPerSecond?: number | null;
   todoPhases: TodoPhase[];
   extensionStatuses: Array<{ key: string; text: string }>;
-  extensionWidgets: Array<{ key: string; lines: string[]; placement: "aboveEditor" | "belowEditor" }>;
+  extensionWidgets: Array<{
+    key: string;
+    lines: string[];
+    placement: "aboveEditor" | "belowEditor";
+  }>;
 }
 
 export type AvailableSlashCommandSource =
-  | "builtin"
-  | "skill"
-  | "extension"
-  | "custom"
-  | "mcp_prompt"
-  | "file";
+  "builtin" | "skill" | "extension" | "custom" | "mcp_prompt" | "file";
 
 /** Mirror of omp's RpcAvailableSlashCommand (`get_available_commands`). */
 export interface RpcAvailableSlashCommand {

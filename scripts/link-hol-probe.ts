@@ -55,12 +55,22 @@ const { values } = parseArgs({
 const server = values.server.replace(/\/+$/, "");
 const seconds = Number(values.seconds);
 const slash = values.model?.indexOf("/") ?? -1;
-if (!values.host || !values.model || slash <= 0 || !(seconds > 0 && seconds <= MAX_SECONDS)) {
-  console.error(`usage: bun scripts/link-hol-probe.ts --host <host id> --model <provider/modelId> [--server <url>] [--cwd <dir on the host>] [--seconds 60 (at most ${MAX_SECONDS})]`);
+if (
+  !values.host ||
+  !values.model ||
+  slash <= 0 ||
+  !(seconds > 0 && seconds <= MAX_SECONDS)
+) {
+  console.error(
+    `usage: bun scripts/link-hol-probe.ts --host <host id> --model <provider/modelId> [--server <url>] [--cwd <dir on the host>] [--seconds 60 (at most ${MAX_SECONDS})]`,
+  );
   process.exit(2);
 }
 const hostId = values.host;
-const model = { provider: values.model.slice(0, slash), modelId: values.model.slice(slash + 1) };
+const model = {
+  provider: values.model.slice(0, slash),
+  modelId: values.model.slice(slash + 1),
+};
 
 const secret = process.env.OMP_WEB_TRUSTED_HEADER_SECRET;
 const stop = new AbortController();
@@ -74,20 +84,39 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
     stop.abort();
   });
 }
-const sleep = (ms: number) => delay(ms, undefined, { signal: stop.signal }).catch(() => {});
+const sleep = (ms: number) =>
+  delay(ms, undefined, { signal: stop.signal }).catch(() => {});
 
 /** One API call; throws on a status outside 2xx unless `allow` lists it. `cleanup`: the call goes on after a stop
  * signal (it deletes what the run made, or creates a session that must then be deleted). */
-async function api(path: string, init: { method?: string; body?: unknown; allow?: number[]; cleanup?: boolean } = {}): Promise<{ bytes: number; json: Record<string, unknown> }> {
+async function api(
+  path: string,
+  init: {
+    method?: string;
+    body?: unknown;
+    allow?: number[];
+    cleanup?: boolean;
+  } = {},
+): Promise<{ bytes: number; json: Record<string, unknown> }> {
   const method = init.method ?? (init.body === undefined ? "GET" : "POST");
   const response = await fetch(`${server}${path}`, {
     method,
-    headers: { ...(secret ? { "x-omp-web-auth": secret } : {}), ...(init.body === undefined ? {} : { "content-type": "application/json" }) },
+    headers: {
+      ...(secret ? { "x-omp-web-auth": secret } : {}),
+      ...(init.body === undefined
+        ? {}
+        : { "content-type": "application/json" }),
+    },
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
-    signal: init.cleanup ? AbortSignal.timeout(FETCH_TIMEOUT_MS) : AbortSignal.any([stop.signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]),
+    signal: init.cleanup
+      ? AbortSignal.timeout(FETCH_TIMEOUT_MS)
+      : AbortSignal.any([stop.signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]),
   });
   const text = await response.text();
-  if (!response.ok && !init.allow?.includes(response.status)) throw new Error(`${method} ${path}: ${response.status} ${text.slice(0, 300)}`);
+  if (!response.ok && !init.allow?.includes(response.status))
+    throw new Error(
+      `${method} ${path}: ${response.status} ${text.slice(0, 300)}`,
+    );
   let json: Record<string, unknown> = {};
   try {
     json = JSON.parse(text) as Record<string, unknown>;
@@ -97,7 +126,11 @@ async function api(path: string, init: { method?: string; body?: unknown; allow?
   return { bytes: Buffer.byteLength(text), json };
 }
 
-const command = (session: string, body: Record<string, unknown>, allow?: number[]) => api(`/api/agent/${session}`, { body, allow });
+const command = (
+  session: string,
+  body: Record<string, unknown>,
+  allow?: number[],
+) => api(`/api/agent/${session}`, { body, allow });
 
 /** A valid PNG of random pixels: 8-bit RGB, or 1-bit gray. */
 function noisePng(side: number, rgb: boolean): Buffer {
@@ -124,36 +157,66 @@ function noisePng(side: number, rgb: boolean): Buffer {
   ]);
 }
 
-async function waitIdle(session: string, timeoutMs = IDLE_TIMEOUT_MS): Promise<void> {
+async function waitIdle(
+  session: string,
+  timeoutMs = IDLE_TIMEOUT_MS,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!stop.signal.aborted) {
     const { json } = await command(session, { type: "get_state" }, [400]);
     // A get_state stuck behind megabytes on a slow link times out (5 s, session_state_timeout): poll again.
     if (json.code !== "session_state_timeout") {
-      if (json.error) throw new Error(`get_state on ${session}: ${JSON.stringify(json).slice(0, 300)}`);
-      if ((json.data as { isStreaming?: unknown } | undefined)?.isStreaming !== true) return;
+      if (json.error)
+        throw new Error(
+          `get_state on ${session}: ${JSON.stringify(json).slice(0, 300)}`,
+        );
+      if (
+        (json.data as { isStreaming?: unknown } | undefined)?.isStreaming !==
+        true
+      )
+        return;
     }
-    if (Date.now() > deadline) throw new Error(`session ${session} still streaming after ${timeoutMs / 1000} s`);
+    if (Date.now() > deadline)
+      throw new Error(
+        `session ${session} still streaming after ${timeoutMs / 1000} s`,
+      );
     await sleep(100);
   }
 }
 
 const png = noisePng(IMAGE_SIDE, true);
 // The server refuses an image over 5 MiB (lib/image-attachments.ts).
-assert(png.byteLength <= 5 * 1024 * 1024 && png.byteLength > 4_000_000, `the probe image is ${png.byteLength} bytes`);
-const asImage = (bytes: Buffer) => ({ type: "image", data: bytes.toString("base64"), mimeType: "image/png" });
-const largePrompt = { type: "prompt", message: "omp-web link probe: ignore this image.", images: [asImage(png)] };
+assert(
+  png.byteLength <= 5 * 1024 * 1024 && png.byteLength > 4_000_000,
+  `the probe image is ${png.byteLength} bytes`,
+);
+const asImage = (bytes: Buffer) => ({
+  type: "image",
+  data: bytes.toString("base64"),
+  mimeType: "image/png",
+});
+const largePrompt = {
+  type: "prompt",
+  message: "omp-web link probe: ignore this image.",
+  images: [asImage(png)],
+};
 // omp stores every image re-encoded as a JPEG of a few hundred KB (the 4.8 MB one comes back ~0.4 MB), so one image
 // cannot make B large: B gets ten, 1-bit noise of the same size (~0.2 MB each as PNG, 2 MB together).
 // A short answer with no tool call: the model's own time stays small next to the transport's.
 const storedPrompt = {
   type: "prompt",
-  message: "omp-web link probe: these images are test noise. Do not call any tool. Reply with exactly: ok",
-  images: Array.from({ length: 10 }, () => asImage(noisePng(IMAGE_SIDE, false))),
+  message:
+    "omp-web link probe: these images are test noise. Do not call any tool. Reply with exactly: ok",
+  images: Array.from({ length: 10 }, () =>
+    asImage(noisePng(IMAGE_SIDE, false)),
+  ),
 };
 
 /** One prompt, aborted once omp took it. */
-async function promptAndAbort(session: string, body: Record<string, unknown>): Promise<void> {
+async function promptAndAbort(
+  session: string,
+  body: Record<string, unknown>,
+): Promise<void> {
   await command(session, body);
   await command(session, { type: "abort" });
   await waitIdle(session);
@@ -161,8 +224,19 @@ async function promptAndAbort(session: string, body: Record<string, unknown>): P
 
 const created: string[] = [];
 async function newSession(withModel: boolean): Promise<string> {
-  const { json } = await api("/api/agent/new", { body: { cwd: values.cwd, hostId, type: "ensure_session", ...(withModel ? model : {}) }, cleanup: true });
-  if (typeof json.sessionId !== "string") throw new Error(`POST /api/agent/new: no sessionId in ${JSON.stringify(json).slice(0, 300)}`);
+  const { json } = await api("/api/agent/new", {
+    body: {
+      cwd: values.cwd,
+      hostId,
+      type: "ensure_session",
+      ...(withModel ? model : {}),
+    },
+    cleanup: true,
+  });
+  if (typeof json.sessionId !== "string")
+    throw new Error(
+      `POST /api/agent/new: no sessionId in ${JSON.stringify(json).slice(0, 300)}`,
+    );
   created.push(json.sessionId);
   return json.sessionId;
 }
@@ -170,7 +244,11 @@ async function newSession(withModel: boolean): Promise<string> {
 const summaries: string[] = [];
 
 /** `load` back to back (at most MAX_ROUNDS) while C answers get_state, for --seconds; then the settle wait. */
-async function phase(name: string, load: () => Promise<void>, c: string): Promise<void> {
+async function phase(
+  name: string,
+  load: () => Promise<void>,
+  c: string,
+): Promise<void> {
   const start = new Date();
   const deadline = Date.now() + seconds * 1000;
   const running = () => Date.now() < deadline && !stop.signal.aborted;
@@ -188,7 +266,10 @@ async function phase(name: string, load: () => Promise<void>, c: string): Promis
         const sent = performance.now();
         const { json } = await command(c, { type: "get_state" }, [400]);
         if (json.code === "session_state_timeout") timeouts++;
-        else if (json.error) throw new Error(`get_state on ${c}: ${JSON.stringify(json).slice(0, 300)}`);
+        else if (json.error)
+          throw new Error(
+            `get_state on ${c}: ${JSON.stringify(json).slice(0, 300)}`,
+          );
         small.push(performance.now() - sent);
         await sleep(SMALL_EVERY_MS);
       }
@@ -197,15 +278,22 @@ async function phase(name: string, load: () => Promise<void>, c: string): Promis
       for (; running() && rounds < MAX_ROUNDS; rounds++) await load();
     })().catch(stopped),
   ]);
-  console.log(`phase ${name}: ${rounds} large rounds; get_state on C over HTTP n=${small.length} p50=${Math.round(percentile(small, 50) ?? 0)} ms p95=${Math.round(percentile(small, 95) ?? 0)} ms max=${Math.round(Math.max(0, ...small))} ms; ${timeouts} timed out (5 s); settling ${SETTLE_MS / 1000} s`);
+  console.log(
+    `phase ${name}: ${rounds} large rounds; get_state on C over HTTP n=${small.length} p50=${Math.round(percentile(small, 50) ?? 0)} ms p95=${Math.round(percentile(small, 95) ?? 0)} ms max=${Math.round(Math.max(0, ...small))} ms; ${timeouts} timed out (5 s); settling ${SETTLE_MS / 1000} s`,
+  );
   await sleep(SETTLE_MS);
-  summaries.push(`${name}: bun scripts/transport-metrics.ts --since ${start.toISOString()} --until ${new Date().toISOString()}`);
+  summaries.push(
+    `${name}: bun scripts/transport-metrics.ts --since ${start.toISOString()} --until ${new Date().toISOString()}`,
+  );
 }
 
 try {
   const { json } = await api("/api/hosts");
-  const host = (json.hosts as { id: string; status: string }[] | undefined)?.find((h) => h.id === hostId);
-  if (host?.status !== "online") throw new Error(`host ${hostId} is ${host ? host.status : "not listed"}`);
+  const host = (
+    json.hosts as { id: string; status: string }[] | undefined
+  )?.find((h) => h.id === hostId);
+  if (host?.status !== "online")
+    throw new Error(`host ${hostId} is ${host ? host.status : "not listed"}`);
   await api("/api/cwd/validate", { body: { cwd: values.cwd, hostId } });
 
   const b = await newSession(true);
@@ -218,7 +306,10 @@ try {
   const read = await api(`/api/sessions/${b}`);
   console.log(`a read of B is ${(read.bytes / 1e6).toFixed(1)} MB`);
   // Under 1 MiB the read is one inline line, not a large frame: the up phase would time something else.
-  if (read.bytes < 1024 * 1024) throw new Error("a read of B is under 1 MiB: did the model take the images?");
+  if (read.bytes < 1024 * 1024)
+    throw new Error(
+      "a read of B is under 1 MiB: did the model take the images?",
+    );
 
   // Made only now: a session nobody watches is disposed after 2 min (disconnected-idle), shorter than B's setup on a
   // slow link.
@@ -226,8 +317,16 @@ try {
   const c = await newSession(false);
   console.log(`sessions A ${a} (image prompts), C ${c} (get_state)`);
 
-  if (!stop.signal.aborted) await phase("down", () => promptAndAbort(a, largePrompt), c);
-  if (!stop.signal.aborted) await phase("up", async () => { await api(`/api/sessions/${b}`); }, c);
+  if (!stop.signal.aborted)
+    await phase("down", () => promptAndAbort(a, largePrompt), c);
+  if (!stop.signal.aborted)
+    await phase(
+      "up",
+      async () => {
+        await api(`/api/sessions/${b}`);
+      },
+      c,
+    );
   console.log(summaries.join("\n"));
 } catch (error) {
   // A stop signal aborts the call in flight: that is the stop, not a failure.
@@ -241,9 +340,15 @@ try {
   // Only what this run made. A session never written (C) answers 404 once its omp is stopped.
   for (const id of created) {
     try {
-      await api(`/api/sessions/${id}`, { method: "DELETE", allow: [404], cleanup: true });
+      await api(`/api/sessions/${id}`, {
+        method: "DELETE",
+        allow: [404],
+        cleanup: true,
+      });
     } catch (error) {
-      console.error(`could not delete session ${id}: ${error instanceof Error ? error.message : error}`);
+      console.error(
+        `could not delete session ${id}: ${error instanceof Error ? error.message : error}`,
+      );
       process.exitCode = 1;
     }
   }

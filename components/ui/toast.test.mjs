@@ -3,14 +3,21 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-const { ClampedDescription, clampDescriptionStyle, resolveToastTimeout } = await import("./toast.tsx");
+const { ClampedDescription, clampDescriptionStyle, resolveToastTimeout } =
+  await import("./toast.tsx");
 
-const TOOL_LIST = "xd://: mounted mcp__ida_reverse_engineering_ida_address_context, mcp__ida_decompile";
+const TOOL_LIST =
+  "xd://: mounted mcp__ida_reverse_engineering_ida_address_context, mcp__ida_decompile";
 
 test("clamped description renders collapsed to 2 lines with an expand affordance", () => {
-  const html = renderToStaticMarkup(React.createElement(ClampedDescription, null, TOOL_LIST));
+  const html = renderToStaticMarkup(
+    React.createElement(ClampedDescription, null, TOOL_LIST),
+  );
 
-  assert.match(html, new RegExp(TOOL_LIST.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(
+    html,
+    new RegExp(TOOL_LIST.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+  );
   assert.match(html, /-webkit-line-clamp:2/);
   assert.match(html, /-webkit-box/);
   assert.match(html, /overflow:hidden/);

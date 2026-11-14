@@ -7,14 +7,14 @@ export interface BrowsableDirectory {
   path: string;
 }
 
-
 export function getBrowseStartDirectory(directory?: string): string {
   return directory || homedir();
 }
 
 export function normalizeDirectory(directory: string): string {
   if (directory === "~") return homedir();
-  if (directory.startsWith("~/")) return path.resolve(homedir(), directory.slice(2));
+  if (directory.startsWith("~/"))
+    return path.resolve(homedir(), directory.slice(2));
   return path.resolve(directory);
 }
 
@@ -28,25 +28,29 @@ export async function resolveDirectory(directory: string): Promise<string> {
   return fsPromises.realpath(normalizeDirectory(directory));
 }
 
-export async function listDirectories(directory: string): Promise<BrowsableDirectory[]> {
+export async function listDirectories(
+  directory: string,
+): Promise<BrowsableDirectory[]> {
   const entries = await fsPromises.readdir(directory, { withFileTypes: true });
   // Skip broken, inaccessible, or non-directory symlinks.
-  const candidates = await Promise.all(entries.map(async (entry) => {
-    if (entry.isDirectory()) {
-      return { name: entry.name, path: path.join(directory, entry.name) };
-    }
-    if (!entry.isSymbolicLink()) return null;
+  const candidates = await Promise.all(
+    entries.map(async (entry) => {
+      if (entry.isDirectory()) {
+        return { name: entry.name, path: path.join(directory, entry.name) };
+      }
+      if (!entry.isSymbolicLink()) return null;
 
-    try {
-      const entryPath = path.join(directory, entry.name);
-      const realEntryPath = await fsPromises.realpath(entryPath);
-      const entryStat = await fsPromises.stat(realEntryPath);
-      if (!entryStat.isDirectory()) return null;
-      return { name: entry.name, path: entryPath };
-    } catch {
-      return null;
-    }
-  }));
+      try {
+        const entryPath = path.join(directory, entry.name);
+        const realEntryPath = await fsPromises.realpath(entryPath);
+        const entryStat = await fsPromises.stat(realEntryPath);
+        if (!entryStat.isDirectory()) return null;
+        return { name: entry.name, path: entryPath };
+      } catch {
+        return null;
+      }
+    }),
+  );
 
   return candidates
     .filter((entry): entry is BrowsableDirectory => entry !== null)

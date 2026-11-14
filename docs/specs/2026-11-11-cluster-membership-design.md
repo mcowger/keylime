@@ -87,12 +87,12 @@ The project keeps the origin it was first registered with. The preparation check
 
 ## Errors
 
-| Case | Result |
-|---|---|
+| Case                                                                                                                                                     | Result                                                          |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
 | Host offline, daemon older than protocol 9, no `gitOrigins`, or omp older than 15.13.1 or unknown (the host's, or this machine's when it is being added) | The switch is disabled; the request answers 409 with the reason |
-| `gitOrigins` fails or times out | Nothing saved; the error is shown |
-| Folder not an absolute path | 400 |
-| `pools.json` unreadable | 503, as the other cluster requests answer today |
+| `gitOrigins` fails or times out                                                                                                                          | Nothing saved; the error is shown                               |
+| Folder not an absolute path                                                                                                                              | 400                                                             |
+| `pools.json` unreadable                                                                                                                                  | 503, as the other cluster requests answer today                 |
 
 ## Testing
 

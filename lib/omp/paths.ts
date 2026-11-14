@@ -15,7 +15,6 @@ import * as path from "path";
 const APP_NAME = "omp";
 const CONFIG_DIR_NAME = ".omp";
 
-
 export function getConfigDirName(): string {
   return process.env.PI_CONFIG_DIR || CONFIG_DIR_NAME;
 }
@@ -52,7 +51,10 @@ function isDefaultAgentDir(): boolean {
  * <agent dir>/omp-web when PI_CODING_AGENT_DIR points elsewhere, so isolated
  * runs (tests, dev servers) never write the real journal. */
 export function getDiagnosticsDir(): string {
-  return path.join(isDefaultAgentDir() ? getConfigRoot() : getAgentDir(), "omp-web");
+  return path.join(
+    isDefaultAgentDir() ? getConfigRoot() : getAgentDir(),
+    "omp-web",
+  );
 }
 
 /** XDG data root for the default agent dir: only honored on linux/darwin when
@@ -60,7 +62,8 @@ export function getDiagnosticsDir(): string {
  * `omp config init-xdg`. XDG flattens the `agent/` prefix:
  * ~/.omp/agent/sessions → $XDG_DATA_HOME/omp/sessions. */
 function xdgDataAgentRoot(): string | undefined {
-  if (process.platform !== "linux" && process.platform !== "darwin") return undefined;
+  if (process.platform !== "linux" && process.platform !== "darwin")
+    return undefined;
   if (!isDefaultAgentDir()) return undefined;
   const value = process.env.XDG_DATA_HOME;
   if (!value) return undefined;
@@ -122,9 +125,16 @@ function canonicalize(value: string): string {
   }
 }
 
-function encodeRelativeSessionDirName(prefix: string, relative: string): string {
+function encodeRelativeSessionDirName(
+  prefix: string,
+  relative: string,
+): string {
   const encoded = relative.replace(/[/\\:]/g, "-");
-  return encoded ? (prefix.endsWith("-") ? `${prefix}${encoded}` : `${prefix}-${encoded}`) : prefix;
+  return encoded
+    ? prefix.endsWith("-")
+      ? `${prefix}${encoded}`
+      : `${prefix}-${encoded}`
+    : prefix;
 }
 
 function encodeLegacyAbsoluteSessionDirName(cwd: string): string {
@@ -145,10 +155,16 @@ export function getSessionDirNameForCwd(cwd: string): string {
   const canonicalTmp = canonicalize(tmpdir());
   const homeRelative = path.relative(canonicalHome, canonicalCwd);
   const tempRelative = path.relative(canonicalTmp, canonicalCwd);
-  if (homeRelative === "" || (!homeRelative.startsWith("..") && !path.isAbsolute(homeRelative))) {
+  if (
+    homeRelative === "" ||
+    (!homeRelative.startsWith("..") && !path.isAbsolute(homeRelative))
+  ) {
     return encodeRelativeSessionDirName("-", homeRelative);
   }
-  if (tempRelative === "" || (!tempRelative.startsWith("..") && !path.isAbsolute(tempRelative))) {
+  if (
+    tempRelative === "" ||
+    (!tempRelative.startsWith("..") && !path.isAbsolute(tempRelative))
+  ) {
     return encodeRelativeSessionDirName("-tmp", tempRelative);
   }
   return encodeLegacyAbsoluteSessionDirName(canonicalCwd);
@@ -186,5 +202,9 @@ export function getAgentsBundledCacheDir(): string {
 
 /** omp's `local://` root for a session (`resolveLocalRoot` in omp's local-protocol.ts). */
 export function sessionLocalRoot(sessionFile: string): string {
-  return path.resolve(path.dirname(sessionFile), path.basename(sessionFile, ".jsonl"), "local");
+  return path.resolve(
+    path.dirname(sessionFile),
+    path.basename(sessionFile, ".jsonl"),
+    "local",
+  );
 }

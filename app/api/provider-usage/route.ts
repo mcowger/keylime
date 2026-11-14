@@ -18,16 +18,27 @@ export async function GET(request: Request) {
 
   if ((rawProvider !== null && !provider) || (rawModel !== null && !modelId)) {
     return Response.json(
-      { error: "Invalid provider or model identifier", code: "invalid_usage_query" },
+      {
+        error: "Invalid provider or model identifier",
+        code: "invalid_usage_query",
+      },
       { status: 400 },
     );
   }
 
   try {
-    return Response.json(await getProviderUsage({ provider, modelId }, searchParams.get("refresh") === "true"));
+    return Response.json(
+      await getProviderUsage(
+        { provider, modelId },
+        searchParams.get("refresh") === "true",
+      ),
+    );
   } catch {
     return Response.json(
-      { error: "Provider usage is currently unavailable", code: "provider_usage_unavailable" },
+      {
+        error: "Provider usage is currently unavailable",
+        code: "provider_usage_unavailable",
+      },
       { status: 502 },
     );
   }

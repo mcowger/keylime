@@ -17,11 +17,17 @@ function render(props = {}) {
 
 test("renders the search input only while the search panel is open", () => {
   const closed = render();
-  assert.doesNotMatch(closed, /aria-label="(Search files|fileExplorer\.searchFiles)"/);
+  assert.doesNotMatch(
+    closed,
+    /aria-label="(Search files|fileExplorer\.searchFiles)"/,
+  );
 
   const open = render({ fileSearchOpen: true });
   assert.match(open, /aria-label="(Search files|fileExplorer\.searchFiles)"/);
-  assert.match(open, /placeholder="(Search files\.\.\.|fileExplorer\.searchPlaceholder)"/);
+  assert.match(
+    open,
+    /placeholder="(Search files\.\.\.|fileExplorer\.searchPlaceholder)"/,
+  );
 });
 
 test("keeps the regular file tree visible while the search query is empty", () => {
@@ -30,5 +36,8 @@ test("keeps the regular file tree visible while the search query is empty", () =
   const open = render({ fileSearchOpen: true });
   assert.match(open, /role="tree"/);
   assert.match(open, /(Loading files\.\.\.|fileExplorer\.loadingFiles)/);
-  assert.doesNotMatch(open, /(No matching files|fileExplorer\.noMatchingFiles)/);
+  assert.doesNotMatch(
+    open,
+    /(No matching files|fileExplorer\.noMatchingFiles)/,
+  );
 });

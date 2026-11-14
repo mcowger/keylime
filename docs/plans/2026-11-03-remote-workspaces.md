@@ -32,17 +32,17 @@
 
 ## File Ownership and Delivery
 
-| Area | Owns | Files |
-| --- | --- | --- |
-| Shared workspace contract | Serializable request/results and named op parameters; no daemon implementations imported into browser | new `lib/workspace-types.ts`; `lib/hosts/host.ts`, `link-protocol.ts` |
-| Daemon file service | Root discovery/grants, file operations and descriptor lifetime | new `lib/hosts/workspace-roots.ts`, `workspace-ops.ts`, `workspace-reads.ts`; `lib/file-authorization.ts`, `file-access.ts` |
-| Existing file index | Move scanner/cache out of route without changing search behavior | new `lib/file-index.ts`; `app/api/file-index/route.ts` |
-| Main routing | Host resolution, validated responses, HTTP headers/streams | `lib/api-utils.ts`, `app/api/files/[...path]/route.ts`, file-index and bash-output routes |
-| Browser resource owner | Tab identity, links, queries, media URLs and stale-request fencing | `AppShell`, `TabBar`, `RightPanel`, `FileExplorer`, `FileViewer`, `MarkdownBody`, `ChatWindow`, `ChatInput`, `lib/types.ts`, `file-paths.ts` |
-| Existing upload pipeline | Workspace destination publication only; existing transport unchanged | `lib/uploads.ts`, `lib/hosts/uploads.ts`, file POST route, `FileExplorer` |
-| File watch | Daemon watcher lifecycle; existing browser file channel | new `lib/hosts/workspace-watch.ts`; `daemon.ts`, `hub.ts`, `event-stream-hub.ts`, `event-stream-protocol.ts` |
-| Git/worktree | Existing helpers execute on owning daemon; host-local cache invalidation | `lib/git-changes.ts`, `github-repo.ts`, `worktree.ts`; workspace ops, routes, sidebar/panels |
-| Directory/clone | Existing browsing helpers; daemon-owned child, cleanup and bounded progress | new `lib/hosts/workspace-clone.ts`; existing directory/clone routes and picker |
+| Area                      | Owns                                                                                                  | Files                                                                                                                                        |
+| ------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared workspace contract | Serializable request/results and named op parameters; no daemon implementations imported into browser | new `lib/workspace-types.ts`; `lib/hosts/host.ts`, `link-protocol.ts`                                                                        |
+| Daemon file service       | Root discovery/grants, file operations and descriptor lifetime                                        | new `lib/hosts/workspace-roots.ts`, `workspace-ops.ts`, `workspace-reads.ts`; `lib/file-authorization.ts`, `file-access.ts`                  |
+| Existing file index       | Move scanner/cache out of route without changing search behavior                                      | new `lib/file-index.ts`; `app/api/file-index/route.ts`                                                                                       |
+| Main routing              | Host resolution, validated responses, HTTP headers/streams                                            | `lib/api-utils.ts`, `app/api/files/[...path]/route.ts`, file-index and bash-output routes                                                    |
+| Browser resource owner    | Tab identity, links, queries, media URLs and stale-request fencing                                    | `AppShell`, `TabBar`, `RightPanel`, `FileExplorer`, `FileViewer`, `MarkdownBody`, `ChatWindow`, `ChatInput`, `lib/types.ts`, `file-paths.ts` |
+| Existing upload pipeline  | Workspace destination publication only; existing transport unchanged                                  | `lib/uploads.ts`, `lib/hosts/uploads.ts`, file POST route, `FileExplorer`                                                                    |
+| File watch                | Daemon watcher lifecycle; existing browser file channel                                               | new `lib/hosts/workspace-watch.ts`; `daemon.ts`, `hub.ts`, `event-stream-hub.ts`, `event-stream-protocol.ts`                                 |
+| Git/worktree              | Existing helpers execute on owning daemon; host-local cache invalidation                              | `lib/git-changes.ts`, `github-repo.ts`, `worktree.ts`; workspace ops, routes, sidebar/panels                                                 |
+| Directory/clone           | Existing browsing helpers; daemon-owned child, cleanup and bounded progress                           | new `lib/hosts/workspace-clone.ts`; existing directory/clone routes and picker                                                               |
 
 Tasks 1–4 form the first complete files PR. Do not merge a transport-only scaffold or claim file parity before all four are proven. Task 5 is the Git/worktree PR; Task 6 completes browsing/clone. Each PR updates its own changelog/docs and passes its changed paths. Shared hub/protocol/Host edits have one integration owner. Do not fan out workers editing those shared files concurrently.
 
@@ -51,18 +51,37 @@ Tasks 1–4 form the first complete files PR. Do not merge a transport-only scaf
 Add these types in `lib/workspace-types.ts`; operation-specific extensions are owned by the tasks below:
 
 ```ts
-interface WorkspaceFileRequest { segments: string[]; sessionId: string | null }
+interface WorkspaceFileRequest {
+  segments: string[];
+  sessionId: string | null;
+}
 interface WorkspaceFileInfo {
-  path: string; name: string; size: number; mtimeMs: number; isDirectory: boolean;
-  language: string; mime: string; previewKind: "pdf" | "docx" | null;
+  path: string;
+  name: string;
+  size: number;
+  mtimeMs: number;
+  isDirectory: boolean;
+  language: string;
+  mime: string;
+  previewKind: "pdf" | "docx" | null;
 }
 interface WorkspaceDirectoryListing {
-  path: string; entries: Array<{name: string; isDir: boolean; size: number; modified: string}>;
+  path: string;
+  entries: Array<{
+    name: string;
+    isDir: boolean;
+    size: number;
+    modified: string;
+  }>;
 }
-interface WorkspaceRead { id: string; info: WorkspaceFileInfo }
+interface WorkspaceRead {
+  id: string;
+  info: WorkspaceFileInfo;
+}
 // FileIndexEntry comes from lib/file-fuzzy.ts.
-type WorkspaceIndex = {files: string[]; truncated: boolean}
-  | {matches: FileIndexEntry[]; truncated?: boolean};
+type WorkspaceIndex =
+  | { files: string[]; truncated: boolean }
+  | { matches: FileIndexEntry[]; truncated?: boolean };
 ```
 
 `WorkspaceOps` methods return `Promise<OpResult<T>>`, using the existing `OpResult` from session ops. Add `Host.workspaceOps` and `Host.supportsWorkspaceOp(name: keyof WorkspaceOps): boolean`. `WORKSPACE_OP_PARAMS` maps each implemented method to its named arguments, as `SESSION_OP_PARAMS` does. Add its names to `HOST_OP_NAMES` without renaming existing session ops. Validate daemon arguments and main-side results; failures keep the existing typed host errors.

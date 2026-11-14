@@ -4,7 +4,11 @@ export function isSafeExternalUrl(value: unknown): value is string {
   if (!raw || raw.startsWith("//")) return false;
   try {
     const url = new URL(raw);
-    return url.protocol === "http:" || url.protocol === "https:" || url.protocol === "mailto:";
+    return (
+      url.protocol === "http:" ||
+      url.protocol === "https:" ||
+      url.protocol === "mailto:"
+    );
   } catch {
     return false;
   }

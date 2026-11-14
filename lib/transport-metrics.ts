@@ -14,12 +14,21 @@ export function transportMetricsPath(): string {
 
 /** Appends the valid samples (stamped with the server clock and user agent) as JSONL to `file`; returns how many were
  * kept. A caller that batches passes the path it resolved when the batch started. */
-export function appendTransportSamples(samples: unknown[], ua: string | null, file = transportMetricsPath()): number {
+export function appendTransportSamples(
+  samples: unknown[],
+  ua: string | null,
+  file = transportMetricsPath(),
+): number {
   const serverAt = Date.now();
   const userAgent = ua?.slice(0, MAX_UA_CHARS) ?? null;
   const lines: string[] = [];
   for (const sample of samples) {
-    if (!isRecord(sample) || typeof sample.metric !== "string" || sample.metric.length > MAX_METRIC_NAME_CHARS) continue;
+    if (
+      !isRecord(sample) ||
+      typeof sample.metric !== "string" ||
+      sample.metric.length > MAX_METRIC_NAME_CHARS
+    )
+      continue;
     if (Buffer.byteLength(JSON.stringify(sample)) > MAX_SAMPLE_BYTES) continue;
     lines.push(JSON.stringify({ ...sample, serverAt, ua: userAgent }));
   }

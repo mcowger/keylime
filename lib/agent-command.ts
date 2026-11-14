@@ -1,9 +1,24 @@
-import { apiErrorResponse, hostOfflineResponse, resolveSessionHostOr404 } from "@/lib/api-utils";
-import { startRpcSession, getRpcSession, getRpcSessionKeys, WebRpcError, type AgentSessionWrapper } from "@/lib/rpc-manager";
+import {
+  apiErrorResponse,
+  hostOfflineResponse,
+  resolveSessionHostOr404,
+} from "@/lib/api-utils";
+import {
+  startRpcSession,
+  getRpcSession,
+  getRpcSessionKeys,
+  WebRpcError,
+  type AgentSessionWrapper,
+} from "@/lib/rpc-manager";
 import { sessionSpawnTarget } from "@/lib/hosts/session-index";
 import { RpcCommandError } from "@/lib/omp/rpc-process";
 import { RequestBodyTooLargeError } from "@/lib/bounded-form-data";
-import { attachUploads, forgetUploads, takeUploads, type OutboxUploadReceipt } from "@/lib/uploads";
+import {
+  attachUploads,
+  forgetUploads,
+  takeUploads,
+  type OutboxUploadReceipt,
+} from "@/lib/uploads";
 import { runOutboxCommand } from "@/lib/message-outbox";
 import { readClientMessageIds } from "@/lib/client-message-ids";
 import { reconcileOutboxHandoffs } from "@/lib/outbox-handoff";
@@ -24,17 +39,29 @@ export const NO_SPAWN_REPLIES: Record<string, unknown> = {
  * errors stay opaque English text. */
 export function commandErrorResponse(error: unknown): Response {
   if (error instanceof RequestBodyTooLargeError) {
-    return Response.json({ error: "Agent command is too large", code: "request_too_large" }, { status: 413 });
+    return Response.json(
+      { error: "Agent command is too large", code: "request_too_large" },
+      { status: 413 },
+    );
   }
   if (error instanceof SyntaxError) {
-    return Response.json({ error: "Invalid JSON request body", code: "invalid_json" }, { status: 400 });
+    return Response.json(
+      { error: "Invalid JSON request body", code: "invalid_json" },
+      { status: 400 },
+    );
   }
   // host_offline falls through to apiErrorResponse: 503 {hostOffline: true}.
   if (error instanceof WebRpcError && error.code !== "host_offline") {
-    return Response.json({ error: error.message, code: error.code }, { status: 400 });
+    return Response.json(
+      { error: error.message, code: error.code },
+      { status: 400 },
+    );
   }
   if (error instanceof RpcCommandError) {
-    return Response.json({ error: error.message, code: error.code ?? "rpc_command_failed" }, { status: 400 });
+    return Response.json(
+      { error: error.message, code: error.code ?? "rpc_command_failed" },
+      { status: 400 },
+    );
   }
   return apiErrorResponse(error);
 }
@@ -52,27 +79,53 @@ function sendFences(): Map<string, Promise<void>> {
  * the browser socket. `owner`: the caller's web session (lib/web-auth.ts
  * `requestOwner`), whose uploads a prompt may attach. Never throws: failures
  * become `commandErrorResponse`. */
-export async function runAgentCommand(id: string, body: unknown, advisor: boolean, owner: string, trustedUploads?: OutboxUploadReceipt[]): Promise<Response> {
+export async function runAgentCommand(
+  id: string,
+  body: unknown,
+  advisor: boolean,
+  owner: string,
+  trustedUploads?: OutboxUploadReceipt[],
+): Promise<Response> {
   let release = () => {}; // frees this command's send fence; idempotent
   try {
     const command = body as { type?: unknown; [key: string]: unknown } | null;
     if (typeof command?.type !== "string" || !command.type.trim()) {
-      return Response.json({ error: "command type is required", code: "command_type_required" }, { status: 400 });
+      return Response.json(
+        { error: "command type is required", code: "command_type_required" },
+        { status: 400 },
+      );
     }
     const type = command.type;
     // Held messages: stored and answered here; the outbox's dispatcher sends them to omp (lib/message-outbox.ts).
-    if (type === "outbox_add" || type === "outbox_remove" || type === "outbox_scope") return await runOutboxCommand(id, command, advisor, owner);
+    if (
+      type === "outbox_add" ||
+      type === "outbox_remove" ||
+      type === "outbox_scope"
+    )
+      return await runOutboxCommand(id, command, advisor, owner);
     if (type === "get_client_message_status") {
       const ids = readClientMessageIds(command.clientMessageIds);
-      if (!ids) return Response.json({ error: "clientMessageIds must contain 1 to 32 unique valid IDs", code: "invalid_client_message_ids" }, { status: 400 });
-      return Response.json({ success: true, data: await reconcileOutboxHandoffs(id, ids) });
+      if (!ids)
+        return Response.json(
+          {
+            error: "clientMessageIds must contain 1 to 32 unique valid IDs",
+            code: "invalid_client_message_ids",
+          },
+          { status: 400 },
+        );
+      return Response.json({
+        success: true,
+        data: await reconcileOutboxHandoffs(id, ids),
+      });
     }
     // Attached files go to the session's host first; nothing reaches omp when one fails (spec U3).
     const uploads = takeUploads(command, owner, trustedUploads);
     // Hold later wrapper selection as well as dispatch behind attachment preparation, so an
     // advisor toggle cannot replace the child and a Stop cannot overtake the preparing prompt.
     // A moved session answers to several ids: a command through any of them waits.
-    const held = getRpcSessionKeys(id).flatMap((key) => sendFences().get(key) ?? []);
+    const held = getRpcSessionKeys(id).flatMap(
+      (key) => sendFences().get(key) ?? [],
+    );
     const prior = held.length ? Promise.all(held).then(() => {}) : undefined;
     if (uploads) {
       const gate = new Promise<void>((resolve) => (release = resolve));
@@ -88,7 +141,13 @@ export async function runAgentCommand(id: string, body: unknown, advisor: boolea
       return session.withPendingCommand(async () => {
         let sending: Promise<unknown>;
         try {
-          await attachUploads(uploads.ids, owner, session, command, uploads.receipts);
+          await attachUploads(
+            uploads.ids,
+            owner,
+            session,
+            command,
+            uploads.receipts,
+          );
           sending = session.send(command);
         } finally {
           release();
@@ -108,8 +167,14 @@ export async function runAgentCommand(id: string, body: unknown, advisor: boolea
     let resumeHost: AgentSessionWrapper["host"] | undefined;
     const noSpawn = Object.hasOwn(NO_SPAWN_REPLIES, type);
     if (existing?.isAlive()) {
-      if (noSpawn || (existing.adopted && !existing.hostOwnedLifecycle)
-        || existing.advisorSpawned === (advisor === true || existing.launchAdvisor === true) || existing.isRunning() || existing.isEditingHistory()) {
+      if (
+        noSpawn ||
+        (existing.adopted && !existing.hostOwnedLifecycle) ||
+        existing.advisorSpawned ===
+          (advisor === true || existing.launchAdvisor === true) ||
+        existing.isRunning() ||
+        existing.isEditingHistory()
+      ) {
         const result = await send(existing);
         return Response.json({ success: true, data: result });
       }
@@ -118,17 +183,25 @@ export async function runAgentCommand(id: string, body: unknown, advisor: boolea
       if (offline) return offline;
       resumeId = existing.sessionId;
       resumeHost = existing.host;
-      if (!existing.hostOwnedLifecycle) await existing.destroyAndWait("advisor", true);
+      if (!existing.hostOwnedLifecycle)
+        await existing.destroyAndWait("advisor", true);
     }
-    if (noSpawn) return Response.json({ success: true, data: NO_SPAWN_REPLIES[type] });
+    if (noSpawn)
+      return Response.json({ success: true, data: NO_SPAWN_REPLIES[type] });
 
-    const resolved = resumeHost ? { host: resumeHost } : await resolveSessionHostOr404(resumeId);
+    const resolved = resumeHost
+      ? { host: resumeHost }
+      : await resolveSessionHostOr404(resumeId);
     if ("response" in resolved) return resolved.response;
     const { host } = resolved;
     const offline = hostOfflineResponse(host);
     if (offline) return offline;
     const target = await sessionSpawnTarget(resumeId, host);
-    if (!target) return Response.json({ error: "Session not found", code: "session_not_found" }, { status: 404 });
+    if (!target)
+      return Response.json(
+        { error: "Session not found", code: "session_not_found" },
+        { status: 404 },
+      );
 
     // A cold set_model must reach omp before the saved model is restored:
     // spawning with only --resume lets omp exit on an unrestorable saved
@@ -149,7 +222,17 @@ export async function runAgentCommand(id: string, body: unknown, advisor: boolea
         ? `${command.provider}/${command.modelId}`
         : undefined;
 
-    const { session } = await startRpcSession(id, target.sessionFile, target.cwd, undefined, advisor, target.recordedCwd, spawnModel, host, true);
+    const { session } = await startRpcSession(
+      id,
+      target.sessionFile,
+      target.cwd,
+      undefined,
+      advisor,
+      target.recordedCwd,
+      spawnModel,
+      host,
+      true,
+    );
     // This command inherits the open's preparation lease, so the shared child cannot idle out before it is sent.
     return await session.withPendingCommand(async () => {
       if (spawnModel) {
@@ -168,8 +251,14 @@ export async function runAgentCommand(id: string, body: unknown, advisor: boolea
           const state = (await session.send({ type: "get_state" })) as {
             model?: { id?: unknown; provider?: unknown };
           } | null;
-          if (state?.model?.provider === command.provider && state?.model?.id === command.modelId) {
-            return Response.json({ success: true, data: { id: command.modelId, provider: command.provider } });
+          if (
+            state?.model?.provider === command.provider &&
+            state?.model?.id === command.modelId
+          ) {
+            return Response.json({
+              success: true,
+              data: { id: command.modelId, provider: command.provider },
+            });
           }
           throw error;
         }

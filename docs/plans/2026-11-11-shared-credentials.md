@@ -40,23 +40,27 @@
 ### Task 1: `shareCredentials` on the host record
 
 **Files:**
+
 - Modify: `lib/hosts/registry.ts` (`HostRecord`, `parseHostRecord`, `createHost`, `updateHost`)
 - Modify: `app/api/hosts/route.ts` (`PATCH`)
 - Modify: `lib/hosts/hub.ts` (`LinkedHostRow`, `listHosts`)
 - Test: `lib/hosts/registry.test.mjs`, `lib/hosts/hosts-route.test.mjs`
 
 **Interfaces:**
+
 - Produces: `HostRecord.shareCredentials: boolean`; `updateHost(id: string, updates: { label?: string; allowAgentStart?: boolean; shareCredentials?: boolean }): HostRecord`; `LinkedHostRow.shareCredentials: boolean`.
 
 - [ ] **Step 1: Write the failing tests**
 
 `registry.test.mjs`:
+
 - a `hosts.json` record without the field loads with `shareCredentials === false`;
 - `createHost("x").host.shareCredentials === false`;
 - `updateHost(id, { shareCredentials: true })`, then `loadHosts()` → `true`;
 - `updateHost("local", { shareCredentials: true })` throws `ReservedHostError`.
 
 `hosts-route.test.mjs`:
+
 - `PATCH { id, shareCredentials: true }` → 200, `body.host.shareCredentials === true`;
 - `PATCH { id, shareCredentials: "yes" }` → 400, `error === "shareCredentials must be a boolean"`;
 - `PATCH { id: "local", shareCredentials: true }` → 400, `error === "This machine's credential sharing cannot be changed"`.
@@ -71,24 +75,40 @@
 ### Task 2: broker child on the web server
 
 **Files:**
+
 - Create: `lib/omp/auth-broker.ts`
 - Test: `lib/omp/auth-broker.test.mjs`
 - Reference: `lib/omp/auth-gateway.ts` (same state-on-`globalThis`, environment and exit-hook pattern)
 
 **Interfaces:**
+
 - Produces:
 
 ```ts
-export const AUTH_BROKER_TIMINGS = { readyMs: 60_000, idleMs: 300_000, killMs: 5_000 }; // mutable: tests shorten them
+export const AUTH_BROKER_TIMINGS = {
+  readyMs: 60_000,
+  idleMs: 300_000,
+  killMs: 5_000,
+}; // mutable: tests shorten them
 export class AuthBrokerUnavailableError extends Error {}
 /** Fetch `path` (starts with "/v1/", query included) from the broker child on behalf of `hostId`. */
-export function brokerFetch(hostId: string, path: string, init: { method: string; headers: Headers; body?: ArrayBuffer; signal: AbortSignal }): Promise<Response>;
+export function brokerFetch(
+  hostId: string,
+  path: string,
+  init: {
+    method: string;
+    headers: Headers;
+    body?: ArrayBuffer;
+    signal: AbortSignal;
+  },
+): Promise<Response>;
 /** Abort every open broker request of this host, streams included. */
 export function abortBrokerRequests(hostId: string): void;
 export function disposeAuthBroker(): void;
 ```
 
 Behaviour the signature does not fix:
+
 - Start: `omp auth-broker token` (stdout, trimmed; empty is a start failure), then `omp auth-broker serve --bind=127.0.0.1:0`. Ready is the first stdout line that parses as JSON with `message === "auth-broker listening"` and a `url` starting with `http://127.0.0.1:`. Concurrent first calls share one start.
 - `brokerFetch` sets `authorization: Bearer <broker token>` itself, fetches with `proxy: false`, and aborts when `init.signal` or the host's own controller aborts.
 - A request is in flight until its response body ends, errors or is cancelled. The idle timer runs only at zero in flight.
@@ -110,6 +130,7 @@ Behaviour the signature does not fix:
 ### Task 3: forwarding route and gate
 
 **Files:**
+
 - Create: `app/api/hosts/broker/[...path]/route.ts`
 - Modify: `server/routes.ts` (import and `"hosts/broker/[...path]"` entry)
 - Modify: `proxy.ts` (`UNGATED` and its comment)
@@ -117,6 +138,7 @@ Behaviour the signature does not fix:
 - Test: `lib/hosts/broker-route.test.mjs`, `lib/web-auth.test.mjs`, `lib/hosts/hosts-route.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `brokerFetch`, `abortBrokerRequests`, `AuthBrokerUnavailableError` (Task 2); `hostForToken`, `HostRegistryUnreadableError`, `LOCAL_HOST_ID`, `HostRecord.shareCredentials` (Task 1); the handler context `{ params, disableIdleTimeout }` (`server/routes.ts`).
 - Produces: `GET`, `POST`, `DELETE` on `/api/hosts/broker/<broker path>`.
 
@@ -124,7 +146,10 @@ The allow-list, exact:
 
 ```ts
 const ALLOWED: readonly (readonly [method: string, path: RegExp])[] = [
-  ["GET", /^\/v1\/(?:healthz|snapshot|snapshot\/stream|credentials\/disabled|usage|usage\/history|usage\/clients)$/],
+  [
+    "GET",
+    /^\/v1\/(?:healthz|snapshot|snapshot\/stream|credentials\/disabled|usage|usage\/history|usage\/clients)$/,
+  ],
   ["POST", /^\/v1\/credential\/\d+\/(?:refresh|disable|block)$/],
   ["DELETE", /^\/v1\/credential\/\d+\/blocks?$/],
   ["POST", /^\/v1\/usage\/(?:observed|stale)$/],
@@ -132,6 +157,7 @@ const ALLOWED: readonly (readonly [method: string, path: RegExp])[] = [
 ```
 
 Order of checks, each answering JSON `{ error }` with `cache-control: no-store`:
+
 1. Bearer token missing or unknown → 401 `Unknown host token`; `HostRegistryUnreadableError` → 503.
 2. Host is `local` or has `shareCredentials` false → 403 `Credential sharing is off for this host`.
 3. `"/" + params.path.join("/")` with the request method not in `ALLOWED` → 404.
@@ -159,6 +185,7 @@ Order of checks, each answering JSON `{ error }` with `cache-control: no-store`:
   `web-auth.test.mjs`: with a password set and no cookie, `proxy()` returns `"public"` for `/api/hosts/broker/v1/healthz` and a 401 `Response` for `/api/hosts/broker` and `/api/hosts/brokerx/v1/healthz`.
 
   `hosts-route.test.mjs`: `PATCH { shareCredentials: false }` and `DELETE` call `abortBrokerRequests` with the host id; `PATCH { shareCredentials: true }` does not.
+
 - [ ] **Step 2: Run** `bun test --parallel lib/hosts/broker-route.test.mjs lib/web-auth.test.mjs lib/hosts/hosts-route.test.mjs server/routes.test.ts` — expected: the new tests fail.
 - [ ] **Step 3: Implement** the route, the table entry, the gate and the two aborts.
 - [ ] **Step 4: Run** the same command — expected: pass.
@@ -169,12 +196,14 @@ Order of checks, each answering JSON `{ error }` with `cache-control: no-store`:
 ### Task 4: link protocol v9 and the hub's flag
 
 **Files:**
+
 - Modify: `lib/hosts/link-protocol.ts` (`LINK_PROTOCOL_VERSION`), plus a new constant
 - Modify: `lib/hosts/host.ts` (`SpawnRequest`)
 - Modify: `lib/hosts/hub.ts` (`RemoteHost.spawnRpc`)
 - Test: `lib/hosts/hub-v7.test.mjs`; fixtures that pin the server's version as 8
 
 **Interfaces:**
+
 - Consumes: `HostRecord.shareCredentials` (Task 1).
 - Produces:
 
@@ -205,22 +234,34 @@ credentialsServer?: string;
 ### Task 5: forwarder on the host daemon
 
 **Files:**
+
 - Create: `lib/hosts/daemon-broker.ts` (Node only: `node:http`, `node:crypto`, `node:stream`, global `fetch`)
 - Test: `lib/hosts/daemon-broker.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `SpawnRequest.credentialsServer` (Task 4); `HostOpError` (`./link-protocol`); `isNewerVersion` (`../npm-update`).
 - Produces:
 
 ```ts
 export const MIN_SHARED_CREDENTIALS_OMP = "15.13.1";
-export type BrokerForwarder = { env(serverUrl: string): Promise<Record<string, string>>; stop(): Promise<void> };
-export function startBrokerForwarder(deps: { login(serverUrl: string): { url: string; token: string } | null; log(message: string): void }): BrokerForwarder;
+export type BrokerForwarder = {
+  env(serverUrl: string): Promise<Record<string, string>>;
+  stop(): Promise<void>;
+};
+export function startBrokerForwarder(deps: {
+  login(serverUrl: string): { url: string; token: string } | null;
+  log(message: string): void;
+}): BrokerForwarder;
 /** The extra spawn environment for a launch, or undefined when it does not share. Throws instead of falling back. */
-export function credentialsEnv(launch: SpawnRequest, deps: { forwarder: BrokerForwarder; ompVersion(): Promise<string | null> }): Promise<Record<string, string> | undefined>;
+export function credentialsEnv(
+  launch: SpawnRequest,
+  deps: { forwarder: BrokerForwarder; ompVersion(): Promise<string | null> },
+): Promise<Record<string, string> | undefined>;
 ```
 
 Behaviour the signatures do not fix:
+
 - Nothing listens until the first `env()` call; then `127.0.0.1:0`, once, with one secret of 32 random bytes (base64url) for the daemon's lifetime.
 - `env(serverUrl)` returns `{ OMP_AUTH_BROKER_URL: "http://127.0.0.1:<port>/<base64url(serverUrl)>", OMP_AUTH_BROKER_TOKEN: <secret> }`.
 - A request is `/<key>/<rest>`. A bearer that is not the secret (constant-time comparison) → 401. `deps.login(decoded key)` null → 403 (not 5xx: omp treats 5xx as transient and may start from its snapshot cache). Otherwise fetch `<login.url without trailing slashes>/api/hosts/broker/<rest>` (query kept) with `authorization: Bearer <login.token>`, read on every request, and stream the answer back. Upstream unreachable → 502. A client that disconnects aborts the upstream fetch.
@@ -246,6 +287,7 @@ Behaviour the signatures do not fix:
 ### Task 6: daemon wiring and resume
 
 **Files:**
+
 - Modify: `lib/hosts/daemon-channels.ts` (`open`, about line 98; `spawnLegacy`, about line 168)
 - Modify: `lib/hosts/daemon.ts` (`spawn` dep 83–91, `prepareLaunch` 92–99, `shutdown` 293–300, startup 301–306)
 - Modify: `lib/hosts/host.ts` (`Host.spawnRpc` options), `lib/hosts/local-host.ts` (`spawnRpc`)
@@ -253,10 +295,12 @@ Behaviour the signatures do not fix:
 - Test: `lib/hosts/daemon-channels.test.mjs`, `lib/hosts/host-resume.test.mjs`, `lib/hosts/local-host-profile.test.mjs`, `lib/hosts/daemon-runtime.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `startBrokerForwarder`, `credentialsEnv` (Task 5); `SpawnRequest.shareCredentials`, `SpawnRequest.credentialsServer` (Task 4); `DaemonLink.login` (`{ url, token }`, the token replaced in place by `rekey`).
 - Produces: `Host.spawnRpc(request, sessionId?, options?: { replaceAdvisor?: boolean; preparing?: boolean; expectedChannel?: string; env?: Record<string, string> })`. `env` is merged over `getAgentEnvOverrides()` by `localHost`; `RemoteHost` ignores it.
 
 Decisions:
+
 - `ChannelTable.open` replaces the wire fields before `ensure`: `credentialsServer` is `link.login.url` when `args.launch.shareCredentials === true`, otherwise absent; `shareCredentials` is removed. A wire-supplied `credentialsServer` is always discarded. `spawnLegacy` removes both.
 - `prepareLaunch` rejects a `credentialsServer` that is present and not a string (400 `invalid_request`), like its other fields.
 - The daemon's `spawn` dep: when the launch has `credentialsServer` and `links` has no entry for it, throw `new HostOpError(409, "credentials_link_gone", "The web server that shares its credentials with this session is no longer linked to this host")`; then `credentialsEnv(launch, { forwarder, ompVersion: getOmpVersion })`; pass the result as `options.env` to `localHost.spawnRpc`.
@@ -279,27 +323,30 @@ Decisions:
 ### Task 7: Settings toggle and documentation
 
 **Files:**
+
 - Modify: `components/HostsConfig.tsx` (next to the `allowAgentStart` toggle, line 144; a second `ConfirmDialog` like the revoke one, line 211)
 - Modify: `lib/i18n/locales/en.json`, `ja.json`, `zh-CN.json`
 - Modify: `README.md`, `AGENTS.md`, `DESIGN.md`, `docs/specs/2026-10-28-remote-hosts-design.md`, `CHANGELOG.md`
 - Test: the existing `HostsConfig` test file if one exists, else `components/HostsConfig.share-credentials.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `LinkedHostRow.shareCredentials` and `PATCH { id, shareCredentials }` (Task 1).
 
 Behaviour: linked hosts only. Turning the toggle off sends `PATCH` at once. Turning it on opens the dialog; only its confirm button sends `PATCH`. The dialog is not `danger`.
 
 Strings (keys `hostsConfig.<name>`):
 
-| name | en | ja | zh-CN |
-|---|---|---|---|
-| `shareCredentials` | Use this server's provider logins | このサーバーのプロバイダーログインを使用 | 使用此服务器的提供商登录 |
-| `shareCredentialsAria` | Use this server's provider logins on {name} | {name} でこのサーバーのプロバイダーログインを使用 | 在 {name} 上使用此服务器的提供商登录 |
-| `shareCredentialsTitle` | Share credentials with {name}? | {name} と認証情報を共有しますか？ | 与 {name} 共享凭据？ |
+| name                          | en                                                                                                                                                          | ja                                                                                                                                                                                     | zh-CN                                                                                                                   |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `shareCredentials`            | Use this server's provider logins                                                                                                                           | このサーバーのプロバイダーログインを使用                                                                                                                                               | 使用此服务器的提供商登录                                                                                                |
+| `shareCredentialsAria`        | Use this server's provider logins on {name}                                                                                                                 | {name} でこのサーバーのプロバイダーログインを使用                                                                                                                                      | 在 {name} 上使用此服务器的提供商登录                                                                                    |
+| `shareCredentialsTitle`       | Share credentials with {name}?                                                                                                                              | {name} と認証情報を共有しますか？                                                                                                                                                      | 与 {name} 共享凭据？                                                                                                    |
 | `shareCredentialsDescription` | Sessions started on {name} will use this server's provider logins. That host can read their access tokens and stored API keys. Its own logins are not used. | {name} で開始するセッションは、このサーバーのプロバイダーログインを使用します。このホストはアクセストークンと保存済みの API キーを読み取れます。ホスト自身のログインは使用されません。 | 在 {name} 上启动的会话将使用此服务器的提供商登录。该主机可以读取访问令牌和已保存的 API 密钥，且不再使用主机自己的登录。 |
-| `shareCredentialsConfirm` | Share | 共有する | 共享 |
+| `shareCredentialsConfirm`     | Share                                                                                                                                                       | 共有する                                                                                                                                                                               | 共享                                                                                                                    |
 
 Documentation, normal prose, taken from the spec:
+
 - `README.md`, "Run sessions on another machine": what sharing does and does not share, the security note, omp 15.13.1; the reverse-proxy paragraphs (lines 184 and 508): `/api/hosts/broker/` must reach the server without the proxy's own authentication and without response buffering.
 - `AGENTS.md`: file map entries for the three new files; "Remote hosts": v9, the flag, the forwarder, no fallback; "Auth and model config": the broker child; the proxy-exclusion note gains the second path.
 - `DESIGN.md` lines 101–103: each machine uses its own credentials unless sharing is on.

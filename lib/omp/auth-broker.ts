@@ -14,15 +14,28 @@ import { OMP_NOT_FOUND, resolveOmpBin } from "./omp-cli";
  */
 
 /** Mutable: tests shorten them. */
-export const AUTH_BROKER_TIMINGS = { readyMs: 60_000, idleMs: 300_000, killMs: 5_000 };
+export const AUTH_BROKER_TIMINGS = {
+  readyMs: 60_000,
+  idleMs: 300_000,
+  killMs: 5_000,
+};
 
 /** Why the broker could not answer, for the log (never the message: it can carry the child's stderr). */
-type AuthBrokerFailure = "binary_missing" | "token_command_failed" | "not_ready" | "exited" | "refused_token";
+type AuthBrokerFailure =
+  | "binary_missing"
+  | "token_command_failed"
+  | "not_ready"
+  | "exited"
+  | "refused_token";
 
 export class AuthBrokerUnavailableError extends Error {
   /** Unset when the request to a running broker failed. */
   readonly reason?: AuthBrokerFailure;
-  constructor(message: string, reason?: AuthBrokerFailure, options?: ErrorOptions) {
+  constructor(
+    message: string,
+    reason?: AuthBrokerFailure,
+    options?: ErrorOptions,
+  ) {
     super(message, options);
     this.reason = reason;
   }
@@ -51,7 +64,13 @@ declare global {
 
 function getState(): AuthBrokerState {
   if (!globalThis.__ompAuthBrokerState) {
-    globalThis.__ompAuthBrokerState = { broker: null, child: null, idleTimer: undefined, inFlight: 0, requests: new Map() };
+    globalThis.__ompAuthBrokerState = {
+      broker: null,
+      child: null,
+      idleTimer: undefined,
+      inFlight: 0,
+      requests: new Map(),
+    };
     const cleanup = () => disposeAuthBroker();
     process.once("exit", cleanup);
     process.once("SIGINT", cleanup);
@@ -62,7 +81,10 @@ function getState(): AuthBrokerState {
 
 function terminate(child: BrokerChild): void {
   child.kill("SIGTERM");
-  const killTimer = setTimeout(() => child.kill("SIGKILL"), AUTH_BROKER_TIMINGS.killMs);
+  const killTimer = setTimeout(
+    () => child.kill("SIGKILL"),
+    AUTH_BROKER_TIMINGS.killMs,
+  );
   killTimer.unref?.();
   child.once("exit", () => clearTimeout(killTimer));
 }
@@ -78,9 +100,13 @@ export function disposeAuthBroker(): void {
   if (child) terminate(child);
 }
 
-async function startBroker(state: AuthBrokerState, isCurrent: () => boolean): Promise<Broker> {
+async function startBroker(
+  state: AuthBrokerState,
+  isCurrent: () => boolean,
+): Promise<Broker> {
   const bin = resolveOmpBin();
-  if (!bin) throw new AuthBrokerUnavailableError(OMP_NOT_FOUND, "binary_missing");
+  if (!bin)
+    throw new AuthBrokerUnavailableError(OMP_NOT_FOUND, "binary_missing");
   // Same environment rules as the auth gateway: no named profile, no project env leaks.
   const env = sanitizeProjectCommandEnvironment({ ...process.env });
   delete env.OMP_PROFILE;
@@ -88,16 +114,39 @@ async function startBroker(state: AuthBrokerState, isCurrent: () => boolean): Pr
   const { readyMs } = AUTH_BROKER_TIMINGS;
 
   const tokenRun = Promise.withResolvers<string>();
-  execFile(bin, ["auth-broker", "token"], { cwd: homedir(), env, timeout: readyMs }, (error, stdout) => {
-    if (error) tokenRun.reject(new AuthBrokerUnavailableError(`omp auth-broker token failed: ${error.message}`, "token_command_failed", { cause: error }));
-    else tokenRun.resolve(stdout.trim());
-  });
+  execFile(
+    bin,
+    ["auth-broker", "token"],
+    { cwd: homedir(), env, timeout: readyMs },
+    (error, stdout) => {
+      if (error)
+        tokenRun.reject(
+          new AuthBrokerUnavailableError(
+            `omp auth-broker token failed: ${error.message}`,
+            "token_command_failed",
+            { cause: error },
+          ),
+        );
+      else tokenRun.resolve(stdout.trim());
+    },
+  );
   const token = await tokenRun.promise;
-  if (!token) throw new AuthBrokerUnavailableError("omp auth-broker token printed nothing", "token_command_failed");
+  if (!token)
+    throw new AuthBrokerUnavailableError(
+      "omp auth-broker token printed nothing",
+      "token_command_failed",
+    );
   // disposeAuthBroker() ran while the token command did: spawning now would leave an unowned child.
-  if (!isCurrent()) throw new AuthBrokerUnavailableError("omp auth-broker was stopped while starting");
+  if (!isCurrent())
+    throw new AuthBrokerUnavailableError(
+      "omp auth-broker was stopped while starting",
+    );
 
-  const child = spawn(bin, ["auth-broker", "serve", "--bind=127.0.0.1:0"], { cwd: homedir(), env, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(bin, ["auth-broker", "serve", "--bind=127.0.0.1:0"], {
+    cwd: homedir(),
+    env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
   state.child = child;
   child.stdout.on("error", () => {});
   let stderrTail = "";
@@ -118,16 +167,28 @@ async function startBroker(state: AuthBrokerState, isCurrent: () => boolean): Pr
       state.child = null;
       if (isCurrent()) state.broker = null;
     }
-    reject(new AuthBrokerUnavailableError(`omp auth-broker ${what}${stderrTail ? `: ${stderrTail.slice(-500)}` : ""}`, "exited"));
+    reject(
+      new AuthBrokerUnavailableError(
+        `omp auth-broker ${what}${stderrTail ? `: ${stderrTail.slice(-500)}` : ""}`,
+        "exited",
+      ),
+    );
   };
-  child.on("exit", (code, signal) => gone(`exited (code ${code ?? "null"}, signal ${signal ?? "none"})`));
+  child.on("exit", (code, signal) =>
+    gone(`exited (code ${code ?? "null"}, signal ${signal ?? "none"})`),
+  );
   child.on("error", (error) => gone(`failed to start: ${error.message}`));
   child.once("spawn", () => {
     if (ready || finished) return;
     readyTimer = setTimeout(() => {
       if (ready || finished) return;
       readyTimer = undefined;
-      reject(new AuthBrokerUnavailableError("omp auth-broker did not become ready", "not_ready"));
+      reject(
+        new AuthBrokerUnavailableError(
+          "omp auth-broker did not become ready",
+          "not_ready",
+        ),
+      );
       terminate(child);
     }, readyMs);
     readyTimer.unref?.();
@@ -141,7 +202,12 @@ async function startBroker(state: AuthBrokerState, isCurrent: () => boolean): Pr
     } catch {
       return;
     }
-    if (frame?.message !== "auth-broker listening" || typeof frame.url !== "string" || !frame.url.startsWith("http://127.0.0.1:")) return;
+    if (
+      frame?.message !== "auth-broker listening" ||
+      typeof frame.url !== "string" ||
+      !frame.url.startsWith("http://127.0.0.1:")
+    )
+      return;
     ready = true;
     clearTimeout(readyTimer);
     readyTimer = undefined;
@@ -152,7 +218,10 @@ async function startBroker(state: AuthBrokerState, isCurrent: () => boolean): Pr
 
 function currentBroker(state: AuthBrokerState): Promise<Broker> {
   if (state.broker) return state.broker;
-  const start: Promise<Broker> = startBroker(state, () => state.broker === start);
+  const start: Promise<Broker> = startBroker(
+    state,
+    () => state.broker === start,
+  );
   state.broker = start;
   // A failed start frees the slot so the next request starts afresh.
   start.catch(() => {
@@ -197,7 +266,12 @@ function releaseWithBody(response: Response, release: () => void): Response {
 export async function brokerFetch(
   hostId: string,
   path: string,
-  init: { method: string; headers: Headers; body?: ArrayBuffer; signal: AbortSignal },
+  init: {
+    method: string;
+    headers: Headers;
+    body?: ArrayBuffer;
+    signal: AbortSignal;
+  },
 ): Promise<Response> {
   const state = getState();
   clearTimeout(state.idleTimer);
@@ -213,7 +287,10 @@ export async function brokerFetch(
     hostRequests.delete(controller);
     if (hostRequests.size === 0) state.requests.delete(hostId);
     if (--state.inFlight === 0) {
-      state.idleTimer = setTimeout(disposeAuthBroker, AUTH_BROKER_TIMINGS.idleMs);
+      state.idleTimer = setTimeout(
+        disposeAuthBroker,
+        AUTH_BROKER_TIMINGS.idleMs,
+      );
       state.idleTimer.unref?.();
     }
   };
@@ -228,16 +305,29 @@ export async function brokerFetch(
     let response: Response;
     try {
       // Never through HTTP(S)_PROXY: a proxy cannot reach this loopback server.
-      response = await fetch(`${url}${path}`, { method: init.method, headers, body: init.body, signal, proxy: false });
+      response = await fetch(`${url}${path}`, {
+        method: init.method,
+        headers,
+        body: init.body,
+        signal,
+        proxy: false,
+      });
     } catch (error) {
       if (signal.aborted) throw error;
-      throw new AuthBrokerUnavailableError(`omp auth-broker request failed: ${error instanceof Error ? error.message : String(error)}`, undefined, { cause: error });
+      throw new AuthBrokerUnavailableError(
+        `omp auth-broker request failed: ${error instanceof Error ? error.message : String(error)}`,
+        undefined,
+        { cause: error },
+      );
     }
     if (response.status === 401) {
       void response.body?.cancel();
       // Only the broker that refused: a concurrent 401 must not stop its replacement.
       if (state.broker === start) disposeAuthBroker();
-      throw new AuthBrokerUnavailableError("omp auth-broker refused its own token", "refused_token");
+      throw new AuthBrokerUnavailableError(
+        "omp auth-broker refused its own token",
+        "refused_token",
+      );
     }
     return releaseWithBody(response, release);
   } catch (error) {
@@ -248,5 +338,8 @@ export async function brokerFetch(
 
 /** Abort every open broker request of this host, streams included. */
 export function abortBrokerRequests(hostId: string): void {
-  for (const controller of globalThis.__ompAuthBrokerState?.requests.get(hostId) ?? []) controller.abort();
+  for (const controller of globalThis.__ompAuthBrokerState?.requests.get(
+    hostId,
+  ) ?? [])
+    controller.abort();
 }

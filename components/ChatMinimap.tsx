@@ -1,6 +1,14 @@
 "use client";
 
-import { memo, useEffect, useRef, useState, useCallback, useMemo, type RefObject } from "react";
+import {
+  memo,
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+  type RefObject,
+} from "react";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import type { AgentMessage, TextContent } from "@/lib/types";
 
@@ -22,7 +30,9 @@ export interface NavNode {
  * Extracts a concise, clean single-line preview string suitable for the
  * floating context navigation pill (e.g. "move Explorer to right panel").
  */
-export function extractPreviewText(msg: AgentMessage | Partial<AgentMessage>): string {
+export function extractPreviewText(
+  msg: AgentMessage | Partial<AgentMessage>,
+): string {
   let raw = "";
 
   if (msg.role === "user") {
@@ -31,22 +41,51 @@ export function extractPreviewText(msg: AgentMessage | Partial<AgentMessage>): s
       raw = content;
     } else if (Array.isArray(content)) {
       raw = content
-        .filter((b): b is TextContent => Boolean(b && typeof b === "object" && "type" in b && b.type === "text" && "text" in b && typeof b.text === "string"))
+        .filter((b): b is TextContent =>
+          Boolean(
+            b &&
+            typeof b === "object" &&
+            "type" in b &&
+            b.type === "text" &&
+            "text" in b &&
+            typeof b.text === "string",
+          ),
+        )
         .map((b) => b.text)
         .join(" ");
     }
   } else if (msg.role === "assistant") {
     const blocks = Array.isArray(msg.content) ? msg.content : [];
     const text = blocks
-      .filter((b): b is TextContent => Boolean(b && typeof b === "object" && "type" in b && b.type === "text" && "text" in b && typeof b.text === "string"))
+      .filter((b): b is TextContent =>
+        Boolean(
+          b &&
+          typeof b === "object" &&
+          "type" in b &&
+          b.type === "text" &&
+          "text" in b &&
+          typeof b.text === "string",
+        ),
+      )
       .map((b) => b.text)
       .join(" ");
     if (text) {
       raw = text;
     } else {
       const toolNames = blocks
-        .filter((b) => Boolean(b && typeof b === "object" && "type" in b && b.type === "toolCall"))
-        .map((b) => (b && typeof b === "object" && "toolName" in b && typeof b.toolName === "string" ? b.toolName : ""));
+        .filter((b) =>
+          Boolean(
+            b && typeof b === "object" && "type" in b && b.type === "toolCall",
+          ),
+        )
+        .map((b) =>
+          b &&
+          typeof b === "object" &&
+          "toolName" in b &&
+          typeof b.toolName === "string"
+            ? b.toolName
+            : "",
+        );
       if (toolNames.length) raw = toolNames.filter(Boolean).join(", ");
     }
   }
@@ -73,7 +112,11 @@ export function extractPreviewText(msg: AgentMessage | Partial<AgentMessage>): s
  * Calculates a dynamic bar width to create the natural, organic minimap rhythm
  * seen in chat outlines (shorter bars for brief turns, longer for detailed prompts).
  */
-export function getBarWidth(text: string, isActive: boolean, isHovered: boolean): number {
+export function getBarWidth(
+  text: string,
+  isActive: boolean,
+  isHovered: boolean,
+): number {
   if (isActive) return 24;
   if (isHovered) return 22;
   const len = text.length;
@@ -95,7 +138,10 @@ const ROW_HEIGHT = 18;
  * correction left is the rail's own scroll offset, which is 0 while the
  * rail fits and otherwise moves the visible row up by exactly that much.
  */
-export function getTooltipTopPx(displayIndex: number, railScrollTop = 0): number {
+export function getTooltipTopPx(
+  displayIndex: number,
+  railScrollTop = 0,
+): number {
   return 6 + displayIndex * ROW_HEIGHT + ROW_HEIGHT / 2 - railScrollTop;
 }
 
@@ -115,18 +161,29 @@ export function getTooltipTopPx(displayIndex: number, railScrollTop = 0): number
  * fixed-height rows already need 282px, more than a <376px viewport's
  * 75vh cap, so the rail can overflow with far fewer than 16 rows.
  */
-export function railOverflows(scrollHeight: number, clientHeight: number): boolean {
+export function railOverflows(
+  scrollHeight: number,
+  clientHeight: number,
+): boolean {
   return scrollHeight > clientHeight;
 }
 
-export function railIndexForPointer(relY: number, railScrollTop: number, nodeCount: number): number {
+export function railIndexForPointer(
+  relY: number,
+  railScrollTop: number,
+  nodeCount: number,
+): number {
   if (nodeCount <= 0) return 0;
   const contentY = railScrollTop + relY;
   const index = Math.floor((contentY - 6) / ROW_HEIGHT);
   return Math.max(0, Math.min(nodeCount - 1, index));
 }
 
-export const ChatMinimap = memo(function ChatMinimap({ messages, scrollContainer, messageRefs }: Props) {
+export const ChatMinimap = memo(function ChatMinimap({
+  messages,
+  scrollContainer,
+  messageRefs,
+}: Props) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [isRailHovered, setIsRailHovered] = useState(false);
@@ -148,7 +205,13 @@ export const ChatMinimap = memo(function ChatMinimap({ messages, scrollContainer
       if (msg.role === "user") {
         const text = extractPreviewText(msg);
         if (text) {
-          const id = msg && typeof msg === "object" && "id" in msg && typeof msg.id === "string" ? msg.id : `u-${i}`;
+          const id =
+            msg &&
+            typeof msg === "object" &&
+            "id" in msg &&
+            typeof msg.id === "string"
+              ? msg.id
+              : `u-${i}`;
           userNodes.push({
             id,
             text,
@@ -172,7 +235,13 @@ export const ChatMinimap = memo(function ChatMinimap({ messages, scrollContainer
       if (msg.role === "assistant") {
         const text = extractPreviewText(msg);
         if (text) {
-          const id = msg && typeof msg === "object" && "id" in msg && typeof msg.id === "string" ? msg.id : `a-${i}`;
+          const id =
+            msg &&
+            typeof msg === "object" &&
+            "id" in msg &&
+            typeof msg.id === "string"
+              ? msg.id
+              : `a-${i}`;
           assistantNodes.push({
             id,
             text,
@@ -188,38 +257,52 @@ export const ChatMinimap = memo(function ChatMinimap({ messages, scrollContainer
 
   // Smoothly scroll to the target message with multi-strategy element resolution
   const reducedMotion = usePrefersReducedMotion();
-  const scrollToNode = useCallback((node: NavNode, smooth = true) => {
-    const scrollEl = scrollContainer.current;
-    if (!scrollEl) return;
-    let targetEl = messageRefs.current?.[node.refIndex];
-    if (!targetEl) {
-      targetEl = scrollEl.querySelector(`[data-message-index="${node.messageIndex}"]`) as HTMLDivElement | null;
-    }
-    if (!targetEl && node.text) {
-      const cards = scrollEl.querySelectorAll(".chat-message-card");
-      const sample = node.text.slice(0, 20);
-      for (const card of Array.from(cards)) {
-        if (card.textContent?.includes(sample)) {
-          targetEl = (card.closest("[data-message-index]") || card.parentElement || card) as HTMLDivElement;
-          break;
+  const scrollToNode = useCallback(
+    (node: NavNode, smooth = true) => {
+      const scrollEl = scrollContainer.current;
+      if (!scrollEl) return;
+      let targetEl = messageRefs.current?.[node.refIndex];
+      if (!targetEl) {
+        targetEl = scrollEl.querySelector(
+          `[data-message-index="${node.messageIndex}"]`,
+        ) as HTMLDivElement | null;
+      }
+      if (!targetEl && node.text) {
+        const cards = scrollEl.querySelectorAll(".chat-message-card");
+        const sample = node.text.slice(0, 20);
+        for (const card of Array.from(cards)) {
+          if (card.textContent?.includes(sample)) {
+            targetEl = (card.closest("[data-message-index]") ||
+              card.parentElement ||
+              card) as HTMLDivElement;
+            break;
+          }
         }
       }
-    }
 
-    const behavior: ScrollBehavior = smooth && !reducedMotion ? "smooth" : "auto";
-    if (targetEl) {
-      const containerRect = scrollEl.getBoundingClientRect();
-      const elRect = targetEl.getBoundingClientRect();
-      const targetScroll = Math.max(0, scrollEl.scrollTop + (elRect.top - containerRect.top) - 16);
-      scrollEl.scrollTo({ top: targetScroll, behavior });
-    } else {
-      const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight;
-      if (maxScroll > 0) {
-        const targetScroll = Math.max(0, (node.messageIndex / Math.max(1, messages.length - 1)) * maxScroll);
+      const behavior: ScrollBehavior =
+        smooth && !reducedMotion ? "smooth" : "auto";
+      if (targetEl) {
+        const containerRect = scrollEl.getBoundingClientRect();
+        const elRect = targetEl.getBoundingClientRect();
+        const targetScroll = Math.max(
+          0,
+          scrollEl.scrollTop + (elRect.top - containerRect.top) - 16,
+        );
         scrollEl.scrollTo({ top: targetScroll, behavior });
+      } else {
+        const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight;
+        if (maxScroll > 0) {
+          const targetScroll = Math.max(
+            0,
+            (node.messageIndex / Math.max(1, messages.length - 1)) * maxScroll,
+          );
+          scrollEl.scrollTo({ top: targetScroll, behavior });
+        }
       }
-    }
-  }, [scrollContainer, messageRefs, messages.length, reducedMotion]);
+    },
+    [scrollContainer, messageRefs, messages.length, reducedMotion],
+  );
 
   const scrollToNodeRef = useRef(scrollToNode);
   scrollToNodeRef.current = scrollToNode;
@@ -244,7 +327,9 @@ export const ChatMinimap = memo(function ChatMinimap({ messages, scrollContainer
       const node = nodes[i];
       let el = messageRefs.current?.[node.refIndex];
       if (!el) {
-        el = scrollEl.querySelector(`[data-message-index="${node.messageIndex}"]`) as HTMLDivElement | null;
+        el = scrollEl.querySelector(
+          `[data-message-index="${node.messageIndex}"]`,
+        ) as HTMLDivElement | null;
       }
       if (!el) continue;
       const elRect = el.getBoundingClientRect();
@@ -302,8 +387,13 @@ export const ChatMinimap = memo(function ChatMinimap({ messages, scrollContainer
     if (!rail) return;
     const revealActiveRow = () => {
       if (!railOverflows(rail.scrollHeight, rail.clientHeight)) return;
-      const activeRow = rail.querySelector(`[data-index="${activeIndex}"]`) as HTMLElement | null;
-      activeRow?.scrollIntoView({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" });
+      const activeRow = rail.querySelector(
+        `[data-index="${activeIndex}"]`,
+      ) as HTMLElement | null;
+      activeRow?.scrollIntoView({
+        block: "nearest",
+        behavior: reducedMotion ? "auto" : "smooth",
+      });
     };
     revealActiveRow();
     const resize = new ResizeObserver(revealActiveRow);
@@ -312,39 +402,46 @@ export const ChatMinimap = memo(function ChatMinimap({ messages, scrollContainer
   }, [activeIndex, nodes.length, reducedMotion]);
 
   // Drag scrubber interaction along the vertical rail
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (nodes.length === 0) return;
-    draggingRef.current = true;
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (nodes.length === 0) return;
+      draggingRef.current = true;
 
-    const handlePointerY = (clientY: number) => {
-      const railEl = railRef.current;
-      if (!railEl) return;
-      const rect = railEl.getBoundingClientRect();
-      const relY = clientY - rect.top;
-      const targetIdx = railIndexForPointer(relY, railEl.scrollTop, nodes.length);
-      if (nodes[targetIdx]) {
-        scrollToNodeRef.current(nodes[targetIdx], false);
-        setActiveIndex(targetIdx);
-        setHoveredIndex(targetIdx);
-      }
-    };
+      const handlePointerY = (clientY: number) => {
+        const railEl = railRef.current;
+        if (!railEl) return;
+        const rect = railEl.getBoundingClientRect();
+        const relY = clientY - rect.top;
+        const targetIdx = railIndexForPointer(
+          relY,
+          railEl.scrollTop,
+          nodes.length,
+        );
+        if (nodes[targetIdx]) {
+          scrollToNodeRef.current(nodes[targetIdx], false);
+          setActiveIndex(targetIdx);
+          setHoveredIndex(targetIdx);
+        }
+      };
 
-    handlePointerY(e.clientY);
+      handlePointerY(e.clientY);
 
-    const onMove = (ev: MouseEvent) => {
-      if (!draggingRef.current) return;
-      handlePointerY(ev.clientY);
-    };
+      const onMove = (ev: MouseEvent) => {
+        if (!draggingRef.current) return;
+        handlePointerY(ev.clientY);
+      };
 
-    const onUp = () => {
-      draggingRef.current = false;
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
+      const onUp = () => {
+        draggingRef.current = false;
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
 
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  }, [nodes]);
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [nodes],
+  );
 
   // Interrupted drag cleanup on unmount
   useEffect(() => {
@@ -358,10 +455,15 @@ export const ChatMinimap = memo(function ChatMinimap({ messages, scrollContainer
   }
 
   // Active or explicitly hovered tooltip target
-  const displayTooltipIndex = hoveredIndex !== null ? hoveredIndex : (isRailHovered ? activeIndex : null);
-  const tooltipNode = displayTooltipIndex !== null ? nodes[displayTooltipIndex] : null;
+  const displayTooltipIndex =
+    hoveredIndex !== null ? hoveredIndex : isRailHovered ? activeIndex : null;
+  const tooltipNode =
+    displayTooltipIndex !== null ? nodes[displayTooltipIndex] : null;
   // Calculate unclipped vertical center position for the tooltip
-  const tooltipTopPx = displayTooltipIndex !== null ? getTooltipTopPx(displayTooltipIndex, railScrollTop) : 0;
+  const tooltipTopPx =
+    displayTooltipIndex !== null
+      ? getTooltipTopPx(displayTooltipIndex, railScrollTop)
+      : 0;
 
   return (
     <div
@@ -470,7 +572,9 @@ export const ChatMinimap = memo(function ChatMinimap({ messages, scrollContainer
               tabIndex={0}
               aria-label={`Jump to: ${node.text}`}
               onMouseEnter={() => setHoveredIndex(i)}
-              onMouseLeave={() => setHoveredIndex((cur) => (cur === i ? null : cur))}
+              onMouseLeave={() =>
+                setHoveredIndex((cur) => (cur === i ? null : cur))
+              }
               onClick={(e) => {
                 e.stopPropagation();
                 scrollToNode(node);
@@ -508,8 +612,8 @@ export const ChatMinimap = memo(function ChatMinimap({ messages, scrollContainer
                   background: isActive
                     ? "var(--text)"
                     : isHovered
-                    ? "color-mix(in srgb, var(--text) 85%, transparent)"
-                    : "color-mix(in srgb, var(--text-dim) 40%, transparent)",
+                      ? "color-mix(in srgb, var(--text) 85%, transparent)"
+                      : "color-mix(in srgb, var(--text-dim) 40%, transparent)",
                   boxShadow: isActive
                     ? "0 0 6px color-mix(in srgb, var(--text) 30%, transparent)"
                     : "none",
@@ -525,7 +629,9 @@ export const ChatMinimap = memo(function ChatMinimap({ messages, scrollContainer
 });
 
 // Hook to create a stable array of refs for messages
-export function useMessageRefs(count: number): RefObject<(HTMLDivElement | null)[]> {
+export function useMessageRefs(
+  count: number,
+): RefObject<(HTMLDivElement | null)[]> {
   const refs = useRef<(HTMLDivElement | null)[]>([]);
   const prevCount = useRef(0);
   if (prevCount.current !== count) {

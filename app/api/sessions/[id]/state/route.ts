@@ -1,5 +1,13 @@
-import { getExitedRpcSession, getRpcSession, WebRpcError } from "@/lib/rpc-manager";
-import { apiErrorResponse, opErrorResponse, resolveSessionHostOr404 } from "@/lib/api-utils";
+import {
+  getExitedRpcSession,
+  getRpcSession,
+  WebRpcError,
+} from "@/lib/rpc-manager";
+import {
+  apiErrorResponse,
+  opErrorResponse,
+  resolveSessionHostOr404,
+} from "@/lib/api-utils";
 import { outboxScope, outboxSnapshot } from "@/lib/message-outbox";
 
 /** Every answer, an offline host's 503 included, carries the session's held messages (`outbox`): a tab opening a
@@ -11,13 +19,16 @@ export async function GET(
   const { id } = await params;
   const response = await sessionState(id);
   const { entries, settledIds, ...settlements } = outboxSnapshot(id);
-  return Response.json({
-    ...(await response.json() as object),
-    outbox: entries,
-    outboxScope: outboxScope(),
-    outboxSettledIds: settledIds,
-    ...settlements,
-  }, { status: response.status });
+  return Response.json(
+    {
+      ...((await response.json()) as object),
+      outbox: entries,
+      outboxScope: outboxScope(),
+      outboxSettledIds: settledIds,
+      ...settlements,
+    },
+    { status: response.status },
+  );
 }
 
 async function sessionState(id: string): Promise<Response> {
@@ -31,7 +42,10 @@ async function sessionState(id: string): Promise<Response> {
         const state = await rpc.send({ type: "get_state" });
         return Response.json({ running: true, state });
       } catch (error) {
-        if (error instanceof WebRpcError && error.code === "session_unresponsive") {
+        if (
+          error instanceof WebRpcError &&
+          error.code === "session_unresponsive"
+        ) {
           return Response.json({ running: false, recovered: true });
         }
         throw error;

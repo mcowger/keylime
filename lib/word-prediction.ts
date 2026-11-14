@@ -26,20 +26,28 @@ export function advanceGhost(
   text: string,
   cursor: number,
 ): { ghost: WordGhost | null; typedPast: boolean } {
-  if (text === ghost.text && cursor === ghost.cursor) return { ghost, typedPast: false };
+  if (text === ghost.text && cursor === ghost.cursor)
+    return { ghost, typedPast: false };
   const head = ghost.text.slice(0, ghost.cursor);
   const tail = ghost.text.slice(ghost.cursor);
   const typed = text.slice(ghost.cursor, cursor);
-  if (cursor <= ghost.cursor || text !== head + typed + tail) return { ghost: null, typedPast: false };
+  if (cursor <= ghost.cursor || text !== head + typed + tail)
+    return { ghost: null, typedPast: false };
   if (ghost.suffix.toLocaleLowerCase().startsWith(typed.toLocaleLowerCase())) {
     const suffix = ghost.suffix.slice(typed.length);
-    return { ghost: suffix ? { text, cursor, suffix } : null, typedPast: false };
+    return {
+      ghost: suffix ? { text, cursor, suffix } : null,
+      typedPast: false,
+    };
   }
   return { ghost: null, typedPast: true };
 }
 
 /** Insert the ghost at its caret, plus the trailing space omp's editor adds unless whitespace/punctuation follows. */
-export function acceptGhost(ghost: WordGhost): { text: string; cursor: number } {
+export function acceptGhost(ghost: WordGhost): {
+  text: string;
+  cursor: number;
+} {
   const after = ghost.text.slice(ghost.cursor);
   const insert = ghost.suffix + (/^[\s.,;:!?"\])}]/.test(after) ? "" : " ");
   return {

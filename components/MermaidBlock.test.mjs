@@ -23,7 +23,10 @@ test("MermaidBlock renders source by default", () => {
 
 test("MermaidBlock can render preview by default", () => {
   const html = renderToStaticMarkup(
-    React.createElement(MermaidBlock, { code: mermaidSrc, defaultPreview: true }),
+    React.createElement(MermaidBlock, {
+      code: mermaidSrc,
+      defaultPreview: true,
+    }),
   );
 
   assert.match(html, />(Source|mermaidBlock\.source)</);
@@ -33,7 +36,11 @@ test("MermaidBlock can render preview by default", () => {
 
 test("MermaidBlock with isStreaming falls back to source view", () => {
   const html = renderToStaticMarkup(
-    React.createElement(MermaidBlock, { code: mermaidSrc, isStreaming: true, defaultPreview: true }),
+    React.createElement(MermaidBlock, {
+      code: mermaidSrc,
+      isStreaming: true,
+      defaultPreview: true,
+    }),
   );
 
   assert.match(html, /disabled/);
@@ -44,7 +51,10 @@ test("MermaidBlock with isStreaming falls back to source view", () => {
 
 test("MermaidBlock renders empty graph without error", () => {
   const html = renderToStaticMarkup(
-    React.createElement(MermaidBlock, { code: "graph TD", defaultPreview: true }),
+    React.createElement(MermaidBlock, {
+      code: "graph TD",
+      defaultPreview: true,
+    }),
   );
 
   assert.doesNotMatch(html, /mermaid-block-error/);
@@ -57,7 +67,10 @@ test("MermaidBlock handles Chinese characters in diagram", () => {
     PC->>SV: 请求登录`;
 
   const html = renderToStaticMarkup(
-    React.createElement(MermaidBlock, { code: chineseMermaid, defaultPreview: true }),
+    React.createElement(MermaidBlock, {
+      code: chineseMermaid,
+      defaultPreview: true,
+    }),
   );
 
   assert.doesNotMatch(html, /mermaid-block-error/);

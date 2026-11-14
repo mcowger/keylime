@@ -1,6 +1,10 @@
 import { randomBytes } from "crypto";
 import { runAgentCommand } from "./agent-command";
-import { EventStreamConnection, serverId, type FrameSink } from "./event-stream-hub";
+import {
+  EventStreamConnection,
+  serverId,
+  type FrameSink,
+} from "./event-stream-hub";
 import {
   BROWSER_LINK_VERSION,
   COMMAND_DEDUPE_MS,
@@ -9,11 +13,26 @@ import {
   parseEventStreamChannel,
   SUBSCRIPTION_ID_RE,
 } from "./event-stream-protocol";
-import { decodeBlobFrame, HostOpError, LINK_LIMITS, LinkSender, Outbox, PartJoiner, queuedLine, SeqWindow } from "./hosts/link-protocol";
+import {
+  decodeBlobFrame,
+  HostOpError,
+  LINK_LIMITS,
+  LinkSender,
+  Outbox,
+  PartJoiner,
+  queuedLine,
+  SeqWindow,
+} from "./hosts/link-protocol";
 import { MAX_AGENT_COMMAND_REQUEST_BYTES } from "./image-attachments";
 import { isRecord } from "./type-guards";
 import { UPLOAD_ID_RE } from "./upload-limits";
-import { abortUpload, forwardUploadFrame, releaseUploadSink, startUpload, type UploadSink } from "./uploads";
+import {
+  abortUpload,
+  forwardUploadFrame,
+  releaseUploadSink,
+  startUpload,
+  type UploadSink,
+} from "./uploads";
 import { requestOwner } from "./web-auth";
 
 // The browser link (docs/specs/2026-11-01-browser-link-design.md): one WebSocket per browser at /api/events/link,
@@ -22,11 +41,20 @@ import { requestOwner } from "./web-auth";
 // window. A link outlives its socket for LINK_RESUME_MS, so a reconnect resumes it instead of re-subscribing.
 
 /** Mutable so tests can shorten them. `helloMs`: a socket that has not said hello by then is closed. */
-export const browserLinkTimings = { pingMs: LINK_LIMITS.pingMs, offlineMs: LINK_LIMITS.offlineMs, resumeMs: LINK_RESUME_MS, helloMs: 10_000, ackMs: 120_000 };
+export const browserLinkTimings = {
+  pingMs: LINK_LIMITS.pingMs,
+  offlineMs: LINK_LIMITS.offlineMs,
+  resumeMs: LINK_RESUME_MS,
+  helloMs: 10_000,
+  ackMs: 120_000,
+};
 /** Mutable so tests can shrink them. A link holding more than `backlogBytes` (sent and unacked, plus queued) is dropped;
  * past `totalBacklogBytes` across every link, the links whose sockets have been gone longest are dropped first. Either
  * way their browsers resync. */
-export const browserLinkLimits = { backlogBytes: 32 * 1024 * 1024, totalBacklogBytes: 256 * 1024 * 1024 };
+export const browserLinkLimits = {
+  backlogBytes: 32 * 1024 * 1024,
+  totalBacklogBytes: 256 * 1024 * 1024,
+};
 /** Remembered commands, kept COMMAND_DEDUPE_MS for a resend. At the cap, a command that changes something is answered
  * 429 `too_many_commands` until one expires: forgetting a remembered one early would let its resend run it twice. */
 export const DEDUPE_MAX = 500;
@@ -34,8 +62,19 @@ export const DEDUPE_MAX = 500;
 const MAX_COMMAND_CHARS = MAX_AGENT_COMMAND_REQUEST_BYTES + 64 * 1024;
 const MAX_SESSION_ID_LENGTH = 512;
 const MAX_RID_LENGTH = 64;
-const CLOSE = { invalidData: 1007, policy: 1008, tooBig: 1009, failed: 1011, replaced: 4409, gone: 4410, versionMismatch: 4426 } as const;
-const INVALID_REQUEST = { error: "Invalid event stream request", code: "invalid_event_stream_request" };
+const CLOSE = {
+  invalidData: 1007,
+  policy: 1008,
+  tooBig: 1009,
+  failed: 1011,
+  replaced: 4409,
+  gone: 4410,
+  versionMismatch: 4426,
+} as const;
+const INVALID_REQUEST = {
+  error: "Invalid event stream request",
+  code: "invalid_event_stream_request",
+};
 
 /** The unacked window follows the link: about WINDOW_TARGET_MS of what the browser acks, between WINDOW_MIN_BYTES and
  * LINK_LIMITS.unackedBytes (see `measure`). A command's reply queued behind a backlog waits behind about that much on
@@ -128,10 +167,16 @@ const helloTimers = new WeakMap<BrowserSocket, NodeJS.Timeout>();
 
 /** GET /api/events/link: the gate already ran (proxy.ts); undefined once upgraded. The owner is the web session a
  * socket belongs to: a resume token, and an upload, are honored only for the same one. */
-export function handleBrowserLinkUpgrade(request: Request, upgrade: (data: BrowserLinkData) => boolean): Response | undefined {
+export function handleBrowserLinkUpgrade(
+  request: Request,
+  upgrade: (data: BrowserLinkData) => boolean,
+): Response | undefined {
   return upgrade({ kind: "browser", owner: requestOwner(request), link: null })
     ? undefined
-    : Response.json({ error: "The browser link is a WebSocket", code: "upgrade_required" }, { status: 426 });
+    : Response.json(
+        { error: "The browser link is a WebSocket", code: "upgrade_required" },
+        { status: 426 },
+      );
 }
 
 /** Bun's `websocket` handler for browser sockets (server/app.ts dispatches on `ws.data.kind`). */
@@ -182,7 +227,9 @@ function guarded(ws: BrowserSocket, handle: () => void): void {
 }
 
 function fail(ws: BrowserSocket, error: unknown): void {
-  console.error(`[omp-web] browser link failed; closing it: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
+  console.error(
+    `[omp-web] browser link failed; closing it: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
+  );
   const link = ws.data.link;
   // Nothing half-applied is resumed: the browser resyncs.
   if (link) dispose(link, CLOSE.failed);
@@ -233,8 +280,17 @@ function linkSink(link: BrowserLink): FrameSink {
     write: (name, at, data) => {
       // A control frame goes with its subscription's frames (`open` before them, `end` after); hello and transport alone.
       const frame: unknown = name === "mux" ? JSON.parse(data) : null;
-      const key = name !== "mux" ? name : isRecord(frame) && typeof frame.sub === "string" ? frame.sub : "mux";
-      return queue(link, key, `{"type":"e","name":${JSON.stringify(name)},"at":${at},"data":${data}}`);
+      const key =
+        name !== "mux"
+          ? name
+          : isRecord(frame) && typeof frame.sub === "string"
+            ? frame.sub
+            : "mux";
+      return queue(
+        link,
+        key,
+        `{"type":"e","name":${JSON.stringify(name)},"at":${at},"data":${data}}`,
+      );
     },
     // Replaceable updates merge while the socket is gone or lines wait for the window; every ack resumes them.
     backpressured: () => !link.socket || link.sender.queuedBytes > 0,
@@ -252,7 +308,10 @@ function queue(link: BrowserLink, key: string, json: string): boolean {
   if (link.disposed) return false;
   const line = queuedLine(json);
   link.sender.push(key, { line, size: Buffer.byteLength(line) });
-  if (link.outboxBytes + link.sender.queuedBytes > browserLinkLimits.backlogBytes) {
+  if (
+    link.outboxBytes + link.sender.queuedBytes >
+    browserLinkLimits.backlogBytes
+  ) {
     dispose(link, CLOSE.gone);
     return false;
   }
@@ -266,13 +325,19 @@ function queue(link: BrowserLink, key: string, json: string): boolean {
  * holding bytes: dropping an empty one frees nothing. Attached links are never dropped here: each stays under
  * backlogBytes, and `watchAcks` detaches one whose browser stops acking, which makes it droppable here. */
 function enforceBudget(): void {
-  const held = (link: BrowserLink) => link.outboxBytes + link.sender.queuedBytes;
+  const held = (link: BrowserLink) =>
+    link.outboxBytes + link.sender.queuedBytes;
   let total = 0;
   for (const each of links().values()) total += held(each);
   while (total > browserLinkLimits.totalBacklogBytes) {
     let oldest: BrowserLink | undefined;
     for (const each of links().values()) {
-      if (!each.socket && held(each) > 0 && each.detachedAt < (oldest?.detachedAt ?? Infinity)) oldest = each;
+      if (
+        !each.socket &&
+        held(each) > 0 &&
+        each.detachedAt < (oldest?.detachedAt ?? Infinity)
+      )
+        oldest = each;
     }
     if (!oldest) return;
     total -= held(oldest);
@@ -312,7 +377,11 @@ function flush(link: BrowserLink): void {
     const unit = link.sender.next(() => ++link.downSeq);
     // Lines only: the browser link queues no result bytes.
     if (!unit || !("line" in unit)) return;
-    const item = { seq: unit.seq, line: unit.line, bytes: Buffer.byteLength(unit.line) };
+    const item = {
+      seq: unit.seq,
+      line: unit.line,
+      bytes: Buffer.byteLength(unit.line),
+    };
     link.outbox.push(item);
     link.outboxBytes += item.bytes;
     if (!write(item)) return;
@@ -343,7 +412,13 @@ function measure(link: BrowserLink, acked: number): void {
   link.busyMs += now - link.busyFrom;
   link.busyFrom = now;
   if (link.busyMs < WINDOW_TARGET_MS) return;
-  const fit = Math.min(LINK_LIMITS.unackedBytes, Math.max(WINDOW_MIN_BYTES, Math.round((link.acked * WINDOW_TARGET_MS) / link.busyMs)));
+  const fit = Math.min(
+    LINK_LIMITS.unackedBytes,
+    Math.max(
+      WINDOW_MIN_BYTES,
+      Math.round((link.acked * WINDOW_TARGET_MS) / link.busyMs),
+    ),
+  );
   if (link.limited) link.window = fit;
   Object.assign(link, { acked: 0, busyMs: 0, limited: false });
 }
@@ -357,7 +432,10 @@ function detach(link: BrowserLink): void {
   clearTimeout(link.ackTimer);
   link.ackTimer = undefined;
   clearTimeout(link.expiryTimer);
-  link.expiryTimer = setTimeout(() => dispose(link, CLOSE.gone), browserLinkTimings.resumeMs);
+  link.expiryTimer = setTimeout(
+    () => dispose(link, CLOSE.gone),
+    browserLinkTimings.resumeMs,
+  );
   link.expiryTimer.unref?.();
 }
 
@@ -412,12 +490,14 @@ function sawBrowser(link: BrowserLink): void {
   link.offlineTimer.unref?.();
 }
 
-const isSafeCount = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
+const isSafeCount = (value: unknown): value is number =>
+  Number.isSafeInteger(value) && (value as number) >= 0;
 
 function onFrame(ws: BrowserSocket, data: string | Uint8Array): void {
   if (typeof data !== "string") return onUploadFrame(ws, data);
   // Every line the browser sends fits a piece: longer ones go as parts.
-  if (Buffer.byteLength(data) > LINK_LIMITS.pieceBytes) return ws.close(CLOSE.tooBig, "Frame too large");
+  if (Buffer.byteLength(data) > LINK_LIMITS.pieceBytes)
+    return ws.close(CLOSE.tooBig, "Frame too large");
   let message: unknown;
   try {
     message = JSON.parse(data);
@@ -426,13 +506,17 @@ function onFrame(ws: BrowserSocket, data: string | Uint8Array): void {
   }
   if (!isRecord(message)) return ws.close(CLOSE.invalidData, "Not a message");
   const link = ws.data.link;
-  if (!link) return message.type === "hello" ? onHello(ws, message) : ws.close(CLOSE.policy, "The first frame must be a hello");
+  if (!link)
+    return message.type === "hello"
+      ? onHello(ws, message)
+      : ws.close(CLOSE.policy, "The first frame must be a hello");
   // A socket a newer one replaced: what it still sends belongs to no link.
   if (link.socket !== ws) return;
   sawBrowser(link);
   switch (message.type) {
     case "ack": {
-      if (!isSafeCount(message.ack)) return ws.close(CLOSE.invalidData, "Invalid ack");
+      if (!isSafeCount(message.ack))
+        return ws.close(CLOSE.invalidData, "Invalid ack");
       const freed = released(link, link.outbox.ack(message.ack));
       // Progress restarts the deadline; an ack that frees nothing does not.
       if (freed > 0) watchAcks(link);
@@ -447,12 +531,18 @@ function onFrame(ws: BrowserSocket, data: string | Uint8Array): void {
     case "pong":
       return;
   }
-  if (!isSafeCount(message.seq) || message.seq === 0) return ws.close(CLOSE.invalidData, "Invalid seq");
+  if (!isSafeCount(message.seq) || message.seq === 0)
+    return ws.close(CLOSE.invalidData, "Invalid seq");
   if (link.up.applied(message.seq)) {
     if (message.type !== "part") apply(link, ws, message);
     else {
       const { at, end, data: slice } = message;
-      if (!isSafeCount(at) || typeof end !== "boolean" || typeof slice !== "string") return ws.close(CLOSE.invalidData, "Invalid part");
+      if (
+        !isSafeCount(at) ||
+        typeof end !== "boolean" ||
+        typeof slice !== "string"
+      )
+        return ws.close(CLOSE.invalidData, "Invalid part");
       const line = link.parts.add({ at, end, data: slice });
       if (line !== null) {
         let joined: unknown;
@@ -461,7 +551,8 @@ function onFrame(ws: BrowserSocket, data: string | Uint8Array): void {
         } catch {
           return ws.close(CLOSE.invalidData, "Invalid JSON");
         }
-        if (!isRecord(joined)) return ws.close(CLOSE.invalidData, "Not a message");
+        if (!isRecord(joined))
+          return ws.close(CLOSE.invalidData, "Not a message");
         apply(link, ws, joined, Buffer.byteLength(line));
       }
     }
@@ -476,26 +567,39 @@ function onUploadFrame(ws: BrowserSocket, data: Uint8Array): void {
   if (!link) return ws.close(CLOSE.invalidData, "Text frames only");
   if (link.socket !== ws) return;
   // 256: the longest header (a length byte and 255 bytes of id).
-  if (data.byteLength > LINK_LIMITS.pieceBytes + 256) return ws.close(CLOSE.tooBig, "Frame too large");
+  if (data.byteLength > LINK_LIMITS.pieceBytes + 256)
+    return ws.close(CLOSE.tooBig, "Frame too large");
   let frame: { id: string; bytes: Uint8Array };
   try {
     frame = decodeBlobFrame(data);
   } catch {
     return ws.close(CLOSE.invalidData, "Invalid binary frame");
   }
-  if (frame.bytes.byteLength > LINK_LIMITS.pieceBytes) return ws.close(CLOSE.tooBig, "Frame too large");
-  if (!link.uploads.has(frame.id)) return ws.close(CLOSE.invalidData, "Not an upload of this link");
+  if (frame.bytes.byteLength > LINK_LIMITS.pieceBytes)
+    return ws.close(CLOSE.tooBig, "Frame too large");
+  if (!link.uploads.has(frame.id))
+    return ws.close(CLOSE.invalidData, "Not an upload of this link");
   sawBrowser(link);
   // False once the upload ended on this server (failed, aborted or evicted idle): say so instead of letting it stall.
   // A failed start already sent its up_error; the worker ignores errors for an upload it dropped.
   const sink = link.uploads.get(frame.id)!;
-  if (!forwardUploadFrame(link.owner, frame.id, frame.bytes, sink)) sink.error(404, "upload_missing", "The upload is no longer open");
+  if (!forwardUploadFrame(link.owner, frame.id, frame.bytes, sink))
+    sink.error(404, "upload_missing", "The upload is no longer open");
 }
 
 function onHello(ws: BrowserSocket, hello: Record<string, unknown>): void {
-  if (hello.v !== BROWSER_LINK_VERSION) return ws.close(CLOSE.versionMismatch, JSON.stringify({ serverVersion: BROWSER_LINK_VERSION }));
-  if (!isSafeCount(hello.ack) || (hello.token !== null && typeof hello.token !== "string")) return ws.close(CLOSE.policy, "Invalid hello");
-  const known = typeof hello.token === "string" ? links().get(hello.token) : undefined;
+  if (hello.v !== BROWSER_LINK_VERSION)
+    return ws.close(
+      CLOSE.versionMismatch,
+      JSON.stringify({ serverVersion: BROWSER_LINK_VERSION }),
+    );
+  if (
+    !isSafeCount(hello.ack) ||
+    (hello.token !== null && typeof hello.token !== "string")
+  )
+    return ws.close(CLOSE.policy, "Invalid hello");
+  const known =
+    typeof hello.token === "string" ? links().get(hello.token) : undefined;
   // Another web session's token resumes nothing, and its link is left alone.
   const resumed = known !== undefined && known.owner === ws.data.owner;
   clearTimeout(helloTimers.get(ws));
@@ -515,40 +619,80 @@ function onHello(ws: BrowserSocket, hello: Record<string, unknown>): void {
   link.sentSeq = ack;
   link.unacked = 0;
   link.awaitingDrain = false;
-  control(ws, { type: "welcome", v: BROWSER_LINK_VERSION, token: link.token, serverId: serverId(), resumed, ack: link.up.acked });
+  control(ws, {
+    type: "welcome",
+    v: BROWSER_LINK_VERSION,
+    token: link.token,
+    serverId: serverId(),
+    resumed,
+    ack: link.up.acked,
+  });
   sawBrowser(link);
   flush(link);
   // Updates merged while the socket was gone go now: no ack may come to resume them.
   link.connection.resume();
 }
 
-const isSubscriptionId = (id: unknown): id is string => typeof id === "string" && SUBSCRIPTION_ID_RE.test(id);
+const isSubscriptionId = (id: unknown): id is string =>
+  typeof id === "string" && SUBSCRIPTION_ID_RE.test(id);
 
-function apply(link: BrowserLink, ws: BrowserSocket, message: Record<string, unknown>, lineBytes = 0): void {
+function apply(
+  link: BrowserLink,
+  ws: BrowserSocket,
+  message: Record<string, unknown>,
+  lineBytes = 0,
+): void {
   const { connection } = link;
   switch (message.type) {
     case "sub": {
       const id = message.id;
-      if (!isSubscriptionId(id)) return ws.close(CLOSE.invalidData, "Invalid subscription id");
+      if (!isSubscriptionId(id))
+        return ws.close(CLOSE.invalidData, "Invalid subscription id");
       const channel = parseEventStreamChannel(message.channel);
       // `refused` stands in for the 400 a POST /api/events would answer.
-      if (!channel) return connection.control({ type: "refused", sub: id, status: 400, ...INVALID_REQUEST });
-      void connection.subscribe(id, channel).then((result) => {
-        if (!result.ok) connection.control({ type: "refused", sub: id, status: result.status, error: result.error, code: result.code });
-      }).catch((error: unknown) => fail(ws, error));
+      if (!channel)
+        return connection.control({
+          type: "refused",
+          sub: id,
+          status: 400,
+          ...INVALID_REQUEST,
+        });
+      void connection
+        .subscribe(id, channel)
+        .then((result) => {
+          if (!result.ok)
+            connection.control({
+              type: "refused",
+              sub: id,
+              status: result.status,
+              error: result.error,
+              code: result.code,
+            });
+        })
+        .catch((error: unknown) => fail(ws, error));
       return;
     }
     case "unsub":
-      if (!isSubscriptionId(message.id)) return ws.close(CLOSE.invalidData, "Invalid subscription id");
+      if (!isSubscriptionId(message.id))
+        return ws.close(CLOSE.invalidData, "Invalid subscription id");
       return connection.unsubscribe(message.id);
     case "up_start":
       return onUploadStart(link, ws, message);
     case "up_abort": {
       const { id, host } = message;
-      if (typeof id !== "string" || !UPLOAD_ID_RE.test(id)) return ws.close(CLOSE.invalidData, "Invalid upload id");
+      if (typeof id !== "string" || !UPLOAD_ID_RE.test(id))
+        return ws.close(CLOSE.invalidData, "Invalid upload id");
       // The worker sends nothing of it after this line, so no chunk of it can follow.
       link.uploads.delete(id);
-      abortUpload(id, link.owner, typeof host === "string" && host.length <= 128 ? host : undefined).catch((error: unknown) => console.error(`[omp-web] upload abort failed: ${error instanceof Error ? error.message : String(error)}`));
+      abortUpload(
+        id,
+        link.owner,
+        typeof host === "string" && host.length <= 128 ? host : undefined,
+      ).catch((error: unknown) =>
+        console.error(
+          `[omp-web] upload abort failed: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+      );
       return;
     }
     case "cmd":
@@ -559,66 +703,182 @@ function apply(link: BrowserLink, ws: BrowserSocket, message: Record<string, unk
 
 /** Opens, or resumes, an upload: all of its sink's acks and errors carry this start's `n`, so queued callbacks from
  * an earlier generation cannot advance or fail a newer attempt. */
-function onUploadStart(link: BrowserLink, ws: BrowserSocket, message: Record<string, unknown>): void {
+function onUploadStart(
+  link: BrowserLink,
+  ws: BrowserSocket,
+  message: Record<string, unknown>,
+): void {
   // `mime`: the file's type (`type` is the message's).
   const { id, n, host, name, size, mime } = message;
-  if (typeof id !== "string" || !UPLOAD_ID_RE.test(id)) return ws.close(CLOSE.invalidData, "Invalid upload id");
+  if (typeof id !== "string" || !UPLOAD_ID_RE.test(id))
+    return ws.close(CLOSE.invalidData, "Invalid upload id");
   const key = `up:${id}`;
   const sink: UploadSink = {
-    ack: (received, done, proof) => void queue(link, key, JSON.stringify({ type: "up_ack", id, received, done, start: n, ...(done && proof ? { proof } : {}) })),
-    error: (status, code, error) => void queue(link, key, JSON.stringify({ type: "up_error", id, status, code, message: error, start: n })),
+    ack: (received, done, proof) =>
+      void queue(
+        link,
+        key,
+        JSON.stringify({
+          type: "up_ack",
+          id,
+          received,
+          done,
+          start: n,
+          ...(done && proof ? { proof } : {}),
+        }),
+      ),
+    error: (status, code, error) =>
+      void queue(
+        link,
+        key,
+        JSON.stringify({
+          type: "up_error",
+          id,
+          status,
+          code,
+          message: error,
+          start: n,
+        }),
+      ),
   };
   if (!link.uploads.has(id)) link.uploads.set(id, sink);
-  if (!isSafeCount(n) || typeof host !== "string" || typeof name !== "string" || !isSafeCount(size) || typeof mime !== "string") {
+  if (
+    !isSafeCount(n) ||
+    typeof host !== "string" ||
+    typeof name !== "string" ||
+    !isSafeCount(size) ||
+    typeof mime !== "string"
+  ) {
     return sink.error(400, "invalid_request", "Invalid upload");
   }
-  startUpload({ id, hostId: host, owner: link.owner, name, size, type: mime, sink, onRegistered: () => link.uploads.set(id, sink) }).then(({ received, proof }) => {
-    queue(link, key, JSON.stringify({ type: "up_ack", id, received, done: received >= size, start: n, ...(proof ? { proof } : {}) }));
-  }, (error: unknown) => {
-    if (error instanceof HostOpError) return sink.error(error.status, error.code, error.message);
-    console.error(`[omp-web] upload start failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
-    sink.error(500, "upload_failed", "The upload could not start");
-  });
+  startUpload({
+    id,
+    hostId: host,
+    owner: link.owner,
+    name,
+    size,
+    type: mime,
+    sink,
+    onRegistered: () => link.uploads.set(id, sink),
+  }).then(
+    ({ received, proof }) => {
+      queue(
+        link,
+        key,
+        JSON.stringify({
+          type: "up_ack",
+          id,
+          received,
+          done: received >= size,
+          start: n,
+          ...(proof ? { proof } : {}),
+        }),
+      );
+    },
+    (error: unknown) => {
+      if (error instanceof HostOpError)
+        return sink.error(error.status, error.code, error.message);
+      console.error(
+        `[omp-web] upload start failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
+      );
+      sink.error(500, "upload_failed", "The upload could not start");
+    },
+  );
 }
 
-function onCommand(link: BrowserLink, ws: BrowserSocket, message: Record<string, unknown>, lineBytes: number): void {
+function onCommand(
+  link: BrowserLink,
+  ws: BrowserSocket,
+  message: Record<string, unknown>,
+  lineBytes: number,
+): void {
   const { rid, session } = message;
-  if (typeof rid !== "string" || !rid || rid.length > MAX_RID_LENGTH) return ws.close(CLOSE.invalidData, "Invalid rid");
+  if (typeof rid !== "string" || !rid || rid.length > MAX_RID_LENGTH)
+    return ws.close(CLOSE.invalidData, "Invalid rid");
   const recvAt = Date.now();
-  const type = isRecord(message.command) && typeof message.command.type === "string" ? message.command.type : "";
+  const type =
+    isRecord(message.command) && typeof message.command.type === "string"
+      ? message.command.type
+      : "";
   // One key per session, as the worker sends them: its commands and replies keep their order.
   const key = `cmd:${typeof session === "string" ? session : ""}`;
   const reply = ({ status, body }: Reply, deduped: boolean) => {
-    queue(link, key, `{"type":"reply","rid":${JSON.stringify(rid)},"status":${status},"recvAt":${recvAt},"at":${Date.now()},"deduped":${deduped},"data":${JSON.stringify(body)}}`);
+    queue(
+      link,
+      key,
+      `{"type":"reply","rid":${JSON.stringify(rid)},"status":${status},"recvAt":${recvAt},"at":${Date.now()},"deduped":${deduped},"data":${JSON.stringify(body)}}`,
+    );
   };
   // A bad session fails only this command: the link carries other sessions' commands.
-  if (typeof session !== "string" || !session || session.length > MAX_SESSION_ID_LENGTH) return reply({ status: 400, body: INVALID_REQUEST }, false);
+  if (
+    typeof session !== "string" ||
+    !session ||
+    session.length > MAX_SESSION_ID_LENGTH
+  )
+    return reply({ status: 400, body: INVALID_REQUEST }, false);
   // The route's cap on the request body, on the command: the line's cap leaves room for the envelope, and only a joined
   // line can pass it. Not remembered, so a resend is refused again.
-  if (lineBytes > MAX_AGENT_COMMAND_REQUEST_BYTES && Buffer.byteLength(JSON.stringify(message.command)) > MAX_AGENT_COMMAND_REQUEST_BYTES) {
-    return reply({ status: 413, body: { error: "Agent command is too large", code: "request_too_large" } }, false);
+  if (
+    lineBytes > MAX_AGENT_COMMAND_REQUEST_BYTES &&
+    Buffer.byteLength(JSON.stringify(message.command)) >
+      MAX_AGENT_COMMAND_REQUEST_BYTES
+  ) {
+    return reply(
+      {
+        status: 413,
+        body: {
+          error: "Agent command is too large",
+          code: "request_too_large",
+        },
+      },
+      false,
+    );
   }
   // Scoped to the session, not the link: a resend after a resync comes on a new link, and a rid another session
   // happens to use never replays this one's reply. JSON keeps the pair unambiguous for any session id. A read-only
   // command is safe to run again and is not remembered, so it never takes the room of one that changes something.
   const run = async () => {
-    const response = await runAgentCommand(session, message.command, message.advisor === true, link.owner);
+    const response = await runAgentCommand(
+      session,
+      message.command,
+      message.advisor === true,
+      link.owner,
+    );
     return { status: response.status, body: await response.json() };
   };
-  const started = isIdempotentCommand(type) ? { result: run(), deduped: false } : runOnce(JSON.stringify([session, rid]), run);
+  const started = isIdempotentCommand(type)
+    ? { result: run(), deduped: false }
+    : runOnce(JSON.stringify([session, rid]), run);
   // Every remembered command is still inside its window: forgetting one would let its resend run it twice.
-  if (!started) return reply({ status: 429, body: { error: "Too many commands in the last 10 minutes", code: "too_many_commands" } }, false);
-  started.result.then((answer) => reply(answer, started.deduped)).catch((error: unknown) => fail(ws, error));
+  if (!started)
+    return reply(
+      {
+        status: 429,
+        body: {
+          error: "Too many commands in the last 10 minutes",
+          code: "too_many_commands",
+        },
+      },
+      false,
+    );
+  started.result
+    .then((answer) => reply(answer, started.deduped))
+    .catch((error: unknown) => fail(ws, error));
 }
 
 /** One run per key: a known key joins the run in flight or replays its settled reply (a resend after a lost reply).
  * Undefined when DEDUPE_MAX commands are remembered and none has expired: nothing is forgotten early. */
-function runOnce(key: string, run: () => Promise<Reply>): { result: Promise<Reply>; deduped: boolean } | undefined {
+function runOnce(
+  key: string,
+  run: () => Promise<Reply>,
+): { result: Promise<Reply>; deduped: boolean } | undefined {
   const map = (globalThis.__ompBrowserCommands ??= new Map());
   const now = Date.now();
   const known = map.get(key);
-  if (known && known.expiresAt > now) return { result: known.result, deduped: true };
-  for (const [stale, entry] of map) if (entry.expiresAt <= now) map.delete(stale);
+  if (known && known.expiresAt > now)
+    return { result: known.result, deduped: true };
+  for (const [stale, entry] of map)
+    if (entry.expiresAt <= now) map.delete(stale);
   if (map.size >= DEDUPE_MAX) return undefined;
   // Called now, not after an await: on the fast path the command reaches omp in the link's order.
   const entry: Remembered = { result: run(), expiresAt: Infinity };

@@ -44,7 +44,12 @@ declare global {
 
 function getState(): AuthGatewayState {
   if (!globalThis.__ompAuthGatewayState) {
-    globalThis.__ompAuthGatewayState = { gateway: null, idleTimer: undefined, inFlight: 0, nextId: 1 };
+    globalThis.__ompAuthGatewayState = {
+      gateway: null,
+      idleTimer: undefined,
+      inFlight: 0,
+      nextId: 1,
+    };
     const cleanup = () => disposeAuthGateway();
     process.once("exit", cleanup);
     process.once("SIGINT", cleanup);
@@ -72,7 +77,11 @@ function startGateway(state: AuthGatewayState): Gateway {
   const env = sanitizeProjectCommandEnvironment({ ...process.env });
   delete env.OMP_PROFILE;
   delete env.PI_PROFILE;
-  const child = spawn(bin, ["auth-gateway", "stdio"], { cwd: homedir(), env, stdio: ["pipe", "pipe", "pipe"] });
+  const child = spawn(bin, ["auth-gateway", "stdio"], {
+    cwd: homedir(),
+    env,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
   child.stdin.on("error", () => {});
   child.stdout.on("error", () => {});
 
@@ -81,7 +90,11 @@ function startGateway(state: AuthGatewayState): Gateway {
   child.stderr.on("data", (chunk: Buffer) => {
     stderrTail = (stderrTail + chunk.toString("utf8")).slice(-2_000);
   });
-  const { promise: ready, resolve: resolveReady, reject: rejectReady } = Promise.withResolvers<void>();
+  const {
+    promise: ready,
+    resolve: resolveReady,
+    reject: rejectReady,
+  } = Promise.withResolvers<void>();
   ready.catch(() => {});
   // Free the slot so the next request respawns, and kill the hung child.
   const readyTimer = setTimeout(() => {
@@ -98,13 +111,19 @@ function startGateway(state: AuthGatewayState): Gateway {
       return;
     }
     if (!frame || typeof frame !== "object") return;
-    const record = frame as { ready?: unknown; id?: unknown; status?: unknown; body?: unknown };
+    const record = frame as {
+      ready?: unknown;
+      id?: unknown;
+      status?: unknown;
+      body?: unknown;
+    };
     if (record.ready === true) {
       clearTimeout(readyTimer);
       resolveReady();
       return;
     }
-    const entry = typeof record.id === "number" ? pending.get(record.id) : undefined;
+    const entry =
+      typeof record.id === "number" ? pending.get(record.id) : undefined;
     if (!entry || typeof record.status !== "number") return;
     pending.delete(record.id as number);
     entry.resolve({ status: record.status, body: record.body });
@@ -119,7 +138,11 @@ function startGateway(state: AuthGatewayState): Gateway {
     if (state.gateway === gateway) state.gateway = null;
   };
   child.on("exit", (code, signal) => {
-    fail(new Error(`omp auth-gateway exited (code ${code ?? "null"}, signal ${signal ?? "none"})${stderrTail ? `: ${stderrTail.slice(-500)}` : ""}`));
+    fail(
+      new Error(
+        `omp auth-gateway exited (code ${code ?? "null"}, signal ${signal ?? "none"})${stderrTail ? `: ${stderrTail.slice(-500)}` : ""}`,
+      ),
+    );
   });
   child.on("error", fail);
   return gateway;
@@ -129,7 +152,11 @@ function startGateway(state: AuthGatewayState): Gateway {
  * Run one request (`POST path` with a JSON `body`) through omp's auth gateway.
  * Abort rejects the caller only; the gateway finishes the request and drops the reply.
  */
-export async function authGatewayRequest(path: string, body: unknown, signal: AbortSignal): Promise<AuthGatewayResponse> {
+export async function authGatewayRequest(
+  path: string,
+  body: unknown,
+  signal: AbortSignal,
+): Promise<AuthGatewayResponse> {
   const state = getState();
   clearTimeout(state.idleTimer);
   state.inFlight++;
@@ -137,12 +164,15 @@ export async function authGatewayRequest(path: string, body: unknown, signal: Ab
     const gateway = (state.gateway ??= startGateway(state));
     const aborted = new Promise<never>((_, reject) => {
       if (signal.aborted) reject(signal.reason);
-      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      signal.addEventListener("abort", () => reject(signal.reason), {
+        once: true,
+      });
     });
     aborted.catch(() => {});
     await Promise.race([gateway.ready, aborted]);
     const id = state.nextId++;
-    const { promise, resolve, reject } = Promise.withResolvers<AuthGatewayResponse>();
+    const { promise, resolve, reject } =
+      Promise.withResolvers<AuthGatewayResponse>();
     gateway.pending.set(id, { resolve, reject });
     gateway.child.stdin.write(`${JSON.stringify({ id, path, body })}\n`);
     try {

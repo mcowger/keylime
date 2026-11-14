@@ -1,7 +1,10 @@
 // Shared models.yml types, constants, and pure helpers extracted from
 // ModelsConfig.tsx (pure extraction, no behavior change).
 
-export type IconComponent = React.ComponentType<{ size?: number | string; style?: React.CSSProperties }>;
+export type IconComponent = React.ComponentType<{
+  size?: number | string;
+  style?: React.CSSProperties;
+}>;
 
 // Provider glyphs are derived from the provider id. Provider ids come from
 // OMP/models.yml at runtime, so adding one never requires a UI registry entry.
@@ -26,9 +29,25 @@ export type OAuthLoginState =
   | { phase: "idle" }
   | { phase: "connecting" }
   | { phase: "auth"; url: string; instructions: string | null; token: string }
-  | { phase: "device_code"; userCode: string; verificationUri: string; intervalSeconds: number | null; expiresInSeconds: number | null }
-  | { phase: "prompt"; message: string; placeholder: string | null; token: string }
-  | { phase: "select"; message: string; options: { id: string; label: string }[]; token: string }
+  | {
+      phase: "device_code";
+      userCode: string;
+      verificationUri: string;
+      intervalSeconds: number | null;
+      expiresInSeconds: number | null;
+    }
+  | {
+      phase: "prompt";
+      message: string;
+      placeholder: string | null;
+      token: string;
+    }
+  | {
+      phase: "select";
+      message: string;
+      options: { id: string; label: string }[];
+      token: string;
+    }
   | { phase: "progress"; message: string }
   | { phase: "success" }
   | { phase: "error"; message: string };
@@ -51,7 +70,12 @@ export interface ModelEntry {
   input?: string[];
   contextWindow?: number;
   maxTokens?: number;
-  cost?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number };
+  cost?: {
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+  };
   compat?: Record<string, unknown>;
 }
 
@@ -73,7 +97,12 @@ export interface ModelsFileData {
 export type ModelTestState =
   | { phase: "idle" }
   | { phase: "testing" }
-  | { phase: "success"; latencyMs?: number; status?: number; responseText?: string }
+  | {
+      phase: "success";
+      latencyMs?: number;
+      status?: number;
+      responseText?: string;
+    }
   | { phase: "error"; message: string; latencyMs?: number; status?: number };
 
 export type Selection =
@@ -106,10 +135,27 @@ export type NativeRegistrySettings = {
 };
 
 export type RetrySettings = {
-  retry?: { enabled?: boolean; maxRetries?: number; modelFallback?: boolean; fallbackRevertPolicy?: "cooldown-expiry" | "never"; fallbackChains?: Record<string, string[]> };
+  retry?: {
+    enabled?: boolean;
+    maxRetries?: number;
+    modelFallback?: boolean;
+    fallbackRevertPolicy?: "cooldown-expiry" | "never";
+    fallbackChains?: Record<string, string[]>;
+  };
 };
 export const COMPOSER_MODELS_STORAGE_KEY = "omp-composer-models";
-export const NATIVE_MODEL_ROLES = ["default", "smol", "slow", "vision", "plan", "designer", "commit", "tiny", "task", "advisor"];
+export const NATIVE_MODEL_ROLES = [
+  "default",
+  "smol",
+  "slow",
+  "vision",
+  "plan",
+  "designer",
+  "commit",
+  "tiny",
+  "task",
+  "advisor",
+];
 // omp's models.yml ApiSchema (config/models-config-schema.ts)
 export const API_OPTIONS = [
   "openai-completions",
@@ -123,13 +169,23 @@ export const API_OPTIONS = [
   "google-vertex",
 ] as const;
 export const hoverRow = (selected: boolean) => ({
-  onMouseEnter: (e: React.MouseEvent<HTMLElement>) => { if (!selected) e.currentTarget.style.background = "var(--bg-hover)"; },
-  onMouseLeave: (e: React.MouseEvent<HTMLElement>) => { if (!selected) e.currentTarget.style.background = "none"; },
+  onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+    if (!selected) e.currentTarget.style.background = "var(--bg-hover)";
+  },
+  onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
+    if (!selected) e.currentTarget.style.background = "none";
+  },
 });
 
 export const hoverAccent = {
-  onMouseEnter: (e: React.MouseEvent<HTMLElement>) => { e.currentTarget.style.color = "var(--accent)"; e.currentTarget.style.borderColor = "var(--accent)"; },
-  onMouseLeave: (e: React.MouseEvent<HTMLElement>) => { e.currentTarget.style.color = "var(--text-muted)"; e.currentTarget.style.borderColor = "var(--border)"; },
+  onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+    e.currentTarget.style.color = "var(--accent)";
+    e.currentTarget.style.borderColor = "var(--accent)";
+  },
+  onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
+    e.currentTarget.style.color = "var(--text-muted)";
+    e.currentTarget.style.borderColor = "var(--border)";
+  },
 };
 export type EndpointPreset = {
   label: string;
@@ -140,9 +196,21 @@ export type EndpointPreset = {
 
 export const ENDPOINT_PRESETS: EndpointPreset[] = [
   { label: "🦙 Ollama", baseUrl: "http://localhost:11434/v1", auth: "none" },
-  { label: "⚡ LM Studio / vLLM", baseUrl: "http://localhost:1234/v1", auth: "none" },
-  { label: "🌐 OpenRouter", baseUrl: "https://openrouter.ai/api/v1", auth: "apiKey" },
-  { label: "🤖 Local Proxy (:2455)", baseUrl: "http://127.0.0.1:2455/v1", auth: "keep" },
+  {
+    label: "⚡ LM Studio / vLLM",
+    baseUrl: "http://localhost:1234/v1",
+    auth: "none",
+  },
+  {
+    label: "🌐 OpenRouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+    auth: "apiKey",
+  },
+  {
+    label: "🤖 Local Proxy (:2455)",
+    baseUrl: "http://127.0.0.1:2455/v1",
+    auth: "keep",
+  },
 ];
 
 export const presetButtonStyle = {
@@ -154,16 +222,23 @@ export const presetButtonStyle = {
   color: "var(--text)",
   cursor: "pointer",
 } as const;
-export const THINKING_LEVELS = ["minimal", "low", "medium", "high", "xhigh", "max"] as const;
-export type ThinkingLevel = typeof THINKING_LEVELS[number];
+export const THINKING_LEVELS = [
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
+export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
 export const LEVEL_COLORS: Record<ThinkingLevel, string> = {
   minimal: "var(--text-dim)",
-  low:     "color-mix(in srgb, var(--accent) 45%, var(--text-muted))",
-  medium:  "var(--accent)",
-  high:    "var(--accent-hover)",
-  xhigh:   "var(--status-warning)",
-  max:     "var(--status-error)",
+  low: "color-mix(in srgb, var(--accent) 45%, var(--text-muted))",
+  medium: "var(--accent)",
+  high: "var(--accent-hover)",
+  xhigh: "var(--status-warning)",
+  max: "var(--status-error)",
 };
 export const COST_LABEL_KEYS = {
   input: "modelsConfig.costInput",
@@ -174,11 +249,13 @@ export const COST_LABEL_KEYS = {
 // ── Provider icon ─────────────────────────────────────────────────────────────
 
 export function providerInitials(id: string): string {
-  return id
-    .split(/[-_]/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase() || "?";
+  return (
+    id
+      .split(/[-_]/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase() || "?"
+  );
 }

@@ -5,7 +5,18 @@
 // No `next/*` or `@/` imports: the daemon loads this through Bun's native TypeScript runtime.
 import { randomUUID } from "crypto";
 import { execFile } from "child_process";
-import { closeSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, realpathSync, rmSync, statSync, type Stats } from "fs";
+import {
+  closeSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  readSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  type Stats,
+} from "fs";
 import * as fsRuntime from "fs";
 import { homedir, tmpdir } from "os";
 import { basename, dirname, isAbsolute, join, resolve } from "path";
@@ -13,7 +24,11 @@ import { promisify } from "util";
 import { comparableProjectPath } from "../comparable-path";
 import { mediaFilePath } from "../media-cache";
 import { OMP_NOT_FOUND, resolveOmpBin } from "../omp/omp-cli";
-import { listArchivedSessionInfos, restoreArchivedSession, restoreFailureStatus } from "../omp/archive";
+import {
+  listArchivedSessionInfos,
+  restoreArchivedSession,
+  restoreFailureStatus,
+} from "../omp/archive";
 import {
   archiveSessionFileWithArtifacts,
   buildSessionTree,
@@ -27,7 +42,10 @@ import {
   setSessionTitle,
   writeSessionFileAtomicSync,
 } from "../omp/session-files";
-import { preparePoolProject, type PreparedPoolProject } from "../pooled-projects";
+import {
+  preparePoolProject,
+  type PreparedPoolProject,
+} from "../pooled-projects";
 import { projectIdentityKey, sessionPathKey } from "../paths";
 import {
   hideProject,
@@ -56,13 +74,28 @@ import {
   SessionFileTooLargeError,
 } from "../session-reader";
 import type { SessionHistoryCursor } from "../session-sync";
-import { extractSubagentHistory, readCompletionArtifact, readSubagentTranscriptPage, resolveSubagentArtifact, subagentTranscriptPath } from "../subagent-history";
+import {
+  extractSubagentHistory,
+  readCompletionArtifact,
+  readSubagentTranscriptPage,
+  resolveSubagentArtifact,
+  subagentTranscriptPath,
+} from "../subagent-history";
 import { SUBAGENT_ID_RE } from "../subagent-types";
 import { isRecord } from "../type-guards";
-import type { ArchivedSessionInfo, ManagedProject, ProjectLaunchConfig, SessionContext, SessionInfo, SessionTitleSource } from "../types";
+import type {
+  ArchivedSessionInfo,
+  ManagedProject,
+  ProjectLaunchConfig,
+  SessionContext,
+  SessionInfo,
+  SessionTitleSource,
+} from "../types";
 import { resolveProject } from "../worktree";
 
-export type OpResult<T> = { ok: true; value: T } | { ok: false; status: number; code: string; error: string };
+export type OpResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; status: number; code: string; error: string };
 
 export interface SessionReadOptions {
   deferThinking: boolean;
@@ -81,7 +114,10 @@ export interface ContextReadOptions extends SessionReadOptions {
 /** `GET /api/sessions/[id]` minus the route's `sessionId` and live `agent`. */
 export interface SessionReadValue {
   filePath: string;
-  info: Omit<SessionInfo, "lastMessageAt" | "projectRoot" | "projectKey" | "worktreeBranch">;
+  info: Omit<
+    SessionInfo,
+    "lastMessageAt" | "projectRoot" | "projectKey" | "worktreeBranch"
+  >;
   leafId: string | null;
   tree: unknown[];
   context: SessionContext;
@@ -99,15 +135,40 @@ export interface SessionOps {
   listSessions(): Promise<SessionInfo[]>;
   /** Strict, uncached active-ID inventory for restore conflict checks; errors mean absence cannot be established. */
   listSessionIdsForRestore(): Promise<string[]>;
-  readSession(id: string, options: SessionReadOptions): Promise<OpResult<SessionReadValue>>;
-  readContext(id: string, leafId: string | undefined, options: ContextReadOptions): Promise<OpResult<unknown>>;
-  readThinking(id: string, entryId: string, block: number): Promise<OpResult<unknown>>;
+  readSession(
+    id: string,
+    options: SessionReadOptions,
+  ): Promise<OpResult<SessionReadValue>>;
+  readContext(
+    id: string,
+    leafId: string | undefined,
+    options: ContextReadOptions,
+  ): Promise<OpResult<unknown>>;
+  readThinking(
+    id: string,
+    entryId: string,
+    block: number,
+  ): Promise<OpResult<unknown>>;
   readSessionState(id: string): Promise<OpResult<unknown>>;
   readSubagentHistory(id: string): Promise<OpResult<unknown>>;
-  readSubagentTranscript(id: string, subagentId: string, mode: "page" | "completion", cursor: number): Promise<OpResult<unknown>>;
-  renameSessionFile(id: string, title: string, source?: SessionTitleSource): Promise<OpResult<null>>;
+  readSubagentTranscript(
+    id: string,
+    subagentId: string,
+    mode: "page" | "completion",
+    cursor: number,
+  ): Promise<OpResult<unknown>>;
+  renameSessionFile(
+    id: string,
+    title: string,
+    source?: SessionTitleSource,
+  ): Promise<OpResult<null>>;
   /** `liveSessionIds`: sessions main has a live omp process for; their files are never rewritten. */
-  deleteSession(id: string, liveSessionIds: string[]): Promise<OpResult<{ skippedChildren?: Array<{ id: string; reason: string }> }>>;
+  deleteSession(
+    id: string,
+    liveSessionIds: string[],
+  ): Promise<
+    OpResult<{ skippedChildren?: Array<{ id: string; reason: string }> }>
+  >;
   archiveSession(id: string): Promise<OpResult<{ archivedPath: string }>>;
   /** This host's archive, newest first (browser entries; no hostId). */
   listArchives(): Promise<ArchivedSessionInfo[]>;
@@ -115,30 +176,60 @@ export interface SessionOps {
    * names this daemon process; main keeps it with the claim, since only this process can revoke the token. */
   restoreReserve(claim: string): Promise<OpResult<{ instance: string }>>;
   /** Restore one archived session on this host under a reserved `claim`; `sessionId` is the restored session's id. */
-  restoreArchive(key: string, claim: string): Promise<OpResult<{ sessionId: string }>>;
+  restoreArchive(
+    key: string,
+    claim: string,
+  ): Promise<OpResult<{ sessionId: string }>>;
   /** Forbid any restore under `claim` from starting in this process, now or whenever its request arrives, and say whether one
    * is running here. `instance` names the answering process: a restore reserved in another process (a replaced or restarted
    * daemon, which may still be running it) was not fenced by this, so main takes a claim over only when `instance` is the
    * one that reserved it and `running` is false. */
-  restoreFence(claim: string): Promise<OpResult<{ instance: string; running: boolean }>>;
-  exportSession(id: string): Promise<OpResult<{ html: string; fileName: string }>>;
+  restoreFence(
+    claim: string,
+  ): Promise<OpResult<{ instance: string; running: boolean }>>;
+  exportSession(
+    id: string,
+  ): Promise<OpResult<{ html: string; fileName: string }>>;
   readMedia(hash: string): Promise<OpResult<Uint8Array>>;
   /** Raw registry entries, hidden ones included (main merges session-discovered projects). */
   listProjects(): Promise<ProjectRegistryEntry[]>;
-  addProject(path: string, launchConfig?: ProjectLaunchConfig): Promise<OpResult<ManagedProject>>;
+  addProject(
+    path: string,
+    launchConfig?: ProjectLaunchConfig,
+  ): Promise<OpResult<ManagedProject>>;
   /** Applied in one registry load/save. `newRoots` were registered by this call. */
-  updateProject(updates: ProjectUpdate[]): Promise<OpResult<{ projects: ProjectRegistryEntry[]; newRoots: string[] }>>;
+  updateProject(
+    updates: ProjectUpdate[],
+  ): Promise<
+    OpResult<{ projects: ProjectRegistryEntry[]; newRoots: string[] }>
+  >;
   hideProject(path: string): Promise<OpResult<null>>;
   /** Input origin and cloneRoot must come from the server's registered pool project. */
-  preparePoolProject(input: Parameters<typeof preparePoolProject>[0]): Promise<OpResult<PreparedPoolProject>>;
-  validateCwd(path: string): Promise<OpResult<{ cwd: string; projectRoot: string; projectKey?: string }>>;
+  preparePoolProject(
+    input: Parameters<typeof preparePoolProject>[0],
+  ): Promise<OpResult<PreparedPoolProject>>;
+  validateCwd(
+    path: string,
+  ): Promise<
+    OpResult<{ cwd: string; projectRoot: string; projectKey?: string }>
+  >;
 }
 
 const execFileAsync = promisify(execFile);
 const ok = <T>(value: T): OpResult<T> => ({ ok: true, value });
-const fail = (status: number, code: string, error: string): OpResult<never> => ({ ok: false, status, code, error });
-const sessionNotFound = () => fail(404, "session_not_found", "Session not found");
-const sessionTooLarge = () => fail(413, "session_file_too_large", "Session file is too large to open in omp-web");
+const fail = (
+  status: number,
+  code: string,
+  error: string,
+): OpResult<never> => ({ ok: false, status, code, error });
+const sessionNotFound = () =>
+  fail(404, "session_not_found", "Session not found");
+const sessionTooLarge = () =>
+  fail(
+    413,
+    "session_file_too_large",
+    "Session file is too large to open in omp-web",
+  );
 
 /** This daemon process, as restore claims see it. Fresh per process, never stored: the token sets below die with the process,
  * so a claim reserved under another value was reserved by a process this one cannot speak for. */
@@ -158,32 +249,64 @@ const SUBAGENT_ID_MAX_LENGTH = 100;
 // path cannot escape the sibling dir; symlink escapes are additionally blocked
 // by realpath confinement (resolveSubagentArtifact).
 export function isValidSubagentId(subagentId: string): boolean {
-  return SUBAGENT_ID_RE.test(subagentId) && subagentId.length <= SUBAGENT_ID_MAX_LENGTH;
+  return (
+    SUBAGENT_ID_RE.test(subagentId) &&
+    subagentId.length <= SUBAGENT_ID_MAX_LENGTH
+  );
 }
 
 /** Header-less files: tell "too large" from "missing or malformed" (the bounded header read returns null for both). */
 function unreadableSession(filePath: string): OpResult<never> {
   const loaded = loadSessionFile(filePath, { resolveBlobs: false });
   if (loaded.error === "too_large") return sessionTooLarge();
-  return fail(404, "session_file_malformed", "Session file is missing or malformed");
+  return fail(
+    404,
+    "session_file_malformed",
+    "Session file is missing or malformed",
+  );
 }
 
 // BranchNavigator still traverses recursively, so keep the response tree shallow.
 const MAX_PROJECTED_TREE_DEPTH = 200;
 const MAX_BRANCH_PREVIEW_LENGTH = 40;
 
-function branchPreviewForEntry(entry: { id?: string; type?: string; message?: unknown }): { role?: "user" | "assistant"; text: string } | undefined {
-  if (entry.type !== "message" || !entry.message || typeof entry.message !== "object" || Array.isArray(entry.message)) return undefined;
+function branchPreviewForEntry(entry: {
+  id?: string;
+  type?: string;
+  message?: unknown;
+}): { role?: "user" | "assistant"; text: string } | undefined {
+  if (
+    entry.type !== "message" ||
+    !entry.message ||
+    typeof entry.message !== "object" ||
+    Array.isArray(entry.message)
+  )
+    return undefined;
   const message = entry.message as { role?: unknown; content?: unknown };
-  let text = typeof message.content === "string"
-    ? message.content
-    : Array.isArray(message.content)
-      ? message.content.filter((block): block is { type?: unknown; text?: unknown } => typeof block === "object" && block !== null).filter((block) => block.type === "text" && typeof block.text === "string").map((block) => block.text as string).join(" ")
-      : "";
-  text = text.replace(/\s+/g, " " ).trim();
-  if (text.length > MAX_BRANCH_PREVIEW_LENGTH) text = `${text.slice(0, MAX_BRANCH_PREVIEW_LENGTH)}…`;
+  let text =
+    typeof message.content === "string"
+      ? message.content
+      : Array.isArray(message.content)
+        ? message.content
+            .filter(
+              (block): block is { type?: unknown; text?: unknown } =>
+                typeof block === "object" && block !== null,
+            )
+            .filter(
+              (block) =>
+                block.type === "text" && typeof block.text === "string",
+            )
+            .map((block) => block.text as string)
+            .join(" ")
+        : "";
+  text = text.replace(/\s+/g, " ").trim();
+  if (text.length > MAX_BRANCH_PREVIEW_LENGTH)
+    text = `${text.slice(0, MAX_BRANCH_PREVIEW_LENGTH)}…`;
   if (!text) text = message.role === "assistant" ? "[assistant]" : "message";
-  const role = message.role === "user" || message.role === "assistant" ? message.role : undefined;
+  const role =
+    message.role === "user" || message.role === "assistant"
+      ? message.role
+      : undefined;
   return { ...(role ? { role } : {}), text };
 }
 
@@ -193,9 +316,13 @@ function branchPreviewForEntry(entry: { id?: string; type?: string; message?: un
  * without recursive traversal. Contracted entry IDs are attached to the next
  * visible node so the UI can still recognize an active leaf inside the chain.
  */
-function projectTreeForResponse<T extends { entry: { id: string }; children: T[]; compressedEntryIds?: string[] }>(
-  nodes: T[]
-): T[] {
+function projectTreeForResponse<
+  T extends {
+    entry: { id: string };
+    children: T[];
+    compressedEntryIds?: string[];
+  },
+>(nodes: T[]): T[] {
   const keep = new Set<T>();
   const roots = new Set(nodes);
   const seen = new Set<T>();
@@ -206,10 +333,7 @@ function projectTreeForResponse<T extends { entry: { id: string }; children: T[]
     if (seen.has(node)) continue;
     seen.add(node);
 
-    if (
-      roots.has(node) ||
-      node.children.length !== 1
-    ) {
+    if (roots.has(node) || node.children.length !== 1) {
       keep.add(node);
     }
 
@@ -218,13 +342,19 @@ function projectTreeForResponse<T extends { entry: { id: string }; children: T[]
     }
   }
 
-  const cloneNode = (node: T, compressedEntryIds?: string[], branchPreview?: { role?: "user" | "assistant"; text: string }): T => ({
+  const cloneNode = (
+    node: T,
+    compressedEntryIds?: string[],
+    branchPreview?: { role?: "user" | "assistant"; text: string },
+  ): T => ({
     ...node,
     children: [],
     ...(compressedEntryIds?.length ? { compressedEntryIds } : {}),
     ...(branchPreview ? { branchPreview } : {}),
   });
-  const projectedRoots = nodes.map((node) => cloneNode(node, undefined, branchPreviewForEntry(node.entry)));
+  const projectedRoots = nodes.map((node) =>
+    cloneNode(node, undefined, branchPreviewForEntry(node.entry)),
+  );
   const tasks = nodes.map((source, index) => ({
     source,
     projected: projectedRoots[index],
@@ -232,7 +362,14 @@ function projectTreeForResponse<T extends { entry: { id: string }; children: T[]
   }));
 
   const appendFlattenedKeptDescendants = (source: T, projectedParent: T) => {
-    const pending = [{ node: source, compressedEntryIds: [] as string[], branchPreview: undefined as { role?: "user" | "assistant"; text: string } | undefined }];
+    const pending = [
+      {
+        node: source,
+        compressedEntryIds: [] as string[],
+        branchPreview: undefined as
+          { role?: "user" | "assistant"; text: string } | undefined,
+      },
+    ];
     const flattenedSeen = new Set<T>();
 
     while (pending.length > 0) {
@@ -241,7 +378,13 @@ function projectTreeForResponse<T extends { entry: { id: string }; children: T[]
       flattenedSeen.add(node);
 
       if (keep.has(node)) {
-        projectedParent.children.push(cloneNode(node, compressedEntryIds, branchPreview ?? branchPreviewForEntry(node.entry)));
+        projectedParent.children.push(
+          cloneNode(
+            node,
+            compressedEntryIds,
+            branchPreview ?? branchPreviewForEntry(node.entry),
+          ),
+        );
       }
 
       for (let i = node.children.length - 1; i >= 0; i--) {
@@ -250,7 +393,9 @@ function projectTreeForResponse<T extends { entry: { id: string }; children: T[]
           compressedEntryIds: keep.has(node)
             ? []
             : [...compressedEntryIds, node.entry.id],
-          branchPreview: keep.has(node) ? undefined : (branchPreview ?? branchPreviewForEntry(node.entry)),
+          branchPreview: keep.has(node)
+            ? undefined
+            : (branchPreview ?? branchPreviewForEntry(node.entry)),
         });
       }
     }
@@ -279,9 +424,17 @@ function projectTreeForResponse<T extends { entry: { id: string }; children: T[]
         continue;
       }
 
-      const projectedChild = cloneNode(child, compressedEntryIds, branchPreview);
+      const projectedChild = cloneNode(
+        child,
+        compressedEntryIds,
+        branchPreview,
+      );
       projected.children.push(projectedChild);
-      tasks.push({ source: child, projected: projectedChild, depth: depth + 1 });
+      tasks.push({
+        source: child,
+        projected: projectedChild,
+        depth: depth + 1,
+      });
     }
   }
 
@@ -300,7 +453,10 @@ function normalizeCwd(cwd: string): string {
  * binary: `omp --export <sessionPath> <outPath>` (the output path is the first
  * positional argument; verified against oh-my-pi main.ts/flag-tables.ts).
  */
-async function runOmpExport(filePath: string, outputPath: string): Promise<void> {
+async function runOmpExport(
+  filePath: string,
+  outputPath: string,
+): Promise<void> {
   const bin = resolveOmpBin();
   if (!bin) {
     throw new Error(OMP_NOT_FOUND);
@@ -326,13 +482,22 @@ export const sessionOps: SessionOps = {
       // deep copy so shared cached objects are never mutated.
       const header = readSessionHeader(filePath);
       if (header === null) return unreadableSession(filePath);
-      const displayEntries = await getSessionEntriesForDisplayAsync(filePath, { skipToolResultImages: deferToolResultImages });
+      const displayEntries = await getSessionEntriesForDisplayAsync(filePath, {
+        skipToolResultImages: deferToolResultImages,
+      });
       const leafId = getLeafEntryId(displayEntries);
       const tree = projectTreeForResponse(buildSessionTree(displayEntries));
-      const context = buildSessionContext(displayEntries, leafId, { deferThinking, deferToolResultImages });
+      const context = buildSessionContext(displayEntries, leafId, {
+        deferThinking,
+        deferToolResultImages,
+      });
 
       let modified = header.timestamp ?? new Date().toISOString();
-      try { modified = statSync(filePath).mtime.toISOString(); } catch { /* use header timestamp */ }
+      try {
+        modified = statSync(filePath).mtime.toISOString();
+      } catch {
+        /* use header timestamp */
+      }
       const parentSessionId = header.parentSession
         ? await resolveParentSessionId(header.parentSession)
         : undefined;
@@ -348,7 +513,14 @@ export const sessionOps: SessionOps = {
         firstMessage: firstUser
           ? (() => {
               const c = (firstUser as { content: unknown }).content;
-              return typeof c === "string" ? c : (Array.isArray(c) ? (c.find((b: { type: string }) => b.type === "text") as { text: string } | undefined)?.text ?? "" : "") || "(no messages)";
+              return typeof c === "string"
+                ? c
+                : (Array.isArray(c)
+                    ? ((
+                        c.find((b: { type: string }) => b.type === "text") as
+                          { text: string } | undefined
+                      )?.text ?? "")
+                    : "") || "(no messages)";
             })()
           : "(no messages)",
         parentSessionId,
@@ -360,7 +532,17 @@ export const sessionOps: SessionOps = {
     }
   },
 
-  async readContext(id, leafId, { deferThinking, deferMedia: deferToolResultImages, includePreCompaction, boundary, sync }) {
+  async readContext(
+    id,
+    leafId,
+    {
+      deferThinking,
+      deferMedia: deferToolResultImages,
+      includePreCompaction,
+      boundary,
+      sync,
+    },
+  ) {
     const filePath = await resolveSessionPath(id);
     if (!filePath) return sessionNotFound();
     try {
@@ -368,14 +550,18 @@ export const sessionOps: SessionOps = {
       if (header === null) return unreadableSession(filePath);
       if (boundary) return ok(getSessionContextBoundary(filePath));
       if (sync) {
-        return ok(getSessionHistoryPage(filePath, sync.cursor, sync.limit, leafId, {
-          deferThinking,
-          deferToolResultImages,
-          includePreCompaction,
-        }));
+        return ok(
+          getSessionHistoryPage(filePath, sync.cursor, sync.limit, leafId, {
+            deferThinking,
+            deferToolResultImages,
+            includePreCompaction,
+          }),
+        );
       }
       // Deduplicated cached read; blob resolution on per-entry deep copies.
-      const entries = await getSessionEntriesForDisplayAsync(filePath, { skipToolResultImages: deferToolResultImages });
+      const entries = await getSessionEntriesForDisplayAsync(filePath, {
+        skipToolResultImages: deferToolResultImages,
+      });
       const context = buildSessionContext(entries, leafId, {
         deferThinking,
         deferToolResultImages,
@@ -394,9 +580,20 @@ export const sessionOps: SessionOps = {
     const filePath = await resolveSessionPath(id);
     if (!filePath) return sessionNotFound();
     // Lenient JSONL parsing keeps omp's malformed-line tolerance.
-    const entry = getSessionEntries(filePath).find((candidate) => candidate.id === entryId);
-    if (!entry || entry.type !== "message" || !isRecord(entry.message) || entry.message.role !== "assistant") {
-      return fail(404, "assistant_message_not_found", "Assistant message not found");
+    const entry = getSessionEntries(filePath).find(
+      (candidate) => candidate.id === entryId,
+    );
+    if (
+      !entry ||
+      entry.type !== "message" ||
+      !isRecord(entry.message) ||
+      entry.message.role !== "assistant"
+    ) {
+      return fail(
+        404,
+        "assistant_message_not_found",
+        "Assistant message not found",
+      );
     }
     const block = entry.message.content[blockIndex];
     if (!block || block.type !== "thinking") {
@@ -406,7 +603,9 @@ export const sessionOps: SessionOps = {
   },
 
   async readSessionState(id) {
-    return (await resolveSessionPath(id)) ? ok({ running: false }) : sessionNotFound();
+    return (await resolveSessionPath(id))
+      ? ok({ running: false })
+      : sessionNotFound();
   },
 
   async readSubagentHistory(id) {
@@ -416,12 +615,18 @@ export const sessionOps: SessionOps = {
   },
 
   async readSubagentTranscript(id, subagentId, mode, fromByte) {
-    if (!isValidSubagentId(subagentId)) return fail(400, "invalid_subagent_id", "Invalid subagent id");
+    if (!isValidSubagentId(subagentId))
+      return fail(400, "invalid_subagent_id", "Invalid subagent id");
     const filePath = await resolveSessionPath(id);
     if (!filePath) return sessionNotFound();
     if (mode === "completion") {
       const resolved = resolveSubagentArtifact(filePath, subagentId, ".md");
-      if (!resolved) return fail(404, "transcript_not_found", "Subagent completion not found");
+      if (!resolved)
+        return fail(
+          404,
+          "transcript_not_found",
+          "Subagent completion not found",
+        );
       // Read the RESOLVED path: re-deriving from the raw session path here
       // would reopen whatever the symlink points at after the check.
       const completion = readCompletionArtifact(resolved);
@@ -432,7 +637,8 @@ export const sessionOps: SessionOps = {
       });
     }
     const resolved = resolveSubagentArtifact(filePath, subagentId, ".jsonl");
-    if (!resolved) return fail(404, "transcript_not_found", "Subagent transcript not found");
+    if (!resolved)
+      return fail(404, "transcript_not_found", "Subagent transcript not found");
     return ok(readSubagentTranscriptPage(resolved, fromByte));
   },
 
@@ -479,9 +685,14 @@ export const sessionOps: SessionOps = {
     const dir = dirname(filePath);
     const skippedChildren: Array<{ id: string; reason: string }> = [];
     try {
-      const readDirectorySync = Reflect.get(fsRuntime, "readdirSync") as typeof readdirSync;
+      const readDirectorySync = Reflect.get(
+        fsRuntime,
+        "readdirSync",
+      ) as typeof readdirSync;
       const files = readDirectorySync(dir).filter(
-        (file) => file.endsWith(".jsonl") && sessionPathKey(join(dir, file)) !== targetPathKey,
+        (file) =>
+          file.endsWith(".jsonl") &&
+          sessionPathKey(join(dir, file)) !== targetPathKey,
       );
       for (const file of files) {
         const childPath = join(dir, file);
@@ -501,7 +712,9 @@ export const sessionOps: SessionOps = {
                 const bytes = readSync(fd, head, 0, head.length, 0);
                 const lines = head.toString("utf8", 0, bytes).split("\n");
                 const headerIndex = parseTitleSlotLine(lines[0] ?? "") ? 1 : 0;
-                const parsed = JSON.parse(lines[headerIndex] ?? "{}") as { id?: unknown };
+                const parsed = JSON.parse(lines[headerIndex] ?? "{}") as {
+                  id?: unknown;
+                };
                 if (typeof parsed.id === "string") oversizedId = parsed.id;
               } finally {
                 closeSync(fd);
@@ -509,7 +722,10 @@ export const sessionOps: SessionOps = {
             } catch {
               // Header unreadable — fall back to the basename.
             }
-            skippedChildren.push({ id: oversizedId, reason: "session_child_too_large" });
+            skippedChildren.push({
+              id: oversizedId,
+              reason: "session_child_too_large",
+            });
             continue;
           }
         } catch {
@@ -517,8 +733,10 @@ export const sessionOps: SessionOps = {
         }
         const childHeader = readSessionHeaderSync(childPath);
         if (!childHeader || !childHeader.parentSession) continue;
-        const linkedByPath = sessionPathKey(childHeader.parentSession) === targetPathKey;
-        if (!linkedByPath && childHeader.parentSession !== deletedSessionId) continue;
+        const linkedByPath =
+          sessionPathKey(childHeader.parentSession) === targetPathKey;
+        if (!linkedByPath && childHeader.parentSession !== deletedSessionId)
+          continue;
 
         // A live omp process owns its session file and flushes its whole
         // in-memory state on write — our rewrite would be clobbered by (or
@@ -550,10 +768,15 @@ export const sessionOps: SessionOps = {
           // would permanently truncate a session the user did NOT delete.
           writeSessionFileAtomicSync(childPath, lines.join("\n"), "reparent");
         } catch {
-          skippedChildren.push({ id: childId ?? file, reason: "session_child_rewrite_failed" });
+          skippedChildren.push({
+            id: childId ?? file,
+            reason: "session_child_rewrite_failed",
+          });
         }
       }
-    } catch { /* skip if dir unreadable */ }
+    } catch {
+      /* skip if dir unreadable */
+    }
 
     deleteSessionFileWithArtifacts(filePath);
     invalidateSessionPathCache(id);
@@ -576,18 +799,25 @@ export const sessionOps: SessionOps = {
   },
 
   async restoreReserve(claim) {
-    if (typeof claim !== "string" || !claim) return fail(400, "archive_claim_required", "Restore claim is required");
+    if (typeof claim !== "string" || !claim)
+      return fail(400, "archive_claim_required", "Restore claim is required");
     reservedRestores.add(claim);
-    if (reservedRestores.size > MAX_RESERVED_RESTORES) reservedRestores.delete(reservedRestores.values().next().value as string);
+    if (reservedRestores.size > MAX_RESERVED_RESTORES)
+      reservedRestores.delete(reservedRestores.values().next().value as string);
     return ok({ instance: RESTORE_INSTANCE });
   },
 
   async restoreArchive(key, claim) {
-    if (typeof key !== "string" || !key.trim()) return fail(400, "archive_key_required", "Archive key is required");
+    if (typeof key !== "string" || !key.trim())
+      return fail(400, "archive_key_required", "Archive key is required");
     // Spent before any await: a fence behind this request on the link sees the restore running, and one that came first
     // already revoked it, whenever this request reached the daemon.
     if (typeof claim !== "string" || !reservedRestores.delete(claim)) {
-      return fail(409, "archive_restore_not_admitted", "This restore was not admitted or was fenced; the archive was not consumed");
+      return fail(
+        409,
+        "archive_restore_not_admitted",
+        "This restore was not admitted or was fenced; the archive was not consumed",
+      );
     }
     runningRestores.add(claim);
     try {
@@ -596,16 +826,24 @@ export const sessionOps: SessionOps = {
       return ok({ sessionId });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return fail(restoreFailureStatus(message), "archive_restore_failed", message);
+      return fail(
+        restoreFailureStatus(message),
+        "archive_restore_failed",
+        message,
+      );
     } finally {
       runningRestores.delete(claim);
     }
   },
 
   async restoreFence(claim) {
-    if (typeof claim !== "string" || !claim) return fail(400, "archive_claim_required", "Restore claim is required");
+    if (typeof claim !== "string" || !claim)
+      return fail(400, "archive_claim_required", "Restore claim is required");
     reservedRestores.delete(claim);
-    return ok({ instance: RESTORE_INSTANCE, running: runningRestores.has(claim) });
+    return ok({
+      instance: RESTORE_INSTANCE,
+      running: runningRestores.has(claim),
+    });
   },
 
   async exportSession(id) {
@@ -620,7 +858,8 @@ export const sessionOps: SessionOps = {
       return ok({ html: readFileSync(outputPath, "utf8"), fileName });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (message.includes(OMP_NOT_FOUND)) return fail(500, "omp_not_found", message);
+      if (message.includes(OMP_NOT_FOUND))
+        return fail(500, "omp_not_found", message);
       throw error;
     } finally {
       rmSync(outputPath, { force: true });
@@ -628,7 +867,8 @@ export const sessionOps: SessionOps = {
   },
 
   async readMedia(hash) {
-    if (!/^[0-9a-f]{64}$/.test(hash)) return fail(400, "invalid_hash", "Invalid media hash");
+    if (!/^[0-9a-f]{64}$/.test(hash))
+      return fail(400, "invalid_hash", "Invalid media hash");
     // As /api/media: the sweep can delete our copy between lookup and read once
     // omp's blob is complete; one more lookup then finds the blob.
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -637,7 +877,8 @@ export const sessionOps: SessionOps = {
       try {
         return ok(readFileSync(file));
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") return fail(500, "media_read_failed", "Media could not be read");
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+          return fail(500, "media_read_failed", "Media could not be read");
       }
     }
     return fail(404, "media_not_found", "Media not found");
@@ -649,12 +890,25 @@ export const sessionOps: SessionOps = {
     try {
       const normalized = validateProjectPath(cwd);
       const { projectRoot } = await resolveProject(normalized);
-      const next = upsertProject(loadProjectRegistry(), projectRoot, new Date().toISOString(), launchConfig);
+      const next = upsertProject(
+        loadProjectRegistry(),
+        projectRoot,
+        new Date().toISOString(),
+        launchConfig,
+      );
       saveProjectRegistry(next);
-      const entry = next.projects.find((p) => comparableProjectPath(p.path) === comparableProjectPath(projectRoot))!;
-      return ok({ path: entry.path, addedAt: entry.addedAt, launchConfig: entry.launchConfig });
+      const entry = next.projects.find(
+        (p) =>
+          comparableProjectPath(p.path) === comparableProjectPath(projectRoot),
+      )!;
+      return ok({
+        path: entry.path,
+        addedAt: entry.addedAt,
+        launchConfig: entry.launchConfig,
+      });
     } catch (error) {
-      if (error instanceof ProjectPathError) return fail(400, error.code, error.message);
+      if (error instanceof ProjectPathError)
+        return fail(400, error.code, error.message);
       throw error;
     }
   },
@@ -669,9 +923,15 @@ export const sessionOps: SessionOps = {
       // Cheap check without stat: resolve ~ and relative, then compare.
       // Mirrors validateProjectPath's normalizeCwd + canonicalProjectPath fallback.
       let probe = normalizeCwd(cwd.trim());
-      try { probe = realpathSync(probe); } catch { /* deleted dirs fall back to resolved */ }
+      try {
+        probe = realpathSync(probe);
+      } catch {
+        /* deleted dirs fall back to resolved */
+      }
       const key = comparableProjectPath(probe);
-      const match = earlyRegistry.projects.find((p) => comparableProjectPath(p.path) === key);
+      const match = earlyRegistry.projects.find(
+        (p) => comparableProjectPath(p.path) === key,
+      );
       return match ? match.path : null;
     };
 
@@ -708,7 +968,8 @@ export const sessionOps: SessionOps = {
         ({ projectRoot } = await resolveProject(normalized));
       } catch (error) {
         if (rawUpdates.length > 1) {
-          const message = error instanceof Error ? error.message : String(error);
+          const message =
+            error instanceof Error ? error.message : String(error);
           skipped.push({ cwd, code: "resolve_failed", error: message });
           continue;
         }
@@ -729,20 +990,36 @@ export const sessionOps: SessionOps = {
     for (const update of parsed) {
       const key = comparableProjectPath(update.path);
       const previous = merged.get(key);
-      merged.set(key, previous ? {
-        path: previous.path,
-        alias: update.alias !== undefined ? update.alias : previous.alias,
-        sortOrder: update.sortOrder !== undefined ? update.sortOrder : previous.sortOrder,
-        pinOrder: update.pinOrder !== undefined ? update.pinOrder : previous.pinOrder,
-        launchConfig: update.launchConfig !== undefined ? update.launchConfig : previous.launchConfig,
-      } : update);
+      merged.set(
+        key,
+        previous
+          ? {
+              path: previous.path,
+              alias: update.alias !== undefined ? update.alias : previous.alias,
+              sortOrder:
+                update.sortOrder !== undefined
+                  ? update.sortOrder
+                  : previous.sortOrder,
+              pinOrder:
+                update.pinOrder !== undefined
+                  ? update.pinOrder
+                  : previous.pinOrder,
+              launchConfig:
+                update.launchConfig !== undefined
+                  ? update.launchConfig
+                  : previous.launchConfig,
+            }
+          : update,
+      );
     }
 
     let registry = loadProjectRegistry();
     const newRoots: string[] = [];
     for (const update of merged.values()) {
       const key = comparableProjectPath(update.path);
-      if (!registry.projects.some((p) => comparableProjectPath(p.path) === key)) {
+      if (
+        !registry.projects.some((p) => comparableProjectPath(p.path) === key)
+      ) {
         registry = upsertProject(registry, update.path);
         newRoots.push(update.path);
       }
@@ -750,16 +1027,29 @@ export const sessionOps: SessionOps = {
     // Hidden entries are invisible management-wise: user actions target rows
     // on screen, so their stored display data stays untouched.
     const updates = [...merged.values()].filter((update) => {
-      const entry = registry.projects.find((p) => comparableProjectPath(p.path) === comparableProjectPath(update.path));
+      const entry = registry.projects.find(
+        (p) =>
+          comparableProjectPath(p.path) === comparableProjectPath(update.path),
+      );
       return !entry?.hidden;
     });
     const next = updateProjectsPresentation(registry, updates);
     saveProjectRegistry(next);
 
-    const updatedKeys = new Set(updates.map((update) => comparableProjectPath(update.path)));
+    const updatedKeys = new Set(
+      updates.map((update) => comparableProjectPath(update.path)),
+    );
     const projects = next.projects
       .filter((entry) => updatedKeys.has(comparableProjectPath(entry.path)))
-      .map((entry) => ({ path: entry.path, addedAt: entry.addedAt, hidden: entry.hidden, alias: entry.alias, sortOrder: entry.sortOrder, pinOrder: entry.pinOrder, launchConfig: entry.launchConfig }));
+      .map((entry) => ({
+        path: entry.path,
+        addedAt: entry.addedAt,
+        hidden: entry.hidden,
+        alias: entry.alias,
+        sortOrder: entry.sortOrder,
+        pinOrder: entry.pinOrder,
+        launchConfig: entry.launchConfig,
+      }));
     return ok({ projects, newRoots });
   },
 
@@ -776,21 +1066,37 @@ export const sessionOps: SessionOps = {
     try {
       stat = statSync(normalizedCwd);
     } catch {
-      return fail(400, "directory_not_found", `Directory does not exist: ${cwd}`);
+      return fail(
+        400,
+        "directory_not_found",
+        `Directory does not exist: ${cwd}`,
+      );
     }
     if (!stat.isDirectory()) {
       return fail(400, "not_a_directory", `Path is not a directory: ${cwd}`);
     }
     const project = await resolveProject(normalizedCwd);
-    return ok({ cwd: normalizedCwd, projectRoot: project.projectRoot, projectKey: projectIdentityKey(project.projectRoot) });
+    return ok({
+      cwd: normalizedCwd,
+      projectRoot: project.projectRoot,
+      projectKey: projectIdentityKey(project.projectRoot),
+    });
   },
 
   async preparePoolProject(input) {
-    if (!isRecord(input)
-      || typeof input.projectId !== "string" || typeof input.creationId !== "string"
-      || typeof input.origin !== "string" || typeof input.cloneRoot !== "string"
-      || (input.ref !== undefined && typeof input.ref !== "string")) {
-      return fail(400, "invalid_request", "Invalid pool project preparation input");
+    if (
+      !isRecord(input) ||
+      typeof input.projectId !== "string" ||
+      typeof input.creationId !== "string" ||
+      typeof input.origin !== "string" ||
+      typeof input.cloneRoot !== "string" ||
+      (input.ref !== undefined && typeof input.ref !== "string")
+    ) {
+      return fail(
+        400,
+        "invalid_request",
+        "Invalid pool project preparation input",
+      );
     }
     return preparePoolProject(input);
   },

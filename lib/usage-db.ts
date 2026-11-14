@@ -3,7 +3,10 @@ import { Database } from "bun:sqlite";
 import { basename, dirname, join } from "path";
 import { readModelsConfig, type ModelsFileConfig } from "./omp/models-config";
 import { getAgentDir, getSessionsDir } from "./omp/paths";
-import { listSessionArtifactTranscripts, listSessionFiles } from "./omp/session-files";
+import {
+  listSessionArtifactTranscripts,
+  listSessionFiles,
+} from "./omp/session-files";
 import {
   formatChartDateLabel,
   formatFullDateLabel,
@@ -58,7 +61,9 @@ export function getUsageDbPath(): string {
  */
 function migrateUsageDatabase(db: Database): void {
   const readSchemaVersion = (): number => {
-    const row = db.prepare("PRAGMA user_version").get() as { user_version?: unknown } | null;
+    const row = db.prepare("PRAGMA user_version").get() as {
+      user_version?: unknown;
+    } | null;
     return typeof row?.user_version === "number" ? row.user_version : 0;
   };
   if (readSchemaVersion() >= USAGE_DB_SCHEMA_VERSION) return;
@@ -199,16 +204,27 @@ export function syncSessionFilesToDb(
   const now = Date.now();
 
   // 1. Fetch currently synced files from SQLite
-  const syncedRows = db.prepare("SELECT file_path, mtime_ms, file_size, parser_version FROM synced_files").all() as Array<{
+  const syncedRows = db
+    .prepare(
+      "SELECT file_path, mtime_ms, file_size, parser_version FROM synced_files",
+    )
+    .all() as Array<{
     file_path: string;
     mtime_ms: number;
     file_size: number;
     parser_version: number | null;
   }>;
 
-  const syncedMap = new Map<string, { mtime_ms: number; file_size: number; parser_version: number | null }>();
+  const syncedMap = new Map<
+    string,
+    { mtime_ms: number; file_size: number; parser_version: number | null }
+  >();
   for (const row of syncedRows) {
-    syncedMap.set(row.file_path, { mtime_ms: row.mtime_ms, file_size: row.file_size, parser_version: row.parser_version });
+    syncedMap.set(row.file_path, {
+      mtime_ms: row.mtime_ms,
+      file_size: row.file_size,
+      parser_version: row.parser_version,
+    });
   }
 
   let filesUpdated = 0;
@@ -228,8 +244,12 @@ export function syncSessionFilesToDb(
     )
   `);
 
-  const deleteRecordsStmt = db.prepare("DELETE FROM usage_records WHERE file_path = ?");
-  const deleteSyncedFileStmt = db.prepare("DELETE FROM synced_files WHERE file_path = ?");
+  const deleteRecordsStmt = db.prepare(
+    "DELETE FROM usage_records WHERE file_path = ?",
+  );
+  const deleteSyncedFileStmt = db.prepare(
+    "DELETE FROM synced_files WHERE file_path = ?",
+  );
   const upsertSyncedFileStmt = db.prepare(`
     INSERT OR REPLACE INTO synced_files (file_path, mtime_ms, file_size, records_count, synced_at, parser_version)
     VALUES (?, ?, ?, ?, ?, ?)
@@ -237,7 +257,9 @@ export function syncSessionFilesToDb(
 
   const currentFilesSet = new Set<string>();
   const transcripts = sessionFiles.flatMap((sessionFile) =>
-    [sessionFile, ...listSessionArtifactTranscripts(sessionFile)].map((filePath) => ({ filePath, sessionFile })),
+    [sessionFile, ...listSessionArtifactTranscripts(sessionFile)].map(
+      (filePath) => ({ filePath, sessionFile }),
+    ),
   );
 
   let filesDeleted = 0;
@@ -272,7 +294,11 @@ export function syncSessionFilesToDb(
       }
 
       // Parse records from disk
-      const records: UsageRecord[] = parseSessionUsage(filePath, customModelsConfig, sessionFile);
+      const records: UsageRecord[] = parseSessionUsage(
+        filePath,
+        customModelsConfig,
+        sessionFile,
+      );
 
       ensureTransaction();
       deleteRecordsStmt.run(filePath);
@@ -301,7 +327,14 @@ export function syncSessionFilesToDb(
         recordsInserted++;
       }
 
-      upsertSyncedFileStmt.run(filePath, stats.mtimeMs, stats.size, records.length, now, USAGE_PARSER_VERSION);
+      upsertSyncedFileStmt.run(
+        filePath,
+        stats.mtimeMs,
+        stats.size,
+        records.length,
+        now,
+        USAGE_PARSER_VERSION,
+      );
       filesUpdated++;
     }
 
@@ -389,7 +422,9 @@ export async function getUsageReportFromDb(
   const startTime = Date.now();
   const timeRange = options.range || "30d";
   const granularity = options.granularity || "daily";
-  const projectFilter = options.project ? options.project.trim().toLowerCase() : undefined;
+  const projectFilter = options.project
+    ? options.project.trim().toLowerCase()
+    : undefined;
 
   const db = customDb || getUsageDatabase();
   if (options.forceRefresh) {
@@ -403,7 +438,9 @@ export async function getUsageReportFromDb(
   // Sync latest sessions (and the helper transcripts in their artifacts
   // directories) from disk before querying
   const sessionsDir = getSessionsDir();
-  const sessionFiles = existsSync(sessionsDir) ? await listSessionFiles(sessionsDir) : [];
+  const sessionFiles = existsSync(sessionsDir)
+    ? await listSessionFiles(sessionsDir)
+    : [];
   syncSessionFilesToDb(sessionFiles, readModelsConfig(), db);
   collectUncountedUsage(db);
   const hasExplicitBounds =
@@ -460,14 +497,26 @@ export async function getUsageReportFromDb(
   const totalRecords = summaryRow?.usageRecordsCount ?? 0;
 
   const costQuality = {
-    providerReported: totalRecords > 0 ? ((summaryRow.providerReportedCount || 0) / totalRecords) * 100 : 0,
-    modelPriced: totalRecords > 0 ? ((summaryRow.modelPricedCount || 0) / totalRecords) * 100 : 0,
-    unpriced: totalRecords > 0 ? ((summaryRow.unpricedCount || 0) / totalRecords) * 100 : 0,
+    providerReported:
+      totalRecords > 0
+        ? ((summaryRow.providerReportedCount || 0) / totalRecords) * 100
+        : 0,
+    modelPriced:
+      totalRecords > 0
+        ? ((summaryRow.modelPricedCount || 0) / totalRecords) * 100
+        : 0,
+    unpriced:
+      totalRecords > 0
+        ? ((summaryRow.unpricedCount || 0) / totalRecords) * 100
+        : 0,
   };
 
-  const tokensPerActiveDay = activeDays > 0 ? Math.round(totalTokens / activeDays) : 0;
+  const tokensPerActiveDay =
+    activeDays > 0 ? Math.round(totalTokens / activeDays) : 0;
   const cachePercentage =
-    cacheReadTokens + inputTokens > 0 ? (cacheReadTokens / (cacheReadTokens + inputTokens)) * 100 : 0;
+    cacheReadTokens + inputTokens > 0
+      ? (cacheReadTokens / (cacheReadTokens + inputTokens)) * 100
+      : 0;
 
   const summary: UsageSummary = {
     totalCost,
@@ -498,7 +547,11 @@ export async function getUsageReportFromDb(
       ORDER BY cost DESC, tokens DESC
     `,
     )
-    .all(...params) as Array<{ provider: string; cost: number; tokens: number }>;
+    .all(...params) as Array<{
+    provider: string;
+    cost: number;
+    tokens: number;
+  }>;
 
   const providers: ProviderUsageSummary[] = providerRows.map((row) => {
     const share =
@@ -585,7 +638,10 @@ export async function getUsageReportFromDb(
         cur.setTime(end.getTime() - maxDailySpanMs);
       }
       let daysCount = 0;
-      while ((cur <= end || toLocalDateString(cur) === toLocalDateString(end)) && daysCount < 730) {
+      while (
+        (cur <= end || toLocalDateString(cur) === toLocalDateString(end)) &&
+        daysCount < 730
+      ) {
         const key = toLocalDateString(cur);
         if (!timeSeriesMap.has(key)) {
           timeSeriesMap.set(key, {
@@ -754,7 +810,9 @@ export async function getUsageReportFromDb(
   }));
 
   // Scan info
-  const totalSyncedRow = db.prepare("SELECT COUNT(*) as c FROM synced_files").get() as { c: number };
+  const totalSyncedRow = db
+    .prepare("SELECT COUNT(*) as c FROM synced_files")
+    .get() as { c: number };
   const inWindowSyncedRow = db
     .prepare(
       `
@@ -767,7 +825,10 @@ export async function getUsageReportFromDb(
 
   const transcriptsScanned = totalSyncedRow?.c ?? sessionFiles.length;
   const transcriptsInWindow = inWindowSyncedRow?.c ?? 0;
-  const transcriptsOutsideWindow = Math.max(0, transcriptsScanned - transcriptsInWindow);
+  const transcriptsOutsideWindow = Math.max(
+    0,
+    transcriptsScanned - transcriptsInWindow,
+  );
   const durationSeconds = Math.max(0.001, (Date.now() - startTime) / 1000);
 
   return {

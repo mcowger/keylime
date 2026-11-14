@@ -6,24 +6,50 @@ import { hostLinkSocket, type LinkSocketData } from "@/lib/hosts/hub";
 import { proxy } from "@/proxy";
 import { ensureOmpRunner } from "@/lib/omp/runner-fetch";
 import { register } from "../instrumentation.node";
-import { finalizeResponse, INDEX_CACHE, renderIndex, serveFile, stylesheetFirst } from "./http";
-import { dispatch, ROUTE_MODULES, routePattern, type ServerSocketData } from "./routes";
+import {
+  finalizeResponse,
+  INDEX_CACHE,
+  renderIndex,
+  serveFile,
+  stylesheetFirst,
+} from "./http";
+import {
+  dispatch,
+  ROUTE_MODULES,
+  routePattern,
+  type ServerSocketData,
+} from "./routes";
 
-export function parseListenArgs(argv: string[], defaultPort: number): { port: number; hostname: string } {
+export function parseListenArgs(
+  argv: string[],
+  defaultPort: number,
+): { port: number; hostname: string } {
   const { values } = parseArgs({
     args: argv,
-    options: { port: { type: "string", short: "p" }, hostname: { type: "string", short: "H" } },
+    options: {
+      port: { type: "string", short: "p" },
+      hostname: { type: "string", short: "H" },
+    },
   });
-  return { port: values.port === undefined ? defaultPort : Number(values.port), hostname: values.hostname ?? "127.0.0.1" };
+  return {
+    port: values.port === undefined ? defaultPort : Number(values.port),
+    hostname: values.hostname ?? "127.0.0.1",
+  };
 }
 
-const text = (body: string, status: number) => new Response(body, { status, headers: { "content-type": "text/plain; charset=utf-8" } });
+const text = (body: string, status: number) =>
+  new Response(body, {
+    status,
+    headers: { "content-type": "text/plain; charset=utf-8" },
+  });
 // Seconds; Bun's default, passed explicitly because handle() puts it back.
 const IDLE_TIMEOUT = 10;
 
 type ServerSocket = Bun.ServerWebSocket<ServerSocketData>;
 /** Browser links and host links share Bun's one `websocket` handler; `ws.data` tells them apart. */
-function isBrowserSocket(ws: ServerSocket): ws is Bun.ServerWebSocket<BrowserLinkData> {
+function isBrowserSocket(
+  ws: ServerSocket,
+): ws is Bun.ServerWebSocket<BrowserLinkData> {
   return "kind" in ws.data && ws.data.kind === "browser";
 }
 // Not a browser link: a host link (the only other upgrade).
@@ -51,7 +77,10 @@ function decodable(pathname: string): boolean {
 async function handle(
   request: Request,
   server: Bun.Server<ServerSocketData>,
-  respond: (context: { gate: "public" | "authenticated"; disableIdleTimeout: () => void }) => Response | undefined | Promise<Response | undefined>,
+  respond: (context: {
+    gate: "public" | "authenticated";
+    disableIdleTimeout: () => void;
+  }) => Response | undefined | Promise<Response | undefined>,
 ): Promise<Response | undefined> {
   let pathname: string;
   try {
@@ -62,7 +91,8 @@ async function handle(
   }
   const gate = proxy(request);
   if (gate instanceof Response) return finalizeResponse(request, gate);
-  if (!decodable(pathname)) return finalizeResponse(request, text("Bad Request", 400));
+  if (!decodable(pathname))
+    return finalizeResponse(request, text("Bad Request", 400));
   const lifted = gate === "authenticated" && pathname.startsWith("/api/");
   if (lifted) server.timeout(request, 0);
   let keepOpen = false;
@@ -77,14 +107,18 @@ async function handle(
       },
     });
   } finally {
-    if (keepOpen && response?.body) response = new Response(untilEnd(response.body, restore), response);
+    if (keepOpen && response?.body)
+      response = new Response(untilEnd(response.body, restore), response);
     else if (lifted || keepOpen) restore();
   }
   return response && finalizeResponse(request, response);
 }
 
 /** `body`, calling `end` once it is done, fails or is cancelled. */
-function untilEnd(body: ReadableStream<Uint8Array>, end: () => void): ReadableStream<Uint8Array> {
+function untilEnd(
+  body: ReadableStream<Uint8Array>,
+  end: () => void,
+): ReadableStream<Uint8Array> {
   const reader = body.getReader();
   return new ReadableStream({
     async pull(controller) {
@@ -119,28 +153,53 @@ async function devIndex(server: Bun.Server<ServerSocketData>): Promise<string> {
 }
 
 /** `worker`: the event-stream worker bundle (server/client-env.ts) dev serves from memory; prod serves dist/'s copy. */
-export function startServer(options: { port: number; hostname: string; dev: boolean; root: string; html?: Bun.HTMLBundle; worker?: string }): Bun.Server<ServerSocketData> {
+export function startServer(options: {
+  port: number;
+  hostname: string;
+  dev: boolean;
+  root: string;
+  html?: Bun.HTMLBundle;
+  worker?: string;
+}): Bun.Server<ServerSocketData> {
   const { dev, root, html, worker } = options;
   // Dev serves the SPA from the HTML import (`html`) and never reads dist/.
-  const index = dev ? null : readFileSync(path.join(root, "dist", "index.html"), "utf8");
+  const index = dev
+    ? null
+    : readFileSync(path.join(root, "dist", "index.html"), "utf8");
 
-  const routes: Record<string, Bun.HTMLBundle | ((request: Bun.BunRequest, server: Bun.Server<ServerSocketData>) => Promise<Response | undefined>)> = {};
+  const routes: Record<
+    string,
+    | Bun.HTMLBundle
+    | ((
+        request: Bun.BunRequest,
+        server: Bun.Server<ServerSocketData>,
+      ) => Promise<Response | undefined>)
+  > = {};
   for (const [key, mod] of Object.entries(ROUTE_MODULES)) {
     const { pattern, rest } = routePattern(key);
     const matcher = new URLPattern({ pathname: pattern });
-    routes[pattern] = (request, server) => handle(request, server, ({ disableIdleTimeout }) => {
-      // Bun's router matched the raw path, but the gate and the handler read request.url, where `..` and `%2e%2e`
-      // are resolved. Answer only when that path is still this route, so no gated route runs under an ungated path.
-      const { pathname } = new URL(request.url);
-      const groups = matcher.exec({ pathname })?.pathname.groups;
-      if (!groups) return text("Not Found", 404);
-      const params: Record<string, string | string[]> = {};
-      for (const [name, value] of Object.entries(groups)) {
-        if (name !== "0" && value !== undefined) params[name] = decodeURIComponent(value);
-      }
-      if (rest) params[rest.name] = pathname.split("/").slice(rest.index).filter(Boolean).map(decodeURIComponent);
-      return dispatch(mod, request, params, disableIdleTimeout, (data) => server.upgrade(request, { data }));
-    });
+    routes[pattern] = (request, server) =>
+      handle(request, server, ({ disableIdleTimeout }) => {
+        // Bun's router matched the raw path, but the gate and the handler read request.url, where `..` and `%2e%2e`
+        // are resolved. Answer only when that path is still this route, so no gated route runs under an ungated path.
+        const { pathname } = new URL(request.url);
+        const groups = matcher.exec({ pathname })?.pathname.groups;
+        if (!groups) return text("Not Found", 404);
+        const params: Record<string, string | string[]> = {};
+        for (const [name, value] of Object.entries(groups)) {
+          if (name !== "0" && value !== undefined)
+            params[name] = decodeURIComponent(value);
+        }
+        if (rest)
+          params[rest.name] = pathname
+            .split("/")
+            .slice(rest.index)
+            .filter(Boolean)
+            .map(decodeURIComponent);
+        return dispatch(mod, request, params, disableIdleTimeout, (data) =>
+          server.upgrade(request, { data }),
+        );
+      });
   }
   if (html) routes[DEV_INDEX] = html;
 
@@ -158,38 +217,70 @@ export function startServer(options: { port: number; hostname: string; dev: bool
       open: (ws: ServerSocket) => {
         if (isBrowserSocket(ws)) browserLink.open(ws);
       },
-      message: (ws: ServerSocket, data: string | Uint8Array) => (isBrowserSocket(ws) ? browserLink.message(ws, data) : hostLinkSocket.message(asLink(ws), data)),
-      drain: (ws: ServerSocket) => (isBrowserSocket(ws) ? browserLink.drain(ws) : hostLinkSocket.drain(asLink(ws))),
-      close: (ws: ServerSocket, code: number) => (isBrowserSocket(ws) ? browserLink.close(ws, code) : hostLinkSocket.close(asLink(ws))),
+      message: (ws: ServerSocket, data: string | Uint8Array) =>
+        isBrowserSocket(ws)
+          ? browserLink.message(ws, data)
+          : hostLinkSocket.message(asLink(ws), data),
+      drain: (ws: ServerSocket) =>
+        isBrowserSocket(ws)
+          ? browserLink.drain(ws)
+          : hostLinkSocket.drain(asLink(ws)),
+      close: (ws: ServerSocket, code: number) =>
+        isBrowserSocket(ws)
+          ? browserLink.close(ws, code)
+          : hostLinkSocket.close(asLink(ws)),
     },
     fetch: async (request, server) => {
       const response = await handle(request, server, async ({ gate }) => {
         const { pathname, search } = new URL(request.url);
         // No route matched: /x/ goes to /x as Next did. Leading slashes collapse, so //host/ never becomes //host.
         if (pathname.length > 1 && pathname.endsWith("/")) {
-          return new Response(null, { status: 308, headers: { location: `/${pathname.replace(/^\/+|\/+$/g, "")}${search}` } });
+          return new Response(null, {
+            status: 308,
+            headers: {
+              location: `/${pathname.replace(/^\/+|\/+$/g, "")}${search}`,
+            },
+          });
         }
         if (worker !== undefined && pathname === "/event-stream-worker.js") {
-          return new Response(worker, { headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-cache" } });
+          return new Response(worker, {
+            headers: {
+              "content-type": "text/javascript; charset=utf-8",
+              "cache-control": "no-cache",
+            },
+          });
         }
         const file = await serveFile(request, root, dev);
         if (file) return file;
         // Unknown extensionless page paths get the SPA too, but /api and its subpaths never do, and neither does a
         // miss under a gate-exempt path (only /login is public and a page).
-        const isPage = pathname === "/" || pathname === "/login" || (
-          gate === "authenticated"
-          && (request.method === "GET" || request.method === "HEAD")
-          && !/^\/api(\/|$)/.test(pathname)
-          && !pathname.slice(pathname.lastIndexOf("/") + 1).includes(".")
-        );
+        const isPage =
+          pathname === "/" ||
+          pathname === "/login" ||
+          (gate === "authenticated" &&
+            (request.method === "GET" || request.method === "HEAD") &&
+            !/^\/api(\/|$)/.test(pathname) &&
+            !pathname.slice(pathname.lastIndexOf("/") + 1).includes("."));
         if (!isPage) return text("Not Found", 404);
-        const shell = index ?? await devIndex(server);
-        return new Response(renderIndex(shell, request), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": INDEX_CACHE } });
+        const shell = index ?? (await devIndex(server));
+        return new Response(renderIndex(shell, request), {
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": INDEX_CACHE,
+          },
+        });
       });
       // Bun's HMR client runs each update as a blob: script; without it every edit in dev is a full reload.
       const csp = response?.headers.get("content-security-policy");
-      if (dev && csp && response?.headers.get("content-type")?.startsWith("text/html")) {
-        response.headers.set("content-security-policy", csp.replace("script-src ", "script-src blob: "));
+      if (
+        dev &&
+        csp &&
+        response?.headers.get("content-type")?.startsWith("text/html")
+      ) {
+        response.headers.set(
+          "content-security-policy",
+          csp.replace("script-src ", "script-src blob: "),
+        );
       }
       return response;
     },
@@ -201,22 +292,43 @@ export function startServer(options: { port: number; hostname: string; dev: bool
  * Run by server/main.ts and by the compiled binary (server/binary.ts) once NODE_ENV is "production". A taken port
  * prints why and exits 1.
  */
-export async function startProduction(listen: { port: number; hostname: string }): Promise<Bun.Server<ServerSocketData>> {
+export async function startProduction(listen: {
+  port: number;
+  hostname: string;
+}): Promise<Bun.Server<ServerSocketData>> {
   let server: Bun.Server<ServerSocketData>;
   try {
-    server = startServer({ ...listen, dev: false, root: process.env.OMP_WEB_PACKAGE_DIR ?? process.cwd() });
+    server = startServer({
+      ...listen,
+      dev: false,
+      root: process.env.OMP_WEB_PACKAGE_DIR ?? process.cwd(),
+    });
   } catch (error) {
     // The npm launcher checks the port first, but another process can take it before this bind.
-    if (!(error instanceof Error && "code" in error && error.code === "EADDRINUSE")) throw error;
-    console.error(`Port ${listen.port} on ${listen.hostname} is already in use: is ompweb already running? Otherwise stop the process using it or start ompweb with --port ${listen.port + 1}.`);
+    if (!(
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "EADDRINUSE"
+    ))
+      throw error;
+    console.error(
+      `Port ${listen.port} on ${listen.hostname} is already in use: is ompweb already running? Otherwise stop the process using it or start ompweb with --port ${listen.port + 1}.`,
+    );
     process.exit(1);
   }
   // The local daemon link (local-bootstrap.ts, run by register) and the update worker dial this address; set it here
   // so `npm start` (server/main.ts) links the daemon like the launcher and the binary do.
-  Object.assign(process.env, { OMP_WEB_PORT: String(server.port), OMP_WEB_HOSTNAME: listen.hostname });
+  Object.assign(process.env, {
+    OMP_WEB_PORT: String(server.port),
+    OMP_WEB_HOSTNAME: listen.hostname,
+  });
   await register();
   // In the background: the fetch can take minutes, and what needs omp reports OMP_NOT_FOUND until it lands.
-  void ensureOmpRunner().catch((error: unknown) => console.error(`[omp-web] ${error instanceof Error ? error.message : String(error)}`));
+  void ensureOmpRunner().catch((error: unknown) =>
+    console.error(
+      `[omp-web] ${error instanceof Error ? error.message : String(error)}`,
+    ),
+  );
   console.log(`[omp-web] Ready on ${server.url.origin}`);
   return server;
 }

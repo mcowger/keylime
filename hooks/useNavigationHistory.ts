@@ -47,7 +47,9 @@ export interface NavigationHistoryController {
  *                 id no longer resolves so navigation skips dead entries.
  */
 export function useNavigationHistory(): NavigationHistoryController {
-  const [history, setHistory] = useState<NavigationHistory>(createNavigationHistory);
+  const [history, setHistory] = useState<NavigationHistory>(
+    createNavigationHistory,
+  );
 
   // Synced in an effect (render-phase ref writes violate compiler rules) so
   // peek()/dropPeeked() stay dependency-stable for AppShell callbacks.
@@ -60,8 +62,14 @@ export function useNavigationHistory(): NavigationHistoryController {
     setHistory((prev) => pushNavigationEntry(prev, entry));
   }, []);
 
-  const peekBack = useCallback(() => peekNavigationEntry(historyRef.current, -1), []);
-  const peekForward = useCallback(() => peekNavigationEntry(historyRef.current, 1), []);
+  const peekBack = useCallback(
+    () => peekNavigationEntry(historyRef.current, -1),
+    [],
+  );
+  const peekForward = useCallback(
+    () => peekNavigationEntry(historyRef.current, 1),
+    [],
+  );
   const commitBack = useCallback(() => {
     setHistory((prev) => stepNavigationHistory(prev, -1));
   }, []);
@@ -75,15 +83,27 @@ export function useNavigationHistory(): NavigationHistoryController {
     setHistory((prev) => removeNavigationEntryAt(prev, prev.index + 1));
   }, []);
 
-  return useMemo(() => ({
-    canBack: canGoNavigationBack(history),
-    canForward: canGoNavigationForward(history),
-    record,
-    peekBack,
-    peekForward,
-    commitBack,
-    commitForward,
-    dropPeekedBack,
-    dropPeekedForward,
-  }), [history, record, peekBack, peekForward, commitBack, commitForward, dropPeekedBack, dropPeekedForward]);
+  return useMemo(
+    () => ({
+      canBack: canGoNavigationBack(history),
+      canForward: canGoNavigationForward(history),
+      record,
+      peekBack,
+      peekForward,
+      commitBack,
+      commitForward,
+      dropPeekedBack,
+      dropPeekedForward,
+    }),
+    [
+      history,
+      record,
+      peekBack,
+      peekForward,
+      commitBack,
+      commitForward,
+      dropPeekedBack,
+      dropPeekedForward,
+    ],
+  );
 }

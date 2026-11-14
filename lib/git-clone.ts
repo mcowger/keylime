@@ -6,7 +6,12 @@ export type CloneFrame =
   | { type: "done"; path: string }
   | { type: "cancelled"; path: string }
   | { type: "error"; error: string; code: string };
-export interface CloneProgress { cursor: number; reset: boolean; frames: CloneFrame[]; terminal: boolean }
+export interface CloneProgress {
+  cursor: number;
+  reset: boolean;
+  frames: CloneFrame[];
+  terminal: boolean;
+}
 const HTTPS_URL = /^https:\/\/[^\s/@]+(?:@[^\s/]+)?\/\S+$/;
 const SSH_URL = /^ssh:\/\/(?:[^\s/@]+@)?[^\s/]+\/\S+$/;
 // scp-like `user@host:path` / `alias:path`. A 2+ char host and no backslashes
@@ -19,10 +24,19 @@ const DIRECTORY_NAME = /^[A-Za-z0-9._-]+$/;
  *  or null when the URL is unsupported or yields no safe name. */
 export function cloneDirectoryName(url: string): string | null {
   const trimmed = url.trim();
-  if (!HTTPS_URL.test(trimmed) && !SSH_URL.test(trimmed) && !SCP_URL.test(trimmed)) return null;
+  if (
+    !HTTPS_URL.test(trimmed) &&
+    !SSH_URL.test(trimmed) &&
+    !SCP_URL.test(trimmed)
+  )
+    return null;
   const path = trimmed.replace(/[?#].*$/, "").replace(/\/+$/, "");
-  const name = path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf(":")) + 1).replace(/\.git$/, "");
-  return DIRECTORY_NAME.test(name) && name !== "." && name !== ".." ? name : null;
+  const name = path
+    .slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf(":")) + 1)
+    .replace(/\.git$/, "");
+  return DIRECTORY_NAME.test(name) && name !== "." && name !== ".."
+    ? name
+    : null;
 }
 
 const USER = String.raw`[A-Za-z0-9._-]+`;
@@ -31,7 +45,9 @@ const PORT = String.raw`(?::\d{1,5})?`;
 const SEGMENT = String.raw`(?!\.{1,2}(?:/|$))[A-Za-z0-9._~+-]+`;
 const PATH = String.raw`${SEGMENT}(?:/${SEGMENT})*/?`;
 const HTTPS_KEY = new RegExp(String.raw`^https://(${HOST})${PORT}/(${PATH})$`);
-const SSH_KEY = new RegExp(String.raw`^ssh://(?:${USER}@)?(${HOST})${PORT}/(${PATH})$`);
+const SSH_KEY = new RegExp(
+  String.raw`^ssh://(?:${USER}@)?(${HOST})${PORT}/(${PATH})$`,
+);
 const SCP_KEY = new RegExp(String.raw`^(?:${USER}@)?(${HOST}):/?(${PATH})$`);
 
 /** Same-repository identity `<host>/<path>`, or null. Strict allow-list: the whole trimmed URL must be
@@ -41,7 +57,8 @@ const SCP_KEY = new RegExp(String.raw`^(?:${USER}@)?(${HOST}):/?(${PATH})$`);
 export function repositoryKey(url: string): string | null {
   if (cloneDirectoryName(url) === null) return null;
   const trimmed = url.trim();
-  const match = HTTPS_KEY.exec(trimmed) ?? SSH_KEY.exec(trimmed) ?? SCP_KEY.exec(trimmed);
+  const match =
+    HTTPS_KEY.exec(trimmed) ?? SSH_KEY.exec(trimmed) ?? SCP_KEY.exec(trimmed);
   if (!match) return null;
   const path = match[2].replace(/\/$/, "").replace(/\.git$/, "");
   return path ? `${match[1].toLowerCase()}/${path}` : null;
@@ -59,7 +76,10 @@ export function appendProgress(log: string, chunk: string): string {
     const latest = segments[segments.length - 1] ?? "";
     return line.endsWith("\r") && latest ? `${latest}\r` : latest;
   });
-  const bounded = lines.slice(-MAX_PROGRESS_LINES).join("\n").slice(-MAX_PROGRESS_CHARS);
+  const bounded = lines
+    .slice(-MAX_PROGRESS_LINES)
+    .join("\n")
+    .slice(-MAX_PROGRESS_CHARS);
   const first = bounded.charCodeAt(0);
   return first >= 0xdc00 && first <= 0xdfff ? bounded.slice(1) : bounded;
 }

@@ -2,7 +2,8 @@ import "../tests/setup-dom.mjs";
 import assert from "node:assert/strict";
 import test, { afterEach, beforeEach } from "node:test";
 import React from "react";
-const { cleanup, render, screen } = await import("@testing-library/react/pure.js");
+const { cleanup, render, screen } =
+  await import("@testing-library/react/pure.js");
 const { default: userEvent } = await import("@testing-library/user-event");
 
 const { ChatInput } = await import("./ChatInput.tsx");
@@ -10,7 +11,11 @@ const enModule = await import("@/lib/i18n/locales/en.json");
 const en = enModule.default ?? enModule;
 
 beforeEach(() => {
-  window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  window.matchMedia = () => ({
+    matches: false,
+    addEventListener() {},
+    removeEventListener() {},
+  });
 });
 afterEach(() => {
   cleanup();
@@ -20,16 +25,25 @@ afterEach(() => {
 
 function renderSlow(props) {
   const changes = [];
-  render(React.createElement(ChatInput, {
-    async onSend() { return { status: "accepted" }; },
-    onAbort() {},
-    isStreaming: false,
-    slowModeSupported: true,
-    slowModeScope: "session",
-    onSlowModeChange: (enabled) => { changes.push(enabled); },
-    ...props,
-  }));
-  return { changes, button: screen.getByRole("button", { name: en["chatInput.slowLabel"] }) };
+  render(
+    React.createElement(ChatInput, {
+      async onSend() {
+        return { status: "accepted" };
+      },
+      onAbort() {},
+      isStreaming: false,
+      slowModeSupported: true,
+      slowModeScope: "session",
+      onSlowModeChange: (enabled) => {
+        changes.push(enabled);
+      },
+      ...props,
+    }),
+  );
+  return {
+    changes,
+    button: screen.getByRole("button", { name: en["chatInput.slowLabel"] }),
+  };
 }
 
 for (const enabled of [true, false]) {
@@ -44,7 +58,10 @@ for (const enabled of [true, false]) {
 
 test("the Slow toggle is disabled and inert while a run streams", async () => {
   const user = userEvent.setup();
-  const { changes, button } = renderSlow({ slowModeEnabled: false, isStreaming: true });
+  const { changes, button } = renderSlow({
+    slowModeEnabled: false,
+    isStreaming: true,
+  });
   assert.equal(button.disabled, true);
   await user.click(button);
   assert.deepEqual(changes, []);

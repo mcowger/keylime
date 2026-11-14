@@ -1,17 +1,32 @@
 import { readFile } from "node:fs/promises";
 import { fetchMediaFromHosts } from "@/lib/hosts/session-index";
-import { createThumbnail, existingThumbnail, imageMimeType, mediaFilePath, storeMediaCopy } from "@/lib/media-cache";
+import {
+  createThumbnail,
+  existingThumbnail,
+  imageMimeType,
+  mediaFilePath,
+  storeMediaCopy,
+} from "@/lib/media-cache";
 
 function image(body: Uint8Array, type: string, immutable = true): Response {
   // A view, not a copy: these buffers come from readFile/Bun.Image, never a SharedArrayBuffer.
-  return new Response(new Uint8Array(body.buffer as ArrayBuffer, body.byteOffset, body.byteLength), {
-    headers: {
-      "Content-Type": type,
-      // Content-addressed: the bytes behind a hash never change.
-      "Cache-Control": immutable ? "private, max-age=31536000, immutable" : "private, no-cache",
-      "X-Content-Type-Options": "nosniff",
+  return new Response(
+    new Uint8Array(
+      body.buffer as ArrayBuffer,
+      body.byteOffset,
+      body.byteLength,
+    ),
+    {
+      headers: {
+        "Content-Type": type,
+        // Content-addressed: the bytes behind a hash never change.
+        "Cache-Control": immutable
+          ? "private, max-age=31536000, immutable"
+          : "private, no-cache",
+        "X-Content-Type-Options": "nosniff",
+      },
     },
-  });
+  );
 }
 
 async function readIfPresent(file: string): Promise<Buffer | null> {
@@ -24,7 +39,10 @@ async function readIfPresent(file: string): Promise<Buffer | null> {
 }
 
 /** GET /api/media/<sha256>[?thumb=1] — a tool-result image, or its small WebP preview. */
-export async function GET(req: Request, { params }: { params: Promise<{ hash: string }> }) {
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ hash: string }> },
+) {
   const { hash } = await params;
   const thumb = new URL(req.url).searchParams.has("thumb");
   const cached = thumb ? existingThumbnail(hash) : null;
@@ -41,7 +59,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ hash: st
   }
   // A remote session's image: ask the linked hosts (only bytes that hash to `hash` come back).
   const remote = bytes ? null : await fetchMediaFromHosts(hash);
-  if (remote) bytes = Buffer.from(remote.buffer, remote.byteOffset, remote.byteLength);
+  if (remote)
+    bytes = Buffer.from(remote.buffer, remote.byteOffset, remote.byteLength);
   if (!bytes) return new Response("Not found", { status: 404 });
   const type = imageMimeType(bytes);
   if (!type) return new Response("Not an image", { status: 415 });

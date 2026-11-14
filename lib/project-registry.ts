@@ -1,4 +1,14 @@
-import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync, type Stats } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+  type Stats,
+} from "fs";
 import { homedir } from "os";
 import { isAbsolute, resolve } from "path";
 import { comparableProjectPath } from "./comparable-path";
@@ -43,7 +53,10 @@ export interface ProjectPresentationUpdate {
 }
 
 /** Presentation changes never inspect or modify the project's filesystem. */
-export function applyProjectPresentation<T extends ProjectPresentationUpdate>(project: T, update: ProjectPresentationUpdate): T {
+export function applyProjectPresentation<T extends ProjectPresentationUpdate>(
+  project: T,
+  update: ProjectPresentationUpdate,
+): T {
   const next = { ...project };
   if (update.alias !== undefined) {
     const alias = update.alias?.trim();
@@ -52,7 +65,8 @@ export function applyProjectPresentation<T extends ProjectPresentationUpdate>(pr
   }
   for (const field of ["sortOrder", "pinOrder", "launchConfig"] as const) {
     if (update[field] === null) delete next[field];
-    else if (update[field] !== undefined) Object.assign(next, { [field]: update[field] });
+    else if (update[field] !== undefined)
+      Object.assign(next, { [field]: update[field] });
   }
   return next;
 }
@@ -88,15 +102,31 @@ function canonicalProjectPath(value: string): string {
  *  boundary (`--cwd`/`--resume`/`--profile`) or the rpc-ui mode. `--profile`
  *  is reserved too: it would bypass the validated `profile` field and could
  *  hand omp a name it rejects, failing every session in the workspace. */
-const RESERVED_LAUNCH_ARGS: Record<string, true> = { "--mode": true, "rpc-ui": true, "--cwd": true, "--resume": true, "--profile": true };
-const RESERVED_LAUNCH_ARG_PREFIXES = ["--mode=", "--cwd=", "--resume=", "--profile="];
+const RESERVED_LAUNCH_ARGS: Record<string, true> = {
+  "--mode": true,
+  "rpc-ui": true,
+  "--cwd": true,
+  "--resume": true,
+  "--profile": true,
+};
+const RESERVED_LAUNCH_ARG_PREFIXES = [
+  "--mode=",
+  "--cwd=",
+  "--resume=",
+  "--profile=",
+];
 export function isReservedLaunchArg(arg: string): boolean {
-  return RESERVED_LAUNCH_ARGS[arg] === true || RESERVED_LAUNCH_ARG_PREFIXES.some((prefix) => arg.startsWith(prefix));
+  return (
+    RESERVED_LAUNCH_ARGS[arg] === true ||
+    RESERVED_LAUNCH_ARG_PREFIXES.some((prefix) => arg.startsWith(prefix))
+  );
 }
 
 /** Preserve stored strings so invalid legacy configurations can be corrected,
  * rather than silently changing the profile or leaving orphaned arguments. */
-function parseLaunchConfig(item: Record<string, unknown>): ProjectLaunchConfig | undefined {
+function parseLaunchConfig(
+  item: Record<string, unknown>,
+): ProjectLaunchConfig | undefined {
   const raw = item.launchConfig;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const value = raw as Record<string, unknown>;
@@ -105,7 +135,12 @@ function parseLaunchConfig(item: Record<string, unknown>): ProjectLaunchConfig |
   const extraArgs = Array.isArray(value.extraArgs)
     ? value.extraArgs.filter((arg): arg is string => typeof arg === "string")
     : undefined;
-  if (profile === undefined && advisor === undefined && (!extraArgs || extraArgs.length === 0)) return undefined;
+  if (
+    profile === undefined &&
+    advisor === undefined &&
+    (!extraArgs || extraArgs.length === 0)
+  )
+    return undefined;
   return { profile, advisor, extraArgs };
 }
 
@@ -114,21 +149,42 @@ function parseLaunchConfig(item: Record<string, unknown>): ProjectLaunchConfig |
 export function parseProjectRegistry(raw: string): ProjectRegistryFile {
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return EMPTY_REGISTRY;
-    if (!("projects" in parsed) || !Array.isArray(parsed.projects)) return EMPTY_REGISTRY;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      return EMPTY_REGISTRY;
+    if (!("projects" in parsed) || !Array.isArray(parsed.projects))
+      return EMPTY_REGISTRY;
     const entries: ProjectRegistryEntry[] = [];
     for (const item of parsed.projects) {
       if (!item || typeof item !== "object" || Array.isArray(item)) continue;
-      if (!("path" in item) || typeof item.path !== "string" || !item.path.trim()) continue;
+      if (
+        !("path" in item) ||
+        typeof item.path !== "string" ||
+        !item.path.trim()
+      )
+        continue;
       entries.push({
         path: canonicalProjectPath(item.path.trim()),
-        addedAt: "addedAt" in item && typeof item.addedAt === "string"
-          ? item.addedAt
-          : new Date(0).toISOString(),
+        addedAt:
+          "addedAt" in item && typeof item.addedAt === "string"
+            ? item.addedAt
+            : new Date(0).toISOString(),
         hidden: "hidden" in item && item.hidden === true,
-        alias: "alias" in item && typeof item.alias === "string" && item.alias.trim() ? item.alias.trim() : undefined,
-        sortOrder: "sortOrder" in item && typeof item.sortOrder === "number" && Number.isFinite(item.sortOrder) ? item.sortOrder : undefined,
-        pinOrder: "pinOrder" in item && typeof item.pinOrder === "number" && Number.isFinite(item.pinOrder) ? item.pinOrder : undefined,
+        alias:
+          "alias" in item && typeof item.alias === "string" && item.alias.trim()
+            ? item.alias.trim()
+            : undefined,
+        sortOrder:
+          "sortOrder" in item &&
+          typeof item.sortOrder === "number" &&
+          Number.isFinite(item.sortOrder)
+            ? item.sortOrder
+            : undefined,
+        pinOrder:
+          "pinOrder" in item &&
+          typeof item.pinOrder === "number" &&
+          Number.isFinite(item.pinOrder)
+            ? item.pinOrder
+            : undefined,
         launchConfig: parseLaunchConfig(item as Record<string, unknown>),
       });
     }
@@ -177,12 +233,21 @@ export function upsertProject(
 ): ProjectRegistryFile {
   const canonical = canonicalProjectPath(path);
   const key = comparableProjectPath(canonical);
-  const existing = registry.projects.find((p) => comparableProjectPath(p.path) === key);
-  const projects = registry.projects.filter((p) => comparableProjectPath(p.path) !== key);
+  const existing = registry.projects.find(
+    (p) => comparableProjectPath(p.path) === key,
+  );
+  const projects = registry.projects.filter(
+    (p) => comparableProjectPath(p.path) !== key,
+  );
   // An omitted launchConfig preserves the stored one: re-adding a workspace
   // (e.g. un-hiding) without config must not wipe it. Explicit clear goes
   // through PATCH with null.
-  projects.push({ path: canonical, addedAt: now, hidden: false, launchConfig: launchConfig ?? existing?.launchConfig });
+  projects.push({
+    path: canonical,
+    addedAt: now,
+    hidden: false,
+    launchConfig: launchConfig ?? existing?.launchConfig,
+  });
   return { version: 1, projects };
 }
 
@@ -195,9 +260,15 @@ export function updateProjectsPresentation(
   registry: ProjectRegistryFile,
   updates: ReadonlyArray<ProjectPresentationUpdate & { path: string }>,
 ): ProjectRegistryFile {
-  const keyed = new Map(updates.map((update) =>
-    [comparableProjectPath(canonicalProjectPath(update.path)), update] as const,
-  ));
+  const keyed = new Map(
+    updates.map(
+      (update) =>
+        [
+          comparableProjectPath(canonicalProjectPath(update.path)),
+          update,
+        ] as const,
+    ),
+  );
   return {
     version: 1,
     projects: registry.projects.map((project) => {
@@ -208,15 +279,24 @@ export function updateProjectsPresentation(
   };
 }
 
-export function hideProject(registry: ProjectRegistryFile, path: string): ProjectRegistryFile {
+export function hideProject(
+  registry: ProjectRegistryFile,
+  path: string,
+): ProjectRegistryFile {
   const canonical = canonicalProjectPath(path);
   const key = comparableProjectPath(canonical);
-  const existing = registry.projects.some((p) => comparableProjectPath(p.path) === key);
+  const existing = registry.projects.some(
+    (p) => comparableProjectPath(p.path) === key,
+  );
   const projects = registry.projects.map((p) =>
     comparableProjectPath(p.path) === key ? { ...p, hidden: true } : p,
   );
   if (!existing) {
-    projects.push({ path: canonical, addedAt: new Date().toISOString(), hidden: true });
+    projects.push({
+      path: canonical,
+      addedAt: new Date().toISOString(),
+      hidden: true,
+    });
   }
   return { version: 1, projects };
 }
@@ -233,7 +313,9 @@ export function mergeProjects(
   canonical: (path: string) => string = canonicalProjectPath,
 ): ManagedProject[] {
   const hidden = new Set(
-    registry.projects.filter((p) => p.hidden).map((p) => comparableProjectPath(p.path)),
+    registry.projects
+      .filter((p) => p.hidden)
+      .map((p) => comparableProjectPath(p.path)),
   );
   const registered: ManagedProject[] = [];
   const registeredSeen = new Set<string>();
@@ -248,13 +330,21 @@ export function mergeProjects(
     const key = comparableProjectPath(p.path);
     if (registeredSeen.has(key)) continue; // tolerate hand-edited duplicates
     registeredSeen.add(key);
-    registered.push({ path: p.path, addedAt: p.addedAt, alias: p.alias, sortOrder: p.sortOrder, pinOrder: p.pinOrder, launchConfig: p.launchConfig });
+    registered.push({
+      path: p.path,
+      addedAt: p.addedAt,
+      alias: p.alias,
+      sortOrder: p.sortOrder,
+      pinOrder: p.pinOrder,
+      launchConfig: p.launchConfig,
+    });
   }
   const extra: ManagedProject[] = [];
   const extraSeen = new Set<string>();
   for (const raw of new Set([...discovered].filter(Boolean).map(canonical))) {
     const key = comparableProjectPath(raw);
-    if (hidden.has(key) || registeredSeen.has(key) || extraSeen.has(key)) continue;
+    if (hidden.has(key) || registeredSeen.has(key) || extraSeen.has(key))
+      continue;
     extraSeen.add(key);
     extra.push({ path: raw });
   }
@@ -282,10 +372,16 @@ export function validateProjectPath(cwd: string): string {
   try {
     stat = statSync(normalized);
   } catch {
-    throw new ProjectPathError("directory_not_found", `Directory does not exist: ${cwd}`);
+    throw new ProjectPathError(
+      "directory_not_found",
+      `Directory does not exist: ${cwd}`,
+    );
   }
   if (!stat.isDirectory()) {
-    throw new ProjectPathError("not_a_directory", `Path is not a directory: ${cwd}`);
+    throw new ProjectPathError(
+      "not_a_directory",
+      `Path is not a directory: ${cwd}`,
+    );
   }
   return normalized;
 }

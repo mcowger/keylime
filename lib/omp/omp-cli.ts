@@ -13,7 +13,11 @@ import { getAgentDir } from "./paths";
 
 let cachedBin: string | null = null;
 let binMissAt = 0;
-let cachedVersion: { fingerprint: string; value: string; expiresAt: number } | null = null;
+let cachedVersion: {
+  fingerprint: string;
+  value: string;
+  expiresAt: number;
+} | null = null;
 let versionMiss: { fingerprint: string | null; retryAt: number } | null = null;
 let versionProbe: Promise<string | null> | null = null;
 
@@ -37,7 +41,9 @@ export function fetchedOmpBin(): string {
 /** A source checkout builds its runner (`bun runner/scripts/build-binary.ts`) instead of fetching one. */
 export function sourceCheckoutOmpBin(): string | null {
   const packageDir = process.env.OMP_WEB_PACKAGE_DIR ?? process.cwd();
-  return existsSync(join(packageDir, "runner", "package.json")) ? join(packageDir, "runner", "release", OMP_RUNNER_ASSET) : null;
+  return existsSync(join(packageDir, "runner", "package.json"))
+    ? join(packageDir, "runner", "release", OMP_RUNNER_ASSET)
+    : null;
 }
 
 function probeOmpBin(): string | null {
@@ -48,7 +54,8 @@ function probeOmpBin(): string | null {
 }
 
 /** What every caller that needs omp reports when resolveOmpBin finds none. */
-export const OMP_NOT_FOUND = "ompweb's omp binary (ompweb-omp) not found. Reinstall ompweb or set OMP_WEB_OMP_BIN.";
+export const OMP_NOT_FOUND =
+  "ompweb's omp binary (ompweb-omp) not found. Reinstall ompweb or set OMP_WEB_OMP_BIN.";
 
 /** Resolve ompweb's omp binary: OMP_WEB_OMP_BIN override, else the source checkout's build or the fetched runner
  * (see probeOmpBin). Returns null when none exists. A hit is cached while the file exists; a miss is re-probed after
@@ -85,7 +92,14 @@ export function versionFingerprint(bin: string): string | null {
   try {
     const target = realpathSync(bin);
     const stat = statSync(target, { bigint: true });
-    return [target, stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");
+    return [
+      target,
+      stat.dev,
+      stat.ino,
+      stat.size,
+      stat.mtimeNs,
+      stat.ctimeNs,
+    ].join(":");
   } catch {
     return null;
   }
@@ -95,10 +109,15 @@ async function probeOmpVersion(): Promise<string | null> {
   const bin = resolveOmpBin();
   const fingerprint = bin ? versionFingerprint(bin) : null;
   const now = Date.now();
-  if (fingerprint && cachedVersion?.fingerprint === fingerprint && now < cachedVersion.expiresAt) {
+  if (
+    fingerprint &&
+    cachedVersion?.fingerprint === fingerprint &&
+    now < cachedVersion.expiresAt
+  ) {
     return cachedVersion.value;
   }
-  if (versionMiss?.fingerprint === fingerprint && now < versionMiss.retryAt) return null;
+  if (versionMiss?.fingerprint === fingerprint && now < versionMiss.retryAt)
+    return null;
   cachedVersion = null;
   if (!bin) {
     versionMiss = { fingerprint, retryAt: now + MISS_TTL_MS };
@@ -108,17 +127,26 @@ async function probeOmpVersion(): Promise<string | null> {
     const output = await new Promise<string>((resolve, reject) => {
       // Without an explicit env this probe would inherit the server's full
       // environment, including omp-web's own secrets, into the child.
-      execFile(bin, ["--version"], { timeout: 30_000, env: createChildProcessEnvironment() }, (error, stdout) => {
-        if (error) reject(error);
-        else resolve(stdout);
-      });
+      execFile(
+        bin,
+        ["--version"],
+        { timeout: 30_000, env: createChildProcessEnvironment() },
+        (error, stdout) => {
+          if (error) reject(error);
+          else resolve(stdout);
+        },
+      );
     });
     const version = output.trim();
     if (version) {
       versionMiss = null;
       // Do not cache a probe across an executable replacement.
       if (fingerprint && versionFingerprint(bin) === fingerprint) {
-        cachedVersion = { fingerprint, value: version, expiresAt: Date.now() + VERSION_TTL_MS };
+        cachedVersion = {
+          fingerprint,
+          value: version,
+          expiresAt: Date.now() + VERSION_TTL_MS,
+        };
       }
       return version;
     }

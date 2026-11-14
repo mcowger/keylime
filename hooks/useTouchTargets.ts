@@ -29,13 +29,17 @@ export function storedTouchTargetsPreference(): TouchTargetsPreference {
   if (typeof window === "undefined") return DEFAULT_TOUCH_TARGETS;
   try {
     const value = localStorage.getItem(STORAGE_KEY);
-    return value && Object.hasOwn(VALID_TOUCH_TARGETS, value) ? (value as TouchTargetsPreference) : DEFAULT_TOUCH_TARGETS;
+    return value && Object.hasOwn(VALID_TOUCH_TARGETS, value)
+      ? (value as TouchTargetsPreference)
+      : DEFAULT_TOUCH_TARGETS;
   } catch {
     return DEFAULT_TOUCH_TARGETS;
   }
 }
 
-export function nextTouchTargetsPreference(current: TouchTargetsPreference): TouchTargetsPreference {
+export function nextTouchTargetsPreference(
+  current: TouchTargetsPreference,
+): TouchTargetsPreference {
   switch (current) {
     case "auto":
       return "compact";
@@ -58,13 +62,19 @@ export function applyTouchTargets(preference: TouchTargetsPreference): void {
     } catch {
       // Storage selection remains usable when localStorage is unavailable.
     }
-    window.dispatchEvent(new CustomEvent(TOUCH_TARGETS_CHANGE_EVENT, { detail: preference }));
+    window.dispatchEvent(
+      new CustomEvent(TOUCH_TARGETS_CHANGE_EVENT, { detail: preference }),
+    );
   }
   notifyListeners();
 }
 
 export function useTouchTargets() {
-  const touchTargets = useSyncExternalStore(subscribe, storedTouchTargetsPreference, () => DEFAULT_TOUCH_TARGETS);
+  const touchTargets = useSyncExternalStore(
+    subscribe,
+    storedTouchTargetsPreference,
+    () => DEFAULT_TOUCH_TARGETS,
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;

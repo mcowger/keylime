@@ -1,9 +1,17 @@
-import { closeSttJob, getSttJob, readSttConfig, retrySttJob } from "@/lib/stt-jobs";
+import {
+  closeSttJob,
+  getSttJob,
+  readSttConfig,
+  retrySttJob,
+} from "@/lib/stt-jobs";
 
 type Params = { params: Promise<{ jobId: string }> };
 
 const notFound = () =>
-  Response.json({ error: "Transcription job not found", code: "stt_job_not_found" }, { status: 404 });
+  Response.json(
+    { error: "Transcription job not found", code: "stt_job_not_found" },
+    { status: 404 },
+  );
 
 /**
  * GET /api/stt/[jobId] — { id, status: "pending" | "done" | "error" | "gone", error? },
@@ -21,12 +29,22 @@ export async function GET(_req: Request, { params }: Params) {
 export async function POST(req: Request, { params }: Params) {
   const config = readSttConfig();
   if (!config) {
-    return Response.json({ error: "STT not configured. Set OMP_WEB_STT_ENDPOINT or OMP_WEB_STT_MODEL." }, { status: 501 });
+    return Response.json(
+      {
+        error:
+          "STT not configured. Set OMP_WEB_STT_ENDPOINT or OMP_WEB_STT_MODEL.",
+      },
+      { status: 501 },
+    );
   }
-  const owner = new URL(req.url).searchParams.get("owner")?.slice(0, 128) || undefined;
+  const owner =
+    new URL(req.url).searchParams.get("owner")?.slice(0, 128) || undefined;
   const job = retrySttJob(config, (await params).jobId, owner);
   if (job === "busy") {
-    return Response.json({ error: "Too many transcriptions in progress", code: "stt_busy" }, { status: 429 });
+    return Response.json(
+      { error: "Too many transcriptions in progress", code: "stt_busy" },
+      { status: 429 },
+    );
   }
   return job ? Response.json(job) : notFound();
 }

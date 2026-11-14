@@ -53,14 +53,18 @@ function isExecutableFile(candidate: string): boolean {
 // Locate an executable on the caller's PATH.
 function which(name: string): string | null {
   for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
-    if (dir && isExecutableFile(path.join(dir, name))) return path.join(dir, name);
+    if (dir && isExecutableFile(path.join(dir, name)))
+      return path.join(dir, name);
   }
   return null;
 }
 
 // Escape a value for embedding in plist XML.
 function xmlEscape(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 // Run launchctl; by default a failure is fatal.
@@ -108,7 +112,9 @@ function install(pkgArg?: string): void {
     "/bin",
     "/usr/sbin",
     "/sbin",
-  ].filter((dir, i, all) => all.indexOf(dir) === i).join(path.delimiter);
+  ]
+    .filter((dir, i, all) => all.indexOf(dir) === i)
+    .join(path.delimiter);
 
   // Environment baked into the service; optional entries only when set.
   const env: Record<string, string> = {
@@ -121,7 +127,10 @@ function install(pkgArg?: string): void {
     ...(agentDir ? { PI_CODING_AGENT_DIR: agentDir } : {}),
   };
   const envXml = Object.entries(env)
-    .map(([key, value]) => `    <key>${xmlEscape(key)}</key><string>${xmlEscape(value)}</string>`)
+    .map(
+      ([key, value]) =>
+        `    <key>${xmlEscape(key)}</key><string>${xmlEscape(value)}</string>`,
+    )
     .join("\n");
 
   const plist = `<?xml version="1.0" encoding="UTF-8"?>
@@ -163,7 +172,10 @@ ${envXml}
   console.log(`package:   ${pkg} (via bunx --bun)`);
   console.log(`url:       http://${hostname}:${port}`);
   console.log(`logs:      ${path.join(LOG_DIR, "ompweb.log")}`);
-  if (passwordHash) console.log("note:      the password hash is stored in the plist (mode 600)");
+  if (passwordHash)
+    console.log(
+      "note:      the password hash is stored in the plist (mode 600)",
+    );
 }
 
 function uninstall(): void {
@@ -173,9 +185,13 @@ function uninstall(): void {
 }
 
 function status(): void {
-  const result = spawnSync("launchctl", ["print", `${DOMAIN}/${LABEL}`], { encoding: "utf8" });
+  const result = spawnSync("launchctl", ["print", `${DOMAIN}/${LABEL}`], {
+    encoding: "utf8",
+  });
   if (result.status === 0) {
-    const lines = (result.stdout ?? "").split("\n").filter((line) => /\b(state|pid|last exit)\b/.test(line));
+    const lines = (result.stdout ?? "")
+      .split("\n")
+      .filter((line) => /\b(state|pid|last exit)\b/.test(line));
     console.log(lines.join("\n") || (result.stdout ?? "").trim());
     return;
   }
@@ -190,6 +206,8 @@ if (command === "install") install(process.argv[3]);
 else if (command === "uninstall") uninstall();
 else if (command === "status") status();
 else {
-  console.error("usage: ompweb-launchd [install [package-spec]|uninstall|status]");
+  console.error(
+    "usage: ompweb-launchd [install [package-spec]|uninstall|status]",
+  );
   process.exit(2);
 }

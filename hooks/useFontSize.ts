@@ -8,7 +8,12 @@ export const STORAGE_KEY = "omp-font-size";
 export const DEFAULT_FONT_SIZE: FontSizePreference = "md";
 export const FONT_SIZE_CHANGE_EVENT = "omp-font-size-change";
 
-const VALID_FONT_SIZES: ReadonlySet<string> = new Set<FontSizePreference>(["sm", "md", "lg", "xl"]);
+const VALID_FONT_SIZES: ReadonlySet<string> = new Set<FontSizePreference>([
+  "sm",
+  "md",
+  "lg",
+  "xl",
+]);
 
 const listeners = new Set<() => void>();
 
@@ -25,7 +30,9 @@ export function storedFontSizePreference(): FontSizePreference {
   if (typeof window === "undefined") return DEFAULT_FONT_SIZE;
   try {
     const value = localStorage.getItem(STORAGE_KEY);
-    return value && VALID_FONT_SIZES.has(value) ? (value as FontSizePreference) : DEFAULT_FONT_SIZE;
+    return value && VALID_FONT_SIZES.has(value)
+      ? (value as FontSizePreference)
+      : DEFAULT_FONT_SIZE;
   } catch {
     return DEFAULT_FONT_SIZE;
   }
@@ -46,7 +53,9 @@ export function resolveFontSizePx(preference: FontSizePreference): number {
   }
 }
 
-export function nextFontSizePreference(current: FontSizePreference): FontSizePreference {
+export function nextFontSizePreference(
+  current: FontSizePreference,
+): FontSizePreference {
   switch (current) {
     case "sm":
       return "md";
@@ -71,7 +80,9 @@ export function applyFontSize(preference: FontSizePreference): void {
     } catch {
       // Storage selection remains usable when localStorage is unavailable.
     }
-    window.dispatchEvent(new CustomEvent(FONT_SIZE_CHANGE_EVENT, { detail: preference }));
+    window.dispatchEvent(
+      new CustomEvent(FONT_SIZE_CHANGE_EVENT, { detail: preference }),
+    );
   }
   notifyListeners();
 }
@@ -81,7 +92,11 @@ function getServerSnapshot(): FontSizePreference {
 }
 
 export function useFontSize() {
-  const fontSize = useSyncExternalStore(subscribe, storedFontSizePreference, getServerSnapshot);
+  const fontSize = useSyncExternalStore(
+    subscribe,
+    storedFontSizePreference,
+    getServerSnapshot,
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;

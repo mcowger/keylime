@@ -1,4 +1,9 @@
-import { apiErrorResponse, hostOfflineResponse, opErrorResponse, resolveSessionHostOr404 } from "@/lib/api-utils";
+import {
+  apiErrorResponse,
+  hostOfflineResponse,
+  opErrorResponse,
+  resolveSessionHostOr404,
+} from "@/lib/api-utils";
 import { HostOpError } from "@/lib/hosts/link-protocol";
 import { invalidateHostSessionList } from "@/lib/hosts/session-index";
 import { clearExitedRpcSession, getRpcSession } from "@/lib/rpc-manager";
@@ -17,10 +22,15 @@ export async function POST(
     // Parent-session paths are native branch metadata. Moving only a parent
     // would leave active children pointing at a path that no longer exists,
     // flattening their tree in the sidebar. Archive leaves first instead.
-    const hasChildren = (await sessionOps.listSessions()).some((session) => session.parentSessionId === id);
+    const hasChildren = (await sessionOps.listSessions()).some(
+      (session) => session.parentSessionId === id,
+    );
     if (hasChildren) {
       return Response.json(
-        { error: "Archive child sessions before archiving this session", code: "session_has_children" },
+        {
+          error: "Archive child sessions before archiving this session",
+          code: "session_has_children",
+        },
         { status: 409 },
       );
     }
@@ -31,15 +41,23 @@ export async function POST(
     const offline = hostOfflineResponse(resolved.host);
     if (offline) return offline;
     const live = getRpcSession(id);
-    if (!live?.hostOwnedLifecycle) await live?.destroyAndWait?.("archive", true);
+    if (!live?.hostOwnedLifecycle)
+      await live?.destroyAndWait?.("archive", true);
     const result = await sessionOps.archiveSession(id);
     if (!result.ok) return opErrorResponse(result);
     invalidateHostSessionList(resolved.host.id);
     clearExitedRpcSession(id);
-    return Response.json({ ok: true, archived: true, archivedPath: result.value.archivedPath });
+    return Response.json({
+      ok: true,
+      archived: true,
+      archivedPath: result.value.archivedPath,
+    });
   } catch (error) {
     if (error instanceof HostOpError) return apiErrorResponse(error);
     const message = error instanceof Error ? error.message : String(error);
-    return Response.json({ error: message, code: "session_archive_failed" }, { status: 500 });
+    return Response.json(
+      { error: message, code: "session_archive_failed" },
+      { status: 500 },
+    );
   }
 }

@@ -69,7 +69,8 @@ export interface ToolCallContent {
   input: Record<string, unknown>;
 }
 
-export type AssistantContentBlock = TextContent | ImageContent | ThinkingContent | ToolCallContent;
+export type AssistantContentBlock =
+  TextContent | ImageContent | ThinkingContent | ToolCallContent;
 
 export interface UserMessage {
   role: "user";
@@ -211,7 +212,8 @@ export interface UiApprovalPrompt {
   grants?: { scope: "folder" | "target"; label: string; alwaysLabel: string }[];
 }
 
-export type UiApprovalAnswer = "once" | "session" | "deny" | { grant: "folder" | "target"; always: boolean };
+export type UiApprovalAnswer =
+  "once" | "session" | "deny" | { grant: "folder" | "target"; always: boolean };
 
 /** omp's `ExtensionAskDialogSubmitResult`. */
 export interface UiAskDialogResult {
@@ -232,31 +234,83 @@ export interface UiFormDialogResult {
 }
 
 /** What an omp dialog method returns; a cancel sends no value. */
-export type UiDialogValue = string | boolean | UiAskDialogResult | UiFormDialogResult | UiApprovalAnswer;
+export type UiDialogValue =
+  string | boolean | UiAskDialogResult | UiFormDialogResult | UiApprovalAnswer;
 
 /**
  * A dialog the runner opened: `method` is omp's `ExtensionUIContext` method, `args` its positional
  * arguments. omp-web's own confirms carry string ids. `expiresAt` (epoch ms) is set when it times out.
  */
-export type UiDialogRequest = { type: "ui_request"; id: number | string; expiresAt?: number } & (
-  | { method: "select"; args: [title: string, options: UiSelectItem[], dialogOptions?: UiDialogOptionsArg] }
-  | { method: "confirm"; args: [title: string, message: string, dialogOptions?: UiDialogOptionsArg] }
-  | { method: "input"; args: [title: string, placeholder?: string | null, dialogOptions?: UiDialogOptionsArg] }
+export type UiDialogRequest = {
+  type: "ui_request";
+  id: number | string;
+  expiresAt?: number;
+} & (
+  | {
+      method: "select";
+      args: [
+        title: string,
+        options: UiSelectItem[],
+        dialogOptions?: UiDialogOptionsArg,
+      ];
+    }
+  | {
+      method: "confirm";
+      args: [
+        title: string,
+        message: string,
+        dialogOptions?: UiDialogOptionsArg,
+      ];
+    }
+  | {
+      method: "input";
+      args: [
+        title: string,
+        placeholder?: string | null,
+        dialogOptions?: UiDialogOptionsArg,
+      ];
+    }
   | {
       method: "editor";
-      args: [title: string, prefill?: string | null, dialogOptions?: UiDialogOptionsArg, editorOptions?: { promptStyle?: boolean } | null];
+      args: [
+        title: string,
+        prefill?: string | null,
+        dialogOptions?: UiDialogOptionsArg,
+        editorOptions?: { promptStyle?: boolean } | null,
+      ];
     }
-  | { method: "askDialog"; args: [questions: RpcAskDialogQuestion[], dialogOptions?: UiDialogOptionsArg] }
+  | {
+      method: "askDialog";
+      args: [
+        questions: RpcAskDialogQuestion[],
+        dialogOptions?: UiDialogOptionsArg,
+      ];
+    }
   /** omp's whole-form ask: the agent's `<form>` HTML, rendered as controls, never as markup. */
-  | { method: "formDialog"; args: [html: string, dialogOptions?: UiDialogOptionsArg] }
-  | { method: "approve"; args: [prompt: UiApprovalPrompt, dialogOptions?: UiDialogOptionsArg] }
+  | {
+      method: "formDialog";
+      args: [html: string, dialogOptions?: UiDialogOptionsArg];
+    }
+  | {
+      method: "approve";
+      args: [prompt: UiApprovalPrompt, dialogOptions?: UiDialogOptionsArg];
+    }
 );
 
 /** A presentation call from the runner. */
 export type UiPresentationFrame = { type: "ui" } & (
-  | { method: "notify"; message: string; notifyType?: "info" | "warning" | "error" }
+  | {
+      method: "notify";
+      message: string;
+      notifyType?: "info" | "warning" | "error";
+    }
   | { method: "setStatus"; statusKey: string; statusText?: string }
-  | { method: "setWidget"; widgetKey: string; widgetLines?: string[]; widgetPlacement?: "aboveEditor" | "belowEditor" }
+  | {
+      method: "setWidget";
+      widgetKey: string;
+      widgetLines?: string[];
+      widgetPlacement?: "aboveEditor" | "belowEditor";
+    }
   | { method: "setTitle"; title: string }
   | { method: "set_editor_text"; text: string }
   | { method: "setWorkingMessage"; message?: string }
@@ -462,7 +516,8 @@ export interface ArchivedSessionInfo {
   messageCount: number;
   firstMessage: string;
   size: number;
-  status?: "complete" | "interrupted" | "aborted" | "error" | "pending" | "unknown";
+  status?:
+    "complete" | "interrupted" | "aborted" | "error" | "pending" | "unknown";
   /** In-progress/interrupted restore evidence; its unique capture key is not an actionable restore target. */
   restorePending?: true;
   /** Host whose archive holds it ("local" for this machine). Set by the all-hosts list; a host's own list leaves it out. */
@@ -530,11 +585,13 @@ export interface CrossSessionHostToolCall {
   arguments: Record<string, unknown>;
 }
 
-export type CrossSessionHostToolEvent = (CrossSessionHostToolCall & { type?: "host_tool_call" }) | {
-  type: "host_tool_cancel";
-  sessionId: string;
-  targetId: string;
-};
+export type CrossSessionHostToolEvent =
+  | (CrossSessionHostToolCall & { type?: "host_tool_call" })
+  | {
+      type: "host_tool_cancel";
+      sessionId: string;
+      targetId: string;
+    };
 
 export interface ExitedRpcSession {
   id: string;

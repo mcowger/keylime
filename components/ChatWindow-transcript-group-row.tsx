@@ -2,12 +2,25 @@
 
 import { useState, type ReactNode } from "react";
 import { ChevronDown, Layers } from "lucide-react";
-import type { AgentMessage, AssistantContentBlock, AssistantMessage } from "@/lib/types";
+import type {
+  AgentMessage,
+  AssistantContentBlock,
+  AssistantMessage,
+} from "@/lib/types";
 import { useI18n } from "@/lib/i18n";
 import type { ActivityPiece, TranscriptRow } from "@/lib/chat-transcript-plan";
 
 /** Renders one committed message, optionally as a partial/overridden view under its own key prefix. */
-export type RenderMessage = (idx: number, options?: { attachRef?: boolean; keyPrefix?: string; messageOverride?: AgentMessage; showTimestamp?: boolean; sourceBlockIndices?: number[] }) => ReactNode;
+export type RenderMessage = (
+  idx: number,
+  options?: {
+    attachRef?: boolean;
+    keyPrefix?: string;
+    messageOverride?: AgentMessage;
+    showTimestamp?: boolean;
+    sourceBlockIndices?: number[];
+  },
+) => ReactNode;
 
 /** A planned user turn: the user message plus its text and activity segments. */
 export type TranscriptGroupRow = Extract<TranscriptRow, { kind: "group" }>;
@@ -32,11 +45,23 @@ function withAssistantBlocks(
   return next;
 }
 
-function ProcessDetailsGroup({ messageCount, toolCallCount, children }: { messageCount: number; toolCallCount: number; children: () => ReactNode }) {
+function ProcessDetailsGroup({
+  messageCount,
+  toolCallCount,
+  children,
+}: {
+  messageCount: number;
+  toolCallCount: number;
+  children: () => ReactNode;
+}) {
   const { t, tn } = useI18n();
   const [expanded, setExpanded] = useState(false);
-  const parts = [t("chatWindow.processDetails"), tn("chatWindow.messageCount", messageCount)];
-  if (toolCallCount > 0) parts.push(tn("chatWindow.toolCallCount", toolCallCount));
+  const parts = [
+    t("chatWindow.processDetails"),
+    tn("chatWindow.messageCount", messageCount),
+  ];
+  if (toolCallCount > 0)
+    parts.push(tn("chatWindow.toolCallCount", toolCallCount));
 
   return (
     <div style={{ marginBottom: 4 }}>
@@ -45,7 +70,11 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, children }: { messag
         aria-expanded={expanded}
         onClick={() => setExpanded((v) => !v)}
         className="process-details-toggle"
-        title={expanded ? t("chatWindow.collapseProcessDetails") : t("chatWindow.expandProcessDetails")}
+        title={
+          expanded
+            ? t("chatWindow.collapseProcessDetails")
+            : t("chatWindow.expandProcessDetails")
+        }
       >
         <Layers
           size={12}
@@ -63,36 +92,52 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, children }: { messag
             transition: "transform var(--dur-fast) var(--ease-out-warm)",
           }}
         />
-        <span className="process-details-label">
-          {parts.join(" · ")}
-        </span>
+        <span className="process-details-label">{parts.join(" · ")}</span>
       </button>
-      {expanded && (
-        <div style={{ marginTop: 3 }}>
-          {children()}
-        </div>
-      )}
+      {expanded && <div style={{ marginTop: 3 }}>{children()}</div>}
     </div>
   );
 }
 
 /** Render a folded activity run exactly as it streamed: one entry per piece, never merged across messages. */
-export function renderActivityPieces(messages: AgentMessage[], pieces: ActivityPiece[], renderMessage: RenderMessage): ReactNode[] {
+export function renderActivityPieces(
+  messages: AgentMessage[],
+  pieces: ActivityPiece[],
+  renderMessage: RenderMessage,
+): ReactNode[] {
   return pieces.map((piece, pieceIdx) => {
-    if (!piece.blocks) return renderMessage(piece.index, { attachRef: false, keyPrefix: "activity" });
+    if (!piece.blocks)
+      return renderMessage(piece.index, {
+        attachRef: false,
+        keyPrefix: "activity",
+      });
     const msg = messages[piece.index] as AssistantMessage;
     return renderMessage(piece.index, {
       attachRef: false,
       keyPrefix: `activity-${pieceIdx}`,
-      messageOverride: { ...withAssistantBlocks(msg, piece.blocks, { omitUsage: true }), errorMessage: undefined },
+      messageOverride: {
+        ...withAssistantBlocks(msg, piece.blocks, { omitUsage: true }),
+        errorMessage: undefined,
+      },
       showTimestamp: false,
-      sourceBlockIndices: piece.blocks.map((block) => msg.content.indexOf(block)),
+      sourceBlockIndices: piece.blocks.map((block) =>
+        msg.content.indexOf(block),
+      ),
     });
   });
 }
 
 /** Render one user turn as keyed transcript entries for `CommittedTranscript`'s row list. */
-export function renderTranscriptGroupRow(row: TranscriptGroupRow, { messages, renderMessage, flat, messageRefs, visibleRefIndexByMessage }: TranscriptGroupRowContext): ReactNode[] {
+export function renderTranscriptGroupRow(
+  row: TranscriptGroupRow,
+  {
+    messages,
+    renderMessage,
+    flat,
+    messageRefs,
+    visibleRefIndexByMessage,
+  }: TranscriptGroupRowContext,
+): ReactNode[] {
   const { userIndex: userIdx, endIndex: endIdx, segments } = row;
   const rendered: ReactNode[] = [];
 
@@ -111,16 +156,22 @@ export function renderTranscriptGroupRow(row: TranscriptGroupRow, { messages, re
   segments.forEach((segment, segmentIdx) => {
     if (segment.kind === "text") {
       const msg = messages[segment.index] as AssistantMessage;
-      const override = withAssistantBlocks(msg, segment.blocks, { omitUsage: !segment.last });
+      const override = withAssistantBlocks(msg, segment.blocks, {
+        omitUsage: !segment.last,
+      });
       if (!segment.last) override.errorMessage = undefined;
-      rendered.push(renderMessage(segment.index, {
-        attachRef: !attached.has(segment.index),
-        keyPrefix: `text-${segmentIdx}`,
-        messageOverride: override,
-        ...(segment.last ? {} : { showTimestamp: false }),
-        // Thinking can ride in a text segment; deferred text loads by source index.
-        sourceBlockIndices: segment.blocks.map((block) => msg.content.indexOf(block)),
-      }));
+      rendered.push(
+        renderMessage(segment.index, {
+          attachRef: !attached.has(segment.index),
+          keyPrefix: `text-${segmentIdx}`,
+          messageOverride: override,
+          ...(segment.last ? {} : { showTimestamp: false }),
+          // Thinking can ride in a text segment; deferred text loads by source index.
+          sourceBlockIndices: segment.blocks.map((block) =>
+            msg.content.indexOf(block),
+          ),
+        }),
+      );
       attached.add(segment.index);
       return;
     }
@@ -132,9 +183,18 @@ export function renderTranscriptGroupRow(row: TranscriptGroupRow, { messages, re
     rendered.push(
       <div
         key={`activity-${userIdx}-${segmentIdx}`}
-        ref={refIdx === undefined ? undefined : (el) => { messageRefs.current[refIdx] = el; }}
+        ref={
+          refIdx === undefined
+            ? undefined
+            : (el) => {
+                messageRefs.current[refIdx] = el;
+              }
+        }
       >
-        <ProcessDetailsGroup messageCount={segment.stepCount} toolCallCount={segment.toolCallCount}>
+        <ProcessDetailsGroup
+          messageCount={segment.stepCount}
+          toolCallCount={segment.toolCallCount}
+        >
           {() => renderActivityPieces(messages, segment.pieces, renderMessage)}
         </ProcessDetailsGroup>
       </div>,

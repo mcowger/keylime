@@ -28,19 +28,26 @@ export async function GET() {
 // Refuses to write while models.yml is unparseable unless ?overwrite=true.
 export async function PUT(req: Request) {
   try {
-    const overwriteUnparseable = new URL(req.url).searchParams.get("overwrite") === "true";
-    const body = await req.json() as ModelsFileConfig;
+    const overwriteUnparseable =
+      new URL(req.url).searchParams.get("overwrite") === "true";
+    const body = (await req.json()) as ModelsFileConfig;
     try {
       validateModelsConfig(body);
     } catch (error) {
-      return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 400 });
+      return Response.json(
+        { error: error instanceof Error ? error.message : String(error) },
+        { status: 400 },
+      );
     }
     try {
       writeModelsConfig(body, { overwriteUnparseable });
     } catch (error) {
       if (error instanceof ModelsConfigParseError) {
         return Response.json(
-          { error: `${error.message} — fix it by hand; omp-web will not overwrite it`, code: "models_config_unparseable" },
+          {
+            error: `${error.message} — fix it by hand; omp-web will not overwrite it`,
+            code: "models_config_unparseable",
+          },
           { status: 409 },
         );
       }

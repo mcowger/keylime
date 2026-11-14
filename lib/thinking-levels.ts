@@ -19,14 +19,29 @@ export interface ThinkingModelMeta {
   thinking?: { efforts?: string[] };
 }
 
-export const DEFAULT_THINKING_LEVELS: readonly string[] = ["auto", "off", "minimal", "low", "medium", "high", "xhigh", "max"];
+export const DEFAULT_THINKING_LEVELS: readonly string[] = [
+  "auto",
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
 
 /** Keep familiar levels ordered while preserving provider-defined additions. */
-export function selectableThinkingLevels(available: readonly string[] | null | undefined): string[] {
+export function selectableThinkingLevels(
+  available: readonly string[] | null | undefined,
+): string[] {
   if (!available) return [...DEFAULT_THINKING_LEVELS];
 
-  const remaining = new Set(available.filter((level) => level && level !== "auto"));
-  const ordered = DEFAULT_THINKING_LEVELS.filter((level) => level === "auto" || remaining.delete(level));
+  const remaining = new Set(
+    available.filter((level) => level && level !== "auto"),
+  );
+  const ordered = DEFAULT_THINKING_LEVELS.filter(
+    (level) => level === "auto" || remaining.delete(level),
+  );
   return [...ordered, ...remaining];
 }
 
@@ -47,7 +62,12 @@ export function resolveAvailableThinkingLevels(
   liveModel: ThinkingModelMeta | null,
 ): string[] | null {
   if (catalogLevels && catalogLevels.length > 0) return catalogLevels;
-  if (model && liveModel && liveModel.provider === model.provider && liveModel.modelId === model.modelId) {
+  if (
+    model &&
+    liveModel &&
+    liveModel.provider === model.provider &&
+    liveModel.modelId === model.modelId
+  ) {
     return thinkingLevelsForMeta(liveModel);
   }
   return null;

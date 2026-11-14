@@ -6,9 +6,14 @@ export interface RecentRunEntry {
 export const MAX_RECENT_COMPLETED_RUNS = 10;
 export const RECENT_RUNS_STORAGE_KEY = "ompweb.recent-completed-runs";
 
-export function loadRecentRuns(storage?: Storage, maxLimit = 100): RecentRunEntry[] {
+export function loadRecentRuns(
+  storage?: Storage,
+  maxLimit = 100,
+): RecentRunEntry[] {
   try {
-    const s = storage ?? (typeof window !== "undefined" ? window.localStorage : undefined);
+    const s =
+      storage ??
+      (typeof window !== "undefined" ? window.localStorage : undefined);
     if (!s) return [];
     const raw = s.getItem(RECENT_RUNS_STORAGE_KEY);
     if (!raw) return [];
@@ -34,28 +39,45 @@ export function saveRecentRuns(
   maxLimit = MAX_RECENT_COMPLETED_RUNS,
 ): void {
   try {
-    const s = storage ?? (typeof window !== "undefined" ? window.localStorage : undefined);
+    const s =
+      storage ??
+      (typeof window !== "undefined" ? window.localStorage : undefined);
     if (!s) return;
-    s.setItem(RECENT_RUNS_STORAGE_KEY, JSON.stringify(entries.slice(0, maxLimit)));
+    s.setItem(
+      RECENT_RUNS_STORAGE_KEY,
+      JSON.stringify(entries.slice(0, maxLimit)),
+    );
   } catch {
     // quota exceeded or private browsing
   }
 }
 
 export function seedRecentRuns(
-  allSessions: Array<{ id: string; modified: string; messageCount?: number; firstMessage?: string; name?: string }>,
+  allSessions: Array<{
+    id: string;
+    modified: string;
+    messageCount?: number;
+    firstMessage?: string;
+    name?: string;
+  }>,
   limit = MAX_RECENT_COMPLETED_RUNS,
 ): RecentRunEntry[] {
   return [...allSessions]
-    .filter((s) => (s.firstMessage && s.firstMessage !== "(no messages)") || (s.messageCount ?? 0) > 0 || Boolean(s.name))
-    .sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime())
+    .filter(
+      (s) =>
+        (s.firstMessage && s.firstMessage !== "(no messages)") ||
+        (s.messageCount ?? 0) > 0 ||
+        Boolean(s.name),
+    )
+    .sort(
+      (a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime(),
+    )
     .slice(0, limit)
     .map((s) => ({
       sessionId: s.id,
       completedAt: new Date(s.modified).getTime() || Date.now(),
     }));
 }
-
 
 export function recordCompletedRun(
   current: RecentRunEntry[],
@@ -64,7 +86,10 @@ export function recordCompletedRun(
   maxLimit = MAX_RECENT_COMPLETED_RUNS,
 ): RecentRunEntry[] {
   const effectiveNow = now ?? Date.now();
-  const newEntry: RecentRunEntry = { sessionId: completedId, completedAt: effectiveNow };
+  const newEntry: RecentRunEntry = {
+    sessionId: completedId,
+    completedAt: effectiveNow,
+  };
   const filtered = current.filter((entry) => entry.sessionId !== completedId);
   return [newEntry, ...filtered].slice(0, maxLimit);
 }
@@ -76,10 +101,15 @@ export function removeActiveFromCompleted(
   return current.filter((entry) => !activeRunningIds.has(entry.sessionId));
 }
 
-export function extractRecentCompletedSet(entries: RecentRunEntry[]): Set<string> {
+export function extractRecentCompletedSet(
+  entries: RecentRunEntry[],
+): Set<string> {
   return new Set(entries.map((entry) => entry.sessionId));
 }
 
-export function isRecentlyCompleted(entries: RecentRunEntry[], sessionId: string): boolean {
+export function isRecentlyCompleted(
+  entries: RecentRunEntry[],
+  sessionId: string,
+): boolean {
   return entries.some((entry) => entry.sessionId === sessionId);
 }

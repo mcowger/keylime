@@ -1,6 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type Ref, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type Ref,
+  type RefObject,
+} from "react";
 import { createPortal } from "react-dom";
 import { Popover } from "@base-ui/react/popover";
 import { useI18n } from "@/lib/i18n";
@@ -33,7 +43,8 @@ function PathLabel({ text, style }: { text: string; style?: CSSProperties }) {
     </span>
   );
 }
-const SIDEBAR_BUTTON_TRANSITION = "background var(--dur-fast) var(--ease-out-warm), color var(--dur-fast) var(--ease-out-warm), border-color var(--dur-fast) var(--ease-out-warm)";
+const SIDEBAR_BUTTON_TRANSITION =
+  "background var(--dur-fast) var(--ease-out-warm), color var(--dur-fast) var(--ease-out-warm), border-color var(--dur-fast) var(--ease-out-warm)";
 
 /** Quiet square icon button used across the sidebar chrome (header, section
  *  headers, footer). Stays visually subdued; the accent appears on hover and
@@ -72,12 +83,22 @@ function SidebarIconButton({
         ? { "aria-pressed": active }
         : { "aria-haspopup": "menu" as const, "aria-expanded": menuExpanded })}
       style={{
-        display: "flex", alignItems: "center", justifyContent: "center",
-        width: 26, height: 26, padding: 0, flexShrink: 0, lineHeight: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 26,
+        height: 26,
+        padding: 0,
+        flexShrink: 0,
+        lineHeight: 0,
         background: active || hovered ? "var(--bg-hover)" : "none",
         border: "none",
         borderRadius: "var(--radius-control)",
-        color: active ? "var(--accent)" : hovered ? "var(--accent)" : "var(--text-dim)",
+        color: active
+          ? "var(--accent)"
+          : hovered
+            ? "var(--accent)"
+            : "var(--text-dim)",
         cursor: disabled ? "default" : "pointer",
         opacity: disabled ? 0.5 : 1,
         transition: SIDEBAR_BUTTON_TRANSITION,
@@ -127,48 +148,76 @@ function SidebarPortalMenu({
     onClose();
     requestAnimationFrame(() => {
       const active = document.activeElement;
-      if (active instanceof HTMLElement && active !== document.body && !menuRef.current?.contains(active)) return;
+      if (
+        active instanceof HTMLElement &&
+        active !== document.body &&
+        !menuRef.current?.contains(active)
+      )
+        return;
       anchor.current?.focus();
     });
   }, [anchor, onClose]);
 
   // Refs are passed as arguments so the callback stays dependency-clean
   // (no ref.current access inside) for the React Compiler.
-  const computePos = useCallback((el: HTMLElement | null, menu: HTMLDivElement | null) => {
-    if (!el || !menu) return;
-    const r = el.getBoundingClientRect();
-    const width = menu.offsetWidth;
-    const height = menu.offsetHeight;
-    // --ui-scale / zoom makes getBoundingClientRect() scaled while offsetWidth is unscaled.
-    // Convert the anchor rect to unscaled CSS pixels so the fixed menu (also zoomed) lands correctly.
-    let scale = 1;
-    if (typeof document !== "undefined") {
-      const raw = getComputedStyle(document.documentElement).getPropertyValue("--ui-scale");
-      const v = parseFloat(raw);
-      if (Number.isFinite(v) && v > 0) scale = v;
-    }
-    const ru = scale !== 1 ? { top: r.top / scale, right: r.right / scale, bottom: r.bottom / scale, left: r.left / scale } : r;
-    // The viewport in the same unscaled CSS pixels as the menu's position.
-    const vw = window.innerWidth / scale;
-    const vh = window.innerHeight / scale;
-    let top: number;
-    if (placement === "above") {
-      top = ru.top - height - MENU_MARGIN;
-      if (top < MENU_VIEWPORT_PAD) {
-        top = Math.min(ru.bottom + MENU_MARGIN, vh - height - MENU_VIEWPORT_PAD);
+  const computePos = useCallback(
+    (el: HTMLElement | null, menu: HTMLDivElement | null) => {
+      if (!el || !menu) return;
+      const r = el.getBoundingClientRect();
+      const width = menu.offsetWidth;
+      const height = menu.offsetHeight;
+      // --ui-scale / zoom makes getBoundingClientRect() scaled while offsetWidth is unscaled.
+      // Convert the anchor rect to unscaled CSS pixels so the fixed menu (also zoomed) lands correctly.
+      let scale = 1;
+      if (typeof document !== "undefined") {
+        const raw = getComputedStyle(document.documentElement).getPropertyValue(
+          "--ui-scale",
+        );
+        const v = parseFloat(raw);
+        if (Number.isFinite(v) && v > 0) scale = v;
       }
-    } else {
-      top = ru.bottom + MENU_MARGIN;
-      if (top + height > vh - MENU_VIEWPORT_PAD) {
+      const ru =
+        scale !== 1
+          ? {
+              top: r.top / scale,
+              right: r.right / scale,
+              bottom: r.bottom / scale,
+              left: r.left / scale,
+            }
+          : r;
+      // The viewport in the same unscaled CSS pixels as the menu's position.
+      const vw = window.innerWidth / scale;
+      const vh = window.innerHeight / scale;
+      let top: number;
+      if (placement === "above") {
         top = ru.top - height - MENU_MARGIN;
+        if (top < MENU_VIEWPORT_PAD) {
+          top = Math.min(
+            ru.bottom + MENU_MARGIN,
+            vh - height - MENU_VIEWPORT_PAD,
+          );
+        }
+      } else {
+        top = ru.bottom + MENU_MARGIN;
+        if (top + height > vh - MENU_VIEWPORT_PAD) {
+          top = ru.top - height - MENU_MARGIN;
+        }
       }
-    }
-    if (top < MENU_VIEWPORT_PAD) top = MENU_VIEWPORT_PAD;
-    const left = align === "start"
-      ? Math.max(MENU_VIEWPORT_PAD, Math.min(ru.left, vw - width - MENU_VIEWPORT_PAD))
-      : Math.max(MENU_VIEWPORT_PAD, Math.min(ru.right - width, vw - width - MENU_VIEWPORT_PAD));
-    setPos({ top, left });
-  }, [placement, align]);
+      if (top < MENU_VIEWPORT_PAD) top = MENU_VIEWPORT_PAD;
+      const left =
+        align === "start"
+          ? Math.max(
+              MENU_VIEWPORT_PAD,
+              Math.min(ru.left, vw - width - MENU_VIEWPORT_PAD),
+            )
+          : Math.max(
+              MENU_VIEWPORT_PAD,
+              Math.min(ru.right - width, vw - width - MENU_VIEWPORT_PAD),
+            );
+      setPos({ top, left });
+    },
+    [placement, align],
+  );
 
   // Measure on open: the portal is mounted during commit, so the menu's own
   // size is available synchronously in the layout effect.
@@ -195,8 +244,11 @@ function SidebarPortalMenu({
     const timer = setTimeout(() => {
       // A radio menu opens on its checked item.
       const menu = menuRef.current;
-      (menu?.querySelector<HTMLButtonElement>('button[aria-checked="true"]:not([disabled])')
-        ?? menu?.querySelector<HTMLButtonElement>("button:not([disabled])"))?.focus();
+      (
+        menu?.querySelector<HTMLButtonElement>(
+          'button[aria-checked="true"]:not([disabled])',
+        ) ?? menu?.querySelector<HTMLButtonElement>("button:not([disabled])")
+      )?.focus();
     }, 0);
     const onPointerDown = (e: MouseEvent | TouchEvent) => {
       const target = e.target as Node;
@@ -213,12 +265,19 @@ function SidebarPortalMenu({
       }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
-        const buttons = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("button:not([disabled])") ?? []);
+        const buttons = Array.from(
+          menuRef.current?.querySelectorAll<HTMLButtonElement>(
+            "button:not([disabled])",
+          ) ?? [],
+        );
         if (buttons.length === 0) return;
-        const currentIndex = buttons.indexOf(document.activeElement as HTMLButtonElement);
-        const nextIndex = e.key === "ArrowDown"
-          ? (currentIndex + 1) % buttons.length
-          : (currentIndex - 1 + buttons.length) % buttons.length;
+        const currentIndex = buttons.indexOf(
+          document.activeElement as HTMLButtonElement,
+        );
+        const nextIndex =
+          e.key === "ArrowDown"
+            ? (currentIndex + 1) % buttons.length
+            : (currentIndex - 1 + buttons.length) % buttons.length;
         buttons[nextIndex]?.focus();
       }
     };
@@ -242,7 +301,8 @@ function SidebarPortalMenu({
       // before the item's own onClick runs, and React then drops that click.
       onClick={(event) => {
         const target = event.target;
-        if (target instanceof Element && target.closest('[role^="menuitem"]')) closeAndRestore();
+        if (target instanceof Element && target.closest('[role^="menuitem"]'))
+          closeAndRestore();
       }}
       role="menu"
       style={{
@@ -268,9 +328,14 @@ function SidebarPortalMenu({
     document.body,
   );
 }
-const SCRAMBLE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+const SCRAMBLE_CHARS =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
 
-function useScramble(target: string, running: boolean, reducedMotion: boolean): string {
+function useScramble(
+  target: string,
+  running: boolean,
+  reducedMotion: boolean,
+): string {
   const [display, setDisplay] = useState(target);
   const frameRef = useRef<number | null>(null);
   const iterRef = useRef(0);
@@ -294,9 +359,11 @@ function useScramble(target: string, running: boolean, reducedMotion: boolean): 
           .map((char, i) => {
             if (char === " ") return " ";
             if (i < resolved) return char;
-            return SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)];
+            return SCRAMBLE_CHARS[
+              Math.floor(Math.random() * SCRAMBLE_CHARS.length)
+            ];
           })
-          .join("")
+          .join(""),
       );
 
       if (iterRef.current < totalFrames) {
@@ -307,7 +374,9 @@ function useScramble(target: string, running: boolean, reducedMotion: boolean): 
     };
 
     frameRef.current = requestAnimationFrame(step);
-    return () => { if (frameRef.current) cancelAnimationFrame(frameRef.current); };
+    return () => {
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+    };
   }, [target, running, reducedMotion]);
 
   return display;
@@ -323,38 +392,59 @@ function OmpWebTitle() {
   const hasCommitDetails = Boolean(commitHash && commitDate);
   const VersionTrigger = hasCommitDetails ? Popover.Trigger : "button";
 
-  const target = showVersion ? `v${process.env.OMP_WEB_PUBLIC_APP_VERSION ?? "0.0.0"}` : "omp web";
+  const target = showVersion
+    ? `v${process.env.OMP_WEB_PUBLIC_APP_VERSION ?? "0.0.0"}`
+    : "omp web";
   const display = useScramble(target, scrambling, reducedMotion);
 
-  const triggerScramble = useCallback((toVersion: boolean) => {
-    setShowVersion(toVersion);
-    if (scrambleTimerRef.current) clearTimeout(scrambleTimerRef.current);
-    if (reducedMotion) return;
-    setScrambling(true);
-    scrambleTimerRef.current = setTimeout(() => setScrambling(false), (toVersion ? 6 : 8) * 4 * (1000 / 60) + 100);
-  }, [reducedMotion]);
+  const triggerScramble = useCallback(
+    (toVersion: boolean) => {
+      setShowVersion(toVersion);
+      if (scrambleTimerRef.current) clearTimeout(scrambleTimerRef.current);
+      if (reducedMotion) return;
+      setScrambling(true);
+      scrambleTimerRef.current = setTimeout(
+        () => setScrambling(false),
+        (toVersion ? 6 : 8) * 4 * (1000 / 60) + 100,
+      );
+    },
+    [reducedMotion],
+  );
 
-  const handleVersionChange = useCallback((next: boolean) => {
-    clearTimeout(revertTimerRef.current ?? undefined);
-    triggerScramble(next);
-    if (next) {
-      revertTimerRef.current = setTimeout(() => triggerScramble(false), 3000);
-    }
-  }, [triggerScramble]);
+  const handleVersionChange = useCallback(
+    (next: boolean) => {
+      clearTimeout(revertTimerRef.current ?? undefined);
+      triggerScramble(next);
+      if (next) {
+        revertTimerRef.current = setTimeout(() => triggerScramble(false), 3000);
+      }
+    },
+    [triggerScramble],
+  );
 
-  useEffect(() => () => {
-    if (revertTimerRef.current) clearTimeout(revertTimerRef.current);
-    if (scrambleTimerRef.current) clearTimeout(scrambleTimerRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (revertTimerRef.current) clearTimeout(revertTimerRef.current);
+      if (scrambleTimerRef.current) clearTimeout(scrambleTimerRef.current);
+    },
+    [],
+  );
 
   return (
     <Popover.Root open={showVersion} onOpenChange={handleVersionChange}>
       <VersionTrigger
         type="button"
-        onClick={hasCommitDetails ? undefined : () => handleVersionChange(!showVersion)}
+        onClick={
+          hasCommitDetails ? undefined : () => handleVersionChange(!showVersion)
+        }
         style={{
-          background: "none", border: "none", padding: 0, cursor: "pointer",
-          fontWeight: 700, fontSize: 14, letterSpacing: "-0.01em",
+          background: "none",
+          border: "none",
+          padding: 0,
+          cursor: "pointer",
+          fontWeight: 700,
+          fontSize: 14,
+          letterSpacing: "-0.01em",
           fontFamily: "var(--font-mono)",
           minWidth: "6ch",
           lineHeight: 1,
@@ -371,18 +461,50 @@ function OmpWebTitle() {
             <span style={{ color: "var(--text)" }}>web</span>
           </span>
         ) : (
-          <span style={{ color: showVersion ? "var(--accent)" : "var(--text)" }}>{display}</span>
+          <span
+            style={{ color: showVersion ? "var(--accent)" : "var(--text)" }}
+          >
+            {display}
+          </span>
         )}
       </VersionTrigger>
       {hasCommitDetails && (
         <Popover.Portal>
-          <Popover.Positioner side="bottom" align="start" sideOffset={8} collisionPadding={8} style={{ zIndex: 220 }}>
+          <Popover.Positioner
+            side="bottom"
+            align="start"
+            sideOffset={8}
+            collisionPadding={8}
+            style={{ zIndex: 220 }}
+          >
             <Popover.Popup
               className="picker-panel ui-focus-ring"
-              style={{ padding: 12, width: 280, maxWidth: "calc((100vw - 16px) / var(--ui-scale, 1))", fontFamily: "var(--font-mono)", fontSize: 12 }}
+              style={{
+                padding: 12,
+                width: 280,
+                maxWidth: "calc((100vw - 16px) / var(--ui-scale, 1))",
+                fontFamily: "var(--font-mono)",
+                fontSize: 12,
+              }}
             >
-              <Popover.Title style={{ margin: "0 0 6px", fontSize: 12, color: "var(--text-muted)" }}>{commitDate}</Popover.Title>
-              <Popover.Description style={{ margin: 0, overflowWrap: "anywhere", color: "var(--text)" }}>{commitHash}</Popover.Description>
+              <Popover.Title
+                style={{
+                  margin: "0 0 6px",
+                  fontSize: 12,
+                  color: "var(--text-muted)",
+                }}
+              >
+                {commitDate}
+              </Popover.Title>
+              <Popover.Description
+                style={{
+                  margin: 0,
+                  overflowWrap: "anywhere",
+                  color: "var(--text)",
+                }}
+              >
+                {commitHash}
+              </Popover.Description>
             </Popover.Popup>
           </Popover.Positioner>
         </Popover.Portal>
@@ -416,7 +538,13 @@ function RunningSessionIndicator({ size = 14 }: { size?: number }) {
     </span>
   );
 }
-function ExitedSessionIndicator({ title, size = 14 }: { title: string; size?: number }) {
+function ExitedSessionIndicator({
+  title,
+  size = 14,
+}: {
+  title: string;
+  size?: number;
+}) {
   return (
     <span
       title={title}
@@ -456,7 +584,6 @@ function RecentlyCompletedIndicator({ size = 12 }: { size?: number }) {
   );
 }
 
-
 function UnreadSessionIndicator({ size = 14 }: { size?: number }) {
   const { t } = useI18n();
   const reducedMotion = usePrefersReducedMotion();
@@ -474,12 +601,36 @@ function UnreadSessionIndicator({ size = 14 }: { size?: number }) {
         color: "var(--accent)",
       }}
     >
-      <svg width={size} height={size} viewBox="0 0 14 14" fill="none" aria-hidden="true" style={{ display: "block" }}>
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 14 14"
+        fill="none"
+        aria-hidden="true"
+        style={{ display: "block" }}
+      >
         <circle cx="7" cy="7" r="2.5" fill="currentColor" />
         {!reducedMotion && (
-          <circle cx="7" cy="7" r="3" stroke="currentColor" strokeWidth="1.4" opacity="0.32">
-            <animate attributeName="r" values="3;6;3" dur="1.6s" repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0.32;0;0.32" dur="1.6s" repeatCount="indefinite" />
+          <circle
+            cx="7"
+            cy="7"
+            r="3"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            opacity="0.32"
+          >
+            <animate
+              attributeName="r"
+              values="3;6;3"
+              dur="1.6s"
+              repeatCount="indefinite"
+            />
+            <animate
+              attributeName="opacity"
+              values="0.32;0;0.32"
+              dur="1.6s"
+              repeatCount="indefinite"
+            />
           </circle>
         )}
       </svg>

@@ -39,7 +39,9 @@ export interface ReconcileGuardOptions {
   timeoutMs?: number;
 }
 
-export function createReconcileGuard(options: ReconcileGuardOptions = {}): ReconcileGuard {
+export function createReconcileGuard(
+  options: ReconcileGuardOptions = {},
+): ReconcileGuard {
   const timeoutMs = options.timeoutMs;
   let inFlight = false;
   let ownerToken = 0;

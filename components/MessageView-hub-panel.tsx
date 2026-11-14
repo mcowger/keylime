@@ -2,7 +2,11 @@
 
 import { MarkdownBody } from "./MarkdownBody";
 import { SubagentStatusIcon } from "./SubagentStatusIcon";
-import { getHubJobs, getHubJobsHeader, getHubSendSummary } from "./MessageView-tool-format";
+import {
+  getHubJobs,
+  getHubJobsHeader,
+  getHubSendSummary,
+} from "./MessageView-tool-format";
 import { isRecord } from "@/lib/type-guards";
 import type { ToolResultMessage } from "@/lib/types";
 
@@ -14,7 +18,8 @@ function formatJobDuration(ms: number | undefined): string | null {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   if (hours > 0) return minutes > 0 ? `${hours}h${minutes}m` : `${hours}h`;
-  if (minutes > 0) return seconds > 0 ? `${minutes}m${seconds}s` : `${minutes}m`;
+  if (minutes > 0)
+    return seconds > 0 ? `${minutes}m${seconds}s` : `${minutes}m`;
   return `${seconds}s`;
 }
 
@@ -23,7 +28,10 @@ function hubReceipts(details: unknown): Array<{ to: string; outcome: string }> {
   const out: Array<{ to: string; outcome: string }> = [];
   for (const raw of details.receipts) {
     if (!isRecord(raw) || typeof raw.to !== "string") continue;
-    out.push({ to: raw.to, outcome: typeof raw.outcome === "string" ? raw.outcome : "sent" });
+    out.push({
+      to: raw.to,
+      outcome: typeof raw.outcome === "string" ? raw.outcome : "sent",
+    });
     if (out.length >= 50) break;
   }
   return out;
@@ -36,7 +44,19 @@ function hubReceipts(details: unknown): Array<{ to: string; outcome: string }> {
  * `waiting on N jobs` row) renders the structured job list. Returns null
  * for other hub ops so the generic tool rendering stays.
  */
-export function HubResultPanel({ input, result, cwd, onOpenFile, sourceSessionId }: { input: unknown; result?: ToolResultMessage; cwd?: string; onOpenFile?: (filePath: string) => void; sourceSessionId?: string | null }) {
+export function HubResultPanel({
+  input,
+  result,
+  cwd,
+  onOpenFile,
+  sourceSessionId,
+}: {
+  input: unknown;
+  result?: ToolResultMessage;
+  cwd?: string;
+  onOpenFile?: (filePath: string) => void;
+  sourceSessionId?: string | null;
+}) {
   if (!isRecord(input) || typeof input.op !== "string") return null;
 
   if (input.op === "send") {
@@ -53,18 +73,40 @@ export function HubResultPanel({ input, result, cwd, onOpenFile, sourceSessionId
           gap: 6,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text-muted)" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 11,
+            color: "var(--text-muted)",
+          }}
+        >
           <span style={{ fontWeight: 600, color: "var(--text)" }}>
             {`IRC → ${send.to.join(", ")}`}
           </span>
           {receipts.length > 0 && (
-            <span style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", color: "var(--text-dim)", fontSize: 10.5 }}>
+            <span
+              style={{
+                marginLeft: "auto",
+                fontFamily: "var(--font-mono)",
+                color: "var(--text-dim)",
+                fontSize: 10.5,
+              }}
+            >
               {receipts.map((receipt) => receipt.outcome).join(" · ")}
             </span>
           )}
         </div>
         {send.message ? (
-          <MarkdownBody className="markdown-hub-message" cwd={cwd} onOpenFile={onOpenFile} sourceSessionId={sourceSessionId}>{send.message}</MarkdownBody>
+          <MarkdownBody
+            className="markdown-hub-message"
+            cwd={cwd}
+            onOpenFile={onOpenFile}
+            sourceSessionId={sourceSessionId}
+          >
+            {send.message}
+          </MarkdownBody>
         ) : null}
       </div>
     );
@@ -82,7 +124,15 @@ export function HubResultPanel({ input, result, cwd, onOpenFile, sourceSessionId
           gap: 4,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text-muted)" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 11,
+            color: "var(--text-muted)",
+          }}
+        >
           <span style={{ fontWeight: 600, color: "var(--text)" }}>
             {getHubJobsHeader(jobs)}
           </span>
@@ -92,17 +142,55 @@ export function HubResultPanel({ input, result, cwd, onOpenFile, sourceSessionId
           return (
             <div
               key={job.id}
-              style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, fontSize: 11.5 }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                minWidth: 0,
+                fontSize: 11.5,
+              }}
             >
-              <SubagentStatusIcon status={job.status === "completed" ? "completed" : job.status === "failed" ? "failed" : "started"} />
-              <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: 10.5, color: "var(--accent)", flexShrink: 0 }}>
+              <SubagentStatusIcon
+                status={
+                  job.status === "completed"
+                    ? "completed"
+                    : job.status === "failed"
+                      ? "failed"
+                      : "started"
+                }
+              />
+              <span
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontWeight: 600,
+                  fontSize: 10.5,
+                  color: "var(--accent)",
+                  flexShrink: 0,
+                }}
+              >
                 {`[${job.type}]`}
               </span>
-              <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, color: "var(--text)" }}>
+              <span
+                style={{
+                  minWidth: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  flex: 1,
+                  color: "var(--text)",
+                }}
+              >
                 {job.label}
               </span>
               {duration && (
-                <span style={{ flexShrink: 0, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-dim)" }}>
+                <span
+                  style={{
+                    flexShrink: 0,
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 10,
+                    color: "var(--text-dim)",
+                  }}
+                >
                   {duration}
                 </span>
               )}

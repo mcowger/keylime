@@ -10,7 +10,12 @@ import { isLinkUp, type Host } from "./host";
 import { HostOpError } from "./link-protocol";
 import { getHost, listHosts, onHostHello } from "./hub";
 import { LOCAL_HOST_ID } from "./registry";
-import { loadPools, poolManagedProject, poolProjectBindings, poolProjectKey } from "./pools";
+import {
+  loadPools,
+  poolManagedProject,
+  poolProjectBindings,
+  poolProjectKey,
+} from "./pools";
 
 /** Same TTL as the daemon's own session-list cache. */
 const LIST_TTL_MS = 30_000;
@@ -40,7 +45,14 @@ function hostLists(hostId: string): HostLists {
   }
   let lists = globalThis.__ompHostLists.get(hostId);
   if (!lists) {
-    lists = { sessions: [], fetchedAt: 0, generation: 0, loading: null, projects: [], loaded: false };
+    lists = {
+      sessions: [],
+      fetchedAt: 0,
+      generation: 0,
+      loading: null,
+      projects: [],
+      loaded: false,
+    };
     globalThis.__ompHostLists.set(hostId, lists);
   }
   return lists;
@@ -48,14 +60,22 @@ function hostLists(hostId: string): HostLists {
 
 /** Host ids in sidebar order: this machine, then linked hosts by label, case-insensitive. */
 function hostIds(): string[] {
-  const remote = listHosts().sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()) || a.id.localeCompare(b.id));
+  const remote = listHosts().sort(
+    (a, b) =>
+      a.label.toLowerCase().localeCompare(b.label.toLowerCase()) ||
+      a.id.localeCompare(b.id),
+  );
   return [LOCAL_HOST_ID, ...remote.map((host) => host.id)];
 }
 
 /** One host's sessions, cached for LIST_TTL_MS. An unreachable or failing host keeps its last list. */
-export async function hostSessions(hostId: string, refresh = false): Promise<SessionInfo[]> {
+export async function hostSessions(
+  hostId: string,
+  refresh = false,
+): Promise<SessionInfo[]> {
   const lists = hostLists(hostId);
-  if (!refresh && Date.now() - lists.fetchedAt < LIST_TTL_MS) return lists.sessions;
+  if (!refresh && Date.now() - lists.fetchedAt < LIST_TTL_MS)
+    return lists.sessions;
   const host = getHost(hostId);
   if (!host || !isLinkUp(host.status())) {
     lists.loaded = false;
@@ -63,20 +83,26 @@ export async function hostSessions(hostId: string, refresh = false): Promise<Ses
   }
   if (lists.loading?.generation !== lists.generation) {
     const generation = lists.generation;
-    const promise: Promise<SessionInfo[]> = host.sessionOps.listSessions().then((sessions) => {
-      const tagged = sessions.map((session) => ({ ...session, hostId }));
-      if (lists.generation === generation) {
-        lists.loaded = true;
-        lists.sessions = tagged;
-        lists.fetchedAt = Date.now();
-      }
-      return tagged;
-    }, () => {
-      if (lists.generation === generation) lists.loaded = false;
-      return lists.sessions;
-    }).finally(() => {
-      if (lists.loading?.promise === promise) lists.loading = null;
-    });
+    const promise: Promise<SessionInfo[]> = host.sessionOps
+      .listSessions()
+      .then(
+        (sessions) => {
+          const tagged = sessions.map((session) => ({ ...session, hostId }));
+          if (lists.generation === generation) {
+            lists.loaded = true;
+            lists.sessions = tagged;
+            lists.fetchedAt = Date.now();
+          }
+          return tagged;
+        },
+        () => {
+          if (lists.generation === generation) lists.loaded = false;
+          return lists.sessions;
+        },
+      )
+      .finally(() => {
+        if (lists.loading?.promise === promise) lists.loading = null;
+      });
     lists.loading = { generation, promise };
   }
   return lists.loading!.promise;
@@ -93,20 +119,35 @@ export async function listSessionsAllHosts(): Promise<SessionInfo[]> {
     for (const session of sessions) {
       if (seen.has(session.id)) continue;
       seen.add(session.id);
-      const binding = bindings.get(session.hostId!)?.get(comparableProjectPath(session.projectRoot ?? session.cwd));
-      merged.push(binding ? {
-        ...session, poolId: binding.pool.id, projectId: binding.project.id,
-        projectKey: poolProjectKey(binding.pool.id, binding.project.id),
-      } : session);
+      const binding = bindings
+        .get(session.hostId!)
+        ?.get(comparableProjectPath(session.projectRoot ?? session.cwd));
+      merged.push(
+        binding
+          ? {
+              ...session,
+              poolId: binding.pool.id,
+              projectId: binding.project.id,
+              projectKey: poolProjectKey(binding.pool.id, binding.project.id),
+            }
+          : session,
+      );
     }
   }
   return merged;
 }
 
-async function hostWithSession(id: string, refresh: boolean): Promise<Host | null> {
+async function hostWithSession(
+  id: string,
+  refresh: boolean,
+): Promise<Host | null> {
   const ids = hostIds();
-  const lists = await Promise.all(ids.map((hostId) => hostSessions(hostId, refresh)));
-  const index = lists.findIndex((sessions) => sessions.some((session) => session.id === id));
+  const lists = await Promise.all(
+    ids.map((hostId) => hostSessions(hostId, refresh)),
+  );
+  const index = lists.findIndex((sessions) =>
+    sessions.some((session) => session.id === id),
+  );
   return index === -1 ? null : getHost(ids[index]);
 }
 
@@ -116,12 +157,23 @@ export async function hostForSessionId(id: string): Promise<Host | null> {
   // Host lists only hold valid ids: a malformed one never costs a round trip.
   if (!isValidSessionId(id)) return null;
   // shortcut: every miss re-asks each linked host; throttle per host if polling for gone sessions shows up.
-  const host = (await hostWithSession(id, false)) ?? (await hostWithSession(id, true));
+  const host =
+    (await hostWithSession(id, false)) ?? (await hostWithSession(id, true));
   if (host) return host;
   for (const hostId of hostIds()) {
     const candidate = getHost(hostId);
-    if (!candidate || !isLinkUp(candidate.status())) throw new HostOpError(503, "host_offline", `${candidate?.label ?? "A host"} is offline`);
-    if (!hostLists(hostId).loaded) throw new HostOpError(503, "host_sessions_unavailable", `${candidate.label}'s sessions are unavailable`);
+    if (!candidate || !isLinkUp(candidate.status()))
+      throw new HostOpError(
+        503,
+        "host_offline",
+        `${candidate?.label ?? "A host"} is offline`,
+      );
+    if (!hostLists(hostId).loaded)
+      throw new HostOpError(
+        503,
+        "host_sessions_unavailable",
+        `${candidate.label}'s sessions are unavailable`,
+      );
   }
   return null;
 }
@@ -130,12 +182,19 @@ export async function hostForSessionId(id: string): Promise<Host | null> {
 export async function sessionSpawnTarget(
   id: string,
   host: Host,
-): Promise<{ sessionFile: string; cwd: string; recordedCwd: string | undefined } | null> {
+): Promise<{
+  sessionFile: string;
+  cwd: string;
+  recordedCwd: string | undefined;
+} | null> {
   // The host's own list entry carries its file path and recorded cwd; the
   // host resolves a missing cwd on its machine when it spawns.
-  const find = async (refresh: boolean) => (await hostSessions(host.id, refresh)).find((session) => session.id === id);
+  const find = async (refresh: boolean) =>
+    (await hostSessions(host.id, refresh)).find((session) => session.id === id);
   const info = (await find(false)) ?? (await find(true));
-  return info ? { sessionFile: info.path, cwd: info.cwd, recordedCwd: info.cwd } : null;
+  return info
+    ? { sessionFile: info.path, cwd: info.cwd, recordedCwd: info.cwd }
+    : null;
 }
 
 /** Drop one host's cached session list; it is kept as the fallback while the host is unreachable. */
@@ -157,36 +216,61 @@ export function invalidateLocalSessionLists(sessionFile?: string): void {
 export async function listProjectsAllHosts(): Promise<ManagedProject[]> {
   const pools = loadPools();
   const bindings = poolProjectBindings(pools);
-  const perHost = await Promise.all(hostIds().map(async (id) => {
-    const host = getHost(id);
-    const lists = hostLists(id);
-    if (host && isLinkUp(host.status())) {
-      try {
-        lists.projects = await host.sessionOps.listProjects();
-      } catch {
-        // Keep the last registry.
+  const perHost = await Promise.all(
+    hostIds().map(async (id) => {
+      const host = getHost(id);
+      const lists = hostLists(id);
+      if (host && isLinkUp(host.status())) {
+        try {
+          lists.projects = await host.sessionOps.listProjects();
+        } catch {
+          // Keep the last registry.
+        }
       }
-    }
-    const discovered = (await hostSessions(id)).map((session) => session.projectRoot ?? session.cwd).filter(Boolean);
-    // Only this machine's paths resolve here; another host's are never resolved on this machine.
-    return mergeProjects({ version: 1, projects: lists.projects }, discovered, id === LOCAL_HOST_ID ? undefined : (path) => path).map((project) => ({ ...project, hostId: id }));
-  }));
-  const standalone = perHost.flat().filter((project) =>
-    !bindings.get(project.hostId!)?.has(comparableProjectPath(project.path)),
+      const discovered = (await hostSessions(id))
+        .map((session) => session.projectRoot ?? session.cwd)
+        .filter(Boolean);
+      // Only this machine's paths resolve here; another host's are never resolved on this machine.
+      return mergeProjects(
+        { version: 1, projects: lists.projects },
+        discovered,
+        id === LOCAL_HOST_ID ? undefined : (path) => path,
+      ).map((project) => ({ ...project, hostId: id }));
+    }),
   );
-  const logical = pools.flatMap((pool) => pool.projects.filter((project) => !project.hidden).map((project) => poolManagedProject(pool, project)));
+  const standalone = perHost
+    .flat()
+    .filter(
+      (project) =>
+        !bindings
+          .get(project.hostId!)
+          ?.has(comparableProjectPath(project.path)),
+    );
+  const logical = pools.flatMap((pool) =>
+    pool.projects
+      .filter((project) => !project.hidden)
+      .map((project) => poolManagedProject(pool, project)),
+  );
   return [...standalone, ...logical];
 }
 
 /** An image from the first online host whose bytes hash to `hash`. */
-export async function fetchMediaFromHosts(hash: string): Promise<Uint8Array | null> {
+export async function fetchMediaFromHosts(
+  hash: string,
+): Promise<Uint8Array | null> {
   const online = listHosts().filter((host) => isLinkUp(host.status));
   try {
-    return await Promise.any(online.map(async ({ id }) => {
-      const result = await getHost(id)?.sessionOps.readMedia(hash);
-      if (!result?.ok || createHash("sha256").update(result.value).digest("hex") !== hash) throw new Error("Not this image");
-      return result.value;
-    }));
+    return await Promise.any(
+      online.map(async ({ id }) => {
+        const result = await getHost(id)?.sessionOps.readMedia(hash);
+        if (
+          !result?.ok ||
+          createHash("sha256").update(result.value).digest("hex") !== hash
+        )
+          throw new Error("Not this image");
+        return result.value;
+      }),
+    );
   } catch {
     return null;
   }

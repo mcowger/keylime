@@ -30,7 +30,10 @@ export interface AttachedTextFileData {
 }
 
 function getFileExtension(name: string): string {
-  return name.toLowerCase().replace(/\\/g, "/").split("/").pop()?.split(".").pop() ?? "";
+  return (
+    name.toLowerCase().replace(/\\/g, "/").split("/").pop()?.split(".").pop() ??
+    ""
+  );
 }
 
 /** Human-readable limit for the composer banners ("512 KB" / "4 MB"). */
@@ -66,13 +69,19 @@ export function selectTextAttachments<T extends { size: number }>(
   budget: TextAttachmentBudget,
 ): TextAttachmentSelection<T> {
   const accepted: T[] = [];
-  const remainingSlots = Math.max(0, MAX_ATTACHED_TEXT_FILES - budget.usedSlots);
+  const remainingSlots = Math.max(
+    0,
+    MAX_ATTACHED_TEXT_FILES - budget.usedSlots,
+  );
   let totalBytes = budget.usedBytes;
   let tooLarge = 0;
   let overBudget = 0;
   for (const candidate of candidates) {
     if (accepted.length >= remainingSlots) break;
-    if (!Number.isFinite(candidate.size) || candidate.size > MAX_ATTACHED_TEXT_BYTES) {
+    if (
+      !Number.isFinite(candidate.size) ||
+      candidate.size > MAX_ATTACHED_TEXT_BYTES
+    ) {
       tooLarge++;
       continue;
     }
@@ -86,20 +95,28 @@ export function selectTextAttachments<T extends { size: number }>(
   return { accepted, tooLarge, overBudget };
 }
 
-export function isTextAttachmentFile(file: Pick<File, "name" | "type">): boolean {
-  return file.type === "text/plain"
-    || file.type === "text/markdown"
-    || TEXT_FILE_EXTENSIONS[getFileExtension(file.name)] === true;
+export function isTextAttachmentFile(
+  file: Pick<File, "name" | "type">,
+): boolean {
+  return (
+    file.type === "text/plain" ||
+    file.type === "text/markdown" ||
+    TEXT_FILE_EXTENSIONS[getFileExtension(file.name)] === true
+  );
 }
 
 function languageForFile(name: string): string {
   const extension = getFileExtension(name);
-  if (extension === "md" || extension === "markdown" || extension === "mdx") return "markdown";
+  if (extension === "md" || extension === "markdown" || extension === "mdx")
+    return "markdown";
   return "text";
 }
 
 function fenceForContent(content: string): string {
-  const longestRun = content.match(/`+/g)?.reduce((longest, run) => Math.max(longest, run.length), 0) ?? 0;
+  const longestRun =
+    content
+      .match(/`+/g)
+      ?.reduce((longest, run) => Math.max(longest, run.length), 0) ?? 0;
   return "`".repeat(Math.max(3, longestRun + 1));
 }
 

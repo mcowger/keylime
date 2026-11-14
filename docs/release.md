@@ -32,6 +32,7 @@ permission lets npm verify the GitHub Actions identity and generate provenance
 for the published package.
 
 ## Release later versions
+
 Run these from a clean `main` checkout after the release changes are merged.
 First update `package.json` and the lockfile for the release version, commit the
 change, and review the commit. Set up the runner as described in CONTRIBUTING.md.

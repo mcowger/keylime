@@ -11,6 +11,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Bun is the sole runtime and package manager. Node/npm launchers are retired; install Bun and use `bun install`, `bun run` and `bunx --bun`. Native compiled distributions remain supported.
 - Runtime management uses mise with a pinned Bun version. Nix packaging and installation support are removed.
 - Windows support is removed, including services, tray, installers, binaries and Windows-specific path handling. This hard fork supports macOS and Linux only; no compatibility or migration is provided.
+- Type checking uses `bun check` for both the root project and runner; formatting uses `bun fmt`. Linting, ESLint and `tsc` are removed because pinned Bun 1.4.4 has no built-in linter. Formatting is not a CI gate on the inherited unformatted baseline.
 
 ## [v0.7.0] - 2026-11-14
 
@@ -493,6 +494,7 @@ This release adds workspace renaming and reordering, improved context compaction
 ### Contributors
 
 Thank you to the contributors who made this release possible:
+
 - @2740653660
 
 ---
@@ -521,6 +523,7 @@ This release introduces an archive browser for past conversations, live tracking
 ### Contributors
 
 Thank you to the contributors who made this release possible:
+
 - @gzaripov
 
 ---
@@ -565,6 +568,7 @@ This release improves model search, Windows workspace support, authentication re
 ### Contributors
 
 Thank you to the contributors who made this release possible:
+
 - @flaribbit
 
 ---
@@ -770,6 +774,7 @@ This is the initial public release of omp-web: a fast, modern browser interface 
 ### Contributors
 
 Thank you to the contributors who made this release possible:
+
 - @19WAS85
 - @AKAZIK-py
 - @AyushDubey23

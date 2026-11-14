@@ -127,20 +127,20 @@ Linux トレイ）はインストール時に `OMP_WEB_PASSWORD` を
 
 ## 環境変数
 
-| 変数名 | 説明 | デフォルト値 |
-| --- | --- | --- |
-| `PORT` | サーバーポート | `30177` |
-| `OMP_WEB_HOSTNAME` | バインドホスト | `127.0.0.1` |
-| `OMP_WEB_PASSWORD_HASH` | Web ログイン用パスワードの scrypt ハッシュ（`ompweb hash-password` で生成）。非ループバックバインドには必須 | _なし（認証無効）_ |
-| `OMP_WEB_TRUSTED_HEADER_SHA256` | 信頼できるリバースプロキシが `X-Omp-Web-Auth` ヘッダーで送るシークレットの SHA-256 ダイジェスト（16 進）。ヘッダーのハッシュが一致したリクエストはパスワードなしで通ります。omp-web はシークレット自体を保持しません。生成方法と nginx の設定例は英語版 README の「Skipping the password on trusted networks」を参照してください | _なし（無効）_ |
-| `OMP_WEB_NO_OPEN` | `1` でブラウザ自動起動を無効化 | `0` |
-| `OMP_WEB_DISABLE_AUTOUPDATE` | `1` で更新チェックとアプリ内更新を無効化（変更後は再起動） | `0` |
-| `OMP_WEB_NAME` | ブラウザのタブとインストールしたアプリに表示する名前。`url`・`host`・`domain`（大文字小文字を区別しない）を指定すると、ブラウザが接続したホスト名（ポートなし）を使用します（localhost と IP アドレスは `omp web` のまま）。それ以外の値はそのまま使用します（変更後は再起動） | `omp web` |
-| `OMP_WEB_OMP_BIN` | ダウンロード版の代わりに使う `ompweb-omp` ビルドのパス（GitHub に接続できないマシンではリリースの `ompweb-omp-<os>-<arch>` のコピー、ソースチェックアウトでは `runner/release/ompweb-omp-<os>-<arch>`）。通常の `omp` は ompweb のチャネルを話さないため使えません。サービスのインストーラーは、これを設定したときだけサービス環境に書き込みます | _ダウンロードした `ompweb-omp`_ |
-| `PI_CODING_AGENT_DIR` | カスタム omp エージェントディレクトリ | `~/.omp/agent` |
-| `OMP_WEB_STT_ENDPOINT` | OpenAI 互換の音声認識エンドポイント URL。未設定の場合は `OMP_WEB_STT_MODEL` を omp 自身の認証情報で使って文字起こしします | _なし_ |
-| `OMP_WEB_STT_KEY` | STT エンドポイント用の API キー | _なし_ |
-| `OMP_WEB_STT_MODEL` | STT エンドポイント用のモデル名。エンドポイント未設定時は、omp のログインで実行する omp の音声認識モデル（例: `openai-codex/codex-transcribe`。ChatGPT サブスクリプション、このモデルを含む omp バージョンが必要） | _なし（エンドポイント未設定時は無効）_ |
+| 変数名                          | 説明                                                                                                                                                                                                                                                                                                                                             | デフォルト値                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| `PORT`                          | サーバーポート                                                                                                                                                                                                                                                                                                                                   | `30177`                                |
+| `OMP_WEB_HOSTNAME`              | バインドホスト                                                                                                                                                                                                                                                                                                                                   | `127.0.0.1`                            |
+| `OMP_WEB_PASSWORD_HASH`         | Web ログイン用パスワードの scrypt ハッシュ（`ompweb hash-password` で生成）。非ループバックバインドには必須                                                                                                                                                                                                                                      | _なし（認証無効）_                     |
+| `OMP_WEB_TRUSTED_HEADER_SHA256` | 信頼できるリバースプロキシが `X-Omp-Web-Auth` ヘッダーで送るシークレットの SHA-256 ダイジェスト（16 進）。ヘッダーのハッシュが一致したリクエストはパスワードなしで通ります。omp-web はシークレット自体を保持しません。生成方法と nginx の設定例は英語版 README の「Skipping the password on trusted networks」を参照してください                 | _なし（無効）_                         |
+| `OMP_WEB_NO_OPEN`               | `1` でブラウザ自動起動を無効化                                                                                                                                                                                                                                                                                                                   | `0`                                    |
+| `OMP_WEB_DISABLE_AUTOUPDATE`    | `1` で更新チェックとアプリ内更新を無効化（変更後は再起動）                                                                                                                                                                                                                                                                                       | `0`                                    |
+| `OMP_WEB_NAME`                  | ブラウザのタブとインストールしたアプリに表示する名前。`url`・`host`・`domain`（大文字小文字を区別しない）を指定すると、ブラウザが接続したホスト名（ポートなし）を使用します（localhost と IP アドレスは `omp web` のまま）。それ以外の値はそのまま使用します（変更後は再起動）                                                                   | `omp web`                              |
+| `OMP_WEB_OMP_BIN`               | ダウンロード版の代わりに使う `ompweb-omp` ビルドのパス（GitHub に接続できないマシンではリリースの `ompweb-omp-<os>-<arch>` のコピー、ソースチェックアウトでは `runner/release/ompweb-omp-<os>-<arch>`）。通常の `omp` は ompweb のチャネルを話さないため使えません。サービスのインストーラーは、これを設定したときだけサービス環境に書き込みます | _ダウンロードした `ompweb-omp`_        |
+| `PI_CODING_AGENT_DIR`           | カスタム omp エージェントディレクトリ                                                                                                                                                                                                                                                                                                            | `~/.omp/agent`                         |
+| `OMP_WEB_STT_ENDPOINT`          | OpenAI 互換の音声認識エンドポイント URL。未設定の場合は `OMP_WEB_STT_MODEL` を omp 自身の認証情報で使って文字起こしします                                                                                                                                                                                                                        | _なし_                                 |
+| `OMP_WEB_STT_KEY`               | STT エンドポイント用の API キー                                                                                                                                                                                                                                                                                                                  | _なし_                                 |
+| `OMP_WEB_STT_MODEL`             | STT エンドポイント用のモデル名。エンドポイント未設定時は、omp のログインで実行する omp の音声認識モデル（例: `openai-codex/codex-transcribe`。ChatGPT サブスクリプション、このモデルを含む omp バージョンが必要）                                                                                                                                | _なし（エンドポイント未設定時は無効）_ |
 
 **`OMP_WEB_NAME` とインストールしたアプリ。** インストールしたアプリ（PWA）の名前は、通常インストール元のページの名前になります。あとで `OMP_WEB_NAME` を変更した場合や、`OMP_WEB_NAME` が `url`・`host`・`domain` のときに別のアドレスで omp-web にアクセスした場合、OS がインストール済みアプリの名前も変更することがあります。`OMP_WEB_NAME` は空のままにするか、どのドメイン名やアドレスでアクセスしてもこの omp-web サーバーを識別できる名前を設定することをおすすめします。
 
@@ -162,10 +162,13 @@ bun run dev
 ### チェックコマンド
 
 ```bash
-bun run typecheck   # 型チェック (TypeScript)
-bun run lint        # ESLint
-bun run test            # テスト実行 (bun test)
+bun run typecheck   # ルートと runner の型チェック (bun check)
+bun fmt             # フォーマット
+bun fmt --check     # フォーマットを確認
+bun run test        # テスト実行 (bun test)
 ```
+
+lint は廃止しました。固定バージョンの Bun 1.4.4 には組み込み linter がなく、ESLint と `tsc` も使用しません。既存コードのフォーマットが統一されていないため、CI ではフォーマットを必須チェックにしていません。
 
 ## クレジットとライセンス
 

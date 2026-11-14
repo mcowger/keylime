@@ -1,4 +1,8 @@
-import { apiErrorResponse, opErrorResponse, resolveSessionHostOr404 } from "@/lib/api-utils";
+import {
+  apiErrorResponse,
+  opErrorResponse,
+  resolveSessionHostOr404,
+} from "@/lib/api-utils";
 import { HostOpError } from "@/lib/hosts/link-protocol";
 import { getRpcSession } from "@/lib/rpc-manager";
 
@@ -10,7 +14,7 @@ import { getRpcSession } from "@/lib/rpc-manager";
  */
 export async function GET(
   _req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   try {

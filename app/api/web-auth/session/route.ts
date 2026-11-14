@@ -1,4 +1,7 @@
-import { parseJsonWithinLimit, RequestBodyTooLargeError } from "@/lib/bounded-form-data";
+import {
+  parseJsonWithinLimit,
+  RequestBodyTooLargeError,
+} from "@/lib/bounded-form-data";
 import { requestProtocol } from "@/lib/request-security";
 import {
   createWebSession,
@@ -12,7 +15,10 @@ const MAX_PASSWORD_REQUEST_BYTES = 8 * 1024;
 
 export async function POST(request: Request) {
   if (!isWebPasswordEnabled()) {
-    return Response.json({ error: "Password protection is disabled" }, { status: 404 });
+    return Response.json(
+      { error: "Password protection is disabled" },
+      { status: 404 },
+    );
   }
 
   let body: { password?: unknown };
@@ -34,5 +40,8 @@ export async function POST(request: Request) {
     maxAge: OMP_WEB_SESSION_MAX_AGE_SECONDS,
     path: "/",
   });
-  return Response.json({ ok: true }, { headers: { "set-cookie": cookie.serialize() } });
+  return Response.json(
+    { ok: true },
+    { headers: { "set-cookie": cookie.serialize() } },
+  );
 }

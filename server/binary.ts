@@ -6,15 +6,25 @@ import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 import packageJson from "../package.json";
 import { releaseRepo } from "../lib/release-repo";
-import { formatAddressBanner, getAccessibleAddresses, getBrowserUrl, openInBrowser } from "../bin/network-addresses";
+import {
+  formatAddressBanner,
+  getAccessibleAddresses,
+  getBrowserUrl,
+  openInBrowser,
+} from "../bin/network-addresses";
 import { runHashPasswordCommand } from "../bin/omp-web-hash-password";
-import { checkLaunchSecurity, parseLaunchOptions } from "../bin/omp-web-options";
+import {
+  checkLaunchSecurity,
+  parseLaunchOptions,
+} from "../bin/omp-web-options";
 import { runHostCli } from "@/lib/hosts/host-cli";
 import { runHostUpdateWorker } from "../lib/hosts/update-worker";
 
 // Before any server module loads: app/api/manifest reads public/ from it when it loads, and the daemon names
 // lib/omp/session-edit-extension.mjs in it to omp.
-process.env.OMP_WEB_PACKAGE_DIR ??= path.dirname(realpathSync(process.execPath));
+process.env.OMP_WEB_PACKAGE_DIR ??= path.dirname(
+  realpathSync(process.execPath),
+);
 const root = process.env.OMP_WEB_PACKAGE_DIR;
 const SEE_README = `https://github.com/${releaseRepo()}#single-binary shows how to run \`ompweb\` and \`ompweb host\` as services instead.`;
 
@@ -24,16 +34,24 @@ if (command === "host-update-worker") {
 }
 if (command === "host") process.exit(await runHostCli(process.argv.slice(3)));
 // The host updater finds this command in a release by PREFLIGHT_MARKER before it runs it: an older ompweb starts the web server instead.
-if (command === "preflight") process.exit(await (await import("../lib/hosts/preflight")).runPreflight());
+if (command === "preflight")
+  process.exit(await (await import("../lib/hosts/preflight")).runPreflight());
 // Updaters run it on a candidate before its preflight: the release archive has no runner (lib/omp/runner-fetch.ts).
-if (command === "fetch-omp") process.exit(await (await import("../lib/omp/runner-fetch")).runFetchOmp());
+if (command === "fetch-omp")
+  process.exit(await (await import("../lib/omp/runner-fetch")).runFetchOmp());
 if (command === "hash-password" || command === "hash_password") {
-  process.exit(await runHashPasswordCommand().catch((error: unknown) => {
-    console.error(`Could not hash the password: ${error instanceof Error ? error.message : String(error)}`);
-    return 1;
-  }));
+  process.exit(
+    await runHashPasswordCommand().catch((error: unknown) => {
+      console.error(
+        `Could not hash the password: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return 1;
+    }),
+  );
 }
-if (["launchd", "ompweb-launchd", "systemd", "ompweb-systemd"].includes(command)) {
+if (
+  ["launchd", "ompweb-launchd", "systemd", "ompweb-systemd"].includes(command)
+) {
   console.error(`The ompweb binary has no service installer. ${SEE_README}`);
   process.exit(2);
 }
@@ -50,7 +68,9 @@ if (options.installTray || options.uninstallTray || options.tray) {
 }
 const passwordHash = checkLaunchSecurity(options);
 if (!existsSync(path.join(root, "dist", "index.html"))) {
-  console.error(`No dist/index.html in ${root}. Keep the ompweb binary in the directory it was released in, or set OMP_WEB_PACKAGE_DIR to that directory.`);
+  console.error(
+    `No dist/index.html in ${root}. Keep the ompweb binary in the directory it was released in, or set OMP_WEB_PACKAGE_DIR to that directory.`,
+  );
   process.exit(1);
 }
 const { hostname, port } = options;
@@ -58,5 +78,13 @@ const { hostname, port } = options;
 const { startProduction } = await import("./app");
 await startProduction({ port: Number(port), hostname });
 const { entries, hint } = getAccessibleAddresses({ hostname, port });
-process.stdout.write(formatAddressBanner({ version: packageJson.version, entries, hint, passwordEnabled: passwordHash !== undefined, isTTY: process.stdout.isTTY }));
+process.stdout.write(
+  formatAddressBanner({
+    version: packageJson.version,
+    entries,
+    hint,
+    passwordEnabled: passwordHash !== undefined,
+    isTTY: process.stdout.isTTY,
+  }),
+);
 if (options.openBrowser) openInBrowser(getBrowserUrl(hostname, port));

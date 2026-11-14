@@ -46,21 +46,31 @@ test("header summary uses the pinned window across reports, skipping reports wit
     report({ sevenDay: { percent: 70 } }),
     report({ fiveHour: { percent: 65 }, sevenDay: { percent: 20 } }),
   ];
-  assert.deepEqual(displaySummary(reports, "auto"), { percent: 90, window: "7D" });
-  assert.deepEqual(displaySummary(reports, "5H"), { percent: 65, window: "5H" });
-  assert.deepEqual(displaySummary(reports, "7D"), { percent: 90, window: "7D" });
+  assert.deepEqual(displaySummary(reports, "auto"), {
+    percent: 90,
+    window: "7D",
+  });
+  assert.deepEqual(displaySummary(reports, "5H"), {
+    percent: 65,
+    window: "5H",
+  });
+  assert.deepEqual(displaySummary(reports, "7D"), {
+    percent: 90,
+    window: "7D",
+  });
 });
 
 test("header summary falls back to the worst window when no report has the pinned window (#285)", () => {
   const reports = [report({ sevenDay: { percent: 55 } })];
-  assert.deepEqual(displaySummary(reports, "5H"), { percent: 55, window: "7D" });
+  assert.deepEqual(displaySummary(reports, "5H"), {
+    percent: 55,
+    window: "7D",
+  });
   assert.deepEqual(displaySummary([], "5H"), null);
 });
 
 test("widget renders with a window toggle chip (#285)", () => {
-  const html = renderToStaticMarkup(
-    React.createElement(ProviderUsageBar, {}),
-  );
+  const html = renderToStaticMarkup(React.createElement(ProviderUsageBar, {}));
   assert.match(html, /Switch usage window \(currently Auto\)/);
   assert.match(html, />Auto</);
 });

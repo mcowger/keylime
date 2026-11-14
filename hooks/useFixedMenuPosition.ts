@@ -24,10 +24,18 @@ export function useFixedMenuPosition(
     const update = () => {
       // --ui-scale zooms <html>: the rect is in painted pixels, while fixed
       // coordinates are zoomed again, so convert to unscaled CSS pixels.
-      const scale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ui-scale")) || 1;
+      const scale =
+        parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue(
+            "--ui-scale",
+          ),
+        ) || 1;
       const rect = trigger.getBoundingClientRect();
       const maxLeft = window.innerWidth / scale - menuWidth - VIEWPORT_PAD;
-      setPos({ top: rect.bottom / scale + GAP, left: Math.max(VIEWPORT_PAD, Math.min(rect.left / scale, maxLeft)) });
+      setPos({
+        top: rect.bottom / scale + GAP,
+        left: Math.max(VIEWPORT_PAD, Math.min(rect.left / scale, maxLeft)),
+      });
     };
     update();
     window.addEventListener("scroll", update, true);

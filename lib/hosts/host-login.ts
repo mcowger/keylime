@@ -1,7 +1,14 @@
 // The daemon's saved links, shared by `ompweb host` and local-bootstrap.
 // Pure Node: no daemon/spawn code, `next/*` or `@/` imports.
 import { randomUUID } from "node:crypto";
-import { linkSync, lstatSync, readFileSync, type Stats, unlinkSync, writeFileSync } from "node:fs";
+import {
+  linkSync,
+  lstatSync,
+  readFileSync,
+  type Stats,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { type FileHandle, mkdir, open, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -13,9 +20,16 @@ const trimUrl = (url: string) => url.replace(/\/+$/, "");
 
 export type HostLink = { url: string; token: string };
 type SavedLink = HostLink & Record<string, unknown>;
-type HostConfig = Record<string, unknown> & { url?: string; token?: string; links?: SavedLink[] };
+type HostConfig = Record<string, unknown> & {
+  url?: string;
+  token?: string;
+  links?: SavedLink[];
+};
 
-export const isLoopbackHost = (hostname: string) => hostname === "localhost" || hostname === "[::1]" || /^127(\.\d{1,3}){3}$/.test(hostname);
+export const isLoopbackHost = (hostname: string) =>
+  hostname === "localhost" ||
+  hostname === "[::1]" ||
+  /^127(\.\d{1,3}){3}$/.test(hostname);
 
 /** Existing configuration must never be confused with a first login. */
 export class HostLoginUnreadableError extends Error {
@@ -24,7 +38,8 @@ export class HostLoginUnreadableError extends Error {
 
 function normalizeLink(link: HostLink): HostLink {
   const { protocol } = new URL(link.url);
-  if (protocol !== "https:" && protocol !== "http:") throw new Error("The server URL must start with https:// or http://");
+  if (protocol !== "https:" && protocol !== "http:")
+    throw new Error("The server URL must start with https:// or http://");
   const token = link.token.trim();
   if (!token) throw new Error("The host token is empty");
   return { url: trimUrl(link.url), token };
@@ -37,14 +52,21 @@ function readConfig(): HostConfig {
     text = readFileSync(file, "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
-    throw new HostLoginUnreadableError(`Cannot read ${file}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new HostLoginUnreadableError(
+      `Cannot read ${file}: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
   let saved: unknown;
   try {
     saved = JSON.parse(text);
     if (!isRecord(saved)) throw new Error();
     const checkLink = (link: unknown) => {
-      if (!isRecord(link) || typeof link.url !== "string" || typeof link.token !== "string") throw new Error();
+      if (
+        !isRecord(link) ||
+        typeof link.url !== "string" ||
+        typeof link.token !== "string"
+      )
+        throw new Error();
       normalizeLink({ url: link.url, token: link.token });
     };
     if ("url" in saved || "token" in saved) checkLink(saved);
@@ -53,23 +75,38 @@ function readConfig(): HostConfig {
       saved.links.forEach(checkLink);
     }
   } catch {
-    throw new HostLoginUnreadableError(`${file} is not valid host link configuration`);
+    throw new HostLoginUnreadableError(
+      `${file} is not valid host link configuration`,
+    );
   }
   return saved as HostConfig;
 }
 
 function configLinks(saved: HostConfig): SavedLink[] {
-  return saved.links ?? (saved.url !== undefined && saved.token !== undefined ? [{ url: saved.url, token: saved.token }] : []);
+  return (
+    saved.links ??
+    (saved.url !== undefined && saved.token !== undefined
+      ? [{ url: saved.url, token: saved.token }]
+      : [])
+  );
 }
 
 /** Only a missing links list falls back to the primary used by older daemons. */
 export function readHostLinks(): HostLink[] {
-  return configLinks(readConfig()).map(({ url, token }) => ({ url: trimUrl(url), token }));
+  return configLinks(readConfig()).map(({ url, token }) => ({
+    url: trimUrl(url),
+    token,
+  }));
 }
 
 function ownerExited(text: string): boolean {
   const owner: unknown = JSON.parse(text);
-  if (!isRecord(owner) || !Number.isSafeInteger(owner.pid) || (owner.pid as number) <= 0) return false;
+  if (
+    !isRecord(owner) ||
+    !Number.isSafeInteger(owner.pid) ||
+    (owner.pid as number) <= 0
+  )
+    return false;
   try {
     process.kill(owner.pid as number, 0);
     return false;
@@ -89,21 +126,33 @@ function recoverLock(lock: string): void {
     if (!ownerExited(text)) return;
     // Published by link(): the mutex never exists without its owner's pid, so a crash cannot leave an unreadable one.
     const temp = `${mutex}.${process.pid}.${randomUUID()}`;
-    writeFileSync(temp, JSON.stringify({ pid: process.pid }), { mode: 0o600, flag: "wx" });
+    writeFileSync(temp, JSON.stringify({ pid: process.pid }), {
+      mode: 0o600,
+      flag: "wx",
+    });
     let ours: Stats;
     try {
       ours = lstatSync(temp);
       linkSync(temp, mutex);
     } catch (error) {
       // Another recoverer holds the mutex; only a proven-dead one is displaced.
-      if ((error as NodeJS.ErrnoException).code === "EEXIST" && ownerExited(readFileSync(mutex, "utf8"))) unlinkSync(mutex);
+      if (
+        (error as NodeJS.ErrnoException).code === "EEXIST" &&
+        ownerExited(readFileSync(mutex, "utf8"))
+      )
+        unlinkSync(mutex);
       return;
     } finally {
       unlinkSync(temp);
     }
     try {
       const current = lstatSync(lock);
-      if (current.dev === before.dev && current.ino === before.ino && readFileSync(lock, "utf8") === text) unlinkSync(lock);
+      if (
+        current.dev === before.dev &&
+        current.ino === before.ino &&
+        readFileSync(lock, "utf8") === text
+      )
+        unlinkSync(lock);
     } finally {
       try {
         const now = lstatSync(mutex);
@@ -117,7 +166,9 @@ function recoverLock(lock: string): void {
   }
 }
 
-async function mutateConfig(update: (saved: HostConfig) => void): Promise<void> {
+async function mutateConfig(
+  update: (saved: HostConfig) => void,
+): Promise<void> {
   const file = loginFile();
   const lock = `${file}.lock`;
   await mkdir(dirname(file), { recursive: true });
@@ -130,7 +181,8 @@ async function mutateConfig(update: (saved: HostConfig) => void): Promise<void> 
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       recoverLock(lock);
-      if (Date.now() >= deadline) throw new Error(`Host configuration lock timed out: ${lock}`);
+      if (Date.now() >= deadline)
+        throw new Error(`Host configuration lock timed out: ${lock}`);
       await sleep(50);
     }
   }
@@ -165,7 +217,8 @@ async function mutateConfig(update: (saved: HostConfig) => void): Promise<void> 
     const current = lstatSync(lock);
     if (current.dev === held.dev && current.ino === held.ino) unlinkSync(lock);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") failure ??= { error };
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+      failure ??= { error };
   }
   try {
     await lease.close();
@@ -177,14 +230,17 @@ async function mutateConfig(update: (saved: HostConfig) => void): Promise<void> 
 
 /** Upsert one URL, preserving the legacy primary and all other links.
  * Local bootstrap selects/validates its shared token inside the same lock. */
-export async function addHostLink(input: HostLink | (() => HostLink)): Promise<void> {
+export async function addHostLink(
+  input: HostLink | (() => HostLink),
+): Promise<void> {
   await mutateConfig((saved) => {
     const link = normalizeLink(typeof input === "function" ? input() : input);
     const links = configLinks(saved);
     const index = links.findIndex(({ url }) => trimUrl(url) === link.url);
     if (index === -1) links.push(link);
     else links[index] = { ...links[index], ...link };
-    if (saved.url === undefined || trimUrl(saved.url) === link.url) Object.assign(saved, link); // v6 daemons only read the top-level pair.
+    if (saved.url === undefined || trimUrl(saved.url) === link.url)
+      Object.assign(saved, link); // v6 daemons only read the top-level pair.
     saved.links = links;
   });
 }
@@ -192,7 +248,9 @@ export async function addHostLink(input: HostLink | (() => HostLink)): Promise<v
 /** Remove membership only; the legacy primary remains for v6 readers. */
 export async function removeHostLink(url: string): Promise<void> {
   await mutateConfig((saved) => {
-    saved.links = configLinks(saved).filter((link) => trimUrl(link.url) !== trimUrl(url));
+    saved.links = configLinks(saved).filter(
+      (link) => trimUrl(link.url) !== trimUrl(url),
+    );
   });
 }
 
@@ -200,7 +258,10 @@ export async function removeHostLink(url: string): Promise<void> {
 export async function loginHost(input: HostLink): Promise<void> {
   const link = normalizeLink(input);
   await mutateConfig((saved) => {
-    const links = configLinks(saved).filter(({ url }) => trimUrl(url) !== trimUrl(saved.url ?? "") || trimUrl(url) === link.url);
+    const links = configLinks(saved).filter(
+      ({ url }) =>
+        trimUrl(url) !== trimUrl(saved.url ?? "") || trimUrl(url) === link.url,
+    );
     const index = links.findIndex(({ url }) => trimUrl(url) === link.url);
     if (index === -1) links.push(link);
     else links[index] = { ...links[index], ...link };
@@ -212,7 +273,12 @@ export async function loginHost(input: HostLink): Promise<void> {
 export function readHostLogin(): HostLink | null {
   try {
     const saved: unknown = JSON.parse(readFileSync(loginFile(), "utf8"));
-    if (isRecord(saved) && typeof saved.url === "string" && typeof saved.token === "string") return { url: saved.url, token: saved.token };
+    if (
+      isRecord(saved) &&
+      typeof saved.url === "string" &&
+      typeof saved.token === "string"
+    )
+      return { url: saved.url, token: saved.token };
   } catch {
     // Retain the legacy reader's tolerant behaviour.
   }

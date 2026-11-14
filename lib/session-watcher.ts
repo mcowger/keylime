@@ -56,9 +56,13 @@ function flush(): void {
     invalidateLocalSessionLists(path);
   }
 
-  void Promise.all(paths.map((path) => resolveSessionIdByPath(path).catch(() => undefined)))
+  void Promise.all(
+    paths.map((path) => resolveSessionIdByPath(path).catch(() => undefined)),
+  )
     .then((ids) => {
-      const sessionIds = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+      const sessionIds = [
+        ...new Set(ids.filter((id): id is string => Boolean(id))),
+      ];
       if (sessionIds.length === 0) return;
       for (const listener of listeners) {
         try {
@@ -102,17 +106,21 @@ function ensureWatcher(): void {
   if (watcher || retryTimer) return;
   const sessionsDir = join(getAgentDir(), "sessions");
   try {
-    watcher = watch(sessionsDir, { recursive: true, persistent: false }, (_event, filename) => {
-      if (!filename) {
-        pendingUnknown = true;
+    watcher = watch(
+      sessionsDir,
+      { recursive: true, persistent: false },
+      (_event, filename) => {
+        if (!filename) {
+          pendingUnknown = true;
+          if (!flushTimer) flushTimer = setTimeout(flush, DEBOUNCE_MS);
+          return;
+        }
+        const name = filename.toString();
+        if (!name.endsWith(".jsonl")) return;
+        pendingPaths.add(join(sessionsDir, name));
         if (!flushTimer) flushTimer = setTimeout(flush, DEBOUNCE_MS);
-        return;
-      }
-      const name = filename.toString();
-      if (!name.endsWith(".jsonl")) return;
-      pendingPaths.add(join(sessionsDir, name));
-      if (!flushTimer) flushTimer = setTimeout(flush, DEBOUNCE_MS);
-    });
+      },
+    );
     watcher.on("error", () => {
       watcher?.close();
       watcher = null;

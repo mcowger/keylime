@@ -39,10 +39,12 @@
 ### Task 1: the manifest
 
 **Files:**
+
 - Create: `lib/hosts/cluster-config.ts`
 - Test: `lib/hosts/cluster-config.test.mjs`
 
 **Interfaces:**
+
 - Produces:
 
 ```ts
@@ -64,6 +66,7 @@ export function isManagedPath(root: ConfigRoot, path: string): boolean;
 ```
 
 `MIRRORED`, exact:
+
 - agent, files: `config.yml`, `models.yml`, `mcp.json`, `.mcp.json`, `AGENTS.md`, `RULES.md`, `SYSTEM.md`, `APPEND_SYSTEM.md`, `TITLE_SYSTEM.md`, `secrets.yml`, `.env`
 - agent, directories: `skills`, `agents`, `rules`, `instructions`, `commands`, `prompts`, `hooks`, `extensions`, `tools`
 - home, directory: `.agents/skills`
@@ -71,6 +74,7 @@ export function isManagedPath(root: ConfigRoot, path: string): boolean;
 `LOCAL_SETTINGS`, exact: `shellPath`; `python.interpreter`; `browser`; `worktree.base`; `plan.autosaveDir`; `shellMinimizer.settingsPath`; `mnemopi.dbPath`; `workspace.additionalDirectories`; `skills.customDirectories`; `extensions`; `images.urls`; `providers.tinyModelDevice`; `providers.tinyModelDtype`; `tts`; `stt`; `tui`; `terminal`; `lsp`; `auth.broker`.
 
 Rules:
+
 - A missing entry is skipped. Where the master has `config.yaml` or `models.yaml` and no `.yml`, its content is mirrored under the `.yml` path.
 - The `config.yml` entry's content is `stripLocalSettings(file)`; its hash and size are of that. A file that is not a YAML map → `invalid_settings`.
 - `hash` is the SHA-256 hex of the content. `version` is the SHA-256 hex of the canonical JSON of `{ files, agentEnv, plugins }` with `files` sorted by root then path, `plugins` by kind then id, and `agentEnv` keys sorted.
@@ -98,28 +102,36 @@ Rules:
 ### Task 2: the master's current configuration and its two routes
 
 **Files:**
+
 - Create: `lib/omp/plugins-cli.ts`, `lib/hosts/cluster-config-server.ts`, `lib/hosts/host-bearer.ts`, `app/api/hosts/cluster-config/manifest/route.ts`, `app/api/hosts/cluster-config/file/[hash]/route.ts`
 - Modify: `app/api/plugins/route.ts` (use `plugins-cli.ts` for the list), `app/api/hosts/broker/[...path]/route.ts` (use `host-bearer.ts`), `proxy.ts` (`UNGATED`), `server/routes.ts`
 - Test: `lib/hosts/cluster-config-route.test.mjs`, `lib/web-auth.test.mjs`, `lib/omp/plugins-cli.test.mjs`
 
 **Interfaces:**
+
 - Consumes: Task 1; `isClusterMember` (`lib/hosts/cluster.ts`); `loadPools`; `hostForToken`, `HostRegistryUnreadableError`; `loadWebServerSettings`; `getAgentDir`.
 - Produces:
 
 ```ts
 // lib/omp/plugins-cli.ts (daemon-safe)
-export function listPlugins(run: (args: string[]) => Promise<string>): Promise<PluginEntry[]>; // `omp plugin list --json`; npm: id = name, version, enabled; marketplace: id, version and enabled of its first user-scope entry
-export function runOmpCli(args: string[], timeoutMs: number): Promise<string>;                  // execFile of resolveOmpBin(); rejects when omp is missing
+export function listPlugins(
+  run: (args: string[]) => Promise<string>,
+): Promise<PluginEntry[]>; // `omp plugin list --json`; npm: id = name, version, enabled; marketplace: id, version and enabled of its first user-scope entry
+export function runOmpCli(args: string[], timeoutMs: number): Promise<string>; // execFile of resolveOmpBin(); rejects when omp is missing
 // lib/hosts/host-bearer.ts
-export function hostFromBearer(request: Request): HostRecord | Response;                         // 401 unknown token, 503 unreadable registry; never 401 for an unreadable registry
+export function hostFromBearer(request: Request): HostRecord | Response; // 401 unknown token, 503 unreadable registry; never 401 for an unreadable registry
 // lib/hosts/cluster-config-server.ts
-export function currentClusterConfig(): Promise<{ manifest: ConfigManifest; content(hash: string): Uint8Array | null }>; // throws ClusterConfigError
+export function currentClusterConfig(): Promise<{
+  manifest: ConfigManifest;
+  content(hash: string): Uint8Array | null;
+}>; // throws ClusterConfigError
 export function clusterConfigVersion(): Promise<string>;
 ```
 
 `currentClusterConfig` rebuilds only when something changed: it keeps the last result with a fingerprint (path, size and modification time of every file under the mirrored entries after following links, the `agentEnv` record, the plugin list) and reuses it while the fingerprint is equal. The plugin list is read at most every 30 s.
 
 Routes, both `GET`, both outside the password gate (`UNGATED` gains the prefix `api\/hosts\/cluster-config\/`), both in this order: `hostFromBearer`; the host is not `local` and `isClusterMember(loadPools(), host.id)`, else 403 `Not a cluster member`; unreadable `pools.json` → 503.
+
 - `manifest` → 200 with the manifest as JSON, `cache-control: no-store`; a `ClusterConfigError` → 409 `{ error, code }`.
 - `file/<hash>`: `hash` must be 64 lower-case hex characters, else 404; bytes of that hash from the current configuration, `content-type: application/octet-stream`; a hash not in the current manifest → 404.
 
@@ -140,18 +152,26 @@ Routes, both `GET`, both outside the password gate (`UNGATED` gains the prefix `
 ### Task 3: applying on a member
 
 **Files:**
+
 - Create: `lib/hosts/daemon-cluster-config.ts`
 - Test: `lib/hosts/daemon-cluster-config.test.mjs`
 
 **Interfaces:**
+
 - Consumes: Task 1 (`ConfigManifest`, `isManagedPath`, `mergeLocalSettings`, `MIRRORED`); `listPlugins` (Task 2); `saveWebServerSettings`, `loadWebServerSettings` (`lib/web-settings.ts`).
 - Produces:
 
 ```ts
-export interface ConfigState { version: string | null; files: "none" | "current" | "failed"; plugins: "none" | "pending" | "current" | "failed"; error: string | null; missingCommands: string[] }
+export interface ConfigState {
+  version: string | null;
+  files: "none" | "current" | "failed";
+  plugins: "none" | "pending" | "current" | "failed";
+  error: string | null;
+  missingCommands: string[];
+}
 export function createClusterConfig(deps: {
   roots(): Record<ConfigRoot, string>;
-  stateDir(): string;                                   // <agent dir>/omp-web
+  stateDir(): string; // <agent dir>/omp-web
   fetch(serverUrl: string, path: string): Promise<Response>; // authenticated by the caller; path starts with /api/hosts/cluster-config/
   runOmp(args: string[], timeoutMs: number): Promise<string>;
   commandExists(command: string): Promise<boolean>;
@@ -170,6 +190,7 @@ export function createClusterConfig(deps: {
 Layout under `stateDir()`: `cluster-config/state.json` (`{ version, plugins }`), `cluster-config/objects/<hash>`, `cluster-config/stage/`, `cluster-config/trash/`, `own-config/` (the backup: `agent/…`, `home/…`, `agent-env.json`, `plugins.json`).
 
 `ensure`, in order:
+
 1. The applied version equals `version` → done.
 2. Fetch the manifest. Apply the version the manifest carries, even if it is newer than the one asked for. Reject any file path for which `isManagedPath` is false.
 3. Download each file whose hash is not in `objects/` and verify its SHA-256; a 404 means the master changed meanwhile: fetch the manifest again, once.
@@ -206,10 +227,12 @@ Layout under `stateDir()`: `cluster-config/state.json` (`{ version, plugins }`),
 ### Task 4: link protocol 10 and the wiring
 
 **Files:**
+
 - Modify: `lib/hosts/link-protocol.ts`, `lib/hosts/host.ts`, `lib/hosts/hub.ts`, `lib/hosts/daemon.ts`, `lib/hosts/daemon-channels.ts`, `app/api/hosts/[id]/cluster/route.ts`, `instrumentation.node.ts`
 - Test: `lib/hosts/hub-v7.test.mjs`, `lib/hosts/daemon-runtime.test.mjs`, `lib/hosts/daemon-channels.test.mjs`, `lib/hosts/cluster-route.test.mjs`, the fixtures that pin the server's version as 9
 
 **Interfaces:**
+
 - Consumes: Tasks 2 and 3; `sharesCredentials`, `isClusterMember`; `SpawnRequest.credentialsServer`; the daemon's authenticated fetch in `lib/hosts/daemon-broker.ts`.
 - Produces:
 
@@ -226,17 +249,20 @@ clusterConfig?: ConfigState & { current: boolean };
 ```
 
 Hub:
+
 - `RemoteHost.spawnRpc`, for a host that is a cluster member and not `local`, on an open that can start a process: a daemon below protocol 10 → 426 `host_upgrade_required` ("Update ompweb on <label> to use it in the cluster"); `clusterConfigVersion()` throwing → 409 `cluster_config_invalid` with the error's message; otherwise the launch gets `configVersion`.
 - `config_state` is stored per link when `hostVersion ≥ 10`; `current` is `state.version === the master's version && state.files === "current" && state.plugins === "current"`; a change calls `notifyHostsChange()`.
 - A timer started from `instrumentation.node.ts` runs every 30 s while a cluster exists: for each online member whose reported version differs from the master's, send `clusterConfig` `apply`. A failing master configuration is logged once per version.
 
 Daemon:
+
 - One `createClusterConfig` per daemon. Its `fetch` uses the link whose URL is given, with that link's current token and `redirect: "error"`; `onState` queues `config_state` on every link of protocol 10 or newer.
 - The `spawn` dependency, after the credentials checks: a launch with `configVersion` and no `credentialsServer` → 409 `cluster_config_failed`; otherwise `await config.ensure(launch.configVersion, launch.credentialsServer)` before `spawnRpc`.
 - `ChannelTable.open` passes `configVersion` through only when it is a string of 64 hex characters, and drops it otherwise. `spawnLegacy` drops it. The resume manifest never stores it: a recovered session starts with the version already applied.
 - The `clusterConfig` op: `apply` → `ensure(version, <the URL of the link that sent the op>)` then the state; `restore` → `restore()` then the state.
 
 Join and leave route:
+
 - The join precondition is protocol 10. After the save, the route sends `clusterConfig` `apply` to the joined host and to no other, waits at most 60 s, and answers 200 either way; the state shows a failure.
 - Leaving sends `clusterConfig` `restore` after the save, and answers 200 with `restoreError` set when it failed.
 
@@ -255,10 +281,12 @@ Join and leave route:
 ### Task 5: placement skips members that are not current
 
 **Files:**
+
 - Modify: `lib/hosts/pools.ts` (`PoolHostSnapshot`, `selectPoolHost`), `lib/hosts/pool-starts.ts` (where the snapshots are built), `lib/hosts/hub.ts` (a getter)
 - Test: `lib/hosts/pool-selection.test.mjs`, `lib/hosts/pool-starts.test.mjs`
 
 **Interfaces:**
+
 - Produces: `PoolHostSnapshot.configCurrent: boolean`; `export function isHostConfigCurrent(hostId: string): boolean` in `hub.ts` (always true for `local`).
 
 `selectPoolHost` skips a member whose snapshot has `configCurrent === false`, next to its `draining` check. When no member is eligible only for that reason, the 503 `pool_unavailable` message says that the members are still receiving the cluster's configuration.
@@ -274,27 +302,30 @@ Join and leave route:
 ### Task 6: Settings
 
 **Files:**
+
 - Modify: `components/HostsConfig.tsx`, `components/AppShell.tsx`, `components/SettingsConfig.tsx`, `lib/i18n/locales/en.json`, `ja.json`, `zh-CN.json`
 - Test: `components/HostsConfig.cluster.test.mjs`, the existing Settings component tests
 
 **Interfaces:**
+
 - Consumes: `LinkedHostRow.clusterConfig` (Task 4); `useHostRows()`; `isClusterMember`.
 
 Behaviour:
+
 - **Hosts.** A member's row shows one line under its details: `configCurrent`; `configUpdating` (files or plugins not yet current and no error); `configFailed` with the error text; and, when the list is not empty, `configMissing` with the commands joined by ", ". The join confirmation gains the note `joinConfigNote`.
 - **Panels.** Today `remoteHost` (in `AppShell`, from the session's host) replaces the MCP, Skills, Plugins and Agents panels with "Not available on remote hosts yet". For a session or project of the cluster whose node is a member other than this machine, the panels are shown instead, in cluster mode: they act on the master's user-level configuration, their project-level parts are hidden, and a line at the top says `clusterConfigNotice`. They are given the master's default working directory (`GET /api/default-cwd` without a host). If a route refuses that directory in its allowed-roots check, change that route to accept a request without `cwd` for its user-level operations; do not widen the allowed roots. A standalone remote host keeps today's message.
 - The Models and settings tabs get the same `clusterConfigNotice` for a cluster session.
 
 Strings (keys `hostsConfig.<name>` unless noted):
 
-| name | en | ja | zh-CN |
-|---|---|---|---|
-| `configCurrent` | Configuration: same as the master | 設定: マスターと同じ | 配置：与主节点一致 |
-| `configUpdating` | Configuration: updating… | 設定: 更新中… | 配置：正在更新… |
-| `configFailed` | Configuration: failed — {reason} | 設定: 失敗 — {reason} | 配置：失败 — {reason} |
-| `configMissing` | Not installed on this host: {commands} | このホストに未インストール: {commands} | 该主机上未安装：{commands} |
-| `joinConfigNote` | Its omp configuration (settings, models, MCP servers, skills, plugins, rules) is replaced by this machine's until it leaves; its own is kept and put back then. | この omp 設定（設定、モデル、MCP サーバー、スキル、プラグイン、ルール）は、離脱するまでこのマシンのものに置き換えられます。元の設定は保存され、離脱時に戻されます。 | 其 omp 配置（设置、模型、MCP 服务器、技能、插件、规则）在离开前将替换为本机的配置；它自己的配置会被保留并在离开时恢复。 |
-| `settings.clusterConfigNotice` | Cluster configuration: changes here apply to every member. | クラスター設定: ここでの変更はすべてのメンバーに適用されます。 | 集群配置：此处的更改适用于所有成员。 |
+| name                           | en                                                                                                                                                              | ja                                                                                                                                                                  | zh-CN                                                                                                                   |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `configCurrent`                | Configuration: same as the master                                                                                                                               | 設定: マスターと同じ                                                                                                                                                | 配置：与主节点一致                                                                                                      |
+| `configUpdating`               | Configuration: updating…                                                                                                                                        | 設定: 更新中…                                                                                                                                                       | 配置：正在更新…                                                                                                         |
+| `configFailed`                 | Configuration: failed — {reason}                                                                                                                                | 設定: 失敗 — {reason}                                                                                                                                               | 配置：失败 — {reason}                                                                                                   |
+| `configMissing`                | Not installed on this host: {commands}                                                                                                                          | このホストに未インストール: {commands}                                                                                                                              | 该主机上未安装：{commands}                                                                                              |
+| `joinConfigNote`               | Its omp configuration (settings, models, MCP servers, skills, plugins, rules) is replaced by this machine's until it leaves; its own is kept and put back then. | この omp 設定（設定、モデル、MCP サーバー、スキル、プラグイン、ルール）は、離脱するまでこのマシンのものに置き換えられます。元の設定は保存され、離脱時に戻されます。 | 其 omp 配置（设置、模型、MCP 服务器、技能、插件、规则）在离开前将替换为本机的配置；它自己的配置会被保留并在离开时恢复。 |
+| `settings.clusterConfigNotice` | Cluster configuration: changes here apply to every member.                                                                                                      | クラスター設定: ここでの変更はすべてのメンバーに適用されます。                                                                                                      | 集群配置：此处的更改适用于所有成员。                                                                                    |
 
 - [ ] **Step 1: Write the failing tests:** each of the four status lines from a row's `clusterConfig`; no line for a standalone host; the join dialog shows `joinConfigNote`; for a cluster session on another member the four panels render with the notice and send their requests without the member's `cwd`; for a standalone remote host the old message stays; for a cluster session on this machine nothing changes except the notice.
 - [ ] **Step 2: Run** them — expected: fail.
@@ -307,6 +338,7 @@ Strings (keys `hostsConfig.<name>` unless noted):
 ### Task 7: documentation
 
 **Files:**
+
 - Modify: `README.md`, `AGENTS.md`, `CHANGELOG.md`, `docs/specs/2026-10-28-remote-hosts-design.md`
 
 Content, from the spec, in plain prose: what is mirrored and what is not (K1, "Not goals"); the settings that stay the member's own (K2); when a member applies and what happens when it cannot (K3, K4); plugins (K5); the backup and what leaving restores (K6); the security note and the limits, in full; the reverse-proxy sentence for `/api/hosts/cluster-config/` (as for `/api/hosts/broker/`); `AGENTS.md`: the file map entries for the new files, the rules under "Remote hosts" (protocol 10, `configVersion`, `config_state`, the `clusterConfig` op, never persisted in the resume manifest), the gate exemption; the remote-hosts specification's version rule gains `10: open.launch.configVersion, config_state, the clusterConfig op`.

@@ -5,10 +5,16 @@ const MAX_QUERY_LENGTH = 500;
 // GET /api/sessions/search?q= — NDJSON, one `{ scores }` line per batch of
 // scanned sessions (empty batches too, so the scan keeps reaching the reader).
 // Closing the request stops the scan after the batch being read (no resume).
-export async function GET(req: Request, { disableIdleTimeout }: { disableIdleTimeout: () => void }) {
+export async function GET(
+  req: Request,
+  { disableIdleTimeout }: { disableIdleTimeout: () => void },
+) {
   const q = new URL(req.url).searchParams.get("q") ?? "";
   if (q.length > MAX_QUERY_LENGTH) {
-    return Response.json({ error: "Query too long", code: "query_too_long" }, { status: 400 });
+    return Response.json(
+      { error: "Query too long", code: "query_too_long" },
+      { status: 400 },
+    );
   }
   const batches = searchSessions(q);
   const encoder = new TextEncoder();
@@ -17,7 +23,10 @@ export async function GET(req: Request, { disableIdleTimeout }: { disableIdleTim
     async pull(controller) {
       const next = await batches.next();
       if (next.done) controller.close();
-      else controller.enqueue(encoder.encode(`${JSON.stringify({ scores: next.value })}\n`));
+      else
+        controller.enqueue(
+          encoder.encode(`${JSON.stringify({ scores: next.value })}\n`),
+        );
     },
     async cancel() {
       await batches.return(undefined);
@@ -25,5 +34,11 @@ export async function GET(req: Request, { disableIdleTimeout }: { disableIdleTim
   });
   disableIdleTimeout();
   // X-Accel-Buffering: nginx must pass batches through as they arrive.
-  return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }

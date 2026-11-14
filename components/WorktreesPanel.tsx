@@ -24,17 +24,52 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
   useEffect(() => {
     const controller = new AbortController();
     setHomeDir("");
-    if (hostId) fetch(`/api/home?${new URLSearchParams({ hostId })}`, { signal: controller.signal })
-      .then((r) => r.json()).then((d: { home?: string }) => { if (!controller.signal.aborted && d.home) setHomeDir(d.home); }).catch(() => {});
+    if (hostId)
+      fetch(`/api/home?${new URLSearchParams({ hostId })}`, {
+        signal: controller.signal,
+      })
+        .then((r) => r.json())
+        .then((d: { home?: string }) => {
+          if (!controller.signal.aborted && d.home) setHomeDir(d.home);
+        })
+        .catch(() => {});
     return () => controller.abort();
   }, [hostId]);
 
   if (!ctx || ctx.error) {
     return (
-      <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, padding: 24, textAlign: "center" }}>
-        <GitFork size={26} strokeWidth={1.5} aria-hidden="true" style={{ color: "var(--text-dim)" }} />
-        <div style={{ color: "var(--text)", fontSize: 13, fontWeight: 600 }}>{t("tabBar.worktrees")}</div>
-        <div role={ctx?.error ? "alert" : undefined} style={{ color: "var(--text-dim)", fontSize: 11, lineHeight: 1.6, maxWidth: 260 }}>{ctx?.error ?? t("sessionSidebar.gitRepoRootOnlyTitle")}</div>
+      <div
+        style={{
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          padding: 24,
+          textAlign: "center",
+        }}
+      >
+        <GitFork
+          size={26}
+          strokeWidth={1.5}
+          aria-hidden="true"
+          style={{ color: "var(--text-dim)" }}
+        />
+        <div style={{ color: "var(--text)", fontSize: 13, fontWeight: 600 }}>
+          {t("tabBar.worktrees")}
+        </div>
+        <div
+          role={ctx?.error ? "alert" : undefined}
+          style={{
+            color: "var(--text-dim)",
+            fontSize: 11,
+            lineHeight: 1.6,
+            maxWidth: 260,
+          }}
+        >
+          {ctx?.error ?? t("sessionSidebar.gitRepoRootOnlyTitle")}
+        </div>
       </div>
     );
   }
@@ -67,7 +102,9 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
     setError(null);
     try {
       // Dirty worktree — ask the user to confirm a force removal.
-      setConfirmRemove(await ctx.remove(path, force) === "dirty" ? path : null);
+      setConfirmRemove(
+        (await ctx.remove(path, force)) === "dirty" ? path : null,
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -83,20 +120,58 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
         const isCurrent = comparableProjectPath(wt.path) === foldedCurrent;
         if (confirmRemove === wt.path) {
           return (
-            <div key={wt.path} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 10px", borderBottom: "1px solid var(--border)", background: "color-mix(in srgb, var(--accent) 6%, transparent)" }}>
-              <span style={{ flex: 1, fontSize: 11, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <div
+              key={wt.path}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "7px 10px",
+                borderBottom: "1px solid var(--border)",
+                background: "color-mix(in srgb, var(--accent) 6%, transparent)",
+              }}
+            >
+              <span
+                style={{
+                  flex: 1,
+                  fontSize: 11,
+                  color: "var(--text)",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
                 {t("sessionSidebar.uncommittedForceRemove")}
               </span>
               <button
                 onClick={() => void handleRemove(wt.path, true)}
                 disabled={busy}
-                style={{ padding: "3px 9px", background: "var(--accent-strong)", border: "none", borderRadius: "var(--radius-control)", color: "var(--on-accent)", fontSize: 11, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}
+                style={{
+                  padding: "3px 9px",
+                  background: "var(--accent-strong)",
+                  border: "none",
+                  borderRadius: "var(--radius-control)",
+                  color: "var(--on-accent)",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  flexShrink: 0,
+                }}
               >
                 {t("sessionSidebar.force")}
               </button>
               <button
                 onClick={() => setConfirmRemove(null)}
-                style={{ padding: "3px 9px", background: "var(--bg-hover)", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", color: "var(--text-muted)", fontSize: 11, cursor: "pointer", flexShrink: 0 }}
+                style={{
+                  padding: "3px 9px",
+                  background: "var(--bg-hover)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-control)",
+                  color: "var(--text-muted)",
+                  fontSize: 11,
+                  cursor: "pointer",
+                  flexShrink: 0,
+                }}
               >
                 {t("sessionSidebar.cancel")}
               </button>
@@ -104,7 +179,14 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
           );
         }
         return (
-          <div key={wt.path} style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--border)" }}>
+          <div
+            key={wt.path}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              borderBottom: "1px solid var(--border)",
+            }}
+          >
             <button
               onClick={() => ctx.select(wt.path)}
               aria-pressed={isCurrent}
@@ -126,29 +208,67 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
               }}
             >
               {isCurrent ? (
-                <Check size={10} strokeWidth={2} style={{ flexShrink: 0, color: "var(--accent)" }} aria-hidden="true" />
+                <Check
+                  size={10}
+                  strokeWidth={2}
+                  style={{ flexShrink: 0, color: "var(--accent)" }}
+                  aria-hidden="true"
+                />
               ) : (
                 <span style={{ width: 10, flexShrink: 0 }} />
               )}
-              <PathLabel text={wt.branch ?? displayCwd(wt.path, homeDir)} style={{ flex: 1 }} />
-              {wt.isMain && <span style={{ flexShrink: 0, color: "var(--text-dim)", fontSize: 10 }}>{t("sessionSidebar.mainBadge")}</span>}
+              <PathLabel
+                text={wt.branch ?? displayCwd(wt.path, homeDir)}
+                style={{ flex: 1 }}
+              />
+              {wt.isMain && (
+                <span
+                  style={{
+                    flexShrink: 0,
+                    color: "var(--text-dim)",
+                    fontSize: 10,
+                  }}
+                >
+                  {t("sessionSidebar.mainBadge")}
+                </span>
+              )}
             </button>
             {!wt.isMain && (
               <button
                 onClick={() => void handleRemove(wt.path, false)}
                 disabled={busy}
-                title={t("sessionSidebar.removeWorktreeTitle", { path: wt.path })}
-                aria-label={t("sessionSidebar.removeWorktreeTitle", { path: wt.path })}
+                title={t("sessionSidebar.removeWorktreeTitle", {
+                  path: wt.path,
+                })}
+                aria-label={t("sessionSidebar.removeWorktreeTitle", {
+                  path: wt.path,
+                })}
                 style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  width: 34, height: 28, padding: 0, marginRight: 4,
-                  background: "none", border: "none",
-                  color: "var(--text-dim)", cursor: "pointer",
-                  borderRadius: "var(--radius-control)", flexShrink: 0,
-                  transition: "color var(--dur-fast) var(--ease-out-warm), background var(--dur-fast) var(--ease-out-warm)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 34,
+                  height: 28,
+                  padding: 0,
+                  marginRight: 4,
+                  background: "none",
+                  border: "none",
+                  color: "var(--text-dim)",
+                  cursor: "pointer",
+                  borderRadius: "var(--radius-control)",
+                  flexShrink: 0,
+                  transition:
+                    "color var(--dur-fast) var(--ease-out-warm), background var(--dur-fast) var(--ease-out-warm)",
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; e.currentTarget.style.background = "color-mix(in srgb, var(--accent) 8%, transparent)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-dim)"; e.currentTarget.style.background = "none"; }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = "var(--accent)";
+                  e.currentTarget.style.background =
+                    "color-mix(in srgb, var(--accent) 8%, transparent)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = "var(--text-dim)";
+                  e.currentTarget.style.background = "none";
+                }}
               >
                 <Trash2 size={12} strokeWidth={2} aria-hidden="true" />
               </button>
@@ -179,7 +299,12 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
             fontSize: 11,
           }}
         >
-          <Plus size={12} strokeWidth={1.8} style={{ flexShrink: 0 }} aria-hidden="true" />
+          <Plus
+            size={12}
+            strokeWidth={1.8}
+            style={{ flexShrink: 0 }}
+            aria-hidden="true"
+          />
           <span>{t("sessionSidebar.newWorktree")}</span>
         </button>
       ) : (
@@ -251,13 +376,16 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
         </div>
       )}
       {error && (
-        <div role="alert" style={{
-          padding: "5px 10px 8px",
-          color: "var(--accent)",
-          fontSize: 11,
-          lineHeight: 1.35,
-          overflowWrap: "anywhere",
-        }}>
+        <div
+          role="alert"
+          style={{
+            padding: "5px 10px 8px",
+            color: "var(--accent)",
+            fontSize: 11,
+            lineHeight: 1.35,
+            overflowWrap: "anywhere",
+          }}
+        >
           {error}
         </div>
       )}

@@ -11,7 +11,9 @@ export interface ProviderModelGroup {
   options: ModelOption[];
 }
 
-export function groupModelOptionsByProvider(options: ModelOption[]): ProviderModelGroup[] {
+export function groupModelOptionsByProvider(
+  options: ModelOption[],
+): ProviderModelGroup[] {
   const groups: ProviderModelGroup[] = [];
   const byProvider = new Map<string, ProviderModelGroup>();
   for (const option of options) {
@@ -27,7 +29,10 @@ export function groupModelOptionsByProvider(options: ModelOption[]): ProviderMod
 }
 
 /** Current model's provider first so the picker opens on what you're already using. */
-export function orderProviderGroups(groups: ProviderModelGroup[], currentProvider: string | null | undefined): ProviderModelGroup[] {
+export function orderProviderGroups(
+  groups: ProviderModelGroup[],
+  currentProvider: string | null | undefined,
+): ProviderModelGroup[] {
   if (!currentProvider) return groups;
   const index = groups.findIndex((g) => g.provider === currentProvider);
   if (index <= 0) return groups;
@@ -37,7 +42,13 @@ export function orderProviderGroups(groups: ProviderModelGroup[], currentProvide
   return next;
 }
 
-export function ProviderBadge({ id, size = 16 }: { id: string; size?: number }) {
+export function ProviderBadge({
+  id,
+  size = 16,
+}: {
+  id: string;
+  size?: number;
+}) {
   return (
     <span
       aria-hidden="true"
@@ -97,41 +108,59 @@ export function ModelPickerPanel({
   const { t } = useI18n();
   const searching = modelSearchQuery.trim().length > 0;
   const groups = useMemo(
-    () => orderProviderGroups(groupModelOptionsByProvider(modelOptions), currentModel?.provider),
+    () =>
+      orderProviderGroups(
+        groupModelOptionsByProvider(modelOptions),
+        currentModel?.provider,
+      ),
     [modelOptions, currentModel?.provider],
   );
   const filteredGroups = useMemo(
-    () => orderProviderGroups(groupModelOptionsByProvider(filteredModelOptions), currentModel?.provider),
+    () =>
+      orderProviderGroups(
+        groupModelOptionsByProvider(filteredModelOptions),
+        currentModel?.provider,
+      ),
     [filteredModelOptions, currentModel?.provider],
   );
 
   // Provider selection is explicit. Hover-driven pane changes make the list
   // flicker while the pointer crosses the picker.
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
-  const selectedProviderAvailable = groups.some((group) => group.provider === selectedProvider);
-  const currentProviderAvailable = groups.some((group) => group.provider === currentModel?.provider);
+  const selectedProviderAvailable = groups.some(
+    (group) => group.provider === selectedProvider,
+  );
+  const currentProviderAvailable = groups.some(
+    (group) => group.provider === currentModel?.provider,
+  );
   const activeProvider = selectedProviderAvailable
     ? selectedProvider
     : currentProviderAvailable
-      ? currentModel?.provider ?? null
-      : groups[0]?.provider ?? null;
+      ? (currentModel?.provider ?? null)
+      : (groups[0]?.provider ?? null);
 
   const leftModels = searching
     ? filteredModelOptions
-    : (groups.find((group) => group.provider === activeProvider)?.options ?? []);
+    : (groups.find((group) => group.provider === activeProvider)?.options ??
+      []);
 
   const leftGroups = searching ? filteredGroups : null;
-  const showProviderRail = !searching && (!isMobile || selectedProvider === null);
+  const showProviderRail =
+    !searching && (!isMobile || selectedProvider === null);
   const showModelPane = searching || !isMobile || selectedProvider !== null;
 
   const selectModel = (opt: ModelOption) => {
     onSelectModel(opt.provider, opt.modelId);
   };
 
-  const renderModelRow = (opt: ModelOption, opts?: { showProvider?: boolean }) => {
-    const isActive = Boolean(currentModel)
-      && opt.modelId === currentModel?.modelId
-      && opt.provider === currentModel?.provider;
+  const renderModelRow = (
+    opt: ModelOption,
+    opts?: { showProvider?: boolean },
+  ) => {
+    const isActive =
+      Boolean(currentModel) &&
+      opt.modelId === currentModel?.modelId &&
+      opt.provider === currentModel?.provider;
     return (
       <button
         className="picker-row"
@@ -142,8 +171,17 @@ export function ModelPickerPanel({
         aria-checked={isActive}
         onClick={() => selectModel(opt)}
       >
-        <span className="picker-check">{isActive && <Check size={11} strokeWidth={2.4} aria-hidden="true" />}</span>
-        <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span className="picker-check">
+          {isActive && <Check size={11} strokeWidth={2.4} aria-hidden="true" />}
+        </span>
+        <span
+          style={{
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
           {opt.name || opt.modelId}
         </span>
         {opts?.showProvider && (
@@ -156,7 +194,12 @@ export function ModelPickerPanel({
   return (
     <>
       <label className="picker-search">
-        <Search size={13} strokeWidth={1.8} color="var(--text-dim)" aria-hidden="true" />
+        <Search
+          size={13}
+          strokeWidth={1.8}
+          color="var(--text-dim)"
+          aria-hidden="true"
+        />
         <input
           ref={searchInputRef}
           type="search"
@@ -175,39 +218,71 @@ export function ModelPickerPanel({
         />
       </label>
 
-      <div className="picker-nested" data-searching={searching ? "true" : "false"}>
+      <div
+        className="picker-nested"
+        data-searching={searching ? "true" : "false"}
+      >
         {showProviderRail && (
-          <div className="picker-nested-providers" role="group" aria-label={t("chatInput.providersLabel")}>
+          <div
+            className="picker-nested-providers"
+            role="group"
+            aria-label={t("chatInput.providersLabel")}
+          >
             {groups.length === 0 ? (
               <div className="picker-empty">
-                {showModelsLoading ? t("chatInput.loadingModels") : t("chatInput.noAvailableModels")}
+                {showModelsLoading
+                  ? t("chatInput.loadingModels")
+                  : t("chatInput.noAvailableModels")}
               </div>
-            ) : groups.map((group) => {
-              const isCurrent = currentModel?.provider === group.provider;
-              const isActive = activeProvider === group.provider;
-              return (
-                <button
-                  key={group.provider}
-                  type="button"
-                  className="picker-row picker-provider-row"
-                  data-active={isActive}
-                  data-current={isCurrent}
-                  onClick={() => setSelectedProvider(group.provider)}
-                  aria-current={isCurrent ? "true" : undefined}
-                  aria-controls="model-picker-options"
-                >
-                  <ProviderBadge id={group.provider} size={15} />
-                  <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {group.provider}
-                  </span>
-                  <ChevronRight size={12} strokeWidth={1.8} style={{ marginLeft: "auto", flexShrink: 0, opacity: 0.55 }} aria-hidden="true" />
-                </button>
-              );
-            })}
+            ) : (
+              groups.map((group) => {
+                const isCurrent = currentModel?.provider === group.provider;
+                const isActive = activeProvider === group.provider;
+                return (
+                  <button
+                    key={group.provider}
+                    type="button"
+                    className="picker-row picker-provider-row"
+                    data-active={isActive}
+                    data-current={isCurrent}
+                    onClick={() => setSelectedProvider(group.provider)}
+                    aria-current={isCurrent ? "true" : undefined}
+                    aria-controls="model-picker-options"
+                  >
+                    <ProviderBadge id={group.provider} size={15} />
+                    <span
+                      style={{
+                        minWidth: 0,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {group.provider}
+                    </span>
+                    <ChevronRight
+                      size={12}
+                      strokeWidth={1.8}
+                      style={{
+                        marginLeft: "auto",
+                        flexShrink: 0,
+                        opacity: 0.55,
+                      }}
+                      aria-hidden="true"
+                    />
+                  </button>
+                );
+              })
+            )}
           </div>
         )}
         {showModelPane && (
-          <div id="model-picker-options" className="picker-nested-models" role="group" aria-label={t("chatInput.modelsLabel")}>
+          <div
+            id="model-picker-options"
+            className="picker-nested-models"
+            role="group"
+            aria-label={t("chatInput.modelsLabel")}
+          >
             {isMobile && !searching && selectedProvider !== null && (
               <button
                 type="button"
@@ -229,12 +304,16 @@ export function ModelPickerPanel({
                 ))
               ) : (
                 <div className="picker-empty">
-                  {showModelsLoading ? t("chatInput.loadingModels") : t("chatInput.noMatchingModels")}
+                  {showModelsLoading
+                    ? t("chatInput.loadingModels")
+                    : t("chatInput.noMatchingModels")}
                 </div>
               )
             ) : leftModels.length === 0 ? (
               <div className="picker-empty">
-                {showModelsLoading ? t("chatInput.loadingModels") : t("chatInput.noAvailableModels")}
+                {showModelsLoading
+                  ? t("chatInput.loadingModels")
+                  : t("chatInput.noAvailableModels")}
               </div>
             ) : (
               leftModels.map((opt) => renderModelRow(opt))

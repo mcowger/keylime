@@ -50,7 +50,9 @@ export function useAudio() {
   });
 
   const enabledRef = useRef(enabled);
-  useEffect(() => { enabledRef.current = enabled; }, [enabled]);
+  useEffect(() => {
+    enabledRef.current = enabled;
+  }, [enabled]);
 
   // The settings dialog toggles the same preference; keep the live state in
   // sync when it changes there.
@@ -62,7 +64,8 @@ export function useAudio() {
       setEnabled(detail);
     };
     window.addEventListener("omp-sound-pref-change", onPrefChange);
-    return () => window.removeEventListener("omp-sound-pref-change", onPrefChange);
+    return () =>
+      window.removeEventListener("omp-sound-pref-change", onPrefChange);
   }, []);
 
   const unlockAudio = useCallback((force = false) => {
@@ -96,11 +99,20 @@ export function useAudio() {
       }
     };
     if (ctx.state === "suspended") {
-      ctx.resume().then(play).catch(() => {});
+      ctx
+        .resume()
+        .then(play)
+        .catch(() => {});
       return;
     }
     play();
   }, []);
 
-  return { soundEnabled: enabled, onSoundToggle: toggle, playDoneSound: playDone, unlockAudio, soundEnabledRef: enabledRef };
+  return {
+    soundEnabled: enabled,
+    onSoundToggle: toggle,
+    playDoneSound: playDone,
+    unlockAudio,
+    soundEnabledRef: enabledRef,
+  };
 }

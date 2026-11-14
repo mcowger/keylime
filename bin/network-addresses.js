@@ -1,10 +1,23 @@
 "use strict";
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const os = require("os");
 
-const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "localhost", "::1", "[::1]", "0:0:0:0:0:0:0:1", "[0:0:0:0:0:0:0:1]"]);
-const WILDCARD_HOSTNAMES = new Set(["0.0.0.0", "::", "[::]", "0:0:0:0:0:0:0:0", "[0:0:0:0:0:0:0:0]", ""]);
+const LOOPBACK_HOSTNAMES = new Set([
+  "127.0.0.1",
+  "localhost",
+  "::1",
+  "[::1]",
+  "0:0:0:0:0:0:0:1",
+  "[0:0:0:0:0:0:0:1]",
+]);
+const WILDCARD_HOSTNAMES = new Set([
+  "0.0.0.0",
+  "::",
+  "[::]",
+  "0:0:0:0:0:0:0:0",
+  "[0:0:0:0:0:0:0:0]",
+  "",
+]);
 
 function isWildcardHost(hostname) {
   if (hostname == null) return true;
@@ -22,7 +35,11 @@ function getBrowserUrl(hostname, port) {
   if (isWildcardHost(hostname)) {
     return `http://localhost:${port}`;
   }
-  if (typeof hostname === "string" && hostname.includes(":") && !hostname.startsWith("[")) {
+  if (
+    typeof hostname === "string" &&
+    hostname.includes(":") &&
+    !hostname.startsWith("[")
+  ) {
     return `http://[${hostname}]:${port}`;
   }
   return `http://${hostname}:${port}`;
@@ -30,22 +47,31 @@ function getBrowserUrl(hostname, port) {
 
 /** Open `url` in the default browser; a failure only warns. */
 function openInBrowser(url) {
-  // getBuiltinModule: bin/ files add no new eslint-disable comments (see bin/bun-runtime.js).
   const { spawn } = process.getBuiltinModule("node:child_process");
   const command = process.platform === "darwin" ? "open" : "xdg-open";
   const opener = spawn(command, [url], { stdio: "ignore", detached: true });
-  opener.on("error", (error) => console.warn(`Could not open browser automatically: ${error.message}`));
+  opener.on("error", (error) =>
+    console.warn(`Could not open browser automatically: ${error.message}`),
+  );
   opener.unref();
 }
 
 function isTailscaleAddress(ifaceName, address) {
-  if (typeof ifaceName === "string" && ifaceName.toLowerCase().includes("tailscale")) {
+  if (
+    typeof ifaceName === "string" &&
+    ifaceName.toLowerCase().includes("tailscale")
+  ) {
     return true;
   }
   // Tailscale IPv4 uses CGNAT range 100.64.0.0/10 (100.64.0.0 to 100.127.255.255)
   if (typeof address === "string") {
     const parts = address.split(".").map(Number);
-    if (parts.length === 4 && parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) {
+    if (
+      parts.length === 4 &&
+      parts[0] === 100 &&
+      parts[1] >= 64 &&
+      parts[1] <= 127
+    ) {
       return true;
     }
   }
@@ -97,7 +123,11 @@ function isStandardPhysicalInterface(name) {
   );
 }
 
-function getAccessibleAddresses({ hostname, port, interfaces = os.networkInterfaces() }) {
+function getAccessibleAddresses({
+  hostname,
+  port,
+  interfaces = os.networkInterfaces(),
+}) {
   if (isLoopbackHost(hostname)) {
     return {
       entries: [{ label: "Local", url: `http://localhost:${port}` }],
@@ -175,20 +205,25 @@ function formatAddressBanner({
   lines.push(`  ${bold("ompweb")} ${dim(`v${version}`)} ${green("is ready")}`);
   lines.push("");
 
-  const maxLabelLen = Math.max(...entries.map((e) => e.label.length), hint ? 7 : 5);
+  const maxLabelLen = Math.max(
+    ...entries.map((e) => e.label.length),
+    hint ? 7 : 5,
+  );
   for (const entry of entries) {
     const padLabel = (entry.label + ":").padEnd(maxLabelLen + 2, " ");
     lines.push(`  ${green("➜")}  ${bold(padLabel)} ${cyan(entry.url)}`);
   }
 
   if (hint) {
-    const padLabel = ("Network:").padEnd(maxLabelLen + 2, " ");
+    const padLabel = "Network:".padEnd(maxLabelLen + 2, " ");
     lines.push(`  ${dim("➜")}  ${dim(padLabel)} ${dim(hint)}`);
   }
 
   if (passwordEnabled) {
     lines.push("");
-    lines.push(`  ${dim("🔒 Password protection enabled (OMP_WEB_PASSWORD_HASH)")}`);
+    lines.push(
+      `  ${dim("🔒 Password protection enabled (OMP_WEB_PASSWORD_HASH)")}`,
+    );
   }
 
   lines.push("");

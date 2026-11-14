@@ -8,6 +8,8 @@ Runtime management is exclusively mise. `mise.toml` pins Bun; use `mise trust &&
 
 Windows is permanently out of scope. Support only macOS and Linux; do not reintroduce Windows services, tray binaries, build targets, path/UNC/drive handling, or platform test accommodations. Keep native OMP profile validation restrictions, which OMP enforces on every platform.
 
+Use `bun run typecheck` for native Bun checks of both the root project and runner. Use `bun fmt` to format and `bun fmt --check` to check formatting. The user approved a full-repository reformat; CI and release checks enforce formatting. Linting is removed by explicit user choice: pinned Bun 1.4.4 has no built-in linter, and ESLint and `tsc` are not used.
+
 Bun-only conversion verification: Bun 1.4.4 selected through mise; typecheck passed; 106 focused tests passed (10 skipped); client production build succeeded. Lint reported seven unrelated React-hook warnings and one unused fixture import; the import was removed and that file's lint passed. Live-session smoke requires building `runner/scripts/build-binary.ts` first, not only fetching runner dependencies.
 
 After building the runner, the full smoke scenario passed with PATH restricted to Bun plus system directories (excluding the installed Node runtime): launcher, SPA/assets, host link, session discovery, live runner get_state, SSE, and shutdown.

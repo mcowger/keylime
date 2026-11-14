@@ -26,8 +26,9 @@ jobs:
           test "$GITHUB_REF_NAME" = "v$VERSION"
 
       - run: bun install --frozen-lockfile
+      - run: bun run format:check
       # The omp the runners compile against: the fork's newest integration build, not runner/omp-build.json's pin
-      # (not committed back). No such release or a runner that fails tsc against it fails the release. Pinned before
+      # (not committed back). No such release or a runner that fails bun check against it fails the release. Pinned before
       # the tests: they import the runner (lib/hosts/omp-socket.test.mjs), and must run against the omp that ships.
       - name: Find the newest omp integration build
         env:
@@ -44,7 +45,7 @@ jobs:
           echo "OMP_TAG=$tag" >> "$GITHUB_ENV"
       # Without GH_TOKEN: bun install runs the omp packages' scripts.
       - name: Pin the runner to it
-        run: bun runner/scripts/use-omp-build.ts "$OMP_TAG" && (cd runner && bunx --bun tsc -p .)
+        run: bun runner/scripts/use-omp-build.ts "$OMP_TAG" && bun check -p runner
       - run: bun run test
       - run: bun run build
       # Builds the omp runners too, which the source smoke spawns from runner/release/. The archives leave them out:

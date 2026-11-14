@@ -44,8 +44,9 @@
     "start": "bun server/main.ts -H 127.0.0.1 -p 30177",
     "start:lan": "bun server/main.ts -H 0.0.0.0 -p 30177",
     "test": "bun test --parallel --timeout 30000 ./app ./bin ./components ./hooks ./lib ./scripts ./server ./tests",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
+    "typecheck": "bun check && bun check -p runner",
+    "format": "bun fmt",
+    "format:check": "bun fmt --check",
     "tray:install": "bun bin/omp-web-tray.js --install",
     "tray:uninstall": "bun bin/omp-web-tray.js --uninstall",
     "tray:start": "bun bin/omp-web-tray.js --start",
@@ -57,7 +58,7 @@
     "systemd:status": "bun bin/omp-web-systemd.js status",
     "prepack": "bun run build",
     "smoke": "bun scripts/smoke.ts",
-    "release:check": "bun run typecheck && bun run lint && bun run test && bun run build && bun run smoke"
+    "release:check": "bun run format:check && bun run typecheck && bun run test && bun run build && bun run smoke"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -92,13 +93,8 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/web-push": "^3.6.4",
     "bun-plugin-tailwind": "0.1.2",
-    "eslint": "^9",
-    "eslint-plugin-react-hooks": "7.0.1",
     "jsdom": "^29.1.1",
     "micromark-util-types": "^2.0.2",
-    "tailwindcss": "^4.3.3",
-    "typescript": "^5",
-    "typescript-eslint": "^8.72.1",
-    "typescript-language-server": "^6.0.0"
+    "tailwindcss": "^4.3.3"
   }
 }

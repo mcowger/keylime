@@ -1,6 +1,16 @@
 import { statSync } from "fs";
-import { invalidateModelsCache, loadModelsWithCache, withModelRuntimeError, withSafeModelLoadFailure, type ModelsData } from "@/lib/models-cache";
-import { disposeUtilityRpc, runUtilityCommand, type OmpModel } from "@/lib/omp/rpc-utility";
+import {
+  invalidateModelsCache,
+  loadModelsWithCache,
+  withModelRuntimeError,
+  withSafeModelLoadFailure,
+  type ModelsData,
+} from "@/lib/models-cache";
+import {
+  disposeUtilityRpc,
+  runUtilityCommand,
+  type OmpModel,
+} from "@/lib/omp/rpc-utility";
 import { getModelsConfigPath } from "@/lib/omp/paths";
 import { readDisabledProviders } from "@/lib/omp/model-roles";
 import { readAnthropicSlowMode } from "@/lib/omp/settings-config";
@@ -35,15 +45,20 @@ function refreshModelsIfConfigChanged(): void {
   }
 }
 
-const modelNameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+const modelNameCollator = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: "base",
+});
 
 function compareModelEntries(
   a: { id: string; name: string; provider: string },
-  b: { id: string; name: string; provider: string }
+  b: { id: string; name: string; provider: string },
 ): number {
-  return modelNameCollator.compare(a.name || a.id, b.name || b.id)
-    || modelNameCollator.compare(a.provider, b.provider)
-    || modelNameCollator.compare(a.id, b.id);
+  return (
+    modelNameCollator.compare(a.name || a.id, b.name || b.id) ||
+    modelNameCollator.compare(a.provider, b.provider) ||
+    modelNameCollator.compare(a.id, b.id)
+  );
 }
 
 // "off" is always a valid selector; the concrete efforts come from the model's
@@ -56,14 +71,24 @@ function thinkingLevelsFor(model: OmpModel): string[] {
 // OMP's /fast maps to a priority service tier. These are the provider families
 // OMP currently resolves for that control (ModelControls.setFastMode).
 function supportsFastMode(model: OmpModel): boolean {
-  return model.provider === "anthropic" || model.provider === "openai" || model.provider === "google";
+  return (
+    model.provider === "anthropic" ||
+    model.provider === "openai" ||
+    model.provider === "google"
+  );
 }
 
 // Copy of omp's AgentSession#slowModeTarget for the composer's Slow toggle
 // before omp runs: Claude low priority on `anthropic`, else the flex tier of
 // the OpenAI/Google service-tier families. Live get_state wins once omp runs.
 // ponytail: provider-only; OpenRouter's openai/google ids need omp's model identity.
-const SLOW_MODE_PROVIDERS: Record<string, true> = { anthropic: true, openai: true, "openai-codex": true, google: true, "google-vertex": true };
+const SLOW_MODE_PROVIDERS: Record<string, true> = {
+  anthropic: true,
+  openai: true,
+  "openai-codex": true,
+  google: true,
+  "google-vertex": true,
+};
 
 async function loadModels(): Promise<ModelsData> {
   const availableResponse = await runUtilityCommand<{ models?: unknown }>(
@@ -72,38 +97,61 @@ async function loadModels(): Promise<ModelsData> {
   );
   const available = Array.isArray(availableResponse.models)
     ? availableResponse.models
-        .filter((model): model is OmpModel => (
-          typeof model === "object" && model !== null
-          && typeof (model as OmpModel).id === "string"
-          && typeof (model as OmpModel).provider === "string"
-        ))
+        .filter(
+          (model): model is OmpModel =>
+            typeof model === "object" &&
+            model !== null &&
+            typeof (model as OmpModel).id === "string" &&
+            typeof (model as OmpModel).provider === "string",
+        )
         .map((model) => ({
           ...model,
-          name: typeof model.name === "string" && model.name.trim().length > 0 ? model.name : model.id,
+          name:
+            typeof model.name === "string" && model.name.trim().length > 0
+              ? model.name
+              : model.id,
         }))
     : [];
 
   const nameMap = new Map<string, string>();
   const thinkingLevels: Record<string, string[]> = {};
   const modelList = available
-    .map((m) => ({ id: m.id, name: m.name, provider: m.provider, thinkingLevels: thinkingLevelsFor(m), supportsFastMode: supportsFastMode(m), supportsSlowMode: SLOW_MODE_PROVIDERS[m.provider] === true, contextWindow: m.contextWindow ?? undefined, maxTokens: m.maxTokens ?? undefined }))
+    .map((m) => ({
+      id: m.id,
+      name: m.name,
+      provider: m.provider,
+      thinkingLevels: thinkingLevelsFor(m),
+      supportsFastMode: supportsFastMode(m),
+      supportsSlowMode: SLOW_MODE_PROVIDERS[m.provider] === true,
+      contextWindow: m.contextWindow ?? undefined,
+      maxTokens: m.maxTokens ?? undefined,
+    }))
     .sort(compareModelEntries);
   const loginResponse = await runUtilityCommand<{ providers?: unknown }>(
     { type: "get_login_providers" },
     30_000,
   );
   const loginProviders = Array.isArray(loginResponse.providers)
-    ? loginResponse.providers.filter((provider): provider is { id: string; name: string; authenticated: boolean } => (
-      typeof provider === "object" && provider !== null
-      && typeof (provider as { id?: unknown }).id === "string"
-      && typeof (provider as { name?: unknown }).name === "string"
-      && typeof (provider as { authenticated?: unknown }).authenticated === "boolean"
-    ))
+    ? loginResponse.providers.filter(
+        (
+          provider,
+        ): provider is { id: string; name: string; authenticated: boolean } =>
+          typeof provider === "object" &&
+          provider !== null &&
+          typeof (provider as { id?: unknown }).id === "string" &&
+          typeof (provider as { name?: unknown }).name === "string" &&
+          typeof (provider as { authenticated?: unknown }).authenticated ===
+            "boolean",
+      )
     : [];
   const disabledProviders = readDisabledProviders();
   const connectedProviders = loginProviders
     .filter((provider) => provider.authenticated)
-    .map((provider) => ({ id: provider.id, name: provider.name, disabled: disabledProviders.has(provider.id) }));
+    .map((provider) => ({
+      id: provider.id,
+      name: provider.name,
+      disabled: disabledProviders.has(provider.id),
+    }));
   for (const m of available) {
     const key = `${m.provider}:${m.id}`;
     nameMap.set(key, m.name);
@@ -114,13 +162,16 @@ async function loadModels(): Promise<ModelsData> {
   // process reports it via get_state.
   let defaultModel: { provider: string; modelId: string } | null = null;
   try {
-    const state = await runUtilityCommand<{ model?: { provider?: string; id?: string } }>(
-      { type: "get_state" },
-      30_000,
-    );
+    const state = await runUtilityCommand<{
+      model?: { provider?: string; id?: string };
+    }>({ type: "get_state" }, 30_000);
     const provider = state.model?.provider;
     const modelId = state.model?.id;
-    if (provider && modelId && available.some((m) => m.provider === provider && m.id === modelId)) {
+    if (
+      provider &&
+      modelId &&
+      available.some((m) => m.provider === provider && m.id === modelId)
+    ) {
       defaultModel = { provider, modelId };
     }
   } catch {
@@ -128,7 +179,13 @@ async function loadModels(): Promise<ModelsData> {
   }
 
   return withModelRuntimeError(
-    { models: Object.fromEntries(nameMap), modelList, defaultModel, thinkingLevels, connectedProviders },
+    {
+      models: Object.fromEntries(nameMap),
+      modelList,
+      defaultModel,
+      thinkingLevels,
+      connectedProviders,
+    },
     undefined,
   );
 }
@@ -145,8 +202,14 @@ export async function GET() {
   // Outside the cache: `/slow` on a Claude model rewrites config.yml.
   const anthropicSlowMode = readAnthropicSlowMode();
   try {
-    return Response.json({ ...await loadModelsWithCache(MODELS_CACHE_KEY, () => loadModels()), anthropicSlowMode });
+    return Response.json({
+      ...(await loadModelsWithCache(MODELS_CACHE_KEY, () => loadModels())),
+      anthropicSlowMode,
+    });
   } catch {
-    return Response.json({ ...withSafeModelLoadFailure(EMPTY_MODELS), anthropicSlowMode });
+    return Response.json({
+      ...withSafeModelLoadFailure(EMPTY_MODELS),
+      anthropicSlowMode,
+    });
   }
 }

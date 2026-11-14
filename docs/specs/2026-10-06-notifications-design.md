@@ -12,12 +12,12 @@ notification is shown for a session the user is currently viewing.
 
 ## Notification types
 
-| Type | Trigger frame (rpc-ui) | Body |
-|---|---|---|
-| `completed` | `session_settled`, unless the last `prompt_result` of that stretch had `status` `error` or `aborted` | "Task finished." |
-| `input` | `extension_ui_request` with `method` `select`, `confirm`, `input`, `editor`, `ask` or `open_url` that omp-web does not auto-answer | "Waiting for your answer: <title or first question>" |
-| `error` | `prompt_result` with `agentInvoked: true` and `status: "error"`, an asynchronous prompt failure (`response` with `success: false`), or omp child exit while a run or its background work is in progress; one notification per run | "Run failed: <error.message>" |
-| `modelSwitch` | `retry_fallback_applied {from, to, reason?}`, or `notice` with `source` `prewalk` or `plan-yolo` | "Switched <from> → <to>: <reason>", or the notice text |
+| Type          | Trigger frame (rpc-ui)                                                                                                                                                                                                            | Body                                                   |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `completed`   | `session_settled`, unless the last `prompt_result` of that stretch had `status` `error` or `aborted`                                                                                                                              | "Task finished."                                       |
+| `input`       | `extension_ui_request` with `method` `select`, `confirm`, `input`, `editor`, `ask` or `open_url` that omp-web does not auto-answer                                                                                                | "Waiting for your answer: <title or first question>"   |
+| `error`       | `prompt_result` with `agentInvoked: true` and `status: "error"`, an asynchronous prompt failure (`response` with `success: false`), or omp child exit while a run or its background work is in progress; one notification per run | "Run failed: <error.message>"                          |
+| `modelSwitch` | `retry_fallback_applied {from, to, reason?}`, or `notice` with `source` `prewalk` or `plan-yolo`                                                                                                                                  | "Switched <from> → <to>: <reason>", or the notice text |
 
 The title is the session name, falling back to the cwd's last path segment.
 
@@ -141,7 +141,7 @@ push: iOS Safari revokes push permission for pushes that show nothing.
 
 - Registered at `/sw.js`, scope `/`. No caching.
 - `push`: `showNotification(title, {body, icon: "/icon-192.png", badge:
-  "/badge-96.png", tag, renotify, data: {url, sessionId}})`.
+"/badge-96.png", tag, renotify, data: {url, sessionId}})`.
 - `notificationclick`: focus an existing window. An app window (`/`) gets
   `postMessage({type: "omp-open-session", sessionId})` and selects the session
   in place; any other window (the sign-in page) navigates to the session URL;
@@ -155,13 +155,13 @@ push: iOS Safari revokes push permission for pushes that show nothing.
 
 ### HTTP API
 
-| Route | Method | Purpose |
-|---|---|---|
-| `/api/agent/running/events?clientId=` | GET | existing SSE stream, now also `{type: "notification", kind, event}` |
-| `/api/notifications/presence` | POST | presence report |
-| `/api/notifications/devices?deviceId=` | GET | VAPID public key, whether this device has a subscription |
-| `/api/notifications/devices` | PUT | `{deviceId, prefs, subscription?}`; an omitted subscription keeps the stored one |
-| `/api/notifications/test` | POST | `{deviceId}`: a test push; 502 with the push service's answer when it fails |
+| Route                                  | Method | Purpose                                                                          |
+| -------------------------------------- | ------ | -------------------------------------------------------------------------------- |
+| `/api/agent/running/events?clientId=`  | GET    | existing SSE stream, now also `{type: "notification", kind, event}`              |
+| `/api/notifications/presence`          | POST   | presence report                                                                  |
+| `/api/notifications/devices?deviceId=` | GET    | VAPID public key, whether this device has a subscription                         |
+| `/api/notifications/devices`           | PUT    | `{deviceId, prefs, subscription?}`; an omitted subscription keeps the stored one |
+| `/api/notifications/test`              | POST   | `{deviceId}`: a test push; 502 with the push service's answer when it fails      |
 
 All routes sit behind the existing password gate and origin check.
 

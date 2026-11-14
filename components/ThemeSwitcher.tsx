@@ -21,9 +21,27 @@ type ThemeOption = {
 };
 
 const ALL_OPTIONS: ReadonlyArray<ThemeOption> = [
-  ...LIGHT_THEMES.map((t) => ({ value: t.id, name: t.name, bg: t.bg, accent: t.accent, category: "light" as const })),
-  ...DARK_THEMES.map((t) => ({ value: t.id, name: t.name, bg: t.bg, accent: t.accent, category: "dark" as const })),
-  { value: "system", name: "System", bg: "transparent", accent: "var(--accent)", category: "system" as const },
+  ...LIGHT_THEMES.map((t) => ({
+    value: t.id,
+    name: t.name,
+    bg: t.bg,
+    accent: t.accent,
+    category: "light" as const,
+  })),
+  ...DARK_THEMES.map((t) => ({
+    value: t.id,
+    name: t.name,
+    bg: t.bg,
+    accent: t.accent,
+    category: "dark" as const,
+  })),
+  {
+    value: "system",
+    name: "System",
+    bg: "transparent",
+    accent: "var(--accent)",
+    category: "system" as const,
+  },
 ];
 
 /** Theme picker for the top bar. Shows the current mode icon and opens a
@@ -46,7 +64,10 @@ export function ThemeSwitcher() {
   const baseId = useId();
   const menuId = `${baseId}-menu`;
 
-  const index = Math.max(0, ALL_OPTIONS.findIndex((o) => o.value === preference));
+  const index = Math.max(
+    0,
+    ALL_OPTIONS.findIndex((o) => o.value === preference),
+  );
   // Keep the highlighted item in sync with the chosen theme when closed.
   useEffect(() => {
     if (!open) setActiveIndex(index);
@@ -72,13 +93,20 @@ export function ThemeSwitcher() {
   const choose = (value: ThemePreference) => {
     // Origin at the trigger center drives the circular theme wipe.
     const rect = triggerRef.current?.getBoundingClientRect();
-    const origin = rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : undefined;
+    const origin = rect
+      ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+      : undefined;
     setTheme(value, origin);
     close(true);
   };
 
   const onTriggerKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " " || e.key === "ArrowUp") {
+    if (
+      e.key === "ArrowDown" ||
+      e.key === "Enter" ||
+      e.key === " " ||
+      e.key === "ArrowUp"
+    ) {
       e.preventDefault();
       setOpen(true);
       setActiveIndex(e.key === "ArrowUp" ? ALL_OPTIONS.length - 1 : index);
@@ -99,14 +127,18 @@ export function ThemeSwitcher() {
         e.preventDefault();
         // If in light column (0..3), jump to dark column
         if (i < LIGHT_THEMES.length) {
-          setActiveIndex(Math.min(ALL_OPTIONS.length - 2, i + LIGHT_THEMES.length));
+          setActiveIndex(
+            Math.min(ALL_OPTIONS.length - 2, i + LIGHT_THEMES.length),
+          );
         }
         break;
       case "ArrowLeft":
         e.preventDefault();
         // If in dark column (4..13), jump to light column
         if (i >= LIGHT_THEMES.length && i < ALL_OPTIONS.length - 1) {
-          setActiveIndex(Math.min(LIGHT_THEMES.length - 1, i - LIGHT_THEMES.length));
+          setActiveIndex(
+            Math.min(LIGHT_THEMES.length - 1, i - LIGHT_THEMES.length),
+          );
         }
         break;
       case "Home":
@@ -237,14 +269,22 @@ export function ThemeSwitcher() {
                   <button
                     key={theme.id}
                     className="dropdown-item"
-                    ref={(el) => { itemRefs.current[globalIdx] = el; }}
+                    ref={(el) => {
+                      itemRefs.current[globalIdx] = el;
+                    }}
                     type="button"
                     role="menuitemradio"
                     tabIndex={-1}
                     aria-checked={selected}
                     onClick={() => choose(theme.id)}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = selected ? "var(--bg-selected)" : "transparent"; }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "var(--bg-hover)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = selected
+                        ? "var(--bg-selected)"
+                        : "transparent";
+                    }}
                     onKeyDown={(e) => onItemKeyDown(e, globalIdx)}
                     style={{
                       width: "100%",
@@ -254,12 +294,15 @@ export function ThemeSwitcher() {
                       padding: "6px 8px",
                       border: 0,
                       borderRadius: 5,
-                      background: selected ? "var(--bg-selected)" : "transparent",
+                      background: selected
+                        ? "var(--bg-selected)"
+                        : "transparent",
                       color: selected ? "var(--text)" : "var(--text-muted)",
                       cursor: "pointer",
                       fontSize: 12,
                       textAlign: "left",
-                      transition: "background-color var(--dur-fast) var(--ease-out-warm), color var(--dur-fast) var(--ease-out-warm)",
+                      transition:
+                        "background-color var(--dur-fast) var(--ease-out-warm), color var(--dur-fast) var(--ease-out-warm)",
                     }}
                   >
                     <span
@@ -268,22 +311,51 @@ export function ThemeSwitcher() {
                         height: 13,
                         borderRadius: "50%",
                         backgroundColor: theme.bg,
-                        border: "1px solid color-mix(in srgb, var(--border) 80%, transparent)",
+                        border:
+                          "1px solid color-mix(in srgb, var(--border) 80%, transparent)",
                         display: "inline-flex",
                         alignItems: "center",
                         justifyContent: "center",
                         flexShrink: 0,
                       }}
                     >
-                      <span style={{ width: 5, height: 5, borderRadius: "50%", backgroundColor: theme.accent }} />
+                      <span
+                        style={{
+                          width: 5,
+                          height: 5,
+                          borderRadius: "50%",
+                          backgroundColor: theme.accent,
+                        }}
+                      />
                     </span>
-                    <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{theme.name}</span>
-                    {selected && <Check size={12} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0, color: "var(--accent)" }} />}
+                    <span
+                      style={{
+                        flex: 1,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {theme.name}
+                    </span>
+                    {selected && (
+                      <Check
+                        size={12}
+                        strokeWidth={2}
+                        aria-hidden="true"
+                        style={{ flexShrink: 0, color: "var(--accent)" }}
+                      />
+                    )}
                   </button>
                 );
               })}
 
-              <div style={{ borderTop: "1px solid var(--border)", margin: "6px 4px 4px" }} />
+              <div
+                style={{
+                  borderTop: "1px solid var(--border)",
+                  margin: "6px 4px 4px",
+                }}
+              />
 
               <div
                 style={{
@@ -304,14 +376,22 @@ export function ThemeSwitcher() {
                   <button
                     key="system"
                     className="dropdown-item"
-                    ref={(el) => { itemRefs.current[systemIdx] = el; }}
+                    ref={(el) => {
+                      itemRefs.current[systemIdx] = el;
+                    }}
                     type="button"
                     role="menuitemradio"
                     tabIndex={-1}
                     aria-checked={selected}
                     onClick={() => choose("system")}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = selected ? "var(--bg-selected)" : "transparent"; }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "var(--bg-hover)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = selected
+                        ? "var(--bg-selected)"
+                        : "transparent";
+                    }}
                     onKeyDown={(e) => onItemKeyDown(e, systemIdx)}
                     style={{
                       width: "100%",
@@ -321,19 +401,41 @@ export function ThemeSwitcher() {
                       padding: "6px 8px",
                       border: 0,
                       borderRadius: 5,
-                      background: selected ? "var(--bg-selected)" : "transparent",
+                      background: selected
+                        ? "var(--bg-selected)"
+                        : "transparent",
                       color: selected ? "var(--text)" : "var(--text-muted)",
                       cursor: "pointer",
                       fontSize: 12,
                       textAlign: "left",
-                      transition: "background-color var(--dur-fast) var(--ease-out-warm), color var(--dur-fast) var(--ease-out-warm)",
+                      transition:
+                        "background-color var(--dur-fast) var(--ease-out-warm), color var(--dur-fast) var(--ease-out-warm)",
                     }}
                   >
-                    <Monitor size={13} strokeWidth={1.8} aria-hidden="true" style={{ flexShrink: 0, color: "var(--text-muted)" }} />
-                    <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <Monitor
+                      size={13}
+                      strokeWidth={1.8}
+                      aria-hidden="true"
+                      style={{ flexShrink: 0, color: "var(--text-muted)" }}
+                    />
+                    <span
+                      style={{
+                        flex: 1,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
                       {t("appShell.themeSystem") || "System"}
                     </span>
-                    {selected && <Check size={12} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0, color: "var(--accent)" }} />}
+                    {selected && (
+                      <Check
+                        size={12}
+                        strokeWidth={2}
+                        aria-hidden="true"
+                        style={{ flexShrink: 0, color: "var(--accent)" }}
+                      />
+                    )}
                   </button>
                 );
               })()}
@@ -360,14 +462,22 @@ export function ThemeSwitcher() {
                   <button
                     key={theme.id}
                     className="dropdown-item"
-                    ref={(el) => { itemRefs.current[globalIdx] = el; }}
+                    ref={(el) => {
+                      itemRefs.current[globalIdx] = el;
+                    }}
                     type="button"
                     role="menuitemradio"
                     tabIndex={-1}
                     aria-checked={selected}
                     onClick={() => choose(theme.id)}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = selected ? "var(--bg-selected)" : "transparent"; }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "var(--bg-hover)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = selected
+                        ? "var(--bg-selected)"
+                        : "transparent";
+                    }}
                     onKeyDown={(e) => onItemKeyDown(e, globalIdx)}
                     style={{
                       width: "100%",
@@ -377,12 +487,15 @@ export function ThemeSwitcher() {
                       padding: "6px 8px",
                       border: 0,
                       borderRadius: 5,
-                      background: selected ? "var(--bg-selected)" : "transparent",
+                      background: selected
+                        ? "var(--bg-selected)"
+                        : "transparent",
                       color: selected ? "var(--text)" : "var(--text-muted)",
                       cursor: "pointer",
                       fontSize: 12,
                       textAlign: "left",
-                      transition: "background-color var(--dur-fast) var(--ease-out-warm), color var(--dur-fast) var(--ease-out-warm)",
+                      transition:
+                        "background-color var(--dur-fast) var(--ease-out-warm), color var(--dur-fast) var(--ease-out-warm)",
                     }}
                   >
                     <span
@@ -390,20 +503,54 @@ export function ThemeSwitcher() {
                         width: 13,
                         height: 13,
                         backgroundColor: theme.bg,
-                        border: theme.id === "omp" ? "1.5px solid #7DD7E8" : "1px solid color-mix(in srgb, var(--border) 80%, transparent)",
+                        border:
+                          theme.id === "omp"
+                            ? "1.5px solid #7DD7E8"
+                            : "1px solid color-mix(in srgb, var(--border) 80%, transparent)",
                         display: "inline-flex",
                         alignItems: "center",
                         justifyContent: "center",
                         flexShrink: 0,
                       }}
                     >
-                      <span style={{ width: 5, height: 5, borderRadius: "50%", backgroundColor: theme.accent }} />
+                      <span
+                        style={{
+                          width: 5,
+                          height: 5,
+                          borderRadius: "50%",
+                          backgroundColor: theme.accent,
+                        }}
+                      />
                     </span>
-                    <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "inline-flex", alignItems: "center", gap: 5 }}>
+                    <span
+                      style={{
+                        flex: 1,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 5,
+                      }}
+                    >
                       {theme.name}
-                      {theme.id === "omp" && <Sparkles size={11} strokeWidth={2} style={{ color: "var(--accent)", flexShrink: 0 }} aria-hidden="true" />}
+                      {theme.id === "omp" && (
+                        <Sparkles
+                          size={11}
+                          strokeWidth={2}
+                          style={{ color: "var(--accent)", flexShrink: 0 }}
+                          aria-hidden="true"
+                        />
+                      )}
                     </span>
-                    {selected && <Check size={12} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0, color: "var(--accent)" }} />}
+                    {selected && (
+                      <Check
+                        size={12}
+                        strokeWidth={2}
+                        aria-hidden="true"
+                        style={{ flexShrink: 0, color: "var(--accent)" }}
+                      />
+                    )}
                   </button>
                 );
               })}

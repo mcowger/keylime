@@ -43,7 +43,14 @@ export function modelEffort(model: string | undefined): string | null {
 }
 
 /** Count of nested (grandchild) subagents an agent currently has in flight. */
-export function countNestedSubagents(progress: { inflightTaskDetails?: unknown; extractedToolData?: Record<string, unknown[]> } | undefined): number {
+export function countNestedSubagents(
+  progress:
+    | {
+        inflightTaskDetails?: unknown;
+        extractedToolData?: Record<string, unknown[]>;
+      }
+    | undefined,
+): number {
   if (!progress) return 0;
   let count = 0;
   const inflight = progress.inflightTaskDetails;

@@ -4,10 +4,7 @@ import { Fragment, useState, useEffect, useCallback, useRef } from "react";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useI18n } from "@/lib/i18n";
 import { formatApiError } from "@/lib/i18n/api-error";
-import {
-  Dialog,
-  DialogContent,
-} from "@/components/ui/primitives";
+import { Dialog, DialogContent } from "@/components/ui/primitives";
 import { toast } from "@/components/ui/toast";
 import { Plus } from "lucide-react";
 import { SettingsTabs, type SettingsTab } from "./SettingsTabs";
@@ -18,12 +15,41 @@ import type {
   SkillUpdateResult,
 } from "@/lib/api-types";
 
-function SkillsConfigSurface({ embedded, isMobile, onClose, children }: { embedded: boolean; isMobile: boolean; onClose: () => void; children: React.ReactNode }) {
+function SkillsConfigSurface({
+  embedded,
+  isMobile,
+  onClose,
+  children,
+}: {
+  embedded: boolean;
+  isMobile: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
   const { t } = useI18n();
   if (embedded) return <>{children}</>;
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent ariaLabel={t("skillsConfig.title")} style={{ width: isMobile ? "calc(100vw - 16px)" : 860, maxWidth: "calc(100vw - 16px)", height: isMobile ? "calc((100dvh / var(--ui-scale)) - 16px)" : "calc(78vh / var(--ui-scale))", maxHeight: "calc((100dvh / var(--ui-scale)) - 16px)", padding: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent
+        ariaLabel={t("skillsConfig.title")}
+        style={{
+          width: isMobile ? "calc(100vw - 16px)" : 860,
+          maxWidth: "calc(100vw - 16px)",
+          height: isMobile
+            ? "calc((100dvh / var(--ui-scale)) - 16px)"
+            : "calc(78vh / var(--ui-scale))",
+          maxHeight: "calc((100dvh / var(--ui-scale)) - 16px)",
+          padding: 0,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+      >
         {children}
       </DialogContent>
     </Dialog>
@@ -54,7 +80,10 @@ function updateKey(skill: Skill): string | null {
     ? `${skill.install.scope}\0${skill.install.package}`
     : null;
 }
-function shortVersion(version: string | undefined, t: (key: string) => string): string {
+function shortVersion(
+  version: string | undefined,
+  t: (key: string) => string,
+): string {
   return version ? version.slice(0, 8) : t("skillsConfig.unknownVersion");
 }
 
@@ -166,8 +195,7 @@ function SkillDetail({
               label === "project"
                 ? "color-mix(in srgb, var(--accent) 12%, transparent)"
                 : "color-mix(in srgb, var(--text-dim) 12%, transparent)",
-            color:
-              label === "project" ? "var(--accent)" : "var(--text-dim)",
+            color: label === "project" ? "var(--accent)" : "var(--text-dim)",
           }}
         >
           {t(SOURCE_LABEL_KEYS[label])}
@@ -192,7 +220,13 @@ function SkillDetail({
           onToggle={() => onToggle(skill)}
         />
         {saveError && (
-          <span style={{ fontSize: 12, color: "var(--status-error)", flexShrink: 0 }}>
+          <span
+            style={{
+              fontSize: 12,
+              color: "var(--status-error)",
+              flexShrink: 0,
+            }}
+          >
             {saveError}
           </span>
         )}
@@ -207,7 +241,11 @@ function SkillDetail({
       {skill.install?.skillsShUrl && (
         <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
           <span
-            style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 500 }}
+            style={{
+              fontSize: 12,
+              color: "var(--text-muted)",
+              fontWeight: 500,
+            }}
           >
             {t("skillsConfig.source")}
           </span>
@@ -244,7 +282,11 @@ function SkillDetail({
       {skill.install && (
         <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
           <span
-            style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 500 }}
+            style={{
+              fontSize: 12,
+              color: "var(--text-muted)",
+              fontWeight: 500,
+            }}
           >
             {t("skillsConfig.version")}
           </span>
@@ -263,7 +305,10 @@ function SkillDetail({
                 color: "var(--text-muted)",
               }}
             >
-              {shortVersion(updateStatus?.currentVersion ?? skill.install.versionHash, t)}
+              {shortVersion(
+                updateStatus?.currentVersion ?? skill.install.versionHash,
+                t,
+              )}
             </span>
             {skill.install.canCheckForUpdates && (
               <button
@@ -275,7 +320,8 @@ function SkillDetail({
                   borderRadius: 5,
                   background: "none",
                   color: "var(--text-muted)",
-                  cursor: checkingUpdate || updating ? "not-allowed" : "pointer",
+                  cursor:
+                    checkingUpdate || updating ? "not-allowed" : "pointer",
                   opacity: checkingUpdate || updating ? 0.5 : 1,
                   fontSize: 11,
                 }}
@@ -304,8 +350,8 @@ function SkillDetail({
                     : updateStatus?.state === "up-to-date"
                       ? "var(--status-success)"
                       : updateStatus?.state === "error"
-                          ? "var(--status-error)"
-                          : "var(--text-dim)",
+                        ? "var(--status-error)"
+                        : "var(--text-dim)",
                 }}
               >
                 {checkingUpdate
@@ -313,8 +359,8 @@ function SkillDetail({
                   : updateStatus?.state === "up-to-date"
                     ? t("skillsConfig.upToDate")
                     : updateStatus?.state === "unsupported"
-                        ? t("skillsConfig.checksUnavailable")
-                        : updateStatus?.message || t("skillsConfig.checkFailed")}
+                      ? t("skillsConfig.checksUnavailable")
+                      : updateStatus?.message || t("skillsConfig.checkFailed")}
               </span>
             )}
             {updateStatus?.state === "update-available" && (
@@ -327,18 +373,23 @@ function SkillDetail({
                   borderRadius: 5,
                   background: "var(--accent-strong)",
                   color: "var(--on-accent)",
-                  cursor: updating || checkingUpdate ? "not-allowed" : "pointer",
+                  cursor:
+                    updating || checkingUpdate ? "not-allowed" : "pointer",
                   opacity: updating || checkingUpdate ? 0.5 : 1,
                   fontSize: 11,
                   fontWeight: 600,
                 }}
               >
-                {updating ? t("skillsConfig.updating") : t("skillsConfig.update")}
+                {updating
+                  ? t("skillsConfig.updating")
+                  : t("skillsConfig.update")}
               </button>
             )}
           </div>
           {updateError && (
-            <span style={{ fontSize: 12, color: "var(--status-error)" }}>{updateError}</span>
+            <span style={{ fontSize: 12, color: "var(--status-error)" }}>
+              {updateError}
+            </span>
           )}
         </div>
       )}
@@ -403,34 +454,38 @@ function AddSkillPanel({
     inputRef.current?.focus();
   }, []);
 
-  const search = useCallback(async (q: string) => {
-    if (!q.trim()) return;
-    setSearching(true);
-    setSearchError(null);
-    setResults([]);
-    try {
-      const res = await fetch("/api/skills/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q.trim() }),
-      });
-      const d = (await res.json()) as {
-        results?: SkillSearchResult[];
-        error?: string;
-        code?: string;
-      };
-      if (d.error) {
-        setSearchError(formatApiError(d));
-        return;
+  const search = useCallback(
+    async (q: string) => {
+      if (!q.trim()) return;
+      setSearching(true);
+      setSearchError(null);
+      setResults([]);
+      try {
+        const res = await fetch("/api/skills/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: q.trim() }),
+        });
+        const d = (await res.json()) as {
+          results?: SkillSearchResult[];
+          error?: string;
+          code?: string;
+        };
+        if (d.error) {
+          setSearchError(formatApiError(d));
+          return;
+        }
+        setResults(d.results ?? []);
+        if ((d.results ?? []).length === 0)
+          setSearchError(t("skillsConfig.noSkillsFound"));
+      } catch (e) {
+        setSearchError(String(e));
+      } finally {
+        setSearching(false);
       }
-      setResults(d.results ?? []);
-      if ((d.results ?? []).length === 0) setSearchError(t("skillsConfig.noSkillsFound"));
-    } catch (e) {
-      setSearchError(String(e));
-    } finally {
-      setSearching(false);
-    }
-  }, [t]);
+    },
+    [t],
+  );
 
   const install = useCallback(
     async (pkg: string) => {
@@ -442,14 +497,16 @@ function AddSkillPanel({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ package: pkg, scope, cwd }),
         });
-        const d = (await res.json()) as { success?: boolean; error?: string; code?: string };
+        const d = (await res.json()) as {
+          success?: boolean;
+          error?: string;
+          code?: string;
+        };
         if (!res.ok || d.error) {
           setInstallError(formatApiError(d.error ? d : `HTTP ${res.status}`));
           return;
         }
-        setNewlyInstalledPkgs((prev) =>
-          new Set(prev).add(`${scope}:${pkg}`),
-        );
+        setNewlyInstalledPkgs((prev) => new Set(prev).add(`${scope}:${pkg}`));
         onInstalled();
       } catch (e) {
         setInstallError(String(e));
@@ -533,7 +590,10 @@ function AddSkillPanel({
               flexShrink: 0,
             }}
           >
-            {(cwd ? ["global", "project"] as const : ["global"] as const).map((s) => (
+            {(cwd
+              ? (["global", "project"] as const)
+              : (["global"] as const)
+            ).map((s) => (
               <button
                 key={s}
                 onClick={() => setScope(s)}
@@ -568,11 +628,17 @@ function AddSkillPanel({
 
         {/* Errors */}
         {searchError && (
-          <div style={{ fontSize: 12, color: "var(--status-error)" }}>{searchError}</div>
+          <div style={{ fontSize: 12, color: "var(--status-error)" }}>
+            {searchError}
+          </div>
         )}
         {installError && (
           <div
-            style={{ fontSize: 12, color: "var(--status-error)", wordBreak: "break-word" }}
+            style={{
+              fontSize: 12,
+              color: "var(--status-error)",
+              wordBreak: "break-word",
+            }}
           >
             {installError}
           </div>
@@ -673,7 +739,9 @@ function AddSkillPanel({
                       isInstalled || isInstalling || installing !== null
                         ? "not-allowed"
                         : "pointer",
-                    background: isInstalled ? "color-mix(in srgb, var(--status-success) 10%, transparent)" : "none",
+                    background: isInstalled
+                      ? "color-mix(in srgb, var(--status-success) 10%, transparent)"
+                      : "none",
                     color: isInstalled
                       ? "var(--status-success)"
                       : isInstalling
@@ -701,7 +769,9 @@ function AddSkillPanel({
             {(() => {
               // "{site}" marks where the skills.sh link goes; kept out of the
               // dictionary value's translation so word order can differ.
-              const [before, after] = t("skillsConfig.searchHint").split("{site}");
+              const [before, after] = t("skillsConfig.searchHint").split(
+                "{site}",
+              );
               return (
                 <>
                   {before}
@@ -745,8 +815,12 @@ export function SkillsConfig({
   const [toggling, setToggling] = useState<Set<string>>(new Set());
   const [saveError, setSaveError] = useState<string | null>(null);
   const [addMode, setAddMode] = useState(false);
-  const [updateStatuses, setUpdateStatuses] = useState<Record<string, SkillUpdateResult>>({});
-  const [checkingUpdates, setCheckingUpdates] = useState<Set<string>>(new Set());
+  const [updateStatuses, setUpdateStatuses] = useState<
+    Record<string, SkillUpdateResult>
+  >({});
+  const [checkingUpdates, setCheckingUpdates] = useState<Set<string>>(
+    new Set(),
+  );
   const [checkingAll, setCheckingAll] = useState(false);
   const [updatingSkill, setUpdatingSkill] = useState<string | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
@@ -755,9 +829,16 @@ export function SkillsConfig({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(cwd ? `/api/skills?cwd=${encodeURIComponent(cwd)}` : "/api/skills");
-      const d = (await res.json()) as { skills?: Skill[]; error?: string; code?: string };
-      if (!res.ok || d.error) throw new Error(formatApiError(d.error ? d : `HTTP ${res.status}`));
+      const res = await fetch(
+        cwd ? `/api/skills?cwd=${encodeURIComponent(cwd)}` : "/api/skills",
+      );
+      const d = (await res.json()) as {
+        skills?: Skill[];
+        error?: string;
+        code?: string;
+      };
+      if (!res.ok || d.error)
+        throw new Error(formatApiError(d.error ? d : `HTTP ${res.status}`));
       const list = d.skills ?? [];
       setSkills(list);
       if (list.length > 0 && !selected) setSelected(list[0].filePath);
@@ -774,144 +855,159 @@ export function SkillsConfig({
     setUpdateStatuses({});
     setUpdateError(null);
     void loadSkills();
-  }, [cwd]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cwd]);
 
-  const checkForUpdates = useCallback(async (skill?: Skill) => {
-    const targets = skill
-      ? [skill]
-      : skills.filter((item) => Boolean(item.install));
-    const keys = targets
-      .map(updateKey)
-      .filter((key): key is string => Boolean(key));
-    if (keys.length === 0) return;
+  const checkForUpdates = useCallback(
+    async (skill?: Skill) => {
+      const targets = skill
+        ? [skill]
+        : skills.filter((item) => Boolean(item.install));
+      const keys = targets
+        .map(updateKey)
+        .filter((key): key is string => Boolean(key));
+      if (keys.length === 0) return;
 
-    setUpdateError(null);
-    setCheckingUpdates((current) => new Set([...current, ...keys]));
-    if (!skill) setCheckingAll(true);
-    try {
-      const res = await fetch("/api/skills/check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cwd,
-          package: skill?.install?.package,
-          scope: skill?.install?.scope,
-        }),
-      });
-      const data = (await res.json()) as {
-        updates?: SkillUpdateResult[];
-        error?: string;
-      };
-      if (!res.ok || data.error) throw new Error(data.error ?? `HTTP ${res.status}`);
-      setUpdateStatuses((current) => {
-        const next = { ...current };
-        for (const update of data.updates ?? []) {
-          next[`${update.scope}\0${update.package}`] = update;
-        }
-        return next;
-      });
-    } catch (e) {
-      setUpdateError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setCheckingUpdates((current) => {
-        const next = new Set(current);
-        for (const key of keys) next.delete(key);
-        return next;
-      });
-      if (!skill) setCheckingAll(false);
-    }
-  }, [cwd, skills]);
-
-  const updateInstalledSkill = useCallback(async (skill: Skill) => {
-    if (!skill.install) return;
-    const key = updateKey(skill)!;
-    setUpdatingSkill(key);
-    setUpdateError(null);
-    try {
-      const res = await fetch("/api/skills/update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cwd,
-          package: skill.install.package,
-          scope: skill.install.scope,
-        }),
-      });
-      const data = (await res.json()) as {
-        success?: boolean;
-        skill?: Skill;
-        error?: string;
-      };
-      if (!res.ok || data.error || !data.success) {
-        throw new Error(data.error ?? `HTTP ${res.status}`);
+      setUpdateError(null);
+      setCheckingUpdates((current) => new Set([...current, ...keys]));
+      if (!skill) setCheckingAll(true);
+      try {
+        const res = await fetch("/api/skills/check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            cwd,
+            package: skill?.install?.package,
+            scope: skill?.install?.scope,
+          }),
+        });
+        const data = (await res.json()) as {
+          updates?: SkillUpdateResult[];
+          error?: string;
+        };
+        if (!res.ok || data.error)
+          throw new Error(data.error ?? `HTTP ${res.status}`);
+        setUpdateStatuses((current) => {
+          const next = { ...current };
+          for (const update of data.updates ?? []) {
+            next[`${update.scope}\0${update.package}`] = update;
+          }
+          return next;
+        });
+      } catch (e) {
+        setUpdateError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setCheckingUpdates((current) => {
+          const next = new Set(current);
+          for (const key of keys) next.delete(key);
+          return next;
+        });
+        if (!skill) setCheckingAll(false);
       }
-      await loadSkills();
-      const versionHash = data.skill?.install?.versionHash;
-      setUpdateStatuses((current) => ({
-        ...current,
-        [key]: {
-          package: skill.install!.package,
-          scope: skill.install!.scope,
-          state: "up-to-date",
-          currentVersion: versionHash,
-          latestVersion: versionHash,
-        },
-      }));
-    } catch (e) {
-      setUpdateError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setUpdatingSkill(null);
-    }
-  }, [cwd, loadSkills]);
+    },
+    [cwd, skills],
+  );
 
-  const toggle = useCallback(async (skill: Skill) => {
-    const next = !skill.disableModelInvocation;
-    setToggling((s) => new Set(s).add(skill.filePath));
-    setSaveError(null);
-    try {
-      const res = await fetch("/api/skills", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filePath: skill.filePath,
-          disableModelInvocation: next,
-          cwd,
-        }),
-      });
-      const d = (await res.json()) as { success?: boolean; error?: string };
-      if (!res.ok || d.error) {
-        const msg = d.error ?? `HTTP ${res.status}`;
+  const updateInstalledSkill = useCallback(
+    async (skill: Skill) => {
+      if (!skill.install) return;
+      const key = updateKey(skill)!;
+      setUpdatingSkill(key);
+      setUpdateError(null);
+      try {
+        const res = await fetch("/api/skills/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            cwd,
+            package: skill.install.package,
+            scope: skill.install.scope,
+          }),
+        });
+        const data = (await res.json()) as {
+          success?: boolean;
+          skill?: Skill;
+          error?: string;
+        };
+        if (!res.ok || data.error || !data.success) {
+          throw new Error(data.error ?? `HTTP ${res.status}`);
+        }
+        await loadSkills();
+        const versionHash = data.skill?.install?.versionHash;
+        setUpdateStatuses((current) => ({
+          ...current,
+          [key]: {
+            package: skill.install!.package,
+            scope: skill.install!.scope,
+            state: "up-to-date",
+            currentVersion: versionHash,
+            latestVersion: versionHash,
+          },
+        }));
+      } catch (e) {
+        setUpdateError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setUpdatingSkill(null);
+      }
+    },
+    [cwd, loadSkills],
+  );
+
+  const toggle = useCallback(
+    async (skill: Skill) => {
+      const next = !skill.disableModelInvocation;
+      setToggling((s) => new Set(s).add(skill.filePath));
+      setSaveError(null);
+      try {
+        const res = await fetch("/api/skills", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filePath: skill.filePath,
+            disableModelInvocation: next,
+            cwd,
+          }),
+        });
+        const d = (await res.json()) as { success?: boolean; error?: string };
+        if (!res.ok || d.error) {
+          const msg = d.error ?? `HTTP ${res.status}`;
+          setSaveError(msg);
+          toast.error(t("skillsConfig.toggleErrorTitle"), msg);
+          return;
+        }
+        setSkills((prev) =>
+          prev.map((s) =>
+            s.filePath === skill.filePath
+              ? { ...s, disableModelInvocation: next }
+              : s,
+          ),
+        );
+        toast.success(t("skillsConfig.toggleSuccessTitle"));
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
         setSaveError(msg);
         toast.error(t("skillsConfig.toggleErrorTitle"), msg);
-        return;
+      } finally {
+        setToggling((s) => {
+          const n = new Set(s);
+          n.delete(skill.filePath);
+          return n;
+        });
       }
-      setSkills((prev) =>
-        prev.map((s) =>
-          s.filePath === skill.filePath
-            ? { ...s, disableModelInvocation: next }
-            : s,
-        ),
-      );
-      toast.success(t("skillsConfig.toggleSuccessTitle"));
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setSaveError(msg);
-      toast.error(t("skillsConfig.toggleErrorTitle"), msg);
-    } finally {
-      setToggling((s) => {
-        const n = new Set(s);
-        n.delete(skill.filePath);
-        return n;
-      });
-    }
-  }, [cwd, t]);
+    },
+    [cwd, t],
+  );
 
   const selectedSkill = skills.find((s) => s.filePath === selected) ?? null;
 
   return (
-    <SkillsConfigSurface embedded={embedded} isMobile={isMobile} onClose={onClose}>
-        {/* Header */}
-        {!embedded && (<div
+    <SkillsConfigSurface
+      embedded={embedded}
+      isMobile={isMobile}
+      onClose={onClose}
+    >
+      {/* Header */}
+      {!embedded && (
+        <div
           style={{
             display: "flex",
             alignItems: "center",
@@ -957,377 +1053,417 @@ export function SkillsConfig({
           >
             ×
           </button>
-        </div>)}
-        {!embedded && onSelectTab && <SettingsTabs active="skills" onSelect={onSelectTab} />}
-
-        {/* Body */}
-        <div style={{ flex: 1, display: "flex", flexDirection: isMobile ? "column" : "row", overflow: "hidden" }}>
-          {/* Left: skill list */}
-          <div
-            style={{
-              width: isMobile ? "100%" : 210,
-              maxHeight: isMobile ? "40vh" : undefined,
-              borderRight: isMobile ? "none" : "1px solid var(--border)",
-              borderBottom: isMobile ? "1px solid var(--border)" : "none",
-              display: "flex",
-              flexDirection: "column",
-              flexShrink: 0,
-              background: "var(--bg-panel)",
-            }}
-          >
-            <div style={{ flex: 1, overflowY: "auto", padding: "8px 6px" }}>
-              {loading ? (
-                <div
-                  style={{
-                    padding: "10px 8px",
-                    fontSize: 12,
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  {t("skillsConfig.loading")}
-                </div>
-              ) : error ? (
-                <div
-                  style={{
-                    padding: "10px 8px",
-                    fontSize: 11,
-                    color: "var(--status-error)",
-                  }}
-                >
-                  {error}
-                </div>
-              ) : skills.length === 0 ? (
-                <div
-                  style={{
-                    padding: "10px 8px",
-                    fontSize: 11,
-                    color: "var(--text-dim)",
-                  }}
-                >
-                  {t("skillsConfig.noSkillsFound")}
-                </div>
-              ) : (
-                (() => {
-                  const groups: { label: string; skills: typeof skills }[] = [];
-                  // label values are i18n keys, resolved with t() at render.
-                  const groupDefinitions = [
-                    {
-                      label: "skillsConfig.groupProjectSkillsSh",
-                      matches: (skill: Skill) =>
-                        sourceLabel(skill) === "project" &&
-                        Boolean(skill.install?.skillsShUrl),
-                    },
-                    {
-                      label: "skillsConfig.scopeProject",
-                      matches: (skill: Skill) =>
-                        sourceLabel(skill) === "project" &&
-                        !skill.install?.skillsShUrl,
-                    },
-                    {
-                      label: "skillsConfig.groupGlobalSkillsSh",
-                      matches: (skill: Skill) =>
-                        sourceLabel(skill) === "global" &&
-                        Boolean(skill.install?.skillsShUrl),
-                    },
-                    {
-                      label: "skillsConfig.scopeGlobal",
-                      matches: (skill: Skill) =>
-                        sourceLabel(skill) === "global" &&
-                        !skill.install?.skillsShUrl,
-                    },
-                    {
-                      label: "skillsConfig.scopePath",
-                      matches: (skill: Skill) => sourceLabel(skill) === "path",
-                    },
-                  ];
-                  for (const { label, matches } of groupDefinitions) {
-                    const grpSkills = skills.filter(matches);
-                    if (grpSkills.length > 0)
-                      groups.push({ label, skills: grpSkills });
-                  }
-                  return groups.map(
-                    ({ label: grpLabel, skills: grpSkills }) => (
-                      <div key={grpLabel} style={{ marginBottom: 6 }}>
-                        <div
-                          style={{
-                            padding: "4px 8px 3px",
-                            fontSize: 10,
-                            fontWeight: 600,
-                            color: "var(--text-dim)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.06em",
-                          }}
-                        >
-                          {t(grpLabel)}
-                        </div>
-                        {[...grpSkills.filter((skill) => !skill.disableModelInvocation), ...grpSkills.filter((skill) => skill.disableModelInvocation)].map((skill, index, orderedSkills) => {
-                          const isSelected =
-                            !addMode && selected === skill.filePath;
-                          const disabled = skill.disableModelInvocation;
-                          const firstDormant = disabled && (index === 0 || !orderedSkills[index - 1].disableModelInvocation);
-                          const dormantCount = firstDormant ? orderedSkills.filter((candidate) => candidate.disableModelInvocation).length : 0;
-                          return (
-                            <Fragment key={skill.filePath}>
-                            {firstDormant && (
-                              <div style={{ marginTop: 6, padding: "6px 8px 3px", borderTop: "1px solid var(--border)", fontSize: 10, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                                {t("skillsConfig.dormant", { count: dormantCount })}
-                              </div>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelected(skill.filePath);
-                                setAddMode(false);
-                              }}
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 7,
-                                padding: "8px 8px",
-                                borderRadius: 5,
-                                cursor: "pointer",
-                                width: "100%",
-                                border: "none",
-                                textAlign: "left",
-                                fontFamily: "inherit",
-                                background: isSelected
-                                  ? "var(--bg-selected)"
-                                  : "none",
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!isSelected)
-                                  e.currentTarget.style.background =
-                                    "var(--bg-hover)";
-                              }}
-                              onMouseLeave={(e) => {
-                                if (!isSelected)
-                                  e.currentTarget.style.background = "none";
-                              }}
-                            >
-                              <span
-                                style={{
-                                  flexShrink: 0,
-                                  width: 7,
-                                  height: 7,
-                                  borderRadius: "50%",
-                                  background: disabled
-                                    ? "var(--border)"
-                                    : "var(--accent)",
-                                  boxShadow: disabled
-                                    ? "none"
-                                    : "0 0 4px var(--accent)",
-                                  transition:
-                                    "background var(--dur-fast) var(--ease-out-warm), box-shadow var(--dur-fast) var(--ease-out-warm)",
-                                }}
-                              />
-                              <span
-                                style={{
-                                  fontSize: 12,
-                                  fontWeight: isSelected ? 600 : 400,
-                                  color: disabled
-                                    ? "var(--text-dim)"
-                                    : "var(--text)",
-                                  fontFamily: "var(--font-mono)",
-                                  flex: 1,
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
-                                }}
-                              >
-                                {skill.name}
-                              </span>
-                              {(() => {
-                                const key = updateKey(skill);
-                                const status = key ? updateStatuses[key] : undefined;
-                                if (status?.state !== "update-available") return null;
-                                return (
-                                  <span
-                                    title={t("skillsConfig.updateAvailable")}
-                                    style={{
-                                      color: "var(--status-warning)",
-                                      fontSize: 13,
-                                      lineHeight: 1,
-                                      flexShrink: 0,
-                                    }}
-                                  >
-                                    ↑
-                                  </span>
-                                );
-                              })()}
-                            </button>
-                            </Fragment>
-                          );
-                        })}
-                      </div>
-                    ),
-                  );
-                })()
-              )}
-            </div>
-            {/* Add skill button */}
-            <div
-              style={{
-                padding: "8px 6px",
-                borderTop: "1px solid var(--border)",
-                flexShrink: 0,
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setAddMode(true)}
-                className="ui-focus-ring"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "7px 8px",
-                  borderRadius: 5,
-                  cursor: "pointer",
-                  border: "none",
-                  background: "none",
-                  color: "var(--accent)",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  width: "100%",
-                  boxSizing: "border-box",
-                  textAlign: "left",
-                  transition: "background var(--dur-fast)",
-                }}
-              >
-                <Plus size={14} aria-hidden="true" />
-                <span>{t("skillsConfig.addCustomSkill")}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Right: detail or add panel */}
-          <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
-            {addMode ? (
-              <AddSkillPanel
-                cwd={cwd}
-                installedPackages={{
-                  global: new Set(
-                    skills
-                      .filter((skill) => skill.install?.scope === "global")
-                      .map((skill) => skill.install!.package),
-                  ),
-                  project: new Set(
-                    skills
-                      .filter((skill) => skill.install?.scope === "project")
-                      .map((skill) => skill.install!.package),
-                  ),
-                }}
-                onInstalled={() => {
-                  void loadSkills();
-                }}
-              />
-            ) : loading ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <div className="skeleton" style={{ height: 18, width: "40%" }} />
-                <div className="skeleton" style={{ height: 12, width: "70%" }} />
-                <div className="skeleton" style={{ height: 12, width: "55%" }} />
-                <div className="skeleton" style={{ height: 90, width: "100%" }} />
-              </div>
-            ) : selectedSkill ? (
-              <SkillDetail
-                key={selectedSkill.filePath}
-                skill={selectedSkill}
-                cwd={cwd}
-                onToggle={toggle}
-                toggling={toggling.has(selectedSkill.filePath)}
-                saveError={saveError}
-                updateStatus={
-                  updateKey(selectedSkill)
-                    ? updateStatuses[updateKey(selectedSkill)!]
-                    : undefined
-                }
-                checkingUpdate={
-                  updateKey(selectedSkill)
-                    ? checkingUpdates.has(updateKey(selectedSkill)!)
-                    : false
-                }
-                updating={updatingSkill === updateKey(selectedSkill)}
-                updateError={updateError}
-                onCheckUpdate={() => void checkForUpdates(selectedSkill)}
-                onUpdate={() => void updateInstalledSkill(selectedSkill)}
-              />
-            ) : (
-              <div
-                style={{
-                  height: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "var(--text-dim)",
-                  fontSize: 13,
-                }}
-              >
-                {t("skillsConfig.selectSkill")}
-              </div>
-            )}
-          </div>
         </div>
+      )}
+      {!embedded && onSelectTab && (
+        <SettingsTabs active="skills" onSelect={onSelectTab} />
+      )}
 
-        {/* Footer */}
+      {/* Body */}
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: isMobile ? "column" : "row",
+          overflow: "hidden",
+        }}
+      >
+        {/* Left: skill list */}
         <div
           style={{
+            width: isMobile ? "100%" : 210,
+            maxHeight: isMobile ? "40vh" : undefined,
+            borderRight: isMobile ? "none" : "1px solid var(--border)",
+            borderBottom: isMobile ? "1px solid var(--border)" : "none",
             display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "10px 18px",
-            borderTop: "1px solid var(--border)",
+            flexDirection: "column",
             flexShrink: 0,
+            background: "var(--bg-panel)",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {skills.some((skill) => Boolean(skill.install)) && (
-              <button
-                onClick={() => void checkForUpdates()}
-                disabled={checkingAll || updatingSkill !== null}
+          <div style={{ flex: 1, overflowY: "auto", padding: "8px 6px" }}>
+            {loading ? (
+              <div
                 style={{
-                  padding: "6px 12px",
-                  background: "none",
-                  border: "1px solid var(--border)",
-                  borderRadius: 6,
-                  color: "var(--text-muted)",
-                  cursor:
-                    checkingAll || updatingSkill !== null
-                      ? "not-allowed"
-                      : "pointer",
-                  opacity: checkingAll || updatingSkill !== null ? 0.5 : 1,
+                  padding: "10px 8px",
                   fontSize: 12,
+                  color: "var(--text-muted)",
                 }}
               >
-                {checkingAll ? t("skillsConfig.checking") : t("skillsConfig.checkUpdates")}
-              </button>
+                {t("skillsConfig.loading")}
+              </div>
+            ) : error ? (
+              <div
+                style={{
+                  padding: "10px 8px",
+                  fontSize: 11,
+                  color: "var(--status-error)",
+                }}
+              >
+                {error}
+              </div>
+            ) : skills.length === 0 ? (
+              <div
+                style={{
+                  padding: "10px 8px",
+                  fontSize: 11,
+                  color: "var(--text-dim)",
+                }}
+              >
+                {t("skillsConfig.noSkillsFound")}
+              </div>
+            ) : (
+              (() => {
+                const groups: { label: string; skills: typeof skills }[] = [];
+                // label values are i18n keys, resolved with t() at render.
+                const groupDefinitions = [
+                  {
+                    label: "skillsConfig.groupProjectSkillsSh",
+                    matches: (skill: Skill) =>
+                      sourceLabel(skill) === "project" &&
+                      Boolean(skill.install?.skillsShUrl),
+                  },
+                  {
+                    label: "skillsConfig.scopeProject",
+                    matches: (skill: Skill) =>
+                      sourceLabel(skill) === "project" &&
+                      !skill.install?.skillsShUrl,
+                  },
+                  {
+                    label: "skillsConfig.groupGlobalSkillsSh",
+                    matches: (skill: Skill) =>
+                      sourceLabel(skill) === "global" &&
+                      Boolean(skill.install?.skillsShUrl),
+                  },
+                  {
+                    label: "skillsConfig.scopeGlobal",
+                    matches: (skill: Skill) =>
+                      sourceLabel(skill) === "global" &&
+                      !skill.install?.skillsShUrl,
+                  },
+                  {
+                    label: "skillsConfig.scopePath",
+                    matches: (skill: Skill) => sourceLabel(skill) === "path",
+                  },
+                ];
+                for (const { label, matches } of groupDefinitions) {
+                  const grpSkills = skills.filter(matches);
+                  if (grpSkills.length > 0)
+                    groups.push({ label, skills: grpSkills });
+                }
+                return groups.map(({ label: grpLabel, skills: grpSkills }) => (
+                  <div key={grpLabel} style={{ marginBottom: 6 }}>
+                    <div
+                      style={{
+                        padding: "4px 8px 3px",
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: "var(--text-dim)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                      }}
+                    >
+                      {t(grpLabel)}
+                    </div>
+                    {[
+                      ...grpSkills.filter(
+                        (skill) => !skill.disableModelInvocation,
+                      ),
+                      ...grpSkills.filter(
+                        (skill) => skill.disableModelInvocation,
+                      ),
+                    ].map((skill, index, orderedSkills) => {
+                      const isSelected =
+                        !addMode && selected === skill.filePath;
+                      const disabled = skill.disableModelInvocation;
+                      const firstDormant =
+                        disabled &&
+                        (index === 0 ||
+                          !orderedSkills[index - 1].disableModelInvocation);
+                      const dormantCount = firstDormant
+                        ? orderedSkills.filter(
+                            (candidate) => candidate.disableModelInvocation,
+                          ).length
+                        : 0;
+                      return (
+                        <Fragment key={skill.filePath}>
+                          {firstDormant && (
+                            <div
+                              style={{
+                                marginTop: 6,
+                                padding: "6px 8px 3px",
+                                borderTop: "1px solid var(--border)",
+                                fontSize: 10,
+                                fontWeight: 600,
+                                color: "var(--text-dim)",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.06em",
+                              }}
+                            >
+                              {t("skillsConfig.dormant", {
+                                count: dormantCount,
+                              })}
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelected(skill.filePath);
+                              setAddMode(false);
+                            }}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 7,
+                              padding: "8px 8px",
+                              borderRadius: 5,
+                              cursor: "pointer",
+                              width: "100%",
+                              border: "none",
+                              textAlign: "left",
+                              fontFamily: "inherit",
+                              background: isSelected
+                                ? "var(--bg-selected)"
+                                : "none",
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isSelected)
+                                e.currentTarget.style.background =
+                                  "var(--bg-hover)";
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isSelected)
+                                e.currentTarget.style.background = "none";
+                            }}
+                          >
+                            <span
+                              style={{
+                                flexShrink: 0,
+                                width: 7,
+                                height: 7,
+                                borderRadius: "50%",
+                                background: disabled
+                                  ? "var(--border)"
+                                  : "var(--accent)",
+                                boxShadow: disabled
+                                  ? "none"
+                                  : "0 0 4px var(--accent)",
+                                transition:
+                                  "background var(--dur-fast) var(--ease-out-warm), box-shadow var(--dur-fast) var(--ease-out-warm)",
+                              }}
+                            />
+                            <span
+                              style={{
+                                fontSize: 12,
+                                fontWeight: isSelected ? 600 : 400,
+                                color: disabled
+                                  ? "var(--text-dim)"
+                                  : "var(--text)",
+                                fontFamily: "var(--font-mono)",
+                                flex: 1,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {skill.name}
+                            </span>
+                            {(() => {
+                              const key = updateKey(skill);
+                              const status = key
+                                ? updateStatuses[key]
+                                : undefined;
+                              if (status?.state !== "update-available")
+                                return null;
+                              return (
+                                <span
+                                  title={t("skillsConfig.updateAvailable")}
+                                  style={{
+                                    color: "var(--status-warning)",
+                                    fontSize: 13,
+                                    lineHeight: 1,
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  ↑
+                                </span>
+                              );
+                            })()}
+                          </button>
+                        </Fragment>
+                      );
+                    })}
+                  </div>
+                ));
+              })()
             )}
-            {(() => {
-              const availableCount = Object.values(updateStatuses).filter(
-                (status) => status.state === "update-available",
-              ).length;
-              if (availableCount === 0) return null;
-              return (
-                <span style={{ fontSize: 12, color: "var(--status-warning)" }}>
-                  {tn("skillsConfig.updateCount", availableCount)}
-                </span>
-              );
-            })()}
           </div>
-          <button
-            onClick={onClose}
+          {/* Add skill button */}
+          <div
             style={{
-              padding: "6px 14px",
-              background: "none",
-              border: "1px solid var(--border)",
-              borderRadius: 6,
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontSize: 13,
+              padding: "8px 6px",
+              borderTop: "1px solid var(--border)",
+              flexShrink: 0,
             }}
           >
-            {t("skillsConfig.close")}
-          </button>
+            <button
+              type="button"
+              onClick={() => setAddMode(true)}
+              className="ui-focus-ring"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "7px 8px",
+                borderRadius: 5,
+                cursor: "pointer",
+                border: "none",
+                background: "none",
+                color: "var(--accent)",
+                fontSize: 12,
+                fontWeight: 500,
+                width: "100%",
+                boxSizing: "border-box",
+                textAlign: "left",
+                transition: "background var(--dur-fast)",
+              }}
+            >
+              <Plus size={14} aria-hidden="true" />
+              <span>{t("skillsConfig.addCustomSkill")}</span>
+            </button>
+          </div>
         </div>
+
+        {/* Right: detail or add panel */}
+        <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+          {addMode ? (
+            <AddSkillPanel
+              cwd={cwd}
+              installedPackages={{
+                global: new Set(
+                  skills
+                    .filter((skill) => skill.install?.scope === "global")
+                    .map((skill) => skill.install!.package),
+                ),
+                project: new Set(
+                  skills
+                    .filter((skill) => skill.install?.scope === "project")
+                    .map((skill) => skill.install!.package),
+                ),
+              }}
+              onInstalled={() => {
+                void loadSkills();
+              }}
+            />
+          ) : loading ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div className="skeleton" style={{ height: 18, width: "40%" }} />
+              <div className="skeleton" style={{ height: 12, width: "70%" }} />
+              <div className="skeleton" style={{ height: 12, width: "55%" }} />
+              <div className="skeleton" style={{ height: 90, width: "100%" }} />
+            </div>
+          ) : selectedSkill ? (
+            <SkillDetail
+              key={selectedSkill.filePath}
+              skill={selectedSkill}
+              cwd={cwd}
+              onToggle={toggle}
+              toggling={toggling.has(selectedSkill.filePath)}
+              saveError={saveError}
+              updateStatus={
+                updateKey(selectedSkill)
+                  ? updateStatuses[updateKey(selectedSkill)!]
+                  : undefined
+              }
+              checkingUpdate={
+                updateKey(selectedSkill)
+                  ? checkingUpdates.has(updateKey(selectedSkill)!)
+                  : false
+              }
+              updating={updatingSkill === updateKey(selectedSkill)}
+              updateError={updateError}
+              onCheckUpdate={() => void checkForUpdates(selectedSkill)}
+              onUpdate={() => void updateInstalledSkill(selectedSkill)}
+            />
+          ) : (
+            <div
+              style={{
+                height: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--text-dim)",
+                fontSize: 13,
+              }}
+            >
+              {t("skillsConfig.selectSkill")}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "10px 18px",
+          borderTop: "1px solid var(--border)",
+          flexShrink: 0,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {skills.some((skill) => Boolean(skill.install)) && (
+            <button
+              onClick={() => void checkForUpdates()}
+              disabled={checkingAll || updatingSkill !== null}
+              style={{
+                padding: "6px 12px",
+                background: "none",
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                color: "var(--text-muted)",
+                cursor:
+                  checkingAll || updatingSkill !== null
+                    ? "not-allowed"
+                    : "pointer",
+                opacity: checkingAll || updatingSkill !== null ? 0.5 : 1,
+                fontSize: 12,
+              }}
+            >
+              {checkingAll
+                ? t("skillsConfig.checking")
+                : t("skillsConfig.checkUpdates")}
+            </button>
+          )}
+          {(() => {
+            const availableCount = Object.values(updateStatuses).filter(
+              (status) => status.state === "update-available",
+            ).length;
+            if (availableCount === 0) return null;
+            return (
+              <span style={{ fontSize: 12, color: "var(--status-warning)" }}>
+                {tn("skillsConfig.updateCount", availableCount)}
+              </span>
+            );
+          })()}
+        </div>
+        <button
+          onClick={onClose}
+          style={{
+            padding: "6px 14px",
+            background: "none",
+            border: "1px solid var(--border)",
+            borderRadius: 6,
+            color: "var(--text-muted)",
+            cursor: "pointer",
+            fontSize: 13,
+          }}
+        >
+          {t("skillsConfig.close")}
+        </button>
+      </div>
     </SkillsConfigSurface>
   );
 }

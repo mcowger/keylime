@@ -9,11 +9,16 @@ const repo = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 test("the package ships the font license texts with the fonts", () => {
   // The fonts are bundled into dist/assets; the OFL requires their license texts to travel with them.
-  const packed = JSON.parse(execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
-    cwd: repo,
-    encoding: "utf8",
-  }))[0].files.map((file) => file.path);
-  const licenses = readdirSync(path.join(repo, "app", "fonts")).filter((name) => /OFL|LICENSE/.test(name));
+  const packed = JSON.parse(
+    execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
+      cwd: repo,
+      encoding: "utf8",
+    }),
+  )[0].files.map((file) => file.path);
+  const licenses = readdirSync(path.join(repo, "app", "fonts")).filter((name) =>
+    /OFL|LICENSE/.test(name),
+  );
   assert.ok(licenses.length >= 5, licenses.join(", "));
-  for (const name of licenses) assert.ok(packed.includes(`app/fonts/${name}`), name);
+  for (const name of licenses)
+    assert.ok(packed.includes(`app/fonts/${name}`), name);
 });

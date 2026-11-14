@@ -3,7 +3,11 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 
 function isAttachableDragItem(item: DataTransferItem): boolean {
-  return item.type.startsWith("image/") || item.type === "text/plain" || item.type === "text/markdown";
+  return (
+    item.type.startsWith("image/") ||
+    item.type === "text/plain" ||
+    item.type === "text/markdown"
+  );
 }
 
 export function useDragDrop(onDrop: (files: File[]) => void) {
@@ -28,7 +32,9 @@ export function useDragDrop(onDrop: (files: File[]) => void) {
   }, []);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
-    const hasAttachables = Array.from(e.dataTransfer.items).some(isAttachableDragItem);
+    const hasAttachables = Array.from(e.dataTransfer.items).some(
+      isAttachableDragItem,
+    );
     if (!hasAttachables) return;
     e.preventDefault();
     counterRef.current += 1;
@@ -36,7 +42,9 @@ export function useDragDrop(onDrop: (files: File[]) => void) {
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
-    const hasAttachables = Array.from(e.dataTransfer.items).some(isAttachableDragItem);
+    const hasAttachables = Array.from(e.dataTransfer.items).some(
+      isAttachableDragItem,
+    );
     if (!hasAttachables) return;
     e.preventDefault();
   }, []);
@@ -49,13 +57,22 @@ export function useDragDrop(onDrop: (files: File[]) => void) {
     }
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    counterRef.current = 0;
-    setIsDragOver(false);
-    const files = Array.from(e.dataTransfer.files);
-    onDrop(files);
-  }, [onDrop]);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      counterRef.current = 0;
+      setIsDragOver(false);
+      const files = Array.from(e.dataTransfer.files);
+      onDrop(files);
+    },
+    [onDrop],
+  );
 
-  return { isDragOver, handleDragEnter, handleDragOver, handleDragLeave, handleDrop };
+  return {
+    isDragOver,
+    handleDragEnter,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+  };
 }

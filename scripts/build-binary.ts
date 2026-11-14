@@ -9,10 +9,16 @@ import { parseArgs } from "node:util";
 import { bundledPackageDirs, writeLicenses } from "./licenses";
 
 const root = path.join(import.meta.dir, "..");
-const { values } = parseArgs({ args: Bun.argv.slice(2), options: { target: { type: "string" }, "no-runner": { type: "boolean" } } });
-const target = (values.target ?? `bun-${process.platform}-${process.arch}`) as Bun.Build.CompileTarget;
+const { values } = parseArgs({
+  args: Bun.argv.slice(2),
+  options: { target: { type: "string" }, "no-runner": { type: "boolean" } },
+});
+const target = (values.target ??
+  `bun-${process.platform}-${process.arch}`) as Bun.Build.CompileTarget;
 if (!/^bun-(linux|darwin)-(x64|arm64)(-baseline)?$/.test(target)) {
-  console.error(`Unsupported target: ${target}. Expected a Linux or macOS x64 or arm64 Bun target.`);
+  console.error(
+    `Unsupported target: ${target}. Expected a Linux or macOS x64 or arm64 Bun target.`,
+  );
   process.exit(1);
 }
 // A -baseline target (x64 without AVX2, what releases ship) keeps the plain name, which the README and the update notice use.
@@ -29,14 +35,21 @@ if (!existsSync(clientPackagesFile)) {
 }
 const bunLicense = path.join(import.meta.dir, `bun-LICENSE-${Bun.version}.md`);
 if (!existsSync(bunLicense)) {
-  console.error(`No scripts/bun-LICENSE-${Bun.version}.md: save https://github.com/oven-sh/bun/blob/bun-v${Bun.version}/LICENSE.md there.`);
+  console.error(
+    `No scripts/bun-LICENSE-${Bun.version}.md: save https://github.com/oven-sh/bun/blob/bun-v${Bun.version}/LICENSE.md there.`,
+  );
   process.exit(1);
 }
 
 const result = await Bun.build({
   entrypoints: [path.join(root, "server", "binary.ts")],
   // A .env or bunfig.toml in the directory ompweb is started from belongs to the user's project, not to ompweb.
-  compile: { target, outfile: path.join(out, "ompweb"), autoloadDotenv: false, autoloadBunfig: false },
+  compile: {
+    target,
+    outfile: path.join(out, "ompweb"),
+    autoloadDotenv: false,
+    autoloadBunfig: false,
+  },
   // What `bun build --compile --production` sets. Without the define the bundle reads NODE_ENV as "development", and
   // the server never writes the local daemon link (instrumentation.node.ts), so no session ever lists.
   minify: true,
@@ -50,26 +63,63 @@ if (!result.success) process.exit(1);
 // The static root (server/binary.ts): the client, the public files, the KaTeX CSS and fonts (where the server
 // resolves the katex package), and the licenses of what ships. Beside the binary, unless --no-runner: the omp runner
 // it spawns (`ompweb-omp`, lib/omp/omp-cli.ts), built first by runner/scripts/build-binary.ts.
-const copy = (from: string, to: string) => cpSync(from, path.join(out, to), { recursive: true });
-for (const file of ["dist", "public", "LICENSE"]) copy(path.join(root, file), file);
+const copy = (from: string, to: string) =>
+  cpSync(from, path.join(out, to), { recursive: true });
+for (const file of ["dist", "public", "LICENSE"])
+  copy(path.join(root, file), file);
 if (!values["no-runner"]) {
   const runnerTarget = name.slice("ompweb-".length);
-  const runner = path.join(root, "runner", "release", `ompweb-omp-${runnerTarget}`);
+  const runner = path.join(
+    root,
+    "runner",
+    "release",
+    `ompweb-omp-${runnerTarget}`,
+  );
   if (!existsSync(runner)) {
-    console.error(`No ${path.relative(root, runner)}: run \`bun runner/scripts/build-binary.ts ${runnerTarget}\` first.`);
+    console.error(
+      `No ${path.relative(root, runner)}: run \`bun runner/scripts/build-binary.ts ${runnerTarget}\` first.`,
+    );
     process.exit(1);
   }
   copy(runner, "ompweb-omp");
 }
-for (const file of new Bun.Glob("app/fonts/*-{OFL.txt,LICENSE.*}").scanSync(root)) copy(path.join(root, file), file);
+for (const file of new Bun.Glob("app/fonts/*-{OFL.txt,LICENSE.*}").scanSync(
+  root,
+))
+  copy(path.join(root, file), file);
 const katex = path.dirname(Bun.resolveSync("katex/package.json", root));
-for (const file of ["package.json", "LICENSE", "dist/katex.min.css", "dist/fonts"]) copy(path.join(katex, file), `node_modules/katex/${file}`);
-const clientPackages = (JSON.parse(readFileSync(clientPackagesFile, "utf8")) as string[]).map((dir) => path.resolve(root, dir));
-writeLicenses(out, [...new Set([...bundledPackageDirs(result.metafile!, process.cwd()), ...clientPackages])].sort(), bunLicense);
+for (const file of [
+  "package.json",
+  "LICENSE",
+  "dist/katex.min.css",
+  "dist/fonts",
+])
+  copy(path.join(katex, file), `node_modules/katex/${file}`);
+const clientPackages = (
+  JSON.parse(readFileSync(clientPackagesFile, "utf8")) as string[]
+).map((dir) => path.resolve(root, dir));
+writeLicenses(
+  out,
+  [
+    ...new Set([
+      ...bundledPackageDirs(result.metafile!, process.cwd()),
+      ...clientPackages,
+    ]),
+  ].sort(),
+  bunLicense,
+);
 
 // Bun.Archive writes every entry as 0644, so use tar to preserve the binary's execute bit.
 const archive = path.join(release, `${name}.tar.gz`);
 rmSync(archive, { force: true });
 const command = ["tar", "-czf", path.basename(archive), name];
-if (Bun.spawnSync(command, { cwd: release, stdio: ["ignore", "inherit", "inherit"] }).exitCode !== 0) process.exit(1);
-console.log(`built ${path.relative(root, out)} and ${path.relative(root, archive)}`);
+if (
+  Bun.spawnSync(command, {
+    cwd: release,
+    stdio: ["ignore", "inherit", "inherit"],
+  }).exitCode !== 0
+)
+  process.exit(1);
+console.log(
+  `built ${path.relative(root, out)} and ${path.relative(root, archive)}`,
+);

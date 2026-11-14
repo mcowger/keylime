@@ -35,28 +35,28 @@
 
 ## Inventory (counts at `03a3b2d8` for Tasks 1–6; at `177afdfa` plus Task 6's working tree for Tasks 7–11 — re-count when Task 6 lands; over `components/ hooks/ lib/ app/ server/ scripts/ public/`)
 
-| Surface | Hits | Files | Task |
-|---|---|---|---|
-| `sendAgentCommand(` call sites (callers unchanged; routing inside `lib/agent-client.ts`) | 60 calls, 48 command types | `hooks/useAgentSession.ts` 49, `hooks/useBtw.ts` 4, `components/ChatWindow.tsx` 2, `components/SubagentTranscriptDialog.tsx` 2, `components/AppShell.tsx` 1, `components/PluginsConfig.tsx` 1, `components/SkillDiagnostics.tsx` 1 (+ 1 mention in `hooks/useAgentSession.rpc.test.mjs`) | 6, 7 |
-| …idempotent by rule (`get_*`, `predict_word`) | 13 calls, 9 types | `get_state` ×4, `get_subagents` ×2, `get_commands`, `get_btw_history`, `get_session_stats`, `get_last_assistant_text`, `get_skill_diagnostics`, `get_subagent_messages`, `predict_word` | 6 |
-| …non-idempotent | 47 calls, 39 types | `prompt` ×3, `steer`, `follow_up`, `abort*` ×6 types, queue ops, `bash`, `compact` ×2, `set_*`, `host_*_result`, … | 6 |
-| Other `lib/agent-client.ts` exports | `setSessionAdvisorSpawn(` 4, `new HostOfflineError(` 3 | `useAgentSession.ts` 4 + 2, `agent-client.ts` 1 | 6 (advisor rides the `cmd` frame) |
-| `fetch` of `GET /api/agent/[id]` (stay HTTP) | 8 | `useAgentSession.ts` | — |
-| `POST /api/agent/new` (stays HTTP) | 1 | `useAgentSession.ts` | — |
-| `openEventStream(` call sites (unchanged) | 6 | `AppShell.tsx` host-tools, `FileViewer.tsx` file, `SessionSidebar.tsx` running, `useHostRows.ts` hosts, `useNotifications.ts` notifications → general socket; `useAgentSession.ts` session → session socket | 5 |
-| Worker subscribe paths | `requestServer(` 2 calls (subscribe in `subscribe()`, unsubscribe in `close()`); resubscribe on `hello` 1, on `end` 1 | `public/event-stream-worker.js` | 5 (socket `sub`/`unsub` frames in WS mode) |
-| Server subscribe paths | `connection.subscribe` 1, `.unsubscribe` 1, `new EventStreamConnection(` 1 (+1 test) | `app/api/events/route.ts`, `lib/event-stream-hub.test.mjs` | 2, 3 |
-| `LinkSocketData` | 15 | `server/app.ts` 7, `server/routes.ts` 3, `lib/hosts/hub.ts` 3, `app/api/hosts/link/route.ts` 2 | 3 (server files widen to `ServerSocketData`; hub and link route unchanged) |
-| `MuxControlFrame` | 4 | `event-stream-protocol.ts` 2, `event-stream-hub.ts` 2 | 2 |
-| Source-text assertions on `app/api/agent/[id]/route.ts` | 6 tests | `lib/api-contract.test.mjs` | 1 |
-| Full-object settings `deepEqual`s | 5 | `lib/web-settings.test.mjs` | 2 |
-| `hello` shape assertions | 1 `deepEqual` + 1 regex | `lib/event-stream-hub.test.mjs` (`connect`), `server/app.test.ts` | 2 |
-| Other `EventSource` | 1 (login SSE, unchanged) | `components/ModelsConfig.tsx` | — |
-| `"websocket"` setting value (excl. `lib/hosts/`) | 63 | `public/event-stream-worker.js` 8, `lib/event-stream.ts` 1, `lib/agent-client.ts` 1, `lib/event-stream-protocol.ts` 2, `lib/web-settings.ts` 2, `app/api/web-settings/route.ts` 1; tests `agent-client.test.mjs` 3, `api-contract.test.mjs` 5, `event-stream-hub.test.mjs` 2, `event-stream-worker.test.mjs` 4, `event-stream.test.mjs` 2, `web-settings.test.mjs` 2, `scripts/transport-metrics.test.ts` 30 (sample labels: the summary is label-agnostic, they may stay) | 8 |
-| Mode checks `=== "websocket"` / `!== "websocket"` (→ `isWebSocketTransport`) | 8 | worker 5 (`setMode` ×2, `open`, `queueCommand`, `attach`), `lib/event-stream.ts` 1 (`sendSessionCommand`), route 1, `lib/web-settings.ts` 1 | 8 |
-| Session binding of a socket (`?session=`, `searchParams.get("session")`, `BrowserSocketData.sessionId`, `ws.data.sessionId`) | 12 | `lib/browser-socket.ts` 3 + the interface field, `lib/browser-socket.test.mjs` 4 (upgrade test), worker 2 (header comment, `dial`), `event-stream-worker.test.mjs` 3 (dial URLs) | 7 |
-| Worker key policy (`connFor(` building `general` / `session:<id>`, `conn.sessionId` in `dial`/`idle`) | 1 function + 2 uses | `public/event-stream-worker.js` | 8 |
-| Summary sections (`SECTION_ORDER`) and the `conn` grouping | 1 + 2 | `scripts/transport-metrics.ts` | 10 |
+| Surface                                                                                                                      | Hits                                                                                                                  | Files                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Task                                                                       |
+| ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `sendAgentCommand(` call sites (callers unchanged; routing inside `lib/agent-client.ts`)                                     | 60 calls, 48 command types                                                                                            | `hooks/useAgentSession.ts` 49, `hooks/useBtw.ts` 4, `components/ChatWindow.tsx` 2, `components/SubagentTranscriptDialog.tsx` 2, `components/AppShell.tsx` 1, `components/PluginsConfig.tsx` 1, `components/SkillDiagnostics.tsx` 1 (+ 1 mention in `hooks/useAgentSession.rpc.test.mjs`)                                                                                                                                                                                   | 6, 7                                                                       |
+| …idempotent by rule (`get_*`, `predict_word`)                                                                                | 13 calls, 9 types                                                                                                     | `get_state` ×4, `get_subagents` ×2, `get_commands`, `get_btw_history`, `get_session_stats`, `get_last_assistant_text`, `get_skill_diagnostics`, `get_subagent_messages`, `predict_word`                                                                                                                                                                                                                                                                                    | 6                                                                          |
+| …non-idempotent                                                                                                              | 47 calls, 39 types                                                                                                    | `prompt` ×3, `steer`, `follow_up`, `abort*` ×6 types, queue ops, `bash`, `compact` ×2, `set_*`, `host_*_result`, …                                                                                                                                                                                                                                                                                                                                                         | 6                                                                          |
+| Other `lib/agent-client.ts` exports                                                                                          | `setSessionAdvisorSpawn(` 4, `new HostOfflineError(` 3                                                                | `useAgentSession.ts` 4 + 2, `agent-client.ts` 1                                                                                                                                                                                                                                                                                                                                                                                                                            | 6 (advisor rides the `cmd` frame)                                          |
+| `fetch` of `GET /api/agent/[id]` (stay HTTP)                                                                                 | 8                                                                                                                     | `useAgentSession.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                       | —                                                                          |
+| `POST /api/agent/new` (stays HTTP)                                                                                           | 1                                                                                                                     | `useAgentSession.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                       | —                                                                          |
+| `openEventStream(` call sites (unchanged)                                                                                    | 6                                                                                                                     | `AppShell.tsx` host-tools, `FileViewer.tsx` file, `SessionSidebar.tsx` running, `useHostRows.ts` hosts, `useNotifications.ts` notifications → general socket; `useAgentSession.ts` session → session socket                                                                                                                                                                                                                                                                | 5                                                                          |
+| Worker subscribe paths                                                                                                       | `requestServer(` 2 calls (subscribe in `subscribe()`, unsubscribe in `close()`); resubscribe on `hello` 1, on `end` 1 | `public/event-stream-worker.js`                                                                                                                                                                                                                                                                                                                                                                                                                                            | 5 (socket `sub`/`unsub` frames in WS mode)                                 |
+| Server subscribe paths                                                                                                       | `connection.subscribe` 1, `.unsubscribe` 1, `new EventStreamConnection(` 1 (+1 test)                                  | `app/api/events/route.ts`, `lib/event-stream-hub.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                 | 2, 3                                                                       |
+| `LinkSocketData`                                                                                                             | 15                                                                                                                    | `server/app.ts` 7, `server/routes.ts` 3, `lib/hosts/hub.ts` 3, `app/api/hosts/link/route.ts` 2                                                                                                                                                                                                                                                                                                                                                                             | 3 (server files widen to `ServerSocketData`; hub and link route unchanged) |
+| `MuxControlFrame`                                                                                                            | 4                                                                                                                     | `event-stream-protocol.ts` 2, `event-stream-hub.ts` 2                                                                                                                                                                                                                                                                                                                                                                                                                      | 2                                                                          |
+| Source-text assertions on `app/api/agent/[id]/route.ts`                                                                      | 6 tests                                                                                                               | `lib/api-contract.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                                                | 1                                                                          |
+| Full-object settings `deepEqual`s                                                                                            | 5                                                                                                                     | `lib/web-settings.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                                                | 2                                                                          |
+| `hello` shape assertions                                                                                                     | 1 `deepEqual` + 1 regex                                                                                               | `lib/event-stream-hub.test.mjs` (`connect`), `server/app.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                          | 2                                                                          |
+| Other `EventSource`                                                                                                          | 1 (login SSE, unchanged)                                                                                              | `components/ModelsConfig.tsx`                                                                                                                                                                                                                                                                                                                                                                                                                                              | —                                                                          |
+| `"websocket"` setting value (excl. `lib/hosts/`)                                                                             | 63                                                                                                                    | `public/event-stream-worker.js` 8, `lib/event-stream.ts` 1, `lib/agent-client.ts` 1, `lib/event-stream-protocol.ts` 2, `lib/web-settings.ts` 2, `app/api/web-settings/route.ts` 1; tests `agent-client.test.mjs` 3, `api-contract.test.mjs` 5, `event-stream-hub.test.mjs` 2, `event-stream-worker.test.mjs` 4, `event-stream.test.mjs` 2, `web-settings.test.mjs` 2, `scripts/transport-metrics.test.ts` 30 (sample labels: the summary is label-agnostic, they may stay) | 8                                                                          |
+| Mode checks `=== "websocket"` / `!== "websocket"` (→ `isWebSocketTransport`)                                                 | 8                                                                                                                     | worker 5 (`setMode` ×2, `open`, `queueCommand`, `attach`), `lib/event-stream.ts` 1 (`sendSessionCommand`), route 1, `lib/web-settings.ts` 1                                                                                                                                                                                                                                                                                                                                | 8                                                                          |
+| Session binding of a socket (`?session=`, `searchParams.get("session")`, `BrowserSocketData.sessionId`, `ws.data.sessionId`) | 12                                                                                                                    | `lib/browser-socket.ts` 3 + the interface field, `lib/browser-socket.test.mjs` 4 (upgrade test), worker 2 (header comment, `dial`), `event-stream-worker.test.mjs` 3 (dial URLs)                                                                                                                                                                                                                                                                                           | 7                                                                          |
+| Worker key policy (`connFor(` building `general` / `session:<id>`, `conn.sessionId` in `dial`/`idle`)                        | 1 function + 2 uses                                                                                                   | `public/event-stream-worker.js`                                                                                                                                                                                                                                                                                                                                                                                                                                            | 8                                                                          |
+| Summary sections (`SECTION_ORDER`) and the `conn` grouping                                                                   | 1 + 2                                                                                                                 | `scripts/transport-metrics.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                             | 10                                                                         |
 
 Order: 1 → 2 → 3 → 5 → 6 → 7 → 8 → 9 → 10 → 11; Task 4 depends on nothing and may run beside 1–3 (it and Task 3 each add one `ROUTE_MODULES` entry: rebase, keep both). Tasks 1–5 are done as written; Task 6 is in progress as written; Tasks 7–11 are the socket-assignment amendment.
 
@@ -65,11 +65,13 @@ Order: 1 → 2 → 3 → 5 → 6 → 7 → 8 → 9 → 10 → 11; Task 4 depends
 ### Task 1: One command function for the route and the socket
 
 **Files:**
+
 - Create: `lib/agent-command.ts`
 - Modify: `app/api/agent/[id]/route.ts`, `lib/api-contract.test.mjs`
 - Test: `lib/agent-command.test.mjs`
 
 **Interfaces:**
+
 - Produces: `export async function runAgentCommand(id: string, body: unknown, advisor: boolean): Promise<Response>` (everything `POST` does after parsing: type check → 400 `command_type_required`, `NO_SPAWN_REPLIES`, `LIVE_SESSION_ONLY`, fast path, spawn, cold `set_model`; never throws: errors go through `commandErrorResponse`); `export function commandErrorResponse(error: unknown): Response` (moved unchanged). The route's `POST` and `GET` answers carry `x-omp-received-at` (ms at handler entry) and `x-omp-replied-at` (ms just before returning).
 
 - [ ] **Step 1: Install.** `npm ci` (prints `added … packages`).
@@ -86,10 +88,12 @@ Order: 1 → 2 → 3 → 5 → 6 → 7 → 8 → 9 → 10 → 11; Task 4 depends
 ### Task 2: The setting, emit times and transport control frames
 
 **Files:**
+
 - Modify: `lib/web-settings.ts`, `app/api/web-settings/route.ts`, `lib/event-stream-protocol.ts`, `lib/event-stream-hub.ts`
 - Test: `lib/web-settings.test.mjs`, `lib/event-stream-hub.test.mjs`, `lib/api-contract.test.mjs` (web-settings route test)
 
 **Interfaces:**
+
 - Produces:
   - `lib/event-stream-protocol.ts`: `export type BrowserTransport = "sse" | "websocket";` `MuxControlFrame` = `hello {connectionId, serverId, transport}` | `open {sub}` | `end {sub}` | `refused {sub, status, error, code}` | `transport {transport}`.
   - `lib/web-settings.ts`: `WebServerSettings.browserTransport: BrowserTransport` (default `"sse"`, only the literal `"websocket"` reads as WebSocket).
@@ -111,11 +115,13 @@ Order: 1 → 2 → 3 → 5 → 6 → 7 → 8 → 9 → 10 → 11; Task 4 depends
 ### Task 3: The browser WebSocket endpoint
 
 **Files:**
+
 - Create: `lib/browser-socket.ts`, `app/api/events/ws/route.ts`
 - Modify: `server/routes.ts`, `server/app.ts`
 - Test: `lib/browser-socket.test.mjs`, `server/app.test.ts`
 
 **Interfaces:**
+
 - Consumes: Task 1 `runAgentCommand`, `commandErrorResponse`; Task 2 `FrameSink`, `EventStreamConnection`, `serverId`, `control`.
 - Produces:
   - `export interface BrowserSocketData { kind: "browser"; sessionId: string | null; connection: EventStreamConnection | null }`
@@ -143,11 +149,13 @@ Order: 1 → 2 → 3 → 5 → 6 → 7 → 8 → 9 → 10 → 11; Task 4 depends
 ### Task 4: Metrics endpoint, JSONL store and summary script
 
 **Files:**
+
 - Create: `lib/transport-metrics.ts`, `app/api/transport-metrics/route.ts`, `scripts/transport-metrics.ts`
 - Modify: `server/routes.ts` (key `"transport-metrics"`)
 - Test: `lib/transport-metrics.test.mjs`, `scripts/transport-metrics.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `GET /api/transport-metrics` → `{ now: number }`, `cache-control: no-store` (the SSE clock probe).
   - `POST /api/transport-metrics` `{ samples: object[] }` → `{ written: number }`; 400 `invalid_transport_metrics` for a non-object body, a missing array or > 1 000 samples; 413 above 256 KiB (`parseJsonWithinLimit`).
@@ -167,10 +175,12 @@ Order: 1 → 2 → 3 → 5 → 6 → 7 → 8 → 9 → 10 → 11; Task 4 depends
 ### Task 5: Worker WebSocket mode for channels
 
 **Files:**
+
 - Modify: `public/event-stream-worker.js`, `lib/event-stream.ts`, `lib/event-stream-protocol.ts` (header comment: the WS framing)
 - Test: `lib/event-stream-worker.test.mjs`
 
 **Interfaces:**
+
 - Consumes: Task 2 hello/`transport`/`refused` frames; Task 3 wire format.
 - Produces (tab ↔ worker, additive):
   - worker → tab `{ transport: BrowserTransport }`: to a tab when it attaches (once known) and to all tabs on every change.
@@ -195,10 +205,12 @@ Behaviour: spec D2, D5 (mode switch, linger, heartbeat, reconnect, wake). In SSE
 ### Task 6: Agent commands over the session socket
 
 **Files:**
+
 - Modify: `public/event-stream-worker.js`, `lib/event-stream.ts`, `lib/agent-client.ts`, `lib/i18n/locales/{en,ja,zh-CN}.json` (`errors.transport_unavailable`, `errors.transport_lost`)
 - Test: `lib/event-stream-worker.test.mjs`, `lib/agent-client.test.mjs` (DOM: import `tests/setup-dom.mjs` first)
 
 **Interfaces:**
+
 - Consumes: Task 3 `cmd`/`ack`/`reply`; Task 5 `Conn`, `transportMode()`.
 - Produces:
   - tab → worker `{ op: "cmd", n: number, req: string, sessionId: string, advisor: boolean, body: string }` (`body` = the command's JSON, stringified once by the tab; the worker builds the frame by concatenation, `{"t":"cmd","rid":<req>,"advisor":…,"command":` + body + `}`).
@@ -226,10 +238,12 @@ Behaviour: spec D5 "Commands" and "Resend". The session socket stays open while 
 Wire change at both ends, so the app keeps working between tasks; the worker still assigns sockets as `ws-session` does until Task 8.
 
 **Files:**
+
 - Modify: `lib/browser-socket.ts`, `public/event-stream-worker.js`, `lib/event-stream-protocol.ts` (header comment)
 - Test: `lib/browser-socket.test.mjs`, `lib/event-stream-worker.test.mjs`
 
 **Interfaces:**
+
 - Consumes: Task 3 `browserSocket`, `runOnce`; Task 6 command queue.
 - Produces:
   - `BrowserSocketData = { kind: "browser"; connection: EventStreamConnection | null }`; `handleBrowserSocketUpgrade` reads no query (426 when `upgrade` returns false, nothing else).
@@ -250,10 +264,12 @@ Wire change at both ends, so the app keeps working between tasks; the worker sti
 ### Task 8: Transport modes, the key policy and make-before-break moves
 
 **Files:**
+
 - Modify: `lib/event-stream-protocol.ts`, `lib/web-settings.ts`, `app/api/web-settings/route.ts`, `lib/event-stream-hub.ts`, `public/event-stream-worker.js`, `lib/event-stream.ts`, `lib/agent-client.ts`
 - Test: `lib/web-settings.test.mjs`, `lib/api-contract.test.mjs`, `lib/event-stream-hub.test.mjs`, `lib/event-stream-worker.test.mjs`, `lib/event-stream.test.mjs`, `lib/agent-client.test.mjs` (every `"websocket"` value in the Inventory row)
 
 **Interfaces:**
+
 - Consumes: Task 7 multi-session sockets; Task 5 `Conn`, `join`, `idle`, `retire`, `redial`; Task 6 `pending`, `lost`, `sendWaiting`.
 - Produces:
   - `lib/event-stream-protocol.ts`: `export type BrowserTransport = "sse" | "ws-client" | "ws-session" | "ws-pool";` `export const BROWSER_TRANSPORTS: readonly BrowserTransport[]`; `export function isWebSocketTransport(transport: BrowserTransport): boolean`; `export interface BrowserTransportState { transport: BrowserTransport; perSocket: number; maxSockets: number }`; `hello` = `{ type: "hello"; connectionId; serverId } & BrowserTransportState`; `transport` = `{ type: "transport" } & BrowserTransportState`.
@@ -264,6 +280,7 @@ Wire change at both ends, so the app keeps working between tasks; the worker sti
   - `lib/event-stream.ts` / `lib/agent-client.ts`: commands go through the worker when `transportMode() !== "sse"`.
 
 Exact behaviour (spec D2, D5): `sse` ↔ ws keeps Task 5/6's switch. Between ws modes `rebalance("mode")`:
+
 - every subscription whose `socketKeyFor` changed gets `subscription.moving = connFor(newKey)` and a `sub` there; `handleControl` on `open` from `moving`: tab `{ error, readyState: 0 }` then `{ open }`, `subscription.conn = moving`, `unsub` on the old socket, `moving = null`; `refused`/`end` from `moving`: `moving = null`, `unsub` there, nothing else;
 - if the old socket drops while a move is pending, the subscription switches to `moving` at once (CONNECTING now, OPEN on its `open`);
 - unsent commands (`attempts === 0`, not in flight) move to their session's new socket; sent ones stay; `lost()` resends on `connFor(socketKeyFor(session))` (same resend rules);
@@ -283,10 +300,12 @@ Exact behaviour (spec D2, D5): `sse` ↔ ws keeps Task 5/6's switch. Between ws 
 ### Task 9: ws-pool sized from active sessions, rendezvous buckets
 
 **Files:**
+
 - Modify: `public/event-stream-worker.js`
 - Test: `lib/event-stream-worker.test.mjs` (`loadWorker` also returns the `vm` context: top-level `function` declarations are its properties)
 
 **Interfaces:**
+
 - Consumes: Task 8 `state`, `socketKeyFor`, `rebalance`, `move`, `keyValid`.
 - Produces (worker top level): `function poolRank(sessionId, n)` → index in `[0, n)`; `function activeSessions()` → `Set` of session ids with a `session` subscription (current or moving) or a pending command on any conn; `let poolSize` (N, 1 outside `ws-pool`); `function resizePool(reason)` (`"grow" | "shrink" | "setting" | "mode"`); `rebalance(reason)` returns `{ fromPool, toPool, fromSockets, toSockets, active, moved, movedOther }` for Task 10. `socketKeyFor` in `ws-pool`: `null` → `pool:0`, a session → `pool:${poolRank(id, poolSize)}`; `keyValid("pool:i")` ⇔ `i < poolSize`.
 
@@ -295,7 +314,8 @@ The ranking (spec D2; the hash is fixed so every worker ranks the same):
 ```js
 function fnv1a(text) {
   let hash = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193);
+  for (let i = 0; i < text.length; i++)
+    hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193);
   return hash >>> 0;
 }
 function fmix32(hash) {
@@ -308,7 +328,10 @@ function poolRank(sessionId, n) {
   let bestScore = -1;
   for (let i = 0; i < n; i++) {
     const score = fmix32(fnv1a(`${i}:${sessionId}`));
-    if (score > bestScore) { best = i; bestScore = score; }
+    if (score > bestScore) {
+      best = i;
+      bestScore = score;
+    }
   }
   return best;
 }
@@ -330,14 +353,17 @@ Sizing: `target = Math.min(Math.max(Math.ceil(activeSessions().size / state.perS
 ### Task 10: Instrument every transport
 
 **Files:**
+
 - Modify: `public/event-stream-worker.js`, `lib/event-stream.ts`, `lib/agent-client.ts`, `scripts/transport-metrics.ts`
 - Test: `lib/event-stream-worker.test.mjs`, `lib/agent-client.test.mjs`, `scripts/transport-metrics.test.ts`
 
 **Interfaces:**
+
 - Consumes: Task 4 endpoint and script; Task 5 `Conn`/`sseConn`, `wake`; Task 6 `CommandReply`; Task 8 `state`, `rebalance`; Task 9 `poolSize`, the `rebalance` result.
 - Produces: tab → worker `{ op: "metric", sample: object }`; `lib/event-stream.ts` `export function recordTransportSample(sample: Record<string, unknown>): void` (posts only when a transport exists; never constructs one). `CommandReply` gains `socket: string` (the key; `"http"` for HTTP) and `behindSameBytes`, `behindOtherBytes`, `replyBehindOtherBytes` (numbers or `null`). Sample schema and derived values: spec D6. The worker stamps `transport`, `pool`, `socket`, `conn`, `sockets`, `clientId`, `effectiveType`, `visible` on every sample that lacks them, and `offset`/`offsetRtt` (best current clock) on `action` samples.
 
 Exact rules:
+
 - Clock: WS `pong` → `offset = at − (c + now) / 2`, `rtt = now − c`, keep the min-RTT sample per `Conn`; the client sends `{t:"ping", c}` on `open` and on every server `ping`. SSE: after each `hello`, `SSE_CLOCK_PROBES` sequential `fetch("/api/transport-metrics")`.
 - Tags: `conn` = the key's prefix (`general`, `session`, `client`, `pool`), `sse` for the EventSource, `http` for an HTTP command, `worker` for `rebalance`/`dropped`; `sockets` = conns holding a `ws`; `pool` = `poolSize` in `ws-pool`, else `null`.
 - Event: SSE `Number(event.lastEventId)`, WS the frame's `at`; at most one per connection per `EVENT_SAMPLE_MS`, except frames with `behindOtherBytes > 0` (always); the connection's clock, else the worker's best (min RTT across `conns` and `sseConn`); none before any clock exists.
@@ -368,10 +394,12 @@ Exact rules:
 ### Task 11: Settings control, docs and an end-to-end run over every mode
 
 **Files:**
+
 - Modify: `components/SettingsConfig.tsx` (a `SETTINGS` entry `{ id: "browser-transport", tab: "general", sectionKey: "settingsConfig.interfaceBehavior", … scope: "UI" }` and a `BrowserTransportSetting` rendered in Interface & Behavior), `lib/i18n/locales/{en,ja,zh-CN}.json` (the ten `settingsConfig.browserTransport*` keys), `AGENTS.md`
 - Test: `components/SettingsConfig.browser-transport.test.mjs`
 
 **Interfaces:**
+
 - Consumes: Task 8 `GET`/`PUT /api/web-settings`.
 - Produces: `BrowserTransportSetting` — a `<select>` (`nativeSelectStyle`, like `word-completion`) with the four modes, loaded from `GET /api/web-settings` (disabled until loaded), `PUT { browserTransport }` on change; while `ws-pool` is selected, two `<input type="number">` (per socket `min=1 max=64`, most connections `min=1 max=16`) under `browserTransportPoolDesc`, each saving `PUT { browserTransportPerSocket }` / `{ browserTransportMaxSockets }` on change when the value is an integer in range; a failed save restores the previous value and calls `toast.error(t("settingsConfig.browserTransportSaveFailed"), …)` (the `AutoResumeSessionsSetting` pattern).
 

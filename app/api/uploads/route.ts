@@ -11,10 +11,24 @@ const NO_SINK = { ack() {}, error() {} };
 export async function POST(req: Request) {
   try {
     const body = await parseJsonWithinLimit<unknown>(req, 16 * 1024);
-    if (!isRecord(body)) return Response.json({ error: "Invalid upload", code: "invalid_request" }, { status: 400 });
+    if (!isRecord(body))
+      return Response.json(
+        { error: "Invalid upload", code: "invalid_request" },
+        { status: 400 },
+      );
     const { id, host, name, size, type } = body;
     // startUpload checks every field's type.
-    return Response.json(await startUpload({ id, hostId: host, owner: requestOwner(req), name, size, type, sink: NO_SINK } as Parameters<typeof startUpload>[0]));
+    return Response.json(
+      await startUpload({
+        id,
+        hostId: host,
+        owner: requestOwner(req),
+        name,
+        size,
+        type,
+        sink: NO_SINK,
+      } as Parameters<typeof startUpload>[0]),
+    );
   } catch (error) {
     return uploadErrorResponse(error);
   }

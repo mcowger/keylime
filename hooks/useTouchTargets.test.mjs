@@ -39,9 +39,15 @@ test("stored preference returns default in non-browser environment", () => {
 });
 
 test("stored preference keeps valid values and rejects unknown or prototype keys", () => {
-  withStoredValue("accessible", () => assert.equal(storedTouchTargetsPreference(), "accessible"));
-  withStoredValue("compact", () => assert.equal(storedTouchTargetsPreference(), "compact"));
+  withStoredValue("accessible", () =>
+    assert.equal(storedTouchTargetsPreference(), "accessible"),
+  );
+  withStoredValue("compact", () =>
+    assert.equal(storedTouchTargetsPreference(), "compact"),
+  );
   for (const bogus of ["garbage", "constructor", "toString", "__proto__"]) {
-    withStoredValue(bogus, () => assert.equal(storedTouchTargetsPreference(), "auto", bogus));
+    withStoredValue(bogus, () =>
+      assert.equal(storedTouchTargetsPreference(), "auto", bogus),
+    );
   }
 });

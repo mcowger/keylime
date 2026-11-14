@@ -1,20 +1,34 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } from "react";
+import {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+} from "react";
 import dynamic from "@/lib/dynamic";
 import { useRouter, useSearchParams } from "@/lib/navigation";
 import { useGlobalKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useSidebarHistory } from "@/hooks/useSidebarHistory";
 import { useModalDialog } from "@/hooks/useModalDialog";
 import { useNavigationHistory } from "@/hooks/useNavigationHistory";
-import { isMacPlatform, navigateShortcutHint, NAVIGATION_HISTORY_MAX_ENTRIES } from "@/lib/navigation-history";
+import {
+  isMacPlatform,
+  navigateShortcutHint,
+  NAVIGATION_HISTORY_MAX_ENTRIES,
+} from "@/lib/navigation-history";
 import { useMobileSidebarGestures } from "@/hooks/useMobileSidebarGestures";
 import { SessionSidebar } from "./SessionSidebar";
 import type { SearchMatchTarget } from "./SessionSearchMatches";
 import type { WorktreeContext } from "./SessionSidebar-helpers";
 import { ToastProvider } from "./ui/toast";
 import { toast } from "./ui/toast";
-import { notificationHistory, useUnreadNotificationCount } from "@/lib/notification-history";
+import {
+  notificationHistory,
+  useUnreadNotificationCount,
+} from "@/lib/notification-history";
 import { ConfirmDialog } from "./ui/field";
 import { ChatWindow } from "./ChatWindow";
 import { type Tab } from "./TabBar";
@@ -25,7 +39,22 @@ import { NotificationBell } from "./NotificationBell";
 import { BranchNavigator } from "./BranchNavigator";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { CommandPaletteMount } from "./CommandPaletteMount";
-import { Check, ChevronDown, Command, Ellipsis, Folder, GitBranch, History, Menu, PanelLeft, PanelRight, Server, Terminal, Wand2, Zap } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Command,
+  Ellipsis,
+  Folder,
+  GitBranch,
+  History,
+  Menu,
+  PanelLeft,
+  PanelRight,
+  Server,
+  Terminal,
+  Wand2,
+  Zap,
+} from "lucide-react";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 import { translate, useI18n } from "@/lib/i18n";
 import { formatApiError } from "@/lib/i18n/api-error";
@@ -33,13 +62,29 @@ import { formatGenerationSpeed } from "@/lib/generation-speed";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useIsCompactOverlay } from "@/hooks/useIsCompactOverlay";
 import { copyText } from "@/lib/clipboard";
-import { getFileApiUrl, getFileName, getRelativeFilePath, joinFilePath } from "@/lib/file-paths";
+import {
+  getFileApiUrl,
+  getFileName,
+  getRelativeFilePath,
+  joinFilePath,
+} from "@/lib/file-paths";
 import { normalizeLocalPath } from "@/lib/file-links";
 import type { WorkspaceFileSource } from "@/lib/workspace-types";
-import { buildAtMentionText, buildFileAtMentionsText, buildFileLineMentionText } from "@/lib/file-fuzzy";
+import {
+  buildAtMentionText,
+  buildFileAtMentionsText,
+  buildFileLineMentionText,
+} from "@/lib/file-fuzzy";
 import { getInitialNavigation } from "@/lib/initial-navigation";
 import { comparableProjectPath } from "@/lib/comparable-path";
-import { foldedHostProjectKey, hostProjectKey, LOCAL_HOST_ID, remoteHostId, projectIdentity, projectTargetId } from "@/lib/project-ordering";
+import {
+  foldedHostProjectKey,
+  hostProjectKey,
+  LOCAL_HOST_ID,
+  remoteHostId,
+  projectIdentity,
+  projectTargetId,
+} from "@/lib/project-ordering";
 import { isClusterTarget } from "@/lib/hosts/cluster";
 import { useHostRows } from "@/hooks/useHostRows";
 import { LocalDaemonBanner } from "./LocalDaemonBanner";
@@ -76,7 +121,12 @@ import {
   projectLabel,
   WorkspaceState,
 } from "./AppShell-layout";
-import type { CrossSessionHostToolCall, ManagedProject, SessionInfo, SessionTreeNode } from "@/lib/types";
+import type {
+  CrossSessionHostToolCall,
+  ManagedProject,
+  SessionInfo,
+  SessionTreeNode,
+} from "@/lib/types";
 import { runHostTool } from "@/hooks/useAgentSession-stream";
 import { sendAgentCommand } from "@/lib/agent-client";
 import { openEventStream } from "@/lib/event-stream";
@@ -99,9 +149,12 @@ import { publishSessionsChanged } from "@/lib/session-change-bus";
 // The settings shell is part of the app bundle so opening it does not fetch or compile a modal chunk. The right panel (viewer included) is a separate chunk, preloaded on the first pointerdown or keydown and mounted on first open.
 // No loading placeholder: it would take the panel's place in the layout (on
 // phones, squeezing out the chat) for a frame even when the code is cached.
-const RightPanel = dynamic(() => import("./RightPanel").then((m) => m.RightPanel), {
-  loading: () => null,
-});
+const RightPanel = dynamic(
+  () => import("./RightPanel").then((m) => m.RightPanel),
+  {
+    loading: () => null,
+  },
+);
 
 const TOOL_CALLS_COLLAPSED_STORAGE_KEY = "omp-web:tool-calls-collapsed";
 const HIDE_TOOL_ACTIVITY_STORAGE_KEY = "omp-web:hide-tool-activity";
@@ -113,7 +166,6 @@ const PROVIDER_USAGE_VISIBLE_STORAGE_KEY = "omp-web:provider-usage-visible";
 const NATIVE_SELECT_ALL_STORAGE_KEY = "omp-web:scope-native-select-all";
 const OPEN_URL_AUTOMATICALLY_STORAGE_KEY = "omp-web:open-url-automatically";
 
-
 type AutoNameStatus =
   | { kind: "idle" }
   | { kind: "naming" }
@@ -124,36 +176,71 @@ type TimerHandle = NodeJS.Timeout;
 export function AppShell({ appName }: { appName: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [initialNavigation] = useState(() => getInitialNavigation(searchParams));
+  const [initialNavigation] = useState(() =>
+    getInitialNavigation(searchParams),
+  );
   const { t, locale } = useI18n();
   const isMobile = useIsMobile();
   const isCompactOverlay = useIsCompactOverlay();
-  const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
+  const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(
+    null,
+  );
   // The transient identity belongs to one intentional new chat, not one request attempt.
   const [newSessionCwd, setNewSessionCwd] = useState<string | null>(null);
   // Host of newSessionCwd; undefined is this machine. Every host-aware state
   // here uses that form (see remoteHostId).
-  const [newSessionHostId, setNewSessionHostId] = useState<string | undefined>(undefined);
-  const [newSessionCreation, setNewSessionCreation] = useState<{ id?: string; initialization?: string }>({});
-  const newSessionCreationId = newSessionCreation.id;
-  const handleNewSessionInitialization = useCallback((initialization: string) => {
-    setNewSessionCreation((current) => current.id === newSessionCreationId && current.initialization === undefined ? { ...current, initialization } : current);
-  }, [newSessionCreationId]);
-  const [newSessionPoolProject, setNewSessionPoolProject] = useState<ManagedProject | null>(null);
-  const [workspaceOptions, setWorkspaceOptions] = useState<{ projects: ManagedProject[]; selectedProject: string | null; cwd: string | null; hostId: string }>({ projects: [], selectedProject: null, cwd: null, hostId: LOCAL_HOST_ID });
-  const [addProjectOpen, setAddProjectOpen] = useState(false);
-  const [addProjectHostId, setAddProjectHostId] = useState<string>(LOCAL_HOST_ID);
-  const openAddProject = useCallback((open: boolean, hostId: string = LOCAL_HOST_ID) => {
-    setAddProjectHostId(hostId);
-    setAddProjectOpen(open);
-  }, []);
-  const { hosts, pools, poolsLoaded } = useHostRows();
-  const handleWorkspaceOptionsChange = useCallback((projects: ManagedProject[], selectedProject: string | null, cwd: string | null, hostId: string) => {
-    setWorkspaceOptions({ projects, selectedProject, cwd, hostId });
-  }, []);
-  const [initialCwdStatus, setInitialCwdStatus] = useState<"idle" | "validating" | "ready" | "error">(
-    () => initialNavigation.requestedCwd ? "validating" : "idle",
+  const [newSessionHostId, setNewSessionHostId] = useState<string | undefined>(
+    undefined,
   );
+  const [newSessionCreation, setNewSessionCreation] = useState<{
+    id?: string;
+    initialization?: string;
+  }>({});
+  const newSessionCreationId = newSessionCreation.id;
+  const handleNewSessionInitialization = useCallback(
+    (initialization: string) => {
+      setNewSessionCreation((current) =>
+        current.id === newSessionCreationId &&
+        current.initialization === undefined
+          ? { ...current, initialization }
+          : current,
+      );
+    },
+    [newSessionCreationId],
+  );
+  const [newSessionPoolProject, setNewSessionPoolProject] =
+    useState<ManagedProject | null>(null);
+  const [workspaceOptions, setWorkspaceOptions] = useState<{
+    projects: ManagedProject[];
+    selectedProject: string | null;
+    cwd: string | null;
+    hostId: string;
+  }>({ projects: [], selectedProject: null, cwd: null, hostId: LOCAL_HOST_ID });
+  const [addProjectOpen, setAddProjectOpen] = useState(false);
+  const [addProjectHostId, setAddProjectHostId] =
+    useState<string>(LOCAL_HOST_ID);
+  const openAddProject = useCallback(
+    (open: boolean, hostId: string = LOCAL_HOST_ID) => {
+      setAddProjectHostId(hostId);
+      setAddProjectOpen(open);
+    },
+    [],
+  );
+  const { hosts, pools, poolsLoaded } = useHostRows();
+  const handleWorkspaceOptionsChange = useCallback(
+    (
+      projects: ManagedProject[],
+      selectedProject: string | null,
+      cwd: string | null,
+      hostId: string,
+    ) => {
+      setWorkspaceOptions({ projects, selectedProject, cwd, hostId });
+    },
+    [],
+  );
+  const [initialCwdStatus, setInitialCwdStatus] = useState<
+    "idle" | "validating" | "ready" | "error"
+  >(() => (initialNavigation.requestedCwd ? "validating" : "idle"));
   const [initialCwdError, setInitialCwdError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [sessionKey, setSessionKey] = useState(0);
@@ -164,8 +251,11 @@ export function AppShell({ appName }: { appName: string }) {
   const [modelsRefreshKey, setModelsRefreshKey] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarReady, setMobileSidebarReady] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState<number>(SIDEBAR_DEFAULT_WIDTH);
-  const [toolCallsDefaultCollapsed, setToolCallsDefaultCollapsed] = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(
+    SIDEBAR_DEFAULT_WIDTH,
+  );
+  const [toolCallsDefaultCollapsed, setToolCallsDefaultCollapsed] =
+    useState(true);
   const [hideToolActivity, setHideToolActivity] = useState(true);
   const [neverFoldActivity, setNeverFoldActivity] = useState(false);
   const [showToolCallsUnfolded, setShowToolCallsUnfolded] = useState(false);
@@ -179,7 +269,10 @@ export function AppShell({ appName }: { appName: string }) {
     const load = () => {
       fetch("/api/omp-settings")
         .then((response) => (response.ok ? response.json() : null))
-        .then((data: { settings?: { hideThinkingBlock?: boolean } } | null) => { if (data) setHideThinkingBlock(data.settings?.hideThinkingBlock === true); })
+        .then((data: { settings?: { hideThinkingBlock?: boolean } } | null) => {
+          if (data)
+            setHideThinkingBlock(data.settings?.hideThinkingBlock === true);
+        })
         .catch(() => {});
     };
     load();
@@ -191,7 +284,10 @@ export function AppShell({ appName }: { appName: string }) {
   const [openUrlAutomatically, setOpenUrlAutomatically] = useState(false);
   const [sidebarResizing, setSidebarResizing] = useState(false);
   // Active drag handlers so an unmount mid-drag can detach them.
-  const sidebarResizeHandlersRef = useRef<{ onMove: (ev: MouseEvent) => void; onUp: () => void } | null>(null);
+  const sidebarResizeHandlersRef = useRef<{
+    onMove: (ev: MouseEvent) => void;
+    onUp: () => void;
+  } | null>(null);
   // DOM element + live width during a drag (see handleSidebarResizeStart).
   const sidebarContainerRef = useModalDialog<HTMLElement>({
     onClose: () => setSidebarOpen(false),
@@ -201,26 +297,52 @@ export function AppShell({ appName }: { appName: string }) {
   useEffect(() => {
     setSidebarWidth(loadSidebarWidth());
     try {
-      setToolCallsDefaultCollapsed(window.localStorage.getItem(TOOL_CALLS_COLLAPSED_STORAGE_KEY) !== "false");
-      setHideToolActivity(window.localStorage.getItem(HIDE_TOOL_ACTIVITY_STORAGE_KEY) !== "false");
-      setNeverFoldActivity(window.localStorage.getItem(NEVER_FOLD_ACTIVITY_STORAGE_KEY) === "true");
-      setShowToolCallsUnfolded(window.localStorage.getItem(SHOW_TOOL_CALLS_UNFOLDED_STORAGE_KEY) === "true");
-      setExpandThinkingByDefault(window.localStorage.getItem(EXPAND_THINKING_STORAGE_KEY) === "true");
-      setProviderUsageVisible(window.localStorage.getItem(PROVIDER_USAGE_VISIBLE_STORAGE_KEY) !== "false");
-      setScopeNativeSelectAll(window.localStorage.getItem(NATIVE_SELECT_ALL_STORAGE_KEY) === "true");
-      setOpenUrlAutomatically(window.localStorage.getItem(OPEN_URL_AUTOMATICALLY_STORAGE_KEY) === "true");
+      setToolCallsDefaultCollapsed(
+        window.localStorage.getItem(TOOL_CALLS_COLLAPSED_STORAGE_KEY) !==
+          "false",
+      );
+      setHideToolActivity(
+        window.localStorage.getItem(HIDE_TOOL_ACTIVITY_STORAGE_KEY) !== "false",
+      );
+      setNeverFoldActivity(
+        window.localStorage.getItem(NEVER_FOLD_ACTIVITY_STORAGE_KEY) === "true",
+      );
+      setShowToolCallsUnfolded(
+        window.localStorage.getItem(SHOW_TOOL_CALLS_UNFOLDED_STORAGE_KEY) ===
+          "true",
+      );
+      setExpandThinkingByDefault(
+        window.localStorage.getItem(EXPAND_THINKING_STORAGE_KEY) === "true",
+      );
+      setProviderUsageVisible(
+        window.localStorage.getItem(PROVIDER_USAGE_VISIBLE_STORAGE_KEY) !==
+          "false",
+      );
+      setScopeNativeSelectAll(
+        window.localStorage.getItem(NATIVE_SELECT_ALL_STORAGE_KEY) === "true",
+      );
+      setOpenUrlAutomatically(
+        window.localStorage.getItem(OPEN_URL_AUTOMATICALLY_STORAGE_KEY) ===
+          "true",
+      );
     } catch {
       // Keep the compact default when storage is unavailable.
     }
   }, []);
-  const handleToolCallsDefaultCollapsedChange = useCallback((collapsed: boolean) => {
-    setToolCallsDefaultCollapsed(collapsed);
-    try {
-      window.localStorage.setItem(TOOL_CALLS_COLLAPSED_STORAGE_KEY, String(collapsed));
-    } catch {
-      // The preference still applies for this page load.
-    }
-  }, []);
+  const handleToolCallsDefaultCollapsedChange = useCallback(
+    (collapsed: boolean) => {
+      setToolCallsDefaultCollapsed(collapsed);
+      try {
+        window.localStorage.setItem(
+          TOOL_CALLS_COLLAPSED_STORAGE_KEY,
+          String(collapsed),
+        );
+      } catch {
+        // The preference still applies for this page load.
+      }
+    },
+    [],
+  );
   const handleHideToolActivityChange = useCallback((hide: boolean) => {
     setHideToolActivity(hide);
     try {
@@ -232,7 +354,10 @@ export function AppShell({ appName }: { appName: string }) {
   const handleNeverFoldActivityChange = useCallback((never: boolean) => {
     setNeverFoldActivity(never);
     try {
-      window.localStorage.setItem(NEVER_FOLD_ACTIVITY_STORAGE_KEY, String(never));
+      window.localStorage.setItem(
+        NEVER_FOLD_ACTIVITY_STORAGE_KEY,
+        String(never),
+      );
     } catch {
       // The preference still applies for this page load.
     }
@@ -240,7 +365,10 @@ export function AppShell({ appName }: { appName: string }) {
   const handleShowToolCallsUnfoldedChange = useCallback((show: boolean) => {
     setShowToolCallsUnfolded(show);
     try {
-      window.localStorage.setItem(SHOW_TOOL_CALLS_UNFOLDED_STORAGE_KEY, String(show));
+      window.localStorage.setItem(
+        SHOW_TOOL_CALLS_UNFOLDED_STORAGE_KEY,
+        String(show),
+      );
     } catch {
       // The preference still applies for this page load.
     }
@@ -256,7 +384,10 @@ export function AppShell({ appName }: { appName: string }) {
   const handleProviderUsageVisibleChange = useCallback((visible: boolean) => {
     setProviderUsageVisible(visible);
     try {
-      window.localStorage.setItem(PROVIDER_USAGE_VISIBLE_STORAGE_KEY, String(visible));
+      window.localStorage.setItem(
+        PROVIDER_USAGE_VISIBLE_STORAGE_KEY,
+        String(visible),
+      );
     } catch {
       // The preference still applies for this page load.
     }
@@ -264,7 +395,10 @@ export function AppShell({ appName }: { appName: string }) {
   const handleScopeNativeSelectAllChange = useCallback((enabled: boolean) => {
     setScopeNativeSelectAll(enabled);
     try {
-      window.localStorage.setItem(NATIVE_SELECT_ALL_STORAGE_KEY, String(enabled));
+      window.localStorage.setItem(
+        NATIVE_SELECT_ALL_STORAGE_KEY,
+        String(enabled),
+      );
     } catch {
       // The preference still applies for this page load.
     }
@@ -272,7 +406,10 @@ export function AppShell({ appName }: { appName: string }) {
   const handleOpenUrlAutomaticallyChange = useCallback((enabled: boolean) => {
     setOpenUrlAutomatically(enabled);
     try {
-      window.localStorage.setItem(OPEN_URL_AUTOMATICALLY_STORAGE_KEY, String(enabled));
+      window.localStorage.setItem(
+        OPEN_URL_AUTOMATICALLY_STORAGE_KEY,
+        String(enabled),
+      );
     } catch {
       // The preference still applies for this page load.
     }
@@ -288,7 +425,10 @@ export function AppShell({ appName }: { appName: string }) {
     }
     if (sidebarResizing) return;
     try {
-      window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth));
+      window.localStorage.setItem(
+        SIDEBAR_WIDTH_STORAGE_KEY,
+        String(sidebarWidth),
+      );
     } catch {
       // ignore storage quota / privacy-mode errors
     }
@@ -300,15 +440,24 @@ export function AppShell({ appName }: { appName: string }) {
   const appUpdateAttemptRef = useRef<string | null>(null);
   const appUpdateStartInFlightRef = useRef(false);
   const appUpdateCompletingRef = useRef(false);
-  const [appUpdateVisibleStage, setAppUpdateVisibleStage] = useState<AppUpdateStage | undefined>();
-  const appUpdateVisibleStageRef = useRef<AppUpdateStage | undefined>(undefined);
+  const [appUpdateVisibleStage, setAppUpdateVisibleStage] = useState<
+    AppUpdateStage | undefined
+  >();
+  const appUpdateVisibleStageRef = useRef<AppUpdateStage | undefined>(
+    undefined,
+  );
   const appUpdateVisibleStageStartedAtRef = useRef<number | null>(null);
   const appUpdateCommittedAttemptRef = useRef<string | null>(null);
   const appUpdateRecoveryCommitAttemptRef = useRef<string | null>(null);
   const appUpdateStageFlowRef = useRef(0);
-  const appUpdateAcknowledgementsRef = useRef<Map<string, Promise<boolean>>>(new Map());
+  const appUpdateAcknowledgementsRef = useRef<Map<string, Promise<boolean>>>(
+    new Map(),
+  );
   const advanceAppUpdateVisibleStage = useCallback((next: AppUpdateStage) => {
-    const visible = getMonotonicAppUpdateStage(appUpdateVisibleStageRef.current, next);
+    const visible = getMonotonicAppUpdateStage(
+      appUpdateVisibleStageRef.current,
+      next,
+    );
     if (visible === appUpdateVisibleStageRef.current) return;
     appUpdateVisibleStageRef.current = visible;
     appUpdateVisibleStageStartedAtRef.current = Date.now();
@@ -321,32 +470,47 @@ export function AppShell({ appName }: { appName: string }) {
     appUpdateCommittedAttemptRef.current = null;
     appUpdateRecoveryCommitAttemptRef.current = null;
     setAppUpdateVisibleStage(undefined);
-    setAppUpdate((current) => current?.appUpdateDrain
-      ? { ...current, appUpdateDrain: undefined }
-      : current);
+    setAppUpdate((current) =>
+      current?.appUpdateDrain
+        ? { ...current, appUpdateDrain: undefined }
+        : current,
+    );
   }, []);
-  const showAppUpdateStagesThrough = useCallback(async (target: AppUpdateStage) => {
-    const stageFlow = appUpdateStageFlowRef.current;
-    const targetIndex = getAppUpdateStageIndex(target);
-    if (appUpdateVisibleStageRef.current === undefined) {
-      advanceAppUpdateVisibleStage(target);
-      return;
-    }
-    while (true) {
-      const current = appUpdateVisibleStageRef.current;
-      if (current === undefined || getAppUpdateStageIndex(current) >= targetIndex) return;
-      await waitForAppUpdateDwell(
-        appUpdateVisibleStageStartedAtRef.current,
-        current === "preparing" ? APP_UPDATE_PREPARING_MIN_MS : APP_UPDATE_VISIBLE_STAGE_MIN_MS,
-      );
-      if (appUpdateStageFlowRef.current !== stageFlow) return;
-      const latest = appUpdateVisibleStageRef.current;
-      if (latest === undefined || getAppUpdateStageIndex(latest) >= targetIndex) return;
-      const next = getNextAppUpdateStage(latest);
-      if (next === undefined) return;
-      advanceAppUpdateVisibleStage(next);
-    }
-  }, [advanceAppUpdateVisibleStage]);
+  const showAppUpdateStagesThrough = useCallback(
+    async (target: AppUpdateStage) => {
+      const stageFlow = appUpdateStageFlowRef.current;
+      const targetIndex = getAppUpdateStageIndex(target);
+      if (appUpdateVisibleStageRef.current === undefined) {
+        advanceAppUpdateVisibleStage(target);
+        return;
+      }
+      while (true) {
+        const current = appUpdateVisibleStageRef.current;
+        if (
+          current === undefined ||
+          getAppUpdateStageIndex(current) >= targetIndex
+        )
+          return;
+        await waitForAppUpdateDwell(
+          appUpdateVisibleStageStartedAtRef.current,
+          current === "preparing"
+            ? APP_UPDATE_PREPARING_MIN_MS
+            : APP_UPDATE_VISIBLE_STAGE_MIN_MS,
+        );
+        if (appUpdateStageFlowRef.current !== stageFlow) return;
+        const latest = appUpdateVisibleStageRef.current;
+        if (
+          latest === undefined ||
+          getAppUpdateStageIndex(latest) >= targetIndex
+        )
+          return;
+        const next = getNextAppUpdateStage(latest);
+        if (next === undefined) return;
+        advanceAppUpdateVisibleStage(next);
+      }
+    },
+    [advanceAppUpdateVisibleStage],
+  );
   // On mobile the sidebar is an overlay drawer; hide it by default so the chat
   // is visible on load. Runs once the breakpoint resolves after hydration.
   useEffect(() => {
@@ -364,79 +528,113 @@ export function AppShell({ appName }: { appName: string }) {
     if (sidebarOpen || !mobileSidebarReady) return;
     const container = sidebarContainerRef.current;
     const active = document.activeElement;
-    if (container && active instanceof HTMLElement && container.contains(active)) {
+    if (
+      container &&
+      active instanceof HTMLElement &&
+      container.contains(active)
+    ) {
       active.blur();
     }
   }, [sidebarOpen, mobileSidebarReady]);
-  const refreshAppUpdate = useCallback(async (force = false, autoOpen = false): Promise<AppUpdateInfo | null> => {
-    const data = await fetchAppUpdateJson<AppUpdateInfo>(
-      force ? "/api/app-update?force=1" : "/api/app-update",
-      { cache: "no-store" },
-    );
-    if (
-      autoOpen
-      && (appUpdateStartInFlightRef.current || appUpdateAttemptRef.current !== null || appUpdateCompletingRef.current)
-    ) return null;
+  const refreshAppUpdate = useCallback(
+    async (force = false, autoOpen = false): Promise<AppUpdateInfo | null> => {
+      const data = await fetchAppUpdateJson<AppUpdateInfo>(
+        force ? "/api/app-update?force=1" : "/api/app-update",
+        { cache: "no-store" },
+      );
+      if (
+        autoOpen &&
+        (appUpdateStartInFlightRef.current ||
+          appUpdateAttemptRef.current !== null ||
+          appUpdateCompletingRef.current)
+      )
+        return null;
 
-    setAppUpdate(data);
+      setAppUpdate(data);
 
-    if (autoOpen && !data.selfUpdateStatus && data.updateAvailable && data.availableVersion) {
-      if (data.selfUpdateSupported === true) {
-        if (readDismissedVersion(DISMISSED_APP_UPDATE_KEY) !== data.availableVersion) {
-          setAppUpdatePhase("idle");
-          setAppUpdateError(null);
-          setAppUpdateDialogOpen(true);
+      if (
+        autoOpen &&
+        !data.selfUpdateStatus &&
+        data.updateAvailable &&
+        data.availableVersion
+      ) {
+        if (data.selfUpdateSupported === true) {
+          if (
+            readDismissedVersion(DISMISSED_APP_UPDATE_KEY) !==
+            data.availableVersion
+          ) {
+            setAppUpdatePhase("idle");
+            setAppUpdateError(null);
+            setAppUpdateDialogOpen(true);
+          }
+        } else {
+          const version = data.availableVersion;
+          if (readDismissedVersion(DISMISSED_APP_UPDATE_KEY) === version)
+            return data;
+          // The compiled binary updates by download: its target is the release page, and there is nothing to run here.
+          const binary = data.installMethod === "binary";
+          toast.info(
+            translate("appShell.appUpdateAvailable"),
+            <UpdateToastBody
+              currentVersion={data.currentVersion}
+              availableVersion={version}
+              target={data.updateCommand || "bun add -g @kahme247/ompweb"}
+              link={binary}
+              action={
+                binary
+                  ? undefined
+                  : {
+                      label: translate("settingsConfig.appUpdateAction"),
+                      onClick: () => {
+                        setSettingsTab("system");
+                        toast.close(`app-update-available:${version}`);
+                      },
+                    }
+              }
+            />,
+            {
+              id: `app-update-available:${version}`,
+              timeout: 0,
+              onClose: () =>
+                rememberDismissedVersion(DISMISSED_APP_UPDATE_KEY, version),
+            },
+          );
         }
-      } else {
-        const version = data.availableVersion;
-        if (readDismissedVersion(DISMISSED_APP_UPDATE_KEY) === version) return data;
-        // The compiled binary updates by download: its target is the release page, and there is nothing to run here.
-        const binary = data.installMethod === "binary";
-        toast.info(
-          translate("appShell.appUpdateAvailable"),
-          <UpdateToastBody
-            currentVersion={data.currentVersion}
-            availableVersion={version}
-            target={data.updateCommand || "bun add -g @kahme247/ompweb"}
-            link={binary}
-            action={binary ? undefined : {
-              label: translate("settingsConfig.appUpdateAction"),
-              onClick: () => {
-                setSettingsTab("system");
-                toast.close(`app-update-available:${version}`);
-              },
-            }}
-          />,
-          { id: `app-update-available:${version}`, timeout: 0, onClose: () => rememberDismissedVersion(DISMISSED_APP_UPDATE_KEY, version) }
-        );
       }
-    }
-    return data;
-  }, []);
+      return data;
+    },
+    [],
+  );
 
-  const acknowledgeAppUpdate = useCallback((attemptId: string): Promise<boolean> => {
-    const existing = appUpdateAcknowledgementsRef.current.get(attemptId);
-    if (existing) return existing;
-    const request = (async () => {
-      try {
-        const response = await fetch("/api/app-update", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "acknowledge", attemptId }),
-        });
-        return response.ok;
-      } catch {
-        return false;
-      }
-    })();
-    appUpdateAcknowledgementsRef.current.set(attemptId, request);
-    void request.then((acknowledged) => {
-      if (!acknowledged && appUpdateAcknowledgementsRef.current.get(attemptId) === request) {
-        appUpdateAcknowledgementsRef.current.delete(attemptId);
-      }
-    });
-    return request;
-  }, []);
+  const acknowledgeAppUpdate = useCallback(
+    (attemptId: string): Promise<boolean> => {
+      const existing = appUpdateAcknowledgementsRef.current.get(attemptId);
+      if (existing) return existing;
+      const request = (async () => {
+        try {
+          const response = await fetch("/api/app-update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "acknowledge", attemptId }),
+          });
+          return response.ok;
+        } catch {
+          return false;
+        }
+      })();
+      appUpdateAcknowledgementsRef.current.set(attemptId, request);
+      void request.then((acknowledged) => {
+        if (
+          !acknowledged &&
+          appUpdateAcknowledgementsRef.current.get(attemptId) === request
+        ) {
+          appUpdateAcknowledgementsRef.current.delete(attemptId);
+        }
+      });
+      return request;
+    },
+    [],
+  );
 
   const showAppUpdateFailure = useCallback((error: unknown) => {
     appUpdateAttemptRef.current = null;
@@ -448,121 +646,173 @@ export function AppShell({ appName }: { appName: string }) {
     setAppUpdateDialogOpen(true);
   }, []);
 
-  const submitAppUpdateCommit = useCallback((attemptId: string) => {
-    void fetchAppUpdateJson<{ error?: string }>("/api/app-update", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "commit", attemptId }),
-      keepalive: true,
-    }, 202).then(() => {
-      if (appUpdateAttemptRef.current === attemptId) {
-        appUpdateCommittedAttemptRef.current = attemptId;
-      }
-    }).catch((error) => {
-      if (error instanceof AppUpdateTransportError) {
-        if (appUpdateRecoveryCommitAttemptRef.current === attemptId) {
-          appUpdateRecoveryCommitAttemptRef.current = null;
-        }
+  const submitAppUpdateCommit = useCallback(
+    (attemptId: string) => {
+      void fetchAppUpdateJson<{ error?: string }>(
+        "/api/app-update",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "commit", attemptId }),
+          keepalive: true,
+        },
+        202,
+      )
+        .then(() => {
+          if (appUpdateAttemptRef.current === attemptId) {
+            appUpdateCommittedAttemptRef.current = attemptId;
+          }
+        })
+        .catch((error) => {
+          if (error instanceof AppUpdateTransportError) {
+            if (appUpdateRecoveryCommitAttemptRef.current === attemptId) {
+              appUpdateRecoveryCommitAttemptRef.current = null;
+            }
+            return;
+          }
+          if (appUpdateAttemptRef.current !== attemptId) return;
+          showAppUpdateFailure(error);
+        });
+    },
+    [showAppUpdateFailure],
+  );
+
+  const recoverPreparedAppUpdate = useCallback(
+    (data: AppUpdateInfo, attemptId: string) => {
+      const status = data.selfUpdateStatus;
+      if (
+        status?.attemptId !== attemptId ||
+        status.state !== "prepared" ||
+        (status.stage !== "preparing" && status.stage !== "stopping")
+      )
         return;
-      }
-      if (appUpdateAttemptRef.current !== attemptId) return;
-      showAppUpdateFailure(error);
-    });
-  }, [showAppUpdateFailure]);
+      if (appUpdateRecoveryCommitAttemptRef.current === attemptId) return;
+      appUpdateRecoveryCommitAttemptRef.current = attemptId;
+      submitAppUpdateCommit(attemptId);
+    },
+    [submitAppUpdateCommit],
+  );
 
-  const recoverPreparedAppUpdate = useCallback((data: AppUpdateInfo, attemptId: string) => {
-    const status = data.selfUpdateStatus;
-    if (
-      status?.attemptId !== attemptId
-      || status.state !== "prepared"
-      || (status.stage !== "preparing" && status.stage !== "stopping")
-    ) return;
-    if (appUpdateRecoveryCommitAttemptRef.current === attemptId) return;
-    appUpdateRecoveryCommitAttemptRef.current = attemptId;
-    submitAppUpdateCommit(attemptId);
-  }, [submitAppUpdateCommit]);
-
-  const completeAppUpdate = useCallback(async (targetVersion: string) => {
-    if (appUpdateCompletingRef.current) return;
-    appUpdateCompletingRef.current = true;
-    appUpdateAttemptRef.current = null;
-    appUpdateCommittedAttemptRef.current = null;
-    appUpdateStartInFlightRef.current = false;
-    await showAppUpdateStagesThrough("finalizing");
-    await waitForAppUpdateDwell(appUpdateVisibleStageStartedAtRef.current, APP_UPDATE_VISIBLE_STAGE_MIN_MS);
-    setAppUpdateError(null);
-    setAppUpdatePhase("completed");
-    setAppUpdateDialogOpen(true);
-    try {
-      window.sessionStorage.setItem(COMPLETED_APP_UPDATE_KEY, JSON.stringify({ version: targetVersion }));
-    } catch {}
-    await new Promise<void>((resolve) => window.setTimeout(resolve, APP_UPDATE_COMPLETED_RELOAD_MS));
-    appUpdateRecoveryCommitAttemptRef.current = null;
-    window.location.reload();
-  }, [showAppUpdateStagesThrough]);
-
-  const handleTerminalAppUpdate = useCallback(async (
-    data: AppUpdateInfo,
-    attemptId: string,
-    targetVersion: string,
-  ): Promise<boolean> => {
-    const status = data.selfUpdateStatus;
-    if (status?.attemptId !== attemptId || status.cleanupReady !== true) return false;
-    if (status.state === "failed") {
-      if (!await acknowledgeAppUpdate(attemptId)) return false;
-      showAppUpdateFailure(status.error);
-      return true;
-    }
-    if (status.state === "succeeded" && data.currentVersion === targetVersion) {
-      if (!await acknowledgeAppUpdate(attemptId)) return false;
-      await completeAppUpdate(targetVersion);
-      return true;
-    }
-    return false;
-  }, [acknowledgeAppUpdate, completeAppUpdate, showAppUpdateFailure]);
-
-  const monitorAppUpdate = useCallback(async (attemptId: string, targetVersion: string) => {
-    if (appUpdateAttemptRef.current === attemptId) return;
-    appUpdateAttemptRef.current = attemptId;
-    const deadline = Date.now() + APP_UPDATE_TIMEOUT_MS;
-    while (appUpdateAttemptRef.current === attemptId && Date.now() < deadline) {
-      await new Promise<void>((resolve) => window.setTimeout(
-        resolve,
-        appUpdateVisibleStageRef.current === "stopping" ? APP_UPDATE_STOPPING_POLL_MS : APP_UPDATE_POLL_MS,
-      ));
+  const completeAppUpdate = useCallback(
+    async (targetVersion: string) => {
+      if (appUpdateCompletingRef.current) return;
+      appUpdateCompletingRef.current = true;
+      appUpdateAttemptRef.current = null;
+      appUpdateCommittedAttemptRef.current = null;
+      appUpdateStartInFlightRef.current = false;
+      await showAppUpdateStagesThrough("finalizing");
+      await waitForAppUpdateDwell(
+        appUpdateVisibleStageStartedAtRef.current,
+        APP_UPDATE_VISIBLE_STAGE_MIN_MS,
+      );
+      setAppUpdateError(null);
+      setAppUpdatePhase("completed");
+      setAppUpdateDialogOpen(true);
       try {
-        const data = await refreshAppUpdate();
-        if (!data) continue;
-        const status = data.selfUpdateStatus;
-        if (status?.attemptId === attemptId && status.stage !== undefined) {
-          if (status.stage !== "preparing") appUpdateCommittedAttemptRef.current = attemptId;
-          await showAppUpdateStagesThrough(status.stage);
-        }
-        recoverPreparedAppUpdate(data, attemptId);
-        if (await handleTerminalAppUpdate(data, attemptId, targetVersion)) return;
-        if (isExactLegacyTargetCompletion(data, targetVersion)) {
-          // Legacy targets do not expose the status/acknowledge contract. Exact
-          // version equality is the completion proof; updater artifacts expire
-          // through the backend's terminal-status TTL instead of UI cleanup.
-          await completeAppUpdate(targetVersion);
+        window.sessionStorage.setItem(
+          COMPLETED_APP_UPDATE_KEY,
+          JSON.stringify({ version: targetVersion }),
+        );
+      } catch {}
+      await new Promise<void>((resolve) =>
+        window.setTimeout(resolve, APP_UPDATE_COMPLETED_RELOAD_MS),
+      );
+      appUpdateRecoveryCommitAttemptRef.current = null;
+      window.location.reload();
+    },
+    [showAppUpdateStagesThrough],
+  );
+
+  const handleTerminalAppUpdate = useCallback(
+    async (
+      data: AppUpdateInfo,
+      attemptId: string,
+      targetVersion: string,
+    ): Promise<boolean> => {
+      const status = data.selfUpdateStatus;
+      if (status?.attemptId !== attemptId || status.cleanupReady !== true)
+        return false;
+      if (status.state === "failed") {
+        if (!(await acknowledgeAppUpdate(attemptId))) return false;
+        showAppUpdateFailure(status.error);
+        return true;
+      }
+      if (
+        status.state === "succeeded" &&
+        data.currentVersion === targetVersion
+      ) {
+        if (!(await acknowledgeAppUpdate(attemptId))) return false;
+        await completeAppUpdate(targetVersion);
+        return true;
+      }
+      return false;
+    },
+    [acknowledgeAppUpdate, completeAppUpdate, showAppUpdateFailure],
+  );
+
+  const monitorAppUpdate = useCallback(
+    async (attemptId: string, targetVersion: string) => {
+      if (appUpdateAttemptRef.current === attemptId) return;
+      appUpdateAttemptRef.current = attemptId;
+      const deadline = Date.now() + APP_UPDATE_TIMEOUT_MS;
+      while (
+        appUpdateAttemptRef.current === attemptId &&
+        Date.now() < deadline
+      ) {
+        await new Promise<void>((resolve) =>
+          window.setTimeout(
+            resolve,
+            appUpdateVisibleStageRef.current === "stopping"
+              ? APP_UPDATE_STOPPING_POLL_MS
+              : APP_UPDATE_POLL_MS,
+          ),
+        );
+        try {
+          const data = await refreshAppUpdate();
+          if (!data) continue;
+          const status = data.selfUpdateStatus;
+          if (status?.attemptId === attemptId && status.stage !== undefined) {
+            if (status.stage !== "preparing")
+              appUpdateCommittedAttemptRef.current = attemptId;
+            await showAppUpdateStagesThrough(status.stage);
+          }
+          recoverPreparedAppUpdate(data, attemptId);
+          if (await handleTerminalAppUpdate(data, attemptId, targetVersion))
+            return;
+          if (isExactLegacyTargetCompletion(data, targetVersion)) {
+            // Legacy targets do not expose the status/acknowledge contract. Exact
+            // version equality is the completion proof; updater artifacts expire
+            // through the backend's terminal-status TTL instead of UI cleanup.
+            await completeAppUpdate(targetVersion);
+            return;
+          }
+        } catch (error) {
+          if (error instanceof AppUpdateTransportError) {
+            if (appUpdateCommittedAttemptRef.current === attemptId) {
+              advanceAppUpdateVisibleStage("installing");
+            }
+            // Connection failures are expected after commit while the server is offline.
+            continue;
+          }
+          showAppUpdateFailure(error);
           return;
         }
-      } catch (error) {
-        if (error instanceof AppUpdateTransportError) {
-          if (appUpdateCommittedAttemptRef.current === attemptId) {
-            advanceAppUpdateVisibleStage("installing");
-          }
-          // Connection failures are expected after commit while the server is offline.
-          continue;
-        }
-        showAppUpdateFailure(error);
-        return;
       }
-    }
-    if (appUpdateAttemptRef.current === attemptId) {
-      showAppUpdateFailure(t("appUpdateDialog.timeout"));
-    }
-  }, [advanceAppUpdateVisibleStage, completeAppUpdate, handleTerminalAppUpdate, recoverPreparedAppUpdate, refreshAppUpdate, showAppUpdateFailure, showAppUpdateStagesThrough, t]);
+      if (appUpdateAttemptRef.current === attemptId) {
+        showAppUpdateFailure(t("appUpdateDialog.timeout"));
+      }
+    },
+    [
+      advanceAppUpdateVisibleStage,
+      completeAppUpdate,
+      handleTerminalAppUpdate,
+      recoverPreparedAppUpdate,
+      refreshAppUpdate,
+      showAppUpdateFailure,
+      showAppUpdateStagesThrough,
+      t,
+    ],
+  );
 
   useEffect(() => {
     try {
@@ -571,7 +821,9 @@ export function AppShell({ appName }: { appName: string }) {
         const completed = JSON.parse(raw) as { version?: unknown };
         window.sessionStorage.removeItem(COMPLETED_APP_UPDATE_KEY);
         if (typeof completed.version === "string") {
-          toast.success(t("appUpdateDialog.completed", { version: completed.version }));
+          toast.success(
+            t("appUpdateDialog.completed", { version: completed.version }),
+          );
         }
       }
     } catch {}
@@ -580,18 +832,37 @@ export function AppShell({ appName }: { appName: string }) {
         const status = data?.selfUpdateStatus;
         if (!data || !status) return;
         const recoveredStage = status.stage ?? "stopping";
-        const initialStage = recoveredStage === "preparing" ? "preparing" : "stopping";
-        if (initialStage === "stopping") appUpdateCommittedAttemptRef.current = status.attemptId;
+        const initialStage =
+          recoveredStage === "preparing" ? "preparing" : "stopping";
+        if (initialStage === "stopping")
+          appUpdateCommittedAttemptRef.current = status.attemptId;
         advanceAppUpdateVisibleStage(initialStage);
-        setAppUpdatePhase(initialStage === "preparing" ? "preparing" : "restarting");
+        setAppUpdatePhase(
+          initialStage === "preparing" ? "preparing" : "restarting",
+        );
         setAppUpdateDialogOpen(true);
         await showAppUpdateStagesThrough(recoveredStage);
-        if (await handleTerminalAppUpdate(data, status.attemptId, status.targetVersion)) return;
+        if (
+          await handleTerminalAppUpdate(
+            data,
+            status.attemptId,
+            status.targetVersion,
+          )
+        )
+          return;
         void monitorAppUpdate(status.attemptId, status.targetVersion);
         recoverPreparedAppUpdate(data, status.attemptId);
       })
       .catch(() => {});
-  }, [advanceAppUpdateVisibleStage, handleTerminalAppUpdate, monitorAppUpdate, recoverPreparedAppUpdate, refreshAppUpdate, showAppUpdateStagesThrough, t]);
+  }, [
+    advanceAppUpdateVisibleStage,
+    handleTerminalAppUpdate,
+    monitorAppUpdate,
+    recoverPreparedAppUpdate,
+    refreshAppUpdate,
+    showAppUpdateStagesThrough,
+    t,
+  ]);
 
   const proceedWithAppUpdate = useCallback(async () => {
     if (appUpdateStartInFlightRef.current) return;
@@ -602,7 +873,10 @@ export function AppShell({ appName }: { appName: string }) {
     setAppUpdatePhase("preparing");
     setAppUpdateError(null);
     try {
-      const prepared = await fetchAppUpdateJson<{ attemptId?: string; targetVersion?: string }>("/api/app-update", {
+      const prepared = await fetchAppUpdateJson<{
+        attemptId?: string;
+        targetVersion?: string;
+      }>("/api/app-update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "prepare" }),
@@ -618,11 +892,21 @@ export function AppShell({ appName }: { appName: string }) {
     } catch (error) {
       showAppUpdateFailure(error);
     }
-  }, [advanceAppUpdateVisibleStage, monitorAppUpdate, resetAppUpdateVisibleStage, showAppUpdateFailure, showAppUpdateStagesThrough, submitAppUpdateCommit]);
+  }, [
+    advanceAppUpdateVisibleStage,
+    monitorAppUpdate,
+    resetAppUpdateVisibleStage,
+    showAppUpdateFailure,
+    showAppUpdateStagesThrough,
+    submitAppUpdateCommit,
+  ]);
 
   const dismissAppUpdate = useCallback(() => {
     if (appUpdatePhase === "idle" && appUpdate?.availableVersion) {
-      rememberDismissedVersion(DISMISSED_APP_UPDATE_KEY, appUpdate.availableVersion);
+      rememberDismissedVersion(
+        DISMISSED_APP_UPDATE_KEY,
+        appUpdate.availableVersion,
+      );
       toast.info(t("appUpdateDialog.settingsLater"));
     }
     setAppUpdateDialogOpen(false);
@@ -630,7 +914,12 @@ export function AppShell({ appName }: { appName: string }) {
     setAppUpdateError(null);
     appUpdateAttemptRef.current = null;
     resetAppUpdateVisibleStage();
-  }, [appUpdate?.availableVersion, appUpdatePhase, resetAppUpdateVisibleStage, t]);
+  }, [
+    appUpdate?.availableVersion,
+    appUpdatePhase,
+    resetAppUpdateVisibleStage,
+    t,
+  ]);
 
   const requestAppUpdateFromSettings = useCallback(() => {
     setSettingsTab(null);
@@ -641,18 +930,30 @@ export function AppShell({ appName }: { appName: string }) {
   }, [resetAppUpdateVisibleStage]);
   const chatInputRef = useRef<ChatInputHandle | null>(null);
   const topBarRef = useRef<HTMLDivElement>(null);
-  const [sessionInfoContainer, setSessionInfoContainer] = useState<HTMLDivElement | null>(null);
+  const [sessionInfoContainer, setSessionInfoContainer] =
+    useState<HTMLDivElement | null>(null);
 
   // Branch navigator state — populated by ChatWindow via onBranchDataChange
   const [branchTree, setBranchTree] = useState<SessionTreeNode[]>([]);
-  const [branchActiveLeafId, setBranchActiveLeafId] = useState<string | null>(null);
-  const branchLeafChangeFnRef = useRef<((leafId: string | null) => void) | null>(null);
+  const [branchActiveLeafId, setBranchActiveLeafId] = useState<string | null>(
+    null,
+  );
+  const branchLeafChangeFnRef = useRef<
+    ((leafId: string | null) => void) | null
+  >(null);
 
-  const handleBranchDataChange = useCallback((tree: SessionTreeNode[], activeLeafId: string | null, onLeafChange: (leafId: string | null) => void) => {
-    setBranchTree(tree);
-    setBranchActiveLeafId(activeLeafId);
-    branchLeafChangeFnRef.current = onLeafChange;
-  }, []);
+  const handleBranchDataChange = useCallback(
+    (
+      tree: SessionTreeNode[],
+      activeLeafId: string | null,
+      onLeafChange: (leafId: string | null) => void,
+    ) => {
+      setBranchTree(tree);
+      setBranchActiveLeafId(activeLeafId);
+      branchLeafChangeFnRef.current = onLeafChange;
+    },
+    [],
+  );
 
   const handleBranchLeafChange = useCallback((leafId: string | null) => {
     branchLeafChangeFnRef.current?.(leafId);
@@ -668,15 +969,22 @@ export function AppShell({ appName }: { appName: string }) {
     setSystemPromptLoading(false);
   }, []);
 
-  const handleSystemPromptLoaderChange = useCallback((loader: (() => Promise<void>) | null) => {
-    systemPromptLoadIdRef.current += 1;
-    systemPromptLoaderRef.current = loader;
-    setSystemPromptLoading(false);
-  }, []);
+  const handleSystemPromptLoaderChange = useCallback(
+    (loader: (() => Promise<void>) | null) => {
+      systemPromptLoadIdRef.current += 1;
+      systemPromptLoaderRef.current = loader;
+      setSystemPromptLoading(false);
+    },
+    [],
+  );
 
   // Session stats (tokens + cost) — populated by ChatWindow, displayed in top bar
-  const [sessionStats, setSessionStats] = useState<SessionStatsInfo | null>(null);
-  const [autoNameStatus, setAutoNameStatus] = useState<AutoNameStatus>({ kind: "idle" });
+  const [sessionStats, setSessionStats] = useState<SessionStatsInfo | null>(
+    null,
+  );
+  const [autoNameStatus, setAutoNameStatus] = useState<AutoNameStatus>({
+    kind: "idle",
+  });
   const autoNameTimerRef = useRef<TimerHandle | undefined>(undefined);
   const activeSessionIdRef = useRef<string | null>(selectedSession?.id ?? null);
   const activeSettingsTabRef = useRef(settingsTab);
@@ -686,9 +994,12 @@ export function AppShell({ appName }: { appName: string }) {
     activeSessionIdRef.current = selectedSession?.id ?? null;
     activeSettingsTabRef.current = settingsTab;
   }, [selectedSession?.id, settingsTab]);
-  const handleSessionStatsChange = useCallback((stats: SessionStatsInfo | null) => {
-    setSessionStats(stats);
-  }, []);
+  const handleSessionStatsChange = useCallback(
+    (stats: SessionStatsInfo | null) => {
+      setSessionStats(stats);
+    },
+    [],
+  );
 
   useEffect(() => {
     return () => {
@@ -697,7 +1008,9 @@ export function AppShell({ appName }: { appName: string }) {
   }, []);
 
   // Single active panel — only one dropdown open at a time
-  const [activeTopPanel, setActiveTopPanel] = useState<"branches" | "system" | null>(null);
+  const [activeTopPanel, setActiveTopPanel] = useState<
+    "branches" | "system" | null
+  >(null);
   const mobileToolsRef = useRef<HTMLDetailsElement>(null);
   const mobileToolsContentRef = useRef<HTMLDivElement>(null);
   const restoreToolsFocusRef = useRef(false);
@@ -720,7 +1033,13 @@ export function AppShell({ appName }: { appName: string }) {
     const closeOnEscape = (event: KeyboardEvent) => {
       const tools = mobileToolsRef.current;
       // Nested pickers and session panels handle their own Escape first.
-      if (event.key !== "Escape" || event.defaultPrevented || activeTopPanel || !tools?.open) return;
+      if (
+        event.key !== "Escape" ||
+        event.defaultPrevented ||
+        activeTopPanel ||
+        !tools?.open
+      )
+        return;
       event.stopPropagation();
       tools.open = false;
       tools.querySelector("summary")?.focus();
@@ -732,16 +1051,23 @@ export function AppShell({ appName }: { appName: string }) {
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [compactTopbar, activeTopPanel]);
-  const toggleTopPanel = useCallback((panel: "branches" | "system") => {
-    if (isMobile) setSidebarOpen(false);
-    setActiveTopPanel((cur) => cur === panel ? null : panel);
-  }, [isMobile]);
+  const toggleTopPanel = useCallback(
+    (panel: "branches" | "system") => {
+      if (isMobile) setSidebarOpen(false);
+      setActiveTopPanel((cur) => (cur === panel ? null : panel));
+    },
+    [isMobile],
+  );
 
   // Generation speed — current live t/s and the session average.
-  const [generationSpeed, setGenerationSpeed] = useState<GenerationSpeedInfo | null>(null);
-  const handleGenerationSpeedChange = useCallback((speed: GenerationSpeedInfo | null) => {
-    setGenerationSpeed(speed);
-  }, []);
+  const [generationSpeed, setGenerationSpeed] =
+    useState<GenerationSpeedInfo | null>(null);
+  const handleGenerationSpeedChange = useCallback(
+    (speed: GenerationSpeedInfo | null) => {
+      setGenerationSpeed(speed);
+    },
+    [],
+  );
   const handleSystemPromptToggle = useCallback(() => {
     const opening = activeTopPanel !== "system";
     toggleTopPanel("system");
@@ -751,11 +1077,14 @@ export function AppShell({ appName }: { appName: string }) {
     if (!load) return;
     const loadId = ++systemPromptLoadIdRef.current;
     setSystemPromptLoading(true);
-    void load().catch((error) => {
-      console.error("Failed to load system prompt:", error);
-    }).finally(() => {
-      if (systemPromptLoadIdRef.current === loadId) setSystemPromptLoading(false);
-    });
+    void load()
+      .catch((error) => {
+        console.error("Failed to load system prompt:", error);
+      })
+      .finally(() => {
+        if (systemPromptLoadIdRef.current === loadId)
+          setSystemPromptLoading(false);
+      });
   }, [activeTopPanel, systemPrompt, systemPromptLoading, toggleTopPanel]);
 
   // /session opens the same information panel as the top-bar control.
@@ -779,74 +1108,90 @@ export function AppShell({ appName }: { appName: string }) {
     setSidebarWidth((prev) => clampSidebarWidth(prev + delta));
   }, []);
 
-  const handleSidebarResizeKey = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "ArrowLeft") {
-      e.preventDefault();
-      changeSidebarWidth(-10);
-    } else if (e.key === "ArrowRight") {
-      e.preventDefault();
-      changeSidebarWidth(10);
-    } else if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      resetSidebarWidth();
-    }
-  }, [changeSidebarWidth, resetSidebarWidth]);
+  const handleSidebarResizeKey = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        changeSidebarWidth(-10);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        changeSidebarWidth(10);
+      } else if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        resetSidebarWidth();
+      }
+    },
+    [changeSidebarWidth, resetSidebarWidth],
+  );
 
-  const handleSidebarResizeStart = useCallback((e: React.MouseEvent) => {
-    if (isMobile) return;
-    e.preventDefault();
-    const startX = e.clientX;
-    const startWidth = sidebarWidth;
-    // Interface Scale (html[data-ui-scale] zoom) leaves clientX in viewport
-    // pixels while the sidebar width is zoomed layout pixels: scale the drag
-    // delta so the edge tracks the pointer at any zoom (same --ui-scale
-    // ground truth as the zoom-aware menus in SessionSidebar-chrome).
-    let uiScale = 1;
-    try {
-      const raw = getComputedStyle(document.documentElement).getPropertyValue("--ui-scale");
-      const value = parseFloat(raw);
-      if (Number.isFinite(value) && value > 0) uiScale = value;
-    } catch {
-      // SSR/unavailable: fall back to unscaled math.
-    }
-    setSidebarResizing(true);
-    const onMove = (ev: MouseEvent) => {
-      const next = clampSidebarWidth(startWidth + (ev.clientX - startX) / uiScale);
-      // Write the CSS variable straight to the DOM: the flex row follows the
-      // pointer without re-rendering the whole AppShell on every mousemove.
-      sidebarContainerRef.current?.style.setProperty("--sidebar-width", `${next}px`);
-      pendingSidebarWidthRef.current = next;
-    };
-    const onUp = () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-      sidebarResizeHandlersRef.current = null;
-      setSidebarResizing(false);
-      // Commit the final width so state and the persisted value agree with
-      // what the user actually dragged to.
-      setSidebarWidth(pendingSidebarWidthRef.current);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    pendingSidebarWidthRef.current = startWidth;
-    sidebarResizeHandlersRef.current = { onMove, onUp };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  }, [isMobile, sidebarWidth]);
+  const handleSidebarResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      if (isMobile) return;
+      e.preventDefault();
+      const startX = e.clientX;
+      const startWidth = sidebarWidth;
+      // Interface Scale (html[data-ui-scale] zoom) leaves clientX in viewport
+      // pixels while the sidebar width is zoomed layout pixels: scale the drag
+      // delta so the edge tracks the pointer at any zoom (same --ui-scale
+      // ground truth as the zoom-aware menus in SessionSidebar-chrome).
+      let uiScale = 1;
+      try {
+        const raw = getComputedStyle(document.documentElement).getPropertyValue(
+          "--ui-scale",
+        );
+        const value = parseFloat(raw);
+        if (Number.isFinite(value) && value > 0) uiScale = value;
+      } catch {
+        // SSR/unavailable: fall back to unscaled math.
+      }
+      setSidebarResizing(true);
+      const onMove = (ev: MouseEvent) => {
+        const next = clampSidebarWidth(
+          startWidth + (ev.clientX - startX) / uiScale,
+        );
+        // Write the CSS variable straight to the DOM: the flex row follows the
+        // pointer without re-rendering the whole AppShell on every mousemove.
+        sidebarContainerRef.current?.style.setProperty(
+          "--sidebar-width",
+          `${next}px`,
+        );
+        pendingSidebarWidthRef.current = next;
+      };
+      const onUp = () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        sidebarResizeHandlersRef.current = null;
+        setSidebarResizing(false);
+        // Commit the final width so state and the persisted value agree with
+        // what the user actually dragged to.
+        setSidebarWidth(pendingSidebarWidthRef.current);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      };
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      pendingSidebarWidthRef.current = startWidth;
+      sidebarResizeHandlersRef.current = { onMove, onUp };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [isMobile, sidebarWidth],
+  );
 
   // If the app unmounts mid-drag, remove the window listeners and restore the
   // body cursor; otherwise the handlers leak and body stays cursor:col-resize.
-  useEffect(() => () => {
-    const handlers = sidebarResizeHandlersRef.current;
-    if (!handlers) return;
-    window.removeEventListener("mousemove", handlers.onMove);
-    window.removeEventListener("mouseup", handlers.onUp);
-    sidebarResizeHandlersRef.current = null;
-    document.body.style.cursor = "";
-    document.body.style.userSelect = "";
-  }, []);
+  useEffect(
+    () => () => {
+      const handlers = sidebarResizeHandlersRef.current;
+      if (!handlers) return;
+      window.removeEventListener("mousemove", handlers.onMove);
+      window.removeEventListener("mouseup", handlers.onUp);
+      sidebarResizeHandlersRef.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    },
+    [],
+  );
 
   const resetRightPanelWidth = useCallback(() => {
     rightPanelRef.current?.style.removeProperty("--right-panel-width");
@@ -857,86 +1202,108 @@ export function AppShell({ appName }: { appName: string }) {
     setRightPanelWidth((prev) => {
       // Keyboard steps from the fluid default start at the panel's live
       // width so the first press doesn't jump to the clamp minimum.
-      const base = prev ?? rightPanelRef.current?.getBoundingClientRect().width ?? RIGHT_PANEL_MIN_WIDTH;
+      const base =
+        prev ??
+        rightPanelRef.current?.getBoundingClientRect().width ??
+        RIGHT_PANEL_MIN_WIDTH;
       const next = clampRightPanelWidth(base + delta);
-      rightPanelRef.current?.style.setProperty("--right-panel-width", `${next}px`);
+      rightPanelRef.current?.style.setProperty(
+        "--right-panel-width",
+        `${next}px`,
+      );
       return next;
     });
   }, []);
 
-  const handleRightPanelResizeKey = useCallback((e: React.KeyboardEvent) => {
-    // The handle sits on the panel's left edge: left widens, right narrows.
-    if (e.key === "ArrowLeft") {
-      e.preventDefault();
-      changeRightPanelWidth(10);
-    } else if (e.key === "ArrowRight") {
-      e.preventDefault();
-      changeRightPanelWidth(-10);
-    } else if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      resetRightPanelWidth();
-    }
-  }, [changeRightPanelWidth, resetRightPanelWidth]);
+  const handleRightPanelResizeKey = useCallback(
+    (e: React.KeyboardEvent) => {
+      // The handle sits on the panel's left edge: left widens, right narrows.
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        changeRightPanelWidth(10);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        changeRightPanelWidth(-10);
+      } else if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        resetRightPanelWidth();
+      }
+    },
+    [changeRightPanelWidth, resetRightPanelWidth],
+  );
 
-  const handleRightPanelResizeStart = useCallback((e: React.MouseEvent) => {
-    if (isMobile) return;
-    e.preventDefault();
-    const startX = e.clientX;
-    // Live rect, not state: it always reflects the committed width (custom or
-    // fluid default), and keeps this callback above the state declarations
-    // without a TDZ cycle. The handle only exists while the panel is open.
-    const startWidth = rightPanelRef.current?.getBoundingClientRect().width
-      ?? RIGHT_PANEL_MIN_WIDTH;
-    // Same --ui-scale ground truth as the left sidebar handle: clientX is in
-    // viewport pixels while the panel width is zoomed layout pixels.
-    let uiScale = 1;
-    try {
-      const raw = getComputedStyle(document.documentElement).getPropertyValue("--ui-scale");
-      const value = parseFloat(raw);
-      if (Number.isFinite(value) && value > 0) uiScale = value;
-    } catch {
-      // SSR/unavailable: fall back to unscaled math.
-    }
-    setRightPanelResizing(true);
-    const onMove = (ev: MouseEvent) => {
-      // Dragging the left edge left grows the panel: inverse of the sidebar.
-      const next = clampRightPanelWidth(startWidth - (ev.clientX - startX) / uiScale);
-      // Write the CSS variable straight to the DOM: the flex row follows the
-      // pointer without re-rendering the whole AppShell on every mousemove.
-      rightPanelRef.current?.style.setProperty("--right-panel-width", `${next}px`);
-      pendingRightPanelWidthRef.current = next;
-    };
-    const onUp = () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-      rightResizeHandlersRef.current = null;
-      setRightPanelResizing(false);
-      // Commit the final width so state and the persisted value agree with
-      // what the user actually dragged to.
-      setRightPanelWidth(pendingRightPanelWidthRef.current);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    pendingRightPanelWidthRef.current = startWidth;
-    rightResizeHandlersRef.current = { onMove, onUp };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  }, [isMobile]);
+  const handleRightPanelResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      if (isMobile) return;
+      e.preventDefault();
+      const startX = e.clientX;
+      // Live rect, not state: it always reflects the committed width (custom or
+      // fluid default), and keeps this callback above the state declarations
+      // without a TDZ cycle. The handle only exists while the panel is open.
+      const startWidth =
+        rightPanelRef.current?.getBoundingClientRect().width ??
+        RIGHT_PANEL_MIN_WIDTH;
+      // Same --ui-scale ground truth as the left sidebar handle: clientX is in
+      // viewport pixels while the panel width is zoomed layout pixels.
+      let uiScale = 1;
+      try {
+        const raw = getComputedStyle(document.documentElement).getPropertyValue(
+          "--ui-scale",
+        );
+        const value = parseFloat(raw);
+        if (Number.isFinite(value) && value > 0) uiScale = value;
+      } catch {
+        // SSR/unavailable: fall back to unscaled math.
+      }
+      setRightPanelResizing(true);
+      const onMove = (ev: MouseEvent) => {
+        // Dragging the left edge left grows the panel: inverse of the sidebar.
+        const next = clampRightPanelWidth(
+          startWidth - (ev.clientX - startX) / uiScale,
+        );
+        // Write the CSS variable straight to the DOM: the flex row follows the
+        // pointer without re-rendering the whole AppShell on every mousemove.
+        rightPanelRef.current?.style.setProperty(
+          "--right-panel-width",
+          `${next}px`,
+        );
+        pendingRightPanelWidthRef.current = next;
+      };
+      const onUp = () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        rightResizeHandlersRef.current = null;
+        setRightPanelResizing(false);
+        // Commit the final width so state and the persisted value agree with
+        // what the user actually dragged to.
+        setRightPanelWidth(pendingRightPanelWidthRef.current);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      };
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      pendingRightPanelWidthRef.current = startWidth;
+      rightResizeHandlersRef.current = { onMove, onUp };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [isMobile],
+  );
 
   // If the app unmounts mid-drag, remove the window listeners and restore the
   // body cursor; otherwise the handlers leak and body stays cursor:col-resize.
-  useEffect(() => () => {
-    const handlers = rightResizeHandlersRef.current;
-    if (!handlers) return;
-    window.removeEventListener("mousemove", handlers.onMove);
-    window.removeEventListener("mouseup", handlers.onUp);
-    rightResizeHandlersRef.current = null;
-    document.body.style.cursor = "";
-    document.body.style.userSelect = "";
-  }, []);
-
+  useEffect(
+    () => () => {
+      const handlers = rightResizeHandlersRef.current;
+      if (!handlers) return;
+      window.removeEventListener("mousemove", handlers.onMove);
+      window.removeEventListener("mouseup", handlers.onUp);
+      rightResizeHandlersRef.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    },
+    [],
+  );
 
   // Dismiss the topbar dropdowns on outside click or Escape. The Escape
   // handler stops propagation so the global Esc (abort agent) does not fire
@@ -945,7 +1312,11 @@ export function AppShell({ appName }: { appName: string }) {
     // The branch panel manages its own outside-click and Escape dismissal.
     if (!activeTopPanel || activeTopPanel === "branches") return;
     const onPointerDown = (event: MouseEvent) => {
-      if (event.target instanceof Element && event.target.closest("[data-top-panel]")) return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest("[data-top-panel]")
+      )
+        return;
       setActiveTopPanel(null);
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -968,7 +1339,9 @@ export function AppShell({ appName }: { appName: string }) {
   const closeRightPanel = useCallback(() => {
     setRightPanelOpen(false);
     if (!isCompactOverlay) {
-      topBarRef.current?.querySelector<HTMLButtonElement>(".shell-panel-opener")?.focus();
+      topBarRef.current
+        ?.querySelector<HTMLButtonElement>(".shell-panel-opener")
+        ?.focus();
     }
   }, [isCompactOverlay]);
   const [rightPanelHasOpened, setRightPanelHasOpened] = useState(false);
@@ -976,13 +1349,15 @@ export function AppShell({ appName }: { appName: string }) {
   const connectionDiagnosticsOn = useConnectionDiagnosticsEnabled();
   // The Connection tab exists only while its setting is on; a selected one falls back to Explorer.
   useEffect(() => {
-    if (!connectionDiagnosticsOn) setRightView((view) => view === "connection" ? "explorer" : view);
+    if (!connectionDiagnosticsOn)
+      setRightView((view) => (view === "connection" ? "explorer" : view));
   }, [connectionDiagnosticsOn]);
   const unreadNotifications = useUnreadNotificationCount();
   // Desktop shows the history in the top-bar bell's popover; mobile in the right panel's tab.
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   useEffect(() => {
-    if (!isMobile) setRightView((view) => view === "notifications" ? "explorer" : view);
+    if (!isMobile)
+      setRightView((view) => (view === "notifications" ? "explorer" : view));
   }, [isMobile]);
   // Settings replaces the top bar; the popover must not reopen on the way back.
   useEffect(() => {
@@ -990,17 +1365,23 @@ export function AppShell({ appName }: { appName: string }) {
   }, [isMobile, settingsTab]);
   // Unread entries stay highlighted while the notifications are shown and
   // become read once the user leaves them (switches tab, closes the panel or popover).
-  const viewingNotifications = (notificationsOpen || (rightPanelOpen && rightView === "notifications")) && !settingsTab;
+  const viewingNotifications =
+    (notificationsOpen || (rightPanelOpen && rightView === "notifications")) &&
+    !settingsTab;
   const wasViewingNotificationsRef = useRef(false);
   // Layout effect: marks read before a notification arriving after the close can join the list.
   useLayoutEffect(() => {
-    if (wasViewingNotificationsRef.current && !viewingNotifications) notificationHistory.markAllRead();
+    if (wasViewingNotificationsRef.current && !viewingNotifications)
+      notificationHistory.markAllRead();
     wasViewingNotificationsRef.current = viewingNotifications;
   }, [viewingNotifications]);
-  const opensNotifications = isMobile && unreadNotifications > 0 && !viewingNotifications;
+  const opensNotifications =
+    isMobile && unreadNotifications > 0 && !viewingNotifications;
   const panelOpenerLabel = opensNotifications
     ? t("appShell.showNotifications", { count: unreadNotifications })
-    : rightPanelOpen ? t("appShell.hideFilePanel") : t("appShell.showFilePanel");
+    : rightPanelOpen
+      ? t("appShell.hideFilePanel")
+      : t("appShell.showFilePanel");
   // User-chosen pixel width (null = fluid 42% default), persisted.
   const [rightPanelWidth, setRightPanelWidth] = useState<number | null>(null);
   const [rightPanelResizing, setRightPanelResizing] = useState(false);
@@ -1010,15 +1391,19 @@ export function AppShell({ appName }: { appName: string }) {
   // it would drop focus from the opener (e.g. a file link in the chat) before
   // the dialog records it, and closing could not return focus there.
   const [rightPanelMounted, setRightPanelMounted] = useState(false);
-  const rightPanelIsModal = isCompactOverlay && rightPanelMounted && rightPanelOpen && !settingsTab;
+  const rightPanelIsModal =
+    isCompactOverlay && rightPanelMounted && rightPanelOpen && !settingsTab;
   const rightPanelRef = useModalDialog<HTMLDivElement>({
     onClose: closeRightPanel,
     active: rightPanelIsModal,
   });
-  const attachRightPanel = useCallback((element: HTMLDivElement | null) => {
-    rightPanelRef.current = element;
-    setRightPanelMounted(element !== null);
-  }, [rightPanelRef]);
+  const attachRightPanel = useCallback(
+    (element: HTMLDivElement | null) => {
+      rightPanelRef.current = element;
+      setRightPanelMounted(element !== null);
+    },
+    [rightPanelRef],
+  );
   useMobileSidebarGestures({
     enabled: isMobile && mobileSidebarReady && !settingsTab,
     leftOpen: sidebarOpen,
@@ -1027,7 +1412,10 @@ export function AppShell({ appName }: { appName: string }) {
     onRightOpenChange: setRightPanelOpen,
   });
   const pendingRightPanelWidthRef = useRef<number | null>(null);
-  const rightResizeHandlersRef = useRef<{ onMove: (ev: MouseEvent) => void; onUp: () => void } | null>(null);
+  const rightResizeHandlersRef = useRef<{
+    onMove: (ev: MouseEvent) => void;
+    onUp: () => void;
+  } | null>(null);
   useEffect(() => {
     setRightPanelWidth(loadRightPanelWidth());
   }, []);
@@ -1051,16 +1439,22 @@ export function AppShell({ appName }: { appName: string }) {
     };
   }, []);
   // One-shot request asking the explorer tab to expand + scroll to a file.
-  const [revealTarget, setRevealTarget] = useState<{ path: string; hostId: string } | null>(null);
+  const [revealTarget, setRevealTarget] = useState<{
+    path: string;
+    hostId: string;
+  } | null>(null);
   const [fileSearchOpen, setFileSearchOpen] = useState(false);
   const [explorerUploadBusy, setExplorerUploadBusy] = useState(false);
   const [explorerGitCount, setExplorerGitCount] = useState(0);
   const [explorerIsRepo, setExplorerIsRepo] = useState(false);
   const fileExplorerRef = useRef<FileExplorerHandle>(null);
-  const handleExplorerGitStatus = useCallback((changedCount: number, isRepo: boolean) => {
-    setExplorerGitCount(changedCount);
-    setExplorerIsRepo(isRepo);
-  }, []);
+  const handleExplorerGitStatus = useCallback(
+    (changedCount: number, isRepo: boolean) => {
+      setExplorerGitCount(changedCount);
+      setExplorerIsRepo(isRepo);
+    },
+    [],
+  );
   // Same guard as the left sidebar: skip the mount run and mid-drag writes. A
   // reset (null) removes the key so the fluid default returns.
   const rightPanelWidthMountedRef = useRef(false);
@@ -1071,8 +1465,13 @@ export function AppShell({ appName }: { appName: string }) {
     }
     if (rightPanelResizing) return;
     try {
-      if (rightPanelWidth === null) window.localStorage.removeItem(RIGHT_PANEL_WIDTH_STORAGE_KEY);
-      else window.localStorage.setItem(RIGHT_PANEL_WIDTH_STORAGE_KEY, String(rightPanelWidth));
+      if (rightPanelWidth === null)
+        window.localStorage.removeItem(RIGHT_PANEL_WIDTH_STORAGE_KEY);
+      else
+        window.localStorage.setItem(
+          RIGHT_PANEL_WIDTH_STORAGE_KEY,
+          String(rightPanelWidth),
+        );
     } catch {
       // ignore storage quota / privacy-mode errors
     }
@@ -1080,27 +1479,40 @@ export function AppShell({ appName }: { appName: string }) {
 
   // Same @mention format as the chat input's @ autocomplete, so the agent's
   // read tool resolves it the same way (it strips the @ prefix).
-  const handleAtMention = useCallback((relativePath: string, isDir: boolean) => {
-    chatInputRef.current?.insertText(buildAtMentionText(relativePath, isDir));
-  }, []);
+  const handleAtMention = useCallback(
+    (relativePath: string, isDir: boolean) => {
+      chatInputRef.current?.insertText(buildAtMentionText(relativePath, isDir));
+    },
+    [],
+  );
 
   const handleAtMentions = useCallback((relativePaths: string[]) => {
     const mentions = buildFileAtMentionsText(relativePaths);
     if (mentions) chatInputRef.current?.insertText(mentions);
   }, []);
 
-  const handleFileLineMention = useCallback((relativePath: string, startLine: number, endLine: number) => {
-    chatInputRef.current?.insertText(buildFileLineMentionText(relativePath, startLine, endLine));
-  }, []);
+  const handleFileLineMention = useCallback(
+    (relativePath: string, startLine: number, endLine: number) => {
+      chatInputRef.current?.insertText(
+        buildFileLineMentionText(relativePath, startLine, endLine),
+      );
+    },
+    [],
+  );
 
   const initialSessionId = initialNavigation.sessionId;
   const [activeCwd, setActiveCwd] = useState<string | null>(null);
-  const [activeHostId, setActiveHostId] = useState<string | undefined>(undefined);
-  const [activePoolProject, setActivePoolProject] = useState<ManagedProject | null>(null);
+  const [activeHostId, setActiveHostId] = useState<string | undefined>(
+    undefined,
+  );
+  const [activePoolProject, setActivePoolProject] =
+    useState<ManagedProject | null>(null);
   // Owned by the sidebar; rendered by the file panel's Worktrees tab.
   const [worktreeCtx, setWorktreeCtx] = useState<WorktreeContext | null>(null);
   // True once the initial ?session= URL param has been resolved (or confirmed absent)
-  const [initialSessionRestored, setInitialSessionRestored] = useState<boolean>(() => !initialSessionId);
+  const [initialSessionRestored, setInitialSessionRestored] = useState<boolean>(
+    () => !initialSessionId,
+  );
   // During the initial URL restore the sidebar adopts the restored cwd and
   // notifies us; that first onCwdChange must not bump sessionKey. We store the
   // expected cwd string and only skip when it matches, so a failure to fire
@@ -1118,14 +1530,25 @@ export function AppShell({ appName }: { appName: string }) {
     void fetch("/api/cwd/validate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: requestedCwd, hostId: initialNavigation.hostId }),
+      body: JSON.stringify({
+        cwd: requestedCwd,
+        hostId: initialNavigation.hostId,
+      }),
       signal: controller.signal,
     })
       .then(async (response) => {
-        const data = await response.json().catch(() => ({})) as { cwd?: string; error?: string; code?: string };
+        const data = (await response.json().catch(() => ({}))) as {
+          cwd?: string;
+          error?: string;
+          code?: string;
+        };
         if (controller.signal.aborted) return;
         if (!response.ok || !data.cwd) {
-          throw new Error(data.error || data.code ? formatApiError(data) : `HTTP ${response.status}`);
+          throw new Error(
+            data.error || data.code
+              ? formatApiError(data)
+              : `HTTP ${response.status}`,
+          );
         }
 
         // The sidebar will notify us when it adopts this cwd. Avoid remounting
@@ -1139,121 +1562,161 @@ export function AppShell({ appName }: { appName: string }) {
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        setInitialCwdError(error instanceof Error ? error.message : String(error));
+        setInitialCwdError(
+          error instanceof Error ? error.message : String(error),
+        );
         setInitialCwdStatus("error");
       });
 
     return () => controller.abort();
   }, [initialNavigation]);
 
-  const handleCwdChange = useCallback((cwd: string | null, projectRoot: string | null, hostId: string, project?: ManagedProject) => {
-    setActivePoolProject(project?.poolId ? project : null);
-    setActiveCwd(project?.poolId ? null : cwd);
-    setActiveHostId(project?.poolId ? undefined : remoteHostId(hostId));
-    if (project?.poolId) {
-      if (selectedSession?.poolId === project.poolId && selectedSession.projectId === project.projectId) return;
-      if (newSessionPoolProject?.poolId === project.poolId && newSessionPoolProject.projectId === project.projectId) return;
-      setNewSessionPoolProject(project);
-      setNewSessionCreation({ id: crypto.randomUUID() });
-      setNewSessionCwd(null);
-      setNewSessionHostId(undefined);
+  const handleCwdChange = useCallback(
+    (
+      cwd: string | null,
+      projectRoot: string | null,
+      hostId: string,
+      project?: ManagedProject,
+    ) => {
+      setActivePoolProject(project?.poolId ? project : null);
+      setActiveCwd(project?.poolId ? null : cwd);
+      setActiveHostId(project?.poolId ? undefined : remoteHostId(hostId));
+      if (project?.poolId) {
+        if (
+          selectedSession?.poolId === project.poolId &&
+          selectedSession.projectId === project.projectId
+        )
+          return;
+        if (
+          newSessionPoolProject?.poolId === project.poolId &&
+          newSessionPoolProject.projectId === project.projectId
+        )
+          return;
+        setNewSessionPoolProject(project);
+        setNewSessionCreation({ id: crypto.randomUUID() });
+        setNewSessionCwd(null);
+        setNewSessionHostId(undefined);
+        setSelectedSession(null);
+        setSessionKey((key) => key + 1);
+        setBranchTree([]);
+        setBranchActiveLeafId(null);
+        setSystemPrompt(null);
+        setSystemPromptLoading(false);
+        setActiveTopPanel(null);
+        router.replace("/");
+        return;
+      }
+      // A standalone path is never a fallback for a pending pool placement.
+      if (!cwd) return;
+      setNewSessionPoolProject(null);
+      // Skip only when the notification matches the cwd we're suppressing for.
+      if (suppressCwdRef.current !== null && suppressCwdRef.current === cwd) {
+        suppressCwdRef.current = null;
+        return;
+      }
+      // Worktrees of one repo share a project root. Moving the effective cwd
+      // within the same project (e.g. switching worktree, or clicking a session
+      // that lives in another worktree) must not close the open session.
+      const newProject = projectRoot ?? cwd;
+      const sessionProject = selectedSession
+        ? (selectedSession.projectRoot ?? selectedSession.cwd)
+        : null;
+      if (
+        sessionProject &&
+        remoteHostId(selectedSession?.hostId) === remoteHostId(hostId) &&
+        comparableProjectPath(sessionProject) ===
+          comparableProjectPath(newProject)
+      ) {
+        return;
+      }
+      // Close any session that belongs to a different project — it no longer
+      // matches the selected project directory.
       setSelectedSession(null);
-      setSessionKey((key) => key + 1);
+      setNewSessionCwd((prev) => {
+        if (prev && prev !== cwd) return null;
+        return prev;
+      });
+      setNewSessionHostId(remoteHostId(hostId));
+      setNewSessionCreation({ id: crypto.randomUUID() });
+      setSessionKey((k) => k + 1);
       setBranchTree([]);
       setBranchActiveLeafId(null);
       setSystemPrompt(null);
       setSystemPromptLoading(false);
       setActiveTopPanel(null);
       router.replace("/");
-      return;
-    }
-    // A standalone path is never a fallback for a pending pool placement.
-    if (!cwd) return;
-    setNewSessionPoolProject(null);
-    // Skip only when the notification matches the cwd we're suppressing for.
-    if (suppressCwdRef.current !== null && suppressCwdRef.current === cwd) {
-      suppressCwdRef.current = null;
-      return;
-    }
-    // Worktrees of one repo share a project root. Moving the effective cwd
-    // within the same project (e.g. switching worktree, or clicking a session
-    // that lives in another worktree) must not close the open session.
-    const newProject = projectRoot ?? cwd;
-    const sessionProject = selectedSession ? (selectedSession.projectRoot ?? selectedSession.cwd) : null;
-    if (sessionProject && remoteHostId(selectedSession?.hostId) === remoteHostId(hostId) && comparableProjectPath(sessionProject) === comparableProjectPath(newProject)) {
-      return;
-    }
-    // Close any session that belongs to a different project — it no longer
-    // matches the selected project directory.
-    setSelectedSession(null);
-    setNewSessionCwd((prev) => {
-      if (prev && prev !== cwd) return null;
-      return prev;
-    });
-    setNewSessionHostId(remoteHostId(hostId));
-    setNewSessionCreation({ id: crypto.randomUUID() });
-    setSessionKey((k) => k + 1);
-    setBranchTree([]);
-    setBranchActiveLeafId(null);
-    setSystemPrompt(null);
-    setSystemPromptLoading(false);
-    setActiveTopPanel(null);
-    router.replace("/");
-  }, [router, selectedSession, newSessionPoolProject]);
+    },
+    [router, selectedSession, newSessionPoolProject],
+  );
 
-  const handleSelectSession = useCallback((session: SessionInfo, isRestore = false) => {
-    // Re-picking the already-open session (sidebar double-click, palette
-    // re-select, notification click) must not bump sessionKey: that remounts
-    // ChatWindow, reconnects SSE, and drops the mid-run streaming view.
-    setSettingsTab(null);
-    // Re-picking the current conversation still closes/rearms the drawer,
-    // without remounting the chat or disturbing its draft.
-    if (isMobile && !isRestore) {
-      setSidebarOpen(false);
-      requestAnimationFrame(() => chatInputRef.current?.focus());
-    }
-    if (!isRestore && session.id === selectedSession?.id) return;
-    setNewSessionCwd(null);
-    setNewSessionPoolProject(null);
-    setSelectedSession(session);
-    setSessionKey((k) => k + 1);
-    setSystemPrompt(null);
-    setSystemPromptLoading(false);
-    setInitialSessionRestored(true);
-    if (isRestore) {
-      // Suppress the redundant sessionKey bump that would come from the
-      // onCwdChange effect firing after setSelectedCwd in the sidebar. We
-      // arm the expected cwd (compared in handleCwdChange) rather than a
-      // sticky flag so a missed notification can't suppress the next
-      // genuine project switch.
-      suppressCwdRef.current = session.cwd;
-    }
-    // Skip router.replace when restoring from the URL: the param is already correct.
-    if (!isRestore) {
-      router.replace(`?session=${encodeURIComponent(session.id)}`);
-    }
-  }, [router, isMobile, selectedSession?.id]);
+  const handleSelectSession = useCallback(
+    (session: SessionInfo, isRestore = false) => {
+      // Re-picking the already-open session (sidebar double-click, palette
+      // re-select, notification click) must not bump sessionKey: that remounts
+      // ChatWindow, reconnects SSE, and drops the mid-run streaming view.
+      setSettingsTab(null);
+      // Re-picking the current conversation still closes/rearms the drawer,
+      // without remounting the chat or disturbing its draft.
+      if (isMobile && !isRestore) {
+        setSidebarOpen(false);
+        requestAnimationFrame(() => chatInputRef.current?.focus());
+      }
+      if (!isRestore && session.id === selectedSession?.id) return;
+      setNewSessionCwd(null);
+      setNewSessionPoolProject(null);
+      setSelectedSession(session);
+      setSessionKey((k) => k + 1);
+      setSystemPrompt(null);
+      setSystemPromptLoading(false);
+      setInitialSessionRestored(true);
+      if (isRestore) {
+        // Suppress the redundant sessionKey bump that would come from the
+        // onCwdChange effect firing after setSelectedCwd in the sidebar. We
+        // arm the expected cwd (compared in handleCwdChange) rather than a
+        // sticky flag so a missed notification can't suppress the next
+        // genuine project switch.
+        suppressCwdRef.current = session.cwd;
+      }
+      // Skip router.replace when restoring from the URL: the param is already correct.
+      if (!isRestore) {
+        router.replace(`?session=${encodeURIComponent(session.id)}`);
+      }
+    },
+    [router, isMobile, selectedSession?.id],
+  );
 
-  const handleNewSession = useCallback((creationId: string, cwd: string | null, hostId?: string, project?: ManagedProject, initialization?: string) => {
-    setSettingsTab(null);
-    setSelectedSession(null);
-    const target = project ?? (cwd === activeCwd ? activePoolProject : null);
-    setNewSessionCreation({ id: creationId || crypto.randomUUID(), initialization });
-    setNewSessionPoolProject(target?.poolId ? target : null);
-    setNewSessionCwd(target?.poolId ? null : cwd);
-    setNewSessionHostId(target?.poolId ? undefined : remoteHostId(hostId));
-    setSessionKey((k) => k + 1);
-    setBranchTree([]);
-    setBranchActiveLeafId(null);
-    setSystemPrompt(null);
-    setSystemPromptLoading(false);
-    setActiveTopPanel(null);
-    if (isMobile) {
-      setSidebarOpen(false);
-      requestAnimationFrame(() => chatInputRef.current?.focus());
-    }
-    router.replace("/");
-  }, [router, isMobile, activeCwd, activePoolProject]);
+  const handleNewSession = useCallback(
+    (
+      creationId: string,
+      cwd: string | null,
+      hostId?: string,
+      project?: ManagedProject,
+      initialization?: string,
+    ) => {
+      setSettingsTab(null);
+      setSelectedSession(null);
+      const target = project ?? (cwd === activeCwd ? activePoolProject : null);
+      setNewSessionCreation({
+        id: creationId || crypto.randomUUID(),
+        initialization,
+      });
+      setNewSessionPoolProject(target?.poolId ? target : null);
+      setNewSessionCwd(target?.poolId ? null : cwd);
+      setNewSessionHostId(target?.poolId ? undefined : remoteHostId(hostId));
+      setSessionKey((k) => k + 1);
+      setBranchTree([]);
+      setBranchActiveLeafId(null);
+      setSystemPrompt(null);
+      setSystemPromptLoading(false);
+      setActiveTopPanel(null);
+      if (isMobile) {
+        setSidebarOpen(false);
+        requestAnimationFrame(() => chatInputRef.current?.focus());
+      }
+      router.replace("/");
+    },
+    [router, isMobile, activeCwd, activePoolProject],
+  );
 
   // ---- In-app Navigate back / forward over visited chat views ----
   // Own stack, not the browser History API (that one belongs to the mobile
@@ -1276,58 +1739,114 @@ export function AppShell({ appName }: { appName: string }) {
     recordNavigationView({
       sessionId: navSessionId,
       cwd: navSessionId ? navSessionCwd : newSessionCwd,
-      ...(!navSessionId && newSessionHostId ? { hostId: newSessionHostId } : {}),
-      ...(!navSessionId && newSessionPoolProject ? { poolId: newSessionPoolProject.poolId, projectId: newSessionPoolProject.projectId } : {}),
+      ...(!navSessionId && newSessionHostId
+        ? { hostId: newSessionHostId }
+        : {}),
+      ...(!navSessionId && newSessionPoolProject
+        ? {
+            poolId: newSessionPoolProject.poolId,
+            projectId: newSessionPoolProject.projectId,
+          }
+        : {}),
       ...(!navSessionId ? { creationId: newSessionCreationId } : {}),
-      ...(!navSessionId && newSessionPoolProject && newSessionCreation.initialization ? { initialization: newSessionCreation.initialization } : {}),
+      ...(!navSessionId &&
+      newSessionPoolProject &&
+      newSessionCreation.initialization
+        ? { initialization: newSessionCreation.initialization }
+        : {}),
     });
-  }, [navSessionId, navSessionCwd, newSessionCwd, newSessionHostId, newSessionPoolProject, newSessionCreation, newSessionCreationId, recordNavigationView]);
+  }, [
+    navSessionId,
+    navSessionCwd,
+    newSessionCwd,
+    newSessionHostId,
+    newSessionPoolProject,
+    newSessionCreation,
+    newSessionCreationId,
+    recordNavigationView,
+  ]);
 
   // Resolves a history entry's session id against the live list. `null`
   // means the id is gone (entry should be dropped); "unavailable" means the
   // list itself could not be fetched (keep the entry, abort this navigation).
-  const fetchSessionForNavigation = useCallback(async (sessionId: string): Promise<SessionInfo | null | "unavailable"> => {
-    try {
-      const res = await fetch(`/api/sessions?id=${encodeURIComponent(sessionId)}`);
-      if (!res.ok) return "unavailable";
-      const data = (await res.json()) as { sessions?: SessionInfo[] };
-      return data.sessions?.find((s) => s.id === sessionId) ?? null;
-    } catch {
-      return "unavailable";
-    }
-  }, []);
+  const fetchSessionForNavigation = useCallback(
+    async (sessionId: string): Promise<SessionInfo | null | "unavailable"> => {
+      try {
+        const res = await fetch(
+          `/api/sessions?id=${encodeURIComponent(sessionId)}`,
+        );
+        if (!res.ok) return "unavailable";
+        const data = (await res.json()) as { sessions?: SessionInfo[] };
+        return data.sessions?.find((s) => s.id === sessionId) ?? null;
+      } catch {
+        return "unavailable";
+      }
+    },
+    [],
+  );
 
-  const navigateInHistory = useCallback(async (direction: -1 | 1): Promise<void> => {
-    // Dead entries (deleted sessions) are skipped, like browser history
-    // skipping a dead slot; bound the loop by the stack's own cap.
-    for (let attempt = 0; attempt <= NAVIGATION_HISTORY_MAX_ENTRIES; attempt++) {
-      const entry = direction === -1 ? peekNavigationBack() : peekNavigationForward();
-      // Nothing that way: stay put. An exhausted stack never falls through to
-      // the browser's own back/forward — the keystroke is swallowed by the
-      // keyboard layer, so the app can never be backed out of by accident.
-      if (!entry) return;
-      if (entry.sessionId === null) {
-        if (direction === -1) navigationHistory.commitBack();
-        else navigationHistory.commitForward();
-        const project = entry.poolId ? workspaceOptions.projects.find((candidate) => candidate.poolId === entry.poolId && candidate.projectId === entry.projectId) : undefined;
-        if (entry.poolId && !project) { toast.error(translate("errors.generic")); return; }
-        handleNewSession(entry.creationId ?? crypto.randomUUID(), entry.cwd, entry.hostId, project, entry.initialization);
-        return;
+  const navigateInHistory = useCallback(
+    async (direction: -1 | 1): Promise<void> => {
+      // Dead entries (deleted sessions) are skipped, like browser history
+      // skipping a dead slot; bound the loop by the stack's own cap.
+      for (
+        let attempt = 0;
+        attempt <= NAVIGATION_HISTORY_MAX_ENTRIES;
+        attempt++
+      ) {
+        const entry =
+          direction === -1 ? peekNavigationBack() : peekNavigationForward();
+        // Nothing that way: stay put. An exhausted stack never falls through to
+        // the browser's own back/forward — the keystroke is swallowed by the
+        // keyboard layer, so the app can never be backed out of by accident.
+        if (!entry) return;
+        if (entry.sessionId === null) {
+          if (direction === -1) navigationHistory.commitBack();
+          else navigationHistory.commitForward();
+          const project = entry.poolId
+            ? workspaceOptions.projects.find(
+                (candidate) =>
+                  candidate.poolId === entry.poolId &&
+                  candidate.projectId === entry.projectId,
+              )
+            : undefined;
+          if (entry.poolId && !project) {
+            toast.error(translate("errors.generic"));
+            return;
+          }
+          handleNewSession(
+            entry.creationId ?? crypto.randomUUID(),
+            entry.cwd,
+            entry.hostId,
+            project,
+            entry.initialization,
+          );
+          return;
+        }
+        const versionAtPress = navViewVersionRef.current;
+        const session = await fetchSessionForNavigation(entry.sessionId);
+        if (navViewVersionRef.current !== versionAtPress) return; // user moved on: do nothing
+        if (session === "unavailable") return; // list fetch failed: keep the entry, try again next press
+        if (session) {
+          if (direction === -1) navigationHistory.commitBack();
+          else navigationHistory.commitForward();
+          handleSelectSession(session, false);
+          return;
+        }
+        if (direction === -1) navigationHistory.dropPeekedBack();
+        else navigationHistory.dropPeekedForward();
       }
-      const versionAtPress = navViewVersionRef.current;
-      const session = await fetchSessionForNavigation(entry.sessionId);
-      if (navViewVersionRef.current !== versionAtPress) return; // user moved on: do nothing
-      if (session === "unavailable") return; // list fetch failed: keep the entry, try again next press
-      if (session) {
-        if (direction === -1) navigationHistory.commitBack();
-        else navigationHistory.commitForward();
-        handleSelectSession(session, false);
-        return;
-      }
-      if (direction === -1) navigationHistory.dropPeekedBack();
-      else navigationHistory.dropPeekedForward();
-    }
-  }, [navigationHistory, peekNavigationBack, peekNavigationForward, fetchSessionForNavigation, handleNewSession, handleSelectSession, workspaceOptions.projects]);
+    },
+    [
+      navigationHistory,
+      peekNavigationBack,
+      peekNavigationForward,
+      fetchSessionForNavigation,
+      handleNewSession,
+      handleSelectSession,
+      workspaceOptions.projects,
+    ],
+  );
 
   // Shared by the sidebar buttons and the global shortcuts. The keyboard
   // layer always swallows the keystroke, so both directions stop dead at the
@@ -1342,22 +1861,38 @@ export function AppShell({ appName }: { appName: string }) {
   // Tooltip shortcut labels follow the platform (⌘[ vs Alt+←). Computed from
   // navigator after mount state to keep SSR markup stable.
   const [navIsMac] = useState(() => isMacPlatform());
-  const sidebarNavigation = useMemo(() => ({
-    canBack: navigationHistory.canBack,
-    canForward: navigationHistory.canForward,
-    onBack: handleNavigateBack,
-    onForward: handleNavigateForward,
-    backShortcut: navigateShortcutHint(-1, navIsMac),
-    forwardShortcut: navigateShortcutHint(1, navIsMac),
-  }), [navigationHistory.canBack, navigationHistory.canForward, handleNavigateBack, handleNavigateForward, navIsMac]);
-
+  const sidebarNavigation = useMemo(
+    () => ({
+      canBack: navigationHistory.canBack,
+      canForward: navigationHistory.canForward,
+      onBack: handleNavigateBack,
+      onForward: handleNavigateForward,
+      backShortcut: navigateShortcutHint(-1, navIsMac),
+      forwardShortcut: navigateShortcutHint(1, navIsMac),
+    }),
+    [
+      navigationHistory.canBack,
+      navigationHistory.canForward,
+      handleNavigateBack,
+      handleNavigateForward,
+      navIsMac,
+    ],
+  );
 
   // Global keyboard shortcuts (handles Esc, Ctrl+Alt+N etc.)
   useGlobalKeyboardShortcuts({
-    onNewSession: (cwd: string) => handleNewSession(crypto.randomUUID(), activePoolProject ? null : cwd, activeHostId, activePoolProject ?? undefined),
+    onNewSession: (cwd: string) =>
+      handleNewSession(
+        crypto.randomUUID(),
+        activePoolProject ? null : cwd,
+        activeHostId,
+        activePoolProject ?? undefined,
+      ),
     onNavigateBack: handleNavigateBack,
     onNavigateForward: handleNavigateForward,
-    activeCwd: activePoolProject ? projectIdentity(activePoolProject) : activeCwd,
+    activeCwd: activePoolProject
+      ? projectIdentity(activePoolProject)
+      : activeCwd,
     scopeNativeSelectAll,
   });
 
@@ -1367,35 +1902,51 @@ export function AppShell({ appName }: { appName: string }) {
   // worktrees right after creating a session doesn't close the chat.
   const hydrateSelectedSession = useCallback((sessionId: string) => {
     void fetch("/api/sessions")
-      .then((r) => (r.ok ? (r.json() as Promise<{ sessions: SessionInfo[] }>) : null))
+      .then((r) =>
+        r.ok ? (r.json() as Promise<{ sessions: SessionInfo[] }>) : null,
+      )
       .then((d) => {
         const full = d?.sessions.find((s) => s.id === sessionId);
         if (!full) return;
-        setSelectedSession((prev) => (prev && prev.id === sessionId && (!prev.projectRoot || prev.path === "") ? full : prev));
+        setSelectedSession((prev) =>
+          prev &&
+          prev.id === sessionId &&
+          (!prev.projectRoot || prev.path === "")
+            ? full
+            : prev,
+        );
       })
       .catch(() => {});
   }, []);
 
   // Called by ChatWindow when a new session gets its real id from pi
-  const handleSessionCreated = useCallback((session: SessionInfo) => {
-    setNewSessionCwd(null);
-    setNewSessionPoolProject(null);
-    setSelectedSession(session);
-    setRefreshKey((k) => k + 1);
-    hydrateSelectedSession(session.id);
-    router.replace(`?session=${encodeURIComponent(session.id)}`);
-  }, [router, hydrateSelectedSession]);
+  const handleSessionCreated = useCallback(
+    (session: SessionInfo) => {
+      setNewSessionCwd(null);
+      setNewSessionPoolProject(null);
+      setSelectedSession(session);
+      setRefreshKey((k) => k + 1);
+      hydrateSelectedSession(session.id);
+      router.replace(`?session=${encodeURIComponent(session.id)}`);
+    },
+    [router, hydrateSelectedSession],
+  );
 
-  const handleSessionMoved = useCallback((oldId: string, newId: string) => {
-    if (activeSessionIdRef.current !== oldId) return;
-    activeSessionIdRef.current = newId;
-    setSelectedSession((current) => current?.id === oldId ? { ...current, id: newId, path: "" } : current);
-    setRefreshKey((key) => key + 1);
-    hydrateSelectedSession(newId);
-    // This is the same conversation. Preserve ChatWindow's run/edit fences
-    // and its mounted composer, including unfinished attachments and audio.
-    router.replace(`?session=${encodeURIComponent(newId)}`);
-  }, [router, hydrateSelectedSession]);
+  const handleSessionMoved = useCallback(
+    (oldId: string, newId: string) => {
+      if (activeSessionIdRef.current !== oldId) return;
+      activeSessionIdRef.current = newId;
+      setSelectedSession((current) =>
+        current?.id === oldId ? { ...current, id: newId, path: "" } : current,
+      );
+      setRefreshKey((key) => key + 1);
+      hydrateSelectedSession(newId);
+      // This is the same conversation. Preserve ChatWindow's run/edit fences
+      // and its mounted composer, including unfinished attachments and audio.
+      router.replace(`?session=${encodeURIComponent(newId)}`);
+    },
+    [router, hydrateSelectedSession],
+  );
 
   const handleAgentEnd = useCallback(() => {
     setRefreshKey((k) => k + 1);
@@ -1405,29 +1956,41 @@ export function AppShell({ appName }: { appName: string }) {
   // Notification clicks name a session id; the session list carries its cwd
   // and project, which selecting needs. When the list cannot be read (the
   // sign-in expired), load the session URL: sign-in carries it through.
-  const openSessionById = useCallback((sessionId: string) => {
-    window.focus();
-    // On narrow screens the file panel covers the chat it is about to show.
-    if (isCompactOverlay) setRightPanelOpen(false);
-    // A full load (not router navigation) so an expired sign-in reaches proxy.ts and the login page.
-    const sessionUrl = new URL(`/?session=${encodeURIComponent(sessionId)}`, window.location.origin).href;
-    void fetch("/api/sessions")
-      .then((r) => {
-        if (!r.ok) {
-          window.location.assign(sessionUrl);
-          return;
-        }
-        return (r.json() as Promise<{ sessions: SessionInfo[] }>).then((d) => {
-          const session = d.sessions.find((s) => s.id === sessionId);
-          if (session) handleSelectSession(session);
-          else toast.error(translate("notifications.sessionNotFound"));
-        });
-      })
-      .catch(() => window.location.assign(sessionUrl));
-  }, [handleSelectSession, isCompactOverlay]);
+  const openSessionById = useCallback(
+    (sessionId: string) => {
+      window.focus();
+      // On narrow screens the file panel covers the chat it is about to show.
+      if (isCompactOverlay) setRightPanelOpen(false);
+      // A full load (not router navigation) so an expired sign-in reaches proxy.ts and the login page.
+      const sessionUrl = new URL(
+        `/?session=${encodeURIComponent(sessionId)}`,
+        window.location.origin,
+      ).href;
+      void fetch("/api/sessions")
+        .then((r) => {
+          if (!r.ok) {
+            window.location.assign(sessionUrl);
+            return;
+          }
+          return (r.json() as Promise<{ sessions: SessionInfo[] }>).then(
+            (d) => {
+              const session = d.sessions.find((s) => s.id === sessionId);
+              if (session) handleSelectSession(session);
+              else toast.error(translate("notifications.sessionNotFound"));
+            },
+          );
+        })
+        .catch(() => window.location.assign(sessionUrl));
+    },
+    [handleSelectSession, isCompactOverlay],
+  );
 
   // Full-page Settings hides the chat, so its session counts as not viewed.
-  useNotifications({ sessionId: settingsTab ? null : selectedSession?.id ?? null, locale, onOpenSession: openSessionById });
+  useNotifications({
+    sessionId: settingsTab ? null : (selectedSession?.id ?? null),
+    locale,
+    onOpenSession: openSessionById,
+  });
 
   const handleAutoName = useCallback(async () => {
     const sessionId = selectedSession?.id;
@@ -1437,26 +2000,49 @@ export function AppShell({ appName }: { appName: string }) {
     setAutoNameStatus({ kind: "naming" });
 
     try {
-      const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/auto-name`, {
-        method: "POST",
-      });
-      const body = (await response.json().catch(() => ({}))) as { title?: string; error?: string; code?: string };
+      const response = await fetch(
+        `/api/sessions/${encodeURIComponent(sessionId)}/auto-name`,
+        {
+          method: "POST",
+        },
+      );
+      const body = (await response.json().catch(() => ({}))) as {
+        title?: string;
+        error?: string;
+        code?: string;
+      };
       if (!response.ok || !body.title) {
-        throw new Error(body.error || body.code ? formatApiError(body) : `HTTP ${response.status}`);
+        throw new Error(
+          body.error || body.code
+            ? formatApiError(body)
+            : `HTTP ${response.status}`,
+        );
       }
 
       const title = body.title.trim();
       if (activeSessionIdRef.current !== sessionId) return;
       setRefreshKey((key) => key + 1);
-      setSelectedSession((current) => current?.id === sessionId ? { ...current, name: title } : current);
-      setSessionStats((current) => current?.sessionId === sessionId ? { ...current, sessionName: title } : current);
+      setSelectedSession((current) =>
+        current?.id === sessionId ? { ...current, name: title } : current,
+      );
+      setSessionStats((current) =>
+        current?.sessionId === sessionId
+          ? { ...current, sessionName: title }
+          : current,
+      );
       setAutoNameStatus({ kind: "success" });
-      autoNameTimerRef.current = setTimeout(() => setAutoNameStatus({ kind: "idle" }), 1800);
+      autoNameTimerRef.current = setTimeout(
+        () => setAutoNameStatus({ kind: "idle" }),
+        1800,
+      );
     } catch (error) {
       if (activeSessionIdRef.current !== sessionId) return;
       const message = error instanceof Error ? error.message : String(error);
       setAutoNameStatus({ kind: "error", message });
-      autoNameTimerRef.current = setTimeout(() => setAutoNameStatus({ kind: "idle" }), 5000);
+      autoNameTimerRef.current = setTimeout(
+        () => setAutoNameStatus({ kind: "idle" }),
+        5000,
+      );
     }
   }, [autoNameStatus.kind, selectedSession?.id]);
 
@@ -1474,173 +2060,263 @@ export function AppShell({ appName }: { appName: string }) {
     setExplorerRefreshing(false);
   }, []);
 
-  const handleSessionForked = useCallback((newSessionId: string) => {
-    setRefreshKey((k) => k + 1);
-    setSessionKey((k) => k + 1);
-    setNewSessionCwd(null);
-    setNewSessionPoolProject(null);
-    setSelectedSession((prev) => ({
-      ...(prev ?? { path: "", cwd: "", created: "", modified: "", messageCount: 0, firstMessage: "" }),
-      id: newSessionId,
-      // path === "" is the sidebar's optimistic-row marker; keep it so the
-      // fork shows up immediately instead of waiting for a refresh.
-      path: "",
-    }));
-    hydrateSelectedSession(newSessionId);
-    router.replace(`?session=${encodeURIComponent(newSessionId)}`);
-  }, [router, hydrateSelectedSession]);
-
-  const handleSessionDeleted = useCallback((sessionId: string) => {
-    // The composer for this session can never be reopened, so its draft would
-    // otherwise keep the exit guard armed for unreachable content.
-    clearDraft(sessionId);
-    setRefreshKey((k) => k + 1);
-    if (selectedSession?.id === sessionId) {
-      const cwd = selectedSession.cwd;
-      setSelectedSession(null);
-      setNewSessionCwd(selectedSession.poolId ? null : cwd ?? null);
-      setNewSessionCreation({ id: crypto.randomUUID() });
-      setNewSessionPoolProject(selectedSession.poolId ? workspaceOptions.projects.find((project) => project.poolId === selectedSession.poolId && project.projectId === selectedSession.projectId) ?? null : null);
-      setNewSessionHostId(remoteHostId(selectedSession.hostId));
+  const handleSessionForked = useCallback(
+    (newSessionId: string) => {
+      setRefreshKey((k) => k + 1);
       setSessionKey((k) => k + 1);
-      setBranchTree([]);
-      setBranchActiveLeafId(null);
-      setSystemPrompt(null);
-      setActiveTopPanel(null);
-      router.replace("/");
-    }
-  }, [selectedSession, router, workspaceOptions.projects]);
+      setNewSessionCwd(null);
+      setNewSessionPoolProject(null);
+      setSelectedSession((prev) => ({
+        ...(prev ?? {
+          path: "",
+          cwd: "",
+          created: "",
+          modified: "",
+          messageCount: 0,
+          firstMessage: "",
+        }),
+        id: newSessionId,
+        // path === "" is the sidebar's optimistic-row marker; keep it so the
+        // fork shows up immediately instead of waiting for a refresh.
+        path: "",
+      }));
+      hydrateSelectedSession(newSessionId);
+      router.replace(`?session=${encodeURIComponent(newSessionId)}`);
+    },
+    [router, hydrateSelectedSession],
+  );
+
+  const handleSessionDeleted = useCallback(
+    (sessionId: string) => {
+      // The composer for this session can never be reopened, so its draft would
+      // otherwise keep the exit guard armed for unreachable content.
+      clearDraft(sessionId);
+      setRefreshKey((k) => k + 1);
+      if (selectedSession?.id === sessionId) {
+        const cwd = selectedSession.cwd;
+        setSelectedSession(null);
+        setNewSessionCwd(selectedSession.poolId ? null : (cwd ?? null));
+        setNewSessionCreation({ id: crypto.randomUUID() });
+        setNewSessionPoolProject(
+          selectedSession.poolId
+            ? (workspaceOptions.projects.find(
+                (project) =>
+                  project.poolId === selectedSession.poolId &&
+                  project.projectId === selectedSession.projectId,
+              ) ?? null)
+            : null,
+        );
+        setNewSessionHostId(remoteHostId(selectedSession.hostId));
+        setSessionKey((k) => k + 1);
+        setBranchTree([]);
+        setBranchActiveLeafId(null);
+        setSystemPrompt(null);
+        setActiveTopPanel(null);
+        router.replace("/");
+      }
+    },
+    [selectedSession, router, workspaceOptions.projects],
+  );
   const handleInitialRestoreDone = useCallback(() => {
     setInitialSessionRestored(true);
   }, []);
 
-  const handleArchiveRestored = useCallback(async (sessionId: string) => {
-    setArchiveBrowserOpen(false);
-    publishSessionsChanged([sessionId]);
-    setRefreshKey((k) => k + 1);
+  const handleArchiveRestored = useCallback(
+    async (sessionId: string) => {
+      setArchiveBrowserOpen(false);
+      publishSessionsChanged([sessionId]);
+      setRefreshKey((k) => k + 1);
 
-    // The poll must not yank the UI back to the restored session if the user
-    // picks another one while we wait, and an untracked setTimeout chain would
-    // keep retrying after unmount — so freeze the selection at start, bail out
-    // of every attempt + the fallback when it changed, and track the timer.
-    const sessionAtRestoreStart = activeSessionIdRef.current;
-    const selectRestoredSession = async (attemptsLeft = 5): Promise<void> => {
-      if (activeSessionIdRef.current !== sessionAtRestoreStart) return;
-      try {
-        const res = await fetch("/api/sessions");
-        if (res.ok) {
-          const data = (await res.json()) as { sessions?: SessionInfo[] };
-          const found = data.sessions?.find((s) => s.id === sessionId);
-          if (found) {
-            if (activeSessionIdRef.current !== sessionAtRestoreStart) return;
-            handleSelectSession(found, false);
-            return;
+      // The poll must not yank the UI back to the restored session if the user
+      // picks another one while we wait, and an untracked setTimeout chain would
+      // keep retrying after unmount — so freeze the selection at start, bail out
+      // of every attempt + the fallback when it changed, and track the timer.
+      const sessionAtRestoreStart = activeSessionIdRef.current;
+      const selectRestoredSession = async (attemptsLeft = 5): Promise<void> => {
+        if (activeSessionIdRef.current !== sessionAtRestoreStart) return;
+        try {
+          const res = await fetch("/api/sessions");
+          if (res.ok) {
+            const data = (await res.json()) as { sessions?: SessionInfo[] };
+            const found = data.sessions?.find((s) => s.id === sessionId);
+            if (found) {
+              if (activeSessionIdRef.current !== sessionAtRestoreStart) return;
+              handleSelectSession(found, false);
+              return;
+            }
           }
+        } catch {
+          // network error / abort
         }
-      } catch {
-        // network error / abort
-      }
 
-      if (attemptsLeft > 0) {
-        archiveRetryTimerRef.current = setTimeout(() => void selectRestoredSession(attemptsLeft - 1), 300);
-      } else if (activeSessionIdRef.current === sessionAtRestoreStart) {
-        router.replace(`?session=${encodeURIComponent(sessionId)}`);
-      }
-    };
+        if (attemptsLeft > 0) {
+          archiveRetryTimerRef.current = setTimeout(
+            () => void selectRestoredSession(attemptsLeft - 1),
+            300,
+          );
+        } else if (activeSessionIdRef.current === sessionAtRestoreStart) {
+          router.replace(`?session=${encodeURIComponent(sessionId)}`);
+        }
+      };
 
-    void selectRestoredSession();
-  }, [handleSelectSession, router]);
+      void selectRestoredSession();
+    },
+    [handleSelectSession, router],
+  );
 
-  const handleCloseFileTab = useCallback((tabId: string) => {
-    // Compute everything from the current list outside the updaters: no side
-    // effect inside a state updater, and no stale-closure read (the callback
-    // is recreated whenever fileTabs changes, but a batched double-close
-    // would still have read the pre-close list from the closure).
-    const next = fileTabs.filter((t) => t.id !== tabId);
-    setFileTabs(next);
-    // The panel now hosts the Explorer tab, so it stays open: closing the
-    // last file falls back to the explorer instead of hiding the panel.
-    if (next.length === 0) setRightView("explorer");
-    setActiveFileTabId((cur) => {
-      if (cur !== tabId) return cur;
-      return next.length > 0 ? next[next.length - 1].id : null;
-    });
-  }, [fileTabs]);
+  const handleCloseFileTab = useCallback(
+    (tabId: string) => {
+      // Compute everything from the current list outside the updaters: no side
+      // effect inside a state updater, and no stale-closure read (the callback
+      // is recreated whenever fileTabs changes, but a batched double-close
+      // would still have read the pre-close list from the closure).
+      const next = fileTabs.filter((t) => t.id !== tabId);
+      setFileTabs(next);
+      // The panel now hosts the Explorer tab, so it stays open: closing the
+      // last file falls back to the explorer instead of hiding the panel.
+      if (next.length === 0) setRightView("explorer");
+      setActiveFileTabId((cur) => {
+        if (cur !== tabId) return cur;
+        return next.length > 0 ? next[next.length - 1].id : null;
+      });
+    },
+    [fileTabs],
+  );
 
-  const handleOpenFile = useCallback((filePath: string, fileName: string, source: WorkspaceFileSource) => {
-    const absolute = filePath.startsWith("/") || filePath.startsWith("~/");
-    const rooted = !absolute && source.cwd ? joinFilePath(source.cwd, filePath) : filePath;
-    const target = filePath.startsWith("~/") ? filePath : normalizeLocalPath(rooted);
-    const tabId = `file:${source.sessionId ?? hostProjectKey(source.hostId, source.cwd ?? "")}:${target}`;
-    setFileTabs((prev) => prev.some((tab) => tab.id === tabId)
-      ? prev
-      : [...prev, { id: tabId, label: fileName, filePath: target, hostId: source.hostId, sourceCwd: source.cwd, sourceSessionId: source.sessionId }]);
-    setActiveFileTabId(tabId);
-    setRightView("file");
-    setRightPanelOpen(true);
-    // On mobile the file panel is full-screen; close the drawer so it shows.
-    if (isMobile) setSidebarOpen(false);
-  }, [isMobile]);
+  const handleOpenFile = useCallback(
+    (filePath: string, fileName: string, source: WorkspaceFileSource) => {
+      const absolute = filePath.startsWith("/") || filePath.startsWith("~/");
+      const rooted =
+        !absolute && source.cwd ? joinFilePath(source.cwd, filePath) : filePath;
+      const target = filePath.startsWith("~/")
+        ? filePath
+        : normalizeLocalPath(rooted);
+      const tabId = `file:${source.sessionId ?? hostProjectKey(source.hostId, source.cwd ?? "")}:${target}`;
+      setFileTabs((prev) =>
+        prev.some((tab) => tab.id === tabId)
+          ? prev
+          : [
+              ...prev,
+              {
+                id: tabId,
+                label: fileName,
+                filePath: target,
+                hostId: source.hostId,
+                sourceCwd: source.cwd,
+                sourceSessionId: source.sessionId,
+              },
+            ],
+      );
+      setActiveFileTabId(tabId);
+      setRightView("file");
+      setRightPanelOpen(true);
+      // On mobile the file panel is full-screen; close the drawer so it shows.
+      if (isMobile) setSidebarOpen(false);
+    },
+    [isMobile],
+  );
 
   // Agent open requests that wait for the user. URLs always ask unless the
   // user opted into opening links from the viewed session automatically; URLs
   // and files from a session this tab is not viewing always ask, so they cannot
   // take over the current view. The click is also the user gesture that lets
   // the new tab through pop-up blockers.
-  const [pendingOpens, setPendingOpens] = useState<Array<{
-    target: string; name: string; sessionId: string; crossSession: boolean;
-  } & ({ kind: "url" } | { kind: "file"; source: WorkspaceFileSource })>>([]);
+  const [pendingOpens, setPendingOpens] = useState<
+    Array<
+      {
+        target: string;
+        name: string;
+        sessionId: string;
+        crossSession: boolean;
+      } & ({ kind: "url" } | { kind: "file"; source: WorkspaceFileSource })
+    >
+  >([]);
   const pendingOpen = pendingOpens[0] ?? null;
   // Keep the last request on screen while the dialog animates closed.
   const shownOpenRef = useRef(pendingOpen);
   if (pendingOpen) shownOpenRef.current = pendingOpen;
   const shownOpen = pendingOpen ?? shownOpenRef.current;
-  const dismissPendingOpen = useCallback(() => setPendingOpens((queue) => queue.slice(1)), []);
-  const requestOpenUrl = useCallback((url: string, sessionId: string, crossSession: boolean): string => {
-    if (!crossSession && openUrlAutomatically) {
-      window.open(url, "_blank", "noopener,noreferrer")?.focus?.();
-      return `Opened ${url}`;
-    }
-    setPendingOpens((queue) => [...queue, { kind: "url", target: url, name: url, sessionId, crossSession }]);
-    return crossSession
-      ? `Asked the user to confirm opening ${url}; they are viewing another omp-web session.`
-      : `Asked the user to confirm opening ${url}.`;
-  }, [openUrlAutomatically]);
-  const handleSessionOpenUrl = useCallback((url: string) => requestOpenUrl(url, selectedSession?.id ?? "", false), [requestOpenUrl, selectedSession?.id]);
+  const dismissPendingOpen = useCallback(
+    () => setPendingOpens((queue) => queue.slice(1)),
+    [],
+  );
+  const requestOpenUrl = useCallback(
+    (url: string, sessionId: string, crossSession: boolean): string => {
+      if (!crossSession && openUrlAutomatically) {
+        window.open(url, "_blank", "noopener,noreferrer")?.focus?.();
+        return `Opened ${url}`;
+      }
+      setPendingOpens((queue) => [
+        ...queue,
+        { kind: "url", target: url, name: url, sessionId, crossSession },
+      ]);
+      return crossSession
+        ? `Asked the user to confirm opening ${url}; they are viewing another omp-web session.`
+        : `Asked the user to confirm opening ${url}.`;
+    },
+    [openUrlAutomatically],
+  );
+  const handleSessionOpenUrl = useCallback(
+    (url: string) => requestOpenUrl(url, selectedSession?.id ?? "", false),
+    [requestOpenUrl, selectedSession?.id],
+  );
   const pendingCrossHostToolsRef = useRef(new Map<string, AbortController>());
-  const handleCrossSessionHostTool = useCallback(async (call: CrossSessionHostToolCall) => {
-    const key = JSON.stringify([call.sessionId, call.id]);
-    if (pendingCrossHostToolsRef.current.has(key)) return;
-    const controller = new AbortController();
-    pendingCrossHostToolsRef.current.set(key, controller);
-    // Full-page Settings hides the chat, so its session counts as not viewed.
-    const viewing = () => call.sessionId === activeSessionIdRef.current && !activeSettingsTabRef.current;
+  const handleCrossSessionHostTool = useCallback(
+    async (call: CrossSessionHostToolCall) => {
+      const key = JSON.stringify([call.sessionId, call.id]);
+      if (pendingCrossHostToolsRef.current.has(key)) return;
+      const controller = new AbortController();
+      pendingCrossHostToolsRef.current.set(key, controller);
+      // Full-page Settings hides the chat, so its session counts as not viewed.
+      const viewing = () =>
+        call.sessionId === activeSessionIdRef.current &&
+        !activeSettingsTabRef.current;
 
-    try {
-      const { text, isError } = await runHostTool(call.toolName, call.arguments, {
-        openUrl: (url) => requestOpenUrl(url, call.sessionId, !viewing()),
-        openFile: (path, name, owner) => {
-          const source = owner ? { ...call, sessionId: owner } : call;
-          if (viewing()) return handleOpenFile(path, name, source);
-          setPendingOpens((queue) => [...queue, { kind: "file", target: path, name, sessionId: call.sessionId, source, crossSession: true }]);
-          return `Asked the user to confirm opening ${path}; they are viewing another omp-web session.`;
-        },
-      }, call.sessionId, controller.signal);
-      if (controller.signal.aborted) return;
-      await sendAgentCommand(call.sessionId, {
-        type: "host_tool_result",
-        id: call.id,
-        isError,
-        result: { content: [{ type: "text", text }] },
-      });
-    } catch (e) {
-      console.error("Failed to send host tool result:", e);
-    } finally {
-      pendingCrossHostToolsRef.current.delete(key);
-    }
-  }, [handleOpenFile, requestOpenUrl]);
+      try {
+        const { text, isError } = await runHostTool(
+          call.toolName,
+          call.arguments,
+          {
+            openUrl: (url) => requestOpenUrl(url, call.sessionId, !viewing()),
+            openFile: (path, name, owner) => {
+              const source = owner ? { ...call, sessionId: owner } : call;
+              if (viewing()) return handleOpenFile(path, name, source);
+              setPendingOpens((queue) => [
+                ...queue,
+                {
+                  kind: "file",
+                  target: path,
+                  name,
+                  sessionId: call.sessionId,
+                  source,
+                  crossSession: true,
+                },
+              ]);
+              return `Asked the user to confirm opening ${path}; they are viewing another omp-web session.`;
+            },
+          },
+          call.sessionId,
+          controller.signal,
+        );
+        if (controller.signal.aborted) return;
+        await sendAgentCommand(call.sessionId, {
+          type: "host_tool_result",
+          id: call.id,
+          isError,
+          result: { content: [{ type: "text", text }] },
+        });
+      } catch (e) {
+        console.error("Failed to send host tool result:", e);
+      } finally {
+        pendingCrossHostToolsRef.current.delete(key);
+      }
+    },
+    [handleOpenFile, requestOpenUrl],
+  );
   const crossSessionHostToolRef = useRef(handleCrossSessionHostTool);
-  useEffect(() => { crossSessionHostToolRef.current = handleCrossSessionHostTool; }, [handleCrossSessionHostTool]);
+  useEffect(() => {
+    crossSessionHostToolRef.current = handleCrossSessionHostTool;
+  }, [handleCrossSessionHostTool]);
   useEffect(() => {
     // Mounted with the shell (not the sidebar) so it keeps listening on the
     // full-page Settings view too.
@@ -1649,10 +2325,20 @@ export function AppShell({ appName }: { appName: string }) {
     source.onmessage = (e) => {
       try {
         const call = JSON.parse(e.data);
-        if (call.type === "host_tool_cancel" && typeof call.sessionId === "string" && typeof call.targetId === "string") {
+        if (
+          call.type === "host_tool_cancel" &&
+          typeof call.sessionId === "string" &&
+          typeof call.targetId === "string"
+        ) {
           pending.get(JSON.stringify([call.sessionId, call.targetId]))?.abort();
-        } else if (call.type === "host_tool_call" && call.sessionId && call.id && call.toolName
-          && typeof call.hostId === "string" && typeof call.cwd === "string") {
+        } else if (
+          call.type === "host_tool_call" &&
+          call.sessionId &&
+          call.id &&
+          call.toolName &&
+          typeof call.hostId === "string" &&
+          typeof call.cwd === "string"
+        ) {
           void crossSessionHostToolRef.current(call);
         }
       } catch {
@@ -1660,48 +2346,80 @@ export function AppShell({ appName }: { appName: string }) {
       }
     };
     // A drop loses the server-side subscription, and with it the calls routed to this tab (rejectCrossSessionHostTools).
-    source.onerror = () => { for (const controller of pending.values()) controller.abort(); };
+    source.onerror = () => {
+      for (const controller of pending.values()) controller.abort();
+    };
     return () => {
       for (const controller of pending.values()) controller.abort();
       source.close();
     };
   }, []);
 
-  const activeFileTab = fileTabs.find((tab) => tab.id === activeFileTabId) ?? null;
+  const activeFileTab =
+    fileTabs.find((tab) => tab.id === activeFileTabId) ?? null;
   // Explorer, Git, and the file viewers follow the open session's folder, then
   // the sidebar's live cwd, then the new-session cwd. Relative paths (mention,
   // copy path) resolve against the same folder so they match the Explorer.
   // A session whose worktree was removed (its repo's worktree list no longer
   // contains its folder) falls back to the sidebar's cwd, the repo root.
   const sessionCwd = selectedSession?.cwd ?? null;
-  const sessionWorktreeRemoved = sessionCwd !== null && worktreeCtx !== null && (selectedSession?.hostId ?? LOCAL_HOST_ID) === worktreeCtx.hostId
-    && comparableProjectPath(selectedSession?.projectRoot ?? sessionCwd) === comparableProjectPath(worktreeCtx.projectRoot)
-    && !worktreeCtx.worktrees.some((wt) => {
+  const sessionWorktreeRemoved =
+    sessionCwd !== null &&
+    worktreeCtx !== null &&
+    (selectedSession?.hostId ?? LOCAL_HOST_ID) === worktreeCtx.hostId &&
+    comparableProjectPath(selectedSession?.projectRoot ?? sessionCwd) ===
+      comparableProjectPath(worktreeCtx.projectRoot) &&
+    !worktreeCtx.worktrees.some((wt) => {
       const root = comparableProjectPath(wt.path);
       const cwd = comparableProjectPath(sessionCwd);
       return cwd === root || cwd.startsWith(`${root}/`);
     });
   // Host of what the user is looking at: the open session's, else the new
   // chat's, else the sidebar's selection. Undefined is this machine.
-  const currentHostId = selectedSession ? remoteHostId(selectedSession.hostId) : newSessionCwd !== null ? newSessionHostId : activeHostId;
+  const currentHostId = selectedSession
+    ? remoteHostId(selectedSession.hostId)
+    : newSessionCwd !== null
+      ? newSessionHostId
+      : activeHostId;
   const remoteHost = currentHostId !== undefined;
   const workspaceHostId = currentHostId ?? LOCAL_HOST_ID;
-  const sidebarCwd = (activeHostId ?? LOCAL_HOST_ID) === workspaceHostId ? activeCwd : null;
+  const sidebarCwd =
+    (activeHostId ?? LOCAL_HOST_ID) === workspaceHostId ? activeCwd : null;
   const explorerCwd = selectedSession
-    ? (sessionWorktreeRemoved ? sidebarCwd : sessionCwd)
-    : newSessionPoolProject || activePoolProject ? null : newSessionCwd ?? sidebarCwd;
+    ? sessionWorktreeRemoved
+      ? sidebarCwd
+      : sessionCwd
+    : newSessionPoolProject || activePoolProject
+      ? null
+      : (newSessionCwd ?? sidebarCwd);
 
   // File-panel integrations: every action works on the active tab so the right
   // panel behaves like an editor toolbar, not just a tab strip.
   const handleMentionActiveFile = useCallback(() => {
-    if (!activeFileTab || activeFileTab.sourceSessionId !== (selectedSession?.id ?? null)) return;
-    if (activeFileTab.hostId !== workspaceHostId) { toast.info(t("hosts.fileOtherHost")); return; }
-    handleAtMention(getRelativeFilePath(activeFileTab.filePath, activeFileTab.sourceCwd ?? undefined), false);
+    if (
+      !activeFileTab ||
+      activeFileTab.sourceSessionId !== (selectedSession?.id ?? null)
+    )
+      return;
+    if (activeFileTab.hostId !== workspaceHostId) {
+      toast.info(t("hosts.fileOtherHost"));
+      return;
+    }
+    handleAtMention(
+      getRelativeFilePath(
+        activeFileTab.filePath,
+        activeFileTab.sourceCwd ?? undefined,
+      ),
+      false,
+    );
   }, [activeFileTab, selectedSession?.id, handleAtMention, workspaceHostId, t]);
 
   const handleCopyActiveFilePath = useCallback(() => {
     if (!activeFileTab) return;
-    const relative = getRelativeFilePath(activeFileTab.filePath, activeFileTab.sourceCwd ?? undefined);
+    const relative = getRelativeFilePath(
+      activeFileTab.filePath,
+      activeFileTab.sourceCwd ?? undefined,
+    );
     copyText(relative).then(
       () => toast.success(t("appShell.copied")),
       () => toast.error(t("appShell.commandCopyFailed")),
@@ -1711,7 +2429,12 @@ export function AppShell({ appName }: { appName: string }) {
   const handleDownloadActiveFile = useCallback(() => {
     if (!activeFileTab) return;
     const link = document.createElement("a");
-    link.href = getFileApiUrl(activeFileTab.filePath, "download", activeFileTab.hostId, activeFileTab.sourceSessionId);
+    link.href = getFileApiUrl(
+      activeFileTab.filePath,
+      "download",
+      activeFileTab.hostId,
+      activeFileTab.sourceSessionId,
+    );
     link.download = activeFileTab.label;
     document.body.appendChild(link);
     link.click();
@@ -1723,8 +2446,14 @@ export function AppShell({ appName }: { appName: string }) {
       toast.info(t("appShell.revealSourceSession"));
       return;
     }
-    if (activeFileTab.hostId !== workspaceHostId) { toast.info(t("hosts.fileOtherHost")); return; }
-    setRevealTarget({ path: activeFileTab.filePath, hostId: activeFileTab.hostId });
+    if (activeFileTab.hostId !== workspaceHostId) {
+      toast.info(t("hosts.fileOtherHost"));
+      return;
+    }
+    setRevealTarget({
+      path: activeFileTab.filePath,
+      hostId: activeFileTab.hostId,
+    });
     setRightView("explorer");
     setRightPanelOpen(true);
   }, [activeFileTab, selectedSession?.id, workspaceHostId, t]);
@@ -1740,7 +2469,7 @@ export function AppShell({ appName }: { appName: string }) {
   }, []);
 
   const handleRevealDone = useCallback(() => {
-    setRevealTarget((current) => current === revealTarget ? null : current);
+    setRevealTarget((current) => (current === revealTarget ? null : current));
   }, [revealTarget]);
 
   const handleToggleFileSearch = useCallback(() => {
@@ -1768,25 +2497,76 @@ export function AppShell({ appName }: { appName: string }) {
   }, [selectedSession]);
 
   // Show chat area if a session is selected, or if we have a cwd to start a new session in
-  const effectivePoolProject = selectedSession ? null : newSessionPoolProject ?? activePoolProject;
-  const effectiveNewSessionCwd = effectivePoolProject ? null : newSessionCwd ?? (selectedSession === null && activeCwd ? activeCwd : null);
-  const newSessionHost = effectivePoolProject ? undefined : newSessionCwd !== null ? newSessionHostId : activeHostId;
-  const newSessionHostKey = effectivePoolProject ? projectTargetId(effectivePoolProject) : newSessionHost ?? LOCAL_HOST_ID;
-  const newSessionProject = effectivePoolProject ? projectIdentity(effectivePoolProject) : (workspaceOptions.cwd === effectiveNewSessionCwd && workspaceOptions.hostId === newSessionHostKey ? workspaceOptions.selectedProject : null) ?? effectiveNewSessionCwd ?? "";
+  const effectivePoolProject = selectedSession
+    ? null
+    : (newSessionPoolProject ?? activePoolProject);
+  const effectiveNewSessionCwd = effectivePoolProject
+    ? null
+    : (newSessionCwd ??
+      (selectedSession === null && activeCwd ? activeCwd : null));
+  const newSessionHost = effectivePoolProject
+    ? undefined
+    : newSessionCwd !== null
+      ? newSessionHostId
+      : activeHostId;
+  const newSessionHostKey = effectivePoolProject
+    ? projectTargetId(effectivePoolProject)
+    : (newSessionHost ?? LOCAL_HOST_ID);
+  const newSessionProject = effectivePoolProject
+    ? projectIdentity(effectivePoolProject)
+    : ((workspaceOptions.cwd === effectiveNewSessionCwd &&
+      workspaceOptions.hostId === newSessionHostKey
+        ? workspaceOptions.selectedProject
+        : null) ??
+      effectiveNewSessionCwd ??
+      "");
   // The panel's target is the group the sidebar lists the project under: the cluster for a member's pinned project. The real host (above) is where the session runs.
-  const newSessionGroupKey = projectTargetId(effectivePoolProject ?? { hostId: newSessionHostKey }, pools);
+  const newSessionGroupKey = projectTargetId(
+    effectivePoolProject ?? { hostId: newSessionHostKey },
+    pools,
+  );
   // Pool projects first (stable), as in the sidebar's cluster group.
-  const hostProjects = workspaceOptions.projects.filter((project) => projectTargetId(project, pools) === newSessionGroupKey).sort((a, b) => Number(Boolean(b.poolId)) - Number(Boolean(a.poolId)));
+  const hostProjects = workspaceOptions.projects
+    .filter((project) => projectTargetId(project, pools) === newSessionGroupKey)
+    .sort((a, b) => Number(Boolean(b.poolId)) - Number(Boolean(a.poolId)));
   // Two members' projects can share a path, so a non-pool option's value carries its host.
-  const newSessionWorkspaceValue = effectivePoolProject ? projectIdentity(effectivePoolProject) : effectiveNewSessionCwd ? hostProjectKey(newSessionHost, effectiveNewSessionCwd) : "";
-  const memberIds = new Set(pools.flatMap((pool) => pool.members.map((member) => member.hostId)));
-  const creationTargets = [...(hosts ?? []).filter((host) => !memberIds.has(host.id) && (poolsLoaded || host.id === LOCAL_HOST_ID)).map((host) => ({ id: host.id, label: hostName(t, host) })), ...pools.map((pool) => ({ id: `pool:${pool.id}`, label: pool.label }))];
-  const chatHost = remoteHost ? hosts?.find((host) => host.id === currentHostId) : undefined;
+  const newSessionWorkspaceValue = effectivePoolProject
+    ? projectIdentity(effectivePoolProject)
+    : effectiveNewSessionCwd
+      ? hostProjectKey(newSessionHost, effectiveNewSessionCwd)
+      : "";
+  const memberIds = new Set(
+    pools.flatMap((pool) => pool.members.map((member) => member.hostId)),
+  );
+  const creationTargets = [
+    ...(hosts ?? [])
+      .filter(
+        (host) =>
+          !memberIds.has(host.id) && (poolsLoaded || host.id === LOCAL_HOST_ID),
+      )
+      .map((host) => ({ id: host.id, label: hostName(t, host) })),
+    ...pools.map((pool) => ({ id: `pool:${pool.id}`, label: pool.label })),
+  ];
+  const chatHost = remoteHost
+    ? hosts?.find((host) => host.id === currentHostId)
+    : undefined;
   const settingsHostId = activeCwd ? activeHostId : currentHostId;
   // What Settings act for, as settingsHostId picks it: the sidebar's project, else the open session, the new chat, the pool project.
-  const settingsTarget = activeCwd ? { hostId: activeHostId } : selectedSession ?? (newSessionCwd !== null ? { hostId: newSessionHostId } : effectivePoolProject);
-  const clusterSettings = isClusterTarget(settingsTarget, settingsHostId, pools);
-  const showChat = selectedSession !== null || effectiveNewSessionCwd !== null || effectivePoolProject !== null;
+  const settingsTarget = activeCwd
+    ? { hostId: activeHostId }
+    : (selectedSession ??
+      (newSessionCwd !== null
+        ? { hostId: newSessionHostId }
+        : effectivePoolProject));
+  const clusterSettings = isClusterTarget(
+    settingsTarget,
+    settingsHostId,
+    pools,
+  );
+  const showChat =
+    selectedSession !== null ||
+    effectiveNewSessionCwd !== null ||
+    effectivePoolProject !== null;
   const currentRate = generationSpeed?.current;
   const rate = currentRate ?? generationSpeed?.average;
   const speed = showChat ? formatGenerationSpeed(rate) : null;
@@ -1795,7 +2575,9 @@ export function AppShell({ appName }: { appName: string }) {
     const header = topBarRef.current;
     const details = mobileToolsRef.current;
     const content = mobileToolsContentRef.current;
-    const right = header?.querySelector<HTMLElement>("[data-topbar-right-group]");
+    const right = header?.querySelector<HTMLElement>(
+      "[data-topbar-right-group]",
+    );
     const tools = header?.querySelector<HTMLElement>(".shell-topbar-tools");
     if (!header || !details || !content || !right || !tools) return;
     const update = () => {
@@ -1807,20 +2589,30 @@ export function AppShell({ appName }: { appName: string }) {
       content.style.visibility = "hidden";
       content.style.display = "flex";
       details.open = true;
-      const children = Array.from(content.children).filter((child) =>
-        !["absolute", "fixed"].includes(getComputedStyle(child).position));
+      const children = Array.from(content.children).filter(
+        (child) =>
+          !["absolute", "fixed"].includes(getComputedStyle(child).position),
+      );
       const contentStyle = getComputedStyle(content);
       const headerStyle = getComputedStyle(header);
-      const controlsWidth = children.reduce((width, child) => {
-        const style = getComputedStyle(child);
-        return width + child.getBoundingClientRect().width
-          + parseFloat(style.marginLeft) + parseFloat(style.marginRight);
-      }, 0) + Math.max(0, children.length - 1) * parseFloat(contentStyle.columnGap);
-      const leftNeed = controlsWidth
-        + (tools.firstElementChild?.getBoundingClientRect().width ?? 0)
-        + parseFloat(getComputedStyle(tools).columnGap)
-        + parseFloat(headerStyle.paddingLeft);
-      const rightNeed = parseFloat(headerStyle.paddingRight) + right.offsetWidth;
+      const controlsWidth =
+        children.reduce((width, child) => {
+          const style = getComputedStyle(child);
+          return (
+            width +
+            child.getBoundingClientRect().width +
+            parseFloat(style.marginLeft) +
+            parseFloat(style.marginRight)
+          );
+        }, 0) +
+        Math.max(0, children.length - 1) * parseFloat(contentStyle.columnGap);
+      const leftNeed =
+        controlsWidth +
+        (tools.firstElementChild?.getBoundingClientRect().width ?? 0) +
+        parseFloat(getComputedStyle(tools).columnGap) +
+        parseFloat(headerStyle.paddingLeft);
+      const rightNeed =
+        parseFloat(headerStyle.paddingRight) + right.offsetWidth;
       const required = leftNeed + parseFloat(headerStyle.columnGap) + rightNeed;
       if (closed) details.open = false;
       content.style.display = display;
@@ -1832,8 +2624,9 @@ export function AppShell({ appName }: { appName: string }) {
         "--topbar-side",
         `${Math.ceil(Math.max(tools.offsetLeft + tools.offsetWidth, header.clientWidth - right.offsetLeft)) + 8}px`,
       );
-      const titleFits = header.querySelector(".shell-topbar-center") === null
-        || 2 * Math.max(leftNeed, rightNeed) + 216 <= header.clientWidth;
+      const titleFits =
+        header.querySelector(".shell-topbar-center") === null ||
+        2 * Math.max(leftNeed, rightNeed) + 216 <= header.clientWidth;
       const compact = required > header.clientWidth || !titleFits;
       if (compact && details.dataset.compact !== "true" && hadControlsFocus) {
         restoreToolsFocusRef.current = true;
@@ -1867,7 +2660,10 @@ export function AppShell({ appName }: { appName: string }) {
   });
   useEffect(() => {
     if (sidebarHistory.exitNeedsNativeBack) {
-      toast.info(t("appShell.exitNativeBackTitle"), t("appShell.exitNativeBackDescription"));
+      toast.info(
+        t("appShell.exitNativeBackTitle"),
+        t("appShell.exitNativeBackDescription"),
+      );
     }
   }, [sidebarHistory.exitNeedsNativeBack, t]);
 
@@ -1881,15 +2677,23 @@ export function AppShell({ appName }: { appName: string }) {
 
     syncWindowTitle();
     const observer = new MutationObserver(syncWindowTitle);
-    observer.observe(document.head, { childList: true, subtree: true, characterData: true });
+    observer.observe(document.head, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
     return () => observer.disconnect();
   }, [windowTitle]);
 
   // The sidebar search drives the chat's find-in-page highlights.
   const [chatSearchQuery, setChatSearchQuery] = useState("");
   // One jump per click: dropped once the chat used it, so reopening that session later starts at the bottom.
-  const [searchMatchTarget, setSearchMatchTarget] = useState<SearchMatchTarget | null>(null);
-  const clearSearchMatchTarget = useCallback(() => setSearchMatchTarget(null), []);
+  const [searchMatchTarget, setSearchMatchTarget] =
+    useState<SearchMatchTarget | null>(null);
+  const clearSearchMatchTarget = useCallback(
+    () => setSearchMatchTarget(null),
+    [],
+  );
   // The sidebar reports only changes: a pending target belongs to the query it was picked under.
   const handleSearchQueryChange = useCallback((query: string) => {
     setChatSearchQuery(query);
@@ -1897,7 +2701,9 @@ export function AppShell({ appName }: { appName: string }) {
   }, []);
   // A target still pending when another session opens must not jump when its own session reopens.
   useEffect(() => {
-    setSearchMatchTarget((target) => (target && target.sessionId !== selectedSession?.id ? null : target));
+    setSearchMatchTarget((target) =>
+      target && target.sessionId !== selectedSession?.id ? null : target,
+    );
   }, [selectedSession?.id]);
 
   const sidebarContent = (
@@ -1912,8 +2718,18 @@ export function AppShell({ appName }: { appName: string }) {
       refreshKey={refreshKey}
       onSessionDeleted={handleSessionDeleted}
       selectedCwd={selectedSession?.cwd ?? newSessionCwd ?? null}
-      selectedHostId={selectedSession ? selectedSession.hostId ?? LOCAL_HOST_ID : newSessionHostId ?? LOCAL_HOST_ID}
-      selectedLogicalProjectKey={selectedSession?.poolId ? selectedSession.projectKey : effectivePoolProject ? projectIdentity(effectivePoolProject) : null}
+      selectedHostId={
+        selectedSession
+          ? (selectedSession.hostId ?? LOCAL_HOST_ID)
+          : (newSessionHostId ?? LOCAL_HOST_ID)
+      }
+      selectedLogicalProjectKey={
+        selectedSession?.poolId
+          ? selectedSession.projectKey
+          : effectivePoolProject
+            ? projectIdentity(effectivePoolProject)
+            : null
+      }
       onCwdChange={handleCwdChange}
       onWorkspaceOptionsChange={handleWorkspaceOptionsChange}
       onWorktreeContextChange={setWorktreeCtx}
@@ -1922,7 +2738,7 @@ export function AppShell({ appName }: { appName: string }) {
       setAddProjectOpen={openAddProject}
       usageVisible={providerUsageVisible}
       settingsOpen={Boolean(settingsTab)}
-      onOpenSettings={() => setSettingsTab((prev) => prev ? null : "general")}
+      onOpenSettings={() => setSettingsTab((prev) => (prev ? null : "general"))}
       onOpenArchive={() => setArchiveBrowserOpen(true)}
       navigation={sidebarNavigation}
       updateAvailable={Boolean(appUpdate?.updateAvailable)}
@@ -1934,62 +2750,92 @@ export function AppShell({ appName }: { appName: string }) {
 
   return (
     <>
-    <ToastProvider>
-      <ConfirmDialog
-        open={sidebarHistory.exitConfirmationOpen}
-        onOpenChange={(open) => { if (!open) sidebarHistory.cancelExit(); }}
-        title={t("appShell.exitTitle")}
-        description={t("appShell.exitDescription")}
-        confirmLabel={t("appShell.exitLeave")}
-        cancelLabel={t("appShell.exitStay")}
-        danger
-        onConfirm={sidebarHistory.leave}
-      />
-      <ConfirmDialog
-        open={pendingOpen !== null}
-        onOpenChange={(open) => { if (!open) dismissPendingOpen(); }}
-        title={t(shownOpen?.kind === "file" ? "appShell.openFileTitle" : shownOpen?.crossSession ? "appShell.openUrlTitle" : "appShell.openUrlSameSessionTitle")}
-        description={t(shownOpen?.crossSession ? "appShell.openUrlDescription" : "appShell.openUrlSameSessionDescription", { url: shownOpen?.target ?? "" })}
-        confirmLabel={t("appShell.openUrlConfirm")}
-        cancelLabel={t("appShell.openUrlCancel")}
-        onConfirm={() => {
-          if (pendingOpen?.kind === "url") window.open(pendingOpen.target, "_blank", "noopener,noreferrer");
-          else if (pendingOpen) {
-            // The file panel is hidden behind full-page Settings.
-            setSettingsTab(null);
-            handleOpenFile(pendingOpen.target, pendingOpen.name, pendingOpen.source);
-          }
-          dismissPendingOpen();
-        }}
-      />
-      <CommandPaletteMount
-        onSelectSession={handleSelectSession}
-        onNewSession={() => {
-          // An empty cwd is truthy, so showChat would render the shell while
-          // useAgentSession refuses to start — every send a silent no-op.
-          // Fall back to the server's default cwd (~/omp-cwd-<date>) instead.
-          if (activeCwd || activePoolProject) {
-            handleNewSession(crypto.randomUUID(), activeCwd, activeHostId, activePoolProject ?? undefined);
-            return;
-          }
-          const targetHost = currentHostId ?? LOCAL_HOST_ID;
-          const sourceVersion = navViewVersionRef.current;
-          void fetch(`/api/default-cwd?${new URLSearchParams({ hostId: targetHost })}`, { method: "POST" })
-            .then(async (response) => {
-              if (!response.ok) throw new Error(`HTTP ${response.status}`);
-              const data = (await response.json()) as { cwd?: string };
-              if (!data.cwd) throw new Error("Empty cwd returned");
-              return data;
-            })
-            .then((data) => {
-              if (!data.cwd) throw new Error("Empty cwd returned");
-              if (navViewVersionRef.current === sourceVersion) handleNewSession(crypto.randomUUID(), data.cwd, targetHost);
-            })
-            .catch(() => toast.error(translate("errors.generic")));
-        }}
-        currentModel={null}
-      />
-    <style>{`
+      <ToastProvider>
+        <ConfirmDialog
+          open={sidebarHistory.exitConfirmationOpen}
+          onOpenChange={(open) => {
+            if (!open) sidebarHistory.cancelExit();
+          }}
+          title={t("appShell.exitTitle")}
+          description={t("appShell.exitDescription")}
+          confirmLabel={t("appShell.exitLeave")}
+          cancelLabel={t("appShell.exitStay")}
+          danger
+          onConfirm={sidebarHistory.leave}
+        />
+        <ConfirmDialog
+          open={pendingOpen !== null}
+          onOpenChange={(open) => {
+            if (!open) dismissPendingOpen();
+          }}
+          title={t(
+            shownOpen?.kind === "file"
+              ? "appShell.openFileTitle"
+              : shownOpen?.crossSession
+                ? "appShell.openUrlTitle"
+                : "appShell.openUrlSameSessionTitle",
+          )}
+          description={t(
+            shownOpen?.crossSession
+              ? "appShell.openUrlDescription"
+              : "appShell.openUrlSameSessionDescription",
+            { url: shownOpen?.target ?? "" },
+          )}
+          confirmLabel={t("appShell.openUrlConfirm")}
+          cancelLabel={t("appShell.openUrlCancel")}
+          onConfirm={() => {
+            if (pendingOpen?.kind === "url")
+              window.open(pendingOpen.target, "_blank", "noopener,noreferrer");
+            else if (pendingOpen) {
+              // The file panel is hidden behind full-page Settings.
+              setSettingsTab(null);
+              handleOpenFile(
+                pendingOpen.target,
+                pendingOpen.name,
+                pendingOpen.source,
+              );
+            }
+            dismissPendingOpen();
+          }}
+        />
+        <CommandPaletteMount
+          onSelectSession={handleSelectSession}
+          onNewSession={() => {
+            // An empty cwd is truthy, so showChat would render the shell while
+            // useAgentSession refuses to start — every send a silent no-op.
+            // Fall back to the server's default cwd (~/omp-cwd-<date>) instead.
+            if (activeCwd || activePoolProject) {
+              handleNewSession(
+                crypto.randomUUID(),
+                activeCwd,
+                activeHostId,
+                activePoolProject ?? undefined,
+              );
+              return;
+            }
+            const targetHost = currentHostId ?? LOCAL_HOST_ID;
+            const sourceVersion = navViewVersionRef.current;
+            void fetch(
+              `/api/default-cwd?${new URLSearchParams({ hostId: targetHost })}`,
+              { method: "POST" },
+            )
+              .then(async (response) => {
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = (await response.json()) as { cwd?: string };
+                if (!data.cwd) throw new Error("Empty cwd returned");
+                return data;
+              })
+              .then((data) => {
+                if (!data.cwd) throw new Error("Empty cwd returned");
+                if (navViewVersionRef.current === sourceVersion)
+                  handleNewSession(crypto.randomUUID(), data.cwd, targetHost);
+              })
+              .catch(() => toast.error(translate("errors.generic")));
+          }}
+          currentModel={null}
+        />
+        <style>
+          {`
       @keyframes session-info-pop {
         0% {
           opacity: 0;
@@ -2043,763 +2889,1322 @@ export function AppShell({ appName }: { appName: string }) {
         }
       }
     `}
-    </style>
-    <a href="#main-content" className="skip-link">{t("appShell.skipToContent")}</a>
-    <div style={{ display: "flex", height: "100%", flex: 1, minHeight: 0, minWidth: 0, overflow: "hidden", background: "var(--bg)" }}>
-      {/* Left sidebar: hidden on full-page Settings */}
-      {!settingsTab && (
-        <>
-      <nav
-        id="workspace-sidebar"
-        role={isMobile ? "dialog" : undefined}
-        aria-modal={isMobile ? true : undefined}
-        tabIndex={-1}
-        ref={sidebarContainerRef}
-        className={`sidebar-container${sidebarOpen ? " sidebar-open" : " sidebar-closed"}${mobileSidebarReady ? "" : " sidebar-mobile-pending"}${sidebarResizing ? " sidebar-resizing" : ""}`}
-        aria-label={t("projects.heading")}
-        aria-hidden={mobileSidebarReady && (!sidebarOpen || rightPanelIsModal) ? true : undefined}
-        inert={mobileSidebarReady && (!sidebarOpen || rightPanelIsModal) ? true : undefined}
-        style={{
-          background: "var(--bg-panel)",
-          borderRight: isMobile ? "none" : "1px solid var(--border)",
-          display: "flex",
-          flexDirection: "column",
-          flexShrink: 0,
-          zIndex: 200,
-          // Desktop-only: the width is user-adjustable via the resize handle.
-          ...(!isMobile ? { "--sidebar-width": `${sidebarWidth}px` } : {}),
-        }}
-      >
-        {sidebarContent}
-      </nav>
-
-      {/* Resize handle — desktop only, hidden while the sidebar is closed */}
-      {!isMobile && sidebarOpen && (
+        </style>
+        <a href="#main-content" className="skip-link">
+          {t("appShell.skipToContent")}
+        </a>
         <div
-          className="sidebar-resize-handle"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label={t("appShell.resizeSidebar")}
-          tabIndex={0}
-          onMouseDown={handleSidebarResizeStart}
-          onDoubleClick={resetSidebarWidth}
-          onKeyDown={handleSidebarResizeKey}
-          title={t("appShell.resizeSidebarTitle")}
           style={{
-            width: 5,
-            flexShrink: 0,
-            marginLeft: -5,
-            cursor: "col-resize",
-            background: "transparent",
-            zIndex: 205,
-            outline: "none",
-            transition: "background var(--dur-fast) var(--ease-out-warm)",
+            display: "flex",
+            height: "100%",
+            flex: 1,
+            minHeight: 0,
+            minWidth: 0,
+            overflow: "hidden",
+            background: "var(--bg)",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "color-mix(in srgb, var(--accent) 35%, transparent)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-          onFocus={(e) => { e.currentTarget.style.background = "color-mix(in srgb, var(--accent) 35%, transparent)"; }}
-          onBlur={(e) => { e.currentTarget.style.background = "transparent"; }}
-        />
-      )}
-        </>
-      )}
-
-      {/* Center: chat */}
-      <main id="main-content" tabIndex={-1} inert={rightPanelIsModal ? true : undefined} style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0, overflow: "hidden" }}>
-        {settingsTab ? (
-          <SettingsConfig
-            activeTab={settingsTab}
-            toolCallsDefaultCollapsed={toolCallsDefaultCollapsed}
-            onToolCallsDefaultCollapsedChange={handleToolCallsDefaultCollapsedChange}
-            hideToolActivity={hideToolActivity}
-            onHideToolActivityChange={handleHideToolActivityChange}
-            neverFoldActivity={neverFoldActivity}
-            onNeverFoldActivityChange={handleNeverFoldActivityChange}
-            showToolCallsUnfolded={showToolCallsUnfolded}
-            onShowToolCallsUnfoldedChange={handleShowToolCallsUnfoldedChange}
-            expandThinkingByDefault={expandThinkingByDefault}
-            onExpandThinkingByDefaultChange={handleExpandThinkingByDefaultChange}
-            onHideThinkingBlockChange={setHideThinkingBlock}
-            providerUsageVisible={providerUsageVisible}
-            onProviderUsageVisibleChange={handleProviderUsageVisibleChange}
-            scopeNativeSelectAll={scopeNativeSelectAll}
-            onScopeNativeSelectAllChange={handleScopeNativeSelectAllChange}
-            openUrlAutomatically={openUrlAutomatically}
-            onOpenUrlAutomaticallyChange={handleOpenUrlAutomaticallyChange}
-            cwd={activeCwd ?? selectedSession?.cwd ?? newSessionCwd}
-            remoteHost={settingsHostId !== undefined}
-            cluster={clusterSettings}
-            sessionId={selectedSession?.id ?? null}
-            onModelsSaved={() => setModelsRefreshKey((k) => k + 1)}
-            onPluginsReloaded={() => setSessionKey((k) => k + 1)}
-            appUpdate={appUpdate}
-            onRefreshAppUpdate={refreshAppUpdate}
-            onRequestAppUpdate={requestAppUpdateFromSettings}
-            onSelectTab={setSettingsTab}
-            onClose={() => setSettingsTab(null)}
-          />
-        ) : (
-          <>
-        {/* Top bar: 3-zone segmented control bar */}
-        <div ref={topBarRef} className="shell-topbar" style={{
-          position: "relative",
-          alignItems: "center",
-          flexShrink: 0,
-          borderBottom: "1px solid var(--border)",
-          minHeight: "var(--shell-topbar-height)",
-          background: "var(--bg-panel)",
-          padding: isMobile ? "env(safe-area-inset-top, 0px) max(4px, env(safe-area-inset-right, 0px)) 0 max(4px, env(safe-area-inset-left, 0px))" : "0 8px",
-          gap: "0 8px",
-          minWidth: 0,
-        }}>
-          {/* Left Zone: Utility group (sidebar, theme, language) & session controls (history, branches, system) */}
-          <div className="shell-topbar-tools" style={{ display: "flex", alignItems: "center", gap: 4, height: isMobile ? 43 : 35, minWidth: 0, flexShrink: 0 }}>
-            <button
-              onClick={handleSidebarToggle}
-              aria-expanded={sidebarOpen}
-              aria-controls="workspace-sidebar"
-              title={sidebarOpen ? t("appShell.hideSidebar") : t("appShell.showSidebar")}
-              aria-label={sidebarOpen ? t("appShell.hideSidebar") : t("appShell.showSidebar")}
-              className="shell-toolbar-btn ui-focus-ring"
-            >
-              {sidebarOpen ? <PanelLeft size={16} strokeWidth={1.8} aria-hidden="true" /> : <Menu size={16} strokeWidth={1.8} aria-hidden="true" />}
-            </button>
-            <details
-              ref={mobileToolsRef}
-              className="shell-topbar-overflow"
-              data-compact={isMobile ? "true" : compactTopbar === null ? "pending" : compactTopbar}
-              open={isMobile ? undefined : compactTopbar ? undefined : true}
-              onToggle={(event) => {
-                if (!event.currentTarget.open) setActiveTopPanel(null);
-              }}
-            >
-              <summary
-                className="shell-toolbar-btn ui-focus-ring"
-                title={t("chatInput.moreControls")}
-                aria-label={t("chatInput.moreControls")}
-              >
-                <Ellipsis size={16} strokeWidth={1.8} aria-hidden="true" />
-              </summary>
-              <div ref={mobileToolsContentRef} className="shell-topbar-overflow-content">
-            <ThemeSwitcher />
-            <LanguageSwitcher />
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isMobile && mobileToolsRef.current) {
-                      mobileToolsRef.current.open = false;
-                      setActiveTopPanel(null);
-                    }
-                    window.dispatchEvent(new Event("omp:open-command-palette"));
-                  }}
-                  title={`${t("commandPalette.label")} (Ctrl/⌘ K)`}
-                  aria-label={t("commandPalette.label")}
-                  aria-keyshortcuts="Control+K Meta+K"
-                  className="shell-toolbar-btn ui-focus-ring"
-                >
-                  <Command size={16} strokeWidth={1.8} aria-hidden="true" />
-                </button>
-            {showChat && (
-              <>
-                <div className="shell-toolbar-divider" aria-hidden="true" />
-                <button
-                  onClick={handleViewFullHistory}
-                  disabled={!selectedSession}
-                  title={selectedSession ? t("appShell.fullHistory") : t("appShell.fullHistoryUnavailable")}
-                  aria-label={t("appShell.fullHistory")}
-                  className="shell-toolbar-btn ui-focus-ring"
-                >
-                  <History size={16} strokeWidth={1.8} aria-hidden="true" />
-                </button>
-                <BranchNavigator
-                  tree={branchTree}
-                  activeLeafId={branchActiveLeafId}
-                  onLeafChange={handleBranchLeafChange}
-                  inline
-                  containerRef={compactTopbar ? mobileToolsContentRef : topBarRef}
-                  open={activeTopPanel === "branches"}
-                  onToggle={() => toggleTopPanel("branches")}
-                  hasSession
-                />
-                <button
-                  ref={systemBtnRef}
-                  onClick={handleSystemPromptToggle}
-                  title={t("appShell.system")}
-                  aria-label={t("appShell.system")}
-                  aria-pressed={activeTopPanel === "system"}
-                  className="shell-toolbar-btn ui-focus-ring"
-                >
-                  <Terminal size={16} strokeWidth={1.8} aria-hidden="true" style={{ color: systemPrompt ? "var(--accent)" : undefined }} />
-                </button>
-              </>
-            )}
-              </div>
-          {activeTopPanel === "system" && (
-            <div data-top-panel className="dropdown-surface" style={{
-              position: "absolute",
-              // Compact: below the 48px tools bar, which clips its overflow (it scrolls sideways).
-              top: isMobile || compactTopbar ? "calc(100% + 56px)" : "calc(100% + 4px)",
-              left: isMobile ? 4 : 8,
-              right: "auto",
-              width: "auto",
-              minWidth: isMobile ? undefined : 420,
-              maxWidth: "min(680px, calc(100vw - 24px))",
-              maxHeight: isMobile || compactTopbar ? "min(70vh, calc(100dvh - 108px))" : "min(70vh, calc(100dvh - 56px))",
-              overflowY: "auto",
-              overflowX: "hidden",
-              zIndex: 500,
-            }}>
-              {activeTopPanel === "system" && (
-                <div className="session-info-popover" style={{
-                  background: "var(--bg-panel)",
-                  borderBottom: "1px solid var(--border)",
-                  boxShadow: "var(--shadow-pop)",
-                  minWidth: isMobile ? undefined : 420,
-                }}>
-                  {systemPrompt ? (
-                    <div style={{
-                      maxHeight: "min(600px, 75vh)",
-                      overflowY: "auto",
-                      padding: "12px 16px",
-                      color: "var(--text-muted)",
-                      fontSize: 12,
-                      lineHeight: 1.6,
-                      whiteSpace: "pre-wrap",
-                      fontFamily: "var(--font-mono)",
-                    }}>
-                      {systemPrompt}
-                    </div>
-                  ) : systemPrompt === "" ? (
-                    <div style={{ padding: "10px 16px", fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
-                      {t("appShell.systemPromptEmpty")}
-                    </div>
-                  ) : (
-                    <div style={{ padding: "10px 16px", fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
-                      {systemPromptLoading ? t("appShell.systemPromptLoading") : t("appShell.systemPromptLoadHint")}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-            </details>
-          </div>
-
-          {/* Center Zone: Workspace & Session Breadcrumb + Auto-name action */}
-          {showChat && (() => {
-            const effectiveProject = selectedSession?.projectRoot ?? selectedSession?.cwd ?? activeCwd ?? "";
-            const sessionTitle = selectedSession?.name || selectedSession?.firstMessage || t("appShell.newSession");
-            const hasMessages = Boolean(
-              selectedSession
-              && (sessionStats?.userMessages ?? selectedSession.messageCount) > 0,
-            );
-            const wandDisabled = !selectedSession || !hasMessages || autoNameStatus.kind === "naming";
-            const wandIsSuccess = autoNameStatus.kind === "success";
-            const wandIsError = autoNameStatus.kind === "error";
-            const wandLabel = autoNameStatus.kind === "naming"
-              ? t("appShell.generating")
-              : wandIsSuccess
-                ? t("appShell.titleUpdated")
-                : wandIsError
-                  ? t("appShell.generationFailed")
-                  : t("appShell.generateTitle");
-            const wandTooltip = !selectedSession
-              ? t("appShell.titleGenUnavailable")
-              : !hasMessages
-                ? t("appShell.titleGenNeedsMessage")
-                : wandIsError
-                  ? autoNameStatus.message
-                  : t("appShell.generateSessionTitle");
-
-            return (
-              <div
-                className="shell-topbar-center"
+        >
+          {/* Left sidebar: hidden on full-page Settings */}
+          {!settingsTab && (
+            <>
+              <nav
+                id="workspace-sidebar"
+                role={isMobile ? "dialog" : undefined}
+                aria-modal={isMobile ? true : undefined}
+                tabIndex={-1}
+                ref={sidebarContainerRef}
+                className={`sidebar-container${sidebarOpen ? " sidebar-open" : " sidebar-closed"}${mobileSidebarReady ? "" : " sidebar-mobile-pending"}${sidebarResizing ? " sidebar-resizing" : ""}`}
+                aria-label={t("projects.heading")}
+                aria-hidden={
+                  mobileSidebarReady && (!sidebarOpen || rightPanelIsModal)
+                    ? true
+                    : undefined
+                }
+                inert={
+                  mobileSidebarReady && (!sidebarOpen || rightPanelIsModal)
+                    ? true
+                    : undefined
+                }
                 style={{
-                  minWidth: 0,
-                  containerType: "inline-size",
-                  containerName: "breadcrumb",
+                  background: "var(--bg-panel)",
+                  borderRight: isMobile ? "none" : "1px solid var(--border)",
                   display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
+                  flexDirection: "column",
+                  flexShrink: 0,
+                  zIndex: 200,
+                  // Desktop-only: the width is user-adjustable via the resize handle.
+                  ...(!isMobile
+                    ? { "--sidebar-width": `${sidebarWidth}px` }
+                    : {}),
                 }}
               >
-                <div
-                  className="shell-topbar-breadcrumb"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                    height: 26,
-                    padding: "0 8px",
-                    borderRadius: "var(--radius-control)",
-                    background: "var(--bg-subtle)",
-                    border: "1px solid var(--border)",
-                    fontSize: 11,
-                    color: "var(--text-muted)",
-                    whiteSpace: "nowrap",
-                    minWidth: 0,
-                    width: "fit-content",
-                    justifyContent: "center",
-                    flexShrink: 1,
-                  }}
-                >
-                  {effectiveProject ? (
-                    <span className="shell-topbar-project-context" style={{ display: "contents" }}>
-                      <Folder size={12} strokeWidth={1.8} style={{ opacity: 0.6, flexShrink: 0 }} aria-hidden="true" />
-                      <span
-                        style={{
-                          fontWeight: 600,
-                          color: "var(--text)",
-                          flexShrink: 0,
-                          maxWidth: 120,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                        title={effectiveProject}
-                      >
-                        {projectLabel(effectiveProject)}
-                      </span>
-                      <span style={{ color: "var(--text-dim)", flexShrink: 0, opacity: 0.5 }}>/</span>
-                    </span>
-                  ) : null}
-                  <span
-                    style={{
-                      color: "var(--text)",
-                      fontWeight: 500,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      minWidth: 0,
-                    }}
-                    title={sessionTitle}
-                  >
-                    {sessionTitle}
-                  </span>
-                  {selectedSession && (
-                    <button
-                      type="button"
-                      onClick={() => void handleAutoName()}
-                      disabled={wandDisabled}
-                      title={wandTooltip}
-                      aria-label={wandLabel}
-                      className="ui-focus-ring"
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        width: 18,
-                        height: 18,
-                        padding: 0,
-                        marginLeft: 2,
-                        border: "none",
-                        borderRadius: 4,
-                        background: "transparent",
-                        color: wandIsSuccess ? "var(--accent)" : wandIsError ? "var(--status-error)" : "var(--text-dim)",
-                        cursor: wandDisabled ? "default" : "pointer",
-                        flexShrink: 0,
-                        opacity: autoNameStatus.kind === "naming" ? 1 : wandDisabled ? 0.35 : 0.75,
-                        transition: "color var(--dur-fast), opacity var(--dur-fast)",
-                      }}
-                    >
-                      {autoNameStatus.kind === "naming" ? (
-                        <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                          <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" opacity="0.25" />
-                          <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                        </svg>
-                      ) : wandIsSuccess ? (
-                        <Check size={12} strokeWidth={2} aria-hidden="true" />
-                      ) : (
-                        <Wand2 size={12} strokeWidth={1.8} aria-hidden="true" />
-                      )}
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })()}
+                {sidebarContent}
+              </nav>
 
-          {/* Right zone: speed, mobile session information, and the file-panel opener. */}
-          <div
-            data-topbar-right-group
+              {/* Resize handle — desktop only, hidden while the sidebar is closed */}
+              {!isMobile && sidebarOpen && (
+                <div
+                  className="sidebar-resize-handle"
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label={t("appShell.resizeSidebar")}
+                  tabIndex={0}
+                  onMouseDown={handleSidebarResizeStart}
+                  onDoubleClick={resetSidebarWidth}
+                  onKeyDown={handleSidebarResizeKey}
+                  title={t("appShell.resizeSidebarTitle")}
+                  style={{
+                    width: 5,
+                    flexShrink: 0,
+                    marginLeft: -5,
+                    cursor: "col-resize",
+                    background: "transparent",
+                    zIndex: 205,
+                    outline: "none",
+                    transition:
+                      "background var(--dur-fast) var(--ease-out-warm)",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background =
+                      "color-mix(in srgb, var(--accent) 35%, transparent)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.background =
+                      "color-mix(in srgb, var(--accent) 35%, transparent)";
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                  }}
+                />
+              )}
+            </>
+          )}
+
+          {/* Center: chat */}
+          <main
+            id="main-content"
+            tabIndex={-1}
+            inert={rightPanelIsModal ? true : undefined}
             style={{
-              marginLeft: "auto",
+              flex: 1,
               display: "flex",
-              alignItems: "center",
-              gap: isMobile ? 2 : 6,
-              height: isMobile ? 43 : "calc(var(--shell-topbar-height) - 1px)",
-              flexShrink: 1,
+              flexDirection: "column",
+              minHeight: 0,
               minWidth: 0,
+              overflow: "hidden",
             }}
           >
-            {hasGenerationSpeed && <div
-              className="shell-topbar-metrics"
-              style={{
-                flex: "0 1 calc(10ch + 33px)",
-                minWidth: 0,
-                fontSize: 11,
-                fontFamily: "var(--font-mono)",
-                containerType: "inline-size",
-                containerName: "topbar-speed",
-              }}
-            >
-            {/* Generation speed pill */}
-            {showChat && (() => {
-              if (!speed || rate == null) return null;
-              const isLive = currentRate != null;
-              const speedTitle = t(isLive ? "appShell.tooltipCurrentSpeed" : "appShell.tooltipAverageSpeed", {
-                value: `${rate.toFixed(1)} t/s`,
-              });
-
-              return (
+            {settingsTab ? (
+              <SettingsConfig
+                activeTab={settingsTab}
+                toolCallsDefaultCollapsed={toolCallsDefaultCollapsed}
+                onToolCallsDefaultCollapsedChange={
+                  handleToolCallsDefaultCollapsedChange
+                }
+                hideToolActivity={hideToolActivity}
+                onHideToolActivityChange={handleHideToolActivityChange}
+                neverFoldActivity={neverFoldActivity}
+                onNeverFoldActivityChange={handleNeverFoldActivityChange}
+                showToolCallsUnfolded={showToolCallsUnfolded}
+                onShowToolCallsUnfoldedChange={
+                  handleShowToolCallsUnfoldedChange
+                }
+                expandThinkingByDefault={expandThinkingByDefault}
+                onExpandThinkingByDefaultChange={
+                  handleExpandThinkingByDefaultChange
+                }
+                onHideThinkingBlockChange={setHideThinkingBlock}
+                providerUsageVisible={providerUsageVisible}
+                onProviderUsageVisibleChange={handleProviderUsageVisibleChange}
+                scopeNativeSelectAll={scopeNativeSelectAll}
+                onScopeNativeSelectAllChange={handleScopeNativeSelectAllChange}
+                openUrlAutomatically={openUrlAutomatically}
+                onOpenUrlAutomaticallyChange={handleOpenUrlAutomaticallyChange}
+                cwd={activeCwd ?? selectedSession?.cwd ?? newSessionCwd}
+                remoteHost={settingsHostId !== undefined}
+                cluster={clusterSettings}
+                sessionId={selectedSession?.id ?? null}
+                onModelsSaved={() => setModelsRefreshKey((k) => k + 1)}
+                onPluginsReloaded={() => setSessionKey((k) => k + 1)}
+                appUpdate={appUpdate}
+                onRefreshAppUpdate={refreshAppUpdate}
+                onRequestAppUpdate={requestAppUpdateFromSettings}
+                onSelectTab={setSettingsTab}
+                onClose={() => setSettingsTab(null)}
+              />
+            ) : (
+              <>
+                {/* Top bar: 3-zone segmented control bar */}
                 <div
-                  title={speedTitle}
-                  role="img"
-                  aria-label={speedTitle}
-                  className="shell-metric-pill shell-pill-extra"
+                  ref={topBarRef}
+                  className="shell-topbar"
                   style={{
-                    display: "inline-flex",
+                    position: "relative",
                     alignItems: "center",
-                    gap: 4,
-                    height: 26,
-                    padding: "0 8px",
-                    borderRadius: "var(--radius-control)",
-                    border: "1px solid var(--border)",
-                    background: "var(--bg-subtle)",
-                    color: isLive ? "var(--accent)" : "var(--text-muted)",
-                    fontSize: 11,
-                    fontFamily: "var(--font-mono)",
-                    fontVariantNumeric: "tabular-nums",
-                    whiteSpace: "nowrap",
-                    cursor: "default",
-                    width: "calc(10ch + 33px)",
                     flexShrink: 0,
+                    borderBottom: "1px solid var(--border)",
+                    minHeight: "var(--shell-topbar-height)",
+                    background: "var(--bg-panel)",
+                    padding: isMobile
+                      ? "env(safe-area-inset-top, 0px) max(4px, env(safe-area-inset-right, 0px)) 0 max(4px, env(safe-area-inset-left, 0px))"
+                      : "0 8px",
+                    gap: "0 8px",
+                    minWidth: 0,
                   }}
                 >
-                  {isLive ? (
-                    <Zap size={11} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0, color: "var(--accent)" }} />
-                  ) : (
-                    <span aria-hidden="true" style={{ width: 11, lineHeight: "11px", textAlign: "center", flexShrink: 0, color: "var(--text-dim)" }}>~</span>
-                  )}
-                  <span style={{ display: "inline-flex", gap: "1ch", fontWeight: isLive ? 600 : 400 }}>
-                    <span style={{ width: "5ch", textAlign: "right" }}>{speed.value}</span>
-                    <span style={{ width: "4ch" }}>{speed.unit}</span>
-                  </span>
-                </div>
-              );
-            })()}
-            </div>}
-            {isMobile && showChat && (
-              <div
-                ref={setSessionInfoContainer}
-                className="shell-session-info"
-                style={{ display: "flex", height: 44, flexShrink: 0, alignSelf: "flex-start" }}
-              />
-            )}
-            {!isMobile && <NotificationBell open={notificationsOpen} onOpenChange={setNotificationsOpen} />}
-            <button
-              type="button"
-              className="shell-toolbar-btn shell-panel-opener ui-focus-ring"
-              onClick={() => {
-                // Unread notifications turn the panel toggle into their shortcut.
-                if (opensNotifications) {
-                  setRightView("notifications");
-                  setRightPanelOpen(true);
-                } else {
-                  setRightPanelOpen((open) => !open);
-                }
-              }}
-              aria-expanded={rightPanelOpen}
-              aria-controls="workspace-file-panel"
-              aria-pressed={rightPanelOpen}
-              title={panelOpenerLabel}
-              aria-label={panelOpenerLabel}
-            >
-              <PanelRight size={16} strokeWidth={1.8} aria-hidden="true" />
-              {isMobile && unreadNotifications > 0 && (
-                <span aria-hidden="true" className="panel-opener-badge">
-                  {unreadNotifications > 99 ? "99+" : unreadNotifications}
-                </span>
-              )}
-            </button>
-          </div>
-
-        </div>
-
-        {/* Chat content */}
-        <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
-          {showChat ? (
-            <ChatWindow
-              key={sessionKey}
-              session={selectedSession}
-              newSessionCwd={effectiveNewSessionCwd}
-              newSessionHostId={newSessionHost}
-              newSessionCreationId={effectivePoolProject ? newSessionCreationId : undefined}
-              newSessionPoolId={effectivePoolProject?.poolId}
-              newSessionProjectId={effectivePoolProject?.projectId}
-              newSessionInitialization={effectivePoolProject ? newSessionCreation.initialization : undefined}
-              onNewSessionInitialization={handleNewSessionInitialization}
-              hostStatus={chatHost?.status}
-              hostLabel={chatHost ? hostName(t, chatHost) : undefined}
-              newSessionWorkspace={(effectiveNewSessionCwd || effectivePoolProject) && (
-                <div className="new-session-workspace">
-                  {creationTargets.length > 1 && (
-                    <>
-                      <label htmlFor="new-session-host" className="new-session-workspace-label">
-                        {t("hosts.pickerLabel")}
-                      </label>
-                      <div className="new-session-workspace-control">
-                        <span className="new-session-workspace-icon" aria-hidden="true">
-                          <Server size={17} strokeWidth={1.8} />
-                        </span>
-                        <select
-                          id="new-session-host"
-                          value={newSessionGroupKey}
-                          onChange={(event) => {
-                            const matches = workspaceOptions.projects.filter((project) => projectTargetId(project, pools) === event.target.value);
-                            const first = matches.find((project) => project.poolId) ?? matches[0];
-                            if (!first || event.target.value === newSessionGroupKey) return;
-                            suppressCwdRef.current = first.path;
-                            setActivePoolProject(first.poolId ? first : null);
-                            setActiveCwd(first.poolId ? null : first.path);
-                            setActiveHostId(first.poolId ? undefined : remoteHostId(first.hostId));
-                            handleNewSession(crypto.randomUUID(), first.poolId ? null : first.path, first.hostId, first);
-                          }}
-                        >
-                          {creationTargets.map((target) => (
-                            <option key={target.id} value={target.id} disabled={!workspaceOptions.projects.some((project) => projectTargetId(project, pools) === target.id)}>
-                              {target.label}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="new-session-workspace-chevron" size={16} strokeWidth={1.8} aria-hidden="true" />
-                      </div>
-                    </>
-                  )}
-                  <label id="new-session-workspace-label" htmlFor="new-session-workspace" className="new-session-workspace-label">
-                    {t("settingsConfig.chipWorkspace")}
-                  </label>
-                  <div className="new-session-workspace-control">
-                    <span className="new-session-workspace-icon" aria-hidden="true">
-                      <Folder size={17} strokeWidth={1.8} />
-                    </span>
-                    <select
-                      id="new-session-workspace"
-                      aria-describedby="new-session-workspace-path"
-                      value={newSessionWorkspaceValue}
-                      onChange={(event) => {
-                        const key = event.target.value;
-                        if (!key) { openAddProject(true, newSessionGroupKey); return; }
-                        const project = hostProjects.find((candidate) => projectIdentity(candidate) === key || (!candidate.poolId && hostProjectKey(candidate.hostId, candidate.path) === key));
-                        if (!project) return;
-                        suppressCwdRef.current = project.path;
-                        setActivePoolProject(project.poolId ? project : null);
-                        setActiveCwd(project.poolId ? null : project.path);
-                        setActiveHostId(project.poolId ? undefined : remoteHostId(project.hostId));
-                        handleNewSession(crypto.randomUUID(), project.poolId ? null : project.path, project.hostId, project);
+                  {/* Left Zone: Utility group (sidebar, theme, language) & session controls (history, branches, system) */}
+                  <div
+                    className="shell-topbar-tools"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      height: isMobile ? 43 : 35,
+                      minWidth: 0,
+                      flexShrink: 0,
+                    }}
+                  >
+                    <button
+                      onClick={handleSidebarToggle}
+                      aria-expanded={sidebarOpen}
+                      aria-controls="workspace-sidebar"
+                      title={
+                        sidebarOpen
+                          ? t("appShell.hideSidebar")
+                          : t("appShell.showSidebar")
+                      }
+                      aria-label={
+                        sidebarOpen
+                          ? t("appShell.hideSidebar")
+                          : t("appShell.showSidebar")
+                      }
+                      className="shell-toolbar-btn ui-focus-ring"
+                    >
+                      {sidebarOpen ? (
+                        <PanelLeft
+                          size={16}
+                          strokeWidth={1.8}
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <Menu size={16} strokeWidth={1.8} aria-hidden="true" />
+                      )}
+                    </button>
+                    <details
+                      ref={mobileToolsRef}
+                      className="shell-topbar-overflow"
+                      data-compact={
+                        isMobile
+                          ? "true"
+                          : compactTopbar === null
+                            ? "pending"
+                            : compactTopbar
+                      }
+                      open={
+                        isMobile ? undefined : compactTopbar ? undefined : true
+                      }
+                      onToggle={(event) => {
+                        if (!event.currentTarget.open) setActiveTopPanel(null);
                       }}
                     >
-                      {!effectivePoolProject && effectiveNewSessionCwd && !hostProjects.some((project) => foldedHostProjectKey(project.hostId, project.path) === foldedHostProjectKey(newSessionHost, newSessionProject)) && (
-                        <option value={newSessionWorkspaceValue}>{projectLabel(effectiveNewSessionCwd)}</option>
-                      )}
-                      {hostProjects.map((project) => {
-                        const name = project.alias ?? project.name ?? projectLabel(project.path);
-                        // A member's pinned project: its option names the node.
-                        const node = !project.poolId && projectTargetId(project, pools) !== (project.hostId ?? LOCAL_HOST_ID) ? hosts?.find((host) => host.id === (project.hostId ?? LOCAL_HOST_ID)) : undefined;
-                        return (
-                          <option key={projectIdentity(project)} value={project.poolId ? projectIdentity(project) : hostProjectKey(project.hostId, foldedHostProjectKey(project.hostId, project.path) === foldedHostProjectKey(newSessionHost, newSessionProject) ? effectiveNewSessionCwd ?? project.path : project.path)}>
-                            {node ? t("hosts.projectOnNode", { name, node: hostName(t, node) }) : name}
-                          </option>
-                        );
-                      })}
-                      <option value="">+ {t("projects.add")}</option>
-                    </select>
-                    <ChevronDown className="new-session-workspace-chevron" size={16} strokeWidth={1.8} aria-hidden="true" />
-                  </div>
-                  {/* The workspace's worktrees: picking one sets where the new
-                      session starts (same switch as the file panel's Worktrees tab). */}
-                  {worktreeCtx && !worktreeCtx.error && worktreeCtx.hostId === newSessionHostKey && worktreeCtx.worktrees.length > 1
-                    && comparableProjectPath(worktreeCtx.projectRoot) === comparableProjectPath(newSessionProject) && (
-                    <div className="new-session-workspace-control">
-                      <span className="new-session-workspace-icon" aria-hidden="true">
-                        <GitBranch size={17} strokeWidth={1.8} />
-                      </span>
-                      <select
-                        aria-label={t("sessionSidebar.switchWorktree")}
-                        aria-describedby="new-session-workspace-path"
-                        value={worktreeCtx.currentPath}
-                        onChange={(event) => worktreeCtx.select(event.target.value)}
+                      <summary
+                        className="shell-toolbar-btn ui-focus-ring"
+                        title={t("chatInput.moreControls")}
+                        aria-label={t("chatInput.moreControls")}
                       >
-                        {worktreeCtx.worktrees.map((wt) => (
-                          <option key={wt.path} value={wt.path}>{wt.branch ?? getFileName(wt.path)}</option>
-                        ))}
-                      </select>
-                      <ChevronDown className="new-session-workspace-chevron" size={16} strokeWidth={1.8} aria-hidden="true" />
-                    </div>
-                  )}
-                  <div id="new-session-workspace-path" className="new-session-workspace-path" title={effectivePoolProject?.origin ?? effectiveNewSessionCwd ?? undefined}>
-                    {effectivePoolProject?.origin ?? effectiveNewSessionCwd}
+                        <Ellipsis
+                          size={16}
+                          strokeWidth={1.8}
+                          aria-hidden="true"
+                        />
+                      </summary>
+                      <div
+                        ref={mobileToolsContentRef}
+                        className="shell-topbar-overflow-content"
+                      >
+                        <ThemeSwitcher />
+                        <LanguageSwitcher />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isMobile && mobileToolsRef.current) {
+                              mobileToolsRef.current.open = false;
+                              setActiveTopPanel(null);
+                            }
+                            window.dispatchEvent(
+                              new Event("omp:open-command-palette"),
+                            );
+                          }}
+                          title={`${t("commandPalette.label")} (Ctrl/⌘ K)`}
+                          aria-label={t("commandPalette.label")}
+                          aria-keyshortcuts="Control+K Meta+K"
+                          className="shell-toolbar-btn ui-focus-ring"
+                        >
+                          <Command
+                            size={16}
+                            strokeWidth={1.8}
+                            aria-hidden="true"
+                          />
+                        </button>
+                        {showChat && (
+                          <>
+                            <div
+                              className="shell-toolbar-divider"
+                              aria-hidden="true"
+                            />
+                            <button
+                              onClick={handleViewFullHistory}
+                              disabled={!selectedSession}
+                              title={
+                                selectedSession
+                                  ? t("appShell.fullHistory")
+                                  : t("appShell.fullHistoryUnavailable")
+                              }
+                              aria-label={t("appShell.fullHistory")}
+                              className="shell-toolbar-btn ui-focus-ring"
+                            >
+                              <History
+                                size={16}
+                                strokeWidth={1.8}
+                                aria-hidden="true"
+                              />
+                            </button>
+                            <BranchNavigator
+                              tree={branchTree}
+                              activeLeafId={branchActiveLeafId}
+                              onLeafChange={handleBranchLeafChange}
+                              inline
+                              containerRef={
+                                compactTopbar
+                                  ? mobileToolsContentRef
+                                  : topBarRef
+                              }
+                              open={activeTopPanel === "branches"}
+                              onToggle={() => toggleTopPanel("branches")}
+                              hasSession
+                            />
+                            <button
+                              ref={systemBtnRef}
+                              onClick={handleSystemPromptToggle}
+                              title={t("appShell.system")}
+                              aria-label={t("appShell.system")}
+                              aria-pressed={activeTopPanel === "system"}
+                              className="shell-toolbar-btn ui-focus-ring"
+                            >
+                              <Terminal
+                                size={16}
+                                strokeWidth={1.8}
+                                aria-hidden="true"
+                                style={{
+                                  color: systemPrompt
+                                    ? "var(--accent)"
+                                    : undefined,
+                                }}
+                              />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                      {activeTopPanel === "system" && (
+                        <div
+                          data-top-panel
+                          className="dropdown-surface"
+                          style={{
+                            position: "absolute",
+                            // Compact: below the 48px tools bar, which clips its overflow (it scrolls sideways).
+                            top:
+                              isMobile || compactTopbar
+                                ? "calc(100% + 56px)"
+                                : "calc(100% + 4px)",
+                            left: isMobile ? 4 : 8,
+                            right: "auto",
+                            width: "auto",
+                            minWidth: isMobile ? undefined : 420,
+                            maxWidth: "min(680px, calc(100vw - 24px))",
+                            maxHeight:
+                              isMobile || compactTopbar
+                                ? "min(70vh, calc(100dvh - 108px))"
+                                : "min(70vh, calc(100dvh - 56px))",
+                            overflowY: "auto",
+                            overflowX: "hidden",
+                            zIndex: 500,
+                          }}
+                        >
+                          {activeTopPanel === "system" && (
+                            <div
+                              className="session-info-popover"
+                              style={{
+                                background: "var(--bg-panel)",
+                                borderBottom: "1px solid var(--border)",
+                                boxShadow: "var(--shadow-pop)",
+                                minWidth: isMobile ? undefined : 420,
+                              }}
+                            >
+                              {systemPrompt ? (
+                                <div
+                                  style={{
+                                    maxHeight: "min(600px, 75vh)",
+                                    overflowY: "auto",
+                                    padding: "12px 16px",
+                                    color: "var(--text-muted)",
+                                    fontSize: 12,
+                                    lineHeight: 1.6,
+                                    whiteSpace: "pre-wrap",
+                                    fontFamily: "var(--font-mono)",
+                                  }}
+                                >
+                                  {systemPrompt}
+                                </div>
+                              ) : systemPrompt === "" ? (
+                                <div
+                                  style={{
+                                    padding: "10px 16px",
+                                    fontSize: 12,
+                                    color: "var(--text-muted)",
+                                    fontStyle: "italic",
+                                  }}
+                                >
+                                  {t("appShell.systemPromptEmpty")}
+                                </div>
+                              ) : (
+                                <div
+                                  style={{
+                                    padding: "10px 16px",
+                                    fontSize: 12,
+                                    color: "var(--text-muted)",
+                                    fontStyle: "italic",
+                                  }}
+                                >
+                                  {systemPromptLoading
+                                    ? t("appShell.systemPromptLoading")
+                                    : t("appShell.systemPromptLoadHint")}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </details>
                   </div>
-                </div>
-              )}
-              onAgentEnd={handleAgentEnd}
-              onSessionCreated={handleSessionCreated}
-              onSessionForked={handleSessionForked}
-              onSessionMoved={handleSessionMoved}
-              modelsRefreshKey={modelsRefreshKey}
-              chatInputRef={chatInputRef}
-              onOpenFile={selectedSession || !effectivePoolProject ? handleOpenFile : undefined}
-              onOpenUrl={handleSessionOpenUrl}
-              onBranchDataChange={handleBranchDataChange}
-              onSystemPromptChange={handleSystemPromptChange}
-              onSystemPromptLoaderChange={handleSystemPromptLoaderChange}
-              onSessionStatsChange={handleSessionStatsChange}
-              onSessionStatsPanelOpen={openSessionStatsPanel}
-              sessionInfoContainer={sessionInfoContainer}
-              onGenerationSpeedChange={handleGenerationSpeedChange}
-              onOpenProviders={() => setSettingsTab("providers")}
-              toolCallsDefaultCollapsed={toolCallsDefaultCollapsed}
-              hideToolActivity={hideToolActivity}
-              neverFoldActivity={neverFoldActivity}
-              showToolCallsUnfolded={showToolCallsUnfolded}
-              expandThinkingByDefault={expandThinkingByDefault}
-              hideThinkingBlock={hideThinkingBlock}
-              searchQuery={chatSearchQuery}
-              searchTarget={searchMatchTarget && searchMatchTarget.sessionId === selectedSession?.id ? searchMatchTarget : null}
-              onSearchTargetHandled={clearSearchMatchTarget}
-            />
-          ) : initialCwdStatus === "validating" ? (
-            <WorkspaceState
-              kind="loading"
-              title={t("appShell.openingWorkspace")}
-              detail={<span className="workspace-state-path">{initialNavigation.requestedCwd}</span>}
-            />
-          ) : initialCwdStatus === "error" ? (
-            <WorkspaceState
-              kind="error"
-              title={t("appShell.unableToOpenWorkspace")}
-              detail={(
-                <>
-                  <span className="workspace-state-path">{initialNavigation.requestedCwd}</span>
-                  <span>{initialCwdError}</span>
-                </>
-              )}
-            />
-          ) : !showPlaceholder ? (
-            <PanelLoadingFallback />
-          ) : activeCwd ? (
-            <WorkspaceState kind="empty" title={t("appShell.selectSessionHint")} />
-          ) : (
-              <div style={{ position: "absolute", top: 12, left: 12, display: "flex", alignItems: "flex-start", gap: 8, userSelect: "none" }}>
-                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7, flexShrink: 0 }}>
-                  <line x1="20" y1="12" x2="4" y2="12" /><polyline points="10 6 4 12 10 18" />
-                </svg>
-                <div>
-                  <div className="display-serif" style={{ fontSize: 20, color: "var(--text)", marginBottom: 8 }}>{t("appShell.getStarted")}</div>
-                  <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.8 }}>
-                    <span style={{ color: "var(--text-dim)", marginRight: 6 }}>1.</span>{t("appShell.getStartedStep1")}<br />
-                    <span style={{ color: "var(--text-dim)", marginRight: 6 }}>2.</span>
-                    {(() => {
-                      // One translatable sentence; the {models} slot is rendered
-                      // as the emphasized button name so word order stays free.
-                      const [before, after] = t("appShell.getStartedStep2").split("{models}");
+
+                  {/* Center Zone: Workspace & Session Breadcrumb + Auto-name action */}
+                  {showChat &&
+                    (() => {
+                      const effectiveProject =
+                        selectedSession?.projectRoot ??
+                        selectedSession?.cwd ??
+                        activeCwd ??
+                        "";
+                      const sessionTitle =
+                        selectedSession?.name ||
+                        selectedSession?.firstMessage ||
+                        t("appShell.newSession");
+                      const hasMessages = Boolean(
+                        selectedSession &&
+                        (sessionStats?.userMessages ??
+                          selectedSession.messageCount) > 0,
+                      );
+                      const wandDisabled =
+                        !selectedSession ||
+                        !hasMessages ||
+                        autoNameStatus.kind === "naming";
+                      const wandIsSuccess = autoNameStatus.kind === "success";
+                      const wandIsError = autoNameStatus.kind === "error";
+                      const wandLabel =
+                        autoNameStatus.kind === "naming"
+                          ? t("appShell.generating")
+                          : wandIsSuccess
+                            ? t("appShell.titleUpdated")
+                            : wandIsError
+                              ? t("appShell.generationFailed")
+                              : t("appShell.generateTitle");
+                      const wandTooltip = !selectedSession
+                        ? t("appShell.titleGenUnavailable")
+                        : !hasMessages
+                          ? t("appShell.titleGenNeedsMessage")
+                          : wandIsError
+                            ? autoNameStatus.message
+                            : t("appShell.generateSessionTitle");
+
                       return (
-                        <>
-                          {before}
-                          <strong style={{ color: "var(--text)" }}>{t("appShell.models")}</strong>
-                          {after}
-                        </>
+                        <div
+                          className="shell-topbar-center"
+                          style={{
+                            minWidth: 0,
+                            containerType: "inline-size",
+                            containerName: "breadcrumb",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <div
+                            className="shell-topbar-breadcrumb"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              height: 26,
+                              padding: "0 8px",
+                              borderRadius: "var(--radius-control)",
+                              background: "var(--bg-subtle)",
+                              border: "1px solid var(--border)",
+                              fontSize: 11,
+                              color: "var(--text-muted)",
+                              whiteSpace: "nowrap",
+                              minWidth: 0,
+                              width: "fit-content",
+                              justifyContent: "center",
+                              flexShrink: 1,
+                            }}
+                          >
+                            {effectiveProject ? (
+                              <span
+                                className="shell-topbar-project-context"
+                                style={{ display: "contents" }}
+                              >
+                                <Folder
+                                  size={12}
+                                  strokeWidth={1.8}
+                                  style={{ opacity: 0.6, flexShrink: 0 }}
+                                  aria-hidden="true"
+                                />
+                                <span
+                                  style={{
+                                    fontWeight: 600,
+                                    color: "var(--text)",
+                                    flexShrink: 0,
+                                    maxWidth: 120,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                  title={effectiveProject}
+                                >
+                                  {projectLabel(effectiveProject)}
+                                </span>
+                                <span
+                                  style={{
+                                    color: "var(--text-dim)",
+                                    flexShrink: 0,
+                                    opacity: 0.5,
+                                  }}
+                                >
+                                  /
+                                </span>
+                              </span>
+                            ) : null}
+                            <span
+                              style={{
+                                color: "var(--text)",
+                                fontWeight: 500,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                minWidth: 0,
+                              }}
+                              title={sessionTitle}
+                            >
+                              {sessionTitle}
+                            </span>
+                            {selectedSession && (
+                              <button
+                                type="button"
+                                onClick={() => void handleAutoName()}
+                                disabled={wandDisabled}
+                                title={wandTooltip}
+                                aria-label={wandLabel}
+                                className="ui-focus-ring"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: 18,
+                                  height: 18,
+                                  padding: 0,
+                                  marginLeft: 2,
+                                  border: "none",
+                                  borderRadius: 4,
+                                  background: "transparent",
+                                  color: wandIsSuccess
+                                    ? "var(--accent)"
+                                    : wandIsError
+                                      ? "var(--status-error)"
+                                      : "var(--text-dim)",
+                                  cursor: wandDisabled ? "default" : "pointer",
+                                  flexShrink: 0,
+                                  opacity:
+                                    autoNameStatus.kind === "naming"
+                                      ? 1
+                                      : wandDisabled
+                                        ? 0.35
+                                        : 0.75,
+                                  transition:
+                                    "color var(--dur-fast), opacity var(--dur-fast)",
+                                }}
+                              >
+                                {autoNameStatus.kind === "naming" ? (
+                                  <svg
+                                    className="animate-spin"
+                                    width="12"
+                                    height="12"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    aria-hidden="true"
+                                  >
+                                    <circle
+                                      cx="12"
+                                      cy="12"
+                                      r="9"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                      opacity="0.25"
+                                    />
+                                    <path
+                                      d="M21 12a9 9 0 0 0-9-9"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                      strokeLinecap="round"
+                                    />
+                                  </svg>
+                                ) : wandIsSuccess ? (
+                                  <Check
+                                    size={12}
+                                    strokeWidth={2}
+                                    aria-hidden="true"
+                                  />
+                                ) : (
+                                  <Wand2
+                                    size={12}
+                                    strokeWidth={1.8}
+                                    aria-hidden="true"
+                                  />
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       );
                     })()}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSidebarOpen(true);
-                      openAddProject(true);
+
+                  {/* Right zone: speed, mobile session information, and the file-panel opener. */}
+                  <div
+                    data-topbar-right-group
+                    style={{
+                      marginLeft: "auto",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: isMobile ? 2 : 6,
+                      height: isMobile
+                        ? 43
+                        : "calc(var(--shell-topbar-height) - 1px)",
+                      flexShrink: 1,
+                      minWidth: 0,
                     }}
-                    style={{ display: "flex", alignItems: "center", gap: 6, width: "fit-content", minHeight: 36, marginTop: 12, padding: "7px 10px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg-panel)", color: "var(--text)", cursor: "pointer", fontSize: 12, fontWeight: 600, boxShadow: "var(--shadow-card)" }}
-                    className="ui-focus-ring"
                   >
-                    <Folder size={14} strokeWidth={1.8} aria-hidden="true" />
-                    {t("appShell.openWorkspaces")}
-                  </button>
+                    {hasGenerationSpeed && (
+                      <div
+                        className="shell-topbar-metrics"
+                        style={{
+                          flex: "0 1 calc(10ch + 33px)",
+                          minWidth: 0,
+                          fontSize: 11,
+                          fontFamily: "var(--font-mono)",
+                          containerType: "inline-size",
+                          containerName: "topbar-speed",
+                        }}
+                      >
+                        {/* Generation speed pill */}
+                        {showChat &&
+                          (() => {
+                            if (!speed || rate == null) return null;
+                            const isLive = currentRate != null;
+                            const speedTitle = t(
+                              isLive
+                                ? "appShell.tooltipCurrentSpeed"
+                                : "appShell.tooltipAverageSpeed",
+                              {
+                                value: `${rate.toFixed(1)} t/s`,
+                              },
+                            );
+
+                            return (
+                              <div
+                                title={speedTitle}
+                                role="img"
+                                aria-label={speedTitle}
+                                className="shell-metric-pill shell-pill-extra"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                  height: 26,
+                                  padding: "0 8px",
+                                  borderRadius: "var(--radius-control)",
+                                  border: "1px solid var(--border)",
+                                  background: "var(--bg-subtle)",
+                                  color: isLive
+                                    ? "var(--accent)"
+                                    : "var(--text-muted)",
+                                  fontSize: 11,
+                                  fontFamily: "var(--font-mono)",
+                                  fontVariantNumeric: "tabular-nums",
+                                  whiteSpace: "nowrap",
+                                  cursor: "default",
+                                  width: "calc(10ch + 33px)",
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {isLive ? (
+                                  <Zap
+                                    size={11}
+                                    strokeWidth={2}
+                                    aria-hidden="true"
+                                    style={{
+                                      flexShrink: 0,
+                                      color: "var(--accent)",
+                                    }}
+                                  />
+                                ) : (
+                                  <span
+                                    aria-hidden="true"
+                                    style={{
+                                      width: 11,
+                                      lineHeight: "11px",
+                                      textAlign: "center",
+                                      flexShrink: 0,
+                                      color: "var(--text-dim)",
+                                    }}
+                                  >
+                                    ~
+                                  </span>
+                                )}
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    gap: "1ch",
+                                    fontWeight: isLive ? 600 : 400,
+                                  }}
+                                >
+                                  <span
+                                    style={{ width: "5ch", textAlign: "right" }}
+                                  >
+                                    {speed.value}
+                                  </span>
+                                  <span style={{ width: "4ch" }}>
+                                    {speed.unit}
+                                  </span>
+                                </span>
+                              </div>
+                            );
+                          })()}
+                      </div>
+                    )}
+                    {isMobile && showChat && (
+                      <div
+                        ref={setSessionInfoContainer}
+                        className="shell-session-info"
+                        style={{
+                          display: "flex",
+                          height: 44,
+                          flexShrink: 0,
+                          alignSelf: "flex-start",
+                        }}
+                      />
+                    )}
+                    {!isMobile && (
+                      <NotificationBell
+                        open={notificationsOpen}
+                        onOpenChange={setNotificationsOpen}
+                      />
+                    )}
+                    <button
+                      type="button"
+                      className="shell-toolbar-btn shell-panel-opener ui-focus-ring"
+                      onClick={() => {
+                        // Unread notifications turn the panel toggle into their shortcut.
+                        if (opensNotifications) {
+                          setRightView("notifications");
+                          setRightPanelOpen(true);
+                        } else {
+                          setRightPanelOpen((open) => !open);
+                        }
+                      }}
+                      aria-expanded={rightPanelOpen}
+                      aria-controls="workspace-file-panel"
+                      aria-pressed={rightPanelOpen}
+                      title={panelOpenerLabel}
+                      aria-label={panelOpenerLabel}
+                    >
+                      <PanelRight
+                        size={16}
+                        strokeWidth={1.8}
+                        aria-hidden="true"
+                      />
+                      {isMobile && unreadNotifications > 0 && (
+                        <span aria-hidden="true" className="panel-opener-badge">
+                          {unreadNotifications > 99
+                            ? "99+"
+                            : unreadNotifications}
+                        </span>
+                      )}
+                    </button>
                   </div>
                 </div>
-              </div>
+
+                {/* Chat content */}
+                <div
+                  style={{ flex: 1, overflow: "hidden", position: "relative" }}
+                >
+                  {showChat ? (
+                    <ChatWindow
+                      key={sessionKey}
+                      session={selectedSession}
+                      newSessionCwd={effectiveNewSessionCwd}
+                      newSessionHostId={newSessionHost}
+                      newSessionCreationId={
+                        effectivePoolProject ? newSessionCreationId : undefined
+                      }
+                      newSessionPoolId={effectivePoolProject?.poolId}
+                      newSessionProjectId={effectivePoolProject?.projectId}
+                      newSessionInitialization={
+                        effectivePoolProject
+                          ? newSessionCreation.initialization
+                          : undefined
+                      }
+                      onNewSessionInitialization={
+                        handleNewSessionInitialization
+                      }
+                      hostStatus={chatHost?.status}
+                      hostLabel={chatHost ? hostName(t, chatHost) : undefined}
+                      newSessionWorkspace={
+                        (effectiveNewSessionCwd || effectivePoolProject) && (
+                          <div className="new-session-workspace">
+                            {creationTargets.length > 1 && (
+                              <>
+                                <label
+                                  htmlFor="new-session-host"
+                                  className="new-session-workspace-label"
+                                >
+                                  {t("hosts.pickerLabel")}
+                                </label>
+                                <div className="new-session-workspace-control">
+                                  <span
+                                    className="new-session-workspace-icon"
+                                    aria-hidden="true"
+                                  >
+                                    <Server size={17} strokeWidth={1.8} />
+                                  </span>
+                                  <select
+                                    id="new-session-host"
+                                    value={newSessionGroupKey}
+                                    onChange={(event) => {
+                                      const matches =
+                                        workspaceOptions.projects.filter(
+                                          (project) =>
+                                            projectTargetId(project, pools) ===
+                                            event.target.value,
+                                        );
+                                      const first =
+                                        matches.find(
+                                          (project) => project.poolId,
+                                        ) ?? matches[0];
+                                      if (
+                                        !first ||
+                                        event.target.value ===
+                                          newSessionGroupKey
+                                      )
+                                        return;
+                                      suppressCwdRef.current = first.path;
+                                      setActivePoolProject(
+                                        first.poolId ? first : null,
+                                      );
+                                      setActiveCwd(
+                                        first.poolId ? null : first.path,
+                                      );
+                                      setActiveHostId(
+                                        first.poolId
+                                          ? undefined
+                                          : remoteHostId(first.hostId),
+                                      );
+                                      handleNewSession(
+                                        crypto.randomUUID(),
+                                        first.poolId ? null : first.path,
+                                        first.hostId,
+                                        first,
+                                      );
+                                    }}
+                                  >
+                                    {creationTargets.map((target) => (
+                                      <option
+                                        key={target.id}
+                                        value={target.id}
+                                        disabled={
+                                          !workspaceOptions.projects.some(
+                                            (project) =>
+                                              projectTargetId(
+                                                project,
+                                                pools,
+                                              ) === target.id,
+                                          )
+                                        }
+                                      >
+                                        {target.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <ChevronDown
+                                    className="new-session-workspace-chevron"
+                                    size={16}
+                                    strokeWidth={1.8}
+                                    aria-hidden="true"
+                                  />
+                                </div>
+                              </>
+                            )}
+                            <label
+                              id="new-session-workspace-label"
+                              htmlFor="new-session-workspace"
+                              className="new-session-workspace-label"
+                            >
+                              {t("settingsConfig.chipWorkspace")}
+                            </label>
+                            <div className="new-session-workspace-control">
+                              <span
+                                className="new-session-workspace-icon"
+                                aria-hidden="true"
+                              >
+                                <Folder size={17} strokeWidth={1.8} />
+                              </span>
+                              <select
+                                id="new-session-workspace"
+                                aria-describedby="new-session-workspace-path"
+                                value={newSessionWorkspaceValue}
+                                onChange={(event) => {
+                                  const key = event.target.value;
+                                  if (!key) {
+                                    openAddProject(true, newSessionGroupKey);
+                                    return;
+                                  }
+                                  const project = hostProjects.find(
+                                    (candidate) =>
+                                      projectIdentity(candidate) === key ||
+                                      (!candidate.poolId &&
+                                        hostProjectKey(
+                                          candidate.hostId,
+                                          candidate.path,
+                                        ) === key),
+                                  );
+                                  if (!project) return;
+                                  suppressCwdRef.current = project.path;
+                                  setActivePoolProject(
+                                    project.poolId ? project : null,
+                                  );
+                                  setActiveCwd(
+                                    project.poolId ? null : project.path,
+                                  );
+                                  setActiveHostId(
+                                    project.poolId
+                                      ? undefined
+                                      : remoteHostId(project.hostId),
+                                  );
+                                  handleNewSession(
+                                    crypto.randomUUID(),
+                                    project.poolId ? null : project.path,
+                                    project.hostId,
+                                    project,
+                                  );
+                                }}
+                              >
+                                {!effectivePoolProject &&
+                                  effectiveNewSessionCwd &&
+                                  !hostProjects.some(
+                                    (project) =>
+                                      foldedHostProjectKey(
+                                        project.hostId,
+                                        project.path,
+                                      ) ===
+                                      foldedHostProjectKey(
+                                        newSessionHost,
+                                        newSessionProject,
+                                      ),
+                                  ) && (
+                                    <option value={newSessionWorkspaceValue}>
+                                      {projectLabel(effectiveNewSessionCwd)}
+                                    </option>
+                                  )}
+                                {hostProjects.map((project) => {
+                                  const name =
+                                    project.alias ??
+                                    project.name ??
+                                    projectLabel(project.path);
+                                  // A member's pinned project: its option names the node.
+                                  const node =
+                                    !project.poolId &&
+                                    projectTargetId(project, pools) !==
+                                      (project.hostId ?? LOCAL_HOST_ID)
+                                      ? hosts?.find(
+                                          (host) =>
+                                            host.id ===
+                                            (project.hostId ?? LOCAL_HOST_ID),
+                                        )
+                                      : undefined;
+                                  return (
+                                    <option
+                                      key={projectIdentity(project)}
+                                      value={
+                                        project.poolId
+                                          ? projectIdentity(project)
+                                          : hostProjectKey(
+                                              project.hostId,
+                                              foldedHostProjectKey(
+                                                project.hostId,
+                                                project.path,
+                                              ) ===
+                                                foldedHostProjectKey(
+                                                  newSessionHost,
+                                                  newSessionProject,
+                                                )
+                                                ? (effectiveNewSessionCwd ??
+                                                    project.path)
+                                                : project.path,
+                                            )
+                                      }
+                                    >
+                                      {node
+                                        ? t("hosts.projectOnNode", {
+                                            name,
+                                            node: hostName(t, node),
+                                          })
+                                        : name}
+                                    </option>
+                                  );
+                                })}
+                                <option value="">+ {t("projects.add")}</option>
+                              </select>
+                              <ChevronDown
+                                className="new-session-workspace-chevron"
+                                size={16}
+                                strokeWidth={1.8}
+                                aria-hidden="true"
+                              />
+                            </div>
+                            {/* The workspace's worktrees: picking one sets where the new
+                      session starts (same switch as the file panel's Worktrees tab). */}
+                            {worktreeCtx &&
+                              !worktreeCtx.error &&
+                              worktreeCtx.hostId === newSessionHostKey &&
+                              worktreeCtx.worktrees.length > 1 &&
+                              comparableProjectPath(worktreeCtx.projectRoot) ===
+                                comparableProjectPath(newSessionProject) && (
+                                <div className="new-session-workspace-control">
+                                  <span
+                                    className="new-session-workspace-icon"
+                                    aria-hidden="true"
+                                  >
+                                    <GitBranch size={17} strokeWidth={1.8} />
+                                  </span>
+                                  <select
+                                    aria-label={t(
+                                      "sessionSidebar.switchWorktree",
+                                    )}
+                                    aria-describedby="new-session-workspace-path"
+                                    value={worktreeCtx.currentPath}
+                                    onChange={(event) =>
+                                      worktreeCtx.select(event.target.value)
+                                    }
+                                  >
+                                    {worktreeCtx.worktrees.map((wt) => (
+                                      <option key={wt.path} value={wt.path}>
+                                        {wt.branch ?? getFileName(wt.path)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <ChevronDown
+                                    className="new-session-workspace-chevron"
+                                    size={16}
+                                    strokeWidth={1.8}
+                                    aria-hidden="true"
+                                  />
+                                </div>
+                              )}
+                            <div
+                              id="new-session-workspace-path"
+                              className="new-session-workspace-path"
+                              title={
+                                effectivePoolProject?.origin ??
+                                effectiveNewSessionCwd ??
+                                undefined
+                              }
+                            >
+                              {effectivePoolProject?.origin ??
+                                effectiveNewSessionCwd}
+                            </div>
+                          </div>
+                        )
+                      }
+                      onAgentEnd={handleAgentEnd}
+                      onSessionCreated={handleSessionCreated}
+                      onSessionForked={handleSessionForked}
+                      onSessionMoved={handleSessionMoved}
+                      modelsRefreshKey={modelsRefreshKey}
+                      chatInputRef={chatInputRef}
+                      onOpenFile={
+                        selectedSession || !effectivePoolProject
+                          ? handleOpenFile
+                          : undefined
+                      }
+                      onOpenUrl={handleSessionOpenUrl}
+                      onBranchDataChange={handleBranchDataChange}
+                      onSystemPromptChange={handleSystemPromptChange}
+                      onSystemPromptLoaderChange={
+                        handleSystemPromptLoaderChange
+                      }
+                      onSessionStatsChange={handleSessionStatsChange}
+                      onSessionStatsPanelOpen={openSessionStatsPanel}
+                      sessionInfoContainer={sessionInfoContainer}
+                      onGenerationSpeedChange={handleGenerationSpeedChange}
+                      onOpenProviders={() => setSettingsTab("providers")}
+                      toolCallsDefaultCollapsed={toolCallsDefaultCollapsed}
+                      hideToolActivity={hideToolActivity}
+                      neverFoldActivity={neverFoldActivity}
+                      showToolCallsUnfolded={showToolCallsUnfolded}
+                      expandThinkingByDefault={expandThinkingByDefault}
+                      hideThinkingBlock={hideThinkingBlock}
+                      searchQuery={chatSearchQuery}
+                      searchTarget={
+                        searchMatchTarget &&
+                        searchMatchTarget.sessionId === selectedSession?.id
+                          ? searchMatchTarget
+                          : null
+                      }
+                      onSearchTargetHandled={clearSearchMatchTarget}
+                    />
+                  ) : initialCwdStatus === "validating" ? (
+                    <WorkspaceState
+                      kind="loading"
+                      title={t("appShell.openingWorkspace")}
+                      detail={
+                        <span className="workspace-state-path">
+                          {initialNavigation.requestedCwd}
+                        </span>
+                      }
+                    />
+                  ) : initialCwdStatus === "error" ? (
+                    <WorkspaceState
+                      kind="error"
+                      title={t("appShell.unableToOpenWorkspace")}
+                      detail={
+                        <>
+                          <span className="workspace-state-path">
+                            {initialNavigation.requestedCwd}
+                          </span>
+                          <span>{initialCwdError}</span>
+                        </>
+                      }
+                    />
+                  ) : !showPlaceholder ? (
+                    <PanelLoadingFallback />
+                  ) : activeCwd ? (
+                    <WorkspaceState
+                      kind="empty"
+                      title={t("appShell.selectSessionHint")}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 12,
+                        left: 12,
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: 8,
+                        userSelect: "none",
+                      }}
+                    >
+                      <svg
+                        width="44"
+                        height="44"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="var(--accent)"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        style={{ opacity: 0.7, flexShrink: 0 }}
+                      >
+                        <line x1="20" y1="12" x2="4" y2="12" />
+                        <polyline points="10 6 4 12 10 18" />
+                      </svg>
+                      <div>
+                        <div
+                          className="display-serif"
+                          style={{
+                            fontSize: 20,
+                            color: "var(--text)",
+                            marginBottom: 8,
+                          }}
+                        >
+                          {t("appShell.getStarted")}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: "var(--text-muted)",
+                            lineHeight: 1.8,
+                          }}
+                        >
+                          <span
+                            style={{ color: "var(--text-dim)", marginRight: 6 }}
+                          >
+                            1.
+                          </span>
+                          {t("appShell.getStartedStep1")}
+                          <br />
+                          <span
+                            style={{ color: "var(--text-dim)", marginRight: 6 }}
+                          >
+                            2.
+                          </span>
+                          {(() => {
+                            // One translatable sentence; the {models} slot is rendered
+                            // as the emphasized button name so word order stays free.
+                            const [before, after] = t(
+                              "appShell.getStartedStep2",
+                            ).split("{models}");
+                            return (
+                              <>
+                                {before}
+                                <strong style={{ color: "var(--text)" }}>
+                                  {t("appShell.models")}
+                                </strong>
+                                {after}
+                              </>
+                            );
+                          })()}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSidebarOpen(true);
+                              openAddProject(true);
+                            }}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              width: "fit-content",
+                              minHeight: 36,
+                              marginTop: 12,
+                              padding: "7px 10px",
+                              border: "1px solid var(--border)",
+                              borderRadius: "var(--radius-control)",
+                              background: "var(--bg-panel)",
+                              color: "var(--text)",
+                              cursor: "pointer",
+                              fontSize: 12,
+                              fontWeight: 600,
+                              boxShadow: "var(--shadow-card)",
+                            }}
+                            className="ui-focus-ring"
+                          >
+                            <Folder
+                              size={14}
+                              strokeWidth={1.8}
+                              aria-hidden="true"
+                            />
+                            {t("appShell.openWorkspaces")}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </main>
+          {rightPanelIsModal && (
+            <div
+              className="right-panel-backdrop"
+              aria-hidden="true"
+              onClick={closeRightPanel}
+            />
+          )}
+          {!settingsTab && rightPanelHasOpened && (
+            <RightPanel
+              fileTabs={fileTabs}
+              activeFileTabId={activeFileTabId}
+              rightView={rightView}
+              onSelectView={handleSelectRightView}
+              rightPanelOpen={rightPanelOpen}
+              onClose={closeRightPanel}
+              rightPanelWidth={rightPanelWidth}
+              rightPanelResizing={rightPanelResizing}
+              rightPanelRef={attachRightPanel}
+              fileExplorerRef={fileExplorerRef}
+              revealPath={
+                revealTarget?.hostId === workspaceHostId
+                  ? revealTarget.path
+                  : null
+              }
+              onRevealDone={handleRevealDone}
+              explorerCwd={explorerCwd}
+              sourceSessionId={selectedSession?.id ?? null}
+              hostId={workspaceHostId}
+              worktrees={worktreeCtx}
+              connectionDiagnosticsOn={connectionDiagnosticsOn}
+              explorerRefreshKey={explorerRefreshKey}
+              fileSearchOpen={fileSearchOpen}
+              onToggleFileSearch={handleToggleFileSearch}
+              onFileSearchOpenChange={setFileSearchOpen}
+              explorerUploadBusy={explorerUploadBusy}
+              onUploadBusyChange={setExplorerUploadBusy}
+              explorerGitCount={explorerGitCount}
+              explorerIsRepo={explorerIsRepo}
+              explorerRefreshing={explorerRefreshing}
+              isMobile={isMobile}
+              isCompactOverlay={isCompactOverlay}
+              onOpenFile={handleOpenFile}
+              onSelectFileTab={handleSelectFileTab}
+              onCloseFileTab={handleCloseFileTab}
+              onCloseOtherFileTabs={handleCloseOtherFileTabs}
+              onCloseAllFileTabs={handleCloseAllFileTabs}
+              onMentionActiveFile={handleMentionActiveFile}
+              onCopyActiveFilePath={handleCopyActiveFilePath}
+              onDownloadActiveFile={handleDownloadActiveFile}
+              onRevealActiveFile={handleRevealActiveFile}
+              onExplorerRefresh={handleExplorerRefresh}
+              onExplorerRefreshDone={handleExplorerRefreshDone}
+              onAtMention={handleAtMention}
+              onAtMentions={handleAtMentions}
+              onMentionLines={handleFileLineMention}
+              onExplorerGitStatus={handleExplorerGitStatus}
+              onResetRightPanelWidth={resetRightPanelWidth}
+              onRightPanelResizeStart={handleRightPanelResizeStart}
+              onRightPanelResizeKey={handleRightPanelResizeKey}
+            />
           )}
         </div>
-          </>
-        )}
-      </main>
-      {rightPanelIsModal && (
-        <div
-          className="right-panel-backdrop"
-          aria-hidden="true"
-          onClick={closeRightPanel}
+        <LocalDaemonBanner />
+        <AppUpdateDialog
+          open={appUpdateDialogOpen}
+          update={appUpdate}
+          phase={appUpdatePhase}
+          visibleStage={appUpdateVisibleStage}
+          error={appUpdateError}
+          onProceed={() => void proceedWithAppUpdate()}
+          onNotNow={dismissAppUpdate}
         />
-      )}
-      {!settingsTab && rightPanelHasOpened && (
-        <RightPanel
-        fileTabs={fileTabs}
-        activeFileTabId={activeFileTabId}
-        rightView={rightView}
-        onSelectView={handleSelectRightView}
-        rightPanelOpen={rightPanelOpen}
-        onClose={closeRightPanel}
-        rightPanelWidth={rightPanelWidth}
-        rightPanelResizing={rightPanelResizing}
-        rightPanelRef={attachRightPanel}
-        fileExplorerRef={fileExplorerRef}
-        revealPath={revealTarget?.hostId === workspaceHostId ? revealTarget.path : null}
-        onRevealDone={handleRevealDone}
-        explorerCwd={explorerCwd}
-        sourceSessionId={selectedSession?.id ?? null}
-        hostId={workspaceHostId}
-        worktrees={worktreeCtx}
-        connectionDiagnosticsOn={connectionDiagnosticsOn}
-        explorerRefreshKey={explorerRefreshKey}
-        fileSearchOpen={fileSearchOpen}
-        onToggleFileSearch={handleToggleFileSearch}
-        onFileSearchOpenChange={setFileSearchOpen}
-        explorerUploadBusy={explorerUploadBusy}
-        onUploadBusyChange={setExplorerUploadBusy}
-        explorerGitCount={explorerGitCount}
-        explorerIsRepo={explorerIsRepo}
-        explorerRefreshing={explorerRefreshing}
-        isMobile={isMobile}
-        isCompactOverlay={isCompactOverlay}
-        onOpenFile={handleOpenFile}
-        onSelectFileTab={handleSelectFileTab}
-        onCloseFileTab={handleCloseFileTab}
-        onCloseOtherFileTabs={handleCloseOtherFileTabs}
-        onCloseAllFileTabs={handleCloseAllFileTabs}
-        onMentionActiveFile={handleMentionActiveFile}
-        onCopyActiveFilePath={handleCopyActiveFilePath}
-        onDownloadActiveFile={handleDownloadActiveFile}
-        onRevealActiveFile={handleRevealActiveFile}
-        onExplorerRefresh={handleExplorerRefresh}
-        onExplorerRefreshDone={handleExplorerRefreshDone}
-        onAtMention={handleAtMention}
-        onAtMentions={handleAtMentions}
-        onMentionLines={handleFileLineMention}
-        onExplorerGitStatus={handleExplorerGitStatus}
-        onResetRightPanelWidth={resetRightPanelWidth}
-        onRightPanelResizeStart={handleRightPanelResizeStart}
-        onRightPanelResizeKey={handleRightPanelResizeKey}
-      />
-      )}
-
-    </div>
-    <LocalDaemonBanner />
-    <AppUpdateDialog open={appUpdateDialogOpen} update={appUpdate} phase={appUpdatePhase} visibleStage={appUpdateVisibleStage} error={appUpdateError} onProceed={() => void proceedWithAppUpdate()} onNotNow={dismissAppUpdate} />
-    {archiveBrowserOpen && (
-      <ArchiveBrowser
-        open={archiveBrowserOpen}
-        onClose={() => setArchiveBrowserOpen(false)}
-        onRestored={handleArchiveRestored}
-      />
-    )}
-    </ToastProvider>
+        {archiveBrowserOpen && (
+          <ArchiveBrowser
+            open={archiveBrowserOpen}
+            onClose={() => setArchiveBrowserOpen(false)}
+            onRestored={handleArchiveRestored}
+          />
+        )}
+      </ToastProvider>
     </>
   );
 }

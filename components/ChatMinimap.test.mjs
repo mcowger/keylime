@@ -3,7 +3,14 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-const { ChatMinimap, extractPreviewText, getBarWidth, getTooltipTopPx, railIndexForPointer, railOverflows } = await import("./ChatMinimap.tsx");
+const {
+  ChatMinimap,
+  extractPreviewText,
+  getBarWidth,
+  getTooltipTopPx,
+  railIndexForPointer,
+  railOverflows,
+} = await import("./ChatMinimap.tsx");
 
 test("extractPreviewText extracts clean text from user string content", () => {
   const preview = extractPreviewText({
@@ -16,13 +23,15 @@ test("extractPreviewText extracts clean text from user string content", () => {
 test("extractPreviewText cleans markdown formatting, code fences, and extra whitespace", () => {
   const preview = extractPreviewText({
     role: "user",
-    content: "## Refactor Minimap\n```ts\nconst a = 1;\n```\n  Can we simplify the context bar?  ",
+    content:
+      "## Refactor Minimap\n```ts\nconst a = 1;\n```\n  Can we simplify the context bar?  ",
   });
   assert.equal(preview, "Refactor Minimap Can we simplify the context bar?");
 });
 
 test("extractPreviewText truncates excessively long prompts with ellipsis", () => {
-  const longPrompt = "This is a very long prompt that exceeds sixty characters and should be truncated with an ellipsis cleanly";
+  const longPrompt =
+    "This is a very long prompt that exceeds sixty characters and should be truncated with an ellipsis cleanly";
   const preview = extractPreviewText({
     role: "user",
     content: longPrompt,
@@ -36,7 +45,14 @@ test("getBarWidth produces organic widths matching the visual design", () => {
   assert.equal(getBarWidth("short", false, true), 22); // hovered is slightly wider
   assert.equal(getBarWidth("hi", false, false), 10); // short text
   assert.equal(getBarWidth("move Explorer to panel", false, false), 14); // medium text
-  assert.equal(getBarWidth("can we refactor the rpc process connection logic", false, false), 18); // long text
+  assert.equal(
+    getBarWidth(
+      "can we refactor the rpc process connection logic",
+      false,
+      false,
+    ),
+    18,
+  ); // long text
 });
 
 test("renders minimal context navigation rail with interactive buttons for user prompts", () => {
@@ -55,7 +71,7 @@ test("renders minimal context navigation rail with interactive buttons for user 
       messages,
       scrollContainer,
       messageRefs,
-    })
+    }),
   );
 
   assert.match(html, /role="navigation"/);
@@ -73,7 +89,7 @@ test("renders nothing when messages list is empty", () => {
       messages: [],
       scrollContainer,
       messageRefs,
-    })
+    }),
   );
 
   assert.equal(html, "");
@@ -81,7 +97,10 @@ test("renders nothing when messages list is empty", () => {
 
 test("falls back to assistant messages when no user prompts exist", () => {
   const messages = [
-    { role: "assistant", content: [{ type: "text", text: "Welcome to the agent" }] },
+    {
+      role: "assistant",
+      content: [{ type: "text", text: "Welcome to the agent" }],
+    },
     { role: "assistant", content: [{ type: "text", text: "Ready for tasks" }] },
   ];
 
@@ -93,7 +112,7 @@ test("falls back to assistant messages when no user prompts exist", () => {
       messages,
       scrollContainer,
       messageRefs,
-    })
+    }),
   );
 
   assert.match(html, /aria-label="Jump to: Welcome to the agent"/);
@@ -112,13 +131,16 @@ test("tooltip stays aligned with its row when the rail has scrolled (#251)", () 
 });
 
 test("rail rows do not shrink below the row height (#251)", () => {
-  const messages = Array.from({ length: 86 }, (_, i) => ({ role: "user", content: `prompt ${i}` }));
+  const messages = Array.from({ length: 86 }, (_, i) => ({
+    role: "user",
+    content: `prompt ${i}`,
+  }));
   const html = renderToStaticMarkup(
     React.createElement(ChatMinimap, {
       messages,
       scrollContainer: { current: null },
       messageRefs: { current: [] },
-    })
+    }),
   );
   assert.match(html, /flex-shrink:0/);
   assert.match(html, /min-height:18px/);
@@ -142,7 +164,7 @@ test("rail is always scrollable, even with few rows on a short viewport (#251 fo
       messages,
       scrollContainer: { current: null },
       messageRefs: { current: [] },
-    })
+    }),
   );
   assert.match(html, /overflow-y:auto/);
 });

@@ -33,18 +33,18 @@
 
 ## Inventory (counts at `51e40f47`, `rg` over code, tests and docs)
 
-| Surface | Hits | Files | Task |
-|---|---|---|---|
-| HTTP-leg code (`LINK_*_HEADER`, `x-omp-web-*`, `helloOffer`/`helloId`, `handleLinkGet`/`Post`, `handleHelloPost`, `openDownlink`, `currentLink`/`staleLink`/`forgetLink`, `nonce`, `readLines`) | 172 | hub.ts 41, daemon.ts 24, link-protocol.ts 8, link route 3, hub.test 34, daemon.test 16, link-driver helper 8, hosts-route.test 5, link-integration.test 4, link-protocol.test 2, server/app.test.ts 2, AGENTS.md 9, remote-hosts spec 16 | 3, 4, 5, 6 |
-| Blob leg (`handleLinkBlob`, `uploadBlob`, `link/blob`, `blob_upload_failed`, `hostsLinkBlobReqId`) | 41 | blob route 3, hub.ts 6, daemon.ts 3, link-protocol.ts 1, server/routes.ts 2, hub.test 8, link-integration 6, daemon.test 2, helper 2, web-auth.test 2, AGENTS.md 2, remote-hosts spec 3, bun-runtime spec/plan 2 | 3, 4, 5, 6 |
-| `MIN_LINK_PROTOCOL_VERSION` | 14 (+1 deploy-script parser, unchanged) | hub.ts 3, link-protocol.ts 1, hub.test 4, AGENTS.md 2, remote-hosts spec 2, local-daemon spec 2 | 4, 6 |
-| v2/v1 acceptance (`v === 2`, `channels(o, v2)`, `legacyHelloVersion`, "v2 daemon") | 25 | hub.ts 4, link-protocol.ts 5, hub.test 5, link-protocol.test 1, AGENTS.md 4, remote-hosts spec 4, local-daemon spec 2 | 4, 6 |
-| `disableIdleTimeout` for the link | 17 code (+4 docs) | hub.ts 8, link route 6, blob route 2, link-integration 1; AGENTS.md 2, bun-runtime spec 2 | 4, 5, 6 |
-| `disableIdleTimeout` elsewhere (kept) | 11 | server/app.ts 5, server/routes.ts 4, event-stream-hub.test 1, file-access.test 1 | — |
-| `freezeHostLinks` / `frozen` | 24 | hub.ts 15, hub.test 5, rpc-manager.ts 2 (call unchanged), AGENTS.md 2 | 4, 6 |
-| `replaced` message and the 409 rule | 47 | hub.ts 4, daemon.ts 6, link-protocol.ts 4, hub.test 8, daemon.test 6, link-protocol.test 3, AGENTS.md 9, remote-hosts spec 7 | 3, 4, 6 |
-| `scripts/smoke.ts` | 0 transport refs | proves the link via `/api/hosts` status (Node daemon in repo/packed runs, Bun daemon in the binary run) | 5 (run only) |
-| `/opt/omp-deployment/bin/ompweb-deploy` | 2 parsers | `link_protocol`, `min_link_protocol` (`sed` on the two constants) | 6 (check only) |
+| Surface                                                                                                                                                                                         | Hits                                    | Files                                                                                                                                                                                                                                    | Task           |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| HTTP-leg code (`LINK_*_HEADER`, `x-omp-web-*`, `helloOffer`/`helloId`, `handleLinkGet`/`Post`, `handleHelloPost`, `openDownlink`, `currentLink`/`staleLink`/`forgetLink`, `nonce`, `readLines`) | 172                                     | hub.ts 41, daemon.ts 24, link-protocol.ts 8, link route 3, hub.test 34, daemon.test 16, link-driver helper 8, hosts-route.test 5, link-integration.test 4, link-protocol.test 2, server/app.test.ts 2, AGENTS.md 9, remote-hosts spec 16 | 3, 4, 5, 6     |
+| Blob leg (`handleLinkBlob`, `uploadBlob`, `link/blob`, `blob_upload_failed`, `hostsLinkBlobReqId`)                                                                                              | 41                                      | blob route 3, hub.ts 6, daemon.ts 3, link-protocol.ts 1, server/routes.ts 2, hub.test 8, link-integration 6, daemon.test 2, helper 2, web-auth.test 2, AGENTS.md 2, remote-hosts spec 3, bun-runtime spec/plan 2                         | 3, 4, 5, 6     |
+| `MIN_LINK_PROTOCOL_VERSION`                                                                                                                                                                     | 14 (+1 deploy-script parser, unchanged) | hub.ts 3, link-protocol.ts 1, hub.test 4, AGENTS.md 2, remote-hosts spec 2, local-daemon spec 2                                                                                                                                          | 4, 6           |
+| v2/v1 acceptance (`v === 2`, `channels(o, v2)`, `legacyHelloVersion`, "v2 daemon")                                                                                                              | 25                                      | hub.ts 4, link-protocol.ts 5, hub.test 5, link-protocol.test 1, AGENTS.md 4, remote-hosts spec 4, local-daemon spec 2                                                                                                                    | 4, 6           |
+| `disableIdleTimeout` for the link                                                                                                                                                               | 17 code (+4 docs)                       | hub.ts 8, link route 6, blob route 2, link-integration 1; AGENTS.md 2, bun-runtime spec 2                                                                                                                                                | 4, 5, 6        |
+| `disableIdleTimeout` elsewhere (kept)                                                                                                                                                           | 11                                      | server/app.ts 5, server/routes.ts 4, event-stream-hub.test 1, file-access.test 1                                                                                                                                                         | —              |
+| `freezeHostLinks` / `frozen`                                                                                                                                                                    | 24                                      | hub.ts 15, hub.test 5, rpc-manager.ts 2 (call unchanged), AGENTS.md 2                                                                                                                                                                    | 4, 6           |
+| `replaced` message and the 409 rule                                                                                                                                                             | 47                                      | hub.ts 4, daemon.ts 6, link-protocol.ts 4, hub.test 8, daemon.test 6, link-protocol.test 3, AGENTS.md 9, remote-hosts spec 7                                                                                                             | 3, 4, 6        |
+| `scripts/smoke.ts`                                                                                                                                                                              | 0 transport refs                        | proves the link via `/api/hosts` status (Node daemon in repo/packed runs, Bun daemon in the binary run)                                                                                                                                  | 5 (run only)   |
+| `/opt/omp-deployment/bin/ompweb-deploy`                                                                                                                                                         | 2 parsers                               | `link_protocol`, `min_link_protocol` (`sed` on the two constants)                                                                                                                                                                        | 6 (check only) |
 
 ---
 
@@ -53,12 +53,13 @@
 Proves D2 on this machine and in this repo's type setup before any code changes. Nothing but spec rows is committed.
 
 **Files:**
+
 - Modify: `docs/specs/2026-10-31-websocket-link-design.md` (append rows to "Verified assumptions")
 - Scratch (never committed): `$TMPDIR/ws-link-probe/server.ts`, `$TMPDIR/ws-link-probe/client.mjs`, `types-probe.ts` at the repo root (deleted in Step 4)
 
 - [ ] **Step 1: Install.** `rm -rf node_modules && npm ci` (prints `added … packages`).
 - [ ] **Step 2: Runtime probe.** Server: `Bun.serve` on port 30311, `idleTimeout: 10`, one async `routes` entry for `/api/hosts/link` that awaits twice, answers 401 without `Authorization: Bearer x`, then `server.upgrade(req, { data })`; `websocket` with `maxPayloadLength: 64 * 1024 * 1024 + 256`, `backpressureLimit: 1024 * 1024`, `closeOnBackpressureLimit: true`, echo on `message`, `ws.close(4001, "replaced")` or a 40 × 256 KiB send flood in `open` when the query asks. Client (one file, runs everywhere): no token, bad token, header auth + text and binary echo, close 4001, flood, 12 s idle. Run with `bun`, `npx -y node@24.0.0`, `node` (26.x) and `/root/.nvm/versions/node/v24.19.0/bin/node`.
-  Expected: every ▶ row of the spec's table reproduces. If any Node client fails header auth, stop and message the plan owner (the fallback is a token in `Sec-WebSocket-Protocol`, D2).
+      Expected: every ▶ row of the spec's table reproduces. If any Node client fails header auth, stop and message the plan owner (the fallback is a token in `Sec-WebSocket-Protocol`, D2).
 - [ ] **Step 3: Type probe.** `types-probe.ts` at the repo root with `new WebSocket("ws://127.0.0.1:1/api/hosts/link", { headers: { authorization: "Bearer t" } })` and a `Bun.serve` whose `routes` handler returns `undefined` after `server.upgrade()`. Run `npx tsc --noEmit`. Record for each whether it compiles as written or needs a cast (and the exact `tsc` error).
 - [ ] **Step 4: Record.** Delete `types-probe.ts`. Append rows `Task 1 probe: …` with the observed output to the table.
 - [ ] **Step 5: Commit** `docs: record the WebSocket link probe` (the spec only; `git status` shows nothing else).
@@ -68,10 +69,12 @@ Proves D2 on this machine and in this repo's type setup before any code changes.
 Additive only: the daemon and hub still compile against the old names until Tasks 3 and 4 remove them.
 
 **Files:**
+
 - Modify: `lib/hosts/link-protocol.ts`
 - Test: `lib/hosts/link-protocol.test.mjs`
 
 **Interfaces:**
+
 - Produces:
   - `DownMessage` and `UpMessage` each gain `{ type: "ack"; ack: number }` (unsequenced); `DOWN_TYPES` and `UP_TYPES` list `"ack"`.
   - `export const LINK_CLOSE = { goingAway: 1001, invalidData: 1007, policy: 1008, tooBig: 1009, replaced: 4409, versionMismatch: 4426 } as const;`
@@ -91,14 +94,17 @@ Additive only: the daemon and hub still compile against the old names until Task
 ### Task 3: The daemon dials a WebSocket
 
 **Files:**
+
 - Modify: `lib/hosts/daemon.ts`
 - Test: `lib/hosts/daemon.test.mjs` (rewrite `scriptedServer`; transport tests below)
 
 **Interfaces:**
+
 - Consumes: Task 2 (`ack`, `LINK_CLOSE`, `encodeBlobFrame`).
 - Produces: `runHostDaemon(options: { url: string; token: string; allowHttp: boolean }): { stop(): Promise<void>; done: Promise<number> }` — the `fetch` option is removed (`lib/hosts/host-cli.ts` never passed it). Behavior on the wire: spec D2/D3 and "Close codes".
 
 Exact behavior (the parts the spec leaves to the daemon):
+
 - Dial: `new WebSocket(linkUrl.replace(/^http/, "ws"), { headers: { authorization: sent } })`, `binaryType = "arraybuffer"`; on `open` send the hello as the first text frame (the existing replay/no-replay fallback stays); each text frame from the hub is one message → `handleDown(frame)`; binary frames from the hub are ignored. Keep the `sent` authorization per dial (the 401 logic compares it).
 - One socket at a time. When the watchdog fires (no frame for `offlineMs`), call `close()`, treat the link as dropped at once, and ignore every later event from that socket.
 - `welcome` → linked, reset `redialDelay`, flush. `ack {ack}` → clear the in-flight flag, `acked(ack)`, `scheduleFlush()`. `replaced` handling is deleted.
@@ -127,11 +133,13 @@ Exact behavior (the parts the spec leaves to the daemon):
 ### Task 4: The server end of the WebSocket
 
 **Files:**
+
 - Modify: `lib/hosts/link-protocol.ts`, `lib/hosts/hub.ts`, `app/api/hosts/link/route.ts`, `server/routes.ts`, `server/app.ts`, `proxy.ts`
 - Delete: `app/api/hosts/link/blob/[reqId]/route.ts`
 - Test: `lib/hosts/link-driver.test-helper.mjs`, `lib/hosts/hub.test.mjs`, `lib/hosts/hosts-route.test.mjs`, `lib/hosts/link-protocol.test.mjs`, `lib/web-auth.test.mjs`, `server/app.test.ts`
 
 **Interfaces:**
+
 - Consumes: Task 2; Task 3's daemon behavior (one `ack` per uplink frame expected back).
 - Produces (`lib/hosts/hub.ts`):
   - `export interface LinkSocketData { hostId: string; hello: boolean }`
@@ -142,6 +150,7 @@ Exact behavior (the parts the spec leaves to the daemon):
 - Produces (`server/routes.ts`): `RouteHandler` context gains `upgrade: (data: LinkSocketData) => boolean` and may return `undefined`; `dispatch(mod, request, params, disableIdleTimeout = () => {}, upgrade = () => false): Promise<Response | undefined>`.
 
 Exact behavior:
+
 - `link-protocol.ts`: `LINK_PROTOCOL_VERSION = 5`, `MIN_LINK_PROTOCOL_VERSION = 4` (doc comment: the v4 line from spec D4 and its N-1 successor; keep the pointer to the compatibility rules); delete `LINK_HELLO_HEADER`, `LINK_ACK_HEADER`, `LINK_NONCE_HEADER`, `replaced` (type, `DOWN_TYPES`, `decodeDown`), `welcome.nonce`, and the v2 branches (`autoApproveExtension` always read, `channels(o)` always reads `cwd`/`pending`).
 - `hub.ts` `Link`: `socket: LinkSocket | null` replaces `stream`, `nonce`, `helloOffer`. `enqueue(link, line)` = `link.socket?.send(line)` (Bun closes a socket over its backpressure limit; the outbox keeps sequenced lines). `request()` treats `!link.socket` as offline.
 - `message(ws, data)`: frozen → ignore. `link.socket === ws` → frame. Else `ws.data.hello` → ignore (a replaced socket). Else the first frame: binary → close `policy`; parse the raw JSON (`policy` on failure), `versionMismatch(link, raw)` → close `versionMismatch` with reason `JSON.stringify({ serverVersion: LINK_PROTOCOL_VERSION })`; `decodeUp` not a hello → close `policy`; else `openLink(link, ws, hello)` (today's `openDownlink` minus the stream, nonce and Response: close the previous socket with `replaced`/"replaced by a newer link", reset windows by `hello.ack`, `welcome {v, hostId}`, resend the outbox, reattach, ping timer, status, hello listeners) and set `ws.data.hello = true`.
@@ -182,21 +191,24 @@ Exact behavior:
 ### Task 5: End to end over a real socket
 
 **Files:**
+
 - Test: `lib/hosts/link-integration.test.mjs`
 
 **Interfaces:**
+
 - Consumes: Task 4's `hostLinkSocket`, `LinkSocket`, link route `GET(req, { upgrade })` / `POST(req)`; Task 3's daemon (spawned as `node bin/omp-web-host.js`, i.e. Node's `WebSocket`).
 
 - [ ] **Step 1: Port the bridge.** Replace the `node:http` server with `Bun.serve({ port: 0, hostname: "127.0.0.1", routes: { "/api/hosts/link": { GET, POST } }, websocket })`. `GET` calls `linkRoute.GET(req, { upgrade: (data) => srv.upgrade(req, { data }) })` and counts 503 answers in `seen.refusedUpgrades`. `websocket` spreads `hub.hostLinkSocket` and wraps it: `open` adds the socket to `sockets`; each socket gets one stable wrapper from a `WeakMap` (`data` is the same `ws.data` object; `send` records `kill` channels into `seen.kills` and applies `loseStdin` by terminating instead of sending a `stdin` frame; a `dropSends` flag makes `send` return 0 without sending; `close`/`terminate` forward); `message` applies `cutUplinkBeforeApply` (terminate without passing a frame that contains `"message_update`) and `cutUplinkAfterApply` (pass it with `dropSends` on, so the ack is lost, then terminate), counts binary frames in `seen.binaryFrames`; `close` removes from `sockets` and forwards.
 - [ ] **Step 2: Port the restart.** `restartWeb`: `process.emit("SIGTERM")` (the freeze closes the sockets with 1001), `await whileStopping?.()`, `await waitFor(() => sockets.size === 0, "the frozen hub to close the link")`, clear the link timers, reset the globals as today; no `closeAllConnections`, no `seen.posting`. The fake omp logs `{ kind: "out", line }` for every stdout line it writes; the two stopping tests wait for their output in `ompLog()` (`"while stopping"`; `q2` and `send_to_session`) and for `seen.refusedUpgrades` to grow, instead of `seen.refusedPosts`. Their other assertions stay.
 - [ ] **Step 3: Rename** `"a 2 MB session read arrives through the blob leg"` → `"…in one binary frame"` (`seen.binaryFrames` +1). **Add, last:** `test("revoking the host closes its socket; the daemon is refused 401, stops its omp children and exits 1", …)`: `revokeHost(hostId)` + `hub.closeHostLink(hostId)`; the daemon exits with code 1 within 20 s and its log contains "revoked".
 - [ ] **Step 4: Run** `bun test lib/hosts/link-integration.test.mjs` — PASS; then `npm run typecheck && npm run lint && npm test` — 0 failures.
-- [ ] **Step 5: Smoke.** `npm run build && npm run smoke` (Node daemon); `npx bun scripts/build-binary.ts --target bun-linux-x64-baseline && npm run smoke -- --binary release/ompweb-linux-x64/ompweb` (Bun daemon); `P="$(mktemp -d)" && npm pack --ignore-scripts && npm install -g --prefix "$P" ./kahme247-ompweb-*.tgz && npm run smoke -- --package "$(npm root -g --prefix "$P")/@kahme247/ompweb"` (Node daemon from a packed install). Each prints `ok \`ompweb host\` links this machine` and no `FAIL`. Remove the tarball and `release/` output afterwards (`git status` clean apart from the test file).
+- [ ] **Step 5: Smoke.** `npm run build && npm run smoke` (Node daemon); `npx bun scripts/build-binary.ts --target bun-linux-x64-baseline && npm run smoke -- --binary release/ompweb-linux-x64/ompweb` (Bun daemon); `P="$(mktemp -d)" && npm pack --ignore-scripts && npm install -g --prefix "$P" ./kahme247-ompweb-*.tgz && npm run smoke -- --package "$(npm root -g --prefix "$P")/@kahme247/ompweb"` (Node daemon from a packed install). Each prints `ok \`ompweb host\` links this machine`and no`FAIL`. Remove the tarball and `release/` output afterwards (`git status` clean apart from the test file).
 - [ ] **Step 6: Commit** `test(hosts): run the link integration test over a real WebSocket`.
 
 ### Task 6: Docs and final checks
 
 **Files:**
+
 - Modify: `docs/specs/2026-10-28-remote-hosts-design.md`, `docs/specs/2026-10-29-local-daemon-design.md`, `AGENTS.md`, `DESIGN.md`, `README.md`, `CHANGELOG.md`
 
 - [ ] **Step 1: remote-hosts spec.** Rewrite "Link protocol" (intro, "Messages", the message table, "Rules" → Version/One link per host/Large results/Limits) from the WebSocket spec's D1–D6, wire format and close codes; in "Protocol versions and compatibility" replace the v2 bullet with "v4 (the WebSocket link) dropped v3 before any release; from the next version on, main keeps N-1" and the `MIN_LINK_PROTOCOL_VERSION (2)` mention with 4. Point to `docs/specs/2026-10-31-websocket-link-design.md`. Historical documents stay as written: `docs/specs/2026-10-30-bun-runtime-design.md`, `docs/plans/2026-10-30-bun-runtime.md`, `docs/plans/2026-10-29-local-daemon.md`.

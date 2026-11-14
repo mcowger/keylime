@@ -44,14 +44,24 @@ export function createNavigationHistory(): NavigationHistory {
  * Session views compare by id (a session keeps its identity while its cwd
  * metadata refreshes); new-chat views compare by host and cwd.
  */
-export function navigationEntriesEqual(a: NavigationEntry, b: NavigationEntry): boolean {
+export function navigationEntriesEqual(
+  a: NavigationEntry,
+  b: NavigationEntry,
+): boolean {
   if (a.sessionId !== b.sessionId) return false;
   if (a.sessionId !== null) return true;
-  if (a.poolId || b.poolId) return a.poolId === b.poolId && a.projectId === b.projectId && a.creationId === b.creationId;
+  if (a.poolId || b.poolId)
+    return (
+      a.poolId === b.poolId &&
+      a.projectId === b.projectId &&
+      a.creationId === b.creationId
+    );
   return (a.cwd ?? null) === (b.cwd ?? null) && a.hostId === b.hostId;
 }
 
-export function currentNavigationEntry(history: NavigationHistory): NavigationEntry | null {
+export function currentNavigationEntry(
+  history: NavigationHistory,
+): NavigationEntry | null {
   return history.entries[history.index] ?? null;
 }
 
@@ -62,15 +72,26 @@ export function currentNavigationEntry(history: NavigationHistory): NavigationEn
  * re-records it and pushes nothing. A genuinely new view truncates any
  * forward branch, browser-style.
  */
-export function pushNavigationEntry(history: NavigationHistory, entry: NavigationEntry): NavigationHistory {
+export function pushNavigationEntry(
+  history: NavigationHistory,
+  entry: NavigationEntry,
+): NavigationHistory {
   if (history.entries.length === 0) {
     return { entries: [entry], index: 0 };
   }
   const current = history.entries[history.index];
   if (current && navigationEntriesEqual(current, entry)) {
-    if (!current.poolId || current.initialization !== undefined || entry.initialization === undefined) return history;
+    if (
+      !current.poolId ||
+      current.initialization !== undefined ||
+      entry.initialization === undefined
+    )
+      return history;
     const entries = [...history.entries];
-    entries[history.index] = { ...current, initialization: entry.initialization };
+    entries[history.index] = {
+      ...current,
+      initialization: entry.initialization,
+    };
     return { ...history, entries };
   }
   const entries = history.entries.slice(0, history.index + 1);
@@ -90,13 +111,21 @@ export function canGoNavigationForward(history: NavigationHistory): boolean {
 }
 
 /** The entry a step in `direction` would display, without moving. */
-export function peekNavigationEntry(history: NavigationHistory, direction: -1 | 1): NavigationEntry | null {
+export function peekNavigationEntry(
+  history: NavigationHistory,
+  direction: -1 | 1,
+): NavigationEntry | null {
   const next = history.index + direction;
-  return next >= 0 && next < history.entries.length ? history.entries[next] : null;
+  return next >= 0 && next < history.entries.length
+    ? history.entries[next]
+    : null;
 }
 
 /** Move one entry in `direction`; out-of-bounds steps return the input. */
-export function stepNavigationHistory(history: NavigationHistory, direction: -1 | 1): NavigationHistory {
+export function stepNavigationHistory(
+  history: NavigationHistory,
+  direction: -1 | 1,
+): NavigationHistory {
   const next = history.index + direction;
   if (next < 0 || next >= history.entries.length) return history;
   return { entries: history.entries, index: next };
@@ -107,7 +136,10 @@ export function stepNavigationHistory(history: NavigationHistory, direction: -1 
  * peeked neighbor, never the current entry: removing an entry before the
  * cursor shifts the cursor down so it keeps pointing at the same entry.
  */
-export function removeNavigationEntryAt(history: NavigationHistory, index: number): NavigationHistory {
+export function removeNavigationEntryAt(
+  history: NavigationHistory,
+  index: number,
+): NavigationHistory {
   if (index < 0 || index >= history.entries.length) return history;
   const entries = history.entries.filter((_, i) => i !== index);
   let index2 = history.index;
@@ -136,15 +168,28 @@ export interface NavigationShortcutEvent {
  * The mouse back/forward buttons arrive as BrowserBack / BrowserForward on
  * every platform. Shift chords are excluded: Cmd+Shift+] switches tabs.
  */
-export function navigateShortcutDirection(event: NavigationShortcutEvent, isMac: boolean): NavigateDirection {
+export function navigateShortcutDirection(
+  event: NavigationShortcutEvent,
+  isMac: boolean,
+): NavigateDirection {
   if (event.isComposing) return 0;
   if (event.key === "BrowserBack") return -1;
   if (event.key === "BrowserForward") return 1;
-  if ((event.metaKey || (!isMac && event.ctrlKey)) && !event.altKey && !event.shiftKey) {
+  if (
+    (event.metaKey || (!isMac && event.ctrlKey)) &&
+    !event.altKey &&
+    !event.shiftKey
+  ) {
     if (event.key === "[") return -1;
     if (event.key === "]") return 1;
   }
-  if (!isMac && event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
+  if (
+    !isMac &&
+    event.altKey &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.shiftKey
+  ) {
     if (event.key === "ArrowLeft") return -1;
     if (event.key === "ArrowRight") return 1;
   }
@@ -155,11 +200,16 @@ export function navigateShortcutDirection(event: NavigationShortcutEvent, isMac:
 export function isMacPlatform(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent ?? "";
-  return /mac/i.test(navigator.platform ?? "") || /Macintosh|iPhone|iPad/i.test(ua);
+  return (
+    /mac/i.test(navigator.platform ?? "") || /Macintosh|iPhone|iPad/i.test(ua)
+  );
 }
 
 /** Short label for tooltips and menus, e.g. "⌘[" or "Alt+←". */
-export function navigateShortcutHint(direction: -1 | 1, isMac: boolean): string {
+export function navigateShortcutHint(
+  direction: -1 | 1,
+  isMac: boolean,
+): string {
   if (direction === -1) return isMac ? "⌘[" : "Alt+←";
   return isMac ? "⌘]" : "Alt+→";
 }

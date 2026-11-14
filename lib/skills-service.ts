@@ -4,7 +4,11 @@ import { homedir } from "os";
 import * as path from "path";
 import { promisify } from "util";
 import { parse as parseYaml } from "yaml";
-import { existingPathWithinRootsChecker, getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
+import {
+  existingPathWithinRootsChecker,
+  getAllowedFileRoots,
+  isExistingFilePathAllowed,
+} from "@/lib/file-access";
 import { resolveOmpBin, versionFingerprint } from "@/lib/omp/omp-cli";
 import { ensureAgentDir, getAgentDir } from "@/lib/omp/paths";
 import { createChildProcessEnvironment } from "@/lib/project-command-env";
@@ -95,35 +99,88 @@ function buildScanRoots(cwd: string): SkillScanRoot[] {
 
   // builtin (.omp): project walk-up first (closest first), then user dir.
   for (const dir of projectAncestors) {
-    roots.push({ dir: path.join(dir, ".omp", "skills"), source: ".omp", scope: "project", requireDescription: true });
+    roots.push({
+      dir: path.join(dir, ".omp", "skills"),
+      source: ".omp",
+      scope: "project",
+      requireDescription: true,
+    });
   }
-  roots.push({ dir: path.join(agentDir, "skills"), source: ".omp", scope: "user", requireDescription: true });
+  roots.push({
+    dir: path.join(agentDir, "skills"),
+    source: ".omp",
+    scope: "user",
+    requireDescription: true,
+  });
 
   // claude compat: user ~/.claude/skills + project .claude/skills walk-up.
-  const claudeHome = process.env.CLAUDE_CONFIG_DIR || path.join(home, ".claude");
-  roots.push({ dir: path.join(claudeHome, "skills"), source: ".claude", scope: "user" });
+  const claudeHome =
+    process.env.CLAUDE_CONFIG_DIR || path.join(home, ".claude");
+  roots.push({
+    dir: path.join(claudeHome, "skills"),
+    source: ".claude",
+    scope: "user",
+  });
   for (const dir of projectAncestors) {
-    roots.push({ dir: path.join(dir, ".claude", "skills"), source: ".claude", scope: "project" });
+    roots.push({
+      dir: path.join(dir, ".claude", "skills"),
+      source: ".claude",
+      scope: "project",
+    });
   }
 
   // agent dirs compat (.agent/.agents): project walk-up + user home.
   for (const dir of projectAncestors) {
-    roots.push({ dir: path.join(dir, ".agent", "skills"), source: ".agents", scope: "project" });
-    roots.push({ dir: path.join(dir, ".agents", "skills"), source: ".agents", scope: "project" });
+    roots.push({
+      dir: path.join(dir, ".agent", "skills"),
+      source: ".agents",
+      scope: "project",
+    });
+    roots.push({
+      dir: path.join(dir, ".agents", "skills"),
+      source: ".agents",
+      scope: "project",
+    });
   }
-  roots.push({ dir: path.join(home, ".agent", "skills"), source: ".agents", scope: "user" });
-  roots.push({ dir: path.join(home, ".agents", "skills"), source: ".agents", scope: "user" });
+  roots.push({
+    dir: path.join(home, ".agent", "skills"),
+    source: ".agents",
+    scope: "user",
+  });
+  roots.push({
+    dir: path.join(home, ".agents", "skills"),
+    source: ".agents",
+    scope: "user",
+  });
 
   // codex compat: user ~/.codex/skills + project .codex/skills.
-  roots.push({ dir: path.join(home, ".codex", "skills"), source: ".codex", scope: "user" });
-  roots.push({ dir: path.join(cwd, ".codex", "skills"), source: ".codex", scope: "project" });
+  roots.push({
+    dir: path.join(home, ".codex", "skills"),
+    source: ".codex",
+    scope: "user",
+  });
+  roots.push({
+    dir: path.join(cwd, ".codex", "skills"),
+    source: ".codex",
+    scope: "project",
+  });
 
   // github compat: <repoRoot>/.github/skills.
   const repoRoot = ancestors[ancestors.length - 1];
-  roots.push({ dir: path.join(repoRoot, ".github", "skills"), source: ".github", scope: "project", requireDescription: true });
+  roots.push({
+    dir: path.join(repoRoot, ".github", "skills"),
+    source: ".github",
+    scope: "project",
+    requireDescription: true,
+  });
 
   // managed auto-learn skills (lowest priority).
-  roots.push({ dir: path.join(agentDir, "managed-skills"), source: "managed", scope: "user", requireDescription: true });
+  roots.push({
+    dir: path.join(agentDir, "managed-skills"),
+    source: "managed",
+    scope: "user",
+    requireDescription: true,
+  });
 
   return roots;
 }
@@ -136,27 +193,40 @@ export function getSkillScanRootDirs(cwd?: string): string[] {
   return buildScanRoots(cwd ?? homedir()).map((root) => root.dir);
 }
 
-const DISABLE_INVOCATION_KEYS = ["disable-model-invocation", "disableModelInvocation", "hide"] as const;
+const DISABLE_INVOCATION_KEYS = [
+  "disable-model-invocation",
+  "disableModelInvocation",
+  "hide",
+] as const;
 /** Agent Skills standard spelling — used when no variant is present yet. */
 const CANONICAL_DISABLE_KEY = DISABLE_INVOCATION_KEYS[0];
 
 /** True when any of the three spellings omp honors is set
  * (frontmatter.hide === true || frontmatter.disableModelInvocation === true,
  * with `disable-model-invocation` normalized into the latter). */
-export function readDisableModelInvocation(frontmatter: Record<string, unknown>): boolean {
+export function readDisableModelInvocation(
+  frontmatter: Record<string, unknown>,
+): boolean {
   return DISABLE_INVOCATION_KEYS.some((key) => isTruthyFlag(frontmatter[key]));
 }
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/;
-const DISABLE_KEY_LINE_RE = new RegExp(`^(?:${DISABLE_INVOCATION_KEYS.join("|")})[ \\t]*:.*$`);
+const DISABLE_KEY_LINE_RE = new RegExp(
+  `^(?:${DISABLE_INVOCATION_KEYS.join("|")})[ \\t]*:.*$`,
+);
 
 /** Set/clear the disable-model-invocation flag in a SKILL.md, editing the key
  * line already present (in whichever of the three spellings) instead of
  * prepending a second copy, which would make the frontmatter invalid YAML. */
-export function setDisableModelInvocation(content: string, disable: boolean): string {
+export function setDisableModelInvocation(
+  content: string,
+  disable: boolean,
+): string {
   const match = FRONTMATTER_RE.exec(content);
   if (!match) {
-    return disable ? `---\n${CANONICAL_DISABLE_KEY}: true\n---\n${content}` : content;
+    return disable
+      ? `---\n${CANONICAL_DISABLE_KEY}: true\n---\n${content}`
+      : content;
   }
 
   const eol = match[0].includes("\r\n") ? "\r\n" : "\n";
@@ -174,7 +244,8 @@ export function setDisableModelInvocation(content: string, disable: boolean): st
       // Keep the spelling the file already uses; drop any duplicate variants so
       // a stale `hide: true` cannot re-enable hiding on the next toggle.
       const keep = hits[0];
-      const keyName = /^([\w-]+)/.exec(lines[keep])?.[1] ?? CANONICAL_DISABLE_KEY;
+      const keyName =
+        /^([\w-]+)/.exec(lines[keep])?.[1] ?? CANONICAL_DISABLE_KEY;
       next = lines
         .map((line, index) => (index === keep ? `${keyName}: true` : line))
         .filter((_, index) => index === keep || !hits.includes(index));
@@ -188,7 +259,10 @@ export function setDisableModelInvocation(content: string, disable: boolean): st
   return block + content.slice(match[0].length);
 }
 
-async function scanRoot(root: SkillScanRoot, diagnostics: SkillDiagnostic[]): Promise<SkillInfo[]> {
+async function scanRoot(
+  root: SkillScanRoot,
+  diagnostics: SkillDiagnostic[],
+): Promise<SkillInfo[]> {
   let entries;
   try {
     // `root.dir` is user-controlled and can be outside the app. Keep this
@@ -208,34 +282,46 @@ async function scanRoot(root: SkillScanRoot, diagnostics: SkillDiagnostic[]): Pr
   }
 
   const skills: SkillInfo[] = [];
-  await Promise.all(entries.map(async (entry) => {
-    if (entry.name.startsWith(".")) return;
-    if (!entry.isDirectory() && !entry.isSymbolicLink()) return;
-    const skillPath = path.join(root.dir, entry.name, "SKILL.md");
-    let content: string;
-    try {
-      content = await fs.readFile(skillPath, "utf8");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-        diagnostics.push({ type: "warning", message: "Failed to read skill file", path: skillPath });
+  await Promise.all(
+    entries.map(async (entry) => {
+      if (entry.name.startsWith(".")) return;
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) return;
+      const skillPath = path.join(root.dir, entry.name, "SKILL.md");
+      let content: string;
+      try {
+        content = await fs.readFile(skillPath, "utf8");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          diagnostics.push({
+            type: "warning",
+            message: "Failed to read skill file",
+            path: skillPath,
+          });
+        }
+        return;
       }
-      return;
-    }
-    const { frontmatter } = parseSkillFrontmatter(content);
-    if (frontmatter.enabled === false) return;
-    const description = typeof frontmatter.description === "string" ? frontmatter.description : "";
-    if (root.requireDescription && !description) return;
-    const rawName = frontmatter.name;
-    const name = typeof rawName === "string" && rawName.trim() ? rawName.trim() : entry.name;
-    skills.push({
-      name,
-      description,
-      filePath: skillPath,
-      baseDir: path.join(root.dir, entry.name),
-      disableModelInvocation: readDisableModelInvocation(frontmatter),
-      sourceInfo: { source: root.source, scope: root.scope },
-    });
-  }));
+      const { frontmatter } = parseSkillFrontmatter(content);
+      if (frontmatter.enabled === false) return;
+      const description =
+        typeof frontmatter.description === "string"
+          ? frontmatter.description
+          : "";
+      if (root.requireDescription && !description) return;
+      const rawName = frontmatter.name;
+      const name =
+        typeof rawName === "string" && rawName.trim()
+          ? rawName.trim()
+          : entry.name;
+      skills.push({
+        name,
+        description,
+        filePath: skillPath,
+        baseDir: path.join(root.dir, entry.name),
+        disableModelInvocation: readDisableModelInvocation(frontmatter),
+        sourceInfo: { source: root.source, scope: root.scope },
+      });
+    }),
+  );
   return skills;
 }
 
@@ -256,23 +342,37 @@ const SOURCE_LABEL_BY_PROVIDER: Record<string, string> = {
  * entries were present but none had the expected shape (upstream drift must
  * fall back to the replica, not render an empty list).
  */
-export function skillsFromCliPayload(data: unknown): SkillsWithDiagnostics | undefined {
+export function skillsFromCliPayload(
+  data: unknown,
+): SkillsWithDiagnostics | undefined {
   if (!isRecord(data) || !Array.isArray(data.skills)) return undefined;
   const rawSkills = data.skills;
   const rawWarnings = Array.isArray(data.warnings) ? data.warnings : [];
   const skills: SkillInfo[] = [];
   for (const raw of rawSkills) {
-    if (!isRecord(raw) || typeof raw.name !== "string" || typeof raw.filePath !== "string") continue;
-    const [provider = "", scope = ""] = typeof raw.source === "string" ? raw.source.split(":") : [];
+    if (
+      !isRecord(raw) ||
+      typeof raw.name !== "string" ||
+      typeof raw.filePath !== "string"
+    )
+      continue;
+    const [provider = "", scope = ""] =
+      typeof raw.source === "string" ? raw.source.split(":") : [];
     skills.push({
       name: raw.name,
       description: typeof raw.description === "string" ? raw.description : "",
       filePath: raw.filePath,
-      baseDir: typeof raw.baseDir === "string" ? raw.baseDir : raw.filePath.replace(/[\\/]SKILL\.md$/, ""),
+      baseDir:
+        typeof raw.baseDir === "string"
+          ? raw.baseDir
+          : raw.filePath.replace(/[\\/]SKILL\.md$/, ""),
       // omp's `hide` is the frontmatter `hide`/`disableModelInvocation`
       // (kebab key normalized), the same keys setDisableModelInvocation writes.
       disableModelInvocation: raw.hide === true,
-      sourceInfo: { source: SOURCE_LABEL_BY_PROVIDER[provider] ?? provider, scope },
+      sourceInfo: {
+        source: SOURCE_LABEL_BY_PROVIDER[provider] ?? provider,
+        scope,
+      },
     });
   }
   if (rawSkills.length > 0 && skills.length === 0) return undefined;
@@ -283,7 +383,9 @@ export function skillsFromCliPayload(data: unknown): SkillsWithDiagnostics | und
     diagnostics.push({
       type: "warning",
       message: raw.message,
-      ...(typeof raw.skillPath === "string" && raw.skillPath ? { path: raw.skillPath } : {}),
+      ...(typeof raw.skillPath === "string" && raw.skillPath
+        ? { path: raw.skillPath }
+        : {}),
     });
   }
   return { skills, diagnostics };
@@ -307,27 +409,35 @@ const skillsCliMisses = new Map<string, number>();
  * when the binary predates the command, or on any exec/parse failure, letting
  * the caller fall back to the replica scan.
  */
-async function discoverSkillsViaCli(cwd: string, ompBin: string | null): Promise<SkillsWithDiagnostics | undefined> {
+async function discoverSkillsViaCli(
+  cwd: string,
+  ompBin: string | null,
+): Promise<SkillsWithDiagnostics | undefined> {
   if (!ompBin) return undefined;
   const cwdPath = path.resolve(cwd);
   const missKey = `${versionFingerprint(ompBin) ?? ompBin}\0${cwdPath}`;
   const now = Date.now();
   if ((skillsCliMisses.get(missKey) ?? 0) > now) return undefined;
   try {
-    const { stdout } = await execFileAsync(ompBin, ["skill", "list", "--json"], {
-      cwd: cwdPath,
-      timeout: SKILLS_CLI_TIMEOUT_MS,
-      maxBuffer: 16 * 1024 * 1024,
-      // Otherwise this child inherits the server's full environment,
-      // including omp-web's own secrets.
-      env: createChildProcessEnvironment(),
-    });
+    const { stdout } = await execFileAsync(
+      ompBin,
+      ["skill", "list", "--json"],
+      {
+        cwd: cwdPath,
+        timeout: SKILLS_CLI_TIMEOUT_MS,
+        maxBuffer: 16 * 1024 * 1024,
+        // Otherwise this child inherits the server's full environment,
+        // including omp-web's own secrets.
+        env: createChildProcessEnvironment(),
+      },
+    );
     const listed = skillsFromCliPayload(JSON.parse(stdout));
     if (listed) return listed;
   } catch {
     // Missing/old binary, exec or parse failure — fall back to the replica.
   }
-  for (const [key, retryAt] of skillsCliMisses) if (retryAt <= now) skillsCliMisses.delete(key);
+  for (const [key, retryAt] of skillsCliMisses)
+    if (retryAt <= now) skillsCliMisses.delete(key);
   skillsCliMisses.set(missKey, now + SKILLS_CLI_MISS_TTL_MS);
   return undefined;
 }
@@ -372,16 +482,27 @@ export async function discoverSkills(
 export async function getSkillToggleRoots(cwd?: string): Promise<Set<string>> {
   // Copy: getAllowedFileRoots returns its shared cache set.
   const roots = new Set(await getAllowedFileRoots());
-  const scanCwd = cwd && isExistingFilePathAllowed(cwd, roots) ? cwd : undefined;
+  const scanCwd =
+    cwd && isExistingFilePathAllowed(cwd, roots) ? cwd : undefined;
   for (const dir of getSkillScanRootDirs(scanCwd)) roots.add(dir);
   return roots;
 }
 
-export async function loadSkillsWithInstallInfo(cwd: string, ompBin: string | null = resolveOmpBin(), scope?: "user") {
-  const [{ skills, diagnostics }, toggleRoots] = await Promise.all([discoverSkills(cwd, ompBin, scope), getSkillToggleRoots(cwd)]);
+export async function loadSkillsWithInstallInfo(
+  cwd: string,
+  ompBin: string | null = resolveOmpBin(),
+  scope?: "user",
+) {
+  const [{ skills, diagnostics }, toggleRoots] = await Promise.all([
+    discoverSkills(cwd, ompBin, scope),
+    getSkillToggleRoots(cwd),
+  ]);
   const isTogglable = existingPathWithinRootsChecker(toggleRoots);
   return {
-    skills: annotateSkillsWithInstallInfo(skills, { cwd, agentDir: getAgentDir() }).map((skill) => ({
+    skills: annotateSkillsWithInstallInfo(skills, {
+      cwd,
+      agentDir: getAgentDir(),
+    }).map((skill) => ({
       ...skill,
       togglable: isTogglable(skill.filePath),
     })),
@@ -391,7 +512,18 @@ export async function loadSkillsWithInstallInfo(cwd: string, ompBin: string | nu
 
 /** The user level only, for a request without a cwd (a cluster member's settings act on this machine's, spec K7): omp
  * runs in its agent directory, where no project lies, and a project-scope entry is left out all the same. */
-export async function loadUserSkillsWithInstallInfo(ompBin: string | null = resolveOmpBin()) {
-  const listed = await loadSkillsWithInstallInfo(ensureAgentDir(), ompBin, "user");
-  return { ...listed, skills: listed.skills.filter((skill) => skill.sourceInfo?.scope !== "project") };
+export async function loadUserSkillsWithInstallInfo(
+  ompBin: string | null = resolveOmpBin(),
+) {
+  const listed = await loadSkillsWithInstallInfo(
+    ensureAgentDir(),
+    ompBin,
+    "user",
+  );
+  return {
+    ...listed,
+    skills: listed.skills.filter(
+      (skill) => skill.sourceInfo?.scope !== "project",
+    ),
+  };
 }

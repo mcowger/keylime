@@ -60,7 +60,12 @@ const LOOP_DEFAULT_ATTEMPTS = 3;
 
 const LOOP_PROMPT = (args: string) => {
   const match = args.match(/^(\d+)\s+([\s\S]+)$/);
-  const attempts = match ? Math.min(Math.max(parseInt(match[1], 10) || LOOP_DEFAULT_ATTEMPTS, 1), LOOP_MAX_ATTEMPTS) : LOOP_DEFAULT_ATTEMPTS;
+  const attempts = match
+    ? Math.min(
+        Math.max(parseInt(match[1], 10) || LOOP_DEFAULT_ATTEMPTS, 1),
+        LOOP_MAX_ATTEMPTS,
+      )
+    : LOOP_DEFAULT_ATTEMPTS;
   const task = match ? match[2].trim() : args;
   return `Attempt the following task, verifying the result concretely after each attempt (run the relevant checks or tests). If it is not fully done, try again from where it stands, building on what you learned — up to ${attempts} attempts in total. Stop early once it is done. Do not ask for confirmation between attempts.\n\nTask:\n\n${task}`;
 };
@@ -137,9 +142,13 @@ export const WEB_SLASH_COMMANDS: readonly WebSlashCommandDef[] = [
     buildPrompt: LOOP_PROMPT,
   },
 ];
-const WEB_SLASH_COMMAND_LOOKUP = new Map(WEB_SLASH_COMMANDS.map((command) => [command.name, command]));
+const WEB_SLASH_COMMAND_LOOKUP = new Map(
+  WEB_SLASH_COMMANDS.map((command) => [command.name, command]),
+);
 
-export function getWebSlashCommand(name: string): WebSlashCommandDef | undefined {
+export function getWebSlashCommand(
+  name: string,
+): WebSlashCommandDef | undefined {
   return WEB_SLASH_COMMAND_LOOKUP.get(name);
 }
 
@@ -163,7 +172,11 @@ export function expandWebSlashCommand(text: string): WebSlashCommandExpansion {
   if (!def) return { kind: "not-web" };
   const args = (match[2] ?? "").trim();
   if (def.requiresArgs && !args) {
-    return { kind: "usage-error", command: `/${def.name}`, argumentHintKey: def.argumentHintKey };
+    return {
+      kind: "usage-error",
+      command: `/${def.name}`,
+      argumentHintKey: def.argumentHintKey,
+    };
   }
   return { kind: "expand", prompt: def.buildPrompt(args) };
 }

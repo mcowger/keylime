@@ -29,7 +29,8 @@ export interface HostUpdateOperation {
 }
 
 export interface HostUpdateInfo {
-  ompweb: HostSoftwareUpdate & Pick<NpmUpdateStatus, "installMethod"> & { protocolVersion: number | null };
+  ompweb: HostSoftwareUpdate &
+    Pick<NpmUpdateStatus, "installMethod"> & { protocolVersion: number | null };
   omp: { currentVersion: string | null };
   operation: HostUpdateOperation | null;
 }

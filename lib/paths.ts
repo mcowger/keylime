@@ -8,7 +8,6 @@ export function projectIdentityKey(projectRoot: string): string {
   return normalizeForComparison(projectRoot);
 }
 
-
 export function normalizeForComparison(value: string): string {
   if (!value) return value;
   const normalized = path.posix.normalize(value);

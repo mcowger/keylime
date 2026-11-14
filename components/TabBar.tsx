@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { Activity, Bell, Folder, GitBranch, GitFork, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { getFileIcon } from "./FileIcons";
@@ -56,7 +62,18 @@ const badgeStyle = (color: string) => ({
 });
 
 /** Notifications / Explorer / Git: fixed tabs before the file tabs. */
-function PinnedTab({ id, panelId, label, title, icon, selected, badge, badgeColor, onSelect, onKeyDown }: {
+function PinnedTab({
+  id,
+  panelId,
+  label,
+  title,
+  icon,
+  selected,
+  badge,
+  badgeColor,
+  onSelect,
+  onKeyDown,
+}: {
   id: string;
   panelId: string;
   label: string;
@@ -114,10 +131,24 @@ function PinnedTab({ id, panelId, label, title, icon, selected, badge, badgeColo
           }}
         />
       )}
-      <span style={{ flexShrink: 0, opacity: selected ? 1 : 0.7, display: "flex", alignItems: "center", color: selected ? "var(--accent)" : undefined }}>
+      <span
+        style={{
+          flexShrink: 0,
+          opacity: selected ? 1 : 0.7,
+          display: "flex",
+          alignItems: "center",
+          color: selected ? "var(--accent)" : undefined,
+        }}
+      >
         {icon}
       </span>
-      <span style={{ overflow: "hidden", textOverflow: "ellipsis", fontWeight: selected ? 500 : 400 }}>
+      <span
+        style={{
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          fontWeight: selected ? 500 : 400,
+        }}
+      >
         {label}
       </span>
       {badge > 0 && (
@@ -129,7 +160,25 @@ function PinnedTab({ id, panelId, label, title, icon, selected, badge, badgeColo
   );
 }
 
-export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, explorerSelected = false, onSelectExplorer, explorerBadge = 0, gitSelected = false, onSelectGit, gitBadge = 0, notificationsSelected = false, onSelectNotifications, notificationsBadge = 0, worktreesSelected = false, onSelectWorktrees, connectionSelected = false, onSelectConnection }: Props) {
+export function TabBar({
+  tabs,
+  activeTabId,
+  onSelectTab,
+  onCloseTab,
+  explorerSelected = false,
+  onSelectExplorer,
+  explorerBadge = 0,
+  gitSelected = false,
+  onSelectGit,
+  gitBadge = 0,
+  notificationsSelected = false,
+  onSelectNotifications,
+  notificationsBadge = 0,
+  worktreesSelected = false,
+  onSelectWorktrees,
+  connectionSelected = false,
+  onSelectConnection,
+}: Props) {
   const { t } = useI18n();
   const [hoveredClose, setHoveredClose] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -156,7 +205,9 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, explorerSel
 
   const focusTabById = (id: string) => {
     requestAnimationFrame(() => {
-      listRef.current?.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(id)}"]`)?.focus();
+      listRef.current
+        ?.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(id)}"]`)
+        ?.focus();
     });
   };
 
@@ -170,8 +221,10 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, explorerSel
     const index = orderedTabIds.indexOf(id);
     if (index < 0 || orderedTabIds.length === 0) return;
     let nextIndex: number | null = null;
-    if (event.key === "ArrowRight") nextIndex = (index + 1) % orderedTabIds.length;
-    else if (event.key === "ArrowLeft") nextIndex = (index - 1 + orderedTabIds.length) % orderedTabIds.length;
+    if (event.key === "ArrowRight")
+      nextIndex = (index + 1) % orderedTabIds.length;
+    else if (event.key === "ArrowLeft")
+      nextIndex = (index - 1 + orderedTabIds.length) % orderedTabIds.length;
     else if (event.key === "Home") nextIndex = 0;
     else if (event.key === "End") nextIndex = orderedTabIds.length - 1;
     if (nextIndex !== null) {
@@ -182,7 +235,10 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, explorerSel
       return;
     }
 
-    if ((event.key === "Delete" || event.key === "Backspace") && tabs.some((tab) => tab.id === id)) {
+    if (
+      (event.key === "Delete" || event.key === "Backspace") &&
+      tabs.some((tab) => tab.id === id)
+    ) {
       event.preventDefault();
       onCloseTab(id);
     }
@@ -192,7 +248,9 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, explorerSel
   useEffect(() => {
     const list = listRef.current;
     if (!list) return;
-    const active = list.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(activeTabId)}"]`);
+    const active = list.querySelector<HTMLElement>(
+      `[data-tab-id="${CSS.escape(activeTabId)}"]`,
+    );
     if (!active) return;
     const listRect = list.getBoundingClientRect();
     const tabRect = active.getBoundingClientRect();
@@ -224,7 +282,13 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, explorerSel
           id="notifications"
           panelId="workspace-file-panel-notifications"
           label={t("appShell.notifications")}
-          title={notificationsBadge > 0 ? t("appShell.notificationsUnreadCount", { count: notificationsBadge }) : t("appShell.notifications")}
+          title={
+            notificationsBadge > 0
+              ? t("appShell.notificationsUnreadCount", {
+                  count: notificationsBadge,
+                })
+              : t("appShell.notifications")
+          }
           icon={<Bell size={13} strokeWidth={2} aria-hidden="true" />}
           selected={notificationsSelected}
           badge={notificationsBadge}
@@ -238,7 +302,11 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, explorerSel
           id="explorer"
           panelId="workspace-file-panel-explorer"
           label={t("sessionSidebar.explorer")}
-          title={explorerBadge > 0 ? t("sessionSidebar.explorerChanged", { count: explorerBadge }) : t("sessionSidebar.explorer")}
+          title={
+            explorerBadge > 0
+              ? t("sessionSidebar.explorerChanged", { count: explorerBadge })
+              : t("sessionSidebar.explorer")
+          }
           icon={<Folder size={13} strokeWidth={2} aria-hidden="true" />}
           selected={explorerSelected}
           badge={explorerBadge}
@@ -252,7 +320,11 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, explorerSel
           id="git"
           panelId="workspace-file-panel-git"
           label={t("tabBar.git")}
-          title={gitBadge > 0 ? t("sessionSidebar.explorerChanged", { count: gitBadge }) : t("tabBar.git")}
+          title={
+            gitBadge > 0
+              ? t("sessionSidebar.explorerChanged", { count: gitBadge })
+              : t("tabBar.git")
+          }
           icon={<GitBranch size={13} strokeWidth={2} aria-hidden="true" />}
           selected={gitSelected}
           badge={gitBadge}
@@ -348,7 +420,14 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, explorerSel
                 }}
               />
             )}
-            <span style={{ flexShrink: 0, opacity: isActive ? 1 : 0.7, display: "flex", alignItems: "center" }}>
+            <span
+              style={{
+                flexShrink: 0,
+                opacity: isActive ? 1 : 0.7,
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
               {getFileIcon(tab.label, 13)}
             </span>
             <span
@@ -364,18 +443,26 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, explorerSel
             </span>
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); onCloseTab(tab.id); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCloseTab(tab.id);
+              }}
               tabIndex={isActive ? 0 : -1}
               onKeyDown={(event) => event.stopPropagation()}
               onMouseEnter={() => setHoveredClose(tab.id)}
               onMouseLeave={() => setHoveredClose(null)}
               style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                width: "var(--icon-control-size-compact)", height: "var(--icon-control-size-compact)",
-                background: hoveredClose === tab.id ? "var(--bg-hover)" : "transparent",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "var(--icon-control-size-compact)",
+                height: "var(--icon-control-size-compact)",
+                background:
+                  hoveredClose === tab.id ? "var(--bg-hover)" : "transparent",
                 border: "none",
                 borderRadius: "var(--radius-control)",
-                color: hoveredClose === tab.id ? "var(--text)" : "var(--text-dim)",
+                color:
+                  hoveredClose === tab.id ? "var(--text)" : "var(--text-dim)",
                 cursor: "pointer",
                 padding: 0,
                 flexShrink: 0,

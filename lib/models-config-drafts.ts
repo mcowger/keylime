@@ -12,12 +12,16 @@ export interface ModelsConfigDraft {
 
 function isUntouchedModelDraft(model: ModelConfigDraft): boolean {
   return Object.entries(model).every(([key, value]) =>
-    key === "id" ? typeof value === "string" && value.trim() === "" : value === undefined,
+    key === "id"
+      ? typeof value === "string" && value.trim() === ""
+      : value === undefined,
   );
 }
 
 /** Excludes only the empty row created by the editor's Add model control. */
-export function omitUntouchedModelDrafts<T extends ModelsConfigDraft>(config: T): T {
+export function omitUntouchedModelDrafts<T extends ModelsConfigDraft>(
+  config: T,
+): T {
   if (!config.providers) return config;
 
   let changed = false;
@@ -29,9 +33,14 @@ export function omitUntouchedModelDrafts<T extends ModelsConfigDraft>(config: T)
       continue;
     }
     changed = true;
-    const completeModels = models.filter((model) => !isUntouchedModelDraft(model));
-    providers[name] = { ...provider, models: completeModels.length > 0 ? completeModels : undefined };
+    const completeModels = models.filter(
+      (model) => !isUntouchedModelDraft(model),
+    );
+    providers[name] = {
+      ...provider,
+      models: completeModels.length > 0 ? completeModels : undefined,
+    };
   }
 
-  return changed ? { ...config, providers } as T : config;
+  return changed ? ({ ...config, providers } as T) : config;
 }

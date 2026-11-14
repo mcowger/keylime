@@ -1,7 +1,11 @@
 import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { isAbsolute, join, relative, resolve, sep } from "path";
-import type { SkillInfo, SkillInstallInfo, SkillInstallScope } from "@/lib/api-types";
+import type {
+  SkillInfo,
+  SkillInstallInfo,
+  SkillInstallScope,
+} from "@/lib/api-types";
 
 interface SkillLockEntry {
   source?: unknown;
@@ -28,11 +32,15 @@ interface AnnotateSkillOptions {
   projectLockPath?: string;
 }
 
-export function getGlobalSkillsLockPath(options: GlobalLockPathOptions = {}): string {
+export function getGlobalSkillsLockPath(
+  options: GlobalLockPathOptions = {},
+): string {
   const homeDir = options.homeDir ?? homedir();
   // Callers that inject a home directory (tests or alternate installations)
   // must not accidentally inherit the host process's XDG state directory.
-  const xdgStateHome = options.xdgStateHome ?? (options.homeDir === undefined ? process.env.XDG_STATE_HOME : undefined);
+  const xdgStateHome =
+    options.xdgStateHome ??
+    (options.homeDir === undefined ? process.env.XDG_STATE_HOME : undefined);
   return xdgStateHome
     ? join(xdgStateHome, "skills", ".skill-lock.json")
     : join(homeDir, ".agents", ".skill-lock.json");
@@ -41,7 +49,9 @@ export function getGlobalSkillsLockPath(options: GlobalLockPathOptions = {}): st
 function readSkillLock(path: string): Record<string, SkillLockEntry> {
   try {
     const parsed = JSON.parse(readFileSync(path, "utf8")) as SkillLockFile;
-    return parsed.skills && typeof parsed.skills === "object" ? parsed.skills : {};
+    return parsed.skills && typeof parsed.skills === "object"
+      ? parsed.skills
+      : {};
   } catch {
     return {};
   }
@@ -49,7 +59,12 @@ function readSkillLock(path: string): Record<string, SkillLockEntry> {
 
 function isWithin(path: string, root: string): boolean {
   const rel = relative(resolve(root), resolve(path));
-  return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+  return (
+    rel !== "" &&
+    rel !== ".." &&
+    !rel.startsWith(`..${sep}`) &&
+    !isAbsolute(rel)
+  );
 }
 
 function findLockEntry(
@@ -58,7 +73,9 @@ function findLockEntry(
 ): SkillLockEntry | undefined {
   if (entries[skillName]) return entries[skillName];
   const normalizedName = skillName.toLowerCase();
-  const key = Object.keys(entries).find((name) => name.toLowerCase() === normalizedName);
+  const key = Object.keys(entries).find(
+    (name) => name.toLowerCase() === normalizedName,
+  );
   return key ? entries[key] : undefined;
 }
 
@@ -72,8 +89,12 @@ function normalizeSource(source: string, sourceType?: string): string {
     .replace(/\/$/, "");
 }
 
-function buildSkillsShUrl(source: string, skillName: string): string | undefined {
-  if (!source || source.includes("://") || source.startsWith("git@")) return undefined;
+function buildSkillsShUrl(
+  source: string,
+  skillName: string,
+): string | undefined {
+  if (!source || source.includes("://") || source.startsWith("git@"))
+    return undefined;
   const sourcePath = source
     .split("/")
     .filter(Boolean)
@@ -89,17 +110,22 @@ function getInstallInfo(
   scope: SkillInstallScope,
 ): SkillInstallInfo | undefined {
   const entry = findLockEntry(entries, skillName);
-  if (!entry || typeof entry.source !== "string" || !entry.source.trim()) return undefined;
+  if (!entry || typeof entry.source !== "string" || !entry.source.trim())
+    return undefined;
 
-  const sourceType = typeof entry.sourceType === "string" ? entry.sourceType : undefined;
+  const sourceType =
+    typeof entry.sourceType === "string" ? entry.sourceType : undefined;
   const source = normalizeSource(entry.source.trim(), sourceType);
   if (!source) return undefined;
-  const skillPath = typeof entry.skillPath === "string" ? entry.skillPath : undefined;
+  const skillPath =
+    typeof entry.skillPath === "string" ? entry.skillPath : undefined;
   const ref = typeof entry.ref === "string" ? entry.ref : undefined;
-  const rawVersionHash = scope === "global" ? entry.skillFolderHash : entry.computedHash;
-  const versionHash = typeof rawVersionHash === "string" && rawVersionHash
-    ? rawVersionHash
-    : undefined;
+  const rawVersionHash =
+    scope === "global" ? entry.skillFolderHash : entry.computedHash;
+  const versionHash =
+    typeof rawVersionHash === "string" && rawVersionHash
+      ? rawVersionHash
+      : undefined;
   const isGitHubSource =
     sourceType === "github" && /^[\w.-]+\/[\w.-]+$/.test(source);
   const hasComparableVersion = scope === "global" || !ref;
@@ -109,7 +135,8 @@ function getInstallInfo(
     scope,
     source,
     sourceType,
-    skillsShUrl: sourceType === "local" ? undefined : buildSkillsShUrl(source, skillName),
+    skillsShUrl:
+      sourceType === "local" ? undefined : buildSkillsShUrl(source, skillName),
     ...(skillPath && { skillPath }),
     ...(ref && { ref }),
     ...(versionHash && { versionHash }),
@@ -132,8 +159,14 @@ export function annotateSkillsWithInstallInfo(
   const projectEntries = readSkillLock(projectLockPath);
   // skills.sh installs with --agent universal land in .agents/skills; omp's
   // own dirs remain valid install roots for manually placed skills.
-  const globalSkillsRoots = [join(agentDir, "skills"), join(homedir(), ".agents", "skills")];
-  const projectSkillsRoots = [join(cwd, ".omp", "skills"), join(cwd, ".agents", "skills")];
+  const globalSkillsRoots = [
+    join(agentDir, "skills"),
+    join(homedir(), ".agents", "skills"),
+  ];
+  const projectSkillsRoots = [
+    join(cwd, ".omp", "skills"),
+    join(cwd, ".agents", "skills"),
+  ];
 
   return skills.map((skill) => {
     if (!existsSync(skill.filePath)) return skill;
@@ -141,7 +174,9 @@ export function annotateSkillsWithInstallInfo(
     // installed name.
     const lockName = skill.name.slice(skill.name.lastIndexOf("/") + 1);
 
-    const install = globalSkillsRoots.some((root) => isWithin(skill.filePath, root))
+    const install = globalSkillsRoots.some((root) =>
+      isWithin(skill.filePath, root),
+    )
       ? getInstallInfo(globalEntries, lockName, "global")
       : projectSkillsRoots.some((root) => isWithin(skill.filePath, root))
         ? getInstallInfo(projectEntries, lockName, "project")

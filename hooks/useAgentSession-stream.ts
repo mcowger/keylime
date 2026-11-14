@@ -11,7 +11,13 @@ import type {
 } from "@/lib/types";
 import type { EventStream } from "@/lib/event-stream";
 import type { ThinkingModelMeta } from "@/lib/thinking-levels";
-import type { QueuedMessages, RpcAvailableSlashCommand, SlowModeScope, TodoPhase, UsageLimitState } from "@/lib/pi-types";
+import type {
+  QueuedMessages,
+  RpcAvailableSlashCommand,
+  SlowModeScope,
+  TodoPhase,
+  UsageLimitState,
+} from "@/lib/pi-types";
 import type {
   SubagentHistoryEntry,
   SubagentInfo,
@@ -55,7 +61,10 @@ export type StreamAction =
   | { type: "end" }
   | { type: "reset" };
 
-export function streamReducer(state: StreamingState, action: StreamAction): StreamingState {
+export function streamReducer(
+  state: StreamingState,
+  action: StreamAction,
+): StreamingState {
   switch (action.type) {
     case "start":
       return { isStreaming: true, streamingMessage: null };
@@ -67,15 +76,23 @@ export function streamReducer(state: StreamingState, action: StreamAction): Stre
       const held = state.isStreaming ? null : state.streamingMessage;
       if (!held) return state;
       // No timestamp to match: drop it now, as before holding existed.
-      const saved = held.timestamp === undefined
-        || action.committed.some((message) => message.role === "assistant" && message.timestamp === held.timestamp);
+      const saved =
+        held.timestamp === undefined ||
+        action.committed.some(
+          (message) =>
+            message.role === "assistant" &&
+            message.timestamp === held.timestamp,
+        );
       return saved ? { isStreaming: false, streamingMessage: null } : state;
     }
     case "idle":
     case "end": {
       const held = !state.isStreaming && state.streamingMessage;
       if (held) return state;
-      return { isStreaming: action.type === "idle" && action.streaming, streamingMessage: null };
+      return {
+        isStreaming: action.type === "idle" && action.streaming,
+        streamingMessage: null,
+      };
     }
     case "reset":
       return { isStreaming: false, streamingMessage: null };
@@ -97,7 +114,9 @@ export const SUBAGENT_ACTIVITY_BUFFER_MAX = 50;
 export const SUBAGENT_ACTIVITY_MAX_IDS = 64;
 
 /** Keep only the most recently inserted entries of an id-keyed map. */
-export function pruneSubagentIdMap<T>(map: Record<string, T>): Record<string, T> {
+export function pruneSubagentIdMap<T>(
+  map: Record<string, T>,
+): Record<string, T> {
   const keys = Object.keys(map);
   if (keys.length <= SUBAGENT_ACTIVITY_MAX_IDS) return map;
   const next = { ...map };
@@ -125,7 +144,9 @@ export function pruneSubagentIdMap<T>(map: Record<string, T>): Record<string, T>
 }
 
 /** Convert a recovered on-disk history entry into roster form. */
-export function historyEntryToSubagentInfo(entry: SubagentHistoryEntry): SubagentInfo {
+export function historyEntryToSubagentInfo(
+  entry: SubagentHistoryEntry,
+): SubagentInfo {
   const info: SubagentInfo = {
     id: entry.id,
     agent: entry.agent,
@@ -177,8 +198,18 @@ export interface LastAssistantTextResponse {
 // Shape of lib/rpc-manager's WebSessionState as seen over HTTP.
 export type AgentStateResponse = {
   // Raw get_state passthrough: the resolved model omp is actually running.
-  model?: { provider: string; id: string; name?: string; reasoning?: boolean; thinking?: { efforts?: string[] } };
-  contextUsage?: { percent: number | null; contextWindow: number; tokens: number | null } | null;
+  model?: {
+    provider: string;
+    id: string;
+    name?: string;
+    reasoning?: boolean;
+    thinking?: { efforts?: string[] };
+  };
+  contextUsage?: {
+    percent: number | null;
+    contextWindow: number;
+    tokens: number | null;
+  } | null;
   systemPrompt?: string;
   thinkingLevel?: string;
   fastModeEnabled?: boolean;
@@ -204,16 +235,35 @@ export type AgentStateResponse = {
   todoPhases?: TodoPhase[];
 };
 
-export function normalizeThinkingLevel(level: string | undefined): ThinkingLevelOption {
+export function normalizeThinkingLevel(
+  level: string | undefined,
+): ThinkingLevelOption {
   // omp's "inherit" sentinel means "no explicit selection" — show as auto.
   if (!level || level === "inherit") return "auto";
   return level as ThinkingLevelOption;
 }
 
 /** Narrow the live state's model (OmpModel: id-based) to the composer's shape. */
-export function toThinkingModelMeta(model: { provider?: string; id?: string; name?: string; reasoning?: boolean; thinking?: { efforts?: string[] } } | null | undefined): ThinkingModelMeta | null {
+export function toThinkingModelMeta(
+  model:
+    | {
+        provider?: string;
+        id?: string;
+        name?: string;
+        reasoning?: boolean;
+        thinking?: { efforts?: string[] };
+      }
+    | null
+    | undefined,
+): ThinkingModelMeta | null {
   if (!model?.provider || !model.id) return null;
-  return { provider: model.provider, modelId: model.id, name: model.name, reasoning: model.reasoning, thinking: model.thinking };
+  return {
+    provider: model.provider,
+    modelId: model.id,
+    name: model.name,
+    reasoning: model.reasoning,
+    thinking: model.thinking,
+  };
 }
 
 export type AgentPhase =
@@ -243,7 +293,13 @@ export interface SlashCommandInfo {
 
 export type BuiltinSlashCommandResult =
   | { handled: false }
-  | { handled: true; message?: string; error?: string; action?: "openSessionStats"; retainInput?: boolean };
+  | {
+      handled: true;
+      message?: string;
+      error?: string;
+      action?: "openSessionStats";
+      retainInput?: boolean;
+    };
 
 export type ThinkingLevelOption = string;
 
@@ -280,7 +336,17 @@ export const EVENT_STREAM_SLOW_CONNECT_MS = 4_000;
 export const EVENT_STREAM_RETRY_MIN_MS = 1_000;
 export const EVENT_STREAM_RETRY_MAX_MS = 30_000;
 
-export const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " ", "Space", "Spacebar"]);
+export const SCROLL_KEYS = new Set([
+  "ArrowUp",
+  "ArrowDown",
+  "PageUp",
+  "PageDown",
+  "Home",
+  "End",
+  " ",
+  "Space",
+  "Spacebar",
+]);
 export function isQuotaLikeError(text: string): boolean {
   return /429|quota|RESOURCE_EXHAUSTED|Cloud Code Assist/i.test(text);
 }
@@ -292,10 +358,14 @@ export type EventStreamConnectionResult = {
 };
 
 export class EventStreamConnectionError extends Error {
-  constructor(public readonly status: Exclude<EventStreamConnectionStatus, "connected">) {
-    super(status === "timeout"
-      ? translate("agentSession.eventStreamTimeout")
-      : translate("agentSession.eventStreamFailed"));
+  constructor(
+    public readonly status: Exclude<EventStreamConnectionStatus, "connected">,
+  ) {
+    super(
+      status === "timeout"
+        ? translate("agentSession.eventStreamTimeout")
+        : translate("agentSession.eventStreamFailed"),
+    );
     this.name = "EventStreamConnectionError";
   }
 }
@@ -323,7 +393,11 @@ export interface HostToolHandlers {
   openUrl: (url: string) => string;
   /** Open a file tab; may return the result text reported to the agent. `ownerSessionId` is set when the server
    * resolved a `local://` file for a session under another id (an alias): the tab belongs to that owner. */
-  openFile?: (path: string, name: string, ownerSessionId?: string) => string | void;
+  openFile?: (
+    path: string,
+    name: string,
+    ownerSessionId?: string,
+  ) => string | void;
 }
 
 /** How long a `local://` lookup may take before the agent is told the server did not answer: the host ops behind it give
@@ -331,22 +405,59 @@ export interface HostToolHandlers {
 export const LOCAL_FILE_LOOKUP_TIMEOUT_MS = 30_000;
 
 /** A session's `local://` file as the absolute path the file viewer opens, found by the server that holds the session. */
-async function resolveLocalFile(sessionId: string | undefined, uri: string, signal?: AbortSignal): Promise<{ ok: true; path: string; sessionId?: string } | { ok: false; error: string }> {
-  if (!sessionId) return { ok: false, error: "A local:// file belongs to a session, and no session asked for it" };
-  const unanswered = { ok: false as const, error: `Could not open ${uri}: the server did not answer` };
+async function resolveLocalFile(
+  sessionId: string | undefined,
+  uri: string,
+  signal?: AbortSignal,
+): Promise<
+  { ok: true; path: string; sessionId?: string } | { ok: false; error: string }
+> {
+  if (!sessionId)
+    return {
+      ok: false,
+      error:
+        "A local:// file belongs to a session, and no session asked for it",
+    };
+  const unanswered = {
+    ok: false as const,
+    error: `Could not open ${uri}: the server did not answer`,
+  };
   // An AbortController and a timer, not AbortSignal.timeout (older browsers lack it): a stalled request must not leave
   // the agent's tool call pending until the tab goes away.
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });
   if (signal?.aborted) controller.abort();
-  const timer = setTimeout(() => controller.abort(), LOCAL_FILE_LOOKUP_TIMEOUT_MS);
+  const timer = setTimeout(
+    () => controller.abort(),
+    LOCAL_FILE_LOOKUP_TIMEOUT_MS,
+  );
   try {
-    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/local-file?uri=${encodeURIComponent(uri)}`, { signal: controller.signal });
-    const body = (await response.json().catch(() => ({}))) as { path?: unknown; sessionId?: unknown; error?: unknown };
+    const response = await fetch(
+      `/api/sessions/${encodeURIComponent(sessionId)}/local-file?uri=${encodeURIComponent(uri)}`,
+      { signal: controller.signal },
+    );
+    const body = (await response.json().catch(() => ({}))) as {
+      path?: unknown;
+      sessionId?: unknown;
+      error?: unknown;
+    };
     if (controller.signal.aborted) return unanswered;
-    if (response.ok && typeof body.path === "string") return { ok: true, path: body.path, ...(typeof body.sessionId === "string" ? { sessionId: body.sessionId } : {}) };
-    return { ok: false, error: typeof body.error === "string" ? body.error : `Could not open ${uri} (HTTP ${response.status})` };
+    if (response.ok && typeof body.path === "string")
+      return {
+        ok: true,
+        path: body.path,
+        ...(typeof body.sessionId === "string"
+          ? { sessionId: body.sessionId }
+          : {}),
+      };
+    return {
+      ok: false,
+      error:
+        typeof body.error === "string"
+          ? body.error
+          : `Could not open ${uri} (HTTP ${response.status})`,
+    };
   } catch {
     return unanswered;
   } finally {
@@ -369,13 +480,15 @@ export async function runHostTool(
   sessionId: string | undefined,
   signal?: AbortSignal,
 ): Promise<{ text: string; isError: boolean }> {
-  const str = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
+  const str = (value: unknown): string | undefined =>
+    typeof value === "string" ? value : undefined;
   const canceled = { text: "Host tool request canceled", isError: true };
   if (signal?.aborted) return canceled;
   switch (toolName) {
     case "open_url": {
       const raw = str(args.url) ?? "";
-      if (!isSafeOpenUrl(raw)) return { text: "Unsafe or invalid URL not opened", isError: !!raw };
+      if (!isSafeOpenUrl(raw))
+        return { text: "Unsafe or invalid URL not opened", isError: !!raw };
       return { text: handlers.openUrl(raw), isError: false };
     }
     case "notify": {
@@ -383,14 +496,25 @@ export async function runHostTool(
       const message = str(args.message) ?? "";
       if (typeof Notification !== "undefined") {
         try {
-          const permission = Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission;
+          const permission =
+            Notification.permission === "default"
+              ? await Notification.requestPermission()
+              : Notification.permission;
           if (signal?.aborted) return canceled;
           if (permission === "granted") {
-            const options = { body: message, icon: "/icon-192.png", badge: "/badge-96.png" };
+            const options = {
+              body: message,
+              icon: "/icon-192.png",
+              badge: "/badge-96.png",
+            };
             // Chrome on Android only allows notifications through a service worker.
-            const registration = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : undefined;
+            const registration =
+              "serviceWorker" in navigator
+                ? await navigator.serviceWorker.getRegistration()
+                : undefined;
             if (signal?.aborted) return canceled;
-            if (registration) await registration.showNotification(title, options);
+            if (registration)
+              await registration.showNotification(title, options);
             else new Notification(title, options);
           }
         } catch {
@@ -416,13 +540,22 @@ export async function runHostTool(
         try {
           text = handlers.openFile(path, path.split("/").pop() || path, owner);
         } catch (error) {
-          return { text: error instanceof Error ? error.message : `Could not open ${requested}`, isError: true };
+          return {
+            text:
+              error instanceof Error
+                ? error.message
+                : `Could not open ${requested}`,
+            isError: true,
+          };
         }
       }
       return { text: text || `Opened ${requested}`, isError: false };
     }
     default:
-      return { text: `Host tool "${toolName}" is not available in omp-web`, isError: true };
+      return {
+        text: `Host tool "${toolName}" is not available in omp-web`,
+        isError: true,
+      };
   }
 }
 
@@ -436,20 +569,27 @@ export function extractMessageText(message: Partial<AgentMessage>): string {
   if (!Array.isArray(content)) return "";
   return content
     .map((block) =>
-      block && typeof block === "object"
-        && (block as { type?: string }).type === "text"
-        && typeof (block as { text?: unknown }).text === "string"
+      block &&
+      typeof block === "object" &&
+      (block as { type?: string }).type === "text" &&
+      typeof (block as { text?: unknown }).text === "string"
         ? (block as { text: string }).text
-        : "")
+        : "",
+    )
     .filter(Boolean)
     .join("\n");
 }
 
 export function describeMcpMountNotice(message: CustomMessage): string {
-  return extractMessageText(message).trim() || "The MCP tool inventory changed.";
+  return (
+    extractMessageText(message).trim() || "The MCP tool inventory changed."
+  );
 }
 
-export function readCompactResult(result: unknown, reason: string): CompactResultInfo | null {
+export function readCompactResult(
+  result: unknown,
+  reason: string,
+): CompactResultInfo | null {
   if (!result || typeof result !== "object") return null;
   const r = result as CompactCommandResult;
   if (typeof r.tokensBefore !== "number") return null;
@@ -458,7 +598,8 @@ export function readCompactResult(result: unknown, reason: string): CompactResul
   return {
     reason,
     tokensBefore: r.tokensBefore,
-    estimatedTokensAfter: typeof r.estimatedTokensAfter === "number" ? r.estimatedTokensAfter : 0,
+    estimatedTokensAfter:
+      typeof r.estimatedTokensAfter === "number" ? r.estimatedTokensAfter : 0,
   };
 }
 
@@ -469,22 +610,42 @@ export function readCompactResult(result: unknown, reason: string): CompactResul
 export function buildOutgoingPrompt(
   message: string,
   images?: AttachedImage[],
-): { userMsg: AgentMessage; piImages: { type: "image"; data: string; mimeType: string }[] | undefined } {
-  const imageBlocks = images?.map((img) => ({ type: "image" as const, source: { type: "base64" as const, media_type: img.mimeType, data: img.data } }));
+): {
+  userMsg: AgentMessage;
+  piImages: { type: "image"; data: string; mimeType: string }[] | undefined;
+} {
+  const imageBlocks = images?.map((img) => ({
+    type: "image" as const,
+    source: {
+      type: "base64" as const,
+      media_type: img.mimeType,
+      data: img.data,
+    },
+  }));
   const userMsg: AgentMessage = {
     role: "user",
     content: imageBlocks?.length
-      ? [...(message.trim() ? [{ type: "text" as const, text: message }] : []), ...imageBlocks]
+      ? [
+          ...(message.trim() ? [{ type: "text" as const, text: message }] : []),
+          ...imageBlocks,
+        ]
       : message,
     timestamp: Date.now(),
   };
-  const piImages = images?.map((img) => ({ type: "image" as const, data: img.data, mimeType: img.mimeType }));
+  const piImages = images?.map((img) => ({
+    type: "image" as const,
+    data: img.data,
+    mimeType: img.mimeType,
+  }));
   return { userMsg, piImages };
 }
 
 export interface ChatInputHandle {
   insertText: (text: string) => void;
-  insertIfEmpty: (content: string, options?: Pick<ChatDraft, "promptOnly">) => void;
+  insertIfEmpty: (
+    content: string,
+    options?: Pick<ChatDraft, "promptOnly">,
+  ) => void;
   prependText: (text: string) => void;
   addFiles: (files: File[]) => void;
 }
@@ -496,7 +657,15 @@ export interface AttachedImage {
 }
 
 export type SelectedModel = { provider: string; modelId: string };
-export type ModelEntry = { id: string; name: string; provider: string; supportsFastMode?: boolean; supportsSlowMode?: boolean; contextWindow?: number; maxTokens?: number };
+export type ModelEntry = {
+  id: string;
+  name: string;
+  provider: string;
+  supportsFastMode?: boolean;
+  supportsSlowMode?: boolean;
+  contextWindow?: number;
+  maxTokens?: number;
+};
 export type ModelsResponse = {
   models: Record<string, string>;
   modelList?: ModelEntry[];
@@ -515,13 +684,16 @@ export type SlashCommandsResponse = {
 // Map omp's slash-command sources onto the palette's grouping. Builtins are
 // skipped: the client intercepts its own builtin set, and other omp builtins
 // still work when typed (omp executes them via the prompt command).
-export function toSlashCommandInfo(command: RpcAvailableSlashCommand): SlashCommandInfo | null {
+export function toSlashCommandInfo(
+  command: RpcAvailableSlashCommand,
+): SlashCommandInfo | null {
   if (command.source === "builtin") return null;
-  const source: SlashCommandInfo["source"] = command.source === "extension"
-    ? "extension"
-    : command.source === "skill"
-      ? "skill"
-      : "prompt";
+  const source: SlashCommandInfo["source"] =
+    command.source === "extension"
+      ? "extension"
+      : command.source === "skill"
+        ? "skill"
+        : "prompt";
   return { name: command.name, description: command.description, source };
 }
 
@@ -534,7 +706,10 @@ export function toSlashCommandInfo(command: RpcAvailableSlashCommand): SlashComm
 // `toSlashCommandInfo` hides from the palette, which are still executed by omp
 // when typed and therefore must not warn. An empty list means the roster has
 // not arrived yet (or failed), in which case saying "unknown" would be a guess.
-export function isUnknownSlashCommand(text: string, knownNames: readonly string[]): boolean {
+export function isUnknownSlashCommand(
+  text: string,
+  knownNames: readonly string[],
+): boolean {
   if (knownNames.length === 0) return false;
   const match = /^\/([A-Za-z][A-Za-z0-9_-]*)/.exec(text.trim());
   if (!match) return false;

@@ -6,7 +6,6 @@
 // is the typed view of it for the server, and the service installers hash the
 // password they write. See issue #239.
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { randomBytes, scryptSync, timingSafeEqual } = require("node:crypto");
 
 /** Salt length in bytes. */
@@ -28,7 +27,8 @@ const MIN_LOG_N = 12;
 const MAX_R = 32;
 const MAX_MEMORY_BYTES = 128 * 1024 * 1024;
 
-const HASH_PATTERN = /^scrypt\$(\d{1,2})\$(\d{1,3})\$(\d{1,2})\$([A-Za-z0-9_-]{16,64})\$([A-Za-z0-9_-]{16,128})$/;
+const HASH_PATTERN =
+  /^scrypt\$(\d{1,2})\$(\d{1,3})\$(\d{1,2})\$([A-Za-z0-9_-]{16,64})\$([A-Za-z0-9_-]{16,128})$/;
 
 /** scrypt's own memory formula (128 * N * r) plus headroom for its scratch space. */
 function maxMemoryFor(logN, r) {
@@ -38,7 +38,10 @@ function maxMemoryFor(logN, r) {
 function equals(left, right) {
   const leftBytes = Buffer.from(left, "utf8");
   const rightBytes = Buffer.from(right, "utf8");
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
+  return (
+    leftBytes.length === rightBytes.length &&
+    timingSafeEqual(leftBytes, rightBytes)
+  );
 }
 
 /** Hash a password into the `scrypt$ln$r$p$salt$digest` format. */
@@ -47,8 +50,20 @@ function hashPassword(password, options = {}) {
   const r = options.r ?? DEFAULT_R;
   const p = options.p ?? DEFAULT_P;
   const salt = randomBytes(SALT_BYTES);
-  const digest = scryptSync(password, salt, DIGEST_BYTES, { N: 2 ** logN, r, p, maxmem: maxMemoryFor(logN, r) });
-  return ["scrypt", logN, r, p, salt.toString("base64url"), digest.toString("base64url")].join("$");
+  const digest = scryptSync(password, salt, DIGEST_BYTES, {
+    N: 2 ** logN,
+    r,
+    p,
+    maxmem: maxMemoryFor(logN, r),
+  });
+  return [
+    "scrypt",
+    logN,
+    r,
+    p,
+    salt.toString("base64url"),
+    digest.toString("base64url"),
+  ].join("$");
 }
 
 /**
@@ -65,7 +80,12 @@ function parsePasswordHash(value) {
   const logN = Number(match[1]);
   const r = Number(match[2]);
   const p = Number(match[3]);
-  if (!Number.isSafeInteger(logN) || !Number.isSafeInteger(r) || !Number.isSafeInteger(p)) return null;
+  if (
+    !Number.isSafeInteger(logN) ||
+    !Number.isSafeInteger(r) ||
+    !Number.isSafeInteger(p)
+  )
+    return null;
   if (logN < MIN_LOG_N || r < 1 || r > MAX_R || p < 1) return null;
   if (2 ** logN * r * 128 > MAX_MEMORY_BYTES) return null;
   if (Buffer.from(match[4], "base64url").length !== SALT_BYTES) return null;
@@ -87,12 +107,17 @@ function verifyPassword(candidate, stored) {
   if (!parsed) return false;
   let digest;
   try {
-    digest = scryptSync(candidate, Buffer.from(parsed.salt, "base64url"), DIGEST_BYTES, {
-      N: 2 ** parsed.logN,
-      r: parsed.r,
-      p: parsed.p,
-      maxmem: maxMemoryFor(parsed.logN, parsed.r),
-    });
+    digest = scryptSync(
+      candidate,
+      Buffer.from(parsed.salt, "base64url"),
+      DIGEST_BYTES,
+      {
+        N: 2 ** parsed.logN,
+        r: parsed.r,
+        p: parsed.p,
+        maxmem: maxMemoryFor(parsed.logN, parsed.r),
+      },
+    );
   } catch {
     // Out-of-memory or unsupported parameters: treat as a failed sign-in.
     return false;

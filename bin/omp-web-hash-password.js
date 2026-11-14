@@ -4,7 +4,6 @@
 // installers use. The password is read from stdin, never from argv, so it
 // stays out of shell history and out of `ps` output (issue #239).
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { hashPassword, isPasswordHash } = require("./omp-web-password-hash");
 
 /** Key sent when the user presses Ctrl+C at a prompt. */
@@ -14,7 +13,9 @@ function readStdin() {
   return new Promise((resolve, reject) => {
     const chunks = [];
     process.stdin.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
-    process.stdin.once("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.once("end", () =>
+      resolve(Buffer.concat(chunks).toString("utf8")),
+    );
     process.stdin.once("error", reject);
   });
 }
@@ -96,7 +97,9 @@ async function promptPassword(options = {}) {
     const first = await readHiddenLine(`${label}: `);
     if (first === null) return null;
     if (!first) {
-      process.stderr.write("Empty password: nothing to hash. Press Ctrl+C to cancel.\n");
+      process.stderr.write(
+        "Empty password: nothing to hash. Press Ctrl+C to cancel.\n",
+      );
       continue;
     }
     if (!confirm) return first;
@@ -116,9 +119,14 @@ async function runHashPasswordCommand(options = {}) {
   const { stdout = process.stdout, stderr = process.stderr, confirm } = options;
   let password;
   try {
-    password = await promptPassword({ confirm: confirm ?? process.stdin.isTTY, label: options.label });
+    password = await promptPassword({
+      confirm: confirm ?? process.stdin.isTTY,
+      label: options.label,
+    });
   } catch (error) {
-    stderr.write(`Could not read the password: ${error instanceof Error ? error.message : String(error)}\n`);
+    stderr.write(
+      `Could not read the password: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
     return 1;
   }
   if (password === null) {
@@ -126,7 +134,9 @@ async function runHashPasswordCommand(options = {}) {
     return 1;
   }
   if (!password) {
-    stderr.write("No password received. Pipe one in or run this command in a terminal.\n");
+    stderr.write(
+      "No password received. Pipe one in or run this command in a terminal.\n",
+    );
     return 1;
   }
   stdout.write(`${hashPassword(password)}\n`);
@@ -142,15 +152,26 @@ async function runHashPasswordCommand(options = {}) {
  * given but is unusable (silently dropping it would disable auth).
  */
 function resolvePasswordHash(env = process.env) {
-  const existing = typeof env.OMP_WEB_PASSWORD_HASH === "string" ? env.OMP_WEB_PASSWORD_HASH.trim() : "";
+  const existing =
+    typeof env.OMP_WEB_PASSWORD_HASH === "string"
+      ? env.OMP_WEB_PASSWORD_HASH.trim()
+      : "";
   if (existing) {
     if (!isPasswordHash(existing)) {
-      throw new Error("OMP_WEB_PASSWORD_HASH is not a valid password hash; generate one with: ompweb hash-password");
+      throw new Error(
+        "OMP_WEB_PASSWORD_HASH is not a valid password hash; generate one with: ompweb hash-password",
+      );
     }
     return existing;
   }
   const plaintext = env.OMP_WEB_PASSWORD;
-  return typeof plaintext === "string" && plaintext.length > 0 ? hashPassword(plaintext) : null;
+  return typeof plaintext === "string" && plaintext.length > 0
+    ? hashPassword(plaintext)
+    : null;
 }
 
-module.exports = { promptPassword, resolvePasswordHash, runHashPasswordCommand };
+module.exports = {
+  promptPassword,
+  resolvePasswordHash,
+  runHashPasswordCommand,
+};

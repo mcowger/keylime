@@ -7,15 +7,10 @@
 //   ompweb-launchd [install [package-spec]|uninstall|status]
 //   bunx --package @kahme247/ompweb@latest ompweb-launchd install
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { spawnSync } = require("node:child_process");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const fs = require("node:fs");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const os = require("node:os");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const path = require("node:path");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { resolvePasswordHash } = require("./omp-web-hash-password");
 
 const LABEL = "com.kahme247.ompweb";
@@ -23,7 +18,12 @@ const LABEL = "com.kahme247.ompweb";
 const HOST_LABEL = "com.kahme247.ompweb-host";
 const HOME = os.homedir();
 const PLIST = path.join(HOME, "Library", "LaunchAgents", `${LABEL}.plist`);
-const HOST_PLIST = path.join(HOME, "Library", "LaunchAgents", `${HOST_LABEL}.plist`);
+const HOST_PLIST = path.join(
+  HOME,
+  "Library",
+  "LaunchAgents",
+  `${HOST_LABEL}.plist`,
+);
 const LOG_DIR = path.join(HOME, "Library", "Logs", "ompweb");
 const DOMAIN = `gui/${process.getuid?.() ?? 0}`;
 
@@ -43,13 +43,17 @@ function isExecutableFile(candidate) {
 
 function which(name) {
   for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
-    if (dir && isExecutableFile(path.join(dir, name))) return path.join(dir, name);
+    if (dir && isExecutableFile(path.join(dir, name)))
+      return path.join(dir, name);
   }
   return null;
 }
 
 function xmlEscape(value) {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function launchctl(args, { ignoreFailure = false } = {}) {
@@ -63,9 +67,14 @@ function launchctl(args, { ignoreFailure = false } = {}) {
 
 // One launch agent; `throttleInterval` (seconds) spaces out KeepAlive restarts.
 function buildPlist({ label, args, env, logName, throttleInterval }) {
-  const argsXml = args.map((arg) => `    <string>${xmlEscape(arg)}</string>`).join("\n");
+  const argsXml = args
+    .map((arg) => `    <string>${xmlEscape(arg)}</string>`)
+    .join("\n");
   const envXml = Object.entries(env)
-    .map(([key, value]) => `    <key>${xmlEscape(key)}</key><string>${xmlEscape(value)}</string>`)
+    .map(
+      ([key, value]) =>
+        `    <key>${xmlEscape(key)}</key><string>${xmlEscape(value)}</string>`,
+    )
     .join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -138,21 +147,32 @@ function install(pkgArg) {
     "/bin",
     "/usr/sbin",
     "/sbin",
-  ].filter((dir, i, all) => all.indexOf(dir) === i).join(path.delimiter);
+  ]
+    .filter((dir, i, all) => all.indexOf(dir) === i)
+    .join(path.delimiter);
 
   const env = {
     PATH: svcPath,
     PORT: port,
     OMP_WEB_HOSTNAME: hostname,
     OMP_WEB_NO_OPEN: noOpen,
-    ...(disableAutoUpdate ? { OMP_WEB_DISABLE_AUTOUPDATE: disableAutoUpdate } : {}),
+    ...(disableAutoUpdate
+      ? { OMP_WEB_DISABLE_AUTOUPDATE: disableAutoUpdate }
+      : {}),
     ...(installName ? { OMP_WEB_NAME: installName } : {}),
     ...(passwordHash ? { OMP_WEB_PASSWORD_HASH: passwordHash } : {}),
-    ...(trustedHeaderDigest ? { OMP_WEB_TRUSTED_HEADER_SHA256: trustedHeaderDigest } : {}),
+    ...(trustedHeaderDigest
+      ? { OMP_WEB_TRUSTED_HEADER_SHA256: trustedHeaderDigest }
+      : {}),
     ...(ompBin ? { OMP_WEB_OMP_BIN: ompBin } : {}),
     ...(agentDir ? { PI_CODING_AGENT_DIR: agentDir } : {}),
   };
-  const web = buildPlist({ label: LABEL, args: [bunBin, "x", "--bun", pkg], env, logName: "ompweb" });
+  const web = buildPlist({
+    label: LABEL,
+    args: [bunBin, "x", "--bun", pkg],
+    env,
+    logName: "ompweb",
+  });
   const host = buildPlist({
     label: HOST_LABEL,
     args: [bunBin, "x", "--bun", pkg, "host"],
@@ -164,10 +184,22 @@ function install(pkgArg) {
 
   fs.mkdirSync(LOG_DIR, { recursive: true });
   fs.mkdirSync(path.dirname(PLIST), { recursive: true });
-  for (const [file, xml, label] of [[PLIST, web, LABEL], [HOST_PLIST, host, HOST_LABEL]]) {
+  for (const [file, xml, label] of [
+    [PLIST, web, LABEL],
+    [HOST_PLIST, host, HOST_LABEL],
+  ]) {
     // Reloading the daemon ends every omp run on this machine: leave it alone when nothing changed.
-    const unchanged = label === HOST_LABEL && fs.existsSync(file) && fs.readFileSync(file, "utf8") === xml;
-    if (unchanged && spawnSync("launchctl", ["print", `${DOMAIN}/${label}`], { stdio: "ignore" }).status === 0) continue;
+    const unchanged =
+      label === HOST_LABEL &&
+      fs.existsSync(file) &&
+      fs.readFileSync(file, "utf8") === xml;
+    if (
+      unchanged &&
+      spawnSync("launchctl", ["print", `${DOMAIN}/${label}`], {
+        stdio: "ignore",
+      }).status === 0
+    )
+      continue;
     fs.writeFileSync(file, xml, { mode: 0o600 });
     fs.chmodSync(file, 0o600);
     launchctl(["bootout", `${DOMAIN}/${label}`], { ignoreFailure: true });
@@ -178,12 +210,20 @@ function install(pkgArg) {
   console.log(`installed: ${HOST_PLIST}`);
   console.log(`package:   ${pkg} (via bunx --bun)`);
   console.log(`url:       http://${hostname}:${port}`);
-  console.log(`logs:      ${path.join(LOG_DIR, "ompweb.log")}, ${path.join(LOG_DIR, "ompweb-host.log")}`);
-  if (passwordHash) console.log("note:      the password hash is stored in the plist (mode 600)");
+  console.log(
+    `logs:      ${path.join(LOG_DIR, "ompweb.log")}, ${path.join(LOG_DIR, "ompweb-host.log")}`,
+  );
+  if (passwordHash)
+    console.log(
+      "note:      the password hash is stored in the plist (mode 600)",
+    );
 }
 
 function uninstall() {
-  for (const [file, label] of [[PLIST, LABEL], [HOST_PLIST, HOST_LABEL]]) {
+  for (const [file, label] of [
+    [PLIST, LABEL],
+    [HOST_PLIST, HOST_LABEL],
+  ]) {
     launchctl(["bootout", `${DOMAIN}/${label}`], { ignoreFailure: true });
     fs.rmSync(file, { force: true });
     console.log(`uninstalled: ${label}`);
@@ -193,11 +233,17 @@ function uninstall() {
 function status() {
   let loaded = false;
   for (const label of [LABEL, HOST_LABEL]) {
-    const result = spawnSync("launchctl", ["print", `${DOMAIN}/${label}`], { encoding: "utf8" });
+    const result = spawnSync("launchctl", ["print", `${DOMAIN}/${label}`], {
+      encoding: "utf8",
+    });
     if (result.status === 0) {
       loaded ||= label === LABEL;
-      const lines = (result.stdout ?? "").split("\n").filter((line) => /\b(state|pid|last exit)\b/.test(line));
-      console.log(`${label}:\n${lines.join("\n") || (result.stdout ?? "").trim()}`);
+      const lines = (result.stdout ?? "")
+        .split("\n")
+        .filter((line) => /\b(state|pid|last exit)\b/.test(line));
+      console.log(
+        `${label}:\n${lines.join("\n") || (result.stdout ?? "").trim()}`,
+      );
     } else {
       console.log(`not loaded: ${label}`);
     }
@@ -214,7 +260,9 @@ function main() {
   else if (command === "uninstall") uninstall();
   else if (command === "status") status();
   else {
-    console.error("usage: ompweb-launchd [install [package-spec]|uninstall|status]");
+    console.error(
+      "usage: ompweb-launchd [install [package-spec]|uninstall|status]",
+    );
     process.exit(2);
   }
 }

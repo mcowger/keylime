@@ -1,5 +1,9 @@
 import { apiErrorResponse } from "@/lib/api-utils";
-import { type OmpLoginProvider, type OmpModel, runUtilityCommand } from "@/lib/omp/rpc-utility";
+import {
+  type OmpLoginProvider,
+  type OmpModel,
+  runUtilityCommand,
+} from "@/lib/omp/rpc-utility";
 
 type Params = { params: Promise<{ provider: string }> };
 
@@ -21,10 +25,9 @@ export async function GET(_req: Request, { params }: Params) {
       { type: "get_available_models" },
       120_000,
     );
-    const { providers: loginProviders } = await runUtilityCommand<{ providers: OmpLoginProvider[] }>(
-      { type: "get_login_providers" },
-      30_000,
-    );
+    const { providers: loginProviders } = await runUtilityCommand<{
+      providers: OmpLoginProvider[];
+    }>({ type: "get_login_providers" }, 30_000);
     const loginProvider = loginProviders.find((p) => p.id === provider);
     const modelCount = models.filter((m) => m.provider === provider).length;
     return Response.json({
@@ -42,7 +45,10 @@ export async function GET(_req: Request, { params }: Params) {
 export async function POST(_req: Request, { params }: Params) {
   const { provider } = await params;
   return Response.json(
-    { error: `Cannot store an API key for "${provider}" from omp-web. ${API_KEY_WRITE_GUIDANCE}`, code: "api_key_store_unsupported" },
+    {
+      error: `Cannot store an API key for "${provider}" from omp-web. ${API_KEY_WRITE_GUIDANCE}`,
+      code: "api_key_store_unsupported",
+    },
     { status: 501 },
   );
 }
@@ -51,7 +57,10 @@ export async function POST(_req: Request, { params }: Params) {
 export async function DELETE(_req: Request, { params }: Params) {
   const { provider } = await params;
   return Response.json(
-    { error: `Cannot remove the API key for "${provider}" from omp-web. ${API_KEY_WRITE_GUIDANCE}`, code: "api_key_remove_unsupported" },
+    {
+      error: `Cannot remove the API key for "${provider}" from omp-web. ${API_KEY_WRITE_GUIDANCE}`,
+      code: "api_key_remove_unsupported",
+    },
     { status: 501 },
   );
 }

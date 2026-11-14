@@ -1,5 +1,14 @@
-import { asciiAlpha, asciiDigit, markdownLineEndingOrSpace } from "micromark-util-character";
-import type { Code, Construct, Extension, Tokenizer } from "micromark-util-types";
+import {
+  asciiAlpha,
+  asciiDigit,
+  markdownLineEndingOrSpace,
+} from "micromark-util-character";
+import type {
+  Code,
+  Construct,
+  Extension,
+  Tokenizer,
+} from "micromark-util-types";
 import remarkMath from "remark-math";
 import type { Processor } from "unified";
 
@@ -17,13 +26,20 @@ function pandocMathText(mathText: Construct): Construct {
   const tokenize: Tokenizer = function (effects, ok, nok) {
     const before = this.previous;
     const consumed: Code[] = [];
-    const tracked = { ...effects, consume: (code: Code) => (consumed.push(code), effects.consume(code)) };
+    const tracked = {
+      ...effects,
+      consume: (code: Code) => (consumed.push(code), effects.consume(code)),
+    };
     const done = (after: Code) => {
       const size = consumed.findIndex((code) => code !== DOLLAR);
       if (size !== 1) return ok(after);
       const first = consumed[1];
       const last = consumed[consumed.length - 2];
-      const literal = markdownLineEndingOrSpace(first) || markdownLineEndingOrSpace(last) || asciiDigit(after) || (asciiAlpha(before) && asciiDigit(first));
+      const literal =
+        markdownLineEndingOrSpace(first) ||
+        markdownLineEndingOrSpace(last) ||
+        asciiDigit(after) ||
+        (asciiAlpha(before) && asciiDigit(first));
       return literal ? nok(after) : ok(after);
     };
     return mathText.tokenize.call(this, tracked, done, nok);

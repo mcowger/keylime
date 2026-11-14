@@ -1,4 +1,12 @@
-import { closeSync, existsSync, fstatSync, openSync, readSync, statSync, type Stats } from "fs";
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  openSync,
+  readSync,
+  statSync,
+  type Stats,
+} from "fs";
 import { normalize as normalizePath } from "path";
 import { getAgentDir } from "./omp/paths";
 import { isClientMessageId } from "./client-message-ids";
@@ -27,11 +35,19 @@ import type {
 import { normalizeToolCalls } from "./normalize";
 import { isRecord } from "./type-guards";
 import { toolResultContentAsUrls } from "./media-cache";
-import { taskResultRetryFailure, taskResultStructuredOutput, taskResultUsageCost } from "./task-result-details";
+import {
+  taskResultRetryFailure,
+  taskResultStructuredOutput,
+  taskResultUsageCost,
+} from "./task-result-details";
 import type { TodoPhase } from "./pi-types";
 import { projectIdentityKey, sessionPathKey } from "./paths";
 import { resolveProject, type ProjectInfo } from "./worktree";
-import { selectHistoryRange, type SessionHistoryCursor, type SessionHistoryPage } from "./session-sync";
+import {
+  selectHistoryRange,
+  type SessionHistoryCursor,
+  type SessionHistoryPage,
+} from "./session-sync";
 import { PASSIVE_TOOL_CONTEXT } from "./chat-transcript-plan";
 
 export { getAgentDir };
@@ -65,14 +81,18 @@ async function loadAllSessions(): Promise<SessionInfo[]> {
   // Resolve each unique cwd to its project root (main repo shared by all
   // worktrees). resolveProject caches per-cwd, so this is cheap after warmup.
   // Bound concurrency so 100+ unique cwds don't spawn 100 parallel git processes.
-  const uniqueCwds = [...new Set(ompSessions.map((s) => s.cwd).filter(Boolean))];
+  const uniqueCwds = [
+    ...new Set(ompSessions.map((s) => s.cwd).filter(Boolean)),
+  ];
   const projectByCwd = new Map<string, ProjectInfo>();
   const CONCURRENCY = 6;
   for (let i = 0; i < uniqueCwds.length; i += CONCURRENCY) {
     const chunk = uniqueCwds.slice(i, i + CONCURRENCY);
-    await Promise.all(chunk.map(async (cwd) => {
-      projectByCwd.set(cwd, await resolveProject(cwd));
-    }));
+    await Promise.all(
+      chunk.map(async (cwd) => {
+        projectByCwd.set(cwd, await resolveProject(cwd));
+      }),
+    );
   }
 
   return ompSessions.map((s) => {
@@ -84,11 +104,14 @@ async function loadAllSessions(): Promise<SessionInfo[]> {
       cwd: s.cwd,
       // omp renamed the display field to `title`; the internal shape keeps `name`.
       name: s.title,
-      created: s.created instanceof Date && !Number.isNaN(s.created.getTime())
-        ? s.created.toISOString()
-        : s.modified.toISOString(),
+      created:
+        s.created instanceof Date && !Number.isNaN(s.created.getTime())
+          ? s.created.toISOString()
+          : s.modified.toISOString(),
       modified: s.modified.toISOString(),
-      ...(s.lastMessageAt ? { lastMessageAt: s.lastMessageAt.toISOString() } : {}),
+      ...(s.lastMessageAt
+        ? { lastMessageAt: s.lastMessageAt.toISOString() }
+        : {}),
       messageCount: s.messageCount,
       firstMessage: s.firstMessage || "(no messages)",
       parentSessionId: s.parentSessionPath
@@ -96,7 +119,9 @@ async function loadAllSessions(): Promise<SessionInfo[]> {
         : undefined,
       projectRoot: project?.projectRoot ?? s.cwd,
       projectKey: projectIdentityKey(project?.projectRoot ?? s.cwd),
-      ...(project?.isWorktree && project.branch ? { worktreeBranch: project.branch } : {}),
+      ...(project?.isWorktree && project.branch
+        ? { worktreeBranch: project.branch }
+        : {}),
     };
   });
 }
@@ -106,13 +131,19 @@ export async function listAllSessions(): Promise<SessionInfo[]> {
 
   // Return cached result if still fresh (avoids re-scanning session files
   // and re-spawning git processes on every page load).
-  if (globalThis.__piSessionListCache && Date.now() - globalThis.__piSessionListCache.ts < SESSION_LIST_CACHE_TTL_MS) {
+  if (
+    globalThis.__piSessionListCache &&
+    Date.now() - globalThis.__piSessionListCache.ts < SESSION_LIST_CACHE_TTL_MS
+  ) {
     return globalThis.__piSessionListCache.data;
   }
 
   // Coalescing dedup: concurrent callers share the same in-flight promise
   // only while it belongs to the current cache generation.
-  if (globalThis.__piSessionListPromise && globalThis.__piSessionListPromiseGeneration === generation) {
+  if (
+    globalThis.__piSessionListPromise &&
+    globalThis.__piSessionListPromiseGeneration === generation
+  ) {
     return globalThis.__piSessionListPromise;
   }
 
@@ -122,7 +153,10 @@ export async function listAllSessions(): Promise<SessionInfo[]> {
   const loadPromise = loadAllSessions().then((data) => {
     // An invalidation may happen while the scan is in flight. Do not let that
     // older result repopulate the cache after a session mutation.
-    if ((globalThis.__piSessionListGeneration ?? 0) === generation && !retired) {
+    if (
+      (globalThis.__piSessionListGeneration ?? 0) === generation &&
+      !retired
+    ) {
       globalThis.__piSessionListCache = { data, ts: Date.now() };
     }
     return data;
@@ -178,7 +212,8 @@ const SESSION_LIST_LOAD_DEADLINE_MS = 60_000;
  * invalidateSessionEntriesCache(path) for the specific file instead of paying
  * for a full parse-cache flush. */
 export function invalidateSessionListMeta(): void {
-  globalThis.__piSessionListGeneration = (globalThis.__piSessionListGeneration ?? 0) + 1;
+  globalThis.__piSessionListGeneration =
+    (globalThis.__piSessionListGeneration ?? 0) + 1;
   globalThis.__piSessionListCache = undefined;
   // The session-file walk cache keys on the sessions-root mtime, which does
   // not change when a file is added inside an existing project subdirectory
@@ -224,22 +259,27 @@ export function invalidateSessionCaches(filePath?: string): void {
 export function invalidateSessionEntriesCache(filePath: string): void {
   globalThis.__ompSessionEntriesCache?.delete(sessionPathKey(filePath));
   for (const [key, index] of globalThis.__ompSessionHistoryIndexes ?? []) {
-    if (index.pathKey === sessionPathKey(filePath)) globalThis.__ompSessionHistoryIndexes?.delete(key);
+    if (index.pathKey === sessionPathKey(filePath))
+      globalThis.__ompSessionHistoryIndexes?.delete(key);
   }
   invalidateSessionScanCache(filePath);
 }
 
 function getPathCache(): Map<string, string> {
-  if (!globalThis.__piSessionPathCache) globalThis.__piSessionPathCache = new Map();
+  if (!globalThis.__piSessionPathCache)
+    globalThis.__piSessionPathCache = new Map();
   return globalThis.__piSessionPathCache;
 }
 
 function getPathToIdCache(): Map<string, string> {
-  if (!globalThis.__piPathToSessionIdCache) globalThis.__piPathToSessionIdCache = new Map();
+  if (!globalThis.__piPathToSessionIdCache)
+    globalThis.__piPathToSessionIdCache = new Map();
   return globalThis.__piPathToSessionIdCache;
 }
 
-export async function resolveSessionPath(sessionId: string): Promise<string | null> {
+export async function resolveSessionPath(
+  sessionId: string,
+): Promise<string | null> {
   const cached = getPathCache().get(sessionId);
   if (cached) {
     if (existsSync(cached)) return cached;
@@ -262,7 +302,9 @@ export async function resolveSessionPath(sessionId: string): Promise<string | nu
   return resolved;
 }
 
-export async function resolveSessionIdByPath(filePath: string): Promise<string | undefined> {
+export async function resolveSessionIdByPath(
+  filePath: string,
+): Promise<string | undefined> {
   const pathKey = sessionPathKey(filePath);
   const cached = getPathToIdCache().get(pathKey);
   if (cached) return cached;
@@ -275,7 +317,9 @@ export async function resolveSessionIdByPath(filePath: string): Promise<string |
  * Resolve a `header.parentSession` value (either a session file path or a bare
  * session id — see matchParentSessionId) to the parent's session id.
  */
-export async function resolveParentSessionId(parentSession: string): Promise<string | undefined> {
+export async function resolveParentSessionId(
+  parentSession: string,
+): Promise<string | undefined> {
   if (!parentSession) return undefined;
   const byPath = await resolveSessionIdByPath(parentSession);
   if (byPath) return byPath;
@@ -289,10 +333,18 @@ export function cacheSessionPath(sessionId: string, filePath: string): void {
   const pathCache = getPathCache();
   const reverseCache = getPathToIdCache();
   const previousPath = pathCache.get(sessionId);
-  const previousPathKey = previousPath ? sessionPathKey(previousPath) : undefined;
+  const previousPathKey = previousPath
+    ? sessionPathKey(previousPath)
+    : undefined;
   const previousSessionId = reverseCache.get(pathKey);
-  const previousOwnerPath = previousSessionId ? pathCache.get(previousSessionId) : undefined;
-  if (previousPathKey && previousPathKey !== pathKey && reverseCache.get(previousPathKey) === sessionId) {
+  const previousOwnerPath = previousSessionId
+    ? pathCache.get(previousSessionId)
+    : undefined;
+  if (
+    previousPathKey &&
+    previousPathKey !== pathKey &&
+    reverseCache.get(previousPathKey) === sessionId
+  ) {
     reverseCache.delete(previousPathKey);
   }
   if (
@@ -337,7 +389,8 @@ interface SessionEntriesCacheEntry {
 }
 
 declare global {
-  var __ompSessionEntriesCache: Map<string, SessionEntriesCacheEntry> | undefined;
+  var __ompSessionEntriesCache:
+    Map<string, SessionEntriesCacheEntry> | undefined;
 }
 
 const MAX_SESSION_ENTRIES_CACHE_ENTRIES = 32;
@@ -346,7 +399,8 @@ const MAX_SESSION_ENTRIES_CACHE_ENTRIES = 32;
 const MAX_SESSION_ENTRIES_CACHE_BYTES = 256 * 1024 * 1024;
 
 function getSessionEntriesCache(): Map<string, SessionEntriesCacheEntry> {
-  if (!globalThis.__ompSessionEntriesCache) globalThis.__ompSessionEntriesCache = new Map();
+  if (!globalThis.__ompSessionEntriesCache)
+    globalThis.__ompSessionEntriesCache = new Map();
   return globalThis.__ompSessionEntriesCache;
 }
 
@@ -390,7 +444,11 @@ function loadSessionEntriesCached(filePath: string): SessionEntry[] {
   // several-fold). Total-bytes eviction keeps the cache within budget.
   let totalBytes = 0;
   for (const entry of cache.values()) totalBytes += entry.size;
-  while (cache.size > 1 && (cache.size > MAX_SESSION_ENTRIES_CACHE_ENTRIES || totalBytes > MAX_SESSION_ENTRIES_CACHE_BYTES)) {
+  while (
+    cache.size > 1 &&
+    (cache.size > MAX_SESSION_ENTRIES_CACHE_ENTRIES ||
+      totalBytes > MAX_SESSION_ENTRIES_CACHE_BYTES)
+  ) {
     const oldestKey = cache.keys().next().value;
     if (oldestKey === undefined) break;
     totalBytes -= cache.get(oldestKey)?.size ?? 0;
@@ -449,14 +507,20 @@ export class SessionFileTooLargeError extends Error {
  * common image-free session clones nothing (the array is shallow-copied).
  * Throws SessionFileTooLargeError when the file exceeds the load ceiling.
  */
-export function getSessionEntriesForDisplay(filePath: string, options: ResolveBlobOptions = {}): SessionEntry[] {
+export function getSessionEntriesForDisplay(
+  filePath: string,
+  options: ResolveBlobOptions = {},
+): SessionEntry[] {
   const entries = loadEntriesOrThrowTooLarge(filePath);
   return toDisplayEntries(entries, options);
 }
 
 /** Blob-resolution transform shared by the sync and deduplicated display
  * reads. */
-function toDisplayEntries(entries: SessionEntry[], options: ResolveBlobOptions): SessionEntry[] {
+function toDisplayEntries(
+  entries: SessionEntry[],
+  options: ResolveBlobOptions,
+): SessionEntry[] {
   if (entries.length === 0) return entries;
   // Blob-bearing entries are deep-copied so resolution never mutates the
   // shared cache object; blob-free entries are shared as-is.
@@ -467,7 +531,8 @@ function toDisplayEntries(entries: SessionEntry[], options: ResolveBlobOptions):
     if (
       options.skipToolResultImages &&
       entry.type === "message" &&
-      ((entry.message as { role?: string } | null | undefined)?.role === "toolResult")
+      (entry.message as { role?: string } | null | undefined)?.role ===
+        "toolResult"
     ) {
       // Caller turns these images into media URLs — share the entry without blob work.
       out[i] = entry;
@@ -501,7 +566,8 @@ declare global {
 }
 
 function getInFlightEntries(): Map<string, Promise<SessionEntry[]>> {
-  if (!globalThis.__ompEntriesInFlight) globalThis.__ompEntriesInFlight = new Map();
+  if (!globalThis.__ompEntriesInFlight)
+    globalThis.__ompEntriesInFlight = new Map();
   return globalThis.__ompEntriesInFlight;
 }
 
@@ -533,7 +599,11 @@ export async function getSessionEntriesForDisplayAsync(
   // loadSessionEntriesCached) — no parse, no dedup bookkeeping.
   if (stat) {
     const cached = cache.get(key);
-    if (cached && cached.size === stat.size && cached.mtimeMs === stat.mtimeMs) {
+    if (
+      cached &&
+      cached.size === stat.size &&
+      cached.mtimeMs === stat.mtimeMs
+    ) {
       cache.delete(key);
       cache.set(key, cached);
       return toDisplayEntries(cached.entries, options);
@@ -541,11 +611,14 @@ export async function getSessionEntriesForDisplayAsync(
   }
 
   const inFlight = getInFlightEntries().get(key);
-  if (inFlight) return inFlight.then((entries) => toDisplayEntries(entries, options));
+  if (inFlight)
+    return inFlight.then((entries) => toDisplayEntries(entries, options));
 
   // Defer the synchronous parse by one microtask so same-tick callers land
   // on the in-flight map instead of each starting their own parse.
-  const parse = Promise.resolve().then(() => loadSessionEntriesCached(filePath));
+  const parse = Promise.resolve().then(() =>
+    loadSessionEntriesCached(filePath),
+  );
   getInFlightEntries().set(key, parse);
   try {
     const entries = await parse;
@@ -596,45 +669,86 @@ function historyFileVersion(stat: Stats): string {
  * Discard bodies before retaining each entry; keep only selection inputs. */
 function historyEntryMetadata(entry: SessionEntry): SessionEntry {
   const compact: Record<string, unknown> = {
-    type: entry.type, id: entry.id, parentId: entry.parentId, timestamp: entry.timestamp,
+    type: entry.type,
+    id: entry.id,
+    parentId: entry.parentId,
+    timestamp: entry.timestamp,
   };
-  if (isClientMessageId(entry.clientMessageId)) compact.clientMessageId = entry.clientMessageId;
+  if (isClientMessageId(entry.clientMessageId))
+    compact.clientMessageId = entry.clientMessageId;
   if (entry.type === "message" && isRecord(entry.message)) {
     const message = entry.message;
     compact.message = {
-      role: message.role, provider: message.provider, model: message.model,
-      ...(message.role === "toolResult" && message.toolName === "todo" ? {
-        toolName: message.toolName, isError: message.isError,
-        details: isRecord(message.details) ? { phases: message.details.phases } : undefined,
-      } : {}),
+      role: message.role,
+      provider: message.provider,
+      model: message.model,
+      ...(message.role === "toolResult" && message.toolName === "todo"
+        ? {
+            toolName: message.toolName,
+            isError: message.isError,
+            details: isRecord(message.details)
+              ? { phases: message.details.phases }
+              : undefined,
+          }
+        : {}),
     };
   } else if (entry.type === "model_change") {
-    Object.assign(compact, { model: entry.model, role: entry.role, provider: entry.provider, modelId: entry.modelId });
+    Object.assign(compact, {
+      model: entry.model,
+      role: entry.role,
+      provider: entry.provider,
+      modelId: entry.modelId,
+    });
   } else if (entry.type === "thinking_level_change") {
     compact.thinkingLevel = entry.thinkingLevel;
   } else if (entry.type === "compaction") {
     compact.firstKeptEntryId = entry.firstKeptEntryId;
-    compact.firstKeptEntryIndex = (entry as unknown as Record<string, unknown>).firstKeptEntryIndex;
+    compact.firstKeptEntryIndex = (
+      entry as unknown as Record<string, unknown>
+    ).firstKeptEntryIndex;
   } else if (entry.type === "branch_summary") {
     compact.summary = entry.summary ? "present" : "";
   } else if (entry.type === "custom" && entry.customType === "user_todo_edit") {
     compact.customType = entry.customType;
-    compact.data = isRecord(entry.data) ? { phases: entry.data.phases } : undefined;
-  } else if (entry.type === "custom" && entry.customType === "client-message-entry") {
+    compact.data = isRecord(entry.data)
+      ? { phases: entry.data.phases }
+      : undefined;
+  } else if (
+    entry.type === "custom" &&
+    entry.customType === "client-message-entry"
+  ) {
     compact.customType = entry.customType;
-    compact.data = isRecord(entry.data) ? { clientMessageId: entry.data.clientMessageId, entryId: entry.data.entryId } : undefined;
-  } else if (entry.type === "custom" && entry.customType === "client-message-resolution") {
+    compact.data = isRecord(entry.data)
+      ? {
+          clientMessageId: entry.data.clientMessageId,
+          entryId: entry.data.entryId,
+        }
+      : undefined;
+  } else if (
+    entry.type === "custom" &&
+    entry.customType === "client-message-resolution"
+  ) {
     compact.customType = entry.customType;
-    compact.data = { clientMessageIds: isRecord(entry.data) && Array.isArray(entry.data.clientMessageIds)
-      ? entry.data.clientMessageIds.filter(isClientMessageId) : [] };
+    compact.data = {
+      clientMessageIds:
+        isRecord(entry.data) && Array.isArray(entry.data.clientMessageIds)
+          ? entry.data.clientMessageIds.filter(isClientMessageId)
+          : [],
+    };
   }
   return compact as unknown as SessionEntry;
 }
 
 function buildHistoryIndex(
-  filePath: string, version: string, leafId?: string, includePreCompaction?: boolean,
+  filePath: string,
+  version: string,
+  leafId?: string,
+  includePreCompaction?: boolean,
 ): SessionHistoryIndex {
-  const ranges = new WeakMap<SessionEntry, { offset: number; length: number }>();
+  const ranges = new WeakMap<
+    SessionEntry,
+    { offset: number; length: number }
+  >();
   const loaded = loadSessionFile(filePath, {
     projectEntry(entry, offset, length) {
       const compact = historyEntryMetadata(entry);
@@ -642,49 +756,83 @@ function buildHistoryIndex(
       return compact;
     },
   });
-  if (loaded.error === "too_large") throw new SessionFileTooLargeError(filePath);
-  const { selected, compactionId, entryClientIds, ...metadata } = selectSessionContext(loaded.entries, leafId, { includePreCompaction });
+  if (loaded.error === "too_large")
+    throw new SessionFileTooLargeError(filePath);
+  const { selected, compactionId, entryClientIds, ...metadata } =
+    selectSessionContext(loaded.entries, leafId, { includePreCompaction });
   const rows = selected.map((entry): HistoryEntryRange => ({
     id: entry.id,
     ...ranges.get(entry)!,
-    ...(entry.type === "compaction" ? { firstKeptEntryId: entry.firstKeptEntryId } : {}),
-    ...(entryClientIds.has(entry.id) ? { clientMessageId: entryClientIds.get(entry.id) } : {}),
-    ...(entry.type === "message" && entry.message.role === "custom" ? { legacyCustom: true } : {}),
+    ...(entry.type === "compaction"
+      ? { firstKeptEntryId: entry.firstKeptEntryId }
+      : {}),
+    ...(entryClientIds.has(entry.id)
+      ? { clientMessageId: entryClientIds.get(entry.id) }
+      : {}),
+    ...(entry.type === "message" && entry.message.role === "custom"
+      ? { legacyCustom: true }
+      : {}),
   }));
   const tipId = loaded.entries.at(-1)?.id ?? null;
   // Detach metadata strings from the parser's JSON source: an ID represented
   // by a sliced V8 string must not pin a multi-megabyte message body.
   const serialized = JSON.stringify({
-    rows, compactionId, metadata, tipId,
-    leafId: leafId && loaded.entries.some((entry) => entry.id === leafId) ? leafId : tipId,
+    rows,
+    compactionId,
+    metadata,
+    tipId,
+    leafId:
+      leafId && loaded.entries.some((entry) => entry.id === leafId)
+        ? leafId
+        : tipId,
   });
-  const detached = JSON.parse(serialized) as Pick<SessionHistoryIndex, "rows" | "compactionId" | "metadata" | "tipId" | "leafId">;
+  const detached = JSON.parse(serialized) as Pick<
+    SessionHistoryIndex,
+    "rows" | "compactionId" | "metadata" | "tipId" | "leafId"
+  >;
   const entryIds = detached.rows.map((row) => row.id);
   const positions = new Map(entryIds.map((id, position) => [id, position]));
   const bytes = 256 + serialized.length * 2 + rows.length * 192;
-  return { ...detached, pathKey: sessionPathKey(filePath), version, bytes, entryIds, positions };
+  return {
+    ...detached,
+    pathKey: sessionPathKey(filePath),
+    version,
+    bytes,
+    entryIds,
+    positions,
+  };
 }
 
 /** Rebuild on any file-version change: growth alone cannot prove that old
  * offsets survived a prefix rewrite. Both readers share the same bounded LRU. */
-function getSessionHistoryIndex(filePath: string, leafId?: string, includePreCompaction = false) {
-  const cache = globalThis.__ompSessionHistoryIndexes ??= new Map();
+function getSessionHistoryIndex(
+  filePath: string,
+  leafId?: string,
+  includePreCompaction = false,
+) {
+  const cache = (globalThis.__ompSessionHistoryIndexes ??= new Map());
   const pathKey = sessionPathKey(filePath);
   const key = JSON.stringify([pathKey, leafId ?? null, includePreCompaction]);
   let stat: Stats | undefined;
-  try { stat = statSync(filePath); } catch { /* Missing/unreadable: retain the lenient empty result. */ }
+  try {
+    stat = statSync(filePath);
+  } catch {
+    /* Missing/unreadable: retain the lenient empty result. */
+  }
   if (stat && stat.size > MAX_SESSION_LOAD_BYTES) {
     invalidateSessionEntriesCache(filePath);
     throw new SessionFileTooLargeError(filePath);
   }
   const version = stat ? historyFileVersion(stat) : "";
   for (const [cachedKey, cached] of cache) {
-    if (cached.pathKey === pathKey && cached.version !== version) cache.delete(cachedKey);
+    if (cached.pathKey === pathKey && cached.version !== version)
+      cache.delete(cachedKey);
   }
   let index = cache.get(key);
   if (!index) {
     index = buildHistoryIndex(filePath, version, leafId, includePreCompaction);
-    if (stat && historyFileVersion(statSync(filePath)) !== version) throw new Error("Session changed while indexing history");
+    if (stat && historyFileVersion(statSync(filePath)) !== version)
+      throw new Error("Session changed while indexing history");
     // An unusually metadata-heavy file still opens, but cannot evict every
     // peer or retain more than the entire index budget by itself.
     if (stat && index.bytes <= MAX_HISTORY_INDEX_BYTES) cache.set(key, index);
@@ -694,7 +842,10 @@ function getSessionHistoryIndex(filePath: string, leafId?: string, includePreCom
   }
   let totalBytes = 0;
   for (const cached of cache.values()) totalBytes += cached.bytes;
-  while (cache.size > MAX_HISTORY_INDEXES || totalBytes > MAX_HISTORY_INDEX_BYTES) {
+  while (
+    cache.size > MAX_HISTORY_INDEXES ||
+    totalBytes > MAX_HISTORY_INDEX_BYTES
+  ) {
     const oldest = cache.keys().next().value!;
     totalBytes -= cache.get(oldest)!.bytes;
     cache.delete(oldest);
@@ -704,7 +855,9 @@ function getSessionHistoryIndex(filePath: string, leafId?: string, includePreCom
 
 /** Current active context IDs only; no body seeks or blob hydration. The
  * returned IDs are cached and immutable, like getSessionEntries results. */
-export function getSessionContextBoundary(filePath: string): { entryIds: string[] } {
+export function getSessionContextBoundary(filePath: string): {
+  entryIds: string[];
+} {
   const { index } = getSessionHistoryIndex(filePath);
   return { entryIds: index.entryIds };
 }
@@ -716,31 +869,59 @@ export function getSessionHistoryPage(
   cursor: SessionHistoryCursor | null,
   limit: number,
   leafId?: string,
-  options: { deferThinking?: boolean; deferToolResultImages?: boolean; includePreCompaction?: boolean } = {},
-): { history: SessionHistoryPage; leafId: string | null; tipId: string | null } {
-  const { index, cache, key } = getSessionHistoryIndex(filePath, leafId, !!options.includePreCompaction);
+  options: {
+    deferThinking?: boolean;
+    deferToolResultImages?: boolean;
+    includePreCompaction?: boolean;
+  } = {},
+): {
+  history: SessionHistoryPage;
+  leafId: string | null;
+  tipId: string | null;
+} {
+  const { index, cache, key } = getSessionHistoryIndex(
+    filePath,
+    leafId,
+    !!options.includePreCompaction,
+  );
   const version = index.version;
 
-  const { start, end, ...page } = selectHistoryRange(index.entryIds, cursor, limit, index.positions);
+  const { start, end, ...page } = selectHistoryRange(
+    index.entryIds,
+    cursor,
+    limit,
+    index.positions,
+  );
   const rawEntries: SessionEntry[] = [];
   if (start < end) {
     const fd = openSync(filePath, "r");
     try {
-      if (historyFileVersion(fstatSync(fd)) !== version) throw new Error("Session changed before reading history");
+      if (historyFileVersion(fstatSync(fd)) !== version)
+        throw new Error("Session changed before reading history");
       for (let i = start; i < end; i++) {
         const row = index.rows[i];
         const buffer = Buffer.allocUnsafe(row.length);
         let read = 0;
         while (read < buffer.length) {
-          const count = readSync(fd, buffer, read, buffer.length - read, row.offset + read);
-          if (count === 0) throw new Error("Session truncated while reading history");
+          const count = readSync(
+            fd,
+            buffer,
+            read,
+            buffer.length - read,
+            row.offset + read,
+          );
+          if (count === 0)
+            throw new Error("Session truncated while reading history");
           read += count;
         }
-        const entry = JSON.parse(buffer.toString("utf8").trim()) as SessionEntry;
+        const entry = JSON.parse(
+          buffer.toString("utf8").trim(),
+        ) as SessionEntry;
         // Reuse IDs/compaction links assigned by v1 migration; v2 renamed the
         // hookMessage role. No migrated body is retained between requests.
         entry.id = row.id;
-        if (entry.type === "compaction") entry.firstKeptEntryId = row.firstKeptEntryId!;
+        if (entry.type === "compaction")
+          entry.firstKeptEntryId = row.firstKeptEntryId!;
         if (entry.type === "message" && row.legacyCustom) {
           const message = entry.message as unknown as Record<string, unknown>;
           if (message.role === "hookMessage") message.role = "custom";
@@ -748,7 +929,10 @@ export function getSessionHistoryPage(
         if (row.clientMessageId) entry.clientMessageId = row.clientMessageId;
         rawEntries.push(entry);
       }
-      if (historyFileVersion(fstatSync(fd)) !== version || historyFileVersion(statSync(filePath)) !== version) {
+      if (
+        historyFileVersion(fstatSync(fd)) !== version ||
+        historyFileVersion(statSync(filePath)) !== version
+      ) {
         throw new Error("Session changed while reading history");
       }
     } catch (error) {
@@ -758,15 +942,19 @@ export function getSessionHistoryPage(
       closeSync(fd);
     }
   }
-  const entries = toDisplayEntries(rawEntries, { skipToolResultImages: options.deferToolResultImages });
+  const entries = toDisplayEntries(rawEntries, {
+    skipToolResultImages: options.deferToolResultImages,
+  });
   const history: SessionHistoryPage = {
     ...page,
     context: {
       ...index.metadata,
       entryIds: index.entryIds.slice(start, end),
-      messages: entries.map((entry) => entry.type === "compaction"
-        ? compactionUiMessage(entry, entry.id === index.compactionId)
-        : entryToUiMessage(entry, options)!),
+      messages: entries.map((entry) =>
+        entry.type === "compaction"
+          ? compactionUiMessage(entry, entry.id === index.compactionId)
+          : entryToUiMessage(entry, options)!,
+      ),
     },
   };
   return { history, leafId: index.leafId, tipId: index.tipId };
@@ -774,14 +962,32 @@ export function getSessionHistoryPage(
 
 function parseTodoPhases(value: unknown): TodoPhase[] | null {
   if (!Array.isArray(value)) return null;
-  const statuses = new Set(["pending", "in_progress", "completed", "blocked", "abandoned"]);
+  const statuses = new Set([
+    "pending",
+    "in_progress",
+    "completed",
+    "blocked",
+    "abandoned",
+  ]);
   const phases: TodoPhase[] = [];
   for (const phase of value) {
-    if (!isRecord(phase) || typeof phase.name !== "string" || !Array.isArray(phase.tasks)) return null;
+    if (
+      !isRecord(phase) ||
+      typeof phase.name !== "string" ||
+      !Array.isArray(phase.tasks)
+    )
+      return null;
     const tasks = [];
     for (const task of phase.tasks) {
-      if (!isRecord(task) || typeof task.content !== "string" || typeof task.status !== "string" || !statuses.has(task.status)) return null;
-      if (task.blocker !== undefined && typeof task.blocker !== "string") return null;
+      if (
+        !isRecord(task) ||
+        typeof task.content !== "string" ||
+        typeof task.status !== "string" ||
+        !statuses.has(task.status)
+      )
+        return null;
+      if (task.blocker !== undefined && typeof task.blocker !== "string")
+        return null;
       tasks.push({
         content: task.content,
         status: task.status as TodoPhase["tasks"][number]["status"],
@@ -794,7 +1000,10 @@ function parseTodoPhases(value: unknown): TodoPhase[] | null {
 }
 
 /** Latest valid todo snapshot on the selected branch, without exposing tool metadata to the client. */
-export function getTodoPhasesFromEntries(entries: SessionEntry[], leafId?: string | null): TodoPhase[] {
+export function getTodoPhasesFromEntries(
+  entries: SessionEntry[],
+  leafId?: string | null,
+): TodoPhase[] {
   if (leafId === null || entries.length === 0) return [];
   const byId = new Map(entries.map((entry) => [entry.id, entry]));
   let entry = leafId ? byId.get(leafId) : entries[entries.length - 1];
@@ -809,20 +1018,34 @@ export function getTodoPhasesFromEntries(entries: SessionEntry[], leafId?: strin
   for (let index = 0; index < path.length; index++) {
     const current = path[index];
     if (current.type === "custom" && current.customType === "user_todo_edit") {
-      const phases = isRecord(current.data) ? parseTodoPhases(current.data.phases) : null;
+      const phases = isRecord(current.data)
+        ? parseTodoPhases(current.data.phases)
+        : null;
       if (phases) return phases;
     }
-    if (current.type === "message" && isRecord(current.message) && current.message.role === "toolResult") {
-      const message = current.message as { role?: string; toolName?: string; isError?: boolean; details?: unknown };
+    if (
+      current.type === "message" &&
+      isRecord(current.message) &&
+      current.message.role === "toolResult"
+    ) {
+      const message = current.message as {
+        role?: string;
+        toolName?: string;
+        isError?: boolean;
+        details?: unknown;
+      };
       if (message.toolName !== "todo" || message.isError) continue;
-      const phases = isRecord(message.details) ? parseTodoPhases(message.details.phases) : null;
+      const phases = isRecord(message.details)
+        ? parseTodoPhases(message.details.phases)
+        : null;
       if (phases) return phases;
     }
   }
   return [];
 }
 
-const SUPERSEDED_COMPACTION_SUMMARY = "[Superseded compaction summary elided after a newer compaction]";
+const SUPERSEDED_COMPACTION_SUMMARY =
+  "[Superseded compaction summary elided after a newer compaction]";
 
 /**
  * Build the display context for a leaf. Port of oh-my-pi's buildSessionContext
@@ -836,16 +1059,27 @@ const SUPERSEDED_COMPACTION_SUMMARY = "[Superseded compaction summary elided aft
 export function buildSessionContext(
   entries: SessionEntry[],
   leafId?: string | null,
-  options: { deferThinking?: boolean; deferToolResultImages?: boolean; includePreCompaction?: boolean } = {},
+  options: {
+    deferThinking?: boolean;
+    deferToolResultImages?: boolean;
+    includePreCompaction?: boolean;
+  } = {},
 ): SessionContext {
-  const { selected, compactionId, entryClientIds, ...metadata } = selectSessionContext(entries, leafId, options);
+  const { selected, compactionId, entryClientIds, ...metadata } =
+    selectSessionContext(entries, leafId, options);
   return {
     ...metadata,
     entryIds: selected.map((entry) => entry.id),
     messages: selected.map((entry) => {
-      if (entry.type === "compaction") return compactionUiMessage(entry, entry.id === compactionId);
+      if (entry.type === "compaction")
+        return compactionUiMessage(entry, entry.id === compactionId);
       const clientMessageId = entryClientIds.get(entry.id);
-      return entryToUiMessage(clientMessageId ? { ...entry, clientMessageId } as SessionEntry : entry, options)!;
+      return entryToUiMessage(
+        clientMessageId
+          ? ({ ...entry, clientMessageId } as SessionEntry)
+          : entry,
+        options,
+      )!;
     }),
   };
 }
@@ -856,7 +1090,14 @@ function selectSessionContext(
   leafId?: string | null,
   options: { includePreCompaction?: boolean } = {},
 ) {
-  const empty = { selected: [] as SessionEntry[], compactionId: null as string | null, thinkingLevel: "off", model: null as SessionContext["model"], todoPhases: [] as TodoPhase[], entryClientIds: new Map<string, string>() };
+  const empty = {
+    selected: [] as SessionEntry[],
+    compactionId: null as string | null,
+    thinkingLevel: "off",
+    model: null as SessionContext["model"],
+    todoPhases: [] as TodoPhase[],
+    entryClientIds: new Map<string, string>(),
+  };
   const byId = new Map<string, SessionEntry>();
   for (const e of entries) byId.set(e.id, e);
   if (leafId === null) return empty;
@@ -884,22 +1125,34 @@ function selectSessionContext(
   // The journal names its message by id, so only entries on the active path count: an abandoned branch's are never visited.
   const journaled = new Map<string, string>();
   for (const entry of path) {
-    if (entry.type === "custom" && entry.customType === "client-message-entry" && isRecord(entry.data)
-      && isClientMessageId(entry.data.clientMessageId) && typeof entry.data.entryId === "string") {
+    if (
+      entry.type === "custom" &&
+      entry.customType === "client-message-entry" &&
+      isRecord(entry.data) &&
+      isClientMessageId(entry.data.clientMessageId) &&
+      typeof entry.data.entryId === "string"
+    ) {
       journaled.set(entry.data.entryId, entry.data.clientMessageId);
     }
   }
   const entryClientIds = new Map<string, string>();
   for (const entry of path) {
     if (entry.type === "message" || entry.type === "custom_message") {
-      const id = isClientMessageId(entry.clientMessageId) ? entry.clientMessageId : journaled.get(entry.id);
+      const id = isClientMessageId(entry.clientMessageId)
+        ? entry.clientMessageId
+        : journaled.get(entry.id);
       if (id) {
         entryClientIds.set(entry.id, id);
         persistedClientMessageIds.add(id);
       }
-    } else if (entry.type === "custom" && entry.customType === "client-message-resolution"
-      && isRecord(entry.data) && Array.isArray(entry.data.clientMessageIds)) {
-      for (const id of entry.data.clientMessageIds) if (isClientMessageId(id)) resolvedClientMessageIds.add(id);
+    } else if (
+      entry.type === "custom" &&
+      entry.customType === "client-message-resolution" &&
+      isRecord(entry.data) &&
+      Array.isArray(entry.data.clientMessageIds)
+    ) {
+      for (const id of entry.data.clientMessageIds)
+        if (isClientMessageId(id)) resolvedClientMessageIds.add(id);
     }
     if (entry.type === "thinking_level_change") {
       thinkingLevel = entry.thinkingLevel ?? "off";
@@ -912,8 +1165,16 @@ function selectSessionContext(
         models.default = `${entry.provider}/${entry.modelId}`;
         hasExplicitDefaultModel = true;
       }
-    } else if (entry.type === "message" && isRecord(entry.message) && entry.message.role === "assistant") {
-      if (!hasExplicitDefaultModel && entry.message.provider && entry.message.model) {
+    } else if (
+      entry.type === "message" &&
+      isRecord(entry.message) &&
+      entry.message.role === "assistant"
+    ) {
+      if (
+        !hasExplicitDefaultModel &&
+        entry.message.provider &&
+        entry.message.model
+      ) {
         models.default = `${entry.message.provider}/${entry.message.model}`;
       }
     } else if (entry.type === "compaction") {
@@ -923,16 +1184,21 @@ function selectSessionContext(
 
   const selected: SessionEntry[] = [];
   const appendEntry = (entry: SessionEntry) => {
-    if (entry.type === "compaction" || entry.type === "custom_message"
-      || (entry.type === "message" && isRecord(entry.message))
-      || (entry.type === "branch_summary" && entry.summary)) {
+    if (
+      entry.type === "compaction" ||
+      entry.type === "custom_message" ||
+      (entry.type === "message" && isRecord(entry.message)) ||
+      (entry.type === "branch_summary" && entry.summary)
+    ) {
       selected.push(entry);
     }
   };
   if (compaction && !options.includePreCompaction) {
     const activeCompaction = compaction;
     appendEntry(activeCompaction);
-    const compactionIdx = path.findIndex((e) => e.type === "compaction" && e.id === activeCompaction.id);
+    const compactionIdx = path.findIndex(
+      (e) => e.type === "compaction" && e.id === activeCompaction.id,
+    );
     let foundFirstKept = false;
     for (let i = 0; i < compactionIdx; i++) {
       const entry = path[i];
@@ -948,15 +1214,27 @@ function selectSessionContext(
   const defaultModel = models.default;
   if (defaultModel) {
     const separator = defaultModel.indexOf("/");
-    model = separator > 0
-      ? { provider: defaultModel.slice(0, separator), modelId: defaultModel.slice(separator + 1) }
-      : { provider: "", modelId: defaultModel };
+    model =
+      separator > 0
+        ? {
+            provider: defaultModel.slice(0, separator),
+            modelId: defaultModel.slice(separator + 1),
+          }
+        : { provider: "", modelId: defaultModel };
   }
   return {
-    selected, compactionId: compaction?.id ?? null, thinkingLevel, model, todoPhases: getTodoPhasesFromEntries(entries, leafId),
-    ...(persistedClientMessageIds.size ? { persistedClientMessageIds: [...persistedClientMessageIds] } : {}),
+    selected,
+    compactionId: compaction?.id ?? null,
+    thinkingLevel,
+    model,
+    todoPhases: getTodoPhasesFromEntries(entries, leafId),
+    ...(persistedClientMessageIds.size
+      ? { persistedClientMessageIds: [...persistedClientMessageIds] }
+      : {}),
     entryClientIds,
-    ...(resolvedClientMessageIds.size ? { resolvedClientMessageIds: [...resolvedClientMessageIds] } : {}),
+    ...(resolvedClientMessageIds.size
+      ? { resolvedClientMessageIds: [...resolvedClientMessageIds] }
+      : {}),
   };
 }
 
@@ -969,7 +1247,8 @@ function parseEntryTimestamp(timestamp: string): number | undefined {
  *  strings in hand-edited/imported files — normalize both to number|undefined
  *  so downstream arithmetic never sees a string (NaN / Invalid Date). */
 function normalizeMessageTimestamp(value: unknown): number | undefined {
-  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value === "number")
+    return Number.isFinite(value) ? value : undefined;
   if (typeof value === "string") return parseEntryTimestamp(value);
   return undefined;
 }
@@ -1008,45 +1287,103 @@ function taskDetailAsync(value: unknown): Record<string, string> | undefined {
   if (!isRecord(value)) return undefined;
   const out: Record<string, string> = {};
   for (const key of ["state", "jobId", "type"] as const) {
-    if (typeof value[key] === "string") out[key] = truncateTaskDetailText(value[key]);
+    if (typeof value[key] === "string")
+      out[key] = truncateTaskDetailText(value[key]);
   }
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
 const TASK_DETAIL_PROGRESS_KEYS = [
-  "index", "id", "agent", "agentSource", "status", "task", "assignment", "lastIntent",
-  "toolCount", "requests", "tokens", "contextTokens", "contextWindow", "cost", "durationMs",
-  "modelRole", "resolvedModel", "resolvedModelIsFallback", "retryFailure",
+  "index",
+  "id",
+  "agent",
+  "agentSource",
+  "status",
+  "task",
+  "assignment",
+  "lastIntent",
+  "toolCount",
+  "requests",
+  "tokens",
+  "contextTokens",
+  "contextWindow",
+  "cost",
+  "durationMs",
+  "modelRole",
+  "resolvedModel",
+  "resolvedModelIsFallback",
+  "retryFailure",
 ] as const;
 
 const TASK_DETAIL_RESULT_KEYS = [
-  "index", "id", "agent", "agentSource", "status", "task", "assignment", "exitCode",
-  "truncated", "structuredOutput", "durationMs", "tokens", "requests", "contextTokens",
-  "contextWindow", "modelRole", "resolvedModel", "resolvedModelIsFallback", "error",
-  "aborted", "abortReason", "outputPath", "patchPath", "branchName", "retryFailure",
+  "index",
+  "id",
+  "agent",
+  "agentSource",
+  "status",
+  "task",
+  "assignment",
+  "exitCode",
+  "truncated",
+  "structuredOutput",
+  "durationMs",
+  "tokens",
+  "requests",
+  "contextTokens",
+  "contextWindow",
+  "modelRole",
+  "resolvedModel",
+  "resolvedModelIsFallback",
+  "error",
+  "aborted",
+  "abortReason",
+  "outputPath",
+  "patchPath",
+  "branchName",
+  "retryFailure",
 ] as const;
 
-function keepTaskToolResultDetails(details: Record<string, unknown>): Record<string, unknown> | null {
+function keepTaskToolResultDetails(
+  details: Record<string, unknown>,
+): Record<string, unknown> | null {
   const kept: Record<string, unknown> = {};
   const results = Array.isArray(details.results) ? details.results : [];
   const progress = Array.isArray(details.progress) ? details.progress : [];
-  if (results.length === 0 && progress.length === 0 && !isRecord(details.async)) return null;
+  if (results.length === 0 && progress.length === 0 && !isRecord(details.async))
+    return null;
 
-  if (typeof details.totalDurationMs === "number") kept.totalDurationMs = details.totalDurationMs;
+  if (typeof details.totalDurationMs === "number")
+    kept.totalDurationMs = details.totalDurationMs;
   if (isRecord(details.async)) {
     const asyncInfo = taskDetailAsync(details.async);
     if (asyncInfo) kept.async = asyncInfo;
   }
 
-  const pickRecord = (raw: unknown, keys: readonly string[]): Record<string, unknown> | null => {
+  const pickRecord = (
+    raw: unknown,
+    keys: readonly string[],
+  ): Record<string, unknown> | null => {
     if (!isRecord(raw)) return null;
     const out: Record<string, unknown> = {};
     for (const key of keys) {
       if (raw[key] !== undefined) out[key] = raw[key];
     }
     // Bound every string field that rides the history payload.
-    for (const key of ["task", "assignment", "error", "abortReason", "lastIntent", "agent", "modelRole", "resolvedModel", "outputPath", "patchPath", "branchName"] as const) {
-      if (typeof out[key] === "string") out[key] = truncateTaskDetailText(out[key]);
+    for (const key of [
+      "task",
+      "assignment",
+      "error",
+      "abortReason",
+      "lastIntent",
+      "agent",
+      "modelRole",
+      "resolvedModel",
+      "outputPath",
+      "patchPath",
+      "branchName",
+    ] as const) {
+      if (typeof out[key] === "string")
+        out[key] = truncateTaskDetailText(out[key]);
     }
     // Settled results carry cost in `usage.cost`, not top-level `cost`.
     if (typeof out.cost !== "number") {
@@ -1055,12 +1392,18 @@ function keepTaskToolResultDetails(details: Record<string, unknown>): Record<str
     }
     // Project nested objects to bounded, UI-only shapes.
     if (raw.retryFailure !== undefined) {
-      const retryFailure = taskResultRetryFailure(raw.retryFailure, truncateTaskDetailText);
+      const retryFailure = taskResultRetryFailure(
+        raw.retryFailure,
+        truncateTaskDetailText,
+      );
       if (retryFailure) out.retryFailure = retryFailure;
       else delete out.retryFailure;
     }
     if (raw.structuredOutput !== undefined) {
-      const structuredOutput = taskResultStructuredOutput(raw.structuredOutput, truncateTaskDetailText);
+      const structuredOutput = taskResultStructuredOutput(
+        raw.structuredOutput,
+        truncateTaskDetailText,
+      );
       if (structuredOutput) out.structuredOutput = structuredOutput;
       else delete out.structuredOutput;
     }
@@ -1082,7 +1425,9 @@ function keepTaskToolResultDetails(details: Record<string, unknown>): Record<str
   return Object.keys(kept).length > 0 ? kept : null;
 }
 
-function keepHubToolResultDetails(details: Record<string, unknown>): Record<string, unknown> | null {
+function keepHubToolResultDetails(
+  details: Record<string, unknown>,
+): Record<string, unknown> | null {
   const op = details.op;
   if (typeof op !== "string" || (op !== "send" && op !== "jobs")) return null;
   const kept: Record<string, unknown> = { op };
@@ -1095,8 +1440,10 @@ function keepHubToolResultDetails(details: Record<string, unknown>): Record<stri
         .map((raw) => {
           if (!isRecord(raw)) return null;
           const out: Record<string, string> = {};
-          if (typeof raw.to === "string") out.to = truncateTaskDetailText(raw.to);
-          if (typeof raw.outcome === "string") out.outcome = truncateTaskDetailText(raw.outcome);
+          if (typeof raw.to === "string")
+            out.to = truncateTaskDetailText(raw.to);
+          if (typeof raw.outcome === "string")
+            out.outcome = truncateTaskDetailText(raw.outcome);
           return Object.keys(out).length > 0 ? out : null;
         })
         .filter((entry): entry is Record<string, string> => entry !== null);
@@ -1109,10 +1456,21 @@ function keepHubToolResultDetails(details: Record<string, unknown>): Record<stri
         .map((raw) => {
           if (!isRecord(raw)) return null;
           const out: Record<string, unknown> = {};
-          for (const key of ["id", "type", "status", "label", "resolvedModel"] as const) {
-            if (typeof raw[key] === "string") out[key] = truncateTaskDetailText(raw[key]);
+          for (const key of [
+            "id",
+            "type",
+            "status",
+            "label",
+            "resolvedModel",
+          ] as const) {
+            if (typeof raw[key] === "string")
+              out[key] = truncateTaskDetailText(raw[key]);
           }
-          if (typeof raw.durationMs === "number" && Number.isFinite(raw.durationMs)) out.durationMs = raw.durationMs;
+          if (
+            typeof raw.durationMs === "number" &&
+            Number.isFinite(raw.durationMs)
+          )
+            out.durationMs = raw.durationMs;
           return Object.keys(out).length > 0 ? out : null;
         })
         .filter((entry): entry is Record<string, unknown> => entry !== null);
@@ -1123,17 +1481,24 @@ function keepHubToolResultDetails(details: Record<string, unknown>): Record<stri
 }
 
 function hubDetailTargets(value: unknown): string[] | undefined {
-  const list = Array.isArray(value) ? value : typeof value === "string" ? [value] : undefined;
+  const list = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? [value]
+      : undefined;
   if (!list) return undefined;
   const out = list
-    .filter((entry): entry is string => typeof entry === "string" && entry.length > 0)
+    .filter(
+      (entry): entry is string => typeof entry === "string" && entry.length > 0,
+    )
     .slice(0, TASK_DETAIL_MAX_ROWS)
     .map((entry) => truncateTaskDetailText(entry));
   return out.length > 0 ? out : undefined;
 }
 
 function stripToolResultDetails(message: AgentMessage): AgentMessage {
-  if (message.role !== "toolResult" || message.details === undefined) return message;
+  if (message.role !== "toolResult" || message.details === undefined)
+    return message;
   const { details, ...rest } = message;
   if (isRecord(details)) {
     const kept: Record<string, unknown> = {};
@@ -1158,7 +1523,10 @@ function toolResultImagesAsUrls(message: AgentMessage): AgentMessage {
   return content === message.content ? message : { ...message, content };
 }
 
-function compactionUiMessage(entry: CompactionEntry, active: boolean): CustomMessage {
+function compactionUiMessage(
+  entry: CompactionEntry,
+  active: boolean,
+): CustomMessage {
   return {
     role: "custom",
     customType: "compaction",
@@ -1166,7 +1534,9 @@ function compactionUiMessage(entry: CompactionEntry, active: boolean): CustomMes
     display: true,
     details: {
       tokensBefore: entry.tokensBefore,
-      ...(entry.tokensAfter !== undefined ? { tokensAfter: entry.tokensAfter } : {}),
+      ...(entry.tokensAfter !== undefined
+        ? { tokensAfter: entry.tokensAfter }
+        : {}),
       ...(entry.method !== undefined ? { method: entry.method } : {}),
       firstKeptEntryId: entry.firstKeptEntryId,
     },
@@ -1186,7 +1556,9 @@ export function entryToUiMessage(
       // object is missing; skip them like any other unmappable entry instead
       // of crashing every reader of the file.
       if (!isRecord(entry.message)) return null;
-      const raw = isClientMessageId(entry.clientMessageId) ? { ...entry.message, clientMessageId: entry.clientMessageId } : entry.message;
+      const raw = isClientMessageId(entry.clientMessageId)
+        ? { ...entry.message, clientMessageId: entry.clientMessageId }
+        : entry.message;
       // omp-only roles are folded into displayable custom messages so the
       // existing role-keyed UI renders them without new components.
       if (raw.role === "developer") {
@@ -1202,10 +1574,14 @@ export function entryToUiMessage(
         };
       }
       if (raw.role === "pythonExecution") {
-        const output = raw.output ? `\n\`\`\`\n${raw.output}\n\`\`\`` : "\n(no output)";
+        const output = raw.output
+          ? `\n\`\`\`\n${raw.output}\n\`\`\``
+          : "\n(no output)";
         const status = raw.cancelled
           ? "\n(execution cancelled)"
-          : raw.exitCode ? `\nExecution failed with code ${raw.exitCode}` : "";
+          : raw.exitCode
+            ? `\nExecution failed with code ${raw.exitCode}`
+            : "";
         return {
           role: "custom",
           customType: "python-execution",
@@ -1219,8 +1595,12 @@ export function entryToUiMessage(
         // the same way the loader tolerates bad lines: one bad entry must not
         // 500 the entire session view.
         const files = Array.isArray(raw.files)
-          ? (raw.files as unknown[]).filter((f): f is { path: string } =>
-              !!f && typeof f === "object" && typeof (f as { path?: unknown }).path === "string")
+          ? (raw.files as unknown[]).filter(
+              (f): f is { path: string } =>
+                !!f &&
+                typeof f === "object" &&
+                typeof (f as { path?: unknown }).path === "string",
+            )
           : [];
         return {
           role: "custom",
@@ -1234,18 +1614,22 @@ export function entryToUiMessage(
         ? toolResultImagesAsUrls(normalizeToolCalls(raw))
         : normalizeToolCalls(raw);
       const message = stripToolResultDetails(normalized);
-      if (!options.deferThinking || message.role !== "assistant") return withNormalizedTimestamp(message);
+      if (!options.deferThinking || message.role !== "assistant")
+        return withNormalizedTimestamp(message);
       // Guard like the loader does for bad lines: normalizeToolCalls passes
       // non-array content through unchanged, so a string-content assistant
       // entry must not 500 the whole context route.
-      if (!Array.isArray(message.content)) return withNormalizedTimestamp(message);
+      if (!Array.isArray(message.content))
+        return withNormalizedTimestamp(message);
       const deferred = {
         ...message,
-        content: message.content.map((block) => (
-          block.type === "thinking" && typeof block.thinking === "string" && block.thinking.trim() !== ""
+        content: message.content.map((block) =>
+          block.type === "thinking" &&
+          typeof block.thinking === "string" &&
+          block.thinking.trim() !== ""
             ? { ...block, thinking: "", deferred: true }
-            : block
-        )),
+            : block,
+        ),
       };
       return withNormalizedTimestamp(deferred);
     }
@@ -1265,7 +1649,9 @@ export function entryToUiMessage(
         display: entry.display,
         details: entry.details,
         timestamp: parseEntryTimestamp(entry.timestamp),
-        ...(isClientMessageId(entry.clientMessageId) ? { clientMessageId: entry.clientMessageId } : {}),
+        ...(isClientMessageId(entry.clientMessageId)
+          ? { clientMessageId: entry.clientMessageId }
+          : {}),
       };
     default:
       // model_change, thinking_level_change, service_tier_change, label,

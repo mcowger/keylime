@@ -1,8 +1,21 @@
-import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "fs";
+import {
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "fs";
 import { uptime } from "os";
 import { resolve } from "path";
 import { isLinkUp } from "./hosts/host";
-import { adoptedChild, getHost, hostOwnsLifecycle, onHostHello } from "./hosts/hub";
+import {
+  adoptedChild,
+  getHost,
+  hostOwnsLifecycle,
+  onHostHello,
+} from "./hosts/hub";
 import { getAgentDir } from "./omp/paths";
 import { isValidSessionId } from "./session-file-references-core";
 import { isRecord } from "./type-guards";
@@ -38,7 +51,12 @@ declare global {
 // use, which claims the previous runs' lists before anything in this run can
 // overwrite them.
 function tracker(): TrackerState {
-  globalThis.__ompResumeTracker ??= { leftover: readLeftover(), sessions: new Map(), drops: new Map(), shuttingDown: false };
+  globalThis.__ompResumeTracker ??= {
+    leftover: readLeftover(),
+    sessions: new Map(),
+    drops: new Map(),
+    shuttingDown: false,
+  };
   return globalThis.__ompResumeTracker;
 }
 
@@ -94,10 +112,19 @@ function readLeftover(): InterruptibleSession[] {
     }
     try {
       const raw: unknown = JSON.parse(readFileSync(claimed, "utf8"));
-      const list = isRecord(raw) && Array.isArray(raw.sessions) ? raw.sessions : [];
+      const list =
+        isRecord(raw) && Array.isArray(raw.sessions) ? raw.sessions : [];
       for (const entry of list) {
-        if (isRecord(entry) && typeof entry.id === "string" && isValidSessionId(entry.id)) {
-          sessions.set(entry.id, { id: entry.id, advisor: entry.advisor === true, hostId: typeof entry.hostId === "string" ? entry.hostId : "local" });
+        if (
+          isRecord(entry) &&
+          typeof entry.id === "string" &&
+          isValidSessionId(entry.id)
+        ) {
+          sessions.set(entry.id, {
+            id: entry.id,
+            advisor: entry.advisor === true,
+            hostId: typeof entry.hostId === "string" ? entry.hostId : "local",
+          });
         }
       }
     } catch {
@@ -109,7 +136,10 @@ function readLeftover(): InterruptibleSession[] {
 }
 
 function interruptedPath(): string {
-  return resolve(getAgentDir(), `omp-web-interrupted-sessions-${process.pid}.json`);
+  return resolve(
+    getAgentDir(),
+    `omp-web-interrupted-sessions-${process.pid}.json`,
+  );
 }
 
 function writeInterrupted(sessions: InterruptibleSession[]): void {
@@ -124,7 +154,9 @@ function writeInterrupted(sessions: InterruptibleSession[]): void {
     writeFileSync(temp, `${JSON.stringify({ sessions }, null, 2)}\n`, "utf8");
     renameSync(temp, path);
   } catch (error) {
-    console.warn(`[omp-web] could not record running sessions for resume: ${error instanceof Error ? error.message : String(error)}`);
+    console.warn(
+      `[omp-web] could not record running sessions for resume: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 
@@ -133,7 +165,10 @@ function writeInterrupted(sessions: InterruptibleSession[]): void {
  * when its run ends normally (its process is still alive), or EXIT_GRACE_MS
  * after its process died unless omp-web is shutting down by then.
  */
-export function recordRunningSessions(running: InterruptibleSession[], isAlive: (id: string) => boolean): void {
+export function recordRunningSessions(
+  running: InterruptibleSession[],
+  isAlive: (id: string) => boolean,
+): void {
   const state = tracker();
   if (state.shuttingDown) return;
   if (!loadWebServerSettings().autoResumeSessions) {
@@ -147,7 +182,9 @@ export function recordRunningSessions(running: InterruptibleSession[], isAlive: 
   }
   let changed = false;
   const runningIds = new Set<string>();
-  for (const session of running.filter((entry) => !hostOwnsLifecycle(entry.hostId))) {
+  for (const session of running.filter(
+    (entry) => !hostOwnsLifecycle(entry.hostId),
+  )) {
     runningIds.add(session.id);
     const drop = state.drops.get(session.id);
     if (drop) {
@@ -191,7 +228,9 @@ export function takeInterruptedSessions(): InterruptibleSession[] {
   const state = tracker();
   const sessions = state.leftover;
   state.leftover = [];
-  return loadWebServerSettings().autoResumeSessions ? sessions.filter((entry) => !hostOwnsLifecycle(entry.hostId)) : [];
+  return loadWebServerSettings().autoResumeSessions
+    ? sessions.filter((entry) => !hostOwnsLifecycle(entry.hostId))
+    : [];
 }
 
 /**
@@ -201,17 +240,23 @@ export function takeInterruptedSessions(): InterruptibleSession[] {
  * dropped. A host already linked in this run said hello before this ran; a
  * host revoked since is skipped.
  */
-export function resumeOnHostLink(entries: InterruptibleSession[], resume: (entry: InterruptibleSession) => Promise<void>): void {
+export function resumeOnHostLink(
+  entries: InterruptibleSession[],
+  resume: (entry: InterruptibleSession) => Promise<void>,
+): void {
   // An unhandled rejection stops the server (instrumentation.node.ts).
   const start = (entry: InterruptibleSession) => {
     if (hostOwnsLifecycle(entry.hostId)) return;
-    void adoptedChild(entry.hostId, entry.id).then((adopted) => adopted ? undefined : resume(entry)).catch(() => {});
+    void adoptedChild(entry.hostId, entry.id)
+      .then((adopted) => (adopted ? undefined : resume(entry)))
+      .catch(() => {});
   };
   const waiting = new Map<string, InterruptibleSession[]>();
   for (const entry of entries) {
     const status = getHost(entry.hostId)?.status();
     if (status && isLinkUp(status)) start(entry);
-    else if (status) waiting.set(entry.hostId, [...(waiting.get(entry.hostId) ?? []), entry]);
+    else if (status)
+      waiting.set(entry.hostId, [...(waiting.get(entry.hostId) ?? []), entry]);
   }
   if (waiting.size === 0) return;
   const stop = onHostHello((hostId) => {

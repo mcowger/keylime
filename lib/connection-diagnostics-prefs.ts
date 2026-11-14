@@ -38,7 +38,8 @@ export function setConnectionDiagnosticsEnabled(on: boolean): void {
 function subscribe(onChange: () => void): () => void {
   // A change in another tab arrives as a `storage` event; `key` is null after clear().
   const onStorage = (event: StorageEvent) => {
-    if (event.key === null || event.key === CONNECTION_DIAGNOSTICS_KEY) onChange();
+    if (event.key === null || event.key === CONNECTION_DIAGNOSTICS_KEY)
+      onChange();
   };
   window.addEventListener(CONNECTION_DIAGNOSTICS_EVENT, onChange);
   window.addEventListener("storage", onStorage);
@@ -50,5 +51,9 @@ function subscribe(onChange: () => void): () => void {
 
 /** Whether connection diagnostics are on in this browser; follows changes made here or in other tabs. */
 export function useConnectionDiagnosticsEnabled(): boolean {
-  return useSyncExternalStore(subscribe, getConnectionDiagnosticsEnabled, () => false);
+  return useSyncExternalStore(
+    subscribe,
+    getConnectionDiagnosticsEnabled,
+    () => false,
+  );
 }

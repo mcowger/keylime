@@ -40,7 +40,8 @@ export function UsageConfig() {
   const [timeRange, setTimeRange] = useState<UsageTimeRange>("30d");
   const [granularity, setGranularity] = useState<UsageGranularity>("daily");
   const [metricView, setMetricView] = useState<UsageMetricView>("cost");
-  const [breakdownView, setBreakdownView] = useState<UsageBreakdownView>("model");
+  const [breakdownView, setBreakdownView] =
+    useState<UsageBreakdownView>("model");
 
   const [report, setReport] = useState<UsageReport | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -49,7 +50,9 @@ export function UsageConfig() {
 
   // Hover state for interactive chart tooltip
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
+  const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(
+    null,
+  );
   const chartSvgRef = useRef<SVGSVGElement | null>(null);
 
   const fetchUsage = useCallback(
@@ -100,7 +103,9 @@ export function UsageConfig() {
     const first = report.timeSeries[0];
     const last = report.timeSeries[report.timeSeries.length - 1];
     if (!first || !last) return "";
-    return first.label === last.label ? first.label : `${first.label} to ${last.label}`;
+    return first.label === last.label
+      ? first.label
+      : `${first.label} to ${last.label}`;
   }, [report]);
 
   // SVG Chart Geometry Calculations
@@ -123,7 +128,8 @@ export function UsageConfig() {
     const plotWidth = width - padLeft - padRight;
     const plotHeight = height - padTop - padBottom;
 
-    const stepX = points.length > 1 ? plotWidth / (points.length - 1) : plotWidth;
+    const stepX =
+      points.length > 1 ? plotWidth / (points.length - 1) : plotWidth;
 
     const coords = points.map((p, idx) => {
       const val = isCost ? p.totalCost : p.totalTokens;
@@ -152,15 +158,26 @@ export function UsageConfig() {
         pathD += ` C ${cx1} ${cy1}, ${cx2} ${cy2}, ${cur.x} ${cur.y}`;
       }
       const firstCoord = coords[0] || { x: padLeft, y: padTop + plotHeight };
-      const lastCoord = coords[coords.length - 1] || { x: padLeft + plotWidth, y: padTop + plotHeight };
+      const lastCoord = coords[coords.length - 1] || {
+        x: padLeft + plotWidth,
+        y: padTop + plotHeight,
+      };
       areaD = `${pathD} L ${lastCoord.x} ${padTop + plotHeight} L ${firstCoord.x} ${padTop + plotHeight} Z`;
     }
 
     // Y ticks
     const yTicks = [
       { y: padTop + plotHeight, label: isCost ? "$0.00" : "0" },
-      { y: padTop + plotHeight / 2, label: isCost ? formatCurrency(maxValue / 2) : formatTokens(maxValue / 2) },
-      { y: padTop, label: isCost ? formatCurrency(maxValue) : formatTokens(maxValue) },
+      {
+        y: padTop + plotHeight / 2,
+        label: isCost
+          ? formatCurrency(maxValue / 2)
+          : formatTokens(maxValue / 2),
+      },
+      {
+        y: padTop,
+        label: isCost ? formatCurrency(maxValue) : formatTokens(maxValue),
+      },
     ];
 
     // X ticks: pick up to 4 spread dates
@@ -240,7 +257,11 @@ export function UsageConfig() {
           color: "var(--text-muted)",
         }}
       >
-        <Loader2 size={24} className="animate-spin" style={{ color: "var(--accent)" }} />
+        <Loader2
+          size={24}
+          className="animate-spin"
+          style={{ color: "var(--accent)" }}
+        />
         <span style={{ fontSize: 13 }}>{t("usageConfig.loading")}</span>
       </div>
     );
@@ -260,7 +281,9 @@ export function UsageConfig() {
         }}
       >
         <AlertCircle size={28} style={{ color: "var(--text-dim)" }} />
-        <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>{t("usageConfig.error")}</span>
+        <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>
+          {t("usageConfig.error")}
+        </span>
         <span style={{ fontSize: 12, color: "var(--text-dim)" }}>{error}</span>
         <button
           type="button"
@@ -294,7 +317,10 @@ export function UsageConfig() {
   const scanInfo = report?.scanInfo;
 
   // Active hover point data
-  const activeHoverPoint = hoverIndex != null && chartData ? chartData.coords[hoverIndex]?.point : null;
+  const activeHoverPoint =
+    hoverIndex != null && chartData
+      ? chartData.coords[hoverIndex]?.point
+      : null;
 
   return (
     <div
@@ -332,11 +358,22 @@ export function UsageConfig() {
             {t("usageConfig.title")}
           </h2>
           {dateRangeSubtitle && (
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{dateRangeSubtitle}</div>
+            <div
+              style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}
+            >
+              {dateRangeSubtitle}
+            </div>
           )}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+          }}
+        >
           {/* Granularity segmented buttons */}
           <div
             style={{
@@ -348,38 +385,46 @@ export function UsageConfig() {
               border: "1px solid var(--border)",
             }}
           >
-            {(["daily", "monthly", "projects"] as UsageGranularity[]).map((g) => {
-              const active = granularity === g;
-              return (
-                <button
-                  key={g}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => setGranularity(g)}
-                  style={{
-                    padding: "4px 10px",
-                    fontSize: 12,
-                    fontWeight: active ? 600 : 400,
-                    borderRadius: "calc(var(--radius-control) - 2px)",
-                    border: "none",
-                    background: active ? "var(--bg-selected)" : "transparent",
-                    color: active ? "var(--text)" : "var(--text-muted)",
-                    cursor: "pointer",
-                    transition: "all var(--dur-fast) ease",
-                  }}
-                >
-                  {g === "daily"
-                    ? t("usageConfig.granularityDaily")
-                    : g === "monthly"
-                      ? t("usageConfig.granularityMonthly")
-                      : t("usageConfig.granularityProjects")}
-                </button>
-              );
-            })}
+            {(["daily", "monthly", "projects"] as UsageGranularity[]).map(
+              (g) => {
+                const active = granularity === g;
+                return (
+                  <button
+                    key={g}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setGranularity(g)}
+                    style={{
+                      padding: "4px 10px",
+                      fontSize: 12,
+                      fontWeight: active ? 600 : 400,
+                      borderRadius: "calc(var(--radius-control) - 2px)",
+                      border: "none",
+                      background: active ? "var(--bg-selected)" : "transparent",
+                      color: active ? "var(--text)" : "var(--text-muted)",
+                      cursor: "pointer",
+                      transition: "all var(--dur-fast) ease",
+                    }}
+                  >
+                    {g === "daily"
+                      ? t("usageConfig.granularityDaily")
+                      : g === "monthly"
+                        ? t("usageConfig.granularityMonthly")
+                        : t("usageConfig.granularityProjects")}
+                  </button>
+                );
+              },
+            )}
           </div>
 
           {/* Time Range Selector */}
-          <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+          <div
+            style={{
+              position: "relative",
+              display: "inline-flex",
+              alignItems: "center",
+            }}
+          >
             <select
               value={timeRange}
               aria-label={t("usageConfig.timeRange")}
@@ -458,18 +503,44 @@ export function UsageConfig() {
             gap: 12,
           }}
         >
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: "var(--text-dim)", textTransform: "uppercase" }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: "0.06em",
+              color: "var(--text-dim)",
+              textTransform: "uppercase",
+            }}
+          >
             {t("usageConfig.rawTokenCost")}
           </div>
 
           <div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
-              <span style={{ fontSize: 32, fontWeight: 700, fontFamily: "var(--font-serif, serif)", color: "var(--text)", letterSpacing: "-0.02em" }}>
+              <span
+                style={{
+                  fontSize: 32,
+                  fontWeight: 700,
+                  fontFamily: "var(--font-serif, serif)",
+                  color: "var(--text)",
+                  letterSpacing: "-0.02em",
+                }}
+              >
                 {formatCurrency(summary?.totalCost ?? 0)}
               </span>
-              <span style={{ fontSize: 14, color: "var(--text-muted)", fontWeight: 500 }}>*</span>
+              <span
+                style={{
+                  fontSize: 14,
+                  color: "var(--text-muted)",
+                  fontWeight: 500,
+                }}
+              >
+                *
+              </span>
             </div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+            <div
+              style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}
+            >
               {t("usageConfig.billedAtFullRate")}
             </div>
           </div>
@@ -486,7 +557,13 @@ export function UsageConfig() {
             }}
           >
             {providers.length === 0 ? (
-              <div style={{ height: "100%", width: "100%", background: "var(--border)" }} />
+              <div
+                style={{
+                  height: "100%",
+                  width: "100%",
+                  background: "var(--border)",
+                }}
+              />
             ) : (
               providers.map((p) => {
                 const widthPct = Math.max(p.share, 2);
@@ -507,9 +584,22 @@ export function UsageConfig() {
           </div>
 
           {/* Provider Share Breakdown List */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              marginTop: 4,
+            }}
+          >
             {providers.length === 0 ? (
-              <div style={{ fontSize: 12, color: "var(--text-dim)", fontStyle: "italic" }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "var(--text-dim)",
+                  fontStyle: "italic",
+                }}
+              >
                 {t("usageConfig.emptyTitle")}
               </div>
             ) : (
@@ -523,7 +613,9 @@ export function UsageConfig() {
                     fontSize: 12,
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 8 }}
+                  >
                     <div
                       style={{
                         width: 9,
@@ -533,15 +625,36 @@ export function UsageConfig() {
                         flexShrink: 0,
                       }}
                     />
-                    <span style={{ fontWeight: 500, color: "var(--text)" }}>{p.name}</span>
+                    <span style={{ fontWeight: 500, color: "var(--text)" }}>
+                      {p.name}
+                    </span>
                   </div>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span style={{ fontWeight: 600, color: "var(--text)" }}>{formatCurrency(p.cost)}</span>
-                    <span style={{ fontSize: 11, color: "var(--text-dim)", minWidth: 70, textAlign: "right" }}>
-                      {p.share.toFixed(1)}% {t("usageConfig.share").toLowerCase()}
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 10 }}
+                  >
+                    <span style={{ fontWeight: 600, color: "var(--text)" }}>
+                      {formatCurrency(p.cost)}
                     </span>
-                    <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 60, textAlign: "right" }}>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: "var(--text-dim)",
+                        minWidth: 70,
+                        textAlign: "right",
+                      }}
+                    >
+                      {p.share.toFixed(1)}%{" "}
+                      {t("usageConfig.share").toLowerCase()}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: "var(--text-muted)",
+                        minWidth: 60,
+                        textAlign: "right",
+                      }}
+                    >
                       {formatTokens(p.tokens)}
                     </span>
                   </div>
@@ -565,9 +678,19 @@ export function UsageConfig() {
           }}
         >
           {/* Chart Card Header */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 8,
+            }}
+          >
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+              <span
+                style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}
+              >
                 {granularity === "monthly"
                   ? metricView === "cost"
                     ? t("usageConfig.monthlyCost")
@@ -578,7 +701,14 @@ export function UsageConfig() {
               </span>
 
               {/* Provider color badges */}
-              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  flexWrap: "wrap",
+                }}
+              >
                 {providers.slice(0, 3).map((p) => (
                   <span
                     key={p.provider}
@@ -590,7 +720,14 @@ export function UsageConfig() {
                       color: "var(--text-muted)",
                     }}
                   >
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: p.color }} />
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        backgroundColor: p.color,
+                      }}
+                    />
                     {p.name}
                   </span>
                 ))}
@@ -618,8 +755,12 @@ export function UsageConfig() {
                   fontWeight: metricView === "cost" ? 600 : 400,
                   borderRadius: "calc(var(--radius-control) - 2px)",
                   border: "none",
-                  background: metricView === "cost" ? "var(--bg-selected)" : "transparent",
-                  color: metricView === "cost" ? "var(--text)" : "var(--text-muted)",
+                  background:
+                    metricView === "cost"
+                      ? "var(--bg-selected)"
+                      : "transparent",
+                  color:
+                    metricView === "cost" ? "var(--text)" : "var(--text-muted)",
                   cursor: "pointer",
                 }}
               >
@@ -635,8 +776,14 @@ export function UsageConfig() {
                   fontWeight: metricView === "tokens" ? 600 : 400,
                   borderRadius: "calc(var(--radius-control) - 2px)",
                   border: "none",
-                  background: metricView === "tokens" ? "var(--bg-selected)" : "transparent",
-                  color: metricView === "tokens" ? "var(--text)" : "var(--text-muted)",
+                  background:
+                    metricView === "tokens"
+                      ? "var(--bg-selected)"
+                      : "transparent",
+                  color:
+                    metricView === "tokens"
+                      ? "var(--text)"
+                      : "var(--text-muted)",
                   cursor: "pointer",
                 }}
               >
@@ -652,14 +799,33 @@ export function UsageConfig() {
                 ref={chartSvgRef}
                 viewBox={`0 0 ${chartData.width} ${chartData.height}`}
                 preserveAspectRatio="none"
-                style={{ width: "100%", height: "100%", overflow: "visible", cursor: "crosshair" }}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  overflow: "visible",
+                  cursor: "crosshair",
+                }}
                 onPointerMove={handleChartPointerMove}
                 onPointerLeave={handleChartPointerLeave}
               >
                 <defs>
-                  <linearGradient id="usageAreaGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.28" />
-                    <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.02" />
+                  <linearGradient
+                    id="usageAreaGradient"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop
+                      offset="0%"
+                      stopColor="var(--accent)"
+                      stopOpacity="0.28"
+                    />
+                    <stop
+                      offset="100%"
+                      stopColor="var(--accent)"
+                      stopOpacity="0.02"
+                    />
                   </linearGradient>
                 </defs>
 
@@ -766,12 +932,28 @@ export function UsageConfig() {
                   whiteSpace: "nowrap",
                 }}
               >
-                <div style={{ fontWeight: 600, color: "var(--text)", borderBottom: "1px solid var(--border)", paddingBottom: 2 }}>
+                <div
+                  style={{
+                    fontWeight: 600,
+                    color: "var(--text)",
+                    borderBottom: "1px solid var(--border)",
+                    paddingBottom: 2,
+                  }}
+                >
                   {activeHoverPoint.label}
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                  }}
+                >
                   <span style={{ color: "var(--text-muted)" }}>
-                    {metricView === "cost" ? t("usageConfig.cost") : t("usageConfig.tokens")}:
+                    {metricView === "cost"
+                      ? t("usageConfig.cost")
+                      : t("usageConfig.tokens")}
+                    :
                   </span>
                   <span style={{ fontWeight: 600, color: "var(--text)" }}>
                     {metricView === "cost"
@@ -779,14 +961,26 @@ export function UsageConfig() {
                       : formatTokens(activeHoverPoint.totalTokens)}
                   </span>
                 </div>
-                {Object.entries(activeHoverPoint.byProvider).map(([p, data]) => (
-                  <div key={p} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 10 }}>
-                    <span style={{ color: "var(--text-dim)" }}>{p}:</span>
-                    <span style={{ color: "var(--text-muted)" }}>
-                      {metricView === "cost" ? formatCurrency(data.cost) : formatTokens(data.tokens)}
-                    </span>
-                  </div>
-                ))}
+                {Object.entries(activeHoverPoint.byProvider).map(
+                  ([p, data]) => (
+                    <div
+                      key={p}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        fontSize: 10,
+                      }}
+                    >
+                      <span style={{ color: "var(--text-dim)" }}>{p}:</span>
+                      <span style={{ color: "var(--text-muted)" }}>
+                        {metricView === "cost"
+                          ? formatCurrency(data.cost)
+                          : formatTokens(data.tokens)}
+                      </span>
+                    </div>
+                  ),
+                )}
               </div>
             )}
           </div>
@@ -813,14 +1007,23 @@ export function UsageConfig() {
             gap: 2,
           }}
         >
-          <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "var(--font-serif, serif)", color: "var(--text)" }}>
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 700,
+              fontFamily: "var(--font-serif, serif)",
+              color: "var(--text)",
+            }}
+          >
             {formatTokens(summary?.totalTokens ?? 0)}
           </div>
           <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text)" }}>
             {t("usageConfig.processedTokens")}
           </div>
           <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
-            {t("usageConfig.perActiveDay", { count: formatTokens(summary?.tokensPerActiveDay ?? 0) })}
+            {t("usageConfig.perActiveDay", {
+              count: formatTokens(summary?.tokensPerActiveDay ?? 0),
+            })}
           </div>
         </div>
 
@@ -836,14 +1039,23 @@ export function UsageConfig() {
             gap: 2,
           }}
         >
-          <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "var(--font-serif, serif)", color: "var(--text)" }}>
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 700,
+              fontFamily: "var(--font-serif, serif)",
+              color: "var(--text)",
+            }}
+          >
             {formatTokens(summary?.cacheReadTokens ?? 0)}
           </div>
           <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text)" }}>
             {t("usageConfig.cachedInput")}
           </div>
           <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
-            {t("usageConfig.ofObservedInput", { percent: (summary?.cachePercentage ?? 0).toFixed(1) })}
+            {t("usageConfig.ofObservedInput", {
+              percent: (summary?.cachePercentage ?? 0).toFixed(1),
+            })}
           </div>
         </div>
 
@@ -859,14 +1071,23 @@ export function UsageConfig() {
             gap: 2,
           }}
         >
-          <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "var(--font-serif, serif)", color: "var(--text)" }}>
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 700,
+              fontFamily: "var(--font-serif, serif)",
+              color: "var(--text)",
+            }}
+          >
             {formatTokens(summary?.inputTokens ?? 0)}
           </div>
           <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text)" }}>
             {t("usageConfig.uncachedInput")}
           </div>
           <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
-            {t("usageConfig.cacheWritesCount", { count: formatTokens(summary?.cacheWriteTokens ?? 0) })}
+            {t("usageConfig.cacheWritesCount", {
+              count: formatTokens(summary?.cacheWriteTokens ?? 0),
+            })}
           </div>
         </div>
 
@@ -882,14 +1103,23 @@ export function UsageConfig() {
             gap: 2,
           }}
         >
-          <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "var(--font-serif, serif)", color: "var(--text)" }}>
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 700,
+              fontFamily: "var(--font-serif, serif)",
+              color: "var(--text)",
+            }}
+          >
             {formatTokens(summary?.outputTokens ?? 0)}
           </div>
           <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text)" }}>
             {t("usageConfig.output")}
           </div>
           <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
-            {t("usageConfig.includesReasoning", { count: formatTokens(summary?.reasoningTokens ?? 0) })}
+            {t("usageConfig.includesReasoning", {
+              count: formatTokens(summary?.reasoningTokens ?? 0),
+            })}
           </div>
         </div>
 
@@ -905,7 +1135,14 @@ export function UsageConfig() {
             gap: 2,
           }}
         >
-          <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "var(--font-serif, serif)", color: "var(--accent)" }}>
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 700,
+              fontFamily: "var(--font-serif, serif)",
+              color: "var(--accent)",
+            }}
+          >
             {formatCurrency(summary?.cacheSavings ?? 0)}
           </div>
           <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text)" }}>
@@ -913,9 +1150,10 @@ export function UsageConfig() {
           </div>
           <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
             {t("usageConfig.cacheSavingsSub", {
-              multiplier: summary && summary.totalCost > 0
-                ? ((summary.cacheSavings || 0) / summary.totalCost).toFixed(1)
-                : "0.0",
+              multiplier:
+                summary && summary.totalCost > 0
+                  ? ((summary.cacheSavings || 0) / summary.totalCost).toFixed(1)
+                  : "0.0",
             })}
           </div>
         </div>
@@ -942,8 +1180,16 @@ export function UsageConfig() {
           }}
         >
           {/* Breakdown Header & Toggle */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <span
+              style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}
+            >
               {t("usageConfig.breakdown")}
             </span>
 
@@ -967,8 +1213,14 @@ export function UsageConfig() {
                   fontWeight: breakdownView === "model" ? 600 : 400,
                   borderRadius: "calc(var(--radius-control) - 2px)",
                   border: "none",
-                  background: breakdownView === "model" ? "var(--bg-selected)" : "transparent",
-                  color: breakdownView === "model" ? "var(--text)" : "var(--text-muted)",
+                  background:
+                    breakdownView === "model"
+                      ? "var(--bg-selected)"
+                      : "transparent",
+                  color:
+                    breakdownView === "model"
+                      ? "var(--text)"
+                      : "var(--text-muted)",
                   cursor: "pointer",
                 }}
               >
@@ -984,8 +1236,14 @@ export function UsageConfig() {
                   fontWeight: breakdownView === "day" ? 600 : 400,
                   borderRadius: "calc(var(--radius-control) - 2px)",
                   border: "none",
-                  background: breakdownView === "day" ? "var(--bg-selected)" : "transparent",
-                  color: breakdownView === "day" ? "var(--text)" : "var(--text-muted)",
+                  background:
+                    breakdownView === "day"
+                      ? "var(--bg-selected)"
+                      : "transparent",
+                  color:
+                    breakdownView === "day"
+                      ? "var(--text)"
+                      : "var(--text-muted)",
                   cursor: "pointer",
                 }}
               >
@@ -1001,8 +1259,14 @@ export function UsageConfig() {
                   fontWeight: breakdownView === "project" ? 600 : 400,
                   borderRadius: "calc(var(--radius-control) - 2px)",
                   border: "none",
-                  background: breakdownView === "project" ? "var(--bg-selected)" : "transparent",
-                  color: breakdownView === "project" ? "var(--text)" : "var(--text-muted)",
+                  background:
+                    breakdownView === "project"
+                      ? "var(--bg-selected)"
+                      : "transparent",
+                  color:
+                    breakdownView === "project"
+                      ? "var(--text)"
+                      : "var(--text-muted)",
                   cursor: "pointer",
                 }}
               >
@@ -1013,9 +1277,21 @@ export function UsageConfig() {
 
           {/* Table Container */}
           <div style={{ maxHeight: 220, overflowY: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                fontSize: 12,
+              }}
+            >
               <thead>
-                <tr style={{ borderBottom: "1px solid var(--border)", color: "var(--text-dim)", textAlign: "left" }}>
+                <tr
+                  style={{
+                    borderBottom: "1px solid var(--border)",
+                    color: "var(--text-dim)",
+                    textAlign: "left",
+                  }}
+                >
                   <th style={{ padding: "6px 4px", fontWeight: 500 }}>
                     {breakdownView === "model"
                       ? t("usageConfig.model")
@@ -1023,37 +1299,117 @@ export function UsageConfig() {
                         ? t("usageConfig.day")
                         : t("usageConfig.project")}
                   </th>
-                  <th style={{ padding: "6px 8px", fontWeight: 500, textAlign: "right" }}>{t("usageConfig.cost")}</th>
-                  <th style={{ padding: "6px 8px", fontWeight: 500, textAlign: "right" }}>{t("usageConfig.share")}</th>
-                  <th style={{ padding: "6px 4px", fontWeight: 500, textAlign: "right" }}>{t("usageConfig.tokens")}</th>
+                  <th
+                    style={{
+                      padding: "6px 8px",
+                      fontWeight: 500,
+                      textAlign: "right",
+                    }}
+                  >
+                    {t("usageConfig.cost")}
+                  </th>
+                  <th
+                    style={{
+                      padding: "6px 8px",
+                      fontWeight: 500,
+                      textAlign: "right",
+                    }}
+                  >
+                    {t("usageConfig.share")}
+                  </th>
+                  <th
+                    style={{
+                      padding: "6px 4px",
+                      fontWeight: 500,
+                      textAlign: "right",
+                    }}
+                  >
+                    {t("usageConfig.tokens")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {breakdownView === "model" &&
                   (modelBreakdown.length === 0 ? (
                     <tr>
-                      <td colSpan={4} style={{ padding: "16px 4px", textAlign: "center", color: "var(--text-dim)" }}>
+                      <td
+                        colSpan={4}
+                        style={{
+                          padding: "16px 4px",
+                          textAlign: "center",
+                          color: "var(--text-dim)",
+                        }}
+                      >
                         {t("usageConfig.emptyTitle")}
                       </td>
                     </tr>
                   ) : (
                     modelBreakdown.map((m) => (
-                      <tr key={`${m.provider}/${m.model}`} style={{ borderBottom: "1px solid var(--bg-subtle)" }}>
-                        <td style={{ padding: "6px 4px", color: "var(--text)", fontWeight: 500 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "var(--accent)" }} />
-                            <span title={m.model} style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <tr
+                        key={`${m.provider}/${m.model}`}
+                        style={{ borderBottom: "1px solid var(--bg-subtle)" }}
+                      >
+                        <td
+                          style={{
+                            padding: "6px 4px",
+                            color: "var(--text)",
+                            fontWeight: 500,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: 6,
+                                height: 6,
+                                borderRadius: "50%",
+                                backgroundColor: "var(--accent)",
+                              }}
+                            />
+                            <span
+                              title={m.model}
+                              style={{
+                                maxWidth: 140,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
                               {m.model}
                             </span>
                           </div>
                         </td>
-                        <td style={{ padding: "6px 8px", textAlign: "right", color: "var(--text)", fontWeight: 600 }}>
+                        <td
+                          style={{
+                            padding: "6px 8px",
+                            textAlign: "right",
+                            color: "var(--text)",
+                            fontWeight: 600,
+                          }}
+                        >
                           {formatCurrency(m.cost)}
                         </td>
-                        <td style={{ padding: "6px 8px", textAlign: "right", color: "var(--text-muted)" }}>
+                        <td
+                          style={{
+                            padding: "6px 8px",
+                            textAlign: "right",
+                            color: "var(--text-muted)",
+                          }}
+                        >
                           {m.share.toFixed(1)}%
                         </td>
-                        <td style={{ padding: "6px 4px", textAlign: "right", color: "var(--text-muted)" }}>
+                        <td
+                          style={{
+                            padding: "6px 4px",
+                            textAlign: "right",
+                            color: "var(--text-muted)",
+                          }}
+                        >
                           {formatTokens(m.tokens)}
                         </td>
                       </tr>
@@ -1063,23 +1419,58 @@ export function UsageConfig() {
                 {breakdownView === "day" &&
                   (dayBreakdown.length === 0 ? (
                     <tr>
-                      <td colSpan={4} style={{ padding: "16px 4px", textAlign: "center", color: "var(--text-dim)" }}>
+                      <td
+                        colSpan={4}
+                        style={{
+                          padding: "16px 4px",
+                          textAlign: "center",
+                          color: "var(--text-dim)",
+                        }}
+                      >
                         {t("usageConfig.emptyTitle")}
                       </td>
                     </tr>
                   ) : (
                     dayBreakdown.map((d) => (
-                      <tr key={d.date} style={{ borderBottom: "1px solid var(--bg-subtle)" }}>
-                        <td style={{ padding: "6px 4px", color: "var(--text)", fontWeight: 500 }}>
+                      <tr
+                        key={d.date}
+                        style={{ borderBottom: "1px solid var(--bg-subtle)" }}
+                      >
+                        <td
+                          style={{
+                            padding: "6px 4px",
+                            color: "var(--text)",
+                            fontWeight: 500,
+                          }}
+                        >
                           {d.label}
                         </td>
-                        <td style={{ padding: "6px 8px", textAlign: "right", color: "var(--text)", fontWeight: 600 }}>
+                        <td
+                          style={{
+                            padding: "6px 8px",
+                            textAlign: "right",
+                            color: "var(--text)",
+                            fontWeight: 600,
+                          }}
+                        >
                           {formatCurrency(d.cost)}
                         </td>
-                        <td style={{ padding: "6px 8px", textAlign: "right", color: "var(--text-muted)" }}>
+                        <td
+                          style={{
+                            padding: "6px 8px",
+                            textAlign: "right",
+                            color: "var(--text-muted)",
+                          }}
+                        >
                           {d.share.toFixed(1)}%
                         </td>
-                        <td style={{ padding: "6px 4px", textAlign: "right", color: "var(--text-muted)" }}>
+                        <td
+                          style={{
+                            padding: "6px 4px",
+                            textAlign: "right",
+                            color: "var(--text-muted)",
+                          }}
+                        >
                           {formatTokens(d.tokens)}
                         </td>
                       </tr>
@@ -1089,23 +1480,58 @@ export function UsageConfig() {
                 {breakdownView === "project" &&
                   (projectBreakdown.length === 0 ? (
                     <tr>
-                      <td colSpan={4} style={{ padding: "16px 4px", textAlign: "center", color: "var(--text-dim)" }}>
+                      <td
+                        colSpan={4}
+                        style={{
+                          padding: "16px 4px",
+                          textAlign: "center",
+                          color: "var(--text-dim)",
+                        }}
+                      >
                         {t("usageConfig.emptyTitle")}
                       </td>
                     </tr>
                   ) : (
                     projectBreakdown.map((p) => (
-                      <tr key={p.project} style={{ borderBottom: "1px solid var(--bg-subtle)" }}>
-                        <td style={{ padding: "6px 4px", color: "var(--text)", fontWeight: 500 }}>
+                      <tr
+                        key={p.project}
+                        style={{ borderBottom: "1px solid var(--bg-subtle)" }}
+                      >
+                        <td
+                          style={{
+                            padding: "6px 4px",
+                            color: "var(--text)",
+                            fontWeight: 500,
+                          }}
+                        >
                           <span title={p.project}>{p.projectName}</span>
                         </td>
-                        <td style={{ padding: "6px 8px", textAlign: "right", color: "var(--text)", fontWeight: 600 }}>
+                        <td
+                          style={{
+                            padding: "6px 8px",
+                            textAlign: "right",
+                            color: "var(--text)",
+                            fontWeight: 600,
+                          }}
+                        >
                           {formatCurrency(p.cost)}
                         </td>
-                        <td style={{ padding: "6px 8px", textAlign: "right", color: "var(--text-muted)" }}>
+                        <td
+                          style={{
+                            padding: "6px 8px",
+                            textAlign: "right",
+                            color: "var(--text-muted)",
+                          }}
+                        >
                           {p.share.toFixed(1)}%
                         </td>
-                        <td style={{ padding: "6px 4px", textAlign: "right", color: "var(--text-muted)" }}>
+                        <td
+                          style={{
+                            padding: "6px 4px",
+                            textAlign: "right",
+                            color: "var(--text-muted)",
+                          }}
+                        >
                           {formatTokens(p.tokens)}
                         </td>
                       </tr>
@@ -1134,35 +1560,77 @@ export function UsageConfig() {
 
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {/* Row 1: Provider reported */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
-              <span style={{ color: "var(--text-muted)" }}>{t("usageConfig.providerReported")}</span>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                fontSize: 12,
+              }}
+            >
+              <span style={{ color: "var(--text-muted)" }}>
+                {t("usageConfig.providerReported")}
+              </span>
               <span style={{ fontWeight: 600, color: "var(--text)" }}>
                 {(summary?.costQuality.providerReported ?? 0).toFixed(1)}%
               </span>
             </div>
 
             {/* Row 2: Model priced */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
-              <span style={{ color: "var(--text-muted)" }}>{t("usageConfig.modelPriced")}</span>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                fontSize: 12,
+              }}
+            >
+              <span style={{ color: "var(--text-muted)" }}>
+                {t("usageConfig.modelPriced")}
+              </span>
               <span style={{ fontWeight: 600, color: "var(--text)" }}>
                 {(summary?.costQuality.modelPriced ?? 0).toFixed(1)}%
               </span>
             </div>
 
             {/* Row 3: Unpriced */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
-              <span style={{ color: "var(--text-muted)" }}>{t("usageConfig.unpriced")}</span>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                fontSize: 12,
+              }}
+            >
+              <span style={{ color: "var(--text-muted)" }}>
+                {t("usageConfig.unpriced")}
+              </span>
               <span style={{ fontWeight: 600, color: "var(--text)" }}>
                 {(summary?.costQuality.unpriced ?? 0).toFixed(1)}%
               </span>
             </div>
 
             {/* Divider */}
-            <div style={{ height: 1, background: "var(--border)", margin: "2px 0" }} />
+            <div
+              style={{
+                height: 1,
+                background: "var(--border)",
+                margin: "2px 0",
+              }}
+            />
 
             {/* Row 4: Cache savings */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
-              <span style={{ color: "var(--text-muted)" }}>{t("usageConfig.cacheSavings")}</span>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                fontSize: 12,
+              }}
+            >
+              <span style={{ color: "var(--text-muted)" }}>
+                {t("usageConfig.cacheSavings")}
+              </span>
               <span style={{ fontWeight: 600, color: "var(--accent)" }}>
                 {formatCurrency(summary?.cacheSavings ?? 0)}
               </span>
