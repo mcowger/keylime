@@ -2242,6 +2242,57 @@ export function AppShell({ appName }: { appName: string }) {
     },
     [updateChatTabs],
   );
+  // Open chat tabs outlive the sidebar's session list. Refresh their titles
+  // when the running channel reports a list change, including auto-naming.
+  useEffect(() => {
+    const source = openEventStream({ kind: "running" });
+    let closed = false;
+    let loading = false;
+    let pending = false;
+    const refresh = async () => {
+      if (loading) {
+        pending = true;
+        return;
+      }
+      loading = true;
+      do {
+        pending = false;
+        try {
+          const response = await fetch("/api/sessions");
+          if (!response.ok) continue;
+          const data = (await response.json()) as { sessions: SessionInfo[] };
+          if (closed) return;
+          const names = new Map(data.sessions.map((session) => [session.id, session.name]));
+          updateChatTabs((tabs) => tabs.map((tab) => {
+            const name = tab.session && names.get(tab.session.id);
+            return name && name !== tab.session?.name
+              ? { ...tab, session: { ...tab.session!, name } }
+              : tab;
+          }));
+          setSelectedSession((current) => {
+            const name = current && names.get(current.id);
+            return current && name && name !== current.name ? { ...current, name } : current;
+          });
+        } catch {
+          // The next list change or reconnect retries.
+        }
+      } while (pending && !closed);
+      loading = false;
+    };
+    source.onopen = () => void refresh();
+    source.onmessage = (event) => {
+      try {
+        if (JSON.parse(event.data).refreshSessionList) void refresh();
+      } catch {
+        // Ignore malformed frames.
+      }
+    };
+    return () => {
+      closed = true;
+      source.close();
+    };
+  }, [updateChatTabs]);
+
 
   // Called by ChatWindow when a new session gets its real id from pi
   const handleSessionCreated = useCallback(
