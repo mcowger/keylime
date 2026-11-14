@@ -1647,11 +1647,6 @@ export function AppShell({ appName }: { appName: string }) {
   const [initialSessionRestored, setInitialSessionRestored] = useState<boolean>(
     () => !initialSessionId,
   );
-  // During the initial URL restore the sidebar adopts the restored cwd and
-  // notifies us; that first onCwdChange must not bump sessionKey. We store the
-  // expected cwd string and only skip when it matches, so a failure to fire
-  // can't leave the suppression armed for the user's next genuine switch.
-  const suppressCwdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const requestedCwd = initialNavigation.requestedCwd;
@@ -1685,12 +1680,9 @@ export function AppShell({ appName }: { appName: string }) {
           );
         }
 
-        // The sidebar will notify us when it adopts this cwd. Avoid remounting
-        // the just-created empty chat during that initial synchronization.
         visitedWorkspaces.current.add(
           `${remoteHostId(initialNavigation.hostId) ?? LOCAL_HOST_ID}:${data.cwd}`,
         );
-        suppressCwdRef.current = data.cwd;
         const existing = chatTabsRef.current.find((tab) =>
           tabInWorkspace(
             tab,
@@ -1745,25 +1737,6 @@ export function AppShell({ appName }: { appName: string }) {
         return;
       const alreadyVisited = visitedWorkspaces.current.has(workspaceKey);
       visitedWorkspaces.current.add(workspaceKey);
-      // Skip only when the notification matches the cwd we're suppressing for.
-      if (suppressCwdRef.current !== null && suppressCwdRef.current === cwd) {
-        suppressCwdRef.current = null;
-        return;
-      }
-      if (
-        selectedSession &&
-        remoteHostId(selectedSession.hostId) === remoteHostId(hostId)
-      ) {
-        const sessionPath = comparableProjectPath(selectedSession.cwd);
-        const workspacePath = comparableProjectPath(cwd);
-        if (
-          sessionPath === workspacePath ||
-          sessionPath.startsWith(
-            workspacePath === "/" ? "/" : `${workspacePath}/`,
-          )
-        )
-          return;
-      }
       let preferredId: string | null = null;
       try {
         preferredId = sessionStorage.getItem(
@@ -1807,7 +1780,6 @@ export function AppShell({ appName }: { appName: string }) {
     },
     [
       router,
-      selectedSession,
       activateChat,
       updateChatTabs,
       workspaceOptions.projects,
@@ -1865,14 +1837,6 @@ export function AppShell({ appName }: { appName: string }) {
       setSystemPrompt(null);
       setSystemPromptLoading(false);
       setInitialSessionRestored(true);
-      if (isRestore) {
-        // Suppress the redundant sessionKey bump that would come from the
-        // onCwdChange effect firing after setSelectedCwd in the sidebar. We
-        // arm the expected cwd (compared in handleCwdChange) rather than a
-        // sticky flag so a missed notification can't suppress the next
-        // genuine project switch.
-        suppressCwdRef.current = session.cwd;
-      }
       // Skip router.replace when restoring from the URL: the param is already correct.
       if (!isRestore) {
         router.replace(`?session=${encodeURIComponent(session.id)}`);
