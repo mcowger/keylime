@@ -66,6 +66,18 @@ Ctrl-C stops both services; either service exiting also stops its peer. Temporar
 files remain for inspection. Remove the printed directory manually when finished.
 The launcher is `scripts/dev-isolated.ts`; see `CONTRIBUTING.md` for usage.
 
+### Local production deployment
+
+`bun run deploy:local` (or this Mac's `keylime-deploy`) builds committed HEAD in
+a separate directory, smoke-tests a versioned binary release, then switches
+Pitchfork's web and host services only when the host owns no session processes.
+An occupied host leaves the candidate staged and prints an activation command;
+`--activate <release-directory> --wait` waits for a quiet window.
+Production stays on port 8080 with its existing authentication and agent directory.
+Mise and both services follow `~/.local/share/keylime/current`; in-app updates are
+disabled. Every activation backs up the agent directory before switching. See
+`docs/local-deployment.md` for deployment, rollback, and recovery limits.
+
 ---
 
 ## Architecture
