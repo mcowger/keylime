@@ -228,10 +228,17 @@ export class ChannelTable {
     return () => this.workspaceFences.delete(directory);
   }
 
+  private workspaceChannelBusy(channel: Channel): boolean {
+    return !channel.lifecycle?.isIdle || channel.editor !== undefined ||
+      channel.commands.size > 0 || channel.internal.size > 0 ||
+      !!channel.resuming || !!channel.replacing || !!channel.sessionMovePending;
+  }
+
   async inspectWorkspace(
     directory: string,
   ): Promise<Array<{ id: string; cwd: string }>> {
     await Promise.allSettled([...this.pendingSpawns]);
+    await this.stopWorkspace(directory, true);
     return [...this.channels.values()]
       .filter(
         (channel) =>
@@ -243,13 +250,14 @@ export class ChannelTable {
       }));
   }
 
-  async stopWorkspace(directory: string): Promise<void> {
+  async stopWorkspace(directory: string, idleOnly = false): Promise<void> {
     await Promise.allSettled([...this.pendingSpawns]);
     await Promise.all(
       [...this.channels.values()]
         .filter(
           (channel) =>
-            !channel.exited && this.workspaceContains(directory, channel.cwd),
+            !channel.exited && this.workspaceContains(directory, channel.cwd) &&
+            (!idleOnly || !this.workspaceChannelBusy(channel)),
         )
         .map(async (channel) => {
           const {
@@ -1112,6 +1120,8 @@ export class ChannelTable {
           true,
         );
     };
+    if (op !== null && [...this.workspaceFences].some((root) => this.workspaceContains(root, channel.cwd)))
+      return refuse("workspace_deleting", "This workspace is being deleted");
     if (drained)
       return refuse(
         "host_drained",

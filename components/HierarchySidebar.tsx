@@ -238,10 +238,17 @@ export function HierarchySidebar({
         if (!response.ok)
           throw new Error(result.error ?? `HTTP ${response.status}`);
         if (result.status === "processes") {
-          const processes =
-            result.processes?.map((p) => `${p.id} — ${p.cwd}`).join("\n") ?? "";
+          const processes = result.processes?.map((p) => {
+            const session = sessions.find(
+              (s) => s.id === p.id && (s.hostId ?? "local") === hostId,
+            );
+            const title = session?.name?.trim() || session?.firstMessage?.trim();
+            return title
+              ? `Session: ${title.slice(0, 120)}\n  Working directory: ${p.cwd}`
+              : `Unidentified session or terminal (ID: ${p.id})\n  Working directory: ${p.cwd}`;
+          }).join("\n\n") ?? "";
           stopProcesses = window.confirm(
-            `Stop these running processes before deletion?\n${processes}`,
+            `Deleting this workspace will stop these sessions or terminals:\n\n${processes}\n\nStop them and continue?`,
           );
           cancel = !stopProcesses;
         } else if (result.status === "dirty") {
