@@ -328,7 +328,7 @@ export interface UseAgentSessionOptions {
   session: SessionInfo | null;
   newSessionCwd: string | null;
   newSessionDraftKey?: string;
-  prepareNewWorkspace?: (prompt: string) => Promise<string>;
+  prepareNewWorkspace?: (prompt: string) => Promise<{ cwd: string; name: string }>;
   /** Host a fresh chat is created on; a started session carries its own `hostId`. This machine when absent. */
   newSessionHostId?: string;
   onBackgroundSessionCreated?: (session: SessionInfo) => void;
@@ -2115,9 +2115,10 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     const promise = (async () => {
       if (prepareNewWorkspace && !firstPrompt)
         throw new Error("Send your first prompt to create this workspace.");
-      const targetCwd = prepareNewWorkspace
+      const workspace = prepareNewWorkspace
         ? await prepareNewWorkspace(firstPrompt!)
-        : newSessionCwd;
+        : undefined;
+      const targetCwd = workspace?.cwd ?? newSessionCwd;
       const selectedModel = newSessionModel ?? newSessionDefaultModel;
       if (selectedModel) setPendingModel(selectedModel);
       const toolNames = getToolNamesForPreset(toolPreset);
@@ -2133,6 +2134,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
               ...(newSessionHostId ? { hostId: newSessionHostId } : {}),
             }),
         type: "ensure_session",
+        ...(workspace ? { name: workspace.name } : {}),
         toolNames,
         ...(selectedModel
           ? { provider: selectedModel.provider, modelId: selectedModel.modelId }
