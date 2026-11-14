@@ -302,9 +302,9 @@ const SETTING_INDEX: SettingIndexEntry[] = [
     labelKey: "settingsConfig.expandThinkingByDefault",
     descKey: "settingsConfig.expandThinkingByDefaultDesc",
     fallbackSection: "Interface & Behavior",
-    fallbackLabel: "Expand thinking blocks by default",
+    fallbackLabel: "Expand thinking blocks",
     fallbackDesc:
-      "Open every thinking block as it appears, including while it streams, and keep it out of Process details so reasoning is readable without clicking each one. Collapsing a block by hand still works.",
+      "Choose whether to expand no thinking blocks, the latest block, or every block. You can still toggle each block manually.",
     scope: "UI",
   },
   {
@@ -2059,8 +2059,8 @@ export function SettingsConfig({
   onNeverFoldActivityChange: (never: boolean) => void;
   showToolCallsUnfolded: boolean;
   onShowToolCallsUnfoldedChange: (show: boolean) => void;
-  expandThinkingByDefault: boolean;
-  onExpandThinkingByDefaultChange: (expand: boolean) => void;
+  expandThinkingByDefault: "off" | "latest" | "always";
+  onExpandThinkingByDefaultChange: (expand: "off" | "latest" | "always") => void;
   onHideThinkingBlockChange?: (hide: boolean) => void;
   providerUsageVisible: boolean;
   onProviderUsageVisibleChange: (visible: boolean) => void;
@@ -2743,10 +2743,20 @@ export function SettingsConfig({
                           )}
                           scope="UI"
                         >
-                          <ToggleSwitch
-                            checked={expandThinkingByDefault}
-                            onChange={onExpandThinkingByDefaultChange}
-                          />
+                          <select
+                            style={nativeSelectStyle}
+                            aria-label={t("settingsConfig.expandThinkingByDefault")}
+                            value={expandThinkingByDefault}
+                            onChange={(event) =>
+                              onExpandThinkingByDefaultChange(
+                                event.target.value as "off" | "latest" | "always",
+                              )
+                            }
+                          >
+                            <option value="off">{t("settingsConfig.expandThinkingOff")}</option>
+                            <option value="latest">{t("settingsConfig.expandThinkingLatest")}</option>
+                            <option value="always">{t("settingsConfig.expandThinkingAlways")}</option>
+                          </select>
                         </NativeSetting>
                         <NativeSetting
                           searchId="hide-tool-activity"

@@ -33,6 +33,7 @@ import type {
 import { translate, useI18n } from "@/lib/i18n";
 import {
   collectToolResults,
+  findLatestThinking,
   isGroupAnchor,
   planTranscriptRows,
   type TranscriptRow,
@@ -114,8 +115,8 @@ interface Props {
   neverFoldActivity?: boolean;
   /** UI `showToolCallsUnfolded`: tool call rows stay out of Process details. */
   showToolCallsUnfolded?: boolean;
-  /** "Expand thinking blocks by default": open each thinking block on mount. */
-  expandThinkingByDefault?: boolean;
+  /** Default expansion policy for thinking blocks. */
+  expandThinkingByDefault?: "off" | "latest" | "always";
   /** omp `hideThinkingBlock`: omit thinking from the transcript. */
   hideThinkingBlock?: boolean;
   onAgentEnd?: () => void;
@@ -323,7 +324,8 @@ interface CommittedTranscriptProps {
   hideToolActivity: boolean;
   neverFoldActivity: boolean;
   showToolCallsUnfolded: boolean;
-  expandThinkingByDefault: boolean;
+  expandThinkingByDefault: "off" | "latest" | "always";
+  latestThinking: { messageIndex: number; blockIndex: number } | null;
   hideThinkingBlock: boolean;
   visibleCount: number;
   /** True while the viewport is near the bottom of the conversation. When
@@ -364,6 +366,7 @@ const CommittedTranscript = memo(function CommittedTranscript({
   neverFoldActivity,
   showToolCallsUnfolded,
   expandThinkingByDefault,
+  latestThinking,
   hideThinkingBlock,
   visibleCount,
   nearBottom,
@@ -450,7 +453,12 @@ const CommittedTranscript = memo(function CommittedTranscript({
         }
         sessionId={sessionId}
         toolCallsDefaultCollapsed={toolCallsDefaultCollapsed}
-        expandThinkingByDefault={expandThinkingByDefault}
+        expandThinkingByDefault={expandThinkingByDefault === "always"}
+        latestThinkingBlockIndex={
+          expandThinkingByDefault === "latest"
+            ? latestThinking?.messageIndex === idx ? latestThinking.blockIndex : null
+            : undefined
+        }
         hideThinking={hideThinkingBlock}
         sourceBlockIndices={options.sourceBlockIndices}
       />
@@ -482,7 +490,7 @@ const CommittedTranscript = memo(function CommittedTranscript({
     () =>
       planTranscriptRows(messages, {
         hideThinking: hideThinkingBlock,
-        showThinking: expandThinkingByDefault,
+        showThinking: expandThinkingByDefault !== "off",
         showToolCalls: showToolCallsUnfolded,
         neverFold: neverFoldActivity,
       }),
@@ -580,7 +588,7 @@ export function ChatWindow({
   hideToolActivity = true,
   neverFoldActivity = false,
   showToolCallsUnfolded = false,
-  expandThinkingByDefault = false,
+  expandThinkingByDefault = "off",
   hideThinkingBlock = false,
   onAgentEnd,
   onSessionCreated,
@@ -971,12 +979,17 @@ export function ChatWindow({
   // scroller mounts after the first send without a remount or a load.
   const isEmptyNew =
     isNew && messages.length === 0 && !streamState.isStreaming && !sessionBusy;
+  const committedLatestThinking = useMemo(() => findLatestThinking(messages), [messages]);
+  const liveLatestThinking = streamState.streamingMessage
+    ? findLatestThinking([streamState.streamingMessage], streamState.isStreaming)
+    : null;
+  const latestThinking = liveLatestThinking ? null : committedLatestThinking;
   // Widen the lazy render window until it includes the message's transcript row.
   const revealMessage = useCallback(
     (messageIndex: number) => {
       const rows = planTranscriptRows(messages, {
         hideThinking: hideThinkingBlock,
-        showThinking: expandThinkingByDefault,
+        showThinking: expandThinkingByDefault !== "off",
         showToolCalls: showToolCallsUnfolded,
         neverFold: neverFoldActivity,
       });
@@ -2020,6 +2033,7 @@ export function ChatWindow({
                             neverFoldActivity={neverFoldActivity}
                             showToolCallsUnfolded={showToolCallsUnfolded}
                             expandThinkingByDefault={expandThinkingByDefault}
+                            latestThinking={latestThinking}
                             hideThinkingBlock={hideThinkingBlock}
                             visibleCount={visibleCount}
                             nearBottom={nearBottom}
@@ -2047,7 +2061,12 @@ export function ChatWindow({
                             toolCallsDefaultCollapsed={
                               toolCallsDefaultCollapsed
                             }
-                            expandThinkingByDefault={expandThinkingByDefault}
+                            expandThinkingByDefault={expandThinkingByDefault === "always"}
+                            latestThinkingBlockIndex={
+                              expandThinkingByDefault === "latest"
+                                ? liveLatestThinking?.blockIndex ?? null
+                                : undefined
+                            }
                             hideThinking={hideThinkingBlock}
                           />
 

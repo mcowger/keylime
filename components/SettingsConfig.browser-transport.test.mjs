@@ -16,7 +16,7 @@ const settingsProps = {
   onToolCallsDefaultCollapsedChange: noop,
   hideToolActivity: false,
   onHideToolActivityChange: noop,
-  expandThinkingByDefault: false,
+  expandThinkingByDefault: "off",
   onExpandThinkingByDefaultChange: noop,
   onHideThinkingBlockChange: noop,
   providerUsageVisible: false,
@@ -36,6 +36,32 @@ const settingsProps = {
   onSelectTab: noop,
   onClose: noop,
 };
+
+test("thinking expansion offers all modes and reports selection changes", async (t) => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("{}", { status: 200 });
+  t.after(() => {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  });
+  const changes = [];
+  const { container } = render(createElement(SettingsConfig, {
+    ...settingsProps,
+    expandThinkingByDefault: "latest",
+    onExpandThinkingByDefaultChange: (value) => changes.push(value),
+  }));
+  await settle();
+  const select = within(container).getByRole("combobox", { name: "Expand thinking blocks" });
+  assert.deepEqual([...select.options].map((option) => [option.value, option.textContent]), [
+    ["off", "Off"],
+    ["latest", "Latest"],
+    ["always", "Always"],
+  ]);
+  assert.equal(select.value, "latest");
+  fireEvent.change(select, { target: { value: "always" } });
+  fireEvent.change(select, { target: { value: "off" } });
+  assert.deepEqual(changes, ["always", "off"]);
+});
 
 test("the browser transport control offers SSE and the WebSocket link, saves a change and restores a failed one", async (t) => {
   const puts = [];

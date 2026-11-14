@@ -375,9 +375,10 @@ export function AppShell({ appName }: { appName: string }) {
   const [hideToolActivity, setHideToolActivity] = useState(true);
   const [neverFoldActivity, setNeverFoldActivity] = useState(false);
   const [showToolCallsUnfolded, setShowToolCallsUnfolded] = useState(false);
-  // "Expand thinking blocks by default" — like the tool-call preference, a
-  // UI-only behavior, so it lives in localStorage rather than omp's config.
-  const [expandThinkingByDefault, setExpandThinkingByDefault] = useState(false);
+  // UI-only behavior, stored locally rather than in omp's config.
+  const [expandThinkingByDefault, setExpandThinkingByDefault] = useState<
+    "off" | "latest" | "always"
+  >("off");
   const [hideThinkingBlock, setHideThinkingBlock] = useState(false);
   useEffect(() => {
     // omp's own setting, so the transcript hides thinking when the TUI does.
@@ -427,8 +428,11 @@ export function AppShell({ appName }: { appName: string }) {
         window.localStorage.getItem(SHOW_TOOL_CALLS_UNFOLDED_STORAGE_KEY) ===
           "true",
       );
+      const expandThinking = window.localStorage.getItem(EXPAND_THINKING_STORAGE_KEY);
       setExpandThinkingByDefault(
-        window.localStorage.getItem(EXPAND_THINKING_STORAGE_KEY) === "true",
+        expandThinking === "true" || expandThinking === "always"
+          ? "always"
+          : expandThinking === "latest" ? "latest" : "off",
       );
       setProviderUsageVisible(
         window.localStorage.getItem(PROVIDER_USAGE_VISIBLE_STORAGE_KEY) !==
@@ -489,14 +493,17 @@ export function AppShell({ appName }: { appName: string }) {
       // The preference still applies for this page load.
     }
   }, []);
-  const handleExpandThinkingByDefaultChange = useCallback((expand: boolean) => {
-    setExpandThinkingByDefault(expand);
-    try {
-      window.localStorage.setItem(EXPAND_THINKING_STORAGE_KEY, String(expand));
-    } catch {
-      // The preference still applies for this page load.
-    }
-  }, []);
+  const handleExpandThinkingByDefaultChange = useCallback(
+    (expand: "off" | "latest" | "always") => {
+      setExpandThinkingByDefault(expand);
+      try {
+        window.localStorage.setItem(EXPAND_THINKING_STORAGE_KEY, expand);
+      } catch {
+        // The preference still applies for this page load.
+      }
+    },
+    [],
+  );
   const handleProviderUsageVisibleChange = useCallback((visible: boolean) => {
     setProviderUsageVisible(visible);
     try {

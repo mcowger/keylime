@@ -28,6 +28,7 @@ export interface ChatLiveTailProps {
   sessionId: string | undefined;
   toolCallsDefaultCollapsed: boolean;
   expandThinkingByDefault: boolean;
+  latestThinkingBlockIndex?: number | null;
   hideThinking: boolean;
 }
 
@@ -46,6 +47,7 @@ export function ChatLiveTail({
   sessionId,
   toolCallsDefaultCollapsed,
   expandThinkingByDefault,
+  latestThinkingBlockIndex,
   hideThinking,
 }: ChatLiveTailProps) {
   const { t } = useI18n();
@@ -64,6 +66,7 @@ export function ChatLiveTail({
           toolResults={toolResults}
           toolCallsDefaultCollapsed={toolCallsDefaultCollapsed}
           expandThinkingByDefault={expandThinkingByDefault}
+          latestThinkingBlockIndex={latestThinkingBlockIndex}
           hideThinking={hideThinking}
           liveTokensPerSecond={liveTokensPerSecond}
         />

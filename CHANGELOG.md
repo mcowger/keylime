@@ -9,6 +9,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 ### Added
 
 - Chat width can be set to a percentage of the available space in Settings → Interface & Behavior.
+- Thinking blocks can expand only the latest block, all blocks, or none by default. Existing enabled preferences continue to expand all blocks.
 - Mobile workspace navigation uses a compact tab switcher and bottom sheet instead of a session-title pill. Saved chats remain searchable from workspace navigation; the sidebar focuses on projects and workspaces with contextual management actions.
 - Workspaces support multiple chat tabs alongside terminals, with independent unsent drafts, saved-session tabs, reload restoration and close-view actions that leave sessions running.
 - Workspaces support independent interactive terminal tabs on local and linked hosts, with daemon-owned PTY shells, resizing, full-screen applications, Unicode and bundled Nerd Font symbols. Reconnect restores retained screen state; browser disconnects and web restarts leave shells running.
