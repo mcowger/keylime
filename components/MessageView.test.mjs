@@ -790,6 +790,20 @@ test("hub send renders as an IRC row with the steered message", () => {
   assert.doesNotMatch(html, /Delivered to 1 peer/);
 });
 
+test("wait results render restricted markdown without changing other tool output", () => {
+  const output = (toolName) => renderToStaticMarkup(React.createElement(MessageView, {
+    isStreaming: true,
+    toolCallsDefaultCollapsed: false,
+    message: { role: "assistant", content: [{ type: "toolCall", toolCallId: "call", toolName, input: {} }] },
+    toolResults: new Map([["call", { role: "toolResult", toolCallId: "call", toolName, content: [{ type: "text", text: "## Still Running\n\n- `Worker` **active**" }] }]]),
+  }));
+  const wait = output("wait");
+  assert.match(wait, /## Still Running/);
+  assert.match(wait, /<li[^>]*><code[^>]*>Worker<\/code> <strong>active<\/strong><\/li>/);
+  assert.doesNotMatch(wait, /<h2/);
+  assert.doesNotMatch(output("bash"), /<strong>active<\/strong>/);
+});
+
 test("hub jobs renders the waiting roster instead of raw markdown", () => {
   const html = renderToStaticMarkup(
     React.createElement(MessageView, {

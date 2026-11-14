@@ -2278,14 +2278,19 @@ const ToolCallBlock = memo(
                     )}
                     {!(hubJobs || (hubSend && !isError)) &&
                       !(resultIsEmpty && resultImages.length > 0) && (
-                        <PairedResult
-                          text={formatToolOutput(
-                            resultText ?? "",
-                            block.toolName,
-                          )}
-                          isEmpty={resultIsEmpty}
-                          isError={isError}
-                        />
+                        block.toolName === "wait" && !resultIsEmpty ? (
+                          <div className={`tool-call-output${isError ? " tool-call-output-error" : ""}`}>
+                            <div className="tool-call-output-text tool-call-output-markdown" data-tool-output="true">
+                              <ThinkingMarkdown>{resultText ?? ""}</ThinkingMarkdown>
+                            </div>
+                          </div>
+                        ) : (
+                          <PairedResult
+                            text={formatToolOutput(resultText ?? "", block.toolName)}
+                            isEmpty={resultIsEmpty}
+                            isError={isError}
+                          />
+                        )
                       )}
                   </>
                 )
