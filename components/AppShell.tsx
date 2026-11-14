@@ -24,7 +24,7 @@ import { useMobileSidebarGestures } from "@/hooks/useMobileSidebarGestures";
 import { SessionSidebar } from "./SessionSidebar";
 import type { SearchMatchTarget } from "./SessionSearchMatches";
 import type { WorktreeContext } from "./SessionSidebar-helpers";
-import { WorktreesPanel } from "./WorktreesPanel";
+import type { WorkspaceCreationJob } from "@/lib/workspace-creation-types";
 import { ToastProvider } from "./ui/toast";
 import { toast } from "./ui/toast";
 import {
@@ -177,6 +177,8 @@ type ChatTab = {
   hostId?: string;
   session: SessionInfo | null;
   creation: { id?: string; initialization?: string };
+  workspaceProject?: string;
+  workspaceJob?: WorkspaceCreationJob;
 };
 
 function tabInWorkspace(
@@ -1639,7 +1641,6 @@ export function AppShell({ appName }: { appName: string }) {
   );
   // Owned by the sidebar; rendered by the file panel's Worktrees tab.
   const [worktreeCtx, setWorktreeCtx] = useState<WorktreeContext | null>(null);
-  const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
   // True once the initial ?session= URL param has been resolved (or confirmed absent)
   const [initialSessionRestored, setInitialSessionRestored] = useState<boolean>(
     () => !initialSessionId,
@@ -1919,6 +1920,67 @@ export function AppShell({ appName }: { appName: string }) {
   );
 
   // ---- In-app Navigate back / forward over visited chat views ----
+
+  const handleNewWorkspace = useCallback((project: ManagedProject) => {
+    if (project.projectKind !== "git") {
+      handleNewSession(browserUUID(), project.path, project.hostId, project);
+      return;
+    }
+    const tab: ChatTab = {
+      id: browserUUID(),
+      cwd: project.path,
+      hostId: remoteHostId(project.hostId),
+      session: null,
+      creation: { id: browserUUID() },
+      workspaceProject: project.projectPath ?? project.path,
+    };
+    updateChatTabs((tabs) => [...tabs, tab]);
+    activateChat(tab);
+    setSettingsTab(null);
+    setSidebarOpen(false);
+    router.replace("/");
+    requestAnimationFrame(() => chatInputRef.current?.focus());
+  }, [handleNewSession, updateChatTabs, activateChat, router]);
+
+  const pendingWorkspace = chatTabs.find((tab) => tab.id === activeChatId && !tab.session)?.workspaceProject;
+  const prepareNewWorkspace = useMemo(() => {
+    const tab = chatTabsRef.current.find((tab) => tab.id === activeChatId);
+    if (!tab?.workspaceProject) return undefined;
+    let pending: Promise<string> | undefined;
+    return (prompt: string) => {
+      if (pending) return pending;
+      pending = (async () => {
+        const save = (job: WorkspaceCreationJob) => {
+          tab.workspaceJob = job;
+          updateChatTabs((tabs) => tabs.map((item) => item.id === tab.id ? { ...item, workspaceJob: job } : item));
+        };
+        let job = tab.workspaceJob;
+        if (!job) {
+          const response = await fetch("/api/worktrees", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "prepare", hostId: tab.hostId ?? "local", input: { projectPath: tab.workspaceProject, prompt } }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error ?? "Workspace creation failed");
+          job = data as WorkspaceCreationJob;
+          save(job);
+        }
+        while (job.status === "running") {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          const response = await fetch(`/api/worktrees?${new URLSearchParams({ action: "status", hostId: tab.hostId ?? "local", id: job.id })}`);
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error ?? "Workspace status unavailable");
+          job = data as WorkspaceCreationJob;
+          save(job);
+        }
+        if (job.status !== "complete" || !job.workspacePath)
+          throw new Error(job.error ?? "Workspace setup did not complete. Check Manage workspaces for logs.");
+        return job.workspacePath;
+      })().catch((error) => { pending = undefined; throw error; });
+      return pending;
+    };
+  }, [activeChatId, pendingWorkspace, updateChatTabs]);
 
   const [pendingSessionImport, setPendingSessionImport] = useState<{
     session: SessionInfo;
@@ -2235,6 +2297,9 @@ export function AppShell({ appName }: { appName: string }) {
       if (activeChatIdRef.current === tabId) {
         setNewSessionCwd(null);
         setSelectedSession(session);
+        suppressCwdRef.current = session.cwd;
+        setActiveCwd(session.cwd);
+        setActiveHostId(remoteHostId(session.hostId));
         hydrateSelectedSession(session.id);
         router.replace(`?session=${encodeURIComponent(session.id)}`);
       }
@@ -3044,6 +3109,7 @@ export function AppShell({ appName }: { appName: string }) {
       onNewSession={handleNewSession}
       initialSessionId={null}
       skipInitialProjectSelection={initialNavigation.requestedCwd !== null}
+      onNewWorkspace={handleNewWorkspace}
       onInitialRestoreDone={handleInitialRestoreDone}
       refreshKey={refreshKey}
       onSessionDeleted={handleSessionDeleted}
@@ -4091,7 +4157,9 @@ export function AppShell({ appName }: { appName: string }) {
                       hostStatus={chatHost?.status}
                       hostLabel={chatHost ? hostName(t, chatHost) : undefined}
                       newSessionWorkspace={
-                        effectiveNewSessionCwd && (
+                        pendingWorkspace ? (
+                          <div className="new-session-workspace">New workspace. Send your first prompt to name it and run setup.</div>
+                        ) : effectiveNewSessionCwd && (
                           <div className="new-session-workspace">
                             {creationTargets.length > 1 && (
                               <>
@@ -4251,7 +4319,7 @@ export function AppShell({ appName }: { appName: string }) {
                                 onChange={(event) => {
                                   const key = event.target.value;
                                   if (key === "__add_workspace__") {
-                                    setCreateWorkspaceOpen(true);
+                                    if (selectedNewWorkspace) handleNewWorkspace(selectedNewWorkspace);
                                     return;
                                   }
                                   const project = projectWorkspaces.find(
@@ -4497,21 +4565,6 @@ export function AppShell({ appName }: { appName: string }) {
               className="right-panel-backdrop"
               aria-hidden="true"
               onClick={closeRightPanel}
-            />
-          )}
-          {createWorkspaceOpen && selectedNewWorkspace?.projectPath && (
-            <WorktreesPanel
-              ctx={{
-                hostId: selectedNewWorkspace.hostId ?? "local",
-                projectRoot: selectedNewWorkspace.projectPath,
-                currentPath: selectedNewWorkspace.path,
-                worktrees: [],
-                select: () => {},
-                refresh: () => worktreeCtx?.refresh(),
-              }}
-              createOnly
-              createOpen
-              onCreateOpenChange={setCreateWorkspaceOpen}
             />
           )}
           {!settingsTab && rightPanelHasOpened && (

@@ -328,6 +328,7 @@ export interface UseAgentSessionOptions {
   session: SessionInfo | null;
   newSessionCwd: string | null;
   newSessionDraftKey?: string;
+  prepareNewWorkspace?: (prompt: string) => Promise<string>;
   /** Host a fresh chat is created on; a started session carries its own `hostId`. This machine when absent. */
   newSessionHostId?: string;
   onBackgroundSessionCreated?: (session: SessionInfo) => void;
@@ -483,6 +484,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     session,
     newSessionCwd,
     newSessionDraftKey,
+    prepareNewWorkspace,
     newSessionHostId,
     onBackgroundSessionCreated,
     newSessionCreationId,
@@ -2100,7 +2102,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   // observed (and its state snapshot recovered on stream open) right away.
   const observeCreatedSessionRef = useRef<((sid: string) => void) | null>(null);
 
-  const ensureNewSession = useCallback(async () => {
+  const ensureNewSession = useCallback(async (firstPrompt?: string) => {
     if (sessionIdRef.current) return sessionIdRef.current;
     if (!isNew) return sessionIdRef.current;
     if (
@@ -2111,6 +2113,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     if (ensuringNewSessionRef.current) return ensuringNewSessionRef.current;
 
     const promise = (async () => {
+      if (prepareNewWorkspace && !firstPrompt)
+        throw new Error("Send your first prompt to create this workspace.");
+      const targetCwd = prepareNewWorkspace
+        ? await prepareNewWorkspace(firstPrompt!)
+        : newSessionCwd;
       const selectedModel = newSessionModel ?? newSessionDefaultModel;
       if (selectedModel) setPendingModel(selectedModel);
       const toolNames = getToolNamesForPreset(toolPreset);
@@ -2122,7 +2129,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
               projectId: newSessionProjectId,
             }
           : {
-              cwd: newSessionCwd,
+              cwd: targetCwd,
               ...(newSessionHostId ? { hostId: newSessionHostId } : {}),
             }),
         type: "ensure_session",
@@ -2196,7 +2203,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       }
       sessionIdRef.current = realId;
       createdOwnerRef.current = {
-        cwd: body.cwd ?? (pooled ? "" : (newSessionCwd ?? "")),
+        cwd: body.cwd ?? (pooled ? "" : (targetCwd ?? "")),
         hostId: body.hostId ?? (pooled ? undefined : newSessionHostId),
       };
       if (
@@ -2253,6 +2260,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     isNew,
     pooled,
     newSessionCwd,
+    prepareNewWorkspace,
     newSessionHostId,
     newSessionCreationId,
     newSessionPoolId,
@@ -2268,13 +2276,15 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   ]);
 
   const resolveUploadHost = useCallback(async () => {
+    if (prepareNewWorkspace && !sessionIdRef.current)
+      return newSessionHostId ?? "local";
     const sid = sessionIdRef.current ?? (await ensureNewSession());
     if (!sid) throw new Error(translate("agentSession.uploadOwnerUnavailable"));
     const hostId = createdOwnerRef.current?.hostId ?? session?.hostId;
     if (pooled && !hostId)
       throw new Error(translate("agentSession.uploadOwnerUnavailable"));
     return hostId ?? "local";
-  }, [ensureNewSession, pooled, session?.hostId]);
+  }, [ensureNewSession, pooled, session?.hostId, prepareNewWorkspace, newSessionHostId]);
 
   // The system panel may initialize a dormant session, but must not create a
   // prompt or model run just to inspect the resolved system prompt.
@@ -5226,7 +5236,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           const selectedModel = newSessionModel;
           const existingSid =
             sessionIdRef.current ?? (await ensuringNewSessionRef.current);
-          const sid = existingSid ?? (await ensureNewSession());
+          const sid = existingSid ?? (await ensureNewSession(message));
           // The originating tab may have been hidden or closed while spawning.
           // Its owner decides whether to retain the resulting session.
           const ownerGone = !hookAliveRef.current;

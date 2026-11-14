@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Plus } from "lucide-react";
 import type {
   HierarchyProject,
   HierarchySnapshot,
@@ -32,6 +33,8 @@ type Props = {
   onToggleHost: (host: string) => void;
   onSelectSession: (session: SessionInfo) => void;
   onAddProject: (host: string) => void;
+  onNewWorkspace: (project: ManagedProject) => void;
+  hostUnavailableReason?: (hostId: string) => string | null;
   onChanged: () => void;
 };
 
@@ -52,6 +55,8 @@ export function HierarchySidebar({
   onSelectWorkspace,
   onSelectSession,
   onAddProject,
+  onNewWorkspace,
+  hostUnavailableReason,
   onProjects,
   onSnapshots,
   onChanged,
@@ -267,6 +272,8 @@ export function HierarchySidebar({
                     )),
               );
               if (!workspaces.length) return null;
+              const defaultWorkspace = project.workspaces.find((workspace) => workspace.isDefault);
+              const unavailableReason = hostUnavailableReason?.(host.id) ?? null;
               return (
                 <div key={project.id} style={{ marginBottom: 4 }}>
                   <div
@@ -287,6 +294,31 @@ export function HierarchySidebar({
                     >
                       {project.alias || project.name}
                     </span>
+                    <button
+                      type="button"
+                      aria-label={`New ${project.kind === "git" ? "workspace" : "session"} in ${project.alias || project.name}`}
+                      title={unavailableReason ?? `New ${project.kind === "git" ? "workspace" : "session"}`}
+                      disabled={!defaultWorkspace || unavailableReason !== null}
+                      style={{ ...button, padding: "3px 6px" }}
+                      onClick={() => {
+                        if (!defaultWorkspace) return;
+                        onNewWorkspace({
+                          path: defaultWorkspace.path,
+                          hostId: host.id,
+                          name: defaultWorkspace.name,
+                          projectId: project.id,
+                          workspaceId: defaultWorkspace.id,
+                          projectPath: project.path,
+                          projectName: project.alias ?? project.name,
+                          projectKind: project.kind,
+                          isDefaultWorkspace: defaultWorkspace.isDefault,
+                          addedAt: project.addedAt,
+                          launchConfig: project.launchConfig,
+                        });
+                      }}
+                    >
+                      <Plus size={14} />
+                    </button>
                     <details style={{ position: "relative" }}>
                       <summary
                         aria-label={`Actions for project ${project.alias || project.name}`}

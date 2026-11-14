@@ -8,6 +8,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Added
 
+- Project rows have a + button for prompt-first workspace creation. The first prompt supplies a display name and branch through the smol task model before setup and agent startup.
 - Removed the Workspaces right-panel tab. Create workspaces from the workspace picker; project actions open workspace management in a modal.
 - Chat width can be set to a percentage of the available space in Settings → Interface & Behavior.
 - Thinking blocks can expand only the latest block, all blocks, or none by default. Existing enabled preferences continue to expand all blocks.

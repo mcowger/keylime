@@ -2,6 +2,8 @@
 
 Projects belong to a host. The sidebar shows explicitly registered projects and their workspaces. Workspace menus provide selective import and unregister actions. The hierarchy starts empty, even if older projects or session files exist. Add a project to register its default workspace, then selectively discover and import existing worktrees and sessions. A non-Git project has exactly one workspace.
 
+Click **+** beside a Git project to open a blank chat for a new workspace. Write the first prompt and send it; Keylime asks the configured `smol` task model for a display name and branch name, creates the worktree using the project's setup pipeline, then starts the agent there. The branch gets a random suffix to avoid collisions. No worktree or agent starts before Send. Naming/setup failures keep the prompt available; inspect setup logs through **Manage workspaces**. For non-Git projects, **+** opens a new session in the project's existing workspace.
+
 Importing sessions finds sessions whose working directory is inside the selected workspace, excluding other workspace roots. App-created sessions and forks register with their workspace. Multiple agents can use the same workspace and files at once; they are not isolated from one another. A missing project or workspace remains registered and visible as unavailable.
 
 Unregistering a project or workspace forgets its child registrations, but does not stop processes or delete files. Re-registering starts fresh; import any existing children again. The default workspace cannot be unregistered separately from its project. Duplicate imports of the same canonical resource are idempotent, and each resource has one parent.

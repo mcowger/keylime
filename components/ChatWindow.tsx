@@ -96,6 +96,7 @@ interface Props {
   newSessionCwd: string | null;
   newSessionDraftKey?: string;
   /** Host a fresh chat starts on (this machine when absent). */
+  prepareNewWorkspace?: (prompt: string) => Promise<string>;
   newSessionHostId?: string;
   onBackgroundSessionCreated?: (session: SessionInfo) => void;
   newSessionCreationId?: string;
@@ -578,6 +579,7 @@ export function ChatWindow({
   onBackgroundSessionCreated,
   newSessionCreationId,
   newSessionPoolId,
+  prepareNewWorkspace,
   newSessionProjectId,
   newSessionInitialization,
   onNewSessionInitialization,
@@ -780,6 +782,7 @@ export function ChatWindow({
     newSessionCreationId,
     newSessionPoolId,
     newSessionProjectId,
+    prepareNewWorkspace,
     newSessionInitialization,
     onNewSessionInitialization,
     onAgentEnd: wrappedOnAgentEnd,
