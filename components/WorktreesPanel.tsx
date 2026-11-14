@@ -6,9 +6,7 @@ import type {
   WorkspaceBranches,
   WorkspaceBranchMode,
   WorkspaceCreationJob,
-  WorkspaceCreationSettings,
   WorkspaceDeleteResult,
-  WorkspacePipeline,
 } from "@/lib/workspace-creation-types";
 import type { HierarchySnapshot } from "@/lib/project-hierarchy-types";
 import { ConfirmDialog } from "./ui/field";
@@ -17,6 +15,7 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
   const [branches, setBranches] = useState<WorkspaceBranches>({
     local: [],
     remote: [],
+    defaultRef: "",
   });
   const [mode, setMode] = useState<WorkspaceBranchMode>("new");
   const [branch, setBranch] = useState("");
@@ -24,10 +23,6 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
   const [name, setName] = useState("");
   const [job, setJob] = useState<WorkspaceCreationJob | null>(null);
   const [snapshot, setSnapshot] = useState<HierarchySnapshot | null>(null);
-  const [settings, setSettings] = useState<WorkspaceCreationSettings | null>(
-    null,
-  );
-  const [scope, setScope] = useState<"defaults" | "override">("defaults");
   const [pending, setPending] = useState<{
     path: string;
     status: "processes" | "dirty";
@@ -67,13 +62,25 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
   }
   useEffect(() => {
     if (!hostId || !projectPath) return;
-    void refresh().catch((e) => setError(String(e)));
+    let current = true;
+    setBranch("");
+    setName("");
+    setBaseRef("");
+    void refresh().catch((e) => {
+      if (current) setError(String(e));
+    });
     void api("branches")
-      .then(setBranches)
-      .catch((e) => setError(String(e)));
-    void api("settings")
-      .then(setSettings)
-      .catch((e) => setError(String(e)));
+      .then((next: WorkspaceBranches) => {
+        if (!current) return;
+        setBranches(next);
+        setBaseRef(next.defaultRef);
+      })
+      .catch((e) => {
+        if (current) setError(String(e));
+      });
+    return () => {
+      current = false;
+    };
   }, [hostId, projectPath]);
   useEffect(() => {
     if (!job || job.status !== "running") return;
@@ -96,8 +103,6 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
   if (!ctx || ctx.error)
     return <div>{ctx?.error ?? "Select a project to manage workspaces."}</div>;
   const project = snapshot?.projects.find((p) => p.path === projectPath);
-  const pipeline =
-    settings && (scope === "defaults" ? settings.defaults : settings.override);
   async function create() {
     setBusy(true);
     setError("");
@@ -148,29 +153,6 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
     } finally {
       setBusy(false);
     }
-  }
-  async function saveSettings() {
-    if (!settings) return;
-    setBusy(true);
-    try {
-      const cleaned = pipeline && {
-        pre: pipeline.pre.filter((s) => s.trim()),
-        create: pipeline.create.filter((s) => s.trim()),
-        post: pipeline.post.filter((s) => s.trim()),
-      };
-      setSettings(await api("settings", { projectPath, [scope]: cleaned }));
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  function editPipeline(stage: keyof WorkspacePipeline, value: string) {
-    if (!settings || !pipeline) return;
-    setSettings({
-      ...settings,
-      [scope]: { ...pipeline, [stage]: value.split("\n") },
-    });
   }
   return (
     <div
@@ -261,7 +243,7 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
               onChange={(e) => {
                 setMode(e.target.value as WorkspaceBranchMode);
                 setBranch("");
-                setBaseRef("");
+                setBaseRef(e.target.value === "new" ? branches.defaultRef : "");
               }}
             >
               <option value="new">New branch</option>
@@ -339,59 +321,6 @@ export function WorktreesPanel({ ctx }: { ctx: WorktreeContext | null }) {
               <pre style={{ whiteSpace: "pre-wrap" }}>{job.logs}</pre>
             </div>
           )}
-          <h3>Creation commands</h3>
-          <label>
-            Settings{" "}
-            <select
-              value={scope}
-              onChange={(e) =>
-                setScope(e.target.value as "defaults" | "override")
-              }
-            >
-              <option value="defaults">Host defaults</option>
-              <option value="override">Project override</option>
-            </select>
-          </label>
-          {scope === "override" && (
-            <label>
-              <input
-                type="checkbox"
-                checked={!!settings?.override}
-                onChange={(e) =>
-                  settings &&
-                  setSettings({
-                    ...settings,
-                    override: e.target.checked
-                      ? structuredClone(settings.defaults)
-                      : null,
-                  })
-                }
-              />{" "}
-              Override all stages
-            </label>
-          )}
-          {pipeline &&
-            (["pre", "create", "post"] as const).map((stage) => (
-              <label key={stage} style={{ display: "block" }}>
-                {stage} commands (one per line)
-                <textarea
-                  value={pipeline[stage].join("\n")}
-                  onChange={(e) => editPipeline(stage, e.target.value)}
-                />
-              </label>
-            ))}
-          <p>
-            Commands receive OMP_PROJECT_PATH, OMP_WORKSPACE_PATH, OMP_BRANCH,
-            OMP_BASE_REF, OMP_BRANCH_MODE and OMP_CREATE_RESULT. Write JSON{" "}
-            {`{"path":"/absolute/worktree/path"}`} to OMP_CREATE_RESULT to
-            return a custom path. An empty create stage uses Git.
-          </p>
-          <button
-            disabled={busy || !settings}
-            onClick={() => void saveSettings()}
-          >
-            Save settings
-          </button>
         </>
       )}
       {error && <p role="alert">{error}</p>}

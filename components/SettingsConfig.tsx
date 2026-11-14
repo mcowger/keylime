@@ -134,6 +134,10 @@ const HostsConfig = dynamic(
   () => import("./HostsConfig").then((module) => module.HostsConfig),
   { loading: SettingsTabLoading },
 );
+const ProjectsConfig = dynamic(
+  () => import("./ProjectsConfig").then((module) => module.ProjectsConfig),
+  { loading: SettingsTabLoading },
+);
 const UsageConfig = dynamic(
   () => import("./UsageConfig").then((module) => module.UsageConfig),
   { loading: SettingsTabLoading },
@@ -4234,6 +4238,33 @@ export function SettingsConfig({
                         </h2>
                       </div>
                       <HostsConfig />
+                    </div>
+                  )}
+
+                  {currentTab === "projects" && (
+                    <div
+                      role="tabpanel"
+                      id="settings-panel-projects"
+                      aria-labelledby="settings-tab-projects"
+                      className="settings-panel-inner"
+                      style={{
+                        padding: isMobile ? "16px 14px 32px" : "32px 24px 64px",
+                        gap: 16,
+                      }}
+                    >
+                      <h2
+                        className="display-serif"
+                        style={{
+                          fontSize: 22,
+                          fontWeight: 600,
+                          margin: 0,
+                          color: "var(--text)",
+                          letterSpacing: "-0.01em",
+                        }}
+                      >
+                        Projects
+                      </h2>
+                      <ProjectsConfig />
                     </div>
                   )}
 

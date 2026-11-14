@@ -556,6 +556,10 @@ export interface ManagedProject {
   poolId?: string;
   projectId?: string;
   workspaceId?: string;
+  projectPath?: string;
+  projectName?: string;
+  projectKind?: "git" | "directory";
+  isDefaultWorkspace?: boolean;
   projectKey?: string;
   origin?: string;
   name?: string;

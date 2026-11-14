@@ -26,6 +26,8 @@ import {
   localInstallCommand,
 } from "./host-status";
 import { HostUpdates } from "./HostUpdates";
+import { CreationPipelineEditor } from "./CreationPipelineEditor";
+import { isLinkUp } from "@/lib/hosts/host";
 
 type Dialogs =
   | { kind: "add" }
@@ -827,6 +829,7 @@ export function HostsConfig() {
   const [joining, setJoining] = useState<HostRow | null>(null);
   const [leaving, setLeaving] = useState<HostRow | null>(null);
   const [busy, setBusy] = useState(false);
+  const [creationHostId, setCreationHostId] = useState(LOCAL_HOST_ID);
   const local = hosts?.find(isLocalRow);
   const localJoins = !isClusterMember(pools, LOCAL_HOST_ID);
   const localBlock =
@@ -1055,6 +1058,38 @@ export function HostsConfig() {
           )}
         </ul>
       )}
+      <section style={{ display: "grid", gap: 12, marginTop: 24 }}>
+        <h2>Host creation defaults</h2>
+        <label>
+          Host{" "}
+          {hosts && (
+            <select
+              value={creationHostId}
+              onChange={(event) => setCreationHostId(event.target.value)}
+            >
+              {hosts.map((host) => (
+                <option key={host.id} value={host.id}>
+                  {hostName(t, host)} ({hostStatusText(t, host)})
+                </option>
+              ))}
+            </select>
+          )}
+        </label>
+        {hosts?.some(
+          (host) => host.id === creationHostId && isLinkUp(host.status),
+        ) ? (
+          <CreationPipelineEditor
+            key={creationHostId}
+            hostId={creationHostId}
+          />
+        ) : (
+          hosts && (
+            <p role="status">
+              Creation defaults are unavailable while this host is offline.
+            </p>
+          )
+        )}
+      </section>
       {dialog && <HostDialog dialog={dialog} onClose={() => setDialog(null)} />}
       {joining && (
         <JoinDialog

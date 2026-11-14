@@ -28,7 +28,7 @@ export async function GET(request: Request) {
           ? await resolved.host.workspaceOps.workspaceBranches(projectPath)
           : action === "settings"
             ? await resolved.host.workspaceOps.workspaceCreationSettings({
-                projectPath,
+                projectPath: projectPath || undefined,
               })
             : await resolved.host.workspaceOps.workspaceCreationStatus(
                 params.get("id") ?? "",

@@ -7,6 +7,7 @@ import {
   Bot,
   Cable,
   Cpu,
+  FolderGit2,
   KeyRound,
   Network,
   RefreshCw,
@@ -27,6 +28,7 @@ export type SettingsTab =
   | "extensions"
   | "mcp"
   | "hosts"
+  | "projects"
   | "skills"
   | "plugins"
   | "notifications"
@@ -99,6 +101,12 @@ export const SETTINGS_CATEGORIES: TabItem[] = [
     label: "Hosts",
     description: "Linked machines, host software versions, and updates",
     Icon: Network,
+  },
+  {
+    id: "projects",
+    label: "Projects",
+    description: "Project names and workspace creation commands",
+    Icon: FolderGit2,
   },
   {
     id: "notifications",

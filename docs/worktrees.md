@@ -8,9 +8,11 @@ Unregistering a project or workspace forgets its child registrations, but does n
 
 ## Creating a workspace
 
-For a Git project, create a workspace from an existing local branch, a remote branch, or a new branch based on a selected ref. Listing branches fetches remote refs. The suggested checkout path is a sibling of the project; edit its name if needed.
+For a Git project, create a workspace from an existing local branch, a remote branch, or a new branch based on a selected ref. Listing branches fetches remote refs. Base ref initially selects the repository's advertised default branch (preferring origin), not the currently checked-out feature branch. Without a remote default, it uses main, master, then the current branch. Checkout paths are derived from the branch under the project's sibling worktrees directory; the display name is editable.
 
-The host owns creation settings: default shell commands and an optional whole-project override, each with ordered pre, create, and post stages. Commands have no interactive stdin or automatic retries. With no create command, Git creates the worktree. Pre and create commands run in the project directory; post commands run in the actual worktree.
+Configure host creation commands in **Settings → Hosts**. **Settings → Projects** lists registered projects and edits their display names and optional whole-project command overrides. These settings live on the owning daemon and are shared with other linked web servers; the workspace creation panel only creates workspaces and displays job output.
+
+Each pipeline has ordered pre, create, and post stages. Commands have no interactive stdin or automatic retries. With no create command, Git creates the worktree. Pre and create commands run in the project directory; post commands run in the actual worktree.
 
 Commands receive `OMP_PROJECT_PATH`, `OMP_WORKSPACE_PATH`, `OMP_BRANCH`, `OMP_BASE_REF`, `OMP_BRANCH_MODE`, and `OMP_CREATE_RESULT`. A create command may write JSON such as `{"path":"/absolute/path"}` to `OMP_CREATE_RESULT`; otherwise the requested path is used. The result must resolve to a linked worktree of the project. The host registers it before post commands run, so sessions can start while post setup is running.
 

@@ -86,7 +86,23 @@ function settings(): StoredSettings {
 export async function workspaceCreationSettings(
   input: WorkspaceSettingsRequest,
 ): Promise<WorkspaceCreationSettings> {
-  project(input.projectPath);
+  if (
+    input.projectPath !== undefined &&
+    !readHierarchy().projects.some(
+      (project) => project.path === input.projectPath,
+    )
+  )
+    throw new HostOpError(
+      404,
+      "project_not_found",
+      "Registered project not found",
+    );
+  if (input.override !== undefined && !input.projectPath)
+    throw new HostOpError(
+      400,
+      "invalid_request",
+      "Project overrides require a project",
+    );
   const data = settings();
   if (input.defaults !== undefined) {
     if (!validPipeline(input.defaults))
@@ -94,7 +110,7 @@ export async function workspaceCreationSettings(
     data.defaults = input.defaults;
   }
   if (input.override !== undefined) {
-    if (input.override === null) delete data.projects[input.projectPath];
+    if (input.override === null) delete data.projects[input.projectPath!];
     else {
       if (!validPipeline(input.override))
         throw new HostOpError(
@@ -102,14 +118,16 @@ export async function workspaceCreationSettings(
           "invalid_request",
           "Invalid project pipeline",
         );
-      data.projects[input.projectPath] = input.override;
+      data.projects[input.projectPath!] = input.override;
     }
   }
   if (input.defaults !== undefined || input.override !== undefined)
     save(settingsFile(), data);
   return {
     defaults: data.defaults,
-    override: data.projects[input.projectPath] ?? null,
+    override: input.projectPath
+      ? (data.projects[input.projectPath] ?? null)
+      : null,
   };
 }
 const exec = promisify(execFile);
@@ -139,7 +157,41 @@ export async function workspaceBranches(
     else if (ref.startsWith("refs/remotes/") && !ref.endsWith("/HEAD"))
       remote.push(ref.slice(13));
   }
-  return { local, remote };
+  let defaultRef = "";
+  const remotes = (await git(projectPath, ["remote"]))
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+  remotes.sort((a, b) =>
+    a === "origin" ? -1 : b === "origin" ? 1 : a.localeCompare(b),
+  );
+  for (const remoteName of remotes) {
+    const advertised = await git(projectPath, [
+      "ls-remote",
+      "--symref",
+      remoteName,
+      "HEAD",
+    ]);
+    const branch = /^ref: refs\/heads\/(.+)\s+HEAD$/m.exec(advertised)?.[1];
+    if (branch) {
+      defaultRef = local.includes(branch) ? branch : `${remoteName}/${branch}`;
+      break;
+    }
+  }
+  if (!defaultRef)
+    defaultRef = local.includes("main")
+      ? "main"
+      : local.includes("master")
+        ? "master"
+        : (
+            await git(projectPath, [
+              "symbolic-ref",
+              "--quiet",
+              "--short",
+              "HEAD",
+            ])
+          ).trim();
+  return { local, remote, defaultRef };
 }
 const active = new Map<string, WorkspaceCreationJob>();
 const running = new Map<string, Promise<void>>();

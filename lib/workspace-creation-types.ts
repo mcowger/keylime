@@ -9,7 +9,7 @@ export interface WorkspaceCreationSettings {
   override: WorkspacePipeline | null;
 }
 export interface WorkspaceSettingsRequest {
-  projectPath: string;
+  projectPath?: string;
   defaults?: WorkspacePipeline;
   override?: WorkspacePipeline | null;
 }
@@ -34,6 +34,7 @@ export interface WorkspaceCreationJob {
 export interface WorkspaceBranches {
   local: string[];
   remote: string[];
+  defaultRef: string;
 }
 export interface WorkspaceDeleteRequest {
   projectPath: string;

@@ -94,7 +94,8 @@ export function validWorkspaceResult(
         Array.isArray(value.local) &&
         value.local.every(text) &&
         Array.isArray(value.remote) &&
-        value.remote.every(text)
+        value.remote.every(text) &&
+        text(value.defaultRef)
       );
     case "workspaceCreationSettings": {
       const pipeline = (input: unknown) =>
