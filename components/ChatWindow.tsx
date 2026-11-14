@@ -91,8 +91,10 @@ import { getFileName } from "@/lib/file-paths";
 interface Props {
   session: SessionInfo | null;
   newSessionCwd: string | null;
+  newSessionDraftKey?: string;
   /** Host a fresh chat starts on (this machine when absent). */
   newSessionHostId?: string;
+  onBackgroundSessionCreated?: (session: SessionInfo) => void;
   newSessionCreationId?: string;
   newSessionPoolId?: string;
   newSessionProjectId?: string;
@@ -561,7 +563,9 @@ const CommittedTranscript = memo(function CommittedTranscript({
 export function ChatWindow({
   session,
   newSessionCwd,
+  newSessionDraftKey,
   newSessionHostId,
+  onBackgroundSessionCreated,
   newSessionCreationId,
   newSessionPoolId,
   newSessionProjectId,
@@ -759,7 +763,9 @@ export function ChatWindow({
   } = useAgentSession({
     session,
     newSessionCwd,
+    newSessionDraftKey,
     newSessionHostId,
+    onBackgroundSessionCreated,
     newSessionCreationId,
     newSessionPoolId,
     newSessionProjectId,
@@ -930,6 +936,7 @@ export function ChatWindow({
   const prevSessionKeyForPagingRef = useRef<string | null>(null);
   const draftKey =
     session?.id ??
+    newSessionDraftKey ??
     (newSessionPoolId && newSessionProjectId
       ? `new:pool:${newSessionPoolId}:${newSessionProjectId}`
       : newSessionCwd
@@ -1566,7 +1573,6 @@ export function ChatWindow({
          accept Escape-to-minimize in the fresh-chat branch where there is
          nothing to collapse. */
       onMinimize={isEmptyNew ? undefined : handleMinimize}
-      statusText={composerStatusText}
     />
   );
 

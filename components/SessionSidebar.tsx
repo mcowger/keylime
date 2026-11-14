@@ -1118,12 +1118,7 @@ export const SessionSidebar = memo(function SessionSidebar({
     return new Set(
       allSessions
         .filter((session) => {
-          if (
-            runningOnly &&
-            !runningSessionIds.has(session.id) &&
-            !effectiveRecentCompletedSet.has(session.id)
-          )
-            return false;
+          if (runningOnly && !runningSessionIds.has(session.id)) return false;
           return (
             !query ||
             currentTranscriptSearch?.scores[session.id] !== undefined ||
@@ -1143,7 +1138,6 @@ export const SessionSidebar = memo(function SessionSidebar({
     trimmedSearchQuery,
     runningOnly,
     runningSessionIds,
-    effectiveRecentCompletedSet,
     currentTranscriptSearch,
   ]);
 
@@ -2021,6 +2015,10 @@ export const SessionSidebar = memo(function SessionSidebar({
           onSnapshots={setHierarchySnapshots}
           searchQuery={trimmedSearchQuery}
           runningOnly={runningOnly}
+          runningSessionIds={runningSessionIds}
+          awaitingInputIds={awaitingInputIds}
+          unreadSessionIds={unreadSessionIds}
+          exitedSessionIds={exitedSessions.keys()}
           matchedSessionIds={matchedSessionIds}
           refreshKey={(refreshKey ?? 0) + hierarchyRefresh}
           sessions={allSessions}

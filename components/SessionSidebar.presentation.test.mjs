@@ -5,6 +5,7 @@ import test from "node:test";
 const { render, cleanup, fireEvent, screen, waitFor } =
   await import("@testing-library/react/pure.js");
 const { SessionSidebar } = await import("./SessionSidebar.tsx");
+const { HierarchySidebar } = await import("./HierarchySidebar.tsx");
 
 class FakeWorker {
   postMessage() {}
@@ -131,7 +132,10 @@ test("failed project unregistration reports the error and keeps the hierarchy", 
   window.confirm = () => true;
   try {
     renderSidebar();
-    fireEvent.click(await screen.findByRole("button", { name: "Unregister" }));
+    fireEvent.click(
+      await screen.findByLabelText("Actions for project Project"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Unregister project" }));
     assert.equal(
       (await screen.findByRole("alert")).textContent,
       "Unregister refused",
@@ -143,6 +147,67 @@ test("failed project unregistration reports the error and keeps the hierarchy", 
       },
     ]);
     assert.ok(screen.getByRole("button", { name: "Workspace" }));
+  } finally {
+    restore();
+  }
+});
+
+test("registered chats appear only as search results and remain selectable", async () => {
+  const registered = {
+    ...snapshot,
+    projects: [
+      {
+        ...snapshot.projects[0],
+        workspaces: [
+          { ...snapshot.projects[0].workspaces[0], sessionIds: ["chat-1"] },
+        ],
+      },
+    ],
+  };
+  const restore = setup(() => Response.json(registered));
+  const selected = [];
+  const session = {
+    id: "chat-1",
+    name: "Saved chat",
+    firstMessage: "",
+    messageCount: 1,
+    cwd: "/workspace",
+  };
+  const props = {
+    hosts: [{ id: "local", label: "" }],
+    sessions: [session],
+    selectedSessionId: null,
+    selectedCwd: null,
+    selectedHostId: "local",
+    onSelectWorkspace() {},
+    onProjects() {},
+    onSnapshots() {},
+    searchQuery: "",
+    matchedSessionIds: null,
+    runningOnly: false,
+    runningSessionIds: new Set(),
+    awaitingInputIds: new Set(),
+    unreadSessionIds: new Set(),
+    exitedSessionIds: [],
+    collapsedHosts: new Set(),
+    onToggleHost() {},
+    onSelectSession: (value) => selected.push(value),
+    onAddProject() {},
+    onChanged() {},
+  };
+  try {
+    const view = render(React.createElement(HierarchySidebar, props));
+    await screen.findByRole("button", { name: "Workspace" });
+    assert.equal(screen.queryByRole("button", { name: "Saved chat" }), null);
+    view.rerender(
+      React.createElement(HierarchySidebar, {
+        ...props,
+        searchQuery: "saved",
+        matchedSessionIds: new Set(["chat-1"]),
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Saved chat" }));
+    assert.deepEqual(selected, [session]);
   } finally {
     restore();
   }

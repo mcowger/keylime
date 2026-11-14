@@ -170,6 +170,70 @@ type AutoNameStatus =
   | { kind: "success" }
   | { kind: "error"; message: string };
 type TimerHandle = NodeJS.Timeout;
+type ChatTab = {
+  id: string;
+  cwd: string;
+  hostId?: string;
+  session: SessionInfo | null;
+  creation: { id?: string; initialization?: string };
+};
+
+function tabInWorkspace(
+  tab: ChatTab,
+  cwd: string,
+  hostId: string | undefined,
+  projects: ManagedProject[],
+) {
+  if (remoteHostId(tab.hostId) !== remoteHostId(hostId)) return false;
+  const path = comparableProjectPath(tab.cwd);
+  const roots = projects
+    .filter((project) => remoteHostId(project.hostId) === remoteHostId(hostId))
+    .map((project) => comparableProjectPath(project.path))
+    .filter(
+      (root) =>
+        path === root || path.startsWith(root === "/" ? "/" : `${root}/`),
+    );
+  const owner = roots.sort((a, b) => b.length - a.length)[0] ?? path;
+  return owner === comparableProjectPath(cwd);
+}
+const CHAT_TABS_STORAGE_KEY = "keylime:workspace-chat-tabs";
+function loadChatTabs(): ChatTab[] {
+  try {
+    const value: unknown = JSON.parse(
+      sessionStorage.getItem(CHAT_TABS_STORAGE_KEY) ?? "[]",
+    );
+    if (!Array.isArray(value)) return [];
+    return value
+      .slice(0, 100)
+      .filter(
+        (tab): tab is ChatTab =>
+          tab &&
+          typeof tab.id === "string" &&
+          typeof tab.cwd === "string" &&
+          (tab.hostId === undefined || typeof tab.hostId === "string") &&
+          tab.creation &&
+          typeof tab.creation === "object" &&
+          !Array.isArray(tab.creation) &&
+          (tab.creation.id === undefined ||
+            typeof tab.creation.id === "string") &&
+          (tab.creation.initialization === undefined ||
+            typeof tab.creation.initialization === "string") &&
+          (tab.session === null ||
+            (tab.session &&
+              typeof tab.session.id === "string" &&
+              typeof tab.session.cwd === "string" &&
+              typeof tab.session.path === "string" &&
+              typeof tab.session.created === "string" &&
+              typeof tab.session.modified === "string" &&
+              typeof tab.session.messageCount === "number" &&
+              typeof tab.session.firstMessage === "string" &&
+              (tab.session.name === undefined ||
+                typeof tab.session.name === "string"))),
+      );
+  } catch {
+    return [];
+  }
+}
 
 export function AppShell({ appName }: { appName: string }) {
   const router = useRouter();
@@ -195,9 +259,64 @@ export function AppShell({ appName }: { appName: string }) {
     id?: string;
     initialization?: string;
   }>({});
+  const [chatTabs, setChatTabs] = useState<ChatTab[]>(loadChatTabs);
+  const chatTabsRef = useRef(chatTabs);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const activeChatIdRef = useRef<string | null>(null);
+  const visitedWorkspaces = useRef(new Set<string>());
+  const updateChatTabs = useCallback(
+    (update: (tabs: ChatTab[]) => ChatTab[]) => {
+      const next = update(chatTabsRef.current);
+      chatTabsRef.current = next;
+      setChatTabs(next);
+      try {
+        sessionStorage.setItem(
+          CHAT_TABS_STORAGE_KEY,
+          JSON.stringify(next.slice(-100)),
+        );
+      } catch {
+        /* Storage may be unavailable or full. */
+      }
+    },
+    [],
+  );
+  const activateChat = useCallback((tab: ChatTab | null) => {
+    if (tab && activeChatIdRef.current === tab.id) {
+      setActiveTerminalId(null);
+      return;
+    }
+    activeChatIdRef.current = tab?.id ?? null;
+    if (tab) {
+      try {
+        sessionStorage.setItem(
+          `${CHAT_TABS_STORAGE_KEY}:active:${tab.hostId ?? LOCAL_HOST_ID}:${tab.cwd}`,
+          tab.id,
+        );
+      } catch {
+        /* Storage may be unavailable. */
+      }
+    }
+    setActiveChatId(tab?.id ?? null);
+    setSelectedSession(tab?.session ?? null);
+    setNewSessionCwd(tab && !tab.session ? tab.cwd : null);
+    setNewSessionHostId(tab?.hostId);
+    setNewSessionCreation(tab?.creation ?? {});
+    setActiveTerminalId(null);
+    setSessionKey((key) => key + 1);
+  }, []);
   const newSessionCreationId = newSessionCreation.id;
   const handleNewSessionInitialization = useCallback(
     (initialization: string) => {
+      const tabId = activeChatIdRef.current;
+      updateChatTabs((tabs) =>
+        tabs.map((tab) =>
+          tab.id === tabId &&
+          tab.creation.id === newSessionCreationId &&
+          tab.creation.initialization === undefined
+            ? { ...tab, creation: { ...tab.creation, initialization } }
+            : tab,
+        ),
+      );
       setNewSessionCreation((current) =>
         current.id === newSessionCreationId &&
         current.initialization === undefined
@@ -205,7 +324,7 @@ export function AppShell({ appName }: { appName: string }) {
           : current,
       );
     },
-    [newSessionCreationId],
+    [newSessionCreationId, updateChatTabs],
   );
   const [workspaceOptions, setWorkspaceOptions] = useState<{
     projects: ManagedProject[];
@@ -927,6 +1046,8 @@ export function AppShell({ appName }: { appName: string }) {
   }, [resetAppUpdateVisibleStage]);
   const chatInputRef = useRef<ChatInputHandle | null>(null);
   const topBarRef = useRef<HTMLDivElement>(null);
+  const [workspaceSwitcherTarget, setWorkspaceSwitcherTarget] =
+    useState<HTMLDivElement | null>(null);
   const [sessionInfoContainer, setSessionInfoContainer] =
     useState<HTMLDivElement | null>(null);
 
@@ -1550,9 +1671,27 @@ export function AppShell({ appName }: { appName: string }) {
 
         // The sidebar will notify us when it adopts this cwd. Avoid remounting
         // the just-created empty chat during that initial synchronization.
+        visitedWorkspaces.current.add(
+          `${remoteHostId(initialNavigation.hostId) ?? LOCAL_HOST_ID}:${data.cwd}`,
+        );
         suppressCwdRef.current = data.cwd;
-        setNewSessionCwd(data.cwd);
-        setNewSessionHostId(remoteHostId(initialNavigation.hostId));
+        const existing = chatTabsRef.current.find((tab) =>
+          tabInWorkspace(
+            tab,
+            data.cwd!,
+            initialNavigation.hostId,
+            workspaceOptions.projects,
+          ),
+        );
+        const tab: ChatTab = existing ?? {
+          id: browserUUID(),
+          cwd: data.cwd,
+          hostId: remoteHostId(initialNavigation.hostId),
+          session: null,
+          creation: { id: browserUUID() },
+        };
+        if (!existing) updateChatTabs((tabs) => [...tabs, tab]);
+        activateChat(tab);
         setActiveCwd(data.cwd);
         setActiveHostId(remoteHostId(initialNavigation.hostId));
         setInitialCwdStatus("ready");
@@ -1564,9 +1703,8 @@ export function AppShell({ appName }: { appName: string }) {
         );
         setInitialCwdStatus("error");
       });
-
     return () => controller.abort();
-  }, [initialNavigation]);
+  }, [initialNavigation, activateChat, updateChatTabs]);
 
   const handleCwdChange = useCallback(
     (
@@ -1578,7 +1716,19 @@ export function AppShell({ appName }: { appName: string }) {
       setActiveTerminalId(null);
       setActiveCwd(cwd);
       setActiveHostId(remoteHostId(hostId));
+      if (initialSessionId && !initialSessionRestored) return;
       if (!cwd) return;
+      const workspaceKey = `${remoteHostId(hostId) ?? LOCAL_HOST_ID}:${cwd}`;
+      const currentTab = chatTabsRef.current.find(
+        (tab) => tab.id === activeChatIdRef.current,
+      );
+      if (
+        currentTab &&
+        tabInWorkspace(currentTab, cwd, hostId, workspaceOptions.projects)
+      )
+        return;
+      const alreadyVisited = visitedWorkspaces.current.has(workspaceKey);
+      visitedWorkspaces.current.add(workspaceKey);
       // Skip only when the notification matches the cwd we're suppressing for.
       if (suppressCwdRef.current !== null && suppressCwdRef.current === cwd) {
         suppressCwdRef.current = null;
@@ -1598,19 +1748,56 @@ export function AppShell({ appName }: { appName: string }) {
         )
           return;
       }
-      setSelectedSession(null);
-      setNewSessionCwd(cwd);
-      setNewSessionHostId(remoteHostId(hostId));
-      setNewSessionCreation({ id: browserUUID() });
-      setSessionKey((k) => k + 1);
+      let preferredId: string | null = null;
+      try {
+        preferredId = sessionStorage.getItem(
+          `${CHAT_TABS_STORAGE_KEY}:active:${remoteHostId(hostId) ?? LOCAL_HOST_ID}:${cwd}`,
+        );
+      } catch {
+        /* Storage may be unavailable. */
+      }
+      const candidates = chatTabsRef.current.filter((tab) =>
+        tabInWorkspace(tab, cwd, hostId, workspaceOptions.projects),
+      );
+      const existing =
+        preferredId === ""
+          ? undefined
+          : (candidates.find((tab) => tab.id === preferredId) ?? candidates[0]);
+      if (existing) {
+        activateChat(existing);
+      } else if (!alreadyVisited && preferredId !== "") {
+        const tab: ChatTab = {
+          id: browserUUID(),
+          cwd,
+          hostId: remoteHostId(hostId),
+          session: null,
+          creation: { id: browserUUID() },
+        };
+        updateChatTabs((tabs) => [...tabs, tab]);
+        activateChat(tab);
+      } else {
+        activateChat(null);
+      }
       setBranchTree([]);
       setBranchActiveLeafId(null);
       setSystemPrompt(null);
       setSystemPromptLoading(false);
       setActiveTopPanel(null);
-      router.replace("/");
+      router.replace(
+        existing?.session
+          ? `?session=${encodeURIComponent(existing.session.id)}`
+          : "/",
+      );
     },
-    [router, selectedSession],
+    [
+      router,
+      selectedSession,
+      activateChat,
+      updateChatTabs,
+      workspaceOptions.projects,
+      initialSessionId,
+      initialSessionRestored,
+    ],
   );
 
   const sessionLookupVersion = useRef(0);
@@ -1628,10 +1815,37 @@ export function AppShell({ appName }: { appName: string }) {
         setSidebarOpen(false);
         requestAnimationFrame(() => chatInputRef.current?.focus());
       }
-      if (!isRestore && session.id === selectedSession?.id) return;
-      setNewSessionCwd(null);
-      setSelectedSession(session);
-      setSessionKey((k) => k + 1);
+      const existing = chatTabsRef.current.find(
+        (tab) =>
+          tab.session?.id === session.id &&
+          remoteHostId(tab.hostId) === remoteHostId(session.hostId),
+      );
+      const tab: ChatTab = existing
+        ? {
+            ...existing,
+            session,
+            cwd: session.cwd,
+            hostId: remoteHostId(session.hostId),
+          }
+        : {
+            id: browserUUID(),
+            cwd: session.cwd,
+            hostId: remoteHostId(session.hostId),
+            session,
+            creation: {},
+          };
+      updateChatTabs((tabs) =>
+        existing
+          ? tabs.map((item) => (item.id === tab.id ? tab : item))
+          : [...tabs, tab],
+      );
+      if (
+        !isRestore &&
+        activeChatIdRef.current === tab.id &&
+        session.id === selectedSession?.id
+      )
+        return;
+      activateChat(tab);
       setSystemPrompt(null);
       setSystemPromptLoading(false);
       setInitialSessionRestored(true);
@@ -1648,7 +1862,7 @@ export function AppShell({ appName }: { appName: string }) {
         router.replace(`?session=${encodeURIComponent(session.id)}`);
       }
     },
-    [router, isMobile, selectedSession?.id],
+    [router, isMobile, selectedSession?.id, activateChat, updateChatTabs],
   );
 
   const handleNewSession = useCallback(
@@ -1662,14 +1876,21 @@ export function AppShell({ appName }: { appName: string }) {
       setActiveTerminalId(null);
       sessionLookupVersion.current += 1;
       setSettingsTab(null);
-      setSelectedSession(null);
-      setNewSessionCreation({
-        id: creationId || browserUUID(),
-        initialization,
-      });
-      setNewSessionCwd(cwd);
-      setNewSessionHostId(remoteHostId(hostId));
-      setSessionKey((k) => k + 1);
+      if (!cwd) return;
+      const existing = creationId
+        ? chatTabsRef.current.find(
+            (item) => item.creation.id === creationId && !item.session,
+          )
+        : undefined;
+      const tab: ChatTab = existing ?? {
+        id: browserUUID(),
+        cwd,
+        hostId: remoteHostId(hostId),
+        session: null,
+        creation: { id: creationId || browserUUID(), initialization },
+      };
+      if (!existing) updateChatTabs((tabs) => [...tabs, tab]);
+      activateChat(tab);
       setBranchTree([]);
       setBranchActiveLeafId(null);
       setSystemPrompt(null);
@@ -1681,7 +1902,7 @@ export function AppShell({ appName }: { appName: string }) {
       }
       router.replace("/");
     },
-    [router, isMobile],
+    [router, isMobile, activateChat, updateChatTabs],
   );
 
   // ---- In-app Navigate back / forward over visited chat views ----
@@ -1695,7 +1916,6 @@ export function AppShell({ appName }: { appName: string }) {
   const [importingSession, setImportingSession] = useState(false);
   const openLinkedSession = useCallback(
     async (id: string, restore = false) => {
-      setSelectedSession(null);
       const version = ++sessionLookupVersion.current;
       setPendingSessionImport(null);
       try {
@@ -1948,39 +2168,77 @@ export function AppShell({ appName }: { appName: string }) {
   // server-computed projectRoot, which the same-project check in
   // handleCwdChange relies on. Hydrate it from the session list so switching
   // worktrees right after creating a session doesn't close the chat.
-  const hydrateSelectedSession = useCallback((sessionId: string) => {
-    void fetch("/api/sessions")
-      .then((r) =>
-        r.ok ? (r.json() as Promise<{ sessions: SessionInfo[] }>) : null,
-      )
-      .then((d) => {
-        const full = d?.sessions.find((s) => s.id === sessionId);
-        if (!full) return;
-        setSelectedSession((prev) =>
-          prev &&
-          prev.id === sessionId &&
-          (!prev.projectRoot || prev.path === "")
-            ? full
-            : prev,
-        );
-      })
-      .catch(() => {});
-  }, []);
+  const hydrateSelectedSession = useCallback(
+    (sessionId: string) => {
+      void fetch("/api/sessions")
+        .then((r) =>
+          r.ok ? (r.json() as Promise<{ sessions: SessionInfo[] }>) : null,
+        )
+        .then((d) => {
+          const full = d?.sessions.find((s) => s.id === sessionId);
+          if (!full) return;
+          updateChatTabs((tabs) =>
+            tabs.map((tab) =>
+              tab.session?.id === sessionId
+                ? {
+                    ...tab,
+                    session: full,
+                    cwd: full.cwd,
+                    hostId: remoteHostId(full.hostId),
+                  }
+                : tab,
+            ),
+          );
+          setSelectedSession((prev) =>
+            prev &&
+            prev.id === sessionId &&
+            (!prev.projectRoot || prev.path === "")
+              ? full
+              : prev,
+          );
+        })
+        .catch(() => {});
+    },
+    [updateChatTabs],
+  );
 
   // Called by ChatWindow when a new session gets its real id from pi
   const handleSessionCreated = useCallback(
-    (session: SessionInfo) => {
-      setNewSessionCwd(null);
-      setSelectedSession(session);
+    (tabId: string | null, session: SessionInfo) => {
+      const tab = chatTabsRef.current.find((item) => item.id === tabId);
+      if (!tab) return;
+      updateChatTabs((tabs) =>
+        tabs.map((item) =>
+          item.id === tabId
+            ? {
+                ...item,
+                session,
+                cwd: session.cwd,
+                hostId: remoteHostId(session.hostId),
+              }
+            : item,
+        ),
+      );
+      if (activeChatIdRef.current === tabId) {
+        setNewSessionCwd(null);
+        setSelectedSession(session);
+        hydrateSelectedSession(session.id);
+        router.replace(`?session=${encodeURIComponent(session.id)}`);
+      }
       setRefreshKey((k) => k + 1);
-      hydrateSelectedSession(session.id);
-      router.replace(`?session=${encodeURIComponent(session.id)}`);
     },
-    [router, hydrateSelectedSession],
+    [router, hydrateSelectedSession, updateChatTabs],
   );
 
   const handleSessionMoved = useCallback(
     (oldId: string, newId: string) => {
+      updateChatTabs((tabs) =>
+        tabs.map((tab) =>
+          tab.session?.id === oldId
+            ? { ...tab, session: { ...tab.session, id: newId, path: "" } }
+            : tab,
+        ),
+      );
       if (activeSessionIdRef.current !== oldId) return;
       activeSessionIdRef.current = newId;
       setSelectedSession((current) =>
@@ -1992,7 +2250,7 @@ export function AppShell({ appName }: { appName: string }) {
       // and its mounted composer, including unfinished attachments and audio.
       router.replace(`?session=${encodeURIComponent(newId)}`);
     },
-    [router, hydrateSelectedSession],
+    [router, hydrateSelectedSession, updateChatTabs],
   );
 
   const handleAgentEnd = useCallback(() => {
@@ -2046,6 +2304,13 @@ export function AppShell({ appName }: { appName: string }) {
       const title = body.title.trim();
       if (activeSessionIdRef.current !== sessionId) return;
       setRefreshKey((key) => key + 1);
+      updateChatTabs((tabs) =>
+        tabs.map((tab) =>
+          tab.session?.id === sessionId
+            ? { ...tab, session: { ...tab.session, name: title } }
+            : tab,
+        ),
+      );
       setSelectedSession((current) =>
         current?.id === sessionId ? { ...current, name: title } : current,
       );
@@ -2068,7 +2333,44 @@ export function AppShell({ appName }: { appName: string }) {
         5000,
       );
     }
-  }, [autoNameStatus.kind, selectedSession?.id]);
+  }, [autoNameStatus.kind, selectedSession?.id, updateChatTabs]);
+  const handleRenameSession = useCallback(
+    async (name: string) => {
+      const sessionId = selectedSession?.id;
+      if (!sessionId) return;
+      try {
+        const response = await fetch(
+          `/api/sessions/${encodeURIComponent(sessionId)}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: name.trim() }),
+          },
+        );
+        if (!response.ok) throw new Error("Session rename failed");
+        const title = name.trim();
+        updateChatTabs((tabs) =>
+          tabs.map((tab) =>
+            tab.session?.id === sessionId
+              ? { ...tab, session: { ...tab.session, name: title } }
+              : tab,
+          ),
+        );
+        setSelectedSession((current) =>
+          current?.id === sessionId ? { ...current, name: title } : current,
+        );
+        setSessionStats((current) =>
+          current?.sessionId === sessionId
+            ? { ...current, sessionName: title }
+            : current,
+        );
+        publishSessionsChanged([sessionId]);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [selectedSession?.id, updateChatTabs],
+  );
 
   useEffect(() => {
     clearTimeout(autoNameTimerRef.current);
@@ -2087,26 +2389,22 @@ export function AppShell({ appName }: { appName: string }) {
   const handleSessionForked = useCallback(
     (newSessionId: string) => {
       setRefreshKey((k) => k + 1);
-      setSessionKey((k) => k + 1);
-      setNewSessionCwd(null);
-      setSelectedSession((prev) => ({
-        ...(prev ?? {
-          path: "",
-          cwd: "",
-          created: "",
-          modified: "",
-          messageCount: 0,
-          firstMessage: "",
-        }),
-        id: newSessionId,
-        // path === "" is the sidebar's optimistic-row marker; keep it so the
-        // fork shows up immediately instead of waiting for a refresh.
-        path: "",
-      }));
+      const source = chatTabsRef.current.find(
+        (tab) => tab.id === activeChatIdRef.current,
+      );
+      if (!source?.session) return;
+      const tab: ChatTab = {
+        ...source,
+        id: browserUUID(),
+        session: { ...source.session, id: newSessionId, path: "" },
+        creation: {},
+      };
+      updateChatTabs((tabs) => [...tabs, tab]);
+      activateChat(tab);
       hydrateSelectedSession(newSessionId);
       router.replace(`?session=${encodeURIComponent(newSessionId)}`);
     },
-    [router, hydrateSelectedSession],
+    [router, hydrateSelectedSession, updateChatTabs, activateChat],
   );
 
   const handleSessionDeleted = useCallback(
@@ -2115,20 +2413,36 @@ export function AppShell({ appName }: { appName: string }) {
       // otherwise keep the exit guard armed for unreachable content.
       clearDraft(sessionId);
       setRefreshKey((k) => k + 1);
-      if (selectedSession?.id === sessionId) {
-        const cwd = selectedSession.cwd;
-        setSelectedSession(null);
-        setNewSessionCwd(activeCwd ?? cwd ?? null);
-        setNewSessionHostId(remoteHostId(selectedSession.hostId));
-        setSessionKey((k) => k + 1);
-        setBranchTree([]);
-        setBranchActiveLeafId(null);
-        setSystemPrompt(null);
-        setActiveTopPanel(null);
-        router.replace("/");
+      const removed = chatTabsRef.current.find(
+        (tab) => tab.session?.id === sessionId,
+      );
+      updateChatTabs((tabs) =>
+        tabs.filter((tab) => tab.session?.id !== sessionId),
+      );
+      if (removed && activeChatIdRef.current === removed.id) {
+        const next = chatTabsRef.current.find((tab) =>
+          tabInWorkspace(
+            tab,
+            activeCwd ?? removed.cwd,
+            removed.hostId,
+            workspaceOptions.projects,
+          ),
+        );
+        activateChat(next ?? null);
+        router.replace(
+          next?.session
+            ? `?session=${encodeURIComponent(next.session.id)}`
+            : "/",
+        );
       }
     },
-    [selectedSession, router, activeCwd],
+    [
+      router,
+      activeCwd,
+      activateChat,
+      updateChatTabs,
+      workspaceOptions.projects,
+    ],
   );
   const handleInitialRestoreDone = useCallback(() => {
     setInitialSessionRestored(true);
@@ -2508,8 +2822,7 @@ export function AppShell({ appName }: { appName: string }) {
   }, [selectedSession]);
 
   // Show chat area if a session is selected, or if we have a cwd to start a new session in
-  const candidateCwd =
-    newSessionCwd ?? (selectedSession === null ? activeCwd : null);
+  const candidateCwd = newSessionCwd;
   const newSessionHost =
     newSessionCwd !== null ? newSessionHostId : activeHostId;
   const newSessionHostKey = newSessionHost ?? LOCAL_HOST_ID;
@@ -2986,6 +3299,91 @@ export function AppShell({ appName }: { appName: string }) {
               activeId={activeTerminalId}
               onSelect={setActiveTerminalId}
               enabled={!settingsTab}
+              mobile={isMobile}
+              headerTarget={workspaceSwitcherTarget}
+              onSelectSaved={handleSelectSession}
+              onGenerateTitle={() => void handleAutoName()}
+              onRename={handleRenameSession}
+              activeSessionName={selectedSession?.name ?? ""}
+              canRename={Boolean(selectedSession)}
+              canGenerateTitle={Boolean(
+                selectedSession &&
+                (sessionStats?.userMessages ?? selectedSession.messageCount) >
+                  0 &&
+                autoNameStatus.kind !== "naming",
+              )}
+              chatTabs={chatTabs
+                .filter(
+                  (tab) =>
+                    terminalWorkspace &&
+                    tabInWorkspace(
+                      tab,
+                      terminalWorkspace.path,
+                      workspaceHostId,
+                      workspaceOptions.projects,
+                    ),
+                )
+                .map((tab, index, tabs) => ({
+                  id: tab.id,
+                  sessionId: tab.session?.id,
+                  title:
+                    tab.session?.name ||
+                    tab.session?.firstMessage ||
+                    (tabs.filter((item) => !item.session).length > 1
+                      ? `New chat ${tabs.slice(0, index + 1).filter((item) => !item.session).length}`
+                      : "New chat"),
+                }))}
+              activeChatId={activeChatId}
+              onSelectChat={(id) => {
+                const tab = chatTabsRef.current.find((item) => item.id === id);
+                if (!tab) return;
+                activateChat(tab);
+                router.replace(
+                  tab.session
+                    ? `?session=${encodeURIComponent(tab.session.id)}`
+                    : "/",
+                );
+              }}
+              onCloseChat={(id) => {
+                const visible = chatTabsRef.current.filter(
+                  (tab) =>
+                    terminalWorkspace &&
+                    tabInWorkspace(
+                      tab,
+                      terminalWorkspace.path,
+                      workspaceHostId,
+                      workspaceOptions.projects,
+                    ),
+                );
+                const index = visible.findIndex((tab) => tab.id === id);
+                updateChatTabs((tabs) => tabs.filter((tab) => tab.id !== id));
+                if (activeChatIdRef.current === id) {
+                  const next = visible[index + 1] ?? visible[index - 1] ?? null;
+                  if (!next && terminalWorkspace) {
+                    try {
+                      sessionStorage.setItem(
+                        `${CHAT_TABS_STORAGE_KEY}:active:${remoteHostId(workspaceHostId) ?? LOCAL_HOST_ID}:${terminalWorkspace.path}`,
+                        "",
+                      );
+                    } catch {
+                      /* Storage may be unavailable. */
+                    }
+                  }
+                  activateChat(next);
+                  router.replace(
+                    next?.session
+                      ? `?session=${encodeURIComponent(next.session.id)}`
+                      : "/",
+                  );
+                }
+              }}
+              onNewChat={() =>
+                handleNewSession(
+                  browserUUID(),
+                  terminalWorkspace?.path ?? null,
+                  workspaceHostId,
+                )
+              }
             />
             {settingsTab ? (
               <SettingsConfig
@@ -3278,9 +3676,16 @@ export function AppShell({ appName }: { appName: string }) {
                       )}
                     </details>
                   </div>
+                  {isMobile && (
+                    <div
+                      ref={setWorkspaceSwitcherTarget}
+                      className="workspace-switcher-header"
+                    />
+                  )}
 
                   {/* Center Zone: Workspace & Session Breadcrumb + Auto-name action */}
-                  {showChat &&
+                  {!isMobile &&
+                    showChat &&
                     (() => {
                       const effectiveProject =
                         selectedSession?.projectRoot ??
@@ -3660,7 +4065,10 @@ export function AppShell({ appName }: { appName: string }) {
                       activityContainer={activityContainer}
                       newSessionCwd={effectiveNewSessionCwd}
                       newSessionHostId={newSessionHost}
-                      newSessionCreationId={newSessionCreationId}
+                      newSessionCreationId={undefined}
+                      newSessionDraftKey={
+                        activeChatId ? `new:tab:${activeChatId}` : undefined
+                      }
                       newSessionInitialization={
                         newSessionCreation.initialization
                       }
@@ -3895,7 +4303,12 @@ export function AppShell({ appName }: { appName: string }) {
                         )
                       }
                       onAgentEnd={handleAgentEnd}
-                      onSessionCreated={handleSessionCreated}
+                      onSessionCreated={(session) =>
+                        handleSessionCreated(activeChatId, session)
+                      }
+                      onBackgroundSessionCreated={(session) =>
+                        handleSessionCreated(activeChatId, session)
+                      }
                       onSessionForked={handleSessionForked}
                       onSessionMoved={handleSessionMoved}
                       modelsRefreshKey={modelsRefreshKey}

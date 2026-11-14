@@ -1660,6 +1660,7 @@ btw` → localized "requires a newer omp" toast (`toastBtwError`); background
 - Registrations are host-bound, canonical and exclusive to one parent. Duplicate imports are idempotent. Missing resources remain visible as unavailable.
 - Unregistering a project or workspace forgets its children without deleting files or stopping processes. Re-registration starts fresh. The default workspace cannot be independently unregistered.
 - App-created sessions and forks register with their workspace. Selective session import uses cwd containment and excludes other workspace roots. Multiple agents may work in the same workspace and share files.
+- Normal sidebar rows stop at workspaces; chat search results remain an explicit search view. Workspace navigation owns saved-chat discovery and open chat/terminal switching. Mobile uses a header trigger and bottom sheet instead of the desktop tab strip or permanent session-title pill. Closing a chat tab never stops or deletes its session.
 
 ### Clone a repository as a new workspace (`/api/projects/clone`)
 

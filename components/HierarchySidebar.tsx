@@ -22,6 +22,10 @@ type Props = {
   searchQuery: string;
   matchedSessionIds: Set<string> | null;
   runningOnly: boolean;
+  runningSessionIds: Set<string>;
+  awaitingInputIds: Set<string>;
+  unreadSessionIds: Set<string>;
+  exitedSessionIds: Iterable<string>;
   collapsedHosts: Set<string>;
   onToggleHost: (host: string) => void;
   onSelectSession: (session: SessionInfo) => void;
@@ -52,6 +56,10 @@ export function HierarchySidebar({
   searchQuery,
   matchedSessionIds,
   runningOnly,
+  runningSessionIds,
+  awaitingInputIds,
+  unreadSessionIds,
+  exitedSessionIds,
   collapsedHosts,
   onToggleHost,
 }: Props) {
@@ -168,6 +176,7 @@ export function HierarchySidebar({
     window.confirm(
       `Unregister ${what}? Files and processes will not be deleted.`,
     );
+  const exitedIds = new Set(exitedSessionIds);
   const query = searchQuery.trim().toLowerCase();
   const button = {
     border: "1px solid var(--border)",
@@ -237,8 +246,10 @@ export function HierarchySidebar({
               const workspaces = project.workspaces.filter(
                 (workspace) =>
                   (!runningOnly ||
+                    (selectedHostId === host.id &&
+                      selectedCwd === workspace.path) ||
                     workspace.sessionIds.some((id) =>
-                      matchedSessionIds?.has(id),
+                      runningSessionIds.has(id),
                     )) &&
                   (!query ||
                     projectMatch ||
@@ -251,182 +262,321 @@ export function HierarchySidebar({
               );
               if (!workspaces.length) return null;
               return (
-                <details key={project.id} open style={{ marginBottom: 4 }}>
-                  <summary
-                    title={project.path}
+                <div key={project.id} style={{ marginBottom: 4 }}>
+                  <div
                     style={{
+                      display: "flex",
+                      alignItems: "center",
                       padding: "5px 4px",
-                      cursor: "pointer",
                       fontWeight: 600,
                     }}
                   >
-                    {project.alias || project.name}{" "}
-                    <button
-                      style={button}
-                      type="button"
-                      disabled={busy}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (confirmForget("this project and its registrations"))
-                          void operate(host.id, {
-                            action: "unregisterProject",
-                            projectId: project.id,
-                          });
+                    <span
+                      title={project.path}
+                      style={{
+                        flex: 1,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
                       }}
                     >
-                      Unregister
-                    </button>{" "}
-                    {project.kind === "git" && (
-                      <button
-                        style={button}
-                        type="button"
-                        disabled={busy}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          void discover(host.id, project);
+                      {project.alias || project.name}
+                    </span>
+                    <details style={{ position: "relative" }}>
+                      <summary
+                        aria-label={`Actions for project ${project.alias || project.name}`}
+                        style={{
+                          cursor: "pointer",
+                          listStyle: "none",
+                          padding: "3px 6px",
                         }}
                       >
-                        Import workspaces
-                      </button>
-                    )}
-                  </summary>
-                  {workspaces.map((workspace) => (
-                    <details key={workspace.id} open style={{ marginLeft: 12 }}>
-                      <summary style={{ padding: "4px 0", cursor: "pointer" }}>
-                        <button
-                          style={{
-                            ...rowButton,
-                            background:
-                              selectedHostId === host.id &&
-                              selectedCwd === workspace.path
-                                ? "var(--bg-selected)"
-                                : "transparent",
-                          }}
-                          type="button"
-                          title={workspace.path}
-                          disabled={workspace.unavailable}
-                          aria-pressed={
-                            selectedHostId === host.id &&
-                            selectedCwd === workspace.path
-                          }
-                          onClick={(e) => {
-                            e.preventDefault();
-                            onSelectWorkspace(workspace.path, host.id);
-                          }}
-                        >
-                          {workspace.name}
-                          {workspace.branch &&
-                          workspace.branch !== workspace.name
-                            ? ` (${workspace.branch})`
-                            : ""}
-                          {workspace.unavailable ? " (unavailable)" : ""}
-                        </button>{" "}
-                        {workspace.setup &&
-                          workspace.setup.status !== "complete" && (
-                            <span title={workspace.setup.error}>
-                              Setup {workspace.setup.status}
-                            </span>
-                          )}{" "}
-                        <button
-                          style={button}
-                          type="button"
-                          disabled={busy || workspace.unavailable}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            void discover(host.id, project, workspace.id);
-                          }}
-                        >
-                          Import sessions
-                        </button>{" "}
-                        {!workspace.isDefault && (
+                        ⋯
+                      </summary>
+                      <div
+                        style={{
+                          position: "absolute",
+                          right: 0,
+                          zIndex: 10,
+                          minWidth: 150,
+                          padding: 4,
+                          background: "var(--bg-panel)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "var(--radius-control)",
+                        }}
+                      >
+                        {project.kind === "git" && (
                           <button
-                            style={button}
+                            style={{
+                              ...button,
+                              display: "block",
+                              width: "100%",
+                            }}
                             type="button"
                             disabled={busy}
                             onClick={(e) => {
-                              e.preventDefault();
-                              if (
-                                confirmForget("this workspace and its sessions")
-                              )
-                                void operate(host.id, {
-                                  action: "unregisterWorkspace",
-                                  workspaceId: workspace.id,
-                                });
+                              e.currentTarget
+                                .closest("details")
+                                ?.removeAttribute("open");
+                              void discover(host.id, project);
                             }}
                           >
-                            Unregister
+                            Import workspaces
                           </button>
                         )}
-                      </summary>
-                      {workspace.sessionIds
-                        .filter(
-                          (id) =>
-                            (!runningOnly || matchedSessionIds?.has(id)) &&
-                            (!query ||
-                              projectMatch ||
-                              `${workspace.name} ${workspace.path} ${workspace.branch ?? ""}`
-                                .toLowerCase()
-                                .includes(query) ||
-                              matchedSessionIds?.has(id)),
-                        )
-                        .map((id) => {
-                          const session = sessions.find(
-                            (item) =>
-                              item.id === id &&
-                              (item.hostId ?? "local") === host.id,
-                          );
-                          return (
-                            <div
-                              key={id}
+                        <button
+                          style={{ ...button, display: "block", width: "100%" }}
+                          type="button"
+                          disabled={busy}
+                          onClick={(e) => {
+                            e.currentTarget
+                              .closest("details")
+                              ?.removeAttribute("open");
+                            if (
+                              confirmForget(
+                                "this project and its registrations",
+                              )
+                            )
+                              void operate(host.id, {
+                                action: "unregisterProject",
+                                projectId: project.id,
+                              });
+                          }}
+                        >
+                          Unregister project
+                        </button>
+                      </div>
+                    </details>
+                  </div>
+                  {workspaces.map((workspace) => {
+                    const runningCount = workspace.sessionIds.filter((id) =>
+                      runningSessionIds.has(id),
+                    ).length;
+                    const needsAttention = workspace.sessionIds.some(
+                      (id) =>
+                        awaitingInputIds.has(id) ||
+                        unreadSessionIds.has(id) ||
+                        exitedIds.has(id),
+                    );
+                    return (
+                      <div key={workspace.id} style={{ marginLeft: 12 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            padding: "4px 0",
+                          }}
+                        >
+                          <button
+                            style={{
+                              ...rowButton,
+                              background:
+                                selectedHostId === host.id &&
+                                selectedCwd === workspace.path
+                                  ? "var(--bg-selected)"
+                                  : "transparent",
+                            }}
+                            type="button"
+                            title={workspace.path}
+                            disabled={workspace.unavailable}
+                            aria-pressed={
+                              selectedHostId === host.id &&
+                              selectedCwd === workspace.path
+                            }
+                            onClick={() =>
+                              onSelectWorkspace(workspace.path, host.id)
+                            }
+                          >
+                            {workspace.name}
+                            {workspace.branch &&
+                            workspace.branch !== workspace.name
+                              ? ` (${workspace.branch})`
+                              : ""}
+                            {workspace.unavailable ? " (unavailable)" : ""}
+                          </button>
+                          {runningCount > 0 && (
+                            <span
+                              title={`${runningCount} running agents`}
+                              aria-label={`${runningCount} running agents`}
+                            >
+                              {runningCount} running
+                            </span>
+                          )}
+                          {needsAttention && (
+                            <span
+                              title="Attention required"
+                              aria-label="Attention required"
                               style={{
-                                marginLeft: 18,
-                                display: "flex",
-                                gap: 6,
-                                alignItems: "center",
-                                background:
-                                  selectedSessionId === id
-                                    ? "var(--bg-selected)"
-                                    : undefined,
+                                color: "var(--status-warning)",
+                                padding: "0 4px",
+                              }}
+                            >
+                              ●
+                            </span>
+                          )}
+                          {workspace.setup &&
+                            workspace.setup.status !== "complete" && (
+                              <span title={workspace.setup.error}>
+                                Setup {workspace.setup.status}
+                              </span>
+                            )}
+                          <details style={{ position: "relative" }}>
+                            <summary
+                              aria-label={`Actions for workspace ${workspace.name}`}
+                              style={{
+                                cursor: "pointer",
+                                listStyle: "none",
+                                padding: "3px 6px",
+                              }}
+                            >
+                              ⋯
+                            </summary>
+                            <div
+                              style={{
+                                position: "absolute",
+                                right: 0,
+                                zIndex: 10,
+                                minWidth: 150,
+                                padding: 4,
+                                background: "var(--bg-panel)",
+                                border: "1px solid var(--border)",
+                                borderRadius: "var(--radius-control)",
                               }}
                             >
                               <button
-                                style={rowButton}
+                                style={{
+                                  ...button,
+                                  display: "block",
+                                  width: "100%",
+                                }}
                                 type="button"
-                                disabled={!session}
-                                aria-current={
-                                  selectedSessionId === id ? "true" : undefined
-                                }
-                                onClick={() => {
-                                  if (session) {
-                                    onSelectWorkspace(workspace.path, host.id);
-                                    onSelectSession(session);
-                                  }
+                                disabled={busy || workspace.unavailable}
+                                onClick={(e) => {
+                                  e.currentTarget
+                                    .closest("details")
+                                    ?.removeAttribute("open");
+                                  void discover(host.id, project, workspace.id);
                                 }}
                               >
-                                {session?.name || session?.firstMessage || id}
-                                {!session && " (unavailable)"}
+                                Import sessions
                               </button>
-                              <button
-                                style={button}
-                                type="button"
-                                disabled={busy}
-                                onClick={() => {
-                                  if (confirmForget("this session"))
-                                    void operate(host.id, {
-                                      action: "unregisterSession",
-                                      workspaceId: workspace.id,
-                                      sessionId: id,
-                                    });
-                                }}
-                              >
-                                Unregister
-                              </button>
+                              {!workspace.isDefault && (
+                                <button
+                                  style={{
+                                    ...button,
+                                    display: "block",
+                                    width: "100%",
+                                  }}
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={(e) => {
+                                    e.currentTarget
+                                      .closest("details")
+                                      ?.removeAttribute("open");
+                                    if (
+                                      confirmForget(
+                                        "this workspace and its sessions",
+                                      )
+                                    )
+                                      void operate(host.id, {
+                                        action: "unregisterWorkspace",
+                                        workspaceId: workspace.id,
+                                      });
+                                  }}
+                                >
+                                  Unregister workspace
+                                </button>
+                              )}
                             </div>
-                          );
-                        })}
-                    </details>
-                  ))}
-                </details>
+                          </details>
+                        </div>
+                        {query &&
+                          workspace.sessionIds
+                            .filter((id) => matchedSessionIds?.has(id))
+                            .map((id) => {
+                              const session = sessions.find(
+                                (item) =>
+                                  item.id === id &&
+                                  (item.hostId ?? "local") === host.id,
+                              );
+                              return (
+                                <div
+                                  key={id}
+                                  style={{
+                                    marginLeft: 18,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    background:
+                                      selectedSessionId === id
+                                        ? "var(--bg-selected)"
+                                        : undefined,
+                                  }}
+                                >
+                                  <button
+                                    style={rowButton}
+                                    type="button"
+                                    disabled={!session || workspace.unavailable}
+                                    aria-current={
+                                      selectedSessionId === id
+                                        ? "true"
+                                        : undefined
+                                    }
+                                    onClick={() => {
+                                      if (session) {
+                                        onSelectWorkspace(
+                                          workspace.path,
+                                          host.id,
+                                        );
+                                        onSelectSession(session);
+                                      }
+                                    }}
+                                  >
+                                    {session?.name ||
+                                      session?.firstMessage ||
+                                      id}
+                                  </button>
+                                  <details style={{ position: "relative" }}>
+                                    <summary
+                                      aria-label={`Actions for session ${session?.name || session?.firstMessage || id}`}
+                                      style={{
+                                        cursor: "pointer",
+                                        listStyle: "none",
+                                        padding: "3px 6px",
+                                      }}
+                                    >
+                                      ⋯
+                                    </summary>
+                                    <button
+                                      style={{
+                                        ...button,
+                                        position: "absolute",
+                                        right: 0,
+                                        zIndex: 10,
+                                        whiteSpace: "nowrap",
+                                      }}
+                                      type="button"
+                                      disabled={busy}
+                                      onClick={(e) => {
+                                        e.currentTarget
+                                          .closest("details")
+                                          ?.removeAttribute("open");
+                                        if (confirmForget("this session"))
+                                          void operate(host.id, {
+                                            action: "unregisterSession",
+                                            workspaceId: workspace.id,
+                                            sessionId: id,
+                                          });
+                                      }}
+                                    >
+                                      Unregister session
+                                    </button>
+                                  </details>
+                                </div>
+                              );
+                            })}
+                      </div>
+                    );
+                  })}
+                </div>
               );
             })}
         </section>

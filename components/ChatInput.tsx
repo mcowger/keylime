@@ -392,8 +392,6 @@ interface Props {
   onAdvisorChange?: (enabled: boolean) => void;
   /** Collapse the entire composer into a minimized bar. */
   onMinimize?: () => void;
-  /** Active status label attached to the composer's top edge (e.g. "Waiting for model..."). */
-  statusText?: string | null;
 }
 
 export interface ChatInputHandle {
@@ -555,7 +553,6 @@ export const ChatInput = memo(
       advisorEnabled,
       onAdvisorChange,
       onMinimize,
-      statusText,
     }: Props,
     ref,
   ) {
@@ -4524,37 +4521,6 @@ export const ChatInput = memo(
                 )}
               </div>
             )}
-            {/* Live agent status bar — attached to composer's top edge */}
-            {statusText && (
-              <div
-                role="status"
-                aria-live="polite"
-                data-shell={shellMode}
-                style={{
-                  border: btwMode
-                    ? "1px solid var(--accent)"
-                    : "1px solid var(--shell-border, color-mix(in srgb, var(--border) 70%, transparent))",
-                  borderBottom: "none",
-                  borderRadius:
-                    queuedCount > 0
-                      ? 0
-                      : "var(--radius-card) var(--radius-card) 0 0",
-                  background: "var(--bg-panel)",
-                  padding: "6px 14px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  fontSize: 12,
-                  color: "var(--text-muted)",
-                }}
-              >
-                <span
-                  aria-hidden
-                  className="live-status-dot live-pulse inline-block h-2 w-2 shrink-0 rounded-full bg-accent"
-                />
-                <span>{statusText}</span>
-              </div>
-            )}
             <div
               className="chat-input-shell"
               data-shell={shellMode}
@@ -4569,7 +4535,7 @@ export const ChatInput = memo(
                     ? "1px solid var(--accent)"
                     : "1px solid var(--shell-border, color-mix(in srgb, var(--border) 70%, transparent))",
                   borderRadius:
-                    queuedCount > 0 || Boolean(statusText)
+                    queuedCount > 0
                       ? "0 0 var(--radius-card) var(--radius-card)"
                       : "var(--radius-card)",
                   padding: "12px 12px 10px",

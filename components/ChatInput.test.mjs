@@ -483,60 +483,6 @@ test("plus trigger renders without change handlers", () => {
   assert.match(html, /aria-label="(More actions|chatInput\.plusMenu)"/);
 });
 
-test("renders live status bar attached to the composer top edge when statusText is provided", () => {
-  const html = renderToStaticMarkup(
-    React.createElement(ChatInput, {
-      async onSend() {
-        return { status: "accepted" };
-      },
-      onAbort() {},
-      isStreaming: true,
-      statusText: "Waiting for model...",
-    }),
-  );
-
-  assert.match(html, /role="status"/);
-  assert.match(html, /Waiting for model\.\.\./);
-  assert.match(html, /live-status-dot/);
-});
-
-test("omits live status bar when statusText is absent or null", () => {
-  const html = renderToStaticMarkup(
-    React.createElement(ChatInput, {
-      async onSend() {
-        return { status: "accepted" };
-      },
-      onAbort() {},
-      isStreaming: false,
-      statusText: null,
-    }),
-  );
-
-  assert.doesNotMatch(html, /role="status"/);
-  assert.doesNotMatch(html, /Waiting for model/);
-});
-
-test("renders both queued prompts and attached status bar together", () => {
-  const html = renderToStaticMarkup(
-    React.createElement(ChatInput, {
-      async onSend() {
-        return { status: "accepted" };
-      },
-      onAbort() {},
-      isStreaming: true,
-      statusText: "Waiting for model...",
-      queuedMessages: {
-        steer: [],
-        followUp: ["Next prompt to run"],
-      },
-    }),
-  );
-
-  assert.match(html, /Next prompt to run/);
-  assert.match(html, /Waiting for model\.\.\./);
-  assert.match(html, /live-status-dot/);
-});
-
 test("renders retry banner with countdown when delayMs and startedAt are provided", () => {
   const now = Date.now();
   const html = renderToStaticMarkup(

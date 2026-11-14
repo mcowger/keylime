@@ -6951,6 +6951,70 @@ test("an abandoned new-chat send delivers its prompt without promoting or attach
   );
 });
 
+test("a hidden fresh chat reports its created session only through the background callback", async () => {
+  resetWorld();
+  let release;
+  world.holds.push({
+    match: (method, url) => method === "POST" && url === "/api/agent/new",
+    produce: () =>
+      new Promise((resolve) => {
+        release = () => resolve({ value: { sessionId: "background-created" } });
+      }),
+  });
+  const foreground = [];
+  const background = [];
+  const w = await mountSession(null, undefined, {
+    newSessionCwd: "/workspace",
+    onSessionCreated: (session) => foreground.push(session),
+    onBackgroundSessionCreated: (session) => background.push(session),
+  });
+  let send;
+  await act(async () => {
+    send = w.latest.handleSend("background prompt");
+    await sleep(20);
+    w.unmount();
+  });
+  await act(async () => {
+    release();
+    assert.equal((await send).status, "accepted");
+  });
+  assert.deepEqual(foreground, []);
+  assert.equal(background.length, 1);
+  assert.equal(background[0].id, "background-created");
+  assert.equal(background[0].cwd, "/workspace");
+  assert.deepEqual(world.esInstances, []);
+  assert.ok(
+    callsTo("POST", "/api/agent/background-created").some(
+      (call) =>
+        call.body?.type === "prompt" &&
+        call.body.message === "background prompt",
+    ),
+  );
+});
+
+test("fresh chat rejection recovers to its originating tab draft key", async () => {
+  resetWorld();
+  for (const key of ["new:tab:first", "new:tab:second"]) {
+    world.holds.push({
+      match: (method, url) => method === "POST" && url === "/api/agent/new",
+      produce: async () => ({
+        status: 500,
+        value: { error: "creation refused" },
+      }),
+    });
+    const w = await mountSession(null, undefined, {
+      newSessionCwd: "/workspace",
+      newSessionDraftKey: key,
+    });
+    let receipt;
+    await act(async () => {
+      receipt = await w.latest.handleSend("keep this draft");
+    });
+    assert.deepEqual(receipt, { status: "rejected", recoveryKey: key });
+    w.unmount();
+  }
+});
+
 test("a /btw that starts a fresh chat promotes it once omp accepts the question", async () => {
   resetWorld();
   world.holds.push({

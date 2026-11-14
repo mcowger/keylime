@@ -8,6 +8,8 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Added
 
+- Mobile workspace navigation uses a compact tab switcher and bottom sheet instead of a session-title pill. Saved chats remain searchable from workspace navigation; the sidebar focuses on projects and workspaces with contextual management actions.
+- Workspaces support multiple chat tabs alongside terminals, with independent unsent drafts, saved-session tabs, reload restoration and close-view actions that leave sessions running.
 - Workspaces support independent interactive terminal tabs on local and linked hosts, with daemon-owned PTY shells, resizing, full-screen applications, Unicode and bundled Nerd Font symbols. Reconnect restores retained screen state; browser disconnects and web restarts leave shells running.
 - `bun run dev:isolated` starts the hot-reloading web server and host daemon with a fresh temporary home/config, private socket, and random loopback port. `--port` selects a fixed port; shutdown retains the temporary files for inspection.
 - Todo and subagents now share the right sidepanel's Activity tab on desktop and mobile. Live updates, completed agents and transcript access remain available without opening the panel automatically; `/btw` stays above the composer.
@@ -17,6 +19,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Fixed
 
+- Removed the redundant live-status popup above the expanded composer; activity remains visible in its toolbar and the minimized composer.
 - The composer model picker opens directly to models when only one provider is available. Removed its Add Providers action; provider management remains in Settings.
 - Reasoning effort is selected inside the model picker instead of a separate composer button, preserving provider-specific levels and disabling changes during streaming. The model trigger shows the current effort gauge instead of a chip icon, including on mobile.
 - Reasoning effort uses a notched horizontal slider built from the current model's available levels, with a detached Auto option on the left and tappable level labels.

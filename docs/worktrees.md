@@ -1,10 +1,16 @@
 # Projects and workspaces
 
-Projects belong to a host. The sidebar shows explicitly registered projects, their workspaces, and registered sessions within each workspace. The hierarchy starts empty, even if older projects or session files exist. Add a project to register its default workspace, then selectively discover and import existing worktrees and sessions. A non-Git project has exactly one workspace.
+Projects belong to a host. The sidebar shows explicitly registered projects and their workspaces. Workspace menus provide selective import and unregister actions. The hierarchy starts empty, even if older projects or session files exist. Add a project to register its default workspace, then selectively discover and import existing worktrees and sessions. A non-Git project has exactly one workspace.
 
 Importing sessions finds sessions whose working directory is inside the selected workspace, excluding other workspace roots. App-created sessions and forks register with their workspace. Multiple agents can use the same workspace and files at once; they are not isolated from one another. A missing project or workspace remains registered and visible as unavailable.
 
 Unregistering a project or workspace forgets its child registrations, but does not stop processes or delete files. Re-registering starts fresh; import any existing children again. The default workspace cannot be unregistered separately from its project. Duplicate imports of the same canonical resource are idempotent, and each resource has one parent.
+
+## Chat tabs
+
+Each workspace can have multiple chat tabs alongside its terminals. Desktop shows open tabs and a **Chats** picker for saved conversations. Mobile uses a compact workspace/tab-count button in the header; tap it for open chats and terminals, creation actions and searchable saved chats. Selecting a saved conversation opens its existing tab or adds one. Unsent chats keep separate drafts, including when several belong to the same workspace.
+
+Closing a chat tab closes only its view. It does not stop the agent, delete the session, or unregister it from the sidebar. Open chat tabs are retained across reloads in the same browser tab; terminal processes remain owned by the host daemon.
 
 ## Creating a workspace
 

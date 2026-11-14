@@ -327,8 +327,10 @@ function currentRunAssistant(
 export interface UseAgentSessionOptions {
   session: SessionInfo | null;
   newSessionCwd: string | null;
+  newSessionDraftKey?: string;
   /** Host a fresh chat is created on; a started session carries its own `hostId`. This machine when absent. */
   newSessionHostId?: string;
+  onBackgroundSessionCreated?: (session: SessionInfo) => void;
   newSessionCreationId?: string;
   newSessionPoolId?: string;
   newSessionProjectId?: string;
@@ -480,7 +482,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const {
     session,
     newSessionCwd,
+    newSessionDraftKey,
     newSessionHostId,
+    onBackgroundSessionCreated,
     newSessionCreationId,
     newSessionPoolId,
     newSessionProjectId,
@@ -2053,7 +2057,10 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       )
         return;
       newSessionPromotedRef.current = true;
-      onSessionCreated?.({
+      const notify = hookAliveRef.current
+        ? onSessionCreated
+        : onBackgroundSessionCreated;
+      notify?.({
         id: sid,
         path: "",
         cwd: createdOwnerRef.current?.cwd ?? newSessionCwd ?? "",
@@ -2084,6 +2091,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       newSessionProjectId,
       pooled,
       onSessionCreated,
+      onBackgroundSessionCreated,
     ],
   );
 
@@ -5199,6 +5207,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
       let recoveryKey =
         sessionIdRef.current ??
+        newSessionDraftKey ??
         (pooled
           ? `new:pool:${newSessionPoolId}:${newSessionProjectId}`
           : newSessionCwd
@@ -5218,20 +5227,17 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           const existingSid =
             sessionIdRef.current ?? (await ensuringNewSessionRef.current);
           const sid = existingSid ?? (await ensureNewSession());
-          // Spawning takes seconds: the user may have opened another chat while
-          // it was in flight (this instance is unmounted). Deliver their prompt
-          // in the background, but never promote — switching the fresh chat
-          // into this session's history is the "new chat shows old history" bug.
+          // The originating tab may have been hidden or closed while spawning.
+          // Its owner decides whether to retain the resulting session.
           const ownerGone = !hookAliveRef.current;
 
           if (sid) {
             sentSessionId = sid;
             // omp assigns the real id before the first prompt finishes. Promote
             // now so the sidebar can show this active session during streaming.
-            if (!ownerGone) {
-              promoteNewSession(1, message);
-              if (onSessionCreated) recoveryKey = sid;
-            }
+            promoteNewSession(1, message);
+            if (ownerGone ? onBackgroundSessionCreated : onSessionCreated)
+              recoveryKey = sid;
             if (selectedModel) {
               setPendingModel(selectedModel);
               if (existingSid) {
@@ -5340,7 +5346,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           ? { status: "accepted" }
           : {
               status: "rejected",
-              recoveryKey: sessionIdRef.current ?? recoveryKey,
+              recoveryKey: isNew
+                ? recoveryKey
+                : (sessionIdRef.current ?? recoveryKey),
             };
       }
     },
@@ -5351,6 +5359,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       pooled,
       newSessionPoolId,
       newSessionProjectId,
+      newSessionDraftKey,
       newSessionCwd,
       newSessionHostId,
       newSessionModel,
@@ -5362,6 +5371,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       waitForPromptSettlement,
       addNotice,
       refreshSubagentRoster,
+      onBackgroundSessionCreated,
       clearLiveToolResults,
       clearTerminalReconcileTimer,
       snapshotRunEntries,

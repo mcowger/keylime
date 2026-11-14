@@ -1,6 +1,7 @@
 /* Keep Tailwind's content scan inside the omp-web package. */
 @import "tailwindcss" source(none);
 @import "@xterm/xterm/css/xterm.css";
+@import "../components/WorkspaceSwitcher.css";
 
 .workspace-terminal-tabs {
   display: flex;
