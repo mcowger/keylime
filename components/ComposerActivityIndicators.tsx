@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { SubagentInfo } from "@/hooks/useAgentSession";
 import { useI18n } from "@/lib/i18n";
 import type { TodoPhase } from "@/lib/pi-types";
+import { SubagentActivityLine } from "./ComposerPanels";
 import { SubagentStatusIcon } from "./SubagentStatusIcon";
 import { TodoList } from "./TodoList";
 
@@ -186,6 +187,7 @@ export function ComposerActivityIndicators({
                         {subagent.task ?? subagent.description ?? subagent.assignment}
                       </span>
                     )}
+                    <SubagentActivityLine subagent={subagent} />
                   </span>
                 </button>
               ))}

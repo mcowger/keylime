@@ -103,7 +103,7 @@ function SubagentMetric({
 }
 
 /** Compact live/secondary line under a chip label (tool, retry, telemetry). */
-function SubagentActivityLine({ subagent }: { subagent: SubagentInfo }) {
+export function SubagentActivityLine({ subagent }: { subagent: SubagentInfo }) {
   const { t } = useI18n();
   const progress = subagent.progress;
   const retryActive = Boolean(progress?.retryState ?? progress?.retryFailure);

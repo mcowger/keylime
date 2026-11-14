@@ -24,6 +24,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Fixed
 
+- The composer subagent preview shows live activity and telemetry, matching the Activity panel.
 - Workspace rows show agent counts and status with icons instead of status text.
 - New sessions omit the introductory heading and place project and workspace selectors side by side.
 - The chat-tab X archives saved chats on desktop and mobile. Failed archives keep the tab open; unsaved new chats still just close.
