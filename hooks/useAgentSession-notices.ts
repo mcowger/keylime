@@ -1,5 +1,6 @@
 // Notice-queue state (types, reducer, ids) extracted from useAgentSession
 // (pure logic only — no hook state).
+import { browserUUID } from "@/lib/browser-uuid";
 
 export type NoticeType = "info" | "success" | "warning" | "error";
 
@@ -26,13 +27,7 @@ export const NOTICE_ERROR_VISIBLE_MS = 30000;
 export const NOTICE_EXIT_ANIMATION_MS = 180;
 
 export function createNoticeId(): string {
-  if (
-    typeof crypto !== "undefined" &&
-    typeof crypto.randomUUID === "function"
-  ) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return browserUUID();
 }
 
 export function markOldestNoticeExiting(notices: NoticeItem[]): NoticeItem[] {

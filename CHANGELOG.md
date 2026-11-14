@@ -6,6 +6,10 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ## [Unreleased]
 
+### Fixed
+
+- Browser UUID generation now works on plain-HTTP LAN origins without `crypto.randomUUID`, using cryptographically random UUID v4 values instead.
+
 ### Breaking changes
 
 - Bun is the sole runtime and package manager. Node/npm launchers are retired; install Bun and use `bun install`, `bun run` and `bunx --bun`. Native compiled distributions remain supported.

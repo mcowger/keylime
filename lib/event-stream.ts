@@ -1,5 +1,6 @@
 "use client";
 
+import { browserUUID } from "./browser-uuid";
 import type {
   BrowserTransport,
   ConnectionDiagnostics,
@@ -402,7 +403,7 @@ class Transport {
     const locks =
       typeof navigator === "undefined" ? undefined : navigator.locks;
     if (!locks) return;
-    const name = `omp-web-event-stream:${crypto.randomUUID()}`;
+    const name = `omp-web-event-stream:${browserUUID()}`;
     void locks.request(name, () => {
       this.port.postMessage({ op: "lock", name });
       return new Promise<never>(() => {});
@@ -718,15 +719,9 @@ export interface UploadHandle {
 /** HTTP PUT bodies in SSE mode (spec U4). */
 const HTTP_UPLOAD_BYTES = 1024 * 1024;
 
-/** A UUID v4, lowercase (UPLOAD_ID_RE); no crypto.randomUUID (insecure LAN origins lack it). */
+/** Lowercase UUID v4 matching UPLOAD_ID_RE, including on plain HTTP. */
 export function newUploadId(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = Array.from(bytes, (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  return browserUUID();
 }
 
 /** Back-off before each automatic resume; the last value repeats. */

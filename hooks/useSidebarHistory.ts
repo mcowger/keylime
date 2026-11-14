@@ -1,5 +1,6 @@
 "use client";
 
+import { browserUUID } from "@/lib/browser-uuid";
 import {
   useCallback,
   useEffect,
@@ -199,13 +200,7 @@ export function useSidebarHistory({
     // commits; a real reload recovers it from history.state instead.
     const marker: SidebarEntry = state[HISTORY_KEY] ??
       snapshot.current?.marker ?? {
-        // `crypto.randomUUID` is secure-context only, so plain-HTTP LAN origins
-        // (e.g. http://<lan-ip>:30177) need a fallback.
-        id:
-          typeof crypto !== "undefined" &&
-          typeof crypto.randomUUID === "function"
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        id: browserUUID(),
         entry: "base",
         previous:
           (window as Window & { navigation?: { canGoBack: boolean } })

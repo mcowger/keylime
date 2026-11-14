@@ -1,5 +1,6 @@
 "use client";
 
+import { browserUUID } from "@/lib/browser-uuid";
 import {
   memo,
   useEffect,
@@ -62,10 +63,7 @@ export function MermaidBlock({
       const parsed = await mermaid.parse(code, { suppressErrors: true });
       if (!parsed) throw new Error("Invalid Mermaid diagram");
 
-      const id =
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? `mermaid-${crypto.randomUUID()}`
-          : `mermaid-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const id = `mermaid-${browserUUID()}`;
       const result = await mermaid.render(id, code);
       if (!cancelled) {
         setRenderState({ key: currentKey, status: "ready", svg: result.svg });

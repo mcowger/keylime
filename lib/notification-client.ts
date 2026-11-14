@@ -3,6 +3,7 @@
  * service worker registration, Web Push subscription, and system notifications.
  * Server routing lives in lib/notification-hub.ts.
  */
+import { browserUUID } from "./browser-uuid";
 import {
   DEFAULT_NOTIFICATION_PREFS,
   isValidNotificationId,
@@ -14,16 +15,8 @@ import {
 const DEVICE_KEY = "omp-notify-device";
 const PREFS_KEY = "omp-notify-prefs";
 
-/** crypto.randomUUID exists only in secure contexts; plain-HTTP LAN origins still need ids. */
-function randomId(): string {
-  return typeof crypto !== "undefined" &&
-    typeof crypto.randomUUID === "function"
-    ? crypto.randomUUID()
-    : `id${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
-}
-
 /** One id per page load: a duplicated tab copies sessionStorage, so it cannot hold this. */
-export const notificationClientId = randomId();
+export const notificationClientId = browserUUID();
 
 let deviceId: string | null = null;
 
@@ -32,10 +25,10 @@ export function getNotificationDeviceId(): string {
   if (deviceId) return deviceId;
   try {
     const stored = localStorage.getItem(DEVICE_KEY);
-    deviceId = isValidNotificationId(stored) ? stored : randomId();
+    deviceId = isValidNotificationId(stored) ? stored : browserUUID();
     if (deviceId !== stored) localStorage.setItem(DEVICE_KEY, deviceId);
   } catch {
-    deviceId ??= randomId();
+    deviceId ??= browserUUID();
   }
   return deviceId;
 }

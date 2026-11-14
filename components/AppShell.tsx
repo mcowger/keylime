@@ -1,5 +1,7 @@
 "use client";
 
+import { browserUUID } from "@/lib/browser-uuid";
+
 import {
   useState,
   useCallback,
@@ -1592,7 +1594,7 @@ export function AppShell({ appName }: { appName: string }) {
         )
           return;
         setNewSessionPoolProject(project);
-        setNewSessionCreation({ id: crypto.randomUUID() });
+        setNewSessionCreation({ id: browserUUID() });
         setNewSessionCwd(null);
         setNewSessionHostId(undefined);
         setSelectedSession(null);
@@ -1636,7 +1638,7 @@ export function AppShell({ appName }: { appName: string }) {
         return prev;
       });
       setNewSessionHostId(remoteHostId(hostId));
-      setNewSessionCreation({ id: crypto.randomUUID() });
+      setNewSessionCreation({ id: browserUUID() });
       setSessionKey((k) => k + 1);
       setBranchTree([]);
       setBranchActiveLeafId(null);
@@ -1696,7 +1698,7 @@ export function AppShell({ appName }: { appName: string }) {
       setSelectedSession(null);
       const target = project ?? (cwd === activeCwd ? activePoolProject : null);
       setNewSessionCreation({
-        id: creationId || crypto.randomUUID(),
+        id: creationId || browserUUID(),
         initialization,
       });
       setNewSessionPoolProject(target?.poolId ? target : null);
@@ -1814,7 +1816,7 @@ export function AppShell({ appName }: { appName: string }) {
             return;
           }
           handleNewSession(
-            entry.creationId ?? crypto.randomUUID(),
+            entry.creationId ?? browserUUID(),
             entry.cwd,
             entry.hostId,
             project,
@@ -1882,7 +1884,7 @@ export function AppShell({ appName }: { appName: string }) {
   useGlobalKeyboardShortcuts({
     onNewSession: (cwd: string) =>
       handleNewSession(
-        crypto.randomUUID(),
+        browserUUID(),
         activePoolProject ? null : cwd,
         activeHostId,
         activePoolProject ?? undefined,
@@ -2094,7 +2096,7 @@ export function AppShell({ appName }: { appName: string }) {
         const cwd = selectedSession.cwd;
         setSelectedSession(null);
         setNewSessionCwd(selectedSession.poolId ? null : (cwd ?? null));
-        setNewSessionCreation({ id: crypto.randomUUID() });
+        setNewSessionCreation({ id: browserUUID() });
         setNewSessionPoolProject(
           selectedSession.poolId
             ? (workspaceOptions.projects.find(
@@ -2804,7 +2806,7 @@ export function AppShell({ appName }: { appName: string }) {
             // Fall back to the server's default cwd (~/omp-cwd-<date>) instead.
             if (activeCwd || activePoolProject) {
               handleNewSession(
-                crypto.randomUUID(),
+                browserUUID(),
                 activeCwd,
                 activeHostId,
                 activePoolProject ?? undefined,
@@ -2826,7 +2828,7 @@ export function AppShell({ appName }: { appName: string }) {
               .then((data) => {
                 if (!data.cwd) throw new Error("Empty cwd returned");
                 if (navViewVersionRef.current === sourceVersion)
-                  handleNewSession(crypto.randomUUID(), data.cwd, targetHost);
+                  handleNewSession(browserUUID(), data.cwd, targetHost);
               })
               .catch(() => toast.error(translate("errors.generic")));
           }}
@@ -3728,7 +3730,7 @@ export function AppShell({ appName }: { appName: string }) {
                                           : remoteHostId(first.hostId),
                                       );
                                       handleNewSession(
-                                        crypto.randomUUID(),
+                                        browserUUID(),
                                         first.poolId ? null : first.path,
                                         first.hostId,
                                         first,
@@ -3809,7 +3811,7 @@ export function AppShell({ appName }: { appName: string }) {
                                       : remoteHostId(project.hostId),
                                   );
                                   handleNewSession(
-                                    crypto.randomUUID(),
+                                    browserUUID(),
                                     project.poolId ? null : project.path,
                                     project.hostId,
                                     project,
