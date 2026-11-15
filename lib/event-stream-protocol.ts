@@ -31,6 +31,8 @@ export const UNKNOWN_CONNECTION_CODE = "unknown_connection";
 
 export type EventStreamChannel =
   | { kind: "running" }
+  | { kind: "open-chat"; sessionId: string }
+  | { kind: "open-chats" }
   | { kind: "terminal"; hostId: string; terminalId: string }
   /** Notifications the server routes to the tab with this notification client id. */
   | { kind: "notifications"; clientId: string }
@@ -168,6 +170,12 @@ export function parseEventStreamChannel(
   switch (channel.kind) {
     case "running":
       return { kind: "running" };
+    case "open-chats":
+      return { kind: "open-chats" };
+    case "open-chat":
+      return isBoundedString(channel.sessionId, MAX_ID_LENGTH)
+        ? { kind: "open-chat", sessionId: channel.sessionId }
+        : null;
     case "notifications":
       return isValidNotificationId(channel.clientId)
         ? { kind: "notifications", clientId: channel.clientId }

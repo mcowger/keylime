@@ -24,6 +24,7 @@ export function WorkspaceTerminalTabs({
   onSelect,
   enabled,
   chatTabs,
+  openSessionIds,
   activeChatId,
   onSelectChat,
   onCloseChat,
@@ -43,6 +44,7 @@ export function WorkspaceTerminalTabs({
   onSelect: (id: string | null) => void;
   enabled: boolean;
   chatTabs: { id: string; title: string; sessionId?: string }[];
+  openSessionIds: string[];
   activeChatId: string | null;
   onSelectChat: (id: string) => void;
   onCloseChat: (id: string) => void | Promise<void>;
@@ -185,8 +187,8 @@ export function WorkspaceTerminalTabs({
                 {tab.title}
               </button>
               <button
-                aria-label={`${tab.sessionId ? "Archive" : "Close"} ${tab.title}`}
-                title={tab.sessionId ? "Archive chat" : "Close chat"}
+                aria-label={`Close ${tab.title}`}
+                title="Close chat"
                 disabled={closingChatIds.has(tab.id)}
                 onClick={() => void closeChat(tab.id)}
               >
@@ -335,8 +337,8 @@ export function WorkspaceTerminalTabs({
                         </button>
                       )}
                     <button
-                      aria-label={`${tab.sessionId ? "Archive" : "Close"} ${tab.title}`}
-                      title={tab.sessionId ? "Archive chat" : "Close chat"}
+                      aria-label={`Close ${tab.title}`}
+                      title="Close chat"
                       disabled={closingChatIds.has(tab.id)}
                       onClick={() => void closeChat(tab.id)}
                     >
@@ -413,6 +415,7 @@ export function WorkspaceTerminalTabs({
               <WorkspaceChatPicker
                 hostId={hostId}
                 cwd={cwd}
+                openSessionIds={openSessionIds}
                 onSelect={(session) => {
                   setPickerOpen(false);
                   onSelectSaved(session);

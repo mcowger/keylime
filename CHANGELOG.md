@@ -34,6 +34,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Touch terminals have an accessory row for Escape, Tab, Ctrl, Ctrl-C and arrow keys; Ctrl applies to the next typed key
 
 ### Changed
+- Open workspace chats appear across clients connected to the same web server rather than only in the client that opened them.
 - Project names and workspace creation settings save automatically without separate save buttons.
 - The mobile workspace switcher shows the active chat or terminal title instead of the workspace directory name.
 - Settings and other selectors use shared themed menus; file actions are quieter while remaining available on focus and touch.

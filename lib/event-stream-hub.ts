@@ -464,6 +464,10 @@ async function openChannel(
     }
     case "running":
       return openRunningChannel(handle);
+    case "open-chat":
+      return openChatChannel(channel.sessionId, handle);
+    case "open-chats":
+      return openChatsChannel(handle);
     case "notifications":
       return openNotificationsChannel(channel.clientId, handle);
     case "session":
@@ -480,6 +484,41 @@ async function openChannel(
     case "hosts":
       return openHostsChannel(handle);
   }
+}
+
+// Subscriptions outlive module re-evaluation under bun --hot.
+declare global {
+  var __ompOpenChats: { counts: Map<string, number>; listeners: Set<SubscriptionHandle> } | undefined;
+}
+const { counts: openChats, listeners: openChatsListeners } =
+  (globalThis.__ompOpenChats ??= { counts: new Map(), listeners: new Set() });
+
+function broadcastOpenChats(): void {
+  const snapshot = { sessionIds: [...openChats.keys()] };
+  for (const listener of openChatsListeners) listener.send(snapshot);
+}
+
+function openChatChannel(sessionId: string, handle: SubscriptionHandle): SubscribeResult {
+  handle.open();
+  if (!handle.active) return SUBSCRIBED;
+  openChats.set(sessionId, (openChats.get(sessionId) ?? 0) + 1);
+  handle.setDetach(() => {
+    const count = openChats.get(sessionId)!;
+    if (count === 1) openChats.delete(sessionId);
+    else openChats.set(sessionId, count - 1);
+    broadcastOpenChats();
+  });
+  broadcastOpenChats();
+  return SUBSCRIBED;
+}
+
+function openChatsChannel(handle: SubscriptionHandle): SubscribeResult {
+  handle.open();
+  if (!handle.active) return SUBSCRIBED;
+  openChatsListeners.add(handle);
+  handle.setDetach(() => openChatsListeners.delete(handle));
+  handle.send({ sessionIds: [...openChats.keys()] });
+  return SUBSCRIBED;
 }
 
 // Running-session ids plus session-list refresh hints for the sidebar.

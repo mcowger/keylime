@@ -129,7 +129,7 @@ import type {
 import type { HierarchySnapshot } from "@/lib/project-hierarchy-types";
 import { runHostTool } from "@/hooks/useAgentSession-stream";
 import { sendAgentCommand } from "@/lib/agent-client";
-import { openEventStream } from "@/lib/event-stream";
+import { openEventStream, type EventStream } from "@/lib/event-stream";
 import type { ChatInputHandle } from "./ChatInput";
 import type { SessionStatsInfo, GenerationSpeedInfo } from "@/lib/pi-types";
 import type { SettingsTab } from "./SettingsTabs";
@@ -266,6 +266,55 @@ export function AppShell({ appName }: { appName: string }) {
   }>({});
   const [chatTabs, setChatTabs] = useState<ChatTab[]>(loadChatTabs);
   const chatTabsRef = useRef(chatTabs);
+  const [openSessionIds, setOpenSessionIds] = useState<string[]>([]);
+  const [sharedSessions, setSharedSessions] = useState<SessionInfo[]>([]);
+  const [hiddenSharedIds, setHiddenSharedIds] = useState<Set<string>>(() => new Set());
+  const membershipStreams = useRef(new Map<string, EventStream>());
+  useEffect(() => {
+    const ids = new Set(chatTabs.flatMap((tab) => tab.session ? [tab.session.id] : []));
+    for (const [id, stream] of membershipStreams.current) {
+      if (!ids.has(id)) {
+        stream.close();
+        membershipStreams.current.delete(id);
+      }
+    }
+    for (const id of ids) {
+      if (!membershipStreams.current.has(id))
+        membershipStreams.current.set(id, openEventStream({ kind: "open-chat", sessionId: id }));
+    }
+  }, [chatTabs]);
+  useEffect(() => () => {
+    for (const stream of membershipStreams.current.values()) stream.close();
+    membershipStreams.current.clear();
+  }, []);
+  useEffect(() => {
+    const source = openEventStream({ kind: "open-chats" });
+    let version = 0;
+    let closed = false;
+    source.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data) as { sessionIds?: unknown };
+        if (!Array.isArray(data.sessionIds) || !data.sessionIds.every((id) => typeof id === "string")) return;
+        const ids: string[] = data.sessionIds;
+        setOpenSessionIds(ids);
+        setHiddenSharedIds((hidden) => new Set([...hidden].filter((id) => ids.includes(id))));
+        const current = ++version;
+        if (ids.length === 0) {
+          setSharedSessions([]);
+          return;
+        }
+        void fetch("/api/sessions").then(async (response) => {
+          if (!response.ok) return;
+          const result = await response.json() as { sessions: SessionInfo[] };
+          if (!closed && current === version)
+            setSharedSessions(result.sessions.filter((session) => ids.includes(session.id)));
+        }).catch(() => {});
+      } catch {
+        // Ignore malformed event frames.
+      }
+    };
+    return () => { closed = true; source.close(); };
+  }, []);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const activeChatIdRef = useRef<string | null>(null);
   const visitedWorkspaces = useRef(new Set<string>());
@@ -3475,6 +3524,7 @@ export function AppShell({ appName }: { appName: string }) {
               headerTarget={workspaceSwitcherTarget}
               onSelectSaved={handleSelectSession}
               onGenerateTitle={() => void handleAutoName()}
+              openSessionIds={[...new Set([...openSessionIds, ...chatTabs.flatMap((tab) => tab.session ? [tab.session.id] : [])])]}
               onRename={handleRenameSession}
               activeSessionName={selectedSession?.name ?? ""}
               canRename={Boolean(selectedSession)}
@@ -3484,23 +3534,17 @@ export function AppShell({ appName }: { appName: string }) {
                   0 &&
                 autoNameStatus.kind !== "naming",
               )}
-              chatTabs={chatTabs
-                .filter(
-                  (tab) =>
-                    terminalWorkspace &&
-                    tabInWorkspace(
-                      tab,
-                      terminalWorkspace.path,
-                      workspaceHostId,
-                      workspaceOptions.projects,
-                    ),
-                )
+              chatTabs={[
+                ...chatTabs,
+                ...sharedSessions
+                  .filter((session) => openSessionIds.includes(session.id) && !hiddenSharedIds.has(session.id) && !chatTabs.some((tab) => tab.session?.id === session.id))
+                  .map((session): ChatTab => ({ id: `shared:${session.id}`, cwd: session.cwd, hostId: remoteHostId(session.hostId), session, creation: {} })),
+              ]
+                .filter((tab) => terminalWorkspace && tabInWorkspace(tab, terminalWorkspace.path, workspaceHostId, workspaceOptions.projects))
                 .map((tab, index, tabs) => ({
                   id: tab.id,
                   sessionId: tab.session?.id,
-                  title:
-                    tab.session?.name ||
-                    tab.session?.firstMessage ||
+                  title: tab.session?.name || tab.session?.firstMessage ||
                     (tabs.filter((item) => !item.session).length > 1
                       ? `New chat ${tabs.slice(0, index + 1).filter((item) => !item.session).length}`
                       : "New chat"),
@@ -3508,6 +3552,11 @@ export function AppShell({ appName }: { appName: string }) {
               activeChatId={activeChatId}
               onSelectChat={(id) => {
                 const tab = chatTabsRef.current.find((item) => item.id === id);
+                if (!tab && id.startsWith("shared:")) {
+                  const session = sharedSessions.find((item) => item.id === id.slice(7));
+                  if (session) handleSelectSession(session);
+                  return;
+                }
                 if (!tab) return;
                 activateChat(tab);
                 router.replace(
@@ -3520,21 +3569,13 @@ export function AppShell({ appName }: { appName: string }) {
                 const closing = chatTabsRef.current.find(
                   (tab) => tab.id === id,
                 );
+                if (!closing && id.startsWith("shared:")) {
+                  setHiddenSharedIds((hidden) => new Set(hidden).add(id.slice(7)));
+                  return;
+                }
                 if (!closing) return;
                 if (closing.session) {
-                  try {
-                    const response = await fetch(
-                      `/api/sessions/${encodeURIComponent(closing.session.id)}/archive`,
-                      { method: "POST" },
-                    );
-                    if (!response.ok) throw new Error("Session archive failed");
-                  } catch {
-                    toast.error(t("sessionSidebar.archiveFailed"));
-                    return;
-                  }
-                  clearDraft(closing.session.id);
-                  publishSessionsChanged([closing.session.id]);
-                  setRefreshKey((key) => key + 1);
+                  setHiddenSharedIds((hidden) => new Set(hidden).add(closing.session!.id));
                 }
                 const visible = chatTabsRef.current.filter(
                   (tab) =>

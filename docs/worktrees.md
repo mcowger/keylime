@@ -12,7 +12,7 @@ Unregistering a project forgets its child registrations without stopping process
 
 Each workspace can have multiple chat tabs alongside its terminals. Desktop shows open tabs and a **Chats** picker for saved conversations. Mobile uses a compact workspace/tab-count button in the header; tap it for open chats and terminals, creation actions and searchable saved chats. Selecting a saved conversation opens its existing tab or adds one. Unsent chats keep separate drafts, including when several belong to the same workspace.
 
-The X archives a saved chat, then removes its tab. Find it under **Archived Sessions** to restore it. If archiving fails, the tab stays open and an error is shown. Unsaved new-chat tabs simply close. Open chat tabs are retained across reloads in the same browser tab; terminal processes remain owned by the host daemon.
+Open saved chats appear as workspace tabs in other clients connected to the same web server and are excluded from their saved-chat picker. Selecting one joins it locally. Closing a tab removes only that client's membership; it does not archive the conversation or clear its draft. A remotely opened tab may be dismissed locally. Open tabs are retained across reloads in the same browser tab; disconnecting removes its memberships once the event connection closes. Resumable WebSocket connections may retain them until their resume window expires. Membership is held by the web-server process, not the host daemon, so clients connected to different web servers do not share it. Terminal processes remain owned by the host daemon.
 
 ## Creating a workspace
 

@@ -2,7 +2,7 @@ import "../tests/setup-dom.mjs";
 import assert from "node:assert/strict";
 import { mock, test } from "bun:test";
 import React from "react";
-const { render, fireEvent, waitFor, cleanup } =
+const { render, fireEvent, waitFor, cleanup, act } =
   await import("@testing-library/react/pure.js");
 
 const projects = ["/repo", "/repo/worktrees/B", "/other"].map((path) => ({
@@ -87,8 +87,13 @@ for (const [path, name] of [
 ]) {
   mock.module(path, () => ({ [name]: empty }));
 }
+let tabProps;
+const streams = [];
 mock.module("./WorkspaceTerminalTabs", () => ({
-  WorkspaceTerminalTabs: (props) => React.createElement("output", { "data-testid": "workspace-tabs" }, JSON.stringify({ cwd: props.cwd, tabs: props.chatTabs })),
+  WorkspaceTerminalTabs: (props) => {
+    tabProps = props;
+    return React.createElement("output", { "data-testid": "workspace-tabs" }, JSON.stringify({ cwd: props.cwd, tabs: props.chatTabs }));
+  },
 }));
 mock.module("@/hooks/useHostRows", () => ({
   useHostRows: () => ({ hosts: [], pools: [] }),
@@ -99,11 +104,11 @@ mock.module("@/hooks/useNotifications", () => ({
 const transport = await import("@/lib/event-stream");
 mock.module("@/lib/event-stream", () => ({
   ...transport,
-  openEventStream: () => ({
-    close() {},
-    addEventListener() {},
-    removeEventListener() {},
-  }),
+  openEventStream: (channel) => {
+    const stream = { channel, closed: false, close() { this.closed = true; }, addEventListener() {}, removeEventListener() {} };
+    streams.push(stream);
+    return stream;
+  },
 }));
 globalThis.ResizeObserver = class {
   observe() {}
@@ -191,4 +196,42 @@ test("creating a workspace from another workspace survives sidebar synchronizati
   await waitFor(() => assert.equal(tabs().cwd, "/repo"));
   assert.equal(tabs().tabs.length, 1);
   cleanup();
+});
+
+test("shared chats appear without local membership and can be selected or dismissed without archiving", async () => {
+  sessionStorage.clear();
+  streams.length = 0;
+  const originalFetch = globalThis.fetch;
+  const session = { id: "shared", cwd: "/repo", path: "/shared.jsonl", created: "2026-11-14", modified: "2026-11-14", messageCount: 1, firstMessage: "hello", name: "Shared" };
+  const requests = [];
+  globalThis.fetch = async (url, options) => {
+    requests.push(String(url));
+    if (String(url) === "/api/sessions") return Response.json({ sessions: [session] });
+    return originalFetch(url, options);
+  };
+  try {
+    window.history.replaceState(null, "", "/?cwd=%2Frepo");
+    const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+    await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
+    const snapshot = streams.find((stream) => stream.channel.kind === "open-chats");
+    await act(async () => snapshot.onmessage({ data: JSON.stringify({ sessionIds: ["shared"] }) }));
+    await waitFor(() => assert.ok(tabProps.chatTabs.some((tab) => tab.title === "Shared")));
+    assert.ok(tabProps.openSessionIds.includes("shared"));
+    assert.equal(streams.filter((stream) => stream.channel.kind === "open-chat" && !stream.closed).length, 0);
+    await act(async () => tabProps.onCloseChat("shared:shared"));
+    assert.ok(!tabProps.chatTabs.some((tab) => tab.title === "Shared"));
+    assert.ok(!requests.some((url) => url.includes("/archive")));
+    await act(async () => snapshot.onmessage({ data: JSON.stringify({ sessionIds: [] }) }));
+    await act(async () => snapshot.onmessage({ data: JSON.stringify({ sessionIds: ["shared"] }) }));
+    await waitFor(() => assert.ok(tabProps.chatTabs.some((tab) => tab.title === "Shared")));
+    act(() => tabProps.onSelectChat("shared:shared"));
+    await waitFor(() => assert.equal(streams.filter((stream) => stream.channel.kind === "open-chat" && stream.channel.sessionId === "shared" && !stream.closed).length, 1));
+    assert.equal(tabProps.chatTabs.filter((tab) => tab.sessionId === "shared").length, 1);
+    await act(async () => snapshot.onmessage({ data: JSON.stringify({ sessionIds: [] }) }));
+    assert.ok(tabProps.chatTabs.some((tab) => tab.sessionId === "shared"));
+    assert.ok(view);
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
 });

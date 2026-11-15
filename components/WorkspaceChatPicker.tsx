@@ -8,10 +8,12 @@ import type { SessionInfo } from "@/lib/types";
 export function WorkspaceChatPicker({
   hostId,
   cwd,
+  openSessionIds,
   onSelect,
 }: {
   hostId: string;
   cwd: string;
+  openSessionIds: string[];
   onSelect: (session: SessionInfo) => void;
 }) {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
@@ -98,6 +100,7 @@ export function WorkspaceChatPicker({
   }, [hostId, cwd, revision]);
 
   const filtered = sessions.filter((session) =>
+    !openSessionIds.includes(session.id) &&
     `${session.name ?? ""} ${session.firstMessage ?? ""}`
       .toLowerCase()
       .includes(query.toLowerCase()),
