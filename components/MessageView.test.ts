@@ -1074,6 +1074,63 @@ test("async-result notices start collapsed to their first line and expand to the
   assert.doesNotMatch(view.container.innerHTML, /system-notice|<h2/);
 });
 
+test("async-result details show job status and duration while retaining raw JSON", () => {
+  const view = render(
+    React.createElement(MessageView, {
+      message: {
+        role: "custom",
+        customType: "async-result",
+        display: true,
+        content: "2 background jobs have completed.",
+        details: {
+          jobs: [
+            {
+              jobId: "HttpSystem",
+              type: "task",
+              status: "completed",
+              label: "HttpSystem",
+              durationMs: 194633,
+            },
+            {
+              jobId: "HttpSessions",
+              type: "task",
+              status: "failed",
+              label: "HttpSessions",
+              durationMs: 211815,
+            },
+          ],
+        },
+      },
+    }),
+  );
+  fireEvent.click(view.getByText("Show details"));
+  assert.match(view.container.textContent!, /HttpSystem/);
+  assert.match(view.container.textContent!, /3m14s/);
+  assert.match(view.container.textContent!, /3m31s/);
+  const raw = view.container.querySelector("details")!;
+  assert.equal(raw.open, false);
+  assert.match(raw.textContent!, /194633/);
+});
+
+test("cancelled async jobs render the aborted status instead of a running indicator", () => {
+  const view = render(
+    React.createElement(MessageView, {
+      message: {
+        role: "custom",
+        customType: "async-result",
+        display: true,
+        content: "Background job cancelled.",
+        details: {
+          jobs: [{ jobId: "cancelled-job", type: "task", status: "cancelled" }],
+        },
+      },
+    }),
+  );
+  fireEvent.click(view.getByText("Show details"));
+  assert.ok(view.container.querySelector("svg.lucide-ban"));
+  assert.equal(view.container.querySelector(".live-status-dot"), null);
+});
+
 test("late LSP diagnostic notices expand to their exact line layout", () => {
   const view = render(
     React.createElement(MessageView, {

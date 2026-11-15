@@ -3057,8 +3057,26 @@ function CustomMessageView({
   sessionId?: string;
 }) {
   const { t, locale } = useI18n();
-  // Reminders and job notices are activity, as in the TUI: start collapsed to
-  // their first line; the header toggles them like a tool call.
+  // Reminders and job notices start collapsed to their first line.
+  const asyncJobs =
+    message.customType === "async-result" &&
+    message.details &&
+    typeof message.details === "object" &&
+    "jobs" in message.details &&
+    Array.isArray(message.details.jobs)
+      ? message.details.jobs.map((job: unknown) => {
+          if (
+            !job ||
+            typeof job !== "object" ||
+            !("jobId" in job) ||
+            typeof job.jobId !== "string"
+          )
+            return job;
+          return { ...job, id: job.jobId };
+        })
+      : null;
+  const hasAsyncJobRows =
+    asyncJobs !== null && getHubJobs({ op: "jobs", jobs: asyncJobs }) !== null;
   const isDeveloper = message.customType === "developer";
   const isNotice =
     isDeveloper ||
@@ -3330,25 +3348,49 @@ function CustomMessageView({
           )}
         </div>
 
-        {hasDetails && detailsExpanded && (
-          <pre
-            style={{
-              margin: 0,
-              padding: "9px 10px",
-              borderTop: "1px solid var(--border)",
-              backgroundColor: "var(--bg)",
-              color: "var(--text-muted)",
-              fontSize: 12,
-              lineHeight: 1.5,
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-              maxHeight: 360,
-              overflow: "auto",
-              fontFamily: "var(--font-mono)",
+        {hasDetails && detailsExpanded && hasAsyncJobRows && (
+          <HubResultPanel
+            input={{ op: "jobs" }}
+            result={{
+              role: "toolResult",
+              toolCallId: "",
+              toolName: "hub",
+              content: [],
+              details: { op: "jobs", jobs: asyncJobs },
             }}
-          >
-            {detailsText}
-          </pre>
+          />
+        )}
+        {hasDetails && detailsExpanded && (
+          <details open={!hasAsyncJobRows}>
+            <summary
+              style={{
+                padding: "6px 10px",
+                color: "var(--text-dim)",
+                cursor: "pointer",
+                fontSize: 11,
+              }}
+            >
+              JSON
+            </summary>
+            <pre
+              style={{
+                margin: 0,
+                padding: "9px 10px",
+                borderTop: "1px solid var(--border)",
+                backgroundColor: "var(--bg)",
+                color: "var(--text-muted)",
+                fontSize: 12,
+                lineHeight: 1.5,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                maxHeight: 360,
+                overflow: "auto",
+                fontFamily: "var(--font-mono)",
+              }}
+            >
+              {detailsText}
+            </pre>
+          </details>
         )}
       </div>
     </div>

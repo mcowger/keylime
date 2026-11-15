@@ -156,7 +156,9 @@ export function HubResultPanel({
                     ? "completed"
                     : job.status === "failed"
                       ? "failed"
-                      : "started"
+                      : job.status === "cancelled"
+                        ? "aborted"
+                        : "started"
                 }
               />
               <span
