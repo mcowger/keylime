@@ -36,6 +36,8 @@ cutover, including for cached runner and frontend-only candidates. Generation fa
 blocks deployment without changing the active services. `--activate` and `--recover`
 operate on immutable prebuilt releases and do not require compiler tools; neither
 does normal use of an installed release.
+Generation logs its coverage, document-building, and per-document validation stages
+to the deployment log, so a slow or failing prerequisite can be identified.
 
 Activation gives active runs and protected host work up to 60 seconds to finish.
 Use `keylime-deploy --timeout 10` or `mise exec -- bun run deploy:local:fast`

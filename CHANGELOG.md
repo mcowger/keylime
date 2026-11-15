@@ -52,6 +52,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Paseo setup command parsing and ordering now distinguish multiline command lists from shell scripts; blocking command selections are revalidated when recipes change
 
 ### Fixed
+- API generation validates AsyncAPI documents without materializing unused parsed models, avoiding excessive deployment build time and memory. Generation now logs each validation stage.
 - Preserve pasted text alongside image files or embedded data images in rich-text clipboard content.
 - Closing an exited terminal tab now removes it even after its shell has disappeared.
 - Opening a workspace selects its first chat open on another browser and shows shared chats in the workspace tab bar.

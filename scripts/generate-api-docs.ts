@@ -578,6 +578,7 @@ async function validateDocuments(
   documents: Record<string, JsonObject>,
 ): Promise<void> {
   for (const [name, document] of Object.entries(documents)) {
+    console.log(`[api] Validating ${name}`);
     if (name.endsWith(".schema.json")) {
       new Ajv({ strict: false, validateFormats: false }).compile(document);
       continue;
@@ -587,11 +588,14 @@ async function validateDocuments(
         resolve: { external: false },
       });
     else {
-      const result = await new Parser().parse(serializeDocument(document));
-      const errors = result.diagnostics.filter(
+      // Parsing also materializes resolved models for every message; validation alone checks the same diagnostics without that expansion.
+      const diagnostics = await new Parser().validate(
+        serializeDocument(document),
+      );
+      const errors = diagnostics.filter(
         (diagnostic) => diagnostic.severity === 0,
       );
-      if (!result.document || errors.length)
+      if (errors.length)
         throw new Error(`${name}: ${JSON.stringify(errors, null, 2)}`);
     }
   }
@@ -658,9 +662,13 @@ async function checkSchemaSemantics(): Promise<void> {
 }
 
 export async function generateApiDocs(check: boolean): Promise<void> {
+  console.log("[api] Checking HTTP coverage");
   const semantics = await checkHttpCoverage();
+  console.log("[api] Checking message coverage");
   await checkMessageCoverage();
+  console.log("[api] Checking schema semantics");
   await checkSchemaSemantics();
+  console.log("[api] Building documents");
   const documents = {
     "host-http.openapi.json": httpDocument(semantics, hostHttpOperations, true),
     "web-http.openapi.json": httpDocument(semantics),
@@ -669,6 +677,7 @@ export async function generateApiDocs(check: boolean): Promise<void> {
     "runner-channel.asyncapi.json": socketDocument(runnerLinkContract),
     "contracts.schema.json": schemaDocument(),
   };
+  console.log("[api] Validating documents");
   await validateDocuments(documents);
   if (!check) await mkdir(outputDirectory, { recursive: true });
   for (const [name, document] of Object.entries(documents)) {
