@@ -1045,6 +1045,24 @@ test("advisor custom messages use the localized advisor label", () => {
   assert.doesNotMatch(html, /customType/);
 });
 
+test("skill prompts start collapsed and can be expanded and collapsed", () => {
+  const view = render(
+    React.createElement(MessageView, {
+      message: {
+        role: "custom",
+        customType: "skill-prompt",
+        content: "Skill invoked\n\nFull skill instructions",
+        display: true,
+      },
+    }),
+  );
+  assert.doesNotMatch(view.container.textContent!, /Full skill instructions/);
+  fireEvent.click(view.getByRole("button", { expanded: false }));
+  assert.match(view.container.textContent!, /Full skill instructions/);
+  fireEvent.click(view.getByRole("button", { expanded: true }));
+  assert.doesNotMatch(view.container.textContent!, /Full skill instructions/);
+});
+
 test("async-result notices start collapsed to their first line and expand to the exact line layout", () => {
   const view = render(
     React.createElement(MessageView, {

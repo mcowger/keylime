@@ -3057,7 +3057,7 @@ function CustomMessageView({
   sessionId?: string;
 }) {
   const { t, locale } = useI18n();
-  // Reminders and job notices start collapsed to their first line.
+  // Notices and skill prompts start collapsed to their first line.
   const asyncJobs =
     message.customType === "async-result" &&
     message.details &&
@@ -3081,7 +3081,8 @@ function CustomMessageView({
   const isNotice =
     isDeveloper ||
     message.customType === "async-result" ||
-    message.customType === "lsp-late-diagnostic";
+    message.customType === "lsp-late-diagnostic" ||
+    message.customType === "skill-prompt";
   const [contentExpanded, setContentExpanded] = useState(!isNotice);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const { copied, copy: copyContent } = useCopyFeedback();

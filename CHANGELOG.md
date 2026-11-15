@@ -38,6 +38,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Paseo workspace setup commands can run as blocking or background jobs, with background status and logs available after workspace creation
 
 ### Changed
+- Explicit skill prompts start collapsed; select the header to show their full instructions.
 - Reloading without a session link leaves projects unselected instead of activating the newest project.
 - Open workspace chats appear across clients connected to the same web server rather than only in the client that opened them.
 - Project names and workspace creation settings save automatically without separate save buttons.
@@ -50,6 +51,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - The mobile workspace switcher shows the active chat or terminal title instead of the workspace directory name
 - Project names and workspace creation settings save automatically without separate save buttons
 - Paseo setup command parsing and ordering now distinguish multiline command lists from shell scripts; blocking command selections are revalidated when recipes change
+- Explicit skill prompts start collapsed; select the header to show their full instructions
 
 ### Fixed
 - Development, builds and local deployments no longer generate or validate API documentation; releases ship the checked-in documents.
