@@ -18,6 +18,8 @@ For live sessions, build the runner for this machine with `bun runner/scripts/bu
 `runner/release/ompweb-omp-<os>-<arch>` by itself (`OMP_WEB_OMP_BIN` overrides it). A stock `omp` does not
 speak ompweb's channel.
 
+Worktrees created with the repository's Paseo setup copy ignored `runner/vendor/` packages from the source checkout before setup. If those packages are missing or do not match the worktree's pin, run `bun runner/scripts/use-omp-build.ts` and then install the runner dependencies. The runner binary is not built during worktree setup; `bun run smoke` builds it before running the smoke checks.
+
 ### Development and browser testing
 
 ```bash

@@ -20,7 +20,8 @@ bun run release:check
 ```
 
 `release:check` includes API freshness, formatting, typechecking, tests, the
-production build and smoke checks. Standalone builds and runner/binary generation
+production build and smoke checks. `bun run smoke` builds the runner first.
+Standalone builds and runner/binary generation
 also regenerate the API documents and fail if generation fails. Source deployment
 preparation does likewise before service cutover, including cached and frontend-only
 candidates; activation and recovery of prebuilt releases and installed runtime use

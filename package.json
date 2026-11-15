@@ -57,7 +57,7 @@
     "systemd:stop": "bun bin/omp-web-systemd.ts stop",
     "systemd:status": "bun bin/omp-web-systemd.ts status",
     "prepack": "bun run build",
-    "smoke": "bun scripts/smoke.ts",
+    "smoke": "bun runner/scripts/build-binary.ts && bun scripts/smoke.ts",
     "release:check": "bun run api:generate && bun run api:check && bun run format:check && bun run typecheck && bun run test && bun run build && bun run smoke"
   },
   "dependencies": {
