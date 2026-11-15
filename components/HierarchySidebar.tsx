@@ -106,6 +106,9 @@ export function HierarchySidebar({
     {},
   );
   const [error, setError] = useState<string | null>(null);
+  const [loadErrors, setLoadErrors] = useState<Record<string, string>>({});
+  const loadGenerations = useRef<Record<string, number>>({});
+  const completedLoadGenerations = useRef<Record<string, number>>({});
   const [discovery, setDiscovery] = useState<Discovery | null>(null);
   const [managedProject, setManagedProject] = useState<{
     host: string;
@@ -217,6 +220,8 @@ export function HierarchySidebar({
   const load = useCallback(async () => {
     await Promise.all(
       hosts.map(async (host) => {
+        const generation = (loadGenerations.current[host.id] ?? 0) + 1;
+        loadGenerations.current[host.id] = generation;
         try {
           const response = await fetch(
             `/api/hierarchy?${new URLSearchParams({ host: host.id })}`,
@@ -224,9 +229,22 @@ export function HierarchySidebar({
           const data = await response.json();
           if (!response.ok)
             throw new Error(data.error ?? `HTTP ${response.status}`);
+          if ((completedLoadGenerations.current[host.id] ?? 0) > generation) return;
+          completedLoadGenerations.current[host.id] = generation;
           setSnapshots((prev) => ({ ...prev, [host.id]: data }));
+          setLoadErrors((prev) => {
+            if (!(host.id in prev)) return prev;
+            const next = { ...prev };
+            delete next[host.id];
+            return next;
+          });
         } catch (e) {
-          setError(e instanceof Error ? e.message : String(e));
+          if ((completedLoadGenerations.current[host.id] ?? 0) > generation) return;
+          completedLoadGenerations.current[host.id] = generation;
+          setLoadErrors((prev) => ({
+            ...prev,
+            [host.id]: e instanceof Error ? e.message : String(e),
+          }));
         }
       }),
     );
@@ -466,6 +484,11 @@ export function HierarchySidebar({
           {error}
         </div>
       )}
+      {hosts.map((host) => loadErrors[host.id] && (
+        <div key={host.id} role="alert" style={{ color: "var(--status-error)", padding: 8 }}>
+          {loadErrors[host.id]}
+        </div>
+      ))}
       {hosts.map((host) => (
         <section key={host.id} style={{ marginBottom: 8 }}>
           <div

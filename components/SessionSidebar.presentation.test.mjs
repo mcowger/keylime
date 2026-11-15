@@ -105,6 +105,46 @@ test("registered hierarchy workspaces can be selected and hosts collapsed", asyn
   }
 });
 
+test("workspace loading error clears after the host recovers", async () => {
+  let offline = true;
+  const restore = setup(() => offline
+    ? Response.json({ error: "MacMini is offline" }, { status: 503 })
+    : Response.json(snapshot));
+  try {
+    renderSidebar();
+    await screen.findByText("MacMini is offline");
+    offline = false;
+    fireEvent.focus(window);
+    await screen.findByRole("button", { name: "Workspace" });
+    await waitFor(() => assert.equal(screen.queryByText("MacMini is offline"), null));
+  } finally {
+    restore();
+  }
+});
+
+test("a slow successful hierarchy refresh recovers despite a newer pending refresh", async () => {
+  const pending = [];
+  let offline = true;
+  const restore = setup(() => {
+    if (offline) return Response.json({ error: "MacMini is offline" }, { status: 503 });
+    return new Promise((resolve) => pending.push(resolve));
+  });
+  try {
+    renderSidebar();
+    await screen.findByText("MacMini is offline");
+    offline = false;
+    fireEvent.focus(window);
+    fireEvent.focus(window);
+    await waitFor(() => assert.equal(pending.length, 2));
+    pending[0](Response.json(snapshot));
+    await screen.findByRole("button", { name: "Workspace" });
+    await waitFor(() => assert.equal(screen.queryByText("MacMini is offline"), null));
+    pending[1](Response.json(snapshot));
+  } finally {
+    restore();
+  }
+});
+
 test("selecting any workspace closes the mobile sidebar", async () => {
   const restore = setup(() => Response.json(snapshot));
   let closes = 0;

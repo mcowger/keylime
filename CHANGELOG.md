@@ -6,6 +6,9 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ## [Unreleased]
 
+### Fixed
+- Clear a host's sidebar loading error when its workspace hierarchy reconnects successfully.
+
 ### Added
 - Touch terminals have an accessory row for Escape, Tab, Ctrl, Ctrl-C and arrow keys; Ctrl applies to the next typed key.
 - Git projects can follow their current on-disk `paseo.json` for workspace setup and teardown, including uncommitted edits, with `.worktreeinclude` copying and live previews. Manual commands remain available, and project settings are accessible directly from each sidebar project menu on desktop and mobile.
