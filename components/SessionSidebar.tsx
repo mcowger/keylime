@@ -752,7 +752,6 @@ export const SessionSidebar = memo(function SessionSidebar({
    *  opening a session. */
   const activateProject = useCallback(
     (project: ManagedProject) => {
-      provisionalSelectionRef.current = false;
       setSelectedCwd(project.path);
       setSelectedHostId(hostOf(project));
       expandProject(workspaceKeyOf(project), hostOf(project));
@@ -798,7 +797,6 @@ export const SessionSidebar = memo(function SessionSidebar({
     const hostId = selectedHostIdProp ?? LOCAL_HOST_ID;
     const syncKey = hostProjectKey(hostId, selectedCwdProp);
     if (syncKey !== lastSyncedCwdPropRef.current) {
-      provisionalSelectionRef.current = false;
       lastSyncedCwdPropRef.current = syncKey;
       synchronizedCwdRef.current =
         selectedCwd !== selectedCwdProp || selectedHostId !== hostId ? syncKey : null;
@@ -1177,9 +1175,6 @@ export const SessionSidebar = memo(function SessionSidebar({
     });
   }, [expandedProjects, sortedProjects]);
 
-  // True while the auto-selected project was chosen before projects loaded
-  // (ordering incomplete); cleared by any manual activation.
-  const provisionalSelectionRef = useRef(false);
 
   // A just-started session's JSONL is not flushed until its first turn makes
   // progress, so a URL reopened in that window has no list entry yet. Retry
@@ -1198,7 +1193,7 @@ export const SessionSidebar = memo(function SessionSidebar({
     [],
   );
 
-  // Auto-select cwd and restore session from URL on first load
+  // Restore a session explicitly named in the URL on first load.
   useEffect(() => {
     if (skipInitialProjectSelection) return;
 
@@ -1236,28 +1231,12 @@ export const SessionSidebar = memo(function SessionSidebar({
       // Session not found — notify parent so it can show the placeholder
       onInitialRestoreDone?.();
     }
-    // No restore target: activate the top project (most recently added) so New
-    // Session and Explorer have a context. When projects have not loaded yet
-    // the ordering is provisional — re-pick once they arrive, unless the user
-    // already activated a project by hand.
-    if (selectedCwd !== null && !provisionalSelectionRef.current) return;
-    // Only this machine's projects: a remote host may be offline.
-    const top = sortedProjects.find(
-      (project) => hostOf(project) === LOCAL_HOST_ID,
-    );
-    if (!top) return;
-    setSelectedCwd(top.path);
-    setSelectedHostId(hostOf(top));
-    expandProject(workspaceKeyOf(top), hostOf(top));
-    provisionalSelectionRef.current = allSessions.length === 0;
   }, [
     allSessions,
-    selectedCwd,
     initialSessionId,
     skipInitialProjectSelection,
     onSelectSession,
     onInitialRestoreDone,
-    sortedProjects,
     expandProject,
     loadSessions,
   ]);
@@ -1381,7 +1360,6 @@ export const SessionSidebar = memo(function SessionSidebar({
         toast.info(unavailable);
         return;
       }
-      provisionalSelectionRef.current = false;
       if (s.cwd) setSelectedCwd(projectRootFor(s.cwd, hostOf(s)));
       setSelectedHostId(hostOf(s));
       expandProject(workspaceKeyOf(s), hostOf(s));
@@ -2040,7 +2018,6 @@ export const SessionSidebar = memo(function SessionSidebar({
           selectedCwd={selectedCwd}
           selectedHostId={selectedHostId}
           onSelectWorkspace={(path, host) => {
-            provisionalSelectionRef.current = false;
             if (selectedCwd === path && selectedHostId === host)
               onCwdChange?.(path, projectRootFor(path, host), host);
             setSelectedCwd(path);
