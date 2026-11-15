@@ -55,7 +55,6 @@ An optional `.worktreeinclude` in the project checkout uses gitignore pattern sy
 
 Enabling Follow Paseo authorizes future recipe edits to execute as the daemon's user. Commands are not sandboxed, and included files can contain local secrets. Only enable it for projects and recipes you trust.
 
-
 ## Deleting a workspace
 
 The default workspace cannot be deleted as a worktree. Deleting another workspace is blocked while setup runs. The daemon fences new session starts and finds all daemon-managed processes in that directory or its descendants, including unregistered sessions and processes shared with other servers. Confirm stopping them first; the daemon waits for exit and refuses deletion if a stop fails.

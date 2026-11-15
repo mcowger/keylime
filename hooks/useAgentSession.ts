@@ -483,8 +483,19 @@ function unrecordedHeldBash<T extends { command: string; after: number }>(
 }
 
 // Upstream 13d8eb2: settle local replacement copies already observed at the server before redriving a retry.
-function reconcileConfirmedLocalOutbox(sessionId: string, entries: LocalOutboxEntry[], confirmedIds: ReadonlySet<string>): Promise<void> {
-  const ids = entries.filter((entry) => entry.sessionId === sessionId && entry.replaces !== undefined && confirmedIds.has(entry.id)).map((entry) => entry.id);
+function reconcileConfirmedLocalOutbox(
+  sessionId: string,
+  entries: LocalOutboxEntry[],
+  confirmedIds: ReadonlySet<string>,
+): Promise<void> {
+  const ids = entries
+    .filter(
+      (entry) =>
+        entry.sessionId === sessionId &&
+        entry.replaces !== undefined &&
+        confirmedIds.has(entry.id),
+    )
+    .map((entry) => entry.id);
   return ids.length ? reconcileOutbox(sessionId, ids) : Promise.resolve();
 }
 
@@ -2761,8 +2772,15 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       );
       setServerOutbox(serverOutboxRef.current);
     }
-    void reconcileConfirmedLocalOutbox(sid, localOutboxRef.current, serverOutboxRef.current.seen)
-      .catch((error) => console.warn(`[omp-web] browser outbox reconciliation failed: ${error instanceof Error ? error.message : String(error)}`));
+    void reconcileConfirmedLocalOutbox(
+      sid,
+      localOutboxRef.current,
+      serverOutboxRef.current.seen,
+    ).catch((error) =>
+      console.warn(
+        `[omp-web] browser outbox reconciliation failed: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    );
     // Held messages open the session channel even without a wrapper: subscribe to follow them.
     if (entries.length > 0 && !eventSourceRef.current)
       void connectEvents(sid, "connected");
@@ -2782,8 +2800,16 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           );
           setServerOutbox(serverOutboxRef.current);
           const sid = sessionIdRef.current;
-          if (sid) void reconcileConfirmedLocalOutbox(sid, event.entries, serverOutboxRef.current.seen)
-            .catch((error) => console.warn(`[omp-web] browser outbox reconciliation failed: ${error instanceof Error ? error.message : String(error)}`));
+          if (sid)
+            void reconcileConfirmedLocalOutbox(
+              sid,
+              event.entries,
+              serverOutboxRef.current.seen,
+            ).catch((error) =>
+              console.warn(
+                `[omp-web] browser outbox reconciliation failed: ${error instanceof Error ? error.message : String(error)}`,
+              ),
+            );
           return;
         }
         const { stored } = event;
@@ -3986,8 +4012,16 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
             );
             setServerOutbox(serverOutboxRef.current);
             const sid = sessionIdRef.current;
-            if (sid) void reconcileConfirmedLocalOutbox(sid, localOutboxRef.current, serverOutboxRef.current.seen)
-              .catch((error) => console.warn(`[omp-web] browser outbox reconciliation failed: ${error instanceof Error ? error.message : String(error)}`));
+            if (sid)
+              void reconcileConfirmedLocalOutbox(
+                sid,
+                localOutboxRef.current,
+                serverOutboxRef.current.seen,
+              ).catch((error) =>
+                console.warn(
+                  `[omp-web] browser outbox reconciliation failed: ${error instanceof Error ? error.message : String(error)}`,
+                ),
+              );
             // Retire only confirmations the server has listed or settled; an older empty snapshot can overtake an ACK.
             setStoredOutbox((current) =>
               current.filter(
@@ -6817,35 +6851,95 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const heldRetriesRef = useRef(new Set<string>());
   /** Upstream 13d8eb2: persist replacement lineage; never remove the failed root before acceptance.
    * Keylime also preserves advisor routing and local upload proofs from the original intent. */
-  const retryHeldMessage = useCallback(async (id: string) => {
-    const sid = sessionIdRef.current;
-    const held = heldMessagesRef.current.find((entry) => entry.id === id);
-    if (!sid || !held || held.state !== "failed" || editInFlightRef.current || heldRetriesRef.current.has(id) || heldDeletionsRef.current.has(id)) return;
-    if (serverOutboxRef.current.represented.has(id)) return;
-    if (localOutboxRef.current.some((entry) => entry.sessionId === sid && entry.replaces === id && entry.state === "sending")) return;
-    heldRetriesRef.current.add(id);
-    try {
-      const serverIds = serverOutboxRef.current.seen;
-      const confirmedIds = new Set(localOutboxRef.current
-        .filter((entry) => entry.sessionId === sid && entry.replaces !== undefined && serverIds.has(entry.id))
-        .map((entry) => entry.id));
-      if (serverIds.has(id)) confirmedIds.add(id);
-      if (confirmedIds.size) await reconcileOutbox(sid, [...confirmedIds]);
-      if (!hookAliveRef.current || sessionIdRef.current !== sid || editInFlightRef.current || serverOutboxRef.current.represented.has(id)) return;
-      const current = heldMessagesRef.current.find((entry) => entry.id === id);
-      if (!current || current.state !== "failed") return;
-      if (held.local && !localOutboxRef.current.some((entry) => entry.id === id)) return;
-      if (localOutboxRef.current.some((entry) => entry.sessionId === sid && entry.replaces === id && entry.state === "sending")) return;
-      // Only this browser's durable row can supply a proof; server snapshots never expose one.
-      const local = localOutboxRef.current.find((entry) => entry.sessionId === sid && entry.id === id);
-      await holdMessage(sid, current.mode, current.message, current.images, current.uploads, local?.uploadProofs, id, current.advisor ?? local?.advisor ?? false);
-    } catch (error) {
-      if (hookAliveRef.current && sessionIdRef.current === sid)
-        addNotice({ type: "error", message: error instanceof Error ? error.message : String(error) });
-    } finally {
-      heldRetriesRef.current.delete(id);
-    }
-  }, [addNotice, holdMessage]);
+  const retryHeldMessage = useCallback(
+    async (id: string) => {
+      const sid = sessionIdRef.current;
+      const held = heldMessagesRef.current.find((entry) => entry.id === id);
+      if (
+        !sid ||
+        !held ||
+        held.state !== "failed" ||
+        editInFlightRef.current ||
+        heldRetriesRef.current.has(id) ||
+        heldDeletionsRef.current.has(id)
+      )
+        return;
+      if (serverOutboxRef.current.represented.has(id)) return;
+      if (
+        localOutboxRef.current.some(
+          (entry) =>
+            entry.sessionId === sid &&
+            entry.replaces === id &&
+            entry.state === "sending",
+        )
+      )
+        return;
+      heldRetriesRef.current.add(id);
+      try {
+        const serverIds = serverOutboxRef.current.seen;
+        const confirmedIds = new Set(
+          localOutboxRef.current
+            .filter(
+              (entry) =>
+                entry.sessionId === sid &&
+                entry.replaces !== undefined &&
+                serverIds.has(entry.id),
+            )
+            .map((entry) => entry.id),
+        );
+        if (serverIds.has(id)) confirmedIds.add(id);
+        if (confirmedIds.size) await reconcileOutbox(sid, [...confirmedIds]);
+        if (
+          !hookAliveRef.current ||
+          sessionIdRef.current !== sid ||
+          editInFlightRef.current ||
+          serverOutboxRef.current.represented.has(id)
+        )
+          return;
+        const current = heldMessagesRef.current.find(
+          (entry) => entry.id === id,
+        );
+        if (!current || current.state !== "failed") return;
+        if (
+          held.local &&
+          !localOutboxRef.current.some((entry) => entry.id === id)
+        )
+          return;
+        if (
+          localOutboxRef.current.some(
+            (entry) =>
+              entry.sessionId === sid &&
+              entry.replaces === id &&
+              entry.state === "sending",
+          )
+        )
+          return;
+        // Only this browser's durable row can supply a proof; server snapshots never expose one.
+        const local = localOutboxRef.current.find(
+          (entry) => entry.sessionId === sid && entry.id === id,
+        );
+        await holdMessage(
+          sid,
+          current.mode,
+          current.message,
+          current.images,
+          current.uploads,
+          local?.uploadProofs,
+          id,
+          current.advisor ?? local?.advisor ?? false,
+        );
+      } catch (error) {
+        if (hookAliveRef.current && sessionIdRef.current === sid)
+          addNotice({
+            type: "error",
+            message: error instanceof Error ? error.message : String(error),
+          });
+      } finally {
+        heldRetriesRef.current.delete(id);
+      }
+    },
+    [addNotice, holdMessage],
+  );
 
   const handleAbortCompaction = useCallback(async () => {
     const sid = sessionIdRef.current;

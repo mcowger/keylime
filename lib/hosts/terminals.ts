@@ -37,14 +37,24 @@ function contains(root: string, cwd: string): boolean {
 }
 type RGB = [number, number, number];
 const ansiDefaults = [
-  0x2e3436, 0xcc0000, 0x4e9a06, 0xc4a000, 0x3465a4, 0x75507b, 0x06989a, 0xd3d7cf,
-  0x555753, 0xef2929, 0x8ae234, 0xfce94f, 0x729fcf, 0xad7fa8, 0x34e2e2, 0xeeeeec,
+  0x2e3436, 0xcc0000, 0x4e9a06, 0xc4a000, 0x3465a4, 0x75507b, 0x06989a,
+  0xd3d7cf, 0x555753, 0xef2929, 0x8ae234, 0xfce94f, 0x729fcf, 0xad7fa8,
+  0x34e2e2, 0xeeeeec,
 ].map((c): RGB => [c >> 16, (c >> 8) & 255, c & 255]);
 const levels = [0, 95, 135, 175, 215, 255];
 for (let i = 0; i < 216; i++)
-  ansiDefaults.push([levels[Math.floor(i / 36)], levels[Math.floor(i / 6) % 6], levels[i % 6]]);
-for (let i = 0; i < 24; i++) ansiDefaults.push([8 + i * 10, 8 + i * 10, 8 + i * 10]);
-const specialDefaults: RGB[] = [[255, 255, 255], [0, 0, 0], [255, 255, 255]];
+  ansiDefaults.push([
+    levels[Math.floor(i / 36)],
+    levels[Math.floor(i / 6) % 6],
+    levels[i % 6],
+  ]);
+for (let i = 0; i < 24; i++)
+  ansiDefaults.push([8 + i * 10, 8 + i * 10, 8 + i * 10]);
+const specialDefaults: RGB[] = [
+  [255, 255, 255],
+  [0, 0, 0],
+  [255, 255, 255],
+];
 
 // Match xterm.js XParseColor, including its distinct #RGB and rgb:R/G/B scaling.
 function parseColor(spec: string): RGB | undefined {
@@ -53,21 +63,46 @@ function parseColor(spec: string): RGB | undefined {
   if (/^rgb:/i.test(spec)) {
     parts = spec.slice(4).split("/");
     rgb = true;
-    if (parts.length !== 3 || !parts.every((p) => /^[\da-f]{1,4}$/i.test(p) && p.length === parts[0].length)) return;
-  } else if (/^#[\da-f]+$/i.test(spec) && [4, 7, 10, 13].includes(spec.length)) {
+    if (
+      parts.length !== 3 ||
+      !parts.every(
+        (p) => /^[\da-f]{1,4}$/i.test(p) && p.length === parts[0].length,
+      )
+    )
+      return;
+  } else if (
+    /^#[\da-f]+$/i.test(spec) &&
+    [4, 7, 10, 13].includes(spec.length)
+  ) {
     const width = (spec.length - 1) / 3;
-    parts = [spec.slice(1, 1 + width), spec.slice(1 + width, 1 + width * 2), spec.slice(1 + width * 2)];
+    parts = [
+      spec.slice(1, 1 + width),
+      spec.slice(1 + width, 1 + width * 2),
+      spec.slice(1 + width * 2),
+    ];
   } else return;
   return parts.map((part) => {
     const value = parseInt(part, 16);
-    return rgb ? Math.round(value * 255 / (16 ** part.length - 1)) : part.length === 1 ? value << 4 : part.length === 2 ? value : value >> (4 * (part.length - 2));
+    return rgb
+      ? Math.round((value * 255) / (16 ** part.length - 1))
+      : part.length === 1
+        ? value << 4
+        : part.length === 2
+          ? value
+          : value >> (4 * (part.length - 2));
   }) as RGB;
 }
 function colorReply(color: RGB): string {
-  return "rgb:" + color.map((c) => c.toString(16).padStart(2, "0").repeat(2)).join("/");
+  return (
+    "rgb:" +
+    color.map((c) => c.toString(16).padStart(2, "0").repeat(2)).join("/")
+  );
 }
 
-function installColorHandlers(screen: Terminal, reply: (data: string) => void): void {
+function installColorHandlers(
+  screen: Terminal,
+  reply: (data: string) => void,
+): void {
   const palette = ansiDefaults.slice();
   const special = specialDefaults.slice();
   screen.parser.registerOscHandler(4, (data) => {
@@ -76,7 +111,8 @@ function installColorHandlers(screen: Terminal, reply: (data: string) => void): 
       if (!/^\d+$/.test(parts[i])) continue;
       const index = Number(parts[i]);
       if (index > 255) continue;
-      if (parts[i + 1] === "?") reply(`\x1b]4;${index};${colorReply(palette[index])}\x1b\\`);
+      if (parts[i + 1] === "?")
+        reply(`\x1b]4;${index};${colorReply(palette[index])}\x1b\\`);
       else {
         const color = parseColor(parts[i + 1]);
         if (color) palette[index] = color;
@@ -89,7 +125,8 @@ function installColorHandlers(screen: Terminal, reply: (data: string) => void): 
       const parts = data.split(";");
       for (let i = 0; i < parts.length && id + i <= 12; i++) {
         const index = id + i - 10;
-        if (parts[i] === "?") reply(`\x1b]${id + i};${colorReply(special[index])}\x1b\\`);
+        if (parts[i] === "?")
+          reply(`\x1b]${id + i};${colorReply(special[index])}\x1b\\`);
         else {
           const color = parseColor(parts[i]);
           if (color) special[index] = color;
@@ -104,10 +141,12 @@ function installColorHandlers(screen: Terminal, reply: (data: string) => void): 
   }
   screen.parser.registerOscHandler(104, (data) => {
     if (!data) for (let i = 0; i < 256; i++) palette[i] = ansiDefaults[i];
-    else for (const part of data.split(";")) {
-      const index = Number(part);
-      if (/^\d+$/.test(part) && index <= 255) palette[index] = ansiDefaults[index];
-    }
+    else
+      for (const part of data.split(";")) {
+        const index = Number(part);
+        if (/^\d+$/.test(part) && index <= 255)
+          palette[index] = ansiDefaults[index];
+      }
     return true;
   });
 }
@@ -302,16 +341,29 @@ export class TerminalManager {
     }
   }
   focus(id: string, viewer: string, focused: boolean): void {
-    if (typeof viewer !== "string" || viewer.length < 1 || viewer.length > 128 || typeof focused !== "boolean") throw invalid();
+    if (
+      typeof viewer !== "string" ||
+      viewer.length < 1 ||
+      viewer.length > 128 ||
+      typeof focused !== "boolean"
+    )
+      throw invalid();
     const entry = this.get(id);
     if (focused && !entry.viewers.has(viewer) && entry.viewers.size >= 128)
-      throw new HostOpError(409, "terminal_viewer_limit", "Too many terminal viewers");
+      throw new HostOpError(
+        409,
+        "terminal_viewer_limit",
+        "Too many terminal viewers",
+      );
     clearTimeout(entry.viewers.get(viewer));
     if (focused) {
-      entry.viewers.set(viewer, setTimeout(() => {
-        entry.viewers.delete(viewer);
-        if (!entry.closed) this.syncFocus(entry);
-      }, 15000));
+      entry.viewers.set(
+        viewer,
+        setTimeout(() => {
+          entry.viewers.delete(viewer);
+          if (!entry.closed) this.syncFocus(entry);
+        }, 15000),
+      );
     } else entry.viewers.delete(viewer);
     this.syncFocus(entry);
   }

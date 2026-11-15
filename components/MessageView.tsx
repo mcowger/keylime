@@ -1129,7 +1129,11 @@ export function HeldMessageView({
                 type="button"
                 className="ui-focus-ring"
                 style={heldActionStyle}
-                onClick={() => held.mayHaveBeenSent ? setConfirmingRetry(true) : onRetry(held.id)}
+                onClick={() =>
+                  held.mayHaveBeenSent
+                    ? setConfirmingRetry(true)
+                    : onRetry(held.id)
+                }
                 aria-label={t("heldMessage.retryTitle")}
               >
                 <RotateCcw size={11} strokeWidth={1.8} aria-hidden />
@@ -1142,7 +1146,10 @@ export function HeldMessageView({
                 description={t("heldMessage.retryConfirmMayHaveBeenSent")}
                 confirmLabel={t("heldMessage.retry")}
                 cancelLabel={t("chatInput.cancel")}
-                onConfirm={() => { setConfirmingRetry(false); onRetry(held.id); }}
+                onConfirm={() => {
+                  setConfirmingRetry(false);
+                  onRetry(held.id);
+                }}
               />
             </>
           )}
@@ -1952,24 +1959,38 @@ function readTargetWebUrl(target: string): string | null {
 
 function WaitResult({ text }: { text: string }) {
   const parts: React.ReactNode[] = [];
-  const notices = /<(system-notice|system-reminder)((?:\s+[\w-]+="[^"]*")*)\s*>([\s\S]*?)<\/\1>/g;
+  const notices =
+    /<(system-notice|system-reminder)((?:\s+[\w-]+="[^"]*")*)\s*>([\s\S]*?)<\/\1>/g;
   let offset = 0;
   for (const match of text.matchAll(notices)) {
     const before = text.slice(offset, match.index);
     if (before.trim()) {
-      parts.push(<ThinkingMarkdown headings key={offset}>{before}</ThinkingMarkdown>);
+      parts.push(
+        <ThinkingMarkdown headings key={offset}>
+          {before}
+        </ThinkingMarkdown>,
+      );
     }
     parts.push(
       <details className="tool-output-notice" key={match.index}>
-        <summary>{match[1] === "system-reminder" ? "System reminder" : "System notice"}</summary>
-        <div>{match[2].trim() && `${match[2].trim()}\n`}{match[3].trim()}</div>
+        <summary>
+          {match[1] === "system-reminder" ? "System reminder" : "System notice"}
+        </summary>
+        <div>
+          {match[2].trim() && `${match[2].trim()}\n`}
+          {match[3].trim()}
+        </div>
       </details>,
     );
     offset = match.index + match[0].length;
   }
   const remaining = text.slice(offset);
   if (remaining.trim()) {
-    parts.push(<ThinkingMarkdown headings key={offset}>{remaining}</ThinkingMarkdown>);
+    parts.push(
+      <ThinkingMarkdown headings key={offset}>
+        {remaining}
+      </ThinkingMarkdown>,
+    );
   }
   return <>{parts}</>;
 }

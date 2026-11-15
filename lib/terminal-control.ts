@@ -1,6 +1,9 @@
 // Apply the touch Ctrl latch to one typed character, leaving paste and escape
 // sequences unchanged until a character or accessory key consumes the latch.
-export function applyTerminalControl(data: string, latched: boolean): { data: string; consumed: boolean } {
+export function applyTerminalControl(
+  data: string,
+  latched: boolean,
+): { data: string; consumed: boolean } {
   if (!latched || data.length !== 1) return { data, consumed: false };
   const code = data.toUpperCase().charCodeAt(0);
   if (data === " ") data = "\x00";

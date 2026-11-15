@@ -1689,22 +1689,23 @@ export function ChatWindow({
             >
               {session && shipWorkspace && (
                 <>
-                  {shipButtonContainer && createPortal(
-                    <button
-                      type="button"
-                      className="ui-focus-ring rounded-md border border-solid border-[var(--border)] bg-[var(--bg-panel)] px-3 py-1.5 text-sm font-semibold text-[var(--text)] hover:bg-[var(--bg-hover)] disabled:cursor-default disabled:opacity-50"
-                      disabled={sessionBusy || streamState.isStreaming}
-                      title={
-                        sessionBusy || streamState.isStreaming
-                          ? "Wait for the session to finish"
-                          : "Ship workspace"
-                      }
-                      onClick={() => setShipOpen(true)}
-                    >
-                      Ship
-                    </button>,
-                    shipButtonContainer,
-                  )}
+                  {shipButtonContainer &&
+                    createPortal(
+                      <button
+                        type="button"
+                        className="ui-focus-ring rounded-md border border-solid border-[var(--border)] bg-[var(--bg-panel)] px-3 py-1.5 text-sm font-semibold text-[var(--text)] hover:bg-[var(--bg-hover)] disabled:cursor-default disabled:opacity-50"
+                        disabled={sessionBusy || streamState.isStreaming}
+                        title={
+                          sessionBusy || streamState.isStreaming
+                            ? "Wait for the session to finish"
+                            : "Ship workspace"
+                        }
+                        onClick={() => setShipOpen(true)}
+                      >
+                        Ship
+                      </button>,
+                      shipButtonContainer,
+                    )}
                   <ShipDialog
                     open={shipOpen}
                     onOpenChange={setShipOpen}
@@ -1715,7 +1716,9 @@ export function ChatWindow({
                     onAskAgentToResolve={async (message) => {
                       const result = await handleSend(message);
                       if (result.status !== "accepted")
-                        throw new Error("Could not submit the resolve request.");
+                        throw new Error(
+                          "Could not submit the resolve request.",
+                        );
                     }}
                     onRemoved={shipWorkspace.onRemoved}
                   />
@@ -1846,10 +1849,7 @@ export function ChatWindow({
                     className="flex flex-1 flex-col items-center justify-center overflow-y-auto py-8"
                     style={{ minHeight: 0, paddingInline: CHAT_COLUMN_PADDING }}
                   >
-                    <div
-                      className="w-full"
-                      style={{ maxWidth: 760 }}
-                    >
+                    <div className="w-full" style={{ maxWidth: 760 }}>
                       <div
                         className="mb-3 empty-chat-brand"
                         style={{

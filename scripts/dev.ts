@@ -61,9 +61,7 @@ const probe = Bun.listen({
 const port = probe.port;
 probe.stop(true);
 const url = `http://127.0.0.1:${port}`;
-console.log(
-  `[dev] Directory: ${directory}\n[dev] URL: ${url}`,
-);
+console.log(`[dev] Directory: ${directory}\n[dev] URL: ${url}`);
 
 const children: Bun.Subprocess[] = [];
 let stopping = false;

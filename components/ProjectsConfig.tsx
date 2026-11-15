@@ -116,7 +116,12 @@ function notifyNameSave(save: NameSave) {
   for (const listener of save.listeners) listener();
 }
 
-async function saveProjectName(key: string, hostId: string, projectId: string, save: NameSave) {
+async function saveProjectName(
+  key: string,
+  hostId: string,
+  projectId: string,
+  save: NameSave,
+) {
   if (save.running) return;
   save.running = true;
   while (true) {
@@ -145,14 +150,14 @@ async function saveProjectName(key: string, hostId: string, projectId: string, s
       }
       continue;
     }
-    if (version === save.version || (save.name.trim() || null) === save.saved) break;
+    if (version === save.version || (save.name.trim() || null) === save.saved)
+      break;
   }
   save.running = false;
   notifyNameSave(save);
   if (!save.listeners.size && !save.error && nameSaves.get(key) === save)
     nameSaves.delete(key);
 }
-
 
 export function ProjectSettings({
   hostId,
@@ -186,13 +191,19 @@ export function ProjectSettings({
   useEffect(() => {
     nameSaves.set(key, save);
     const listener = () => setRevision((n) => n + 1);
-    const updated = (snapshot: HierarchySnapshot) => onUpdatedRef.current(snapshot);
+    const updated = (snapshot: HierarchySnapshot) =>
+      onUpdatedRef.current(snapshot);
     save.listeners.add(listener);
     save.updated.add(updated);
     return () => {
       save.listeners.delete(listener);
       save.updated.delete(updated);
-      if (!save.listeners.size && !save.running && !save.error && nameSaves.get(key) === save)
+      if (
+        !save.listeners.size &&
+        !save.running &&
+        !save.error &&
+        nameSaves.get(key) === save
+      )
         nameSaves.delete(key);
     };
   }, [key, save]);
@@ -224,14 +235,41 @@ export function ProjectSettings({
       }}
     >
       <h3>{project.alias ?? project.name}</h3>
-      <div style={{ color: "var(--text-dim)", fontSize: 12, overflowWrap: "anywhere" }}>
+      <div
+        style={{
+          color: "var(--text-dim)",
+          fontSize: 12,
+          overflowWrap: "anywhere",
+        }}
+      >
         {project.path}
       </div>
       <label>
         Display name{" "}
-        <input style={{ width: "100%", padding: 8, border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg-panel)", color: "var(--text)" }} value={save.name} onChange={(e) => changeName(e.target.value)} />
+        <input
+          style={{
+            width: "100%",
+            padding: 8,
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-control)",
+            background: "var(--bg-panel)",
+            color: "var(--text)",
+          }}
+          value={save.name}
+          onChange={(e) => changeName(e.target.value)}
+        />
       </label>
-      {save.error && <div role="alert">{save.error} <button type="button" onClick={() => void saveProjectName(key, hostId, project.id, save)}>Retry</button></div>}
+      {save.error && (
+        <div role="alert">
+          {save.error}{" "}
+          <button
+            type="button"
+            onClick={() => void saveProjectName(key, hostId, project.id, save)}
+          >
+            Retry
+          </button>
+        </div>
+      )}
       <CreationPipelineEditor
         key={`${hostId}:${project.path}`}
         hostId={hostId}

@@ -488,7 +488,9 @@ async function openChannel(
 
 // Subscriptions outlive module re-evaluation under bun --hot.
 declare global {
-  var __ompOpenChats: { counts: Map<string, number>; listeners: Set<SubscriptionHandle> } | undefined;
+  var __ompOpenChats:
+    | { counts: Map<string, number>; listeners: Set<SubscriptionHandle> }
+    | undefined;
 }
 const { counts: openChats, listeners: openChatsListeners } =
   (globalThis.__ompOpenChats ??= { counts: new Map(), listeners: new Set() });
@@ -498,7 +500,10 @@ function broadcastOpenChats(): void {
   for (const listener of openChatsListeners) listener.send(snapshot);
 }
 
-function openChatChannel(sessionId: string, handle: SubscriptionHandle): SubscribeResult {
+function openChatChannel(
+  sessionId: string,
+  handle: SubscriptionHandle,
+): SubscribeResult {
   handle.open();
   if (!handle.active) return SUBSCRIBED;
   openChats.set(sessionId, (openChats.get(sessionId) ?? 0) + 1);

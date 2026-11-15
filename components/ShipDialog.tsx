@@ -139,7 +139,17 @@ export function ShipDialog({
   }, [open, host, projectPath, path, sessionId]);
 
   useEffect(() => {
-    if (!open || mode === "local" || !preview || preview.issues.length || plan === undefined || (plan === null && preview.ahead === 0) || pr || prLoading) return;
+    if (
+      !open ||
+      mode === "local" ||
+      !preview ||
+      preview.issues.length ||
+      plan === undefined ||
+      (plan === null && preview.ahead === 0) ||
+      pr ||
+      prLoading
+    )
+      return;
     const current = generation.current;
     setPrLoading(true);
     void sendAgentCommand<PrDescription>(sessionId, {
@@ -267,24 +277,61 @@ export function ShipDialog({
         }}
       >
         <DialogTitle>Ship workspace</DialogTitle>
-        {error && <Alert variant="error" description={error} style={{ marginTop: 16 }} />}
+        {error && (
+          <Alert
+            variant="error"
+            description={error}
+            style={{ marginTop: 16 }}
+          />
+        )}
         {plan === undefined && !error && !preview?.issues.length && (
-          <p role="status" style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)", fontSize: 12 }}>
-            <Loader2 size={16} aria-hidden="true" /> Generating commit plan ({elapsed}s)
+          <p
+            role="status"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              color: "var(--text-muted)",
+              fontSize: 12,
+            }}
+          >
+            <Loader2 size={16} aria-hidden="true" /> Generating commit plan (
+            {elapsed}s)
           </p>
         )}
-        {!preview && !error && <p style={{ color: "var(--text-muted)", fontSize: 12 }}>Loading workspace...</p>}
+        {!preview && !error && (
+          <p style={{ color: "var(--text-muted)", fontSize: 12 }}>
+            Loading workspace...
+          </p>
+        )}
         {!!preview?.issues.length && !job && (
           <div style={{ display: "grid", gap: 8, marginTop: 16 }}>
-            {preview.issues.map((issue, i) => <Alert key={i} variant="warning" description={issue} />)}
-            <button type="button" style={{ ...secondaryButtonStyle, justifySelf: "start" }} disabled={asking} onClick={() => void askAgent(`Please resolve these issues preventing shipping this workspace:\n${preview.issues.map((issue) => `- ${issue}`).join("\n")}`)}>
+            {preview.issues.map((issue, i) => (
+              <Alert key={i} variant="warning" description={issue} />
+            ))}
+            <button
+              type="button"
+              style={{ ...secondaryButtonStyle, justifySelf: "start" }}
+              disabled={asking}
+              onClick={() =>
+                void askAgent(
+                  `Please resolve these issues preventing shipping this workspace:\n${preview.issues.map((issue) => `- ${issue}`).join("\n")}`,
+                )
+              }
+            >
               {asking ? "Sending..." : "Ask agent to resolve"}
             </button>
           </div>
         )}
         {preview && plan !== undefined && !job && (
           <div style={{ display: "grid", gap: 14, marginTop: 16 }}>
-            {nothing && <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 13 }}>Nothing to ship.</p>}
+            {nothing && (
+              <p
+                style={{ margin: 0, color: "var(--text-muted)", fontSize: 13 }}
+              >
+                Nothing to ship.
+              </p>
+            )}
             {plan?.commits.map((commit, index) => (
               <Field
                 key={index}
@@ -295,7 +342,14 @@ export function ShipDialog({
                 }
               >
                 <div style={{ display: "grid", gap: 6 }}>
-                  <div style={pathStyle}>{commit.files.map((file, i) => <code key={i}>{i > 0 && ", "}{file}</code>)}</div>
+                  <div style={pathStyle}>
+                    {commit.files.map((file, i) => (
+                      <code key={i}>
+                        {i > 0 && ", "}
+                        {file}
+                      </code>
+                    ))}
+                  </div>
                   <textarea
                     aria-label={`Commit ${index + 1} message`}
                     value={commit.message}
@@ -317,14 +371,25 @@ export function ShipDialog({
             ))}
             {plan?.changelog.length ? (
               <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
-                Changelog: <span style={pathStyle}>{plan.changelog.map((item, i) => <code key={i}>{i > 0 && ", "}{item.path}</code>)}</span>
+                Changelog:{" "}
+                <span style={pathStyle}>
+                  {plan.changelog.map((item, i) => (
+                    <code key={i}>
+                      {i > 0 && ", "}
+                      {item.path}
+                    </code>
+                  ))}
+                </span>
               </div>
             ) : null}
             {plan?.warnings.map((warning, i) => (
               <Alert key={i} variant="warning" description={warning} />
             ))}
             {plan?.usedFallback && (
-              <Alert variant="warning" description="Generated a fallback commit message. Review it before shipping." />
+              <Alert
+                variant="warning"
+                description="Generated a fallback commit message. Review it before shipping."
+              />
             )}
             <Check
               checked={rebase}
@@ -333,9 +398,26 @@ export function ShipDialog({
             />
             <fieldset
               disabled={working || !!nothing}
-              style={{ display: "grid", gap: 8, margin: 0, padding: "10px 12px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", color: "var(--text-muted)", fontSize: 12 }}
+              style={{
+                display: "grid",
+                gap: 8,
+                margin: 0,
+                padding: "10px 12px 12px",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-control)",
+                color: "var(--text-muted)",
+                fontSize: 12,
+              }}
             >
-              <legend style={{ padding: "0 4px", color: "var(--text)", fontWeight: 600 }}>Path</legend>
+              <legend
+                style={{
+                  padding: "0 4px",
+                  color: "var(--text)",
+                  fontWeight: 600,
+                }}
+              >
+                Path
+              </legend>
               <label
                 style={{ display: "flex", alignItems: "center", gap: 8 }}
                 title={
@@ -355,7 +437,10 @@ export function ShipDialog({
                   ? " (base workspace has uncommitted changes)"
                   : ""}
               </label>
-              <label title={githubReason ?? undefined} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <label
+                title={githubReason ?? undefined}
+                style={{ display: "flex", alignItems: "center", gap: 8 }}
+              >
                 <input
                   type="radio"
                   checked={mode === "pr"}
@@ -364,7 +449,10 @@ export function ShipDialog({
                 />{" "}
                 Open PR{githubReason ? ` (${githubReason})` : ""}
               </label>
-              <label title={githubReason ?? undefined} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <label
+                title={githubReason ?? undefined}
+                style={{ display: "flex", alignItems: "center", gap: 8 }}
+              >
                 <input
                   type="radio"
                   checked={mode === "pr-auto"}
@@ -376,7 +464,16 @@ export function ShipDialog({
             </fieldset>
             {mode !== "local" &&
               (prLoading ? (
-                <p role="status" style={{ margin: 0, color: "var(--text-muted)", fontSize: 12 }}>Generating PR description...</p>
+                <p
+                  role="status"
+                  style={{
+                    margin: 0,
+                    color: "var(--text-muted)",
+                    fontSize: 12,
+                  }}
+                >
+                  Generating PR description...
+                </p>
               ) : (
                 pr && (
                   <>
@@ -416,24 +513,85 @@ export function ShipDialog({
         )}
         {job && (
           <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
-            <ul style={{ display: "grid", gap: 8, margin: 0, padding: 0, listStyle: "none" }}>
+            <ul
+              style={{
+                display: "grid",
+                gap: 8,
+                margin: 0,
+                padding: 0,
+                listStyle: "none",
+              }}
+            >
               {job.steps.map((step) => (
-                <li key={step.name} style={{ display: "flex", alignItems: "flex-start", gap: 8, color: step.status === "failed" ? "var(--status-error)" : "var(--text-muted)", fontSize: 12, lineHeight: 1.5 }}>
-                  <span aria-hidden="true" style={{ display: "flex", flexShrink: 0, marginTop: 2, color: step.status === "done" ? "var(--status-success)" : step.status === "failed" ? "var(--status-error)" : "var(--text-dim)" }}>
-                    {step.status === "running" ? <Loader2 size={14} /> : step.status === "done" ? <CheckCircle2 size={14} /> : step.status === "failed" ? <XCircle size={14} /> : <Circle size={14} />}
+                <li
+                  key={step.name}
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 8,
+                    color:
+                      step.status === "failed"
+                        ? "var(--status-error)"
+                        : "var(--text-muted)",
+                    fontSize: 12,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      display: "flex",
+                      flexShrink: 0,
+                      marginTop: 2,
+                      color:
+                        step.status === "done"
+                          ? "var(--status-success)"
+                          : step.status === "failed"
+                            ? "var(--status-error)"
+                            : "var(--text-dim)",
+                    }}
+                  >
+                    {step.status === "running" ? (
+                      <Loader2 size={14} />
+                    ) : step.status === "done" ? (
+                      <CheckCircle2 size={14} />
+                    ) : step.status === "failed" ? (
+                      <XCircle size={14} />
+                    ) : (
+                      <Circle size={14} />
+                    )}
                   </span>
-                  <span style={{ minWidth: 0, overflowWrap: "anywhere" }}><strong style={{ color: "var(--text)" }}>{step.name}</strong>: {step.status} {step.detail}</span>
+                  <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+                    <strong style={{ color: "var(--text)" }}>
+                      {step.name}
+                    </strong>
+                    : {step.status} {step.detail}
+                  </span>
                 </li>
               ))}
             </ul>
             {job.status === "conflict" && (
               <>
-                <div style={{ color: "var(--status-warning)", fontSize: 12 }}>Conflicts: <span style={pathStyle}>{job.conflictFiles?.map((file, i) => <code key={i}>{i > 0 && ", "}{file}</code>)}</span></div>
+                <div style={{ color: "var(--status-warning)", fontSize: 12 }}>
+                  Conflicts:{" "}
+                  <span style={pathStyle}>
+                    {job.conflictFiles?.map((file, i) => (
+                      <code key={i}>
+                        {i > 0 && ", "}
+                        {file}
+                      </code>
+                    ))}
+                  </span>
+                </div>
                 <button
                   type="button"
                   style={{ ...secondaryButtonStyle, justifySelf: "start" }}
                   disabled={asking}
-                  onClick={() => void askAgent(`Rebasing onto ${preview?.base} conflicts in: ${job.conflictFiles?.join(", ")}. Rebase this branch onto ${preview?.base} and resolve the conflicts, keeping both sides' intent.`)}
+                  onClick={() =>
+                    void askAgent(
+                      `Rebasing onto ${preview?.base} conflicts in: ${job.conflictFiles?.join(", ")}. Rebase this branch onto ${preview?.base} and resolve the conflicts, keeping both sides' intent.`,
+                    )
+                  }
                 >
                   {asking ? "Sending..." : "Ask agent to resolve"}
                 </button>
@@ -444,7 +602,19 @@ export function ShipDialog({
                 <Alert variant="error" description={job.error || job.status} />
                 <details style={{ color: "var(--text-muted)", fontSize: 12 }}>
                   <summary style={{ cursor: "pointer" }}>Logs</summary>
-                  <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", padding: 10, background: "var(--bg-subtle)", borderRadius: "var(--radius-control)", fontFamily: "var(--font-mono)", fontSize: 11 }}>{job.logs}</pre>
+                  <pre
+                    style={{
+                      whiteSpace: "pre-wrap",
+                      overflowWrap: "anywhere",
+                      padding: 10,
+                      background: "var(--bg-subtle)",
+                      borderRadius: "var(--radius-control)",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 11,
+                    }}
+                  >
+                    {job.logs}
+                  </pre>
                 </details>
               </>
             )}
@@ -458,14 +628,28 @@ export function ShipDialog({
             marginTop: 16,
           }}
         >
-          <button type="button" className="dialog-action" style={secondaryButtonStyle} onClick={() => onOpenChange(false)}>
+          <button
+            type="button"
+            className="dialog-action"
+            style={secondaryButtonStyle}
+            onClick={() => onOpenChange(false)}
+          >
             Cancel
           </button>
           {!job && (
             <button
               type="button"
               className="dialog-action"
-              style={{ padding: "6px 14px", background: "var(--accent-strong)", border: "none", borderRadius: "var(--radius-control)", color: "var(--on-accent)", cursor: working ? "wait" : "pointer", fontSize: 13, fontWeight: 600 }}
+              style={{
+                padding: "6px 14px",
+                background: "var(--accent-strong)",
+                border: "none",
+                borderRadius: "var(--radius-control)",
+                color: "var(--on-accent)",
+                cursor: working ? "wait" : "pointer",
+                fontSize: 13,
+                fontWeight: 600,
+              }}
               disabled={
                 working ||
                 !preview ||

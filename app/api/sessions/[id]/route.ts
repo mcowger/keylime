@@ -186,7 +186,9 @@ export async function DELETE(
     try {
       forgetSessionReplacementMappings(id);
     } catch (error) {
-      console.warn(`[api/sessions] could not clear deleted-session retry metadata: ${error instanceof Error ? error.message : String(error)}`);
+      console.warn(
+        `[api/sessions] could not clear deleted-session retry metadata: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
     invalidateHostSessionList(resolved.host.id);
     clearExitedRpcSession(id);

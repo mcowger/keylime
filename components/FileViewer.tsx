@@ -1643,15 +1643,25 @@ function TextFileViewer({
                 <Tooltip content={t("fileViewer.highlightLanguage")}>
                   <ThemedSelect
                     value={languageOverride ?? ""}
-                    onChange={(nextValue) => setLanguageOverride(nextValue || null)}
+                    onChange={(nextValue) =>
+                      setLanguageOverride(nextValue || null)
+                    }
                     aria-label={t("fileViewer.highlightLanguage")}
                     className="file-viewer-language-select"
                     options={[
                       // Upstream 280a9b5 shares the themed control; the empty
                       // value still means auto-detect per file in Keylime.
-                      { value: "", label: t("fileViewer.languageAuto", { language: data.language }) },
+                      {
+                        value: "",
+                        label: t("fileViewer.languageAuto", {
+                          language: data.language,
+                        }),
+                      },
                       { value: "plaintext", label: t("fileViewer.plainText") },
-                      ...HIGHLIGHT_LANGUAGES.map((language) => ({ value: language, label: language })),
+                      ...HIGHLIGHT_LANGUAGES.map((language) => ({
+                        value: language,
+                        label: language,
+                      })),
                     ]}
                   />
                 </Tooltip>

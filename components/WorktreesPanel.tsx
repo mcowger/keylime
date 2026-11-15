@@ -213,7 +213,8 @@ export function WorktreesPanel({
                     void fetch(`/api/worktrees?${params}`)
                       .then(async (r) => {
                         const value = await r.json();
-                        if (!r.ok) throw new Error(value.error ?? "Request failed");
+                        if (!r.ok)
+                          throw new Error(value.error ?? "Request failed");
                         setJob(value);
                       })
                       .catch((e) => setError(String(e)));
@@ -338,17 +339,31 @@ export function WorktreesPanel({
             Setup: {job.status} / {job.stage}
             {job.error ? ` — ${job.error}` : ""}
           </p>
-          <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{job.logs}</pre>
-          <button type="button" onClick={() => setJob(null)}>Close logs</button>
+          <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+            {job.logs}
+          </pre>
+          <button type="button" onClick={() => setJob(null)}>
+            Close logs
+          </button>
         </section>
       )}
       {!createOnly && project?.kind === "git" && (
         <button onClick={() => setModalOpen(true)}>Create workspace</button>
       )}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="workspace-create-dialog" style={{ width: 520 }}>
+        <DialogContent
+          className="workspace-create-dialog"
+          style={{ width: 520 }}
+        >
           <DialogTitle>Create workspace</DialogTitle>
-          <div style={{ marginTop: 8, color: "var(--text-muted)", fontSize: 13, overflowWrap: "anywhere" }}>
+          <div
+            style={{
+              marginTop: 8,
+              color: "var(--text-muted)",
+              fontSize: 13,
+              overflowWrap: "anywhere",
+            }}
+          >
             Project: {project?.alias ?? project?.name ?? projectPath}
             {projectPath && <div>{projectPath}</div>}
           </div>

@@ -268,10 +268,14 @@ export function AppShell({ appName }: { appName: string }) {
   const chatTabsRef = useRef(chatTabs);
   const [openSessionIds, setOpenSessionIds] = useState<string[]>([]);
   const [sharedSessions, setSharedSessions] = useState<SessionInfo[]>([]);
-  const [hiddenSharedIds, setHiddenSharedIds] = useState<Set<string>>(() => new Set());
+  const [hiddenSharedIds, setHiddenSharedIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const membershipStreams = useRef(new Map<string, EventStream>());
   useEffect(() => {
-    const ids = new Set(chatTabs.flatMap((tab) => tab.session ? [tab.session.id] : []));
+    const ids = new Set(
+      chatTabs.flatMap((tab) => (tab.session ? [tab.session.id] : [])),
+    );
     for (const [id, stream] of membershipStreams.current) {
       if (!ids.has(id)) {
         stream.close();
@@ -280,13 +284,19 @@ export function AppShell({ appName }: { appName: string }) {
     }
     for (const id of ids) {
       if (!membershipStreams.current.has(id))
-        membershipStreams.current.set(id, openEventStream({ kind: "open-chat", sessionId: id }));
+        membershipStreams.current.set(
+          id,
+          openEventStream({ kind: "open-chat", sessionId: id }),
+        );
     }
   }, [chatTabs]);
-  useEffect(() => () => {
-    for (const stream of membershipStreams.current.values()) stream.close();
-    membershipStreams.current.clear();
-  }, []);
+  useEffect(
+    () => () => {
+      for (const stream of membershipStreams.current.values()) stream.close();
+      membershipStreams.current.clear();
+    },
+    [],
+  );
   useEffect(() => {
     const source = openEventStream({ kind: "open-chats" });
     let version = 0;
@@ -294,26 +304,41 @@ export function AppShell({ appName }: { appName: string }) {
     source.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data) as { sessionIds?: unknown };
-        if (!Array.isArray(data.sessionIds) || !data.sessionIds.every((id) => typeof id === "string")) return;
+        if (
+          !Array.isArray(data.sessionIds) ||
+          !data.sessionIds.every((id) => typeof id === "string")
+        )
+          return;
         const ids: string[] = data.sessionIds;
         setOpenSessionIds(ids);
-        setHiddenSharedIds((hidden) => new Set([...hidden].filter((id) => ids.includes(id))));
+        setHiddenSharedIds(
+          (hidden) => new Set([...hidden].filter((id) => ids.includes(id))),
+        );
         const current = ++version;
         if (ids.length === 0) {
           setSharedSessions([]);
           return;
         }
-        void fetch("/api/sessions").then(async (response) => {
-          if (!response.ok) return;
-          const result = await response.json() as { sessions: SessionInfo[] };
-          if (!closed && current === version)
-            setSharedSessions(result.sessions.filter((session) => ids.includes(session.id)));
-        }).catch(() => {});
+        void fetch("/api/sessions")
+          .then(async (response) => {
+            if (!response.ok) return;
+            const result = (await response.json()) as {
+              sessions: SessionInfo[];
+            };
+            if (!closed && current === version)
+              setSharedSessions(
+                result.sessions.filter((session) => ids.includes(session.id)),
+              );
+          })
+          .catch(() => {});
       } catch {
         // Ignore malformed event frames.
       }
     };
-    return () => { closed = true; source.close(); };
+    return () => {
+      closed = true;
+      source.close();
+    };
   }, []);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const activeChatIdRef = useRef<string | null>(null);
@@ -1425,7 +1450,8 @@ export function AppShell({ appName }: { appName: string }) {
       // Live rect, not state: it always reflects the committed width (custom or
       // fluid default), and keeps this callback above the state declarations
       // without a TDZ cycle. The handle only exists while the panel is open.
-      const measuredWidth = rightPanelRef.current?.getBoundingClientRect().width;
+      const measuredWidth =
+        rightPanelRef.current?.getBoundingClientRect().width;
       // Same --ui-scale ground truth as the left sidebar handle: clientX is in
       // viewport pixels while the panel width is zoomed layout pixels.
       let uiScale = 1;
@@ -1439,7 +1465,10 @@ export function AppShell({ appName }: { appName: string }) {
         // SSR/unavailable: fall back to unscaled math.
       }
       // The rect is in viewport pixels; persisted panel widths are unscaled.
-      const startWidth = measuredWidth === undefined ? RIGHT_PANEL_MIN_WIDTH : measuredWidth / uiScale;
+      const startWidth =
+        measuredWidth === undefined
+          ? RIGHT_PANEL_MIN_WIDTH
+          : measuredWidth / uiScale;
       setRightPanelResizing(true);
       // Coalesce pointer writes per frame, but retain the latest width for mouseup.
       let frame: number | null = null;
@@ -1790,7 +1819,12 @@ export function AppShell({ appName }: { appName: string }) {
       setActiveCwd(cwd);
       setActiveHostId(remoteHostId(hostId));
       if (initialSessionId && !initialSessionRestored) return;
-      if (synchronized && chatTabsRef.current.find((tab) => tab.id === activeChatIdRef.current)?.workspaceProject) return;
+      if (
+        synchronized &&
+        chatTabsRef.current.find((tab) => tab.id === activeChatIdRef.current)
+          ?.workspaceProject
+      )
+        return;
       if (!cwd) return;
       const workspaceKey = `${remoteHostId(hostId) ?? LOCAL_HOST_ID}:${cwd}`;
       const currentTab = chatTabsRef.current.find(
@@ -2029,7 +2063,11 @@ export function AppShell({ appName }: { appName: string }) {
           job = data as WorkspaceCreationJob;
           save(job);
         }
-        if (!job.workspaceId || !job.workspacePath || job.stage !== "postNonBlocking")
+        if (
+          !job.workspaceId ||
+          !job.workspacePath ||
+          job.stage !== "postNonBlocking"
+        )
           throw new Error(
             job.error ??
               "Workspace setup did not complete. Check Manage workspaces for logs.",
@@ -3524,7 +3562,14 @@ export function AppShell({ appName }: { appName: string }) {
               headerTarget={workspaceSwitcherTarget}
               onSelectSaved={handleSelectSession}
               onGenerateTitle={() => void handleAutoName()}
-              openSessionIds={[...new Set([...openSessionIds, ...chatTabs.flatMap((tab) => tab.session ? [tab.session.id] : [])])]}
+              openSessionIds={[
+                ...new Set([
+                  ...openSessionIds,
+                  ...chatTabs.flatMap((tab) =>
+                    tab.session ? [tab.session.id] : [],
+                  ),
+                ]),
+              ]}
               onRename={handleRenameSession}
               activeSessionName={selectedSession?.name ?? ""}
               canRename={Boolean(selectedSession)}
@@ -3537,14 +3582,36 @@ export function AppShell({ appName }: { appName: string }) {
               chatTabs={[
                 ...chatTabs,
                 ...sharedSessions
-                  .filter((session) => openSessionIds.includes(session.id) && !hiddenSharedIds.has(session.id) && !chatTabs.some((tab) => tab.session?.id === session.id))
-                  .map((session): ChatTab => ({ id: `shared:${session.id}`, cwd: session.cwd, hostId: remoteHostId(session.hostId), session, creation: {} })),
+                  .filter(
+                    (session) =>
+                      openSessionIds.includes(session.id) &&
+                      !hiddenSharedIds.has(session.id) &&
+                      !chatTabs.some((tab) => tab.session?.id === session.id),
+                  )
+                  .map((session): ChatTab => ({
+                    id: `shared:${session.id}`,
+                    cwd: session.cwd,
+                    hostId: remoteHostId(session.hostId),
+                    session,
+                    creation: {},
+                  })),
               ]
-                .filter((tab) => terminalWorkspace && tabInWorkspace(tab, terminalWorkspace.path, workspaceHostId, workspaceOptions.projects))
+                .filter(
+                  (tab) =>
+                    terminalWorkspace &&
+                    tabInWorkspace(
+                      tab,
+                      terminalWorkspace.path,
+                      workspaceHostId,
+                      workspaceOptions.projects,
+                    ),
+                )
                 .map((tab, index, tabs) => ({
                   id: tab.id,
                   sessionId: tab.session?.id,
-                  title: tab.session?.name || tab.session?.firstMessage ||
+                  title:
+                    tab.session?.name ||
+                    tab.session?.firstMessage ||
                     (tabs.filter((item) => !item.session).length > 1
                       ? `New chat ${tabs.slice(0, index + 1).filter((item) => !item.session).length}`
                       : "New chat"),
@@ -3553,7 +3620,9 @@ export function AppShell({ appName }: { appName: string }) {
               onSelectChat={(id) => {
                 const tab = chatTabsRef.current.find((item) => item.id === id);
                 if (!tab && id.startsWith("shared:")) {
-                  const session = sharedSessions.find((item) => item.id === id.slice(7));
+                  const session = sharedSessions.find(
+                    (item) => item.id === id.slice(7),
+                  );
                   if (session) handleSelectSession(session);
                   return;
                 }
@@ -3570,12 +3639,16 @@ export function AppShell({ appName }: { appName: string }) {
                   (tab) => tab.id === id,
                 );
                 if (!closing && id.startsWith("shared:")) {
-                  setHiddenSharedIds((hidden) => new Set(hidden).add(id.slice(7)));
+                  setHiddenSharedIds((hidden) =>
+                    new Set(hidden).add(id.slice(7)),
+                  );
                   return;
                 }
                 if (!closing) return;
                 if (closing.session) {
-                  setHiddenSharedIds((hidden) => new Set(hidden).add(closing.session!.id));
+                  setHiddenSharedIds((hidden) =>
+                    new Set(hidden).add(closing.session!.id),
+                  );
                 }
                 const visible = chatTabsRef.current.filter(
                   (tab) =>
@@ -4245,7 +4318,10 @@ export function AppShell({ appName }: { appName: string }) {
                         }}
                       />
                     )}
-                    <div ref={setShipButtonContainer} style={{ flexShrink: 0 }} />
+                    <div
+                      ref={setShipButtonContainer}
+                      style={{ flexShrink: 0 }}
+                    />
                     {!isMobile && (
                       <NotificationBell
                         open={notificationsOpen}
@@ -4299,7 +4375,9 @@ export function AppShell({ appName }: { appName: string }) {
                     <ChatWindow
                       key={sessionKey}
                       session={selectedSession}
-                      shipButtonContainer={activeTerminalId ? null : shipButtonContainer}
+                      shipButtonContainer={
+                        activeTerminalId ? null : shipButtonContainer
+                      }
                       shipWorkspace={(() => {
                         if (!selectedSession) return undefined;
                         const host = selectedSession.hostId ?? LOCAL_HOST_ID;
@@ -4366,212 +4444,255 @@ export function AppShell({ appName }: { appName: string }) {
                       hostLabel={chatHost ? hostName(t, chatHost) : undefined}
                       newSessionWorkspace={
                         pendingWorkspace ? (
-                          <div className="new-session-workspace" title={pendingWorkspace} style={{ color: "var(--text-muted)", overflowWrap: "anywhere" }}>
-                            New workspace in {hostProjects.find((project) => (project.projectPath ?? project.path) === pendingWorkspace)?.projectName ?? projectLabel(pendingWorkspace)}
+                          <div
+                            className="new-session-workspace"
+                            title={pendingWorkspace}
+                            style={{
+                              color: "var(--text-muted)",
+                              overflowWrap: "anywhere",
+                            }}
+                          >
+                            New workspace in{" "}
+                            {hostProjects.find(
+                              (project) =>
+                                (project.projectPath ?? project.path) ===
+                                pendingWorkspace,
+                            )?.projectName ?? projectLabel(pendingWorkspace)}
                           </div>
-                        ) : effectiveNewSessionCwd && (
-                          <div className="new-session-workspace">
-                            {creationTargets.length > 1 && (
-                              <>
-                                <label
-                                  htmlFor="new-session-host"
-                                  className="new-session-workspace-label"
-                                >
-                                  {t("hosts.pickerLabel")}
-                                </label>
-                                <div className="new-session-workspace-control">
-                                  <span
-                                    className="new-session-workspace-icon"
-                                    aria-hidden="true"
+                        ) : (
+                          effectiveNewSessionCwd && (
+                            <div className="new-session-workspace">
+                              {creationTargets.length > 1 && (
+                                <>
+                                  <label
+                                    htmlFor="new-session-host"
+                                    className="new-session-workspace-label"
                                   >
-                                    <Server size={17} strokeWidth={1.8} />
-                                  </span>
-                                  <ThemedSelect
-                                    className="workspace-select-trigger"
-                                    id="new-session-host"
-                                    value={newSessionGroupKey}
-                                    onChange={(key) => {
-                                      const first =
-                                        workspaceOptions.projects.find(
-                                          (project) =>
-                                            (project.hostId ??
-                                              LOCAL_HOST_ID) ===
-                                            key,
-                                        );
-                                      if (
-                                        !first ||
-                                        key === newSessionGroupKey
-                                      )
-                                        return;
-                                      setActiveCwd(first.path);
-                                      setActiveHostId(
-                                        remoteHostId(first.hostId),
-                                      );
-                                      handleNewSession(
-                                        browserUUID(),
-                                        first.path,
-                                        first.hostId,
-                                        first,
-                                      );
-                                    }}
-                                    options={creationTargets.map((target) => ({
-                                      value: target.id,
-                                      label: target.label,
-                                      disabled: !workspaceOptions.projects.some(
-                                        (project) => (project.hostId ?? LOCAL_HOST_ID) === target.id,
-                                      ),
-                                    }))}
-                                  />
-                                  <ChevronDown
-                                    className="new-session-workspace-chevron"
-                                    size={16}
-                                    strokeWidth={1.8}
-                                    aria-hidden="true"
-                                  />
-                                </div>
-                              </>
-                            )}
-                            <div className="new-session-workspace-fields">
-                              <div className="new-session-workspace-field">
-                                <label
-                                  htmlFor="new-session-project"
-                                  className="new-session-workspace-label"
-                                >
-                                  Project
-                                </label>
-                                <div className="new-session-workspace-control">
-                                  <span
-                                    className="new-session-workspace-icon"
-                                    aria-hidden="true"
-                                  >
-                                    <Folder size={17} strokeWidth={1.8} />
-                                  </span>
-                                  <ThemedSelect
-                                    className="workspace-select-trigger"
-                                    id="new-session-project"
-                                    value={selectedNewProjectId}
-                                    onChange={(key) => {
-                                      if (!key) {
-                                        openAddProject(
-                                          true,
-                                          newSessionGroupKey,
-                                        );
-                                        return;
-                                      }
-                                      const workspace =
-                                        hostProjects.find(
-                                          (candidate) =>
-                                            candidate.projectId === key &&
-                                            candidate.isDefaultWorkspace,
-                                        ) ??
-                                        hostProjects.find(
-                                          (candidate) =>
-                                            candidate.projectId === key,
-                                        );
-                                      if (!workspace) return;
-                                      setActiveCwd(workspace.path);
-                                      setActiveHostId(
-                                        remoteHostId(workspace.hostId),
-                                      );
-                                      handleNewSession(
-                                        browserUUID(),
-                                        workspace.path,
-                                        workspace.hostId,
-                                        workspace,
-                                      );
-                                    }}
-                                    options={[
-                                      ...newSessionProjects.map((project) => {
-                                        const label = project.projectName ?? projectLabel(project.projectPath ?? project.path);
-                                        // Native option values fall back to their text when value is undefined.
-                                        return { value: project.projectId ?? label, label };
-                                      }),
-                                      { value: "", label: t("projects.add"), action: true },
-                                    ]}
-                                  />
-                                  <ChevronDown
-                                    className="new-session-workspace-chevron"
-                                    size={16}
-                                    strokeWidth={1.8}
-                                    aria-hidden="true"
-                                  />
-                                </div>
-                              </div>
-                              <div className="new-session-workspace-field">
-                                <label
-                                  id="new-session-workspace-label"
-                                  htmlFor="new-session-workspace"
-                                  className="new-session-workspace-label"
-                                >
-                                  {t("settingsConfig.chipWorkspace")}
-                                </label>
-                                <div className="new-session-workspace-control">
-                                  <span
-                                    className="new-session-workspace-icon"
-                                    aria-hidden="true"
-                                  >
-                                    <Folder size={17} strokeWidth={1.8} />
-                                  </span>
-                                  <ThemedSelect
-                                    className="workspace-select-trigger"
-                                    id="new-session-workspace"
-                                    aria-describedby="new-session-workspace-path"
-                                    value={newSessionWorkspaceValue}
-                                    onChange={(key) => {
-                                      if (key === "__add_workspace__") {
-                                        if (selectedNewWorkspace)
-                                          handleNewWorkspace(
-                                            selectedNewWorkspace,
+                                    {t("hosts.pickerLabel")}
+                                  </label>
+                                  <div className="new-session-workspace-control">
+                                    <span
+                                      className="new-session-workspace-icon"
+                                      aria-hidden="true"
+                                    >
+                                      <Server size={17} strokeWidth={1.8} />
+                                    </span>
+                                    <ThemedSelect
+                                      className="workspace-select-trigger"
+                                      id="new-session-host"
+                                      value={newSessionGroupKey}
+                                      onChange={(key) => {
+                                        const first =
+                                          workspaceOptions.projects.find(
+                                            (project) =>
+                                              (project.hostId ??
+                                                LOCAL_HOST_ID) === key,
                                           );
-                                        return;
-                                      }
-                                      const project = projectWorkspaces.find(
-                                        (candidate) =>
-                                          hostProjectKey(
-                                            candidate.hostId,
-                                            candidate.path,
-                                          ) === key,
-                                      );
-                                      if (!project) return;
-                                      setActiveCwd(project.path);
-                                      setActiveHostId(
-                                        remoteHostId(project.hostId),
-                                      );
-                                      handleNewSession(
-                                        browserUUID(),
-                                        project.path,
-                                        project.hostId,
-                                        project,
-                                      );
-                                    }}
-                                    options={[
-                                      // Keylime creates a workspace for the selected project rather than an upstream worktree selection.
-                                      ...projectWorkspaces.map((project) => ({
-                                        value: hostProjectKey(project.hostId, project.path),
-                                        label: project.alias ?? project.name ?? projectLabel(project.path),
-                                      })),
-                                      ...(selectedNewWorkspace?.projectKind === "git"
-                                        ? [{ value: "__add_workspace__", label: "Add workspace", action: true }]
-                                        : []),
-                                    ]}
-                                  />
-                                  <ChevronDown
-                                    className="new-session-workspace-chevron"
-                                    size={16}
-                                    strokeWidth={1.8}
-                                    aria-hidden="true"
-                                  />
+                                        if (
+                                          !first ||
+                                          key === newSessionGroupKey
+                                        )
+                                          return;
+                                        setActiveCwd(first.path);
+                                        setActiveHostId(
+                                          remoteHostId(first.hostId),
+                                        );
+                                        handleNewSession(
+                                          browserUUID(),
+                                          first.path,
+                                          first.hostId,
+                                          first,
+                                        );
+                                      }}
+                                      options={creationTargets.map(
+                                        (target) => ({
+                                          value: target.id,
+                                          label: target.label,
+                                          disabled:
+                                            !workspaceOptions.projects.some(
+                                              (project) =>
+                                                (project.hostId ??
+                                                  LOCAL_HOST_ID) === target.id,
+                                            ),
+                                        }),
+                                      )}
+                                    />
+                                    <ChevronDown
+                                      className="new-session-workspace-chevron"
+                                      size={16}
+                                      strokeWidth={1.8}
+                                      aria-hidden="true"
+                                    />
+                                  </div>
+                                </>
+                              )}
+                              <div className="new-session-workspace-fields">
+                                <div className="new-session-workspace-field">
+                                  <label
+                                    htmlFor="new-session-project"
+                                    className="new-session-workspace-label"
+                                  >
+                                    Project
+                                  </label>
+                                  <div className="new-session-workspace-control">
+                                    <span
+                                      className="new-session-workspace-icon"
+                                      aria-hidden="true"
+                                    >
+                                      <Folder size={17} strokeWidth={1.8} />
+                                    </span>
+                                    <ThemedSelect
+                                      className="workspace-select-trigger"
+                                      id="new-session-project"
+                                      value={selectedNewProjectId}
+                                      onChange={(key) => {
+                                        if (!key) {
+                                          openAddProject(
+                                            true,
+                                            newSessionGroupKey,
+                                          );
+                                          return;
+                                        }
+                                        const workspace =
+                                          hostProjects.find(
+                                            (candidate) =>
+                                              candidate.projectId === key &&
+                                              candidate.isDefaultWorkspace,
+                                          ) ??
+                                          hostProjects.find(
+                                            (candidate) =>
+                                              candidate.projectId === key,
+                                          );
+                                        if (!workspace) return;
+                                        setActiveCwd(workspace.path);
+                                        setActiveHostId(
+                                          remoteHostId(workspace.hostId),
+                                        );
+                                        handleNewSession(
+                                          browserUUID(),
+                                          workspace.path,
+                                          workspace.hostId,
+                                          workspace,
+                                        );
+                                      }}
+                                      options={[
+                                        ...newSessionProjects.map((project) => {
+                                          const label =
+                                            project.projectName ??
+                                            projectLabel(
+                                              project.projectPath ??
+                                                project.path,
+                                            );
+                                          // Native option values fall back to their text when value is undefined.
+                                          return {
+                                            value: project.projectId ?? label,
+                                            label,
+                                          };
+                                        }),
+                                        {
+                                          value: "",
+                                          label: t("projects.add"),
+                                          action: true,
+                                        },
+                                      ]}
+                                    />
+                                    <ChevronDown
+                                      className="new-session-workspace-chevron"
+                                      size={16}
+                                      strokeWidth={1.8}
+                                      aria-hidden="true"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="new-session-workspace-field">
+                                  <label
+                                    id="new-session-workspace-label"
+                                    htmlFor="new-session-workspace"
+                                    className="new-session-workspace-label"
+                                  >
+                                    {t("settingsConfig.chipWorkspace")}
+                                  </label>
+                                  <div className="new-session-workspace-control">
+                                    <span
+                                      className="new-session-workspace-icon"
+                                      aria-hidden="true"
+                                    >
+                                      <Folder size={17} strokeWidth={1.8} />
+                                    </span>
+                                    <ThemedSelect
+                                      className="workspace-select-trigger"
+                                      id="new-session-workspace"
+                                      aria-describedby="new-session-workspace-path"
+                                      value={newSessionWorkspaceValue}
+                                      onChange={(key) => {
+                                        if (key === "__add_workspace__") {
+                                          if (selectedNewWorkspace)
+                                            handleNewWorkspace(
+                                              selectedNewWorkspace,
+                                            );
+                                          return;
+                                        }
+                                        const project = projectWorkspaces.find(
+                                          (candidate) =>
+                                            hostProjectKey(
+                                              candidate.hostId,
+                                              candidate.path,
+                                            ) === key,
+                                        );
+                                        if (!project) return;
+                                        setActiveCwd(project.path);
+                                        setActiveHostId(
+                                          remoteHostId(project.hostId),
+                                        );
+                                        handleNewSession(
+                                          browserUUID(),
+                                          project.path,
+                                          project.hostId,
+                                          project,
+                                        );
+                                      }}
+                                      options={[
+                                        // Keylime creates a workspace for the selected project rather than an upstream worktree selection.
+                                        ...projectWorkspaces.map((project) => ({
+                                          value: hostProjectKey(
+                                            project.hostId,
+                                            project.path,
+                                          ),
+                                          label:
+                                            project.alias ??
+                                            project.name ??
+                                            projectLabel(project.path),
+                                        })),
+                                        ...(selectedNewWorkspace?.projectKind ===
+                                        "git"
+                                          ? [
+                                              {
+                                                value: "__add_workspace__",
+                                                label: "Add workspace",
+                                                action: true,
+                                              },
+                                            ]
+                                          : []),
+                                      ]}
+                                    />
+                                    <ChevronDown
+                                      className="new-session-workspace-chevron"
+                                      size={16}
+                                      strokeWidth={1.8}
+                                      aria-hidden="true"
+                                    />
+                                  </div>
                                 </div>
                               </div>
+                              <div
+                                id="new-session-workspace-path"
+                                className="new-session-workspace-path"
+                                title={effectiveNewSessionCwd ?? undefined}
+                              >
+                                {effectiveNewSessionCwd}
+                              </div>
                             </div>
-                            <div
-                              id="new-session-workspace-path"
-                              className="new-session-workspace-path"
-                              title={effectiveNewSessionCwd ?? undefined}
-                            >
-                              {effectiveNewSessionCwd}
-                            </div>
-                          </div>
+                          )
                         )
                       }
                       onAgentEnd={handleAgentEnd}

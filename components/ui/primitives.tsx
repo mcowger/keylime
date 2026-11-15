@@ -20,7 +20,10 @@ export interface ThemedSelectOption {
   action?: boolean;
 }
 
-type ThemedSelectProps = Omit<React.ComponentPropsWithoutRef<"button">, "value" | "onChange" | "children"> & {
+type ThemedSelectProps = Omit<
+  React.ComponentPropsWithoutRef<"button">,
+  "value" | "onChange" | "children"
+> & {
   value: string | number;
   onChange: (value: string) => void;
   options: readonly ThemedSelectOption[];
@@ -29,38 +32,98 @@ type ThemedSelectProps = Omit<React.ComponentPropsWithoutRef<"button">, "value" 
 
 // Upstream 280a9b5e: use one keyboard-accessible, theme-aware select across
 // panels instead of relying on platform-specific native option styling.
-export const ThemedSelect = forwardRef<HTMLButtonElement, ThemedSelectProps>(function ThemedSelect({
-  value, onChange, options, disabled, required, name, className, ...triggerProps
-}, ref) {
-  const items = options.map((option) => ({ ...option, value: String(option.value) }));
-  return (
-    <BaseSelect.Root value={String(value)} items={items} disabled={disabled} required={required} name={name}
-      onValueChange={(next) => { if (next !== null) onChange(next); }}>
-      <BaseSelect.Trigger {...triggerProps} ref={ref} className={`themed-select-trigger${className ? ` ${className}` : ""}`}>
-        <BaseSelect.Value className="themed-select-value" />
-        <ChevronDown className="themed-select-chevron" size={14} strokeWidth={1.8} aria-hidden="true" />
-      </BaseSelect.Trigger>
-      {/* Nonzero bounds let the positioner measure both axes of Interface Scale. */}
-      <BaseSelect.Portal style={{ position: "relative", height: 1, zIndex: 1100 }}>
-        <BaseSelect.Positioner className="themed-select-positioner" sideOffset={6} align="start" alignItemWithTrigger={false}>
-          <BaseSelect.Popup className="themed-select-popup">
-            <BaseSelect.List className="themed-select-list">
-              {items.map((option) => (
-                <BaseSelect.Item key={option.value} value={option.value} label={typeof option.label === "string" ? option.label : undefined}
-                  disabled={option.disabled} data-action={option.action || undefined} className="themed-select-item">
-                  <span className="themed-select-indicator" aria-hidden="true">
-                    {option.action ? <Plus size={14} /> : <BaseSelect.ItemIndicator><Check size={14} /></BaseSelect.ItemIndicator>}
-                  </span>
-                  <BaseSelect.ItemText className="themed-select-item-text">{option.label}</BaseSelect.ItemText>
-                </BaseSelect.Item>
-              ))}
-            </BaseSelect.List>
-          </BaseSelect.Popup>
-        </BaseSelect.Positioner>
-      </BaseSelect.Portal>
-    </BaseSelect.Root>
-  );
-});
+export const ThemedSelect = forwardRef<HTMLButtonElement, ThemedSelectProps>(
+  function ThemedSelect(
+    {
+      value,
+      onChange,
+      options,
+      disabled,
+      required,
+      name,
+      className,
+      ...triggerProps
+    },
+    ref,
+  ) {
+    const items = options.map((option) => ({
+      ...option,
+      value: String(option.value),
+    }));
+    return (
+      <BaseSelect.Root
+        value={String(value)}
+        items={items}
+        disabled={disabled}
+        required={required}
+        name={name}
+        onValueChange={(next) => {
+          if (next !== null) onChange(next);
+        }}
+      >
+        <BaseSelect.Trigger
+          {...triggerProps}
+          ref={ref}
+          className={`themed-select-trigger${className ? ` ${className}` : ""}`}
+        >
+          <BaseSelect.Value className="themed-select-value" />
+          <ChevronDown
+            className="themed-select-chevron"
+            size={14}
+            strokeWidth={1.8}
+            aria-hidden="true"
+          />
+        </BaseSelect.Trigger>
+        {/* Nonzero bounds let the positioner measure both axes of Interface Scale. */}
+        <BaseSelect.Portal
+          style={{ position: "relative", height: 1, zIndex: 1100 }}
+        >
+          <BaseSelect.Positioner
+            className="themed-select-positioner"
+            sideOffset={6}
+            align="start"
+            alignItemWithTrigger={false}
+          >
+            <BaseSelect.Popup className="themed-select-popup">
+              <BaseSelect.List className="themed-select-list">
+                {items.map((option) => (
+                  <BaseSelect.Item
+                    key={option.value}
+                    value={option.value}
+                    label={
+                      typeof option.label === "string"
+                        ? option.label
+                        : undefined
+                    }
+                    disabled={option.disabled}
+                    data-action={option.action || undefined}
+                    className="themed-select-item"
+                  >
+                    <span
+                      className="themed-select-indicator"
+                      aria-hidden="true"
+                    >
+                      {option.action ? (
+                        <Plus size={14} />
+                      ) : (
+                        <BaseSelect.ItemIndicator>
+                          <Check size={14} />
+                        </BaseSelect.ItemIndicator>
+                      )}
+                    </span>
+                    <BaseSelect.ItemText className="themed-select-item-text">
+                      {option.label}
+                    </BaseSelect.ItemText>
+                  </BaseSelect.Item>
+                ))}
+              </BaseSelect.List>
+            </BaseSelect.Popup>
+          </BaseSelect.Positioner>
+        </BaseSelect.Portal>
+      </BaseSelect.Root>
+    );
+  },
+);
 
 /* ---------------------------------- Dialog --------------------------------- */
 

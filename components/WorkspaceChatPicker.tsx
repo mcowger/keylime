@@ -99,11 +99,12 @@ export function WorkspaceChatPicker({
     return () => controller.abort();
   }, [hostId, cwd, revision]);
 
-  const filtered = sessions.filter((session) =>
-    !openSessionIds.includes(session.id) &&
-    `${session.name ?? ""} ${session.firstMessage ?? ""}`
-      .toLowerCase()
-      .includes(query.toLowerCase()),
+  const filtered = sessions.filter(
+    (session) =>
+      !openSessionIds.includes(session.id) &&
+      `${session.name ?? ""} ${session.firstMessage ?? ""}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
   );
   return (
     <section className="workspace-picker-history">

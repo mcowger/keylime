@@ -926,7 +926,11 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
               );
               break;
             case "focus":
-              terminals.focus(id, input.viewer as string, input.focused as boolean);
+              terminals.focus(
+                id,
+                input.viewer as string,
+                input.focused as boolean,
+              );
               break;
             case "close":
               await terminals.close(id);

@@ -220,22 +220,37 @@ export function validWorkspaceResult(
     case "workspaceCreationSettings": {
       const pipeline = (input: unknown) =>
         isRecord(input) &&
-        [input.pre, input.create, input.postBlocking, input.postNonBlocking].every(
-          (commands) => Array.isArray(commands) && commands.every(text),
-        );
+        [
+          input.pre,
+          input.create,
+          input.postBlocking,
+          input.postNonBlocking,
+        ].every((commands) => Array.isArray(commands) && commands.every(text));
       return (
         pipeline(value.defaults) &&
         (value.override === null || pipeline(value.override)) &&
         (value.source === "manual" || value.source === "paseo") &&
-        Array.isArray(value.paseoBlocking) && value.paseoBlocking.every((entry) =>
-          isRecord(entry) && Number.isInteger(entry.index) && (entry.index as number) >= 0 && text(entry.command)) &&
-        (value.paseo === null || (isRecord(value.paseo) &&
-          text(value.paseo.path) && text(value.paseo.includePath) &&
-          [value.paseo.setup, value.paseo.teardown, value.paseo.includePatterns, value.paseo.unsupportedFeatures].every(
-            (items) => Array.isArray(items) && items.every(text),
-          ) &&
-          (value.paseo.fingerprint === undefined || text(value.paseo.fingerprint)) &&
-          (value.paseo.error === undefined || text(value.paseo.error))))
+        Array.isArray(value.paseoBlocking) &&
+        value.paseoBlocking.every(
+          (entry) =>
+            isRecord(entry) &&
+            Number.isInteger(entry.index) &&
+            (entry.index as number) >= 0 &&
+            text(entry.command),
+        ) &&
+        (value.paseo === null ||
+          (isRecord(value.paseo) &&
+            text(value.paseo.path) &&
+            text(value.paseo.includePath) &&
+            [
+              value.paseo.setup,
+              value.paseo.teardown,
+              value.paseo.includePatterns,
+              value.paseo.unsupportedFeatures,
+            ].every((items) => Array.isArray(items) && items.every(text)) &&
+            (value.paseo.fingerprint === undefined ||
+              text(value.paseo.fingerprint)) &&
+            (value.paseo.error === undefined || text(value.paseo.error))))
       );
     }
     case "createWorkspace":
@@ -245,7 +260,9 @@ export function validWorkspaceResult(
         ["running", "complete", "failed", "interrupted"].includes(
           value.status as string,
         ) &&
-        ["pre", "create", "postBlocking", "postNonBlocking"].includes(value.stage as string) &&
+        ["pre", "create", "postBlocking", "postNonBlocking"].includes(
+          value.stage as string,
+        ) &&
         typeof value.logs === "string" &&
         isRecord(value.input)
       );

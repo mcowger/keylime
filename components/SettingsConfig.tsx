@@ -1242,11 +1242,17 @@ function UploadRetentionSetting() {
         value={days === undefined ? "30" : String(days)}
         disabled={days === undefined || saving}
         onChange={(event) =>
-          void change(
-            event === "null" ? null : Number(event),
-          )
+          void change(event === "null" ? null : Number(event))
         }
-        options={choices.map((choice) => ({ value: String(choice), label: choice === null ? t("settingsConfig.uploadRetentionNever") : tn("settingsConfig.uploadRetentionDays", choice, { count: choice }) }))}
+        options={choices.map((choice) => ({
+          value: String(choice),
+          label:
+            choice === null
+              ? t("settingsConfig.uploadRetentionNever")
+              : tn("settingsConfig.uploadRetentionDays", choice, {
+                  count: choice,
+                }),
+        }))}
       />
     </NativeSetting>
   );
@@ -1311,12 +1317,13 @@ function BrowserTransportSetting() {
         value={transport ?? "ws"}
         disabled={transport === null || saving}
         onChange={(event) => {
-          const next = BROWSER_TRANSPORTS.find(
-            (mode) => mode === event,
-          );
+          const next = BROWSER_TRANSPORTS.find((mode) => mode === event);
           if (next) void change(next);
         }}
-        options={BROWSER_TRANSPORTS.map((mode) => ({ value: mode, label: t(BROWSER_TRANSPORT_LABELS[mode]) }))}
+        options={BROWSER_TRANSPORTS.map((mode) => ({
+          value: mode,
+          label: t(BROWSER_TRANSPORT_LABELS[mode]),
+        }))}
       />
     </NativeSetting>
   );
@@ -2719,14 +2726,22 @@ export function SettingsConfig({
                             value={expandThinkingByDefault}
                             onChange={(event) =>
                               onExpandThinkingByDefaultChange(
-                                event as
-                                  "off" | "latest" | "always",
+                                event as "off" | "latest" | "always",
                               )
                             }
                             options={[
-                              { value: "off", label: t("settingsConfig.expandThinkingOff") },
-                              { value: "latest", label: t("settingsConfig.expandThinkingLatest") },
-                              { value: "always", label: t("settingsConfig.expandThinkingAlways") },
+                              {
+                                value: "off",
+                                label: t("settingsConfig.expandThinkingOff"),
+                              },
+                              {
+                                value: "latest",
+                                label: t("settingsConfig.expandThinkingLatest"),
+                              },
+                              {
+                                value: "always",
+                                label: t("settingsConfig.expandThinkingAlways"),
+                              },
                             ]}
                           />
                         </NativeSetting>
@@ -2854,10 +2869,19 @@ export function SettingsConfig({
                             style={nativeSelectStyle}
                             value={ttsVoiceURI || ""}
                             disabled={!ttsSupported || ttsVoices.length === 0}
-                            onChange={(e) =>
-                              setTtsVoiceURI(e || null)
-                            }
-                            options={[{ value: "", label: t("settingsConfig.defaultVoice") || "Default system voice" }, ...ttsVoices.map((v) => ({ value: v.voiceURI, label: `${v.name} (${v.lang})` }))]}
+                            onChange={(e) => setTtsVoiceURI(e || null)}
+                            options={[
+                              {
+                                value: "",
+                                label:
+                                  t("settingsConfig.defaultVoice") ||
+                                  "Default system voice",
+                              },
+                              ...ttsVoices.map((v) => ({
+                                value: v.voiceURI,
+                                label: `${v.name} (${v.lang})`,
+                              })),
+                            ]}
                           />
                         </NativeSetting>
                         <NativeSetting
@@ -2881,15 +2905,25 @@ export function SettingsConfig({
                             style={nativeSelectStyle}
                             value={fontSize}
                             onChange={(event) =>
-                              setFontSize(
-                                event as FontSizePreference,
-                              )
+                              setFontSize(event as FontSizePreference)
                             }
                             options={[
-                              { value: "sm", label: t("settingsConfig.fontSizeSmall") },
-                              { value: "md", label: t("settingsConfig.fontSizeMedium") },
-                              { value: "lg", label: t("settingsConfig.fontSizeLarge") },
-                              { value: "xl", label: t("settingsConfig.fontSizeXLarge") },
+                              {
+                                value: "sm",
+                                label: t("settingsConfig.fontSizeSmall"),
+                              },
+                              {
+                                value: "md",
+                                label: t("settingsConfig.fontSizeMedium"),
+                              },
+                              {
+                                value: "lg",
+                                label: t("settingsConfig.fontSizeLarge"),
+                              },
+                              {
+                                value: "xl",
+                                label: t("settingsConfig.fontSizeXLarge"),
+                              },
                             ]}
                           />
                         </NativeSetting>
@@ -2912,15 +2946,27 @@ export function SettingsConfig({
                               aria-label={t("settingsConfig.recentRunsLimit")}
                               value={recentRunsPreset}
                               onChange={(e) =>
-                                setRecentRunsPreset(
-                                  e as RecentRunsLimitPreset,
-                                )
+                                setRecentRunsPreset(e as RecentRunsLimitPreset)
                               }
                               options={[
-                                { value: "10", label: t("settingsConfig.recentRunsOption10") },
-                                { value: "15", label: t("settingsConfig.recentRunsOption15") },
-                                { value: "20", label: t("settingsConfig.recentRunsOption20") },
-                                { value: "custom", label: t("settingsConfig.recentRunsOptionCustom") },
+                                {
+                                  value: "10",
+                                  label: t("settingsConfig.recentRunsOption10"),
+                                },
+                                {
+                                  value: "15",
+                                  label: t("settingsConfig.recentRunsOption15"),
+                                },
+                                {
+                                  value: "20",
+                                  label: t("settingsConfig.recentRunsOption20"),
+                                },
+                                {
+                                  value: "custom",
+                                  label: t(
+                                    "settingsConfig.recentRunsOptionCustom",
+                                  ),
+                                },
                               ]}
                             />
                             {recentRunsPreset === "custom" && (
@@ -2961,10 +3007,20 @@ export function SettingsConfig({
                             aria-label={t("settingsConfig.chatWidth")}
                             style={nativeSelectStyle}
                             value={chatWidth}
-                            onChange={(event) =>
-                              setChatWidth(Number(event))
-                            }
-                            options={[{ value: 0, label: t("settingsConfig.chatWidthDefault") }, ...Array.from({ length: 15 }, (_, i) => 30 + i * 5).map((width) => ({ value: width, label: `${width}%` }))]}
+                            onChange={(event) => setChatWidth(Number(event))}
+                            options={[
+                              {
+                                value: 0,
+                                label: t("settingsConfig.chatWidthDefault"),
+                              },
+                              ...Array.from(
+                                { length: 15 },
+                                (_, i) => 30 + i * 5,
+                              ).map((width) => ({
+                                value: width,
+                                label: `${width}%`,
+                              })),
+                            ]}
                           />
                         </NativeSetting>
                         <NativeSetting
@@ -2977,15 +3033,25 @@ export function SettingsConfig({
                             style={nativeSelectStyle}
                             value={uiScale}
                             onChange={(event) =>
-                              setUiScale(
-                                event as UiScalePreference,
-                              )
+                              setUiScale(event as UiScalePreference)
                             }
                             options={[
-                              { value: "compact", label: t("settingsConfig.uiScaleCompact") },
-                              { value: "standard", label: t("settingsConfig.uiScaleStandard") },
-                              { value: "comfortable", label: t("settingsConfig.uiScaleComfortable") },
-                              { value: "large", label: t("settingsConfig.uiScaleLarge") },
+                              {
+                                value: "compact",
+                                label: t("settingsConfig.uiScaleCompact"),
+                              },
+                              {
+                                value: "standard",
+                                label: t("settingsConfig.uiScaleStandard"),
+                              },
+                              {
+                                value: "comfortable",
+                                label: t("settingsConfig.uiScaleComfortable"),
+                              },
+                              {
+                                value: "large",
+                                label: t("settingsConfig.uiScaleLarge"),
+                              },
                             ]}
                           />
                         </NativeSetting>
@@ -2999,14 +3065,23 @@ export function SettingsConfig({
                             style={nativeSelectStyle}
                             value={touchTargets}
                             onChange={(event) =>
-                              setTouchTargets(
-                                event as TouchTargetsPreference,
-                              )
+                              setTouchTargets(event as TouchTargetsPreference)
                             }
                             options={[
-                              { value: "auto", label: t("settingsConfig.touchTargetsAuto") },
-                              { value: "compact", label: t("settingsConfig.touchTargetsCompact") },
-                              { value: "accessible", label: t("settingsConfig.touchTargetsAccessible") },
+                              {
+                                value: "auto",
+                                label: t("settingsConfig.touchTargetsAuto"),
+                              },
+                              {
+                                value: "compact",
+                                label: t("settingsConfig.touchTargetsCompact"),
+                              },
+                              {
+                                value: "accessible",
+                                label: t(
+                                  "settingsConfig.touchTargetsAccessible",
+                                ),
+                              },
                             ]}
                           />
                         </NativeSetting>
@@ -3027,8 +3102,14 @@ export function SettingsConfig({
                               setSubmitBehavior(next);
                             }}
                             options={[
-                              { value: "steer", label: t("settingsConfig.steerCurrentRun") },
-                              { value: "queue", label: t("settingsConfig.queueFollowUp") },
+                              {
+                                value: "steer",
+                                label: t("settingsConfig.steerCurrentRun"),
+                              },
+                              {
+                                value: "queue",
+                                label: t("settingsConfig.queueFollowUp"),
+                              },
                             ]}
                           />
                         </NativeSetting>
@@ -3047,9 +3128,18 @@ export function SettingsConfig({
                               setWordCompletion(next);
                             }}
                             options={[
-                              { value: "auto", label: t("settingsConfig.wordCompletionAuto") },
-                              { value: "on", label: t("settingsConfig.wordCompletionOn") },
-                              { value: "off", label: t("settingsConfig.wordCompletionOff") },
+                              {
+                                value: "auto",
+                                label: t("settingsConfig.wordCompletionAuto"),
+                              },
+                              {
+                                value: "on",
+                                label: t("settingsConfig.wordCompletionOn"),
+                              },
+                              {
+                                value: "off",
+                                label: t("settingsConfig.wordCompletionOff"),
+                              },
                             ]}
                           />
                         </NativeSetting>
@@ -3134,9 +3224,18 @@ export function SettingsConfig({
                               })
                             }
                             options={[
-                              { value: "always-ask", label: t("settingsConfig.alwaysAsk") },
-                              { value: "write", label: t("settingsConfig.allowWrites") },
-                              { value: "yolo", label: t("settingsConfig.autoApproveYolo") },
+                              {
+                                value: "always-ask",
+                                label: t("settingsConfig.alwaysAsk"),
+                              },
+                              {
+                                value: "write",
+                                label: t("settingsConfig.allowWrites"),
+                              },
+                              {
+                                value: "yolo",
+                                label: t("settingsConfig.autoApproveYolo"),
+                              },
                             ]}
                           />
                         </NativeSetting>
@@ -3153,14 +3252,22 @@ export function SettingsConfig({
                             }
                             onChange={(event) =>
                               patchApproval({
-                                bash: event as
-                                  "allow" | "prompt" | "deny",
+                                bash: event as "allow" | "prompt" | "deny",
                               })
                             }
                             options={[
-                              { value: "allow", label: t("settingsConfig.allow") },
-                              { value: "prompt", label: t("settingsConfig.alwaysAsk") },
-                              { value: "deny", label: t("settingsConfig.deny") },
+                              {
+                                value: "allow",
+                                label: t("settingsConfig.allow"),
+                              },
+                              {
+                                value: "prompt",
+                                label: t("settingsConfig.alwaysAsk"),
+                              },
+                              {
+                                value: "deny",
+                                label: t("settingsConfig.deny"),
+                              },
                             ]}
                           />
                         </NativeSetting>
@@ -3180,13 +3287,18 @@ export function SettingsConfig({
                             }
                             onChange={(event) =>
                               patchApproval({
-                                extension: event as
-                                  "allow" | "prompt",
+                                extension: event as "allow" | "prompt",
                               })
                             }
                             options={[
-                              { value: "prompt", label: t("settingsConfig.askEveryTime") },
-                              { value: "allow", label: t("settingsConfig.autoApprove") },
+                              {
+                                value: "prompt",
+                                label: t("settingsConfig.askEveryTime"),
+                              },
+                              {
+                                value: "allow",
+                                label: t("settingsConfig.autoApprove"),
+                              },
                             ]}
                           />
                         </NativeSetting>
@@ -3252,10 +3364,19 @@ export function SettingsConfig({
                             }
                             onChange={(e) =>
                               patchSettings({
-                                defaultThinkingLevel: e as NativeSettings["defaultThinkingLevel"],
+                                defaultThinkingLevel:
+                                  e as NativeSettings["defaultThinkingLevel"],
                               })
                             }
-                            options={["auto", "minimal", "low", "medium", "high", "xhigh", "max"].map((l) => ({ value: l, label: l }))}
+                            options={[
+                              "auto",
+                              "minimal",
+                              "low",
+                              "medium",
+                              "high",
+                              "xhigh",
+                              "max",
+                            ].map((l) => ({ value: l, label: l }))}
                           />
                         </NativeSetting>
                         {nativeSettings?.defaultThinkingLevel === "auto" && (
@@ -3276,14 +3397,20 @@ export function SettingsConfig({
                               onChange={(e) =>
                                 patchSection("providers", {
                                   autoThinkingSource:
-                                    e === "vendor"
-                                      ? "vendor"
-                                      : "classifier",
+                                    e === "vendor" ? "vendor" : "classifier",
                                 })
                               }
                               options={[
-                                { value: "classifier", label: t("settingsConfig.autoThinkingClassifier") },
-                                { value: "vendor", label: t("settingsConfig.autoThinkingVendor") },
+                                {
+                                  value: "classifier",
+                                  label: t(
+                                    "settingsConfig.autoThinkingClassifier",
+                                  ),
+                                },
+                                {
+                                  value: "vendor",
+                                  label: t("settingsConfig.autoThinkingVendor"),
+                                },
                               ]}
                             />
                           </NativeSetting>
@@ -3299,13 +3426,23 @@ export function SettingsConfig({
                             value={nativeSettings?.textVerbosity ?? "medium"}
                             onChange={(e) =>
                               patchSettings({
-                                textVerbosity: e as NativeSettings["textVerbosity"],
+                                textVerbosity:
+                                  e as NativeSettings["textVerbosity"],
                               })
                             }
                             options={[
-                              { value: "low", label: t("settingsConfig.verbosityLow") },
-                              { value: "medium", label: t("settingsConfig.verbosityMedium") },
-                              { value: "high", label: t("settingsConfig.verbosityHigh") },
+                              {
+                                value: "low",
+                                label: t("settingsConfig.verbosityLow"),
+                              },
+                              {
+                                value: "medium",
+                                label: t("settingsConfig.verbosityMedium"),
+                              },
+                              {
+                                value: "high",
+                                label: t("settingsConfig.verbosityHigh"),
+                              },
                             ]}
                           />
                         </NativeSetting>
@@ -3324,10 +3461,22 @@ export function SettingsConfig({
                               })
                             }
                             options={[
-                              { value: "default", label: t("settingsConfig.personalityDefault") },
-                              { value: "friendly", label: t("settingsConfig.personalityFriendly") },
-                              { value: "pragmatic", label: t("settingsConfig.personalityPragmatic") },
-                              { value: "none", label: t("settingsConfig.personalityNone") },
+                              {
+                                value: "default",
+                                label: t("settingsConfig.personalityDefault"),
+                              },
+                              {
+                                value: "friendly",
+                                label: t("settingsConfig.personalityFriendly"),
+                              },
+                              {
+                                value: "pragmatic",
+                                label: t("settingsConfig.personalityPragmatic"),
+                              },
+                              {
+                                value: "none",
+                                label: t("settingsConfig.personalityNone"),
+                              },
                             ]}
                           />
                         </NativeSetting>
@@ -3634,10 +3783,26 @@ export function SettingsConfig({
                                 })
                               }
                               options={[
-                                { value: "off", label: t("settingsConfig.memoryBackendOff") },
-                                { value: "local", label: t("settingsConfig.memoryBackendLocal") },
-                                { value: "mnemopi", label: t("settingsConfig.memoryBackendMnemopi") },
-                                { value: "hindsight", label: t("settingsConfig.memoryBackendHindsight") },
+                                {
+                                  value: "off",
+                                  label: t("settingsConfig.memoryBackendOff"),
+                                },
+                                {
+                                  value: "local",
+                                  label: t("settingsConfig.memoryBackendLocal"),
+                                },
+                                {
+                                  value: "mnemopi",
+                                  label: t(
+                                    "settingsConfig.memoryBackendMnemopi",
+                                  ),
+                                },
+                                {
+                                  value: "hindsight",
+                                  label: t(
+                                    "settingsConfig.memoryBackendHindsight",
+                                  ),
+                                },
                               ]}
                             />
                           </NativeSetting>
@@ -3697,9 +3862,22 @@ export function SettingsConfig({
                                 })
                               }
                               options={[
-                                { value: "per-project", label: t("settingsConfig.memoryScopePerProject") },
-                                { value: "per-project-tagged", label: t( "settingsConfig.memoryScopePerProjectTagged", ) },
-                                { value: "global", label: t("settingsConfig.memoryScopeGlobal") },
+                                {
+                                  value: "per-project",
+                                  label: t(
+                                    "settingsConfig.memoryScopePerProject",
+                                  ),
+                                },
+                                {
+                                  value: "per-project-tagged",
+                                  label: t(
+                                    "settingsConfig.memoryScopePerProjectTagged",
+                                  ),
+                                },
+                                {
+                                  value: "global",
+                                  label: t("settingsConfig.memoryScopeGlobal"),
+                                },
                               ]}
                             />
                           </NativeSetting>
@@ -3805,7 +3983,10 @@ export function SettingsConfig({
                                   maxRetries: Number(e),
                                 })
                               }
-                              options={[0, 1, 2, 3, 4, 5].map((n) => ({ value: n, label: String(n) }))}
+                              options={[0, 1, 2, 3, 4, 5].map((n) => ({
+                                value: n,
+                                label: String(n),
+                              }))}
                             />
                           </NativeSetting>
                           <NativeSetting

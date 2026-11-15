@@ -33,7 +33,9 @@ export async function POST(request: Request, context: Context) {
     if (
       !isRecord(body) ||
       typeof body.hostId !== "string" ||
-      (body.action !== "input" && body.action !== "resize" && body.action !== "focus")
+      (body.action !== "input" &&
+        body.action !== "resize" &&
+        body.action !== "focus")
     )
       return Response.json(
         { error: "Invalid request", code: "invalid_request" },

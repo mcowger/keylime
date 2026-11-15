@@ -768,7 +768,8 @@ export const SessionSidebar = memo(function SessionSidebar({
       selectedCwd === null ? null : hostProjectKey(selectedHostId, selectedCwd);
     if (lastNotifiedCwdRef.current === notifyKey) return;
     lastNotifiedCwdRef.current = notifyKey;
-    const synchronized = notifyKey !== null && synchronizedCwdRef.current === notifyKey;
+    const synchronized =
+      notifyKey !== null && synchronizedCwdRef.current === notifyKey;
     synchronizedCwdRef.current = null;
     onCwdChange?.(
       selectedCwd,
@@ -799,7 +800,9 @@ export const SessionSidebar = memo(function SessionSidebar({
     if (syncKey !== lastSyncedCwdPropRef.current) {
       lastSyncedCwdPropRef.current = syncKey;
       synchronizedCwdRef.current =
-        selectedCwd !== selectedCwdProp || selectedHostId !== hostId ? syncKey : null;
+        selectedCwd !== selectedCwdProp || selectedHostId !== hostId
+          ? syncKey
+          : null;
       setSelectedCwd(selectedCwdProp);
       setSelectedHostId(hostId);
       const project = projectRootFor(selectedCwdProp, hostId);
@@ -1174,7 +1177,6 @@ export const SessionSidebar = memo(function SessionSidebar({
       return next;
     });
   }, [expandedProjects, sortedProjects]);
-
 
   // A just-started session's JSONL is not flushed until its first turn makes
   // progress, so a URL reopened in that window has no list entry yet. Retry

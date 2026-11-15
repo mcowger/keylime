@@ -3534,9 +3534,12 @@ export function ModelsConfig({
                         const models = pData.models ?? [];
                         // Upstream de8f16c shows runtime discoveries alongside models.yml
                         // entries. Configured entries win because only those are editable.
-                        const configuredIds = new Set(models.map((model) => model.id));
-                        const discoveredModels = (runtimeModelsByProvider[pName] ?? [])
-                          .filter((model) => !configuredIds.has(model.id));
+                        const configuredIds = new Set(
+                          models.map((model) => model.id),
+                        );
+                        const discoveredModels = (
+                          runtimeModelsByProvider[pName] ?? []
+                        ).filter((model) => !configuredIds.has(model.id));
                         return (
                           <div
                             key={pName}
@@ -3667,7 +3670,8 @@ export function ModelsConfig({
                             </div>
 
                             {/* Models chips */}
-                            {models.length > 0 || discoveredModels.length > 0 ? (
+                            {models.length > 0 ||
+                            discoveredModels.length > 0 ? (
                               <div
                                 style={{
                                   display: "flex",
@@ -3753,7 +3757,11 @@ export function ModelsConfig({
                                 {runtimeModelsLoading ? (
                                   t("modelsConfig.loadingRuntimeModels")
                                 ) : (
-                                  <>No models configured or discovered. Click &quot;Add Model&quot; or &quot;Catalog&quot; above to configure models.</>
+                                  <>
+                                    No models configured or discovered. Click
+                                    &quot;Add Model&quot; or &quot;Catalog&quot;
+                                    above to configure models.
+                                  </>
                                 )}
                               </div>
                             )}

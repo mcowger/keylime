@@ -226,7 +226,9 @@ export function useGlobalKeyboardShortcuts(
       const target = event.target;
       if (
         target instanceof Element &&
-        (target.closest("input, textarea, select, iframe, .themed-select-trigger, .themed-select-list") ||
+        (target.closest(
+          "input, textarea, select, iframe, .themed-select-trigger, .themed-select-list",
+        ) ||
           (target instanceof HTMLElement && target.isContentEditable))
       )
         return;
@@ -289,7 +291,11 @@ export function useGlobalKeyboardShortcuts(
       if (e.target instanceof Element && e.target.closest(".xterm")) return;
       // Upstream 280a9b5e: Escape and navigation belong to an open select,
       // not to the global agent or editor shortcuts.
-      if (e.target instanceof Element && e.target.closest(".themed-select-trigger, .themed-select-list")) return;
+      if (
+        e.target instanceof Element &&
+        e.target.closest(".themed-select-trigger, .themed-select-list")
+      )
+        return;
       // ---- Esc: stop agent ----
       if (e.key === "Escape") {
         if (!globalAbortHandler) return;

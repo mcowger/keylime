@@ -7,9 +7,11 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 ## [Unreleased]
 
 ### Fixed
+
 - Clear a host's sidebar loading error when its workspace hierarchy reconnects successfully.
 
 ### Added
+
 - Touch terminals have an accessory row for Escape, Tab, Ctrl, Ctrl-C and arrow keys; Ctrl applies to the next typed key.
 - Git projects can follow their current on-disk `paseo.json` for workspace setup and teardown, including uncommitted edits, with `.worktreeinclude` copying and live previews. Manual commands remain available, and project settings are accessible directly from each sidebar project menu on desktop and mobile.
 - Failed held messages can be retried without reconstructing their contents or attachments. Retries warn when the original may already have been sent.
@@ -38,6 +40,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Paseo workspace setup commands can run as blocking or background jobs, with background status and logs available after workspace creation
 
 ### Changed
+
 - Reloading without a session link leaves projects unselected instead of activating the newest project.
 - Open workspace chats appear across clients connected to the same web server rather than only in the client that opened them.
 - Project names and workspace creation settings save automatically without separate save buttons.
@@ -52,6 +55,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Paseo setup command parsing and ordering now distinguish multiline command lists from shell scripts; blocking command selections are revalidated when recipes change
 
 ### Fixed
+
 - Workspace terminal queries are answered once by the host, even without a browser: device attributes, color and character dimensions no longer depend on connected viewers. Focus reporting aggregates viewer leases.
 - Workspace creation identifies its project, and mobile branch inputs use 16px text to avoid iOS focus zoom.
 - A new workspace no longer inherits the parent workspace's tabs, terminals, or restored active-chat selection before it exists.
@@ -105,6 +109,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Workspace terminal queries are answered once by the host, even without a browser: device attributes, color and character dimensions no longer depend on connected viewers. Focus reporting aggregates viewer leases
 - Prompt-first workspace creation starts the agent after blocking setup completes without waiting for background setup commands
 - Pull request descriptions now wait for the commit plan and use planned commit messages when the workspace has no commits
+
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

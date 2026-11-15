@@ -121,7 +121,10 @@ function deleteOutboxEntry(db, id, replaces, sessionId, intent) {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction("entries", "readwrite");
     transaction.oncomplete = () => resolve();
-    transaction.onabort = transaction.onerror = () => reject(transaction.error || new Error("Could not remove the outbox entry"));
+    transaction.onabort = transaction.onerror = () =>
+      reject(
+        transaction.error || new Error("Could not remove the outbox entry"),
+      );
     const store = transaction.objectStore("entries");
     const request = store.getAll();
     request.onsuccess = () => {
@@ -131,7 +134,12 @@ function deleteOutboxEntry(db, id, replaces, sessionId, intent) {
       if (lineageRoot === undefined && intent.replaces !== undefined) {
         const root = replacementRoot(intent, byId);
         const original = root === null ? undefined : byId.get(root);
-        if (original?.sessionId === sessionId && original.state === "failed" && sameOutboxIntent(original, intent)) lineageRoot = root;
+        if (
+          original?.sessionId === sessionId &&
+          original.state === "failed" &&
+          sameOutboxIntent(original, intent)
+        )
+          lineageRoot = root;
       }
       for (const entry of entries) {
         if (entry.sessionId !== sessionId) continue;
@@ -139,8 +147,13 @@ function deleteOutboxEntry(db, id, replaces, sessionId, intent) {
           store.delete(entry.id);
           continue;
         }
-        if (lineageRoot === undefined || !sameOutboxIntent(entry, intent)
-          || entry.id !== lineageRoot && replacementRoot(entry, byId) !== lineageRoot) continue;
+        if (
+          lineageRoot === undefined ||
+          !sameOutboxIntent(entry, intent) ||
+          (entry.id !== lineageRoot &&
+            replacementRoot(entry, byId) !== lineageRoot)
+        )
+          continue;
         store.delete(entry.id);
       }
     };
@@ -157,13 +170,19 @@ function sameOutboxIntent(a, b) {
   for (let index = 0; index < imageCount; index++) {
     const left = aImages?.[index];
     const right = bImages?.[index];
-    if (left?.type !== right?.type || left?.data !== right?.data || left?.mimeType !== right?.mimeType) return false;
+    if (
+      left?.type !== right?.type ||
+      left?.data !== right?.data ||
+      left?.mimeType !== right?.mimeType
+    )
+      return false;
   }
   const aUploads = a.uploads;
   const bUploads = b.uploads;
   const uploadCount = aUploads?.length ?? 0;
   if (uploadCount !== (bUploads?.length ?? 0)) return false;
-  for (let index = 0; index < uploadCount; index++) if (aUploads?.[index] !== bUploads?.[index]) return false;
+  for (let index = 0; index < uploadCount; index++)
+    if (aUploads?.[index] !== bUploads?.[index]) return false;
   return true;
 }
 
@@ -177,7 +196,12 @@ function replacementRoot(entry, entries) {
     if (seen.has(id)) return null;
     seen.add(id);
     const parent = entries.get(id);
-    if (!parent || parent.sessionId !== entry.sessionId || parent.state !== "failed") return id;
+    if (
+      !parent ||
+      parent.sessionId !== entry.sessionId ||
+      parent.state !== "failed"
+    )
+      return id;
     if (!sameOutboxIntent(parent, entry)) return null;
     if (parent.replaces === undefined) return id;
     id = parent.replaces;
@@ -186,7 +210,11 @@ function replacementRoot(entry, entries) {
 }
 // Legacy rows predate every sequenced add; timestamp ties already lost their original ordering.
 function compareOutbox(a, b) {
-  return (a.enqueueOrder ?? 0) - (b.enqueueOrder ?? 0) || a.createdAt - b.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  return (
+    (a.enqueueOrder ?? 0) - (b.enqueueOrder ?? 0) ||
+    a.createdAt - b.createdAt ||
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  );
 }
 
 function readOutboxForSync(db) {
@@ -197,16 +225,29 @@ function readOutboxForSync(db) {
       const store = transaction.objectStore("entries");
       const request = store.getAll();
       transaction.oncomplete = () => resolve(entries);
-      transaction.onabort = transaction.onerror = request.onerror = () => reject(transaction.error || request.error || new Error("Could not read the outbox"));
+      transaction.onabort =
+        transaction.onerror =
+        request.onerror =
+          () =>
+            reject(
+              transaction.error ||
+                request.error ||
+                new Error("Could not read the outbox"),
+            );
       request.onsuccess = () => {
         entries = request.result;
         const byId = new Map(entries.map((entry) => [entry.id, entry]));
         for (let index = 0; index < entries.length; index++) {
           const entry = entries[index];
-          if (entry.state !== "sending" || entry.replaces === undefined) continue;
+          if (entry.state !== "sending" || entry.replaces === undefined)
+            continue;
           const root = replacementRoot(entry, byId);
           if (root === null) {
-            const failed = { ...entry, state: "failed", error: "This retry chain is invalid; retry the original message." };
+            const failed = {
+              ...entry,
+              state: "failed",
+              error: "This retry chain is invalid; retry the original message.",
+            };
             entries[index] = failed;
             byId.set(entry.id, failed);
             store.put(failed);
@@ -226,23 +267,43 @@ function readOutboxForSync(db) {
 
 function acceptedOutboxEntry(reply, id) {
   const entry = reply?.data?.entry;
-  return reply?.success === true && entry?.id === id &&
-    typeof entry.sessionId === "string" && entry.sessionId.length > 0 &&
+  return reply?.success === true &&
+    entry?.id === id &&
+    typeof entry.sessionId === "string" &&
+    entry.sessionId.length > 0 &&
     ["prompt", "followUp", "steer"].includes(entry.mode) &&
-    ["held", "waiting_host", "delivering", "failed", "delivered"].includes(entry.state) &&
-    (entry.images === undefined || Array.isArray(entry.images) && entry.images.every((image) => image?.type === "image" && typeof image.data === "string" && typeof image.mimeType === "string")) &&
-    (entry.uploads === undefined || Array.isArray(entry.uploads) && entry.uploads.every((upload) => typeof upload === "string")) &&
+    ["held", "waiting_host", "delivering", "failed", "delivered"].includes(
+      entry.state,
+    ) &&
+    (entry.images === undefined ||
+      (Array.isArray(entry.images) &&
+        entry.images.every(
+          (image) =>
+            image?.type === "image" &&
+            typeof image.data === "string" &&
+            typeof image.mimeType === "string",
+        ))) &&
+    (entry.uploads === undefined ||
+      (Array.isArray(entry.uploads) &&
+        entry.uploads.every((upload) => typeof upload === "string"))) &&
     (entry.error === undefined || typeof entry.error === "string") &&
-    (entry.mayHaveBeenSent === undefined || typeof entry.mayHaveBeenSent === "boolean") &&
-    (entry.replaces === undefined || typeof entry.replaces === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(entry.replaces)) &&
-    typeof entry.message === "string" && typeof entry.createdAt === "number" && Number.isFinite(entry.createdAt) && entry.createdAt >= 0
-    ? entry : null;
+    (entry.mayHaveBeenSent === undefined ||
+      typeof entry.mayHaveBeenSent === "boolean") &&
+    (entry.replaces === undefined ||
+      (typeof entry.replaces === "string" &&
+        /^[A-Za-z0-9_-]{1,64}$/.test(entry.replaces))) &&
+    typeof entry.message === "string" &&
+    typeof entry.createdAt === "number" &&
+    Number.isFinite(entry.createdAt) &&
+    entry.createdAt >= 0
+    ? entry
+    : null;
 }
-
 
 async function flushOutbox() {
   const open = indexedDB.open("omp-web-outbox", 1);
-  open.onupgradeneeded = () => open.result.createObjectStore("entries", { keyPath: "id" });
+  open.onupgradeneeded = () =>
+    open.result.createObjectStore("entries", { keyPath: "id" });
   const db = await done(open);
   try {
     const entries = await readOutboxForSync(db);
@@ -254,12 +315,30 @@ async function flushOutbox() {
       if (initial.state !== "sending" || waiting.has(sessionId)) continue;
       // A running worker may have added or accepted an entry since our snapshot: only the shared session head can go.
       const current = await readOutboxForSync(db);
-      const head = current.filter((entry) => entry.sessionId === sessionId && entry.state === "sending").sort(compareOutbox)[0];
+      const head = current
+        .filter(
+          (entry) => entry.sessionId === sessionId && entry.state === "sending",
+        )
+        .sort(compareOutbox)[0];
       if (!head || head.id !== id) continue;
-      const { scope, advisor, mode, message, images, uploads, uploadProofs, replaces, createdAt } = head;
+      const {
+        scope,
+        advisor,
+        mode,
+        message,
+        images,
+        uploads,
+        uploadProofs,
+        replaces,
+        createdAt,
+      } = head;
       // Expired or unscoped rows are never rebound: they are not sent, so they stop blocking that session's later entries.
-      const stale = Date.now() - createdAt > 7 * 24 * 60 * 60 * 1000 ? "Not sent within 7 days."
-        : typeof scope !== "string" || !scope ? "This message has no saved installation or sign-in scope and cannot be sent." : null;
+      const stale =
+        Date.now() - createdAt > 7 * 24 * 60 * 60 * 1000
+          ? "Not sent within 7 days."
+          : typeof scope !== "string" || !scope
+            ? "This message has no saved installation or sign-in scope and cannot be sent."
+            : null;
       if (stale) {
         await markOutboxFailed(db, id, stale);
         continue;
@@ -270,25 +349,57 @@ async function flushOutbox() {
       let timer;
       try {
         // Include the body read: a half-open POST must not keep every later sync entry waiting forever.
-        const body = JSON.stringify({ type: "outbox_add", id, scope, mode, message, images, uploads, uploadProofs, replaces });
+        const body = JSON.stringify({
+          type: "outbox_add",
+          id,
+          scope,
+          mode,
+          message,
+          images,
+          uploads,
+          uploadProofs,
+          replaces,
+        });
         const controller = new AbortController();
-        timer = setTimeout(() => controller.abort(), 40_000 + Math.ceil(body.length / 2));
-        const response = await fetch(`/api/agent/${encodeURIComponent(sessionId)}${advisor === true ? "?advisor=1" : ""}`, { method: "POST", headers: { "Content-Type": "application/json" }, body, signal: controller.signal });
+        timer = setTimeout(
+          () => controller.abort(),
+          40_000 + Math.ceil(body.length / 2),
+        );
+        const response = await fetch(
+          `/api/agent/${encodeURIComponent(sessionId)}${advisor === true ? "?advisor=1" : ""}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+            signal: controller.signal,
+          },
+        );
         const reply = await response.json().catch((error) => {
           if (controller.signal.aborted) throw error;
         });
         if (typeof reply?.error === "string") error = reply.error;
         accepted = acceptedOutboxEntry(reply, id);
-        status = response.status >= 200 && response.status < 300 && !accepted ? 0 : response.status;
+        status =
+          response.status >= 200 && response.status < 300 && !accepted
+            ? 0
+            : response.status;
       } catch {
         // Offline or timed out: retried below.
       } finally {
         clearTimeout(timer);
       }
       if (status >= 200 && status < 300) {
-        const confirmedReplaces = accepted?.replaces === replaces ? accepted.replaces : undefined;
+        const confirmedReplaces =
+          accepted?.replaces === replaces ? accepted.replaces : undefined;
         await deleteOutboxEntry(db, id, confirmedReplaces, sessionId, head);
-      } else if (status === 0 || status === 401 || status === 408 || status === 429 || status >= 500) waiting.add(sessionId);
+      } else if (
+        status === 0 ||
+        status === 401 ||
+        status === 408 ||
+        status === 429 ||
+        status >= 500
+      )
+        waiting.add(sessionId);
       else await markOutboxFailed(db, id, error || `HTTP ${status}`);
     }
     if (waiting.size > 0) throw new Error("omp-outbox: entries left to send");

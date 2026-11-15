@@ -497,7 +497,12 @@ async function prDescription(
   } catch {
     /* Fall back to the commit log. */
   }
-  return { title: log.trim() ? log.split("\n")[0] : plannedMessages[0]?.split("\n")[0] || "Changes", body: `## Changes\n\n${log.trim() || stat.trim()}` };
+  return {
+    title: log.trim()
+      ? log.split("\n")[0]
+      : plannedMessages[0]?.split("\n")[0] || "Changes",
+    body: `## Changes\n\n${log.trim() || stat.trim()}`,
+  };
 }
 
 export const gitCommands: CommandTable = {

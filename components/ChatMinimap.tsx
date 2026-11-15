@@ -388,7 +388,11 @@ export const ChatMinimap = memo(function ChatMinimap({
     if (!rail) return;
     const revealActiveRow = (smooth: boolean) => {
       // A scrub owns the rail position; resize notifications should not animate it.
-      if (draggingRef.current || !railOverflows(rail.scrollHeight, rail.clientHeight)) return;
+      if (
+        draggingRef.current ||
+        !railOverflows(rail.scrollHeight, rail.clientHeight)
+      )
+        return;
       const activeRow = rail.querySelector(
         `[data-index="${activeIndex}"]`,
       ) as HTMLElement | null;

@@ -513,93 +513,98 @@ const ExplorerRow = memo(function ExplorerRow({
         </span>
       )}
       <span className="file-explorer-row-status">
-      {highlighted && (
-        <span
-          title={t("fileExplorer.newlyUploaded")}
-          aria-label={t("fileExplorer.newlyUploaded")}
-          style={{
-            width: 6,
-            height: 6,
-            flexShrink: 0,
-            borderRadius: "50%",
-            background: "var(--accent)",
-          }}
-        />
-      )}
-      {!node.isDir && gitStatus && (
-        <span
-          title={t(GIT_STATUS_LABEL_KEYS[gitStatus.status])}
-          aria-label={t(GIT_STATUS_LABEL_KEYS[gitStatus.status])}
-          style={{
-            width: 14,
-            flexShrink: 0,
-            color: GIT_STATUS_COLORS[gitStatus.status],
-            fontFamily: "var(--font-mono)",
-            fontSize: 11,
-            fontWeight: 600,
-            textAlign: "center",
-          }}
-        >
-          {gitStatus.code}
-        </span>
-      )}
-      {containsGitChanges && (
-        <span
-          title={t("fileExplorer.containsChangedFiles")}
-          aria-label={t("fileExplorer.containsChangedFiles")}
-          style={{
-            width: 6,
-            height: 6,
-            flexShrink: 0,
-            borderRadius: "50%",
-            background: "var(--status-modified)",
-          }}
-        />
-      )}
-      {loading && (
-        <Loader2
-          size={10}
-          strokeWidth={2}
-          color="var(--text-dim)"
-          style={{ animation: "spin 0.8s linear infinite", flexShrink: 0 }}
-          aria-hidden="true"
-        />
-      )}
+        {highlighted && (
+          <span
+            title={t("fileExplorer.newlyUploaded")}
+            aria-label={t("fileExplorer.newlyUploaded")}
+            style={{
+              width: 6,
+              height: 6,
+              flexShrink: 0,
+              borderRadius: "50%",
+              background: "var(--accent)",
+            }}
+          />
+        )}
+        {!node.isDir && gitStatus && (
+          <span
+            title={t(GIT_STATUS_LABEL_KEYS[gitStatus.status])}
+            aria-label={t(GIT_STATUS_LABEL_KEYS[gitStatus.status])}
+            style={{
+              width: 14,
+              flexShrink: 0,
+              color: GIT_STATUS_COLORS[gitStatus.status],
+              fontFamily: "var(--font-mono)",
+              fontSize: 11,
+              fontWeight: 600,
+              textAlign: "center",
+            }}
+          >
+            {gitStatus.code}
+          </span>
+        )}
+        {containsGitChanges && (
+          <span
+            title={t("fileExplorer.containsChangedFiles")}
+            aria-label={t("fileExplorer.containsChangedFiles")}
+            style={{
+              width: 6,
+              height: 6,
+              flexShrink: 0,
+              borderRadius: "50%",
+              background: "var(--status-modified)",
+            }}
+          />
+        )}
+        {loading && (
+          <Loader2
+            size={10}
+            strokeWidth={2}
+            color="var(--text-dim)"
+            style={{ animation: "spin 0.8s linear infinite", flexShrink: 0 }}
+            aria-hidden="true"
+          />
+        )}
       </span>
       <span className="file-explorer-row-actions">
-      {onAtMention && (
-        <Tooltip content={mentionLabel}>
-          <button
-            type="button"
-            className="file-explorer-row-action"
-            onClick={(e) => {
-              e.stopPropagation();
-              onAtMention(getRelativeFilePath(node.fullPath, cwd), node.isDir);
-            }}
-            aria-label={mentionLabel}
-          >
-            <AtSign size={14} strokeWidth={1.8} aria-hidden="true" />
-          </button>
-        </Tooltip>
-      )}
-      {!node.isDir && !blocked ? (
-        <Tooltip content={downloadLabel}>
-          <a
-            href={getFileApiUrl(
-              node.fullPath,
-              "download",
-              hostId,
-              sourceSessionId,
-            )}
-            download
-            onClick={(e) => e.stopPropagation()}
-            aria-label={downloadLabel}
-            className="file-explorer-row-action"
-          >
-            <Download size={14} strokeWidth={1.8} aria-hidden="true" />
-          </a>
-        </Tooltip>
-      ) : <span className="file-explorer-row-action-slot" aria-hidden="true" />}
+        {onAtMention && (
+          <Tooltip content={mentionLabel}>
+            <button
+              type="button"
+              className="file-explorer-row-action"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAtMention(
+                  getRelativeFilePath(node.fullPath, cwd),
+                  node.isDir,
+                );
+              }}
+              aria-label={mentionLabel}
+            >
+              <AtSign size={14} strokeWidth={1.8} aria-hidden="true" />
+            </button>
+          </Tooltip>
+        )}
+        {!node.isDir && !blocked ? (
+          <Tooltip content={downloadLabel}>
+            <a
+              href={getFileApiUrl(
+                node.fullPath,
+                "download",
+                hostId,
+                sourceSessionId,
+              )}
+              download
+              onClick={(e) => e.stopPropagation()}
+              aria-label={downloadLabel}
+              className="file-explorer-row-action"
+            >
+              <Download size={14} strokeWidth={1.8} aria-hidden="true" />
+            </a>
+          </Tooltip>
+        ) : (
+          <span className="file-explorer-row-action-slot" aria-hidden="true" />
+        )}
       </span>
     </div>
   );
@@ -1055,10 +1060,14 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(
       });
     }, [rowHeight]);
 
-    useEffect(() => () => {
-      if (scrollFrameRef.current !== null) cancelAnimationFrame(scrollFrameRef.current);
-      scrollFrameRef.current = null;
-    }, [rowHeight]);
+    useEffect(
+      () => () => {
+        if (scrollFrameRef.current !== null)
+          cancelAnimationFrame(scrollFrameRef.current);
+        scrollFrameRef.current = null;
+      },
+      [rowHeight],
+    );
 
     // Track the viewport height so the window math stays correct across panel
     // resizes; rows themselves are fixed-height and never measured.

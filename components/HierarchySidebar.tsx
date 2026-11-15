@@ -139,7 +139,11 @@ export function HierarchySidebar({
   } | null>(null);
   const confirmationRef = useRef<((confirmed: boolean) => void) | null>(null);
   useEffect(() => () => confirmationRef.current?.(false), []);
-  const confirmAction = (title: string, description: string, confirmLabel: string) =>
+  const confirmAction = (
+    title: string,
+    description: string,
+    confirmLabel: string,
+  ) =>
     new Promise<boolean>((resolve) => {
       if (confirmationRef.current) return resolve(false);
       confirmationRef.current = resolve;
@@ -155,7 +159,9 @@ export function HierarchySidebar({
     branch: string | undefined;
     resolve: (choice: boolean | null) => void;
   } | null>(null);
-  const branchChoiceRef = useRef<((choice: boolean | null) => void) | null>(null);
+  const branchChoiceRef = useRef<((choice: boolean | null) => void) | null>(
+    null,
+  );
   useEffect(() => () => branchChoiceRef.current?.(null), []);
   const chooseBranch = (branch: string | undefined) =>
     new Promise<boolean | null>((resolve) => {
@@ -229,7 +235,8 @@ export function HierarchySidebar({
           const data = await response.json();
           if (!response.ok)
             throw new Error(data.error ?? `HTTP ${response.status}`);
-          if ((completedLoadGenerations.current[host.id] ?? 0) > generation) return;
+          if ((completedLoadGenerations.current[host.id] ?? 0) > generation)
+            return;
           completedLoadGenerations.current[host.id] = generation;
           setSnapshots((prev) => ({ ...prev, [host.id]: data }));
           setLoadErrors((prev) => {
@@ -239,7 +246,8 @@ export function HierarchySidebar({
             return next;
           });
         } catch (e) {
-          if ((completedLoadGenerations.current[host.id] ?? 0) > generation) return;
+          if ((completedLoadGenerations.current[host.id] ?? 0) > generation)
+            return;
           completedLoadGenerations.current[host.id] = generation;
           setLoadErrors((prev) => ({
             ...prev,
@@ -315,11 +323,14 @@ export function HierarchySidebar({
     projectPath: string,
     path: string,
   ) => {
-    if (!(await confirmAction(
-      "Delete workspace?",
-      "Unregister this workspace and remove its checkout? Running processes and uncommitted changes require separate approval. Session history is kept.",
-      "Delete workspace",
-    ))) return;
+    if (
+      !(await confirmAction(
+        "Delete workspace?",
+        "Unregister this workspace and remove its checkout? Running processes and uncommitted changes require separate approval. Session history is kept.",
+        "Delete workspace",
+      ))
+    )
+      return;
     setBusy(true);
     setError(null);
     let stopProcesses = false;
@@ -395,7 +406,11 @@ export function HierarchySidebar({
     }
   };
   const confirmForget = (what: string) =>
-    confirmAction("Unregister?", `Unregister ${what}? Files and processes will not be deleted.`, "Unregister");
+    confirmAction(
+      "Unregister?",
+      `Unregister ${what}? Files and processes will not be deleted.`,
+      "Unregister",
+    );
   const exitedIds = new Set(exitedSessionIds);
   const query = searchQuery.trim().toLowerCase();
   const button = {
@@ -448,7 +463,10 @@ export function HierarchySidebar({
           onAskAgentToResolve={async (message) => {
             let advisor = false;
             try {
-              advisor = localStorage.getItem(`omp-advisor-enabled:${shipTarget.sessionId}`) === "true";
+              advisor =
+                localStorage.getItem(
+                  `omp-advisor-enabled:${shipTarget.sessionId}`,
+                ) === "true";
             } catch {
               // Storage can be unavailable; match the normal session default.
             }
@@ -484,11 +502,18 @@ export function HierarchySidebar({
           {error}
         </div>
       )}
-      {hosts.map((host) => loadErrors[host.id] && (
-        <div key={host.id} role="alert" style={{ color: "var(--status-error)", padding: 8 }}>
-          {loadErrors[host.id]}
-        </div>
-      ))}
+      {hosts.map(
+        (host) =>
+          loadErrors[host.id] && (
+            <div
+              key={host.id}
+              role="alert"
+              style={{ color: "var(--status-error)", padding: 8 }}
+            >
+              {loadErrors[host.id]}
+            </div>
+          ),
+      )}
       {hosts.map((host) => (
         <section key={host.id} style={{ marginBottom: 8 }}>
           <div
@@ -617,11 +642,14 @@ export function HierarchySidebar({
                           aria-label="Project settings"
                           title="Project settings"
                           onClick={(e) => {
-                            e.currentTarget.closest("details")?.removeAttribute("open");
+                            e.currentTarget
+                              .closest("details")
+                              ?.removeAttribute("open");
                             setSettingsProject({ host: host.id, project });
                           }}
                         >
-                          <Wrench size={16} aria-hidden="true" /> Project settings
+                          <Wrench size={16} aria-hidden="true" /> Project
+                          settings
                         </button>
                         {project.kind === "git" && (
                           <button
@@ -666,11 +694,14 @@ export function HierarchySidebar({
                             e.currentTarget
                               .closest("details")
                               ?.removeAttribute("open");
-                            void confirmForget("this project and its registrations").then((confirmed) => {
-                              if (confirmed) void operate(host.id, {
-                                action: "unregisterProject",
-                                projectId: project.id,
-                              });
+                            void confirmForget(
+                              "this project and its registrations",
+                            ).then((confirmed) => {
+                              if (confirmed)
+                                void operate(host.id, {
+                                  action: "unregisterProject",
+                                  projectId: project.id,
+                                });
                             });
                           }}
                         >
@@ -993,12 +1024,15 @@ export function HierarchySidebar({
                                           e.currentTarget
                                             .closest("details")
                                             ?.removeAttribute("open");
-                                          void confirmForget("this session").then((confirmed) => {
-                                            if (confirmed) void operate(host.id, {
-                                              action: "unregisterSession",
-                                              workspaceId: workspace.id,
-                                              sessionId: id,
-                                            });
+                                          void confirmForget(
+                                            "this session",
+                                          ).then((confirmed) => {
+                                            if (confirmed)
+                                              void operate(host.id, {
+                                                action: "unregisterSession",
+                                                workspaceId: workspace.id,
+                                                sessionId: id,
+                                              });
                                           });
                                         }}
                                       >
@@ -1019,31 +1053,100 @@ export function HierarchySidebar({
       ))}
       <ConfirmDialog
         open={confirmation !== null}
-        onOpenChange={(open) => { if (!open) finishConfirmation(false); }}
+        onOpenChange={(open) => {
+          if (!open) finishConfirmation(false);
+        }}
         title={confirmation?.title ?? ""}
         description={confirmation?.description}
         confirmLabel={confirmation?.confirmLabel ?? "Confirm"}
         danger
         onConfirm={() => finishConfirmation(true)}
       />
-      <Dialog open={branchChoice !== null} onOpenChange={(open) => {
-        if (!open) finishBranchChoice(null);
-      }}>
-        <DialogContent style={{ width: 420, maxWidth: "min(92vw, 420px)", padding: 22 }}>
+      <Dialog
+        open={branchChoice !== null}
+        onOpenChange={(open) => {
+          if (!open) finishBranchChoice(null);
+        }}
+      >
+        <DialogContent
+          style={{ width: 420, maxWidth: "min(92vw, 420px)", padding: 22 }}
+        >
           <DialogTitle>Keep or delete branch?</DialogTitle>
-          <p style={{ color: "var(--text-muted)", fontSize: 13, lineHeight: 1.55 }}>
-            Branch {branchChoice?.branch ?? "for this workspace"} is not confirmed merged.
-            Choose whether to keep it or delete it along with the workspace.
+          <p
+            style={{
+              color: "var(--text-muted)",
+              fontSize: 13,
+              lineHeight: 1.55,
+            }}
+          >
+            Branch {branchChoice?.branch ?? "for this workspace"} is not
+            confirmed merged. Choose whether to keep it or delete it along with
+            the workspace.
           </p>
-          <div className="dialog-actions" style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-            <button type="button" className="dialog-action" style={{ padding: "6px 14px", background: "none", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", color: "var(--text-muted)", cursor: "pointer", fontSize: 13 }} onClick={() => finishBranchChoice(null)}>Cancel</button>
-            <button type="button" className="dialog-action" style={{ padding: "6px 14px", background: "var(--accent-strong)", border: "none", borderRadius: "var(--radius-control)", color: "var(--on-accent)", cursor: "pointer", fontSize: 13, fontWeight: 600 }} onClick={() => finishBranchChoice(true)}>Keep branch</button>
-            <button type="button" className="dialog-action" style={{ padding: "6px 14px", background: "var(--status-error)", border: "none", borderRadius: "var(--radius-control)", color: "var(--on-accent)", cursor: "pointer", fontSize: 13, fontWeight: 600 }} onClick={() => finishBranchChoice(false)}>Delete branch</button>
+          <div
+            className="dialog-actions"
+            style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
+          >
+            <button
+              type="button"
+              className="dialog-action"
+              style={{
+                padding: "6px 14px",
+                background: "none",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-control)",
+                color: "var(--text-muted)",
+                cursor: "pointer",
+                fontSize: 13,
+              }}
+              onClick={() => finishBranchChoice(null)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="dialog-action"
+              style={{
+                padding: "6px 14px",
+                background: "var(--accent-strong)",
+                border: "none",
+                borderRadius: "var(--radius-control)",
+                color: "var(--on-accent)",
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+              onClick={() => finishBranchChoice(true)}
+            >
+              Keep branch
+            </button>
+            <button
+              type="button"
+              className="dialog-action"
+              style={{
+                padding: "6px 14px",
+                background: "var(--status-error)",
+                border: "none",
+                borderRadius: "var(--radius-control)",
+                color: "var(--on-accent)",
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+              onClick={() => finishBranchChoice(false)}
+            >
+              Delete branch
+            </button>
           </div>
         </DialogContent>
       </Dialog>
       {settingsProject && (
-        <Dialog open onOpenChange={(open) => { if (!open) setSettingsProject(null); }}>
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setSettingsProject(null);
+          }}
+        >
           <DialogContent style={{ width: 640, maxWidth: "92vw" }}>
             <DialogTitle>Project settings</DialogTitle>
             <ProjectSettings
@@ -1054,8 +1157,15 @@ export function HierarchySidebar({
                 const host = settingsProject.host;
                 setSnapshots((previous) => ({ ...previous, [host]: snapshot }));
                 setSettingsProject((previous) => {
-                  if (!previous || previous.host !== host || previous.project.id !== settingsProject.project.id) return previous;
-                  const project = snapshot.projects.find((item) => item.id === previous.project.id);
+                  if (
+                    !previous ||
+                    previous.host !== host ||
+                    previous.project.id !== settingsProject.project.id
+                  )
+                    return previous;
+                  const project = snapshot.projects.find(
+                    (item) => item.id === previous.project.id,
+                  );
                   return project ? { ...previous, project } : previous;
                 });
                 onChanged();

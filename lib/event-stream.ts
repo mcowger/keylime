@@ -184,9 +184,17 @@ class Transport {
       else if ("up" in message) this.uploads.get(message.up)?.(message);
       else if ("diag" in message)
         this.diagnostics.get(message.diag)?.(message.data);
-      else if ("outboxAdded" in message || "outboxDropped" in message || "outboxReconciled" in message) {
-        const n = "outboxAdded" in message ? message.outboxAdded
-          : "outboxDropped" in message ? message.outboxDropped : message.outboxReconciled;
+      else if (
+        "outboxAdded" in message ||
+        "outboxDropped" in message ||
+        "outboxReconciled" in message
+      ) {
+        const n =
+          "outboxAdded" in message
+            ? message.outboxAdded
+            : "outboxDropped" in message
+              ? message.outboxDropped
+              : message.outboxReconciled;
         const pending = this.outboxWrites.get(n);
         if (message.error !== undefined)
           pending?.reject(new Error(message.error));
@@ -307,7 +315,12 @@ class Transport {
     return new Promise((resolve, reject) => {
       const n = this.nextId++;
       this.outboxWrites.set(n, { resolve, reject });
-      this.port.postMessage({ op: "outbox_reconcile", n, sessionId, confirmedIds });
+      this.port.postMessage({
+        op: "outbox_reconcile",
+        n,
+        sessionId,
+        confirmedIds,
+      });
     });
   }
 
@@ -605,7 +618,10 @@ export async function addToOutbox(
 }
 
 /** Remove browser copies only after an authoritative server identity snapshot. */
-export async function reconcileOutbox(sessionId: string, confirmedIds: string[]): Promise<void> {
+export async function reconcileOutbox(
+  sessionId: string,
+  confirmedIds: string[],
+): Promise<void> {
   transport ??= connectTransport();
   await transport.reconcileOutbox(sessionId, confirmedIds);
 }

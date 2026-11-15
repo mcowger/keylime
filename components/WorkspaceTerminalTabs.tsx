@@ -245,9 +245,9 @@ export function WorkspaceTerminalTabs({
           >
             {(activeId === null
               ? chatTabs.find((tab) => tab.id === activeChatId)?.title
-              : visible.find((entry) => entry.terminal.id === activeId)?.terminal
-                  .title) || "Workspace"} ·{" "}
-            {chatTabs.length + visible.length} tabs
+              : visible.find((entry) => entry.terminal.id === activeId)
+                  ?.terminal.title) || "Workspace"}{" "}
+            · {chatTabs.length + visible.length} tabs
           </button>,
           headerTarget,
         )}

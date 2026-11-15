@@ -31,7 +31,12 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import { Dialog, DialogContent, DialogTitle, ThemedSelect } from "@/components/ui/primitives";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  ThemedSelect,
+} from "@/components/ui/primitives";
 
 /* ────────────────────────── Field wrapper ────────────────────────── */
 
@@ -549,7 +554,16 @@ interface SelectProps {
   "aria-describedby"?: string;
 }
 export function Select({
-  value, onChange, options, required, placeholder, invalid, error, disabled, id, ...aria
+  value,
+  onChange,
+  options,
+  required,
+  placeholder,
+  invalid,
+  error,
+  disabled,
+  id,
+  ...aria
 }: SelectProps) {
   const isInvalid = Boolean(invalid || error);
   return (
@@ -561,7 +575,10 @@ export function Select({
       disabled={disabled}
       required={required}
       aria-invalid={isInvalid || undefined}
-      style={{ width: "100%", color: value ? "var(--text)" : "var(--text-dim)" }}
+      style={{
+        width: "100%",
+        color: value ? "var(--text)" : "var(--text-dim)",
+      }}
       options={[
         ...(!required ? [{ value: "", label: placeholder ?? "" }] : []),
         ...options.map((option) => ({ value: option, label: option })),
@@ -569,7 +586,6 @@ export function Select({
     />
   );
 }
-
 
 /* ─── Checkbox ─── */
 

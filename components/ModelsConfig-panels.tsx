@@ -2,7 +2,12 @@
 
 import { useState, useEffect, useRef, type CSSProperties } from "react";
 import { useI18n } from "@/lib/i18n";
-import { Dialog, DialogContent, DialogTitle, ThemedSelect } from "@/components/ui/primitives";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  ThemedSelect,
+} from "@/components/ui/primitives";
 import { Plus, Trash2, ArrowDown, ArrowUp } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import {
@@ -318,7 +323,10 @@ export function RetryFallbackDetail({
               background: "var(--bg)",
               color: "var(--text)",
             }}
-            options={[0, 1, 2, 3, 5, 10, 15, 20].map((count) => ({ value: count, label: count }))}
+            options={[0, 1, 2, 3, 5, 10, 15, 20].map((count) => ({
+              value: count,
+              label: count,
+            }))}
           />
         </label>
         <label
@@ -353,7 +361,10 @@ export function RetryFallbackDetail({
               color: "var(--text)",
             }}
             options={[
-              { value: "cooldown-expiry", label: t("modelsConfig.afterCooldown") },
+              {
+                value: "cooldown-expiry",
+                label: t("modelsConfig.afterCooldown"),
+              },
               { value: "never", label: t("modelsConfig.never") },
             ]}
           />
@@ -389,7 +400,10 @@ export function RetryFallbackDetail({
               background: "var(--bg)",
               color: "var(--text)",
             }}
-            options={NATIVE_MODEL_ROLES.map((value) => ({ value, label: value }))}
+            options={NATIVE_MODEL_ROLES.map((value) => ({
+              value,
+              label: value,
+            }))}
           />
         </div>
         <div style={{ padding: 12, display: "flex", gap: 8 }}>
@@ -1077,7 +1091,14 @@ export function ModelRolesDetail({ models }: { models: RuntimeModelEntry[] }) {
                     }}
                     options={[
                       { value: "", label: t("modelsConfig.noOverride") },
-                      ...(!modelKnown ? [{ value: selectedModel, label: `${selectedModel} (not currently available)` }] : []),
+                      ...(!modelKnown
+                        ? [
+                            {
+                              value: selectedModel,
+                              label: `${selectedModel} (not currently available)`,
+                            },
+                          ]
+                        : []),
                       ...models.map((item) => ({
                         value: `${item.provider}/${item.id}`,
                         label: `${item.name || item.id} (${item.provider}/${item.id})`,

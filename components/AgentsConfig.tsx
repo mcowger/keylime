@@ -993,12 +993,26 @@ export function AgentsConfig({
                       <ThemedSelect
                         aria-label={t("agentsConfig.scope")}
                         value={createScope}
-                        onChange={(value) => setCreateScope(value as "user" | "project")}
-                        style={{ ...nativeSelectStyle, fontSize: 11, minHeight: 28 }}
+                        onChange={(value) =>
+                          setCreateScope(value as "user" | "project")
+                        }
+                        style={{
+                          ...nativeSelectStyle,
+                          fontSize: 11,
+                          minHeight: 28,
+                        }}
                         options={[
                           { value: "user", label: t("agentsConfig.scopeUser") },
                           // Keep project creation unavailable when the project cannot be edited.
-                          ...(!userOnly ? [{ value: "project", label: t("agentsConfig.scopeProject"), disabled: !canEditProject }] : []),
+                          ...(!userOnly
+                            ? [
+                                {
+                                  value: "project",
+                                  label: t("agentsConfig.scopeProject"),
+                                  disabled: !canEditProject,
+                                },
+                              ]
+                            : []),
                         ]}
                       />
                     </label>
@@ -1062,7 +1076,10 @@ export function AgentsConfig({
                       value={thinkingLevel}
                       onChange={setThinkingLevel}
                       style={nativeSelectStyle}
-                      options={THINKING_LEVELS.map((lv) => ({ value: lv, label: lv || t("agentsConfig.defaultThinking") }))}
+                      options={THINKING_LEVELS.map((lv) => ({
+                        value: lv,
+                        label: lv || t("agentsConfig.defaultThinking"),
+                      }))}
                     />
                   </label>
                 </div>

@@ -56,7 +56,8 @@ function remarkRestrictedThinking(allowHeadings = false) {
           child.type === "list" &&
           child.children?.some((item) => item.checked != null);
         if (
-          (!supported[child.type] && !(allowHeadings && child.type === "heading")) ||
+          (!supported[child.type] &&
+            !(allowHeadings && child.type === "heading")) ||
           indentedCode ||
           taskList
         ) {
@@ -75,7 +76,11 @@ function remarkRestrictedThinking(allowHeadings = false) {
 }
 
 const plugins = [remarkGfm, remarkMath, remarkRestrictedThinking];
-const waitPlugins = [remarkGfm, remarkMath, () => remarkRestrictedThinking(true)];
+const waitPlugins = [
+  remarkGfm,
+  remarkMath,
+  () => remarkRestrictedThinking(true),
+];
 
 export function ThinkingMarkdown({
   children,
@@ -89,12 +94,24 @@ export function ThinkingMarkdown({
       <ReactMarkdown
         remarkPlugins={headings ? waitPlugins : plugins}
         components={{
-          h1: ({ children }) => <div className="tool-output-heading">{children}</div>,
-          h2: ({ children }) => <div className="tool-output-heading">{children}</div>,
-          h3: ({ children }) => <div className="tool-output-heading">{children}</div>,
-          h4: ({ children }) => <div className="tool-output-heading">{children}</div>,
-          h5: ({ children }) => <div className="tool-output-heading">{children}</div>,
-          h6: ({ children }) => <div className="tool-output-heading">{children}</div>,
+          h1: ({ children }) => (
+            <div className="tool-output-heading">{children}</div>
+          ),
+          h2: ({ children }) => (
+            <div className="tool-output-heading">{children}</div>
+          ),
+          h3: ({ children }) => (
+            <div className="tool-output-heading">{children}</div>
+          ),
+          h4: ({ children }) => (
+            <div className="tool-output-heading">{children}</div>
+          ),
+          h5: ({ children }) => (
+            <div className="tool-output-heading">{children}</div>
+          ),
+          h6: ({ children }) => (
+            <div className="tool-output-heading">{children}</div>
+          ),
           span: ({ children }) => (
             <span style={{ whiteSpace: "pre-wrap", fontSize: "inherit" }}>
               {children}

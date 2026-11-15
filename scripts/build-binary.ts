@@ -125,7 +125,9 @@ if (!values["no-archive"]) {
     }).exitCode !== 0
   )
     process.exit(1);
-  console.log(`built ${path.relative(root, out)} and ${path.relative(root, archive)}`);
+  console.log(
+    `built ${path.relative(root, out)} and ${path.relative(root, archive)}`,
+  );
 } else {
   console.log(`built ${path.relative(root, out)}`);
 }

@@ -182,14 +182,28 @@ try {
           const metadata = JSON.parse(
             readFileSync(path.join(active, "keylime-release.json"), "utf8"),
           );
-          if (typeof metadata.sha === "string" && /^[0-9a-f]{40,64}$/.test(metadata.sha)) {
+          if (
+            typeof metadata.sha === "string" &&
+            /^[0-9a-f]{40,64}$/.test(metadata.sha)
+          ) {
             const same = ["runner", "mise.toml"].every(
-              (file) => text(["git", "-C", root, "rev-parse", `${metadata.sha}:${file}`]) ===
-                text(["git", "-C", root, "rev-parse", `${sha}:${file}`]),
+              (file) =>
+                text([
+                  "git",
+                  "-C",
+                  root,
+                  "rev-parse",
+                  `${metadata.sha}:${file}`,
+                ]) === text(["git", "-C", root, "rev-parse", `${sha}:${file}`]),
             );
             const source = path.join(active, "ompweb-omp");
             if (same && existsSync(source)) {
-              const destination = path.join(scratch, "runner", "release", `ompweb-omp-${process.platform}-${process.arch}`);
+              const destination = path.join(
+                scratch,
+                "runner",
+                "release",
+                `ompweb-omp-${process.platform}-${process.arch}`,
+              );
               mkdirSync(path.dirname(destination), { recursive: true });
               cpSync(source, destination);
               reusedRunner = true;
