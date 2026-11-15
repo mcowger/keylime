@@ -31,11 +31,13 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - The composer shows advisor review activity while the advisor model reviews a run
 
 ### Changed
+- The mobile workspace switcher shows the active chat or terminal title instead of the workspace directory name.
 - Settings and other selectors use shared themed menus; file actions are quieter while remaining available on focus and touch.
 - Panel resizing, file-explorer scrolling and minimap dragging coalesce updates for smoother interaction.
 - The composer subagent preview omits assignment prompts and uses a robot icon.
 - Local deployment reuses an unchanged runner and skips archive creation to reduce build time. It no longer smoke-tests releases or backs up production data before activation
 - The new-session screen uses a narrower content column
+- The mobile workspace switcher shows the active chat or terminal title instead of the workspace directory name
 
 ### Fixed
 - A new workspace no longer inherits the parent workspace's tabs, terminals, or restored active-chat selection before it exists.

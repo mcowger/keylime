@@ -241,7 +241,10 @@ export function WorkspaceTerminalTabs({
             onClick={() => setPickerOpen(true)}
             aria-label={`Workspace tabs, ${chatTabs.length + visible.length} open`}
           >
-            {cwd.split("/").filter(Boolean).at(-1) || "/"} ·{" "}
+            {(activeId === null
+              ? chatTabs.find((tab) => tab.id === activeChatId)?.title
+              : visible.find((entry) => entry.terminal.id === activeId)?.terminal
+                  .title) || "Workspace"} ·{" "}
             {chatTabs.length + visible.length} tabs
           </button>,
           headerTarget,
