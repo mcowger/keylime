@@ -10,6 +10,14 @@ import {
 import { isRecord } from "@/lib/type-guards";
 import type { CloneProgress } from "@/lib/git-clone";
 
+/**
+ * @apiContract workspaceClonePost
+ * @apiUsage Clone a project and stream progress frames.
+ * @apiInputs Send an id, destination parent, repository URL and optional hostId; paths are on that host.
+ * @apiInvariants The client-provided id identifies the host clone job; progress is read with an advancing cursor.
+ * @apiEffects Starts a host clone; request abort or stream cancellation asks the host to cancel.
+ * @apiRecovery Disconnect cancellation is best effort and may race completion; inspect the destination before retrying.
+ */
 export async function POST(
   request: Request,
   { disableIdleTimeout }: { disableIdleTimeout: () => void },
@@ -111,6 +119,14 @@ export async function POST(
   }
 }
 
+/**
+ * @apiContract workspaceCloneDelete
+ * @apiUsage Request cancellation of a clone.
+ * @apiInputs Send the clone id and optional hostId.
+ * @apiInvariants Cancellation is directed to the host that owns the job.
+ * @apiEffects Asks the host to cancel; cancellation can race clone completion.
+ * @apiRecovery Inspect the destination and job outcome after uncertainty rather than assuming rollback.
+ */
 export async function DELETE(request: Request) {
   try {
     const body: unknown = await parseJsonWithinLimit(request, 64 * 1024);

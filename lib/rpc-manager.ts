@@ -90,11 +90,8 @@ import {
   sessionSpawnTarget,
 } from "./hosts/session-index";
 import { comparableProjectPath } from "./comparable-path";
-import type {
-  SessionLiveSnapshot,
-  SessionLiveToolEvent,
-  SessionStreamCursor,
-} from "./session-sync";
+import type { SessionLiveSnapshot, SessionLiveToolEvent } from "./session-sync";
+import type { SessionStreamCursorContract } from "./api-contracts/runner-events";
 
 // ============================================================================
 // Types
@@ -107,9 +104,10 @@ export interface SessionEditResult {
   leafId: string | null;
 }
 
+/** Browser-adapted runner or extension event; unknown future event fields remain accepted. */
 export interface AgentEvent {
   type: string;
-  web: SessionStreamCursor;
+  web: SessionStreamCursorContract;
   [key: string]: unknown;
 }
 
@@ -484,6 +482,8 @@ function watchReplacement(
         retry = !context.ok && context.status >= 500;
         return;
       }
+      if (!("entryIds" in context.value) || !("messages" in context.value))
+        return;
       const { entryIds, messages } = context.value;
       if (!Array.isArray(entryIds) || !Array.isArray(messages)) return;
       const added = messages.filter(
@@ -2240,6 +2240,7 @@ export class AgentSessionWrapper {
     this.pendingHostUris.clear();
   }
 
+  /** @apiEvent host_status @apiEvent process_exit @apiEvent session_history_changed */
   private emit(nativeEvent: UnsequencedAgentEvent): void {
     // Tool-result images go out (and into the replay snapshot) as media URLs:
     // big screenshots must never sit in the browser's chat state as base64.

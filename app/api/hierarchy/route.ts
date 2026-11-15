@@ -7,6 +7,14 @@ import { parseJsonWithinLimit } from "@/lib/bounded-form-data";
 import { isRecord } from "@/lib/type-guards";
 import type { HierarchyRequest } from "@/lib/project-hierarchy-types";
 
+/**
+ * @apiContract workspaceHierarchyGet
+ * @apiUsage List the selected host’s project hierarchy.
+ * @apiInputs Optional host selects the daemon.
+ * @apiInvariants The result describes registered hierarchy, not every discoverable directory.
+ * @apiEffects Returns a hierarchy snapshot without changing registrations.
+ * @apiRecovery Refresh after mutations or host reconnection.
+ */
 export async function GET(request: Request) {
   try {
     const resolved = resolveHostOrError(
@@ -21,6 +29,14 @@ export async function GET(request: Request) {
     return apiErrorResponse(error);
   }
 }
+/**
+ * @apiContract workspaceHierarchyPost
+ * @apiUsage Apply a hierarchy action on a host.
+ * @apiInputs Send host and an input object with an action and its action-specific fields.
+ * @apiInvariants Registration and discovery are distinct; the host validates action preconditions.
+ * @apiEffects Actions can change project or workspace registration and presentation.
+ * @apiRecovery After an uncertain mutation, fetch the hierarchy before deciding whether to repeat it.
+ */
 export async function POST(request: Request) {
   try {
     const body: unknown = await parseJsonWithinLimit(request, 64 * 1024);

@@ -48,6 +48,14 @@ function newSessionErrorResponse(error: unknown) {
   }
   return apiErrorResponse(error);
 }
+/**
+ * @apiContract createAgentSession
+ * @apiUsage Create a fresh session on a registered host and optionally initialize and send its first command.
+ * @apiInputs Supply cwd and command type; hostId selects the host. provider and modelId take effect together; thinkingLevel, name, toolNames and advisor configure the spawn. Images are validated; uploads are only supported on existing sessions.
+ * @apiInvariants poolId, creationId and ref are rejected; a supplied sessionId is discarded. ensure_session creates without forwarding a prompt, although model, thinking level and name may still be initialized.
+ * @apiEffects Starts an RPC process, applies initialization in order and sends the command unless it is ensure_session. The session may not yet have a persisted transcript.
+ * @apiRecovery An offline error can include the new sessionId and delivery status: inspect that session before retrying an uncertain command, rather than creating another session. Other initialization failures destroy the new wrapper.
+ */
 export async function POST(req: Request) {
   try {
     const body = await parseJsonWithinLimit<{

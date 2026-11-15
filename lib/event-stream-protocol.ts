@@ -16,32 +16,30 @@
 // one WebSocket per browser at GET /api/events/link, carrying every subscription and every agent command with the
 // host link's sequencing, pieces and fair queues (lib/hosts/link-protocol.ts). Its `e` messages carry exactly the
 // SSE frames above (name, emit time, data).
+// Link sequence/ack belongs to the transport, not the session event cursor. A session cursor's streamId
+// identifies its epoch; merged adjacent deltas retain the later sequence and web.first identifies the first
+// included sequence. A snapshot inside that range cannot safely apply the merged update.
+// A link disconnect is not session termination: resuming can replay retained frames, while a new link needs
+// subscriptions rebuilt and uncertain commands reconciled. File watch replacement starts a new epoch.
 // Every hello and the `transport` control frame carry the setting; the worker switches on it.
 //
 // lib/event-stream-worker.ts imports this module (bundled by server/client-env.ts).
 
 import { isValidNotificationId } from "./notification-events";
 import type { DiagnosticStat } from "./transport-stats";
+import type { EventStreamChannel } from "./api-contracts/browser-link";
+export type { EventStreamChannel } from "./api-contracts/browser-link";
+import type { Static } from "@sinclair/typebox";
+import type {
+  MuxControlFrameSchema,
+  EventStreamRequestSchema,
+} from "./api-contracts/http-system";
 
 export const EVENT_STREAM_PATH = "/api/events";
 export const MUX_CONTROL_EVENT = "mux";
 /** Subscription ids double as SSE event names: no whitespace, never "mux"/"message". */
 export const SUBSCRIPTION_ID_RE = /^s[0-9]{1,15}$/;
 export const UNKNOWN_CONNECTION_CODE = "unknown_connection";
-
-export type EventStreamChannel =
-  | { kind: "running" }
-  | { kind: "open-chat"; sessionId: string }
-  | { kind: "open-chats" }
-  | { kind: "terminal"; hostId: string; terminalId: string }
-  /** Notifications the server routes to the tab with this notification client id. */
-  | { kind: "notifications"; clientId: string }
-  | { kind: "session"; sessionId: string }
-  | { kind: "file"; path: string; hostId?: string; sessionId: string | null }
-  /** Host tool calls (open_url, notify, open_file) from sessions no tab is watching. */
-  | { kind: "host-tools" }
-  /** Settings → Hosts: the `GET /api/hosts` body on subscribe and after every change. */
-  | { kind: "hosts" };
 
 /** How the browser's shared worker reaches the server: SSE + HTTP POST, or the browser link (one WebSocket). */
 export type BrowserTransport = "sse" | "ws";
@@ -130,30 +128,8 @@ export function isIdempotentCommand(type: string): boolean {
   return type.startsWith("get_") || REPEATABLE_COMMANDS.includes(type);
 }
 
-export type MuxControlFrame =
-  | ({
-      type: "hello";
-      connectionId: string;
-      serverId: string;
-    } & BrowserTransportState)
-  | { type: "open"; sub: string }
-  | { type: "end"; sub: string }
-  | {
-      type: "refused";
-      sub: string;
-      status: number;
-      error: string;
-      code: string;
-    }
-  /** The setting changed; the worker switches transport. */
-  | ({ type: "transport" } & BrowserTransportState);
-
-export type EventStreamRequest =
-  | {
-      connectionId: string;
-      subscribe: { id: string; channel: EventStreamChannel };
-    }
-  | { connectionId: string; unsubscribe: string };
+export type MuxControlFrame = Static<typeof MuxControlFrameSchema>;
+export type EventStreamRequest = Static<typeof EventStreamRequestSchema>;
 
 const MAX_ID_LENGTH = 512;
 const MAX_PATH_LENGTH = 8192;

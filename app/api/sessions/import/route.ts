@@ -28,6 +28,14 @@ function isoSessionTimestamp(): string {
 // POST /api/sessions/import — import a native omp session .jsonl file.
 // The session keeps its original entries but can only target a workspace the
 // user previously authorized through projects, sessions, or cwd selection.
+/**
+ * @apiContract importSession
+ * @apiUsage Import a native omp JSONL session into local storage under its authorized workspace.
+ * @apiInputs JSON fileName must be a basename and content must be nonempty JSONL with a session header containing cwd; decoded content is limited to 10 MiB and the encoded request has a separate bound.
+ * @apiInvariants The header cwd must already be an authorized existing path. Session header IDs are replaced with a fresh UUID and imported bash fullOutputPath references are stripped; the provided fileName is not the destination path.
+ * @apiEffects Writes a new local session file and invalidates local list and file caches; it does not start an agent.
+ * @apiRecovery A lost response may still have created a new session; inspect local sessions before retrying, since another import creates another ID and file.
+ */
 export async function POST(req: Request) {
   try {
     const body = await parseJsonWithinLimit<{

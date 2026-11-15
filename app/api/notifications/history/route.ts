@@ -25,11 +25,27 @@ const isId = (value: unknown): value is string =>
   value.length <= MAX_ID_LENGTH;
 
 /** GET /api/notifications/history — every entry, newest first. */
+/**
+ * @apiContract getNotificationsHistory
+ * @apiUsage Load the persistent notification center history.
+ * @apiInputs No parameters.
+ * @apiInvariants Entries are newest first, limited to the latest 100; events requested by at least one enabled device are recorded even if undelivered.
+ * @apiEffects Returns entries without marking them read.
+ * @apiRecovery Reload history to reconcile the client mirror after a failed mutation.
+ */
 export async function GET() {
   return Response.json({ entries: listHistory() });
 }
 
 /** PATCH /api/notifications/history { ids } — mark entries read. A client marks what it shows, never entries it has not seen. */
+/**
+ * @apiContract patchNotificationsHistory
+ * @apiUsage Mark only entries the client has shown as read.
+ * @apiInputs JSON ids array of at most 100 nonempty strings, each at most 256 characters; body limit 32 KiB.
+ * @apiInvariants Unknown IDs and an empty array are harmless; replacing a session/type entry later creates a new notification with its own read state.
+ * @apiEffects Marks matching stored entries read and returns ok.
+ * @apiRecovery Correct malformed requests after 400 invalid_history_request or reduce the body after 413 request_too_large.
+ */
 export async function PATCH(req: Request) {
   let body: unknown;
   try {
@@ -56,6 +72,14 @@ export async function PATCH(req: Request) {
 /**
  * DELETE /api/notifications/history?id=<id> removes one entry; ?all=1 clears the history.
  * Never a body: proxies may drop one, and a lost id must not become "clear everything".
+ */
+/**
+ * @apiContract deleteNotificationsHistory
+ * @apiUsage Remove one history entry by id or explicitly clear all history.
+ * @apiInputs Query id is a nonempty string up to 256 characters; alternatively use all=1 with no id. No body is read.
+ * @apiInvariants A valid id takes precedence over all; an invalid present id never clears history. Unknown IDs are harmless.
+ * @apiEffects Deletes the selected entry or all entries and returns ok.
+ * @apiRecovery On 400 invalid_history_request, supply a valid id or omit id and explicitly set all=1.
  */
 export async function DELETE(req: Request) {
   const params = new URL(req.url).searchParams;

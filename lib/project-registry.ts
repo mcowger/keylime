@@ -11,6 +11,8 @@ import {
 } from "fs";
 import { homedir } from "os";
 import { isAbsolute, resolve } from "path";
+import type { Static } from "@sinclair/typebox";
+import type { ProjectRegistryEntrySchema } from "./api-contracts/host-session-operations";
 import { comparableProjectPath } from "./comparable-path";
 import { getAgentDir } from "./omp/paths";
 import type { ManagedProject, ProjectLaunchConfig } from "./types";
@@ -26,24 +28,7 @@ import type { ManagedProject, ProjectLaunchConfig } from "./types";
 // worktrees always group under their main repository.
 // ============================================================================
 
-export interface ProjectRegistryEntry {
-  /** Canonical project path (worktrees resolve to their main repo root). */
-  path: string;
-  /** ISO timestamp of the most recent explicit add. Used to order projects by
-   *  most-recently-added (stable; never session activity). */
-  addedAt: string;
-  /** True when the user removed the project from the sidebar. Hidden entries
-   *  suppress session re-discovery until the project is added again. */
-  hidden: boolean;
-  /** Optional display-only workspace name. */
-  alias?: string;
-  /** Explicit sidebar position; lower values appear first. */
-  sortOrder?: number;
-  /** Present when pinned; position among pinned projects, lower first. */
-  pinOrder?: number;
-  /** Workspace-level omp launch configuration. */
-  launchConfig?: ProjectLaunchConfig;
-}
+export type ProjectRegistryEntry = Static<typeof ProjectRegistryEntrySchema>;
 
 export interface ProjectPresentationUpdate {
   alias?: string | null;

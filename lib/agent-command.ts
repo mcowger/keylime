@@ -22,6 +22,8 @@ import {
 import { runOutboxCommand } from "@/lib/message-outbox";
 import { readClientMessageIds } from "@/lib/client-message-ids";
 import { reconcileOutboxHandoffs } from "@/lib/outbox-handoff";
+import type { Static } from "@sinclair/typebox";
+import type { ClientMessageStatusSchema } from "@/lib/api-contracts/domain";
 
 // Commands that ride whatever child is alive and never spawn or replace one:
 // keystroke predictions, and the side-question reads/cancel omp-web sends in
@@ -81,7 +83,16 @@ function sendFences(): Map<string, Promise<void>> {
 /** Everything POST /api/agent/[id] does once the body is parsed; shared with
  * the browser socket. `owner`: the caller's web session (lib/web-auth.ts
  * `requestOwner`), whose uploads a prompt may attach. Never throws: failures
- * become `commandErrorResponse`. */
+ * become `commandErrorResponse`.
+ * Outbox acceptance persists a held message but does not mean runner admission. For attached uploads,
+ * per-session send fences keep later commands behind attachment and send; they release before the
+ * command completes, so neither this fence nor an HTTP success means the prompt has settled.
+ * Status reconciliation does not spawn a child and can fail when acceptance cannot be established.
+ * @apiCommand outbox_add
+ * @apiCommand outbox_remove
+ * @apiCommand outbox_scope
+ * @apiCommand get_client_message_status
+ */
 export async function runAgentCommand(
   id: string,
   body: unknown,
@@ -118,7 +129,9 @@ export async function runAgentCommand(
         );
       return Response.json({
         success: true,
-        data: await reconcileOutboxHandoffs(id, ids),
+        data: (await reconcileOutboxHandoffs(id, ids)) satisfies Static<
+          typeof ClientMessageStatusSchema
+        >,
       });
     }
     // Attached files go to the session's host first; nothing reaches omp when one fails (spec U3).

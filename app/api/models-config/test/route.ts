@@ -21,6 +21,14 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * @apiContract postModelsConfigTest
+ * @apiUsage Check that an isolated omp registry resolves a candidate model.
+ * @apiInputs Provide providerName, provider object and model object with an ID; latencyMs is milliseconds.
+ * @apiInvariants This is configuration discovery, not a completion or credential connectivity test; the isolated agent directory excludes stored credentials.
+ * @apiEffects Starts an isolated utility process and writes then removes a temporary models.yml; it does not save the candidate to user configuration.
+ * @apiRecovery Inspect validation or resolution errors before retrying; a successful resolution does not prove credentials work.
+ */
 export async function POST(req: Request) {
   let tempDir: string | undefined;
 

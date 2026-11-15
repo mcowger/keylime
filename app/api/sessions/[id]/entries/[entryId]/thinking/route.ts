@@ -4,6 +4,14 @@ import {
   resolveSessionHostOr404,
 } from "@/lib/api-utils";
 
+/**
+ * @apiContract getSessionThinking
+ * @apiUsage Fetch a deferred thinking block from persisted session history.
+ * @apiInputs id and entryId identify the session and entry; blockIndex is a required nonnegative safe integer identifying its content block.
+ * @apiInvariants The owning host reads the requested block; this is not a live stream or an independent session authorization.
+ * @apiEffects Reads stored content without starting an agent process.
+ * @apiRecovery If the entry or block is no longer available, refresh the selected history before requesting it again.
+ */
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string; entryId: string }> },

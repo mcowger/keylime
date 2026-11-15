@@ -57,6 +57,14 @@ import {
   type FallbackReason,
   type EventStreamChannel,
 } from "./event-stream-protocol";
+import type {
+  BrowserDownHead as DownHead,
+  BrowserUp,
+  BrowserUploadStart,
+  BrowserSubscribe,
+  BrowserUnsubscribe,
+  BrowserUploadAbort,
+} from "./api-contracts/browser-link";
 import type { LocalOutboxEntry } from "./event-stream";
 import {
   LINK_LIMITS,
@@ -256,30 +264,6 @@ type UpItem =
   | { line: string; size: number; rid?: string }
   | { id: string; blob: Uint8Array };
 type Sent = { seq: number; line: string; bytes: number; rid?: string };
-
-/** A server line's header: everything but `data`, which `decode` hands on as the raw text it is. */
-interface DownHead {
-  type?: unknown;
-  seq?: unknown;
-  name?: unknown;
-  at?: unknown;
-  rid?: unknown;
-  status?: unknown;
-  recvAt?: unknown;
-  deduped?: unknown;
-  token?: unknown;
-  serverId?: unknown;
-  resumed?: unknown;
-  ack?: unknown;
-  c?: unknown;
-  id?: unknown;
-  received?: unknown;
-  done?: unknown;
-  proof?: unknown;
-  start?: unknown;
-  code?: unknown;
-  message?: unknown;
-}
 
 interface ControlFrame {
   type?: unknown;
@@ -557,7 +541,10 @@ function applyMode(): void {
     if (link.token !== null)
       queueUp(
         subscription.id,
-        JSON.stringify({ type: "unsub", id: subscription.id }),
+        JSON.stringify({ type: "unsub", id: subscription.id } satisfies Omit<
+          BrowserUnsubscribe,
+          "seq"
+        >),
       );
   }
   // Uploads go back too: the tab resumes each over HTTP from the host's offset.
@@ -588,7 +575,7 @@ function subscribe(subscription: Subscription): void {
         type: "sub",
         id: subscription.id,
         channel: subscription.channel,
-      }),
+      } satisfies Omit<BrowserSubscribe, "seq">),
     );
     return;
   }
@@ -702,7 +689,10 @@ function close(client: Client, streamId: number): void {
   if (mode === "ws")
     queueUp(
       subscription.id,
-      JSON.stringify({ type: "unsub", id: subscription.id }),
+      JSON.stringify({ type: "unsub", id: subscription.id } satisfies Omit<
+        BrowserUnsubscribe,
+        "seq"
+      >),
     );
   release(subscription);
   if (mode === "sse" && wasConnected && connectionId === wasConnected)
@@ -815,7 +805,7 @@ function dial(): void {
       v: BROWSER_LINK_VERSION,
       token: link.token,
       ack: link.down.acked,
-    });
+    } satisfies BrowserUp);
     clockPing();
   };
   ws.onmessage = (event: MessageEvent<string>) => {
@@ -954,7 +944,7 @@ function sendControl(message: Record<string, unknown>): void {
 }
 
 function clockPing(): void {
-  sendControl({ type: "ping", c: Date.now() });
+  sendControl({ type: "ping", c: Date.now() } satisfies BrowserUp);
 }
 
 /** A sequenced line for the server, under `key` (a subscription, or `cmd:<session>`): sent fair and in turn. */
@@ -1141,7 +1131,7 @@ function sendAck(): void {
   clearTimeout(link.ackTimer);
   link.ackTimer = undefined;
   link.appliedBytes = 0;
-  sendControl({ type: "ack", ack: link.down.acked });
+  sendControl({ type: "ack", ack: link.down.acked } satisfies BrowserUp);
 }
 
 function onAck(ack: number): void {
@@ -1476,7 +1466,7 @@ function openUpload(upload: Upload): void {
       name,
       size: upload.blob.size,
       mime: type,
-    }),
+    } satisfies Omit<BrowserUploadStart, "seq">),
   );
 }
 
@@ -1546,7 +1536,10 @@ function sendAbort(id: string): void {
   if (link.token !== null)
     queueUp(
       `up:${id}`,
-      JSON.stringify({ type: "up_abort", id, host: abort.host }),
+      JSON.stringify({ type: "up_abort", id, host: abort.host } satisfies Omit<
+        BrowserUploadAbort,
+        "seq"
+      >),
       `${ABORT_RID}${id}`,
     );
   else ensureLink();

@@ -8,6 +8,14 @@ import { parseLocalUri } from "@/lib/local-uri";
 /** GET ?uri=local://<file> — the absolute path of a file in the session's own `local://` directory, for the file
  * viewer (open_file). The owning host's daemon resolves and confines it (its machine, its platform rules); the file
  * is stat'ed, not read: 404 `file_not_found` when it is not there, so the agent hears it. */
+/**
+ * @apiContract resolveSessionLocalFile
+ * @apiUsage Resolve a session-local URI to an existing path on the owning host for the file viewer.
+ * @apiInputs uri must have valid local:// syntax; id can be a live alias which is followed to its owning session.
+ * @apiInvariants The host applies its own confinement and filename rules and stats the file without reading it. The returned sessionId is the owner, not necessarily the requested alias.
+ * @apiEffects Reads host filesystem metadata; no file contents are returned and no agent process is started.
+ * @apiRecovery Use the returned owner when opening the file, since a temporary alias can disappear; resolve again if the file moves or the host reconnects.
+ */
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },

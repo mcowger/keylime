@@ -11,6 +11,14 @@ import {
 } from "@/lib/omp/settings-config";
 import { assertNoAmbiguousModelScopes } from "@/lib/model-scope";
 
+/**
+ * @apiContract getOmpSettings
+ * @apiUsage Read native user settings and their configuration source.
+ * @apiInputs No workspace is selected.
+ * @apiInvariants This is persisted native configuration, not a live session snapshot.
+ * @apiEffects Reads configuration without mutation.
+ * @apiRecovery Correct file errors and retry the read.
+ */
 export function GET() {
   try {
     return Response.json(readNativeSettings());
@@ -19,6 +27,14 @@ export function GET() {
   }
 }
 
+/**
+ * @apiContract putOmpSettings
+ * @apiUsage Update native user settings.
+ * @apiInputs Provide a settings object; enabledModels is checked for ambiguous bare IDs when a catalog is available.
+ * @apiInvariants The writer preserves unrelated configuration keys; unavailable omp does not prevent editing.
+ * @apiEffects Writes configuration and invalidates model cache and utility process when model-selection settings change.
+ * @apiRecovery Read settings after an uncertain response before retrying.
+ */
 export async function PUT(request: Request) {
   try {
     const body = (await request.json()) as { settings?: NativeSettings };

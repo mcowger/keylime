@@ -889,13 +889,25 @@ and the daemon stays linked to your installed ompweb.
 
 `bun run dev` starts a seeded development environment with Bun hot reload and a separate host daemon, printing its temporary directory and URL. Pass `--port 30278` to select a port. See [CONTRIBUTING.md](CONTRIBUTING.md) for details. `bun run build` bundles the browser app into `dist/`, and `bun run start` serves it on port 30177 (`bun run smoke` checks the result). `bun run build:binary` builds the [single binary](#single-binary) for this machine into `release/` (`-- --target bun-linux-arm64` and the like for another platform; `bun run smoke -- --binary release/ompweb-linux-x64/ompweb` checks it).
 
+API documents regenerate at dev startup and on watched API source changes; a
+generation failure blocks startup or stops the dev cycle. Standalone builds and
+runner/binary generation also run generation and fail if it fails. Source deployment
+preparation does the same before cutover, including cached runner and frontend-only
+candidates; activation, recovery, and installed runtime use prebuilt artifacts and
+need no compiler tools. See [local deployment](docs/local-deployment.md).
+
+At API boundaries, use the canonical TypeBox schemas and inferred types in
+`lib/api-contracts`, importing them in consumers and deriving projections instead
+of duplicating wire DTOs. Update source semantics and annotations with API changes,
+regenerate and commit the documents, and run `bun run api:check` before delivery.
+
 ### Checks
 
 ```bash
 bun run format:check # bun fmt --check
 bun run typecheck    # bun check for the root project and runner
 bun run test         # bun test --parallel
-bun run release:check # formatting, types, tests, build, and live-session smoke
+bun run release:check # API freshness, formatting, types, tests, build, and live-session smoke
 ```
 
 Run `bun fmt` to format files. Linting is intentionally removed: pinned Bun 1.4.4 has no built-in linter, and this project uses neither ESLint nor standalone `tsc`. GitHub Actions are disabled, so run checks locally. The workflow definitions remain in `.github/workflows/` with `.disabled` extensions; renaming them back to `.yml` would reactivate them after pushing.

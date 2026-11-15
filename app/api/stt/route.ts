@@ -12,6 +12,14 @@ import { listSttJobs, readSttConfig, startSttJob } from "@/lib/stt-jobs";
 const MAX_SCOPE_LENGTH = 1024;
 
 /** GET /api/stt?scope=<draft key> — live jobs for that composer, newest first. */
+/**
+ * @apiContract getStt
+ * @apiUsage Discover live transcription jobs for a composer, newest first.
+ * @apiInputs Query scope is required and at most 1024 characters.
+ * @apiInvariants Views contain status and error, never transcript text; gone jobs are excluded.
+ * @apiEffects Reads the process-local job store without starting transcription.
+ * @apiRecovery Invalid scope returns 400; jobs disappear after expiry or server restart.
+ */
 export async function GET(request: Request) {
   const scope = new URL(request.url).searchParams.get("scope");
   if (!scope || scope.length > MAX_SCOPE_LENGTH) {
@@ -27,6 +35,14 @@ export async function GET(request: Request) {
  * POST /api/stt (multipart: file, optional scope) — keeps the audio and starts
  * a server-side transcription job. Returns 202 { jobId }; poll
  * GET /api/stt/[jobId] for the result.
+ */
+/**
+ * @apiContract postStt
+ * @apiUsage Upload recording once and follow the returned jobId via GET and claim via DELETE.
+ * @apiInputs Multipart file is required and nonempty, at most 25MB; optional scope is at most 1024 characters, owner is truncated to 128, and after selects send, steer or followup.
+ * @apiInvariants Owner identifies the recording tab, not the per-composer claim token; absent after means insert. Jobs and audio live in process memory.
+ * @apiEffects Starts one upstream transcription and retains audio for playback or retry; success returns 202.
+ * @apiRecovery Missing configuration returns 501, invalid input 400, oversized audio 413 and capacity exhaustion 429. A repeated upload creates a new job, not a deduplicated retry.
  */
 export async function POST(request: Request) {
   try {

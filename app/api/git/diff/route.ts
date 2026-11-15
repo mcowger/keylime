@@ -4,6 +4,14 @@ import {
   resolveWorkspaceHost,
 } from "@/lib/api-utils";
 
+/**
+ * @apiContract workspaceGitDiff
+ * @apiUsage Read the Git diff for one workspace path.
+ * @apiInputs Provide cwd and path on the selected host, optionally bound to sessionId.
+ * @apiInvariants A session determines the authoritative host and cwd.
+ * @apiEffects Reads a current Git snapshot; repository changes can change the result.
+ * @apiRecovery Retry a failed read after checking host and repository availability.
+ */
 export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;

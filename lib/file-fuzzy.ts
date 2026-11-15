@@ -2,6 +2,9 @@
 // behavior: @ triggers at line start or after whitespace, entries are ranked
 // with the TUI's scoreEntry ladder, and completions insert "@relative/path ".
 
+import type { Static } from "@sinclair/typebox";
+import type { FileIndexEntrySchema } from "./api-contracts/workspace-models";
+
 export interface AtQueryMatch {
   /** Index of the "@" character in the text */
   start: number;
@@ -11,11 +14,7 @@ export interface AtQueryMatch {
   quoted: boolean;
 }
 
-export interface FileIndexEntry {
-  /** Path relative to the session cwd, "/"-separated, no trailing slash */
-  path: string;
-  isDir: boolean;
-}
+export type FileIndexEntry = Static<typeof FileIndexEntrySchema>;
 
 /**
  * Detect an @ file token immediately before the cursor. The @ must be at the

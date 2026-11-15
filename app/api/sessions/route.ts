@@ -12,6 +12,14 @@ const SESSION_LIST_HEADERS = {
   Vary: "Cookie",
 } as const;
 
+/**
+ * @apiContract listSessions
+ * @apiUsage Poll the cross-host session inventory together with currently running registered wrappers.
+ * @apiInputs Optional id filters only sessions, not runningSessionIds or runningSessions; an unfiltered request may supply If-None-Match.
+ * @apiInvariants Host inventories can be cached internally; running wrappers are sampled at request time. Unfiltered responses have an ETag and may return 304; filtered responses do not.
+ * @apiEffects Read-only inventory and live-wrapper lookup; responses prohibit browser and proxy storage.
+ * @apiRecovery Re-poll for changes and retain the previous unfiltered body on 304; a partial host inventory is not proof a session is absent everywhere.
+ */
 export async function GET(req: Request) {
   try {
     const filterId = new URL(req.url).searchParams.get("id");

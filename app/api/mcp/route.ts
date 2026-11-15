@@ -82,6 +82,14 @@ async function allowedCwd(cwd: unknown): Promise<string> {
   return cwd;
 }
 
+/**
+ * @apiContract getMcp
+ * @apiUsage Inspect local user/project MCP configuration and optionally a session's live inventory.
+ * @apiInputs cwd is optional and must be allowed; live=0 disables live lookup, attach=1 avoids starting a session, and advisor=1 applies only to a fresh spawn.
+ * @apiInvariants Without cwd there is no project config. User secrets are not returned and project server configuration is redacted; live errors are sanitized.
+ * @apiEffects Reads local files; a live lookup with sessionId may start a local session unless attach=1.
+ * @apiRecovery Inspect liveError separately from configuration; use attach=1 to avoid spawning while retrying.
+ */
 export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
@@ -228,6 +236,14 @@ export async function GET(request: Request) {
   }
 }
 
+/**
+ * @apiContract postMcp
+ * @apiUsage Write or rename a project MCP server.
+ * @apiInputs Supply allowed cwd, name and server; previousName is optional. Request body is limited to 1 MiB.
+ * @apiInvariants Server configuration is validated before writing; command and URL transports are mutually exclusive.
+ * @apiEffects Updates the local project MCP configuration.
+ * @apiRecovery Read configuration after an uncertain response before repeating the write; returned secrets are redacted.
+ */
 export async function POST(request: Request) {
   try {
     const body = await parseJsonWithinLimit<{
@@ -257,6 +273,14 @@ export async function POST(request: Request) {
   }
 }
 
+/**
+ * @apiContract putMcp
+ * @apiUsage Validate a candidate MCP server without saving it.
+ * @apiInputs Provide name and server; request body is limited to 1 MiB.
+ * @apiInvariants Validation does not establish that the server can connect.
+ * @apiEffects No configuration is written and no server is started.
+ * @apiRecovery Correct validation errors and submit the candidate again.
+ */
 export async function PUT(request: Request) {
   try {
     const body = await parseJsonWithinLimit<{
@@ -273,6 +297,14 @@ export async function PUT(request: Request) {
   }
 }
 
+/**
+ * @apiContract deleteMcp
+ * @apiUsage Delete a project MCP server from local configuration.
+ * @apiInputs Provide allowed cwd and server name; request body is limited to 1 MiB.
+ * @apiInvariants This edits project configuration, not user-level configuration.
+ * @apiEffects Writes the local project MCP file.
+ * @apiRecovery Read configuration after an uncertain response before repeating deletion.
+ */
 export async function DELETE(request: Request) {
   try {
     const body = await parseJsonWithinLimit<{ cwd?: unknown; name?: unknown }>(
@@ -288,6 +320,14 @@ export async function DELETE(request: Request) {
 }
 
 /** Native local commands only: never a model prompt or shell command. */
+/**
+ * @apiContract patchMcp
+ * @apiUsage Enable, disable or reload MCP servers in a selected local session.
+ * @apiInputs Provide sessionId and action; enable and disable also require a validated server name.
+ * @apiInvariants A running turn returns 409; no arbitrary cwd, shell command or model prompt is accepted.
+ * @apiEffects May start the selected local session and sends a native MCP command to it.
+ * @apiRecovery Wait for a busy turn to finish; after an uncertain response inspect live inventory before repeating.
+ */
 export async function PATCH(request: Request) {
   try {
     const body = await parseJsonWithinLimit<{

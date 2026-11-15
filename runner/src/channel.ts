@@ -136,6 +136,12 @@ function wireArgs(method: DialogMethod, args: unknown[]): unknown[] {
   return wire;
 }
 
+/**
+ * @apiEvent hello @apiEvent ui_request @apiEvent ui_end @apiEvent ui
+ * Frames are connection-local, not a durable replay log. Reconnect starts fresh subscriptions and
+ * re-announces still-open local dialogs. In a mirrored dialog the first host or local answer wins;
+ * timeout, abort or disconnect of a host-only dialog resolves its fallback instead.
+ */
 export class HostChannel {
   readonly #session: AgentSession;
   readonly #subagentEventBus: EventBus | undefined;

@@ -18,6 +18,8 @@ import { parseJsonWithinLimit } from "@/lib/bounded-form-data";
 import { publishWorkspaceUpload, uploadErrorResponse } from "@/lib/uploads";
 import { requestOwner } from "@/lib/web-auth";
 import { isRecord } from "@/lib/type-guards";
+import type { Static } from "@sinclair/typebox";
+import type { WorkspaceFilesPublishResultSchema } from "@/lib/api-contracts/http-workspaces";
 
 const FILE_REQUEST_TYPES = [
   "list",
@@ -34,6 +36,14 @@ function parseFileRequestType(value: string): FileRequestType | null {
   return FILE_REQUEST_TYPE_SET.has(value) ? (value as FileRequestType) : null;
 }
 
+/**
+ * @apiContract workspaceFilesPost
+ * @apiUsage Inspect upload names or publish staged uploads into a directory.
+ * @apiInputs The path is a daemon-machine directory; type defaults to upload, while upload-check takes fileNames. Publish takes 1–1000 id/name pairs and a conflict strategy.
+ * @apiInvariants Host and session must agree; staging belongs to the requesting owner and target inspection does not reserve names.
+ * @apiEffects Publishing may partially succeed: uploaded, skipped and per-file errors are returned, with 207 for mixed results.
+ * @apiRecovery After an uncertain response inspect the directory and individual results before retrying; already published files may remain.
+ */
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ path: string[] }> },
@@ -148,7 +158,7 @@ export async function POST(
         skipped,
         errors,
         ...(allFailed ? { error: errors[0].error, code: errors[0].code } : {}),
-      },
+      } satisfies Static<typeof WorkspaceFilesPublishResultSchema>,
       { status: allFailed ? failureStatus : errors.length ? 207 : 200 },
     );
   } catch (error) {
@@ -214,6 +224,14 @@ ${bodyHtml}
 </html>`;
 }
 
+/**
+ * @apiContract workspaceFilesGet
+ * @apiUsage List, read, download, preview or inspect a workspace file.
+ * @apiInputs The path names daemon-machine path segments; type defaults to list, with optional root, hostId and sessionId. Downloads accept HTTP byte ranges.
+ * @apiInvariants Session ownership confines access; file authorization and root/symlink and secret restrictions apply on the host.
+ * @apiEffects Reads current host data; streamed files open a host handle that is closed after streaming.
+ * @apiRecovery A changed or unavailable file can invalidate a repeated read or byte range; request a fresh snapshot.
+ */
 export async function GET(
   request: Request,
   {

@@ -31,6 +31,12 @@ checks the candidate runner before activation, and activation verifies service
 readiness. Run `bun run smoke` separately when needed; deployment no longer checks
 the SPA, APIs, or event stream before switching.
 
+Source deployment preparation generates API documents before any live service
+cutover, including for cached runner and frontend-only candidates. Generation failure
+blocks deployment without changing the active services. `--activate` and `--recover`
+operate on immutable prebuilt releases and do not require compiler tools; neither
+does normal use of an installed release.
+
 Activation gives active runs and protected host work up to 60 seconds to finish.
 Use `keylime-deploy --timeout 10` or `mise exec -- bun run deploy:local:fast`
 to shorten that grace period to 10 seconds. `--timeout` takes positive whole

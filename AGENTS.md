@@ -20,6 +20,44 @@ Password authentication is optional on every bind address, including `0.0.0.0`. 
 
 System tray integration is out of scope. Do not add tray processes, icons, desktop autostart, or desktop bus integration. Keep systemd and launchd service registration.
 
+## Canonical API contracts (required)
+
+- `lib/api-contracts/` is the canonical source for HTTP payloads, host operations,
+  browser commands/events and runner frames. Use the defined APIs and import their
+  schema-derived types at producers and consumers. Do not introduce independent
+  inline request/response/command/event DTOs, parallel structural interfaces or
+  caller-specific wire formats for a contract that already exists. Add missing
+  contracts there first and migrate every in-repository caller. Derive legitimate
+  projections with schema composition, `Static`, `Pick` or `Omit`, not copied fields.
+- Local implementation-only types and intentionally untrusted input headers may
+  remain local. Keep external input `unknown` until the existing parser narrows it;
+  an inferred type does not replace authorization or validation. Do not install
+  runtime schema validation merely to produce documentation.
+- Preserve distinct representations: native runner tool calls use `id`, `name`
+  and `arguments`; parsed conversation DTOs use `toolCallId`, `toolName` and `input`.
+  Paths belong to their owning host, not automatically to the web server.
+- API changes include source semantics, not only shapes. Each handler needs its
+  method-specific `@apiContract`, `@apiUsage`, `@apiInputs`, `@apiInvariants`,
+  `@apiEffects` and `@apiRecovery` JSDoc. Operation descriptions require those same
+  five sections; canonical schemas need intended-use and important field metadata.
+  Document units, ownership, null/omission, ordering, side effects and safe recovery.
+- Run `mise exec -- bun run api:generate` after changing contract definitions,
+  route annotations, command/event inventories or their semantics. Commit the
+  regenerated `docs/api/` artifacts with the source changes, then run
+  `mise exec -- bun run api:check` before delivery. Do not hand-edit OpenAPI,
+  AsyncAPI or JSON Schema artifacts. `api:bootstrap` is a one-time TypeBox Codegen
+  conversion aid, not another permanently maintained source of types.
+- Generation is a blocking prerequisite of development startup, production asset
+  builds, standalone web/runner binary builds and committed-source deployment
+  preparation. Dev watches relevant source inputs and regenerates serially after
+  changes; generated output must not trigger a loop. Generation failure must stop
+  the affected cycle, never be ignored or bypassed with stale artifacts.
+- `release:check` regenerates before its checks; source packaging/prepack and
+  deployment builds also generate. Source builds require root development
+  dependencies. Installed runtime startup and activation/recovery of immutable
+  prebuilt releases must not require compilers or regenerate historical contracts.
+  See `CONTRIBUTING.md`, `docs/release.md` and `docs/local-deployment.md`.
+
 ## Quick Start
 
 ```bash
@@ -32,12 +70,14 @@ bun run test    # bun test --parallel
 bun run smoke   # start the built server and `ompweb host` (or a packed install: -- --package <dir>; a binary: -- --binary <path>) and check them
 bun run build:binary --target bun-<os>-<arch>   # compile release/ompweb-<os>-<arch>/ and its .tar.gz
 bun run typecheck  # bun check for the root project and runner
+bun run api:generate # regenerate and validate source-derived API documents
+bun run api:check    # validate semantic coverage and checked-in freshness
 bun fmt            # format files; bun fmt --check checks formatting
 ```
 
 Use native `bun check` for typechecking and `bun fmt` for formatting. `bun run typecheck` checks both the root project and runner; `bun run format:check` checks the fully formatted baseline. Linting is intentionally removed: pinned Bun 1.4.4 has no built-in linter. Do not reintroduce ESLint or standalone `tsc` tooling.
 
-GitHub Actions are disabled. All four workflow definitions are preserved as `.github/workflows/*.yml.disabled`; do not reactivate them or add active workflows without an explicit request. Run checks locally. `bun run release:check` runs formatting, typechecking, tests, build, and smoke verification; it does not publish.
+GitHub Actions are disabled. All four workflow definitions are preserved as `.github/workflows/*.yml.disabled`; do not reactivate them or add active workflows without an explicit request. Run checks locally. `bun run release:check` regenerates API contracts and runs API freshness, formatting, typechecking, tests, build, and smoke verification; it does not publish.
 
 Live-agent features need ompweb's omp build (`runner/`). Fetch the pinned omp packages first, then install
 (`bun run test` needs this too):
@@ -51,6 +91,10 @@ Use `bun run dev` for seeded development and browser checks. `bun run dev --port
 selects a fixed loopback port; otherwise the launcher picks a free port. It prints
 the URL and randomly named temporary directory, then runs the web server with HMR
 and a separate hot-reloading host daemon. The source checkout stays in place.
+Before either service starts, contract generation must succeed. Changes to watched
+API/schema/command/event source inputs regenerate the documents in a fresh Bun
+process; a failure stops the dev services. Generated docs and build outputs are not
+watched. Ctrl-C also stops any pending generation.
 
 Each run gets a fresh HOME, agent directory, XDG directories, and private host
 socket. The launcher clears inherited `OMP_*`, `OMPWEB_*`, `PI_*`, and XDG settings

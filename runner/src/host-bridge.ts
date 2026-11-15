@@ -52,7 +52,12 @@ interface PendingRequest<T> {
   onUpdate?: AgentToolUpdateCallback<unknown>;
 }
 
-/** Frames sent under a fresh id that wait for the host's answer; an abort sends `{t: cancelType, targetId}`. */
+/**
+ * Each host request has a fresh correlation id; abort removes it before sending a cancel with a
+ * separate id and targetId. The first answer or abort to remove the pending entry wins, so late
+ * answers and updates cannot settle it again. Closing rejects pending calls; a permanently closed
+ * bridge also rejects future calls. Host execution itself may already have had side effects.
+ */
 class HostRequests<T> {
   readonly #send: Send;
   readonly #cancelType: string;

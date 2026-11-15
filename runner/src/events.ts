@@ -106,6 +106,16 @@ function toDelta(event: AssistantMessageEvent): object {
  * Stamps message lifecycle events with a `messageId` and applies `set_event_filter`. Ids are assigned whether or
  * not the event passes the filter, so changing the filter mid-message never splits one message across two ids.
  */
+/**
+ * @apiEvent agent_start @apiEvent agent_end @apiEvent turn_start @apiEvent turn_end
+ * @apiEvent message_start @apiEvent message_update @apiEvent message_end
+ * @apiEvent tool_execution_start @apiEvent tool_execution_update @apiEvent tool_stream_update @apiEvent tool_execution_end
+ * @apiEvent auto_compaction_start @apiEvent auto_compaction_end @apiEvent manual_compaction_start @apiEvent manual_compaction_end
+ * @apiEvent auto_retry_start @apiEvent auto_retry_end @apiEvent cache_warming_start @apiEvent cache_warming_end
+ * @apiEvent retry_fallback_applied @apiEvent retry_fallback_succeeded @apiEvent model_changed @apiEvent config_warnings_changed
+ * @apiEvent advisor_cost_changed @apiEvent advisor_yielded @apiEvent ttsr_triggered @apiEvent todo_reminder @apiEvent todo_auto_clear
+ * @apiEvent irc_message @apiEvent thinking_level_changed @apiEvent goal_updated @apiEvent queue_update
+ */
 class SessionEventForwarder {
   #filter: Set<string> | undefined;
   #messageUpdates: MessageUpdates = "delta";
@@ -182,7 +192,8 @@ async function nextMacrotask(): Promise<void> {
 
 /**
  * Emits `session_settled` once per stretch of agent activity, after the final run yields and background work
- * that could wake the session has drained. Re-checks on every terminal `agent_end` and after session transitions.
+ * that could wake the session has drained. A terminal `agent_end` alone is not settlement: scheduled turns
+ * and background work can continue. Two macrotask hops let prompt results precede the settled event.
  */
 class SessionSettleWatcher {
   /** Agent activity since the last `session_settled`. */
@@ -265,6 +276,7 @@ const bridges = new WeakMap<AgentSession, HostEvents>();
 /** A host-scheduled turn not yet admitted (a goal continuation); set by the prompting commands, possibly before the bridge exists. */
 const scheduledTurns = new WeakMap<AgentSession, () => boolean>();
 
+/** @apiEvent session_settled @apiEvent available_commands_update @apiEvent model_activity @apiEvent session_info_update @apiEvent notice */
 export function subscribeHostEvents(
   session: AgentSession,
   send: CommandContext["send"],
@@ -357,6 +369,7 @@ export async function afterSessionChange(session: AgentSession): Promise<void> {
   await bridge.emitCommands();
 }
 
+/** @apiCommand set_event_filter */
 export const eventsCommands: CommandTable = {
   async set_event_filter({ session }, { events, messageUpdates = "delta" }) {
     if (

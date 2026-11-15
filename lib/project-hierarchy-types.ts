@@ -1,70 +1,11 @@
-import type { ProjectLaunchConfig, SessionInfo } from "./types";
-import type { WorkspaceShipState } from "./workspace-ship-types";
+import type { Static } from "@sinclair/typebox";
+import type * as M from "./api-contracts/workspace-models";
 
-export interface HierarchyWorkspace {
-  id: string;
-  projectId: string;
-  path: string;
-  name: string;
-  isDefault: boolean;
-  branch?: string;
-  sessionIds: string[];
-  unavailable?: boolean;
-  ship?: WorkspaceShipState;
-  setup?: {
-    status: "running" | "failed" | "complete" | "interrupted";
-    jobId: string;
-    stage?: string;
-    error?: string;
-  };
-}
-export interface HierarchyProject {
-  id: string;
-  path: string;
-  name: string;
-  kind: "git" | "directory";
-  addedAt: string;
-  launchConfig?: ProjectLaunchConfig;
-  alias?: string;
-  sortOrder?: number;
-  pinOrder?: number;
-  workspaces: HierarchyWorkspace[];
-}
-export interface HierarchySnapshot {
-  selectedProjectId?: string;
-  projects: HierarchyProject[];
-  workspaceCandidates?: {
-    path: string;
-    name: string;
-    branch?: string;
-    isDefault: boolean;
-  }[];
-  sessionCandidates?: SessionInfo[];
-}
-export interface HierarchyRequest {
-  action:
-    | "list"
-    | "registerProject"
-    | "unregisterProject"
-    | "updateProject"
-    | "discoverWorkspaces"
-    | "importWorkspaces"
-    | "discoverSessions"
-    | "importSessions"
-    | "unregisterSession"
-    | "registerSession"
-    | "moveSession";
-  projectId?: string;
-  workspaceId?: string;
-  path?: string;
-  paths?: string[];
-  sessionId?: string;
-  sessionIds?: string[];
-  cwd?: string;
-  from?: string;
-  to?: string;
-  alias?: string | null;
-  sortOrder?: number | null;
-  pinOrder?: number | null;
-  launchConfig?: ProjectLaunchConfig | null;
-}
+/** Canonically registered workspace and session membership, not merely a discovered worktree. */
+export type HierarchyWorkspace = Static<typeof M.HierarchyWorkspaceSchema>;
+/** Registered host project and its workspaces, with optional display and ordering metadata. */
+export type HierarchyProject = Static<typeof M.HierarchyProjectSchema>;
+/** Registered hierarchy plus optional discovery candidates that require explicit import. */
+export type HierarchySnapshot = Static<typeof M.HierarchySnapshotSchema>;
+/** Action-specific hierarchy query or mutation; nullable metadata clears existing values. */
+export type HierarchyRequest = Static<typeof M.HierarchyRequestSchema>;

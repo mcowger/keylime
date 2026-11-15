@@ -1,3 +1,4 @@
+import type { WebServerSettings as ContractWebServerSettings } from "./api-contracts/configuration-models";
 import {
   existsSync,
   mkdirSync,
@@ -10,7 +11,6 @@ import { resolve } from "path";
 import { getAgentDir } from "./omp/paths";
 import {
   BROWSER_TRANSPORTS,
-  type BrowserTransport,
   type BrowserTransportState,
 } from "./event-stream-protocol";
 import {
@@ -20,28 +20,7 @@ import {
 import { isRecord } from "./type-guards";
 
 /** omp-web's own server-side settings (omp's config.yml stays omp's). */
-export interface WebServerSettings {
-  /** Resume sessions that were mid-run when omp-web stopped. */
-  autoResumeSessions: boolean;
-  /**
-   * Server-side agent tools (issue #275: list_sessions / new_session /
-   * send_to_session). OFF by default: when on, any agent session may call
-   * them to reach other sessions, with no browser tab required. Sessions
-   * pick the tools up on their next host-tool registration (session start
-   * or SSE reconnect).
-   */
-  agentToolsEnabled: boolean;
-  /**
-   * Environment variables merged into the `omp` child process (issue #104).
-   * Stored as a validated record; lib/omp/agent-env.ts owns the policy and
-   * re-checks every name before handing it to a spawn.
-   */
-  agentEnv: Record<string, string>;
-  /** Live-event transport the browser uses; "ws" unless the file says "sse" (a missing or unknown value, the experiment's ws-* values included, reads as "ws"). */
-  browserTransport: BrowserTransport;
-  /** Days a sent upload stays in its session's `local://uploads/` on every host; `null` keeps them for ever (docs/specs/2026-11-02-file-uploads-design.md, U6). */
-  uploadRetentionDays: number | null;
-}
+export type WebServerSettings = ContractWebServerSettings;
 
 const DEFAULTS: WebServerSettings = {
   autoResumeSessions: false,

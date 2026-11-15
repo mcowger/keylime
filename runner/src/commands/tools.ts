@@ -66,7 +66,11 @@ function optionalString(
   return value;
 }
 
-/** The session's bridges, created on first use; their frames go to the host that sent the command. */
+/**
+ * The session's bridges are created on first use and send frames to the originating host. They are
+ * in-memory: disconnect fails outstanding host callbacks and stops microphone/live capture; side
+ * question checkpoints are saved separately in the session history sidecar.
+ */
 function stateOf(ctx: CommandContext): ToolsState {
   let state = states.get(ctx.session);
   if (state) return state;
@@ -311,15 +315,18 @@ async function liveStart(
 // shortcut: live_start/live_connect/dictation_start should also be refused while a session change or shutdown runs;
 // that counter lives with the session-change commands, so add it when they export one.
 export const toolsCommands: CommandTable = {
+  /** @apiCommand set_host_tools */
   set_host_tools: async (ctx, args) => {
     const tools = hostToolDefinitions(args.tools);
     await ctx.session.refreshRpcHostTools(stateOf(ctx).hostTools.tools(tools));
     return { toolNames: tools.map((tool) => tool.name) };
   },
+  /** @apiCommand set_host_uri_schemes */
   set_host_uri_schemes: async (ctx, args) => ({
     schemes: stateOf(ctx).hostUris.setSchemes(hostUriSchemes(args.schemes)),
   }),
 
+  /** @apiCommand btw */
   btw: async (ctx, args) => {
     if (typeof args.question !== "string")
       throw new Error("btw: question must be a string");
@@ -330,15 +337,18 @@ export const toolsCommands: CommandTable = {
       ),
     };
   },
+  /** @apiCommand btw_cancel */
   btw_cancel: async (ctx, args) => ({
     cancelled: stateOf(ctx).btw.cancel(
       optionalString("btw_cancel", args, "recordId"),
     ),
   }),
+  /** @apiCommand get_btw_history */
   get_btw_history: async (ctx) => ({
     records: await stateOf(ctx).btw.history(),
   }),
 
+  /** @apiCommand predict_word */
   predict_word: async (ctx, args) => {
     const { text, cursor } = textCursor("predict_word", args);
     return {
@@ -349,6 +359,7 @@ export const toolsCommands: CommandTable = {
       ),
     };
   },
+  /** @apiCommand predict_word_feedback */
   predict_word_feedback: async (ctx, args) => {
     const { text, cursor } = textCursor("predict_word_feedback", args);
     const { suggestion, accepted } = args;
@@ -370,6 +381,7 @@ export const toolsCommands: CommandTable = {
     return undefined;
   },
 
+  /** @apiCommand dictation_start */
   dictation_start: async (ctx, args) => {
     const state = stateOf(ctx);
     if (state.live.active)
@@ -385,14 +397,19 @@ export const toolsCommands: CommandTable = {
     await state.dictation.start(args.captureId);
     return undefined;
   },
+  /** @apiCommand dictation_stop */
   dictation_stop: async (ctx) => stateOf(ctx).dictation.stop(),
 
+  /** @apiCommand live_start */
   live_start: (ctx, args) => liveStart(ctx, args, "live_start"),
+  /** @apiCommand live_connect */
   live_connect: (ctx, args) => liveStart(ctx, args, "live_connect"),
+  /** @apiCommand live_stop */
   live_stop: async (ctx) => {
     await stateOf(ctx).live.stop();
     return undefined;
   },
+  /** @apiCommand live_mute */
   live_mute: async (ctx, args) => {
     const { muted } = args;
     if (muted !== undefined && typeof muted !== "boolean")

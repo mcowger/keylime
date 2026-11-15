@@ -475,6 +475,8 @@ export function onClientQueueChange(
   return () => state.queueListeners.delete(listener);
 }
 
+/** Reconcile only this session's accepted and journaled IDs. The bounded response can omit large
+ * messages; callers must consult history instead of interpreting omission as non-admission. */
 export async function getClientMessageStatus(
   session: AgentSession,
   value: unknown,
@@ -496,6 +498,7 @@ export async function getClientMessageStatus(
 }
 
 export const correlationCommands: CommandTable = {
+  /** @apiCommand get_client_message_status */
   async get_client_message_status({ session }, args) {
     return getClientMessageStatus(session, args.clientMessageIds);
   },

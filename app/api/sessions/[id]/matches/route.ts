@@ -17,6 +17,14 @@ const MAX_QUERY_LENGTH = 500;
 // asks for a longer prefix rather than the next offset: a running session re-ranks
 // between requests, and an offset would then repeat or skip hits.
 // shortcut: re-reads and re-ranks the whole session per request; cache per (session, query) if that gets slow.
+/**
+ * @apiContract getSessionMatches
+ * @apiUsage Find the best-ranked matches in the active conversation of one session.
+ * @apiInputs q defaults to empty and is limited to 500 characters; limit is a positive bounded decimal and defaults to the search page size.
+ * @apiInvariants Every request rereads and reranks the active context; results are a best-first prefix, not an offset page, and may change as the session changes. Pre-compaction entries are excluded.
+ * @apiEffects Reads host history with thinking and media deferred; no-store response and no agent spawn.
+ * @apiRecovery To load more request a larger prefix and replace the old results rather than concatenating offset pages; refresh after history changes.
+ */
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> },

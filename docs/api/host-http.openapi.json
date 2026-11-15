@@ -1,0 +1,2823 @@
+{
+  "components": {
+    "securitySchemes": {
+      "hostBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      },
+      "trustedProxy": {
+        "description": "Only a configured trusted proxy should set this header.",
+        "in": "header",
+        "name": "x-omp-web-auth",
+        "type": "apiKey"
+      },
+      "webSession": {
+        "in": "cookie",
+        "name": "omp_web_session",
+        "type": "apiKey"
+      }
+    }
+  },
+  "info": {
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nDaemon-to-web HTTP endpoints. Authentication is optional when not configured; origin, ownership and secret-exclusion policies still apply. HEAD follows GET, OPTIONS reports allowed methods, and missing methods return 405. Streaming media descriptions identify SSE/NDJSON item schemas. WebSocket framing and command exchanges are generated separately as AsyncAPI documents.",
+    "title": "Keylime host HTTP API",
+    "version": "1.0.0"
+  },
+  "jsonSchemaDialect": "http://json-schema.org/draft-07/schema#",
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/hosts/broker/v1/credential/{id}/block": {
+      "delete": {
+        "description": "### Usage\n\nDelete an allowed auth-broker credential block through the sharing proxy.\n\n### Inputs\n\nSupply host bearer authentication and an allowed path; query and selected headers pass through, and a body is limited to 1 MiB.\n\n### Invariants\n\nAdmission is repeated after reading the body; disallowed paths are refused and payload semantics belong to the broker.\n\n### Effects\n\nForwards the deletion and passes through upstream status and body; revocation can abort in-flight work.\n\n### Recovery\n\nAfter an uncertain response, consult broker state before repeating the deletion.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "operationId": "hostBrokerDeleteCredentialBlock",
+        "parameters": [
+          {
+            "description": "Decimal credential identifier.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                "title": "Opaque broker payload"
+              }
+            },
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "description": "Opaque broker request body, at most 1 MiB.",
+          "required": false
+        },
+        "responses": {
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing or invalid host bearer token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Credential sharing is disabled for this host."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Method and path are not allowed, or the upstream returned 404."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body exceeds 1 MiB."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The broker request failed or was aborted."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host registry or required service is unavailable."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                  "title": "Opaque broker payload"
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "description": "Opaque broker response bytes.",
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "description": "Opaque broker event stream.",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Upstream broker response; status, body and selected headers are forwarded."
+          }
+        },
+        "security": [
+          {
+            "hostBearer": []
+          }
+        ],
+        "summary": "Delete a credential block",
+        "x-client-semantics": {
+          "Effects": "Forwards the deletion and passes through upstream status and body; revocation can abort in-flight work.",
+          "Inputs": "Supply host bearer authentication and an allowed path; query and selected headers pass through, and a body is limited to 1 MiB.",
+          "Invariants": "Admission is repeated after reading the body; disallowed paths are refused and payload semantics belong to the broker.",
+          "Recovery": "After an uncertain response, consult broker state before repeating the deletion.",
+          "Usage": "Delete an allowed auth-broker credential block through the sharing proxy."
+        }
+      },
+      "post": {
+        "description": "### Usage\n\nSend an allowed auth-broker mutation through the credential-sharing proxy.\n\n### Inputs\n\nSupply host bearer authentication, an allowed path and a body no larger than 1 MiB; queries and selected headers are forwarded.\n\n### Invariants\n\nAdmission is checked before forwarding and after reading the body; broker payload semantics are opaque to this proxy.\n\n### Effects\n\nThe upstream receives the request; its status and body are passed through, potentially as a stream.\n\n### Recovery\n\nA revoked host or aborted request may leave upstream outcome uncertain; consult broker state before repeating a mutation.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "operationId": "hostBrokerBlockCredential",
+        "parameters": [
+          {
+            "description": "Decimal credential identifier.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                "title": "Opaque broker payload"
+              }
+            },
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "description": "Opaque broker request body, at most 1 MiB.",
+          "required": false
+        },
+        "responses": {
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing or invalid host bearer token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Credential sharing is disabled for this host."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Method and path are not allowed, or the upstream returned 404."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body exceeds 1 MiB."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The broker request failed or was aborted."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host registry or required service is unavailable."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                  "title": "Opaque broker payload"
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "description": "Opaque broker response bytes.",
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "description": "Opaque broker event stream.",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Upstream broker response; status, body and selected headers are forwarded."
+          }
+        },
+        "security": [
+          {
+            "hostBearer": []
+          }
+        ],
+        "summary": "Block a credential",
+        "x-client-semantics": {
+          "Effects": "The upstream receives the request; its status and body are passed through, potentially as a stream.",
+          "Inputs": "Supply host bearer authentication, an allowed path and a body no larger than 1 MiB; queries and selected headers are forwarded.",
+          "Invariants": "Admission is checked before forwarding and after reading the body; broker payload semantics are opaque to this proxy.",
+          "Recovery": "A revoked host or aborted request may leave upstream outcome uncertain; consult broker state before repeating a mutation.",
+          "Usage": "Send an allowed auth-broker mutation through the credential-sharing proxy."
+        }
+      }
+    },
+    "/api/hosts/broker/v1/credential/{id}/blocks": {
+      "delete": {
+        "description": "### Usage\n\nDelete an allowed auth-broker credential block through the sharing proxy.\n\n### Inputs\n\nSupply host bearer authentication and an allowed path; query and selected headers pass through, and a body is limited to 1 MiB.\n\n### Invariants\n\nAdmission is repeated after reading the body; disallowed paths are refused and payload semantics belong to the broker.\n\n### Effects\n\nForwards the deletion and passes through upstream status and body; revocation can abort in-flight work.\n\n### Recovery\n\nAfter an uncertain response, consult broker state before repeating the deletion.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "operationId": "hostBrokerDeleteCredentialBlocks",
+        "parameters": [
+          {
+            "description": "Decimal credential identifier.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                "title": "Opaque broker payload"
+              }
+            },
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "description": "Opaque broker request body, at most 1 MiB.",
+          "required": false
+        },
+        "responses": {
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing or invalid host bearer token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Credential sharing is disabled for this host."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Method and path are not allowed, or the upstream returned 404."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body exceeds 1 MiB."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The broker request failed or was aborted."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host registry or required service is unavailable."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                  "title": "Opaque broker payload"
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "description": "Opaque broker response bytes.",
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "description": "Opaque broker event stream.",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Upstream broker response; status, body and selected headers are forwarded."
+          }
+        },
+        "security": [
+          {
+            "hostBearer": []
+          }
+        ],
+        "summary": "Delete credential blocks",
+        "x-client-semantics": {
+          "Effects": "Forwards the deletion and passes through upstream status and body; revocation can abort in-flight work.",
+          "Inputs": "Supply host bearer authentication and an allowed path; query and selected headers pass through, and a body is limited to 1 MiB.",
+          "Invariants": "Admission is repeated after reading the body; disallowed paths are refused and payload semantics belong to the broker.",
+          "Recovery": "After an uncertain response, consult broker state before repeating the deletion.",
+          "Usage": "Delete an allowed auth-broker credential block through the sharing proxy."
+        }
+      }
+    },
+    "/api/hosts/broker/v1/credential/{id}/disable": {
+      "post": {
+        "description": "### Usage\n\nSend an allowed auth-broker mutation through the credential-sharing proxy.\n\n### Inputs\n\nSupply host bearer authentication, an allowed path and a body no larger than 1 MiB; queries and selected headers are forwarded.\n\n### Invariants\n\nAdmission is checked before forwarding and after reading the body; broker payload semantics are opaque to this proxy.\n\n### Effects\n\nThe upstream receives the request; its status and body are passed through, potentially as a stream.\n\n### Recovery\n\nA revoked host or aborted request may leave upstream outcome uncertain; consult broker state before repeating a mutation.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "operationId": "hostBrokerDisableCredential",
+        "parameters": [
+          {
+            "description": "Decimal credential identifier.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                "title": "Opaque broker payload"
+              }
+            },
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "description": "Opaque broker request body, at most 1 MiB.",
+          "required": false
+        },
+        "responses": {
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing or invalid host bearer token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Credential sharing is disabled for this host."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Method and path are not allowed, or the upstream returned 404."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body exceeds 1 MiB."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The broker request failed or was aborted."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host registry or required service is unavailable."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                  "title": "Opaque broker payload"
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "description": "Opaque broker response bytes.",
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "description": "Opaque broker event stream.",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Upstream broker response; status, body and selected headers are forwarded."
+          }
+        },
+        "security": [
+          {
+            "hostBearer": []
+          }
+        ],
+        "summary": "Disable a credential",
+        "x-client-semantics": {
+          "Effects": "The upstream receives the request; its status and body are passed through, potentially as a stream.",
+          "Inputs": "Supply host bearer authentication, an allowed path and a body no larger than 1 MiB; queries and selected headers are forwarded.",
+          "Invariants": "Admission is checked before forwarding and after reading the body; broker payload semantics are opaque to this proxy.",
+          "Recovery": "A revoked host or aborted request may leave upstream outcome uncertain; consult broker state before repeating a mutation.",
+          "Usage": "Send an allowed auth-broker mutation through the credential-sharing proxy."
+        }
+      }
+    },
+    "/api/hosts/broker/v1/credential/{id}/refresh": {
+      "post": {
+        "description": "### Usage\n\nSend an allowed auth-broker mutation through the credential-sharing proxy.\n\n### Inputs\n\nSupply host bearer authentication, an allowed path and a body no larger than 1 MiB; queries and selected headers are forwarded.\n\n### Invariants\n\nAdmission is checked before forwarding and after reading the body; broker payload semantics are opaque to this proxy.\n\n### Effects\n\nThe upstream receives the request; its status and body are passed through, potentially as a stream.\n\n### Recovery\n\nA revoked host or aborted request may leave upstream outcome uncertain; consult broker state before repeating a mutation.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "operationId": "hostBrokerRefreshCredential",
+        "parameters": [
+          {
+            "description": "Decimal credential identifier.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                "title": "Opaque broker payload"
+              }
+            },
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "description": "Opaque broker request body, at most 1 MiB.",
+          "required": false
+        },
+        "responses": {
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing or invalid host bearer token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Credential sharing is disabled for this host."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Method and path are not allowed, or the upstream returned 404."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body exceeds 1 MiB."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The broker request failed or was aborted."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host registry or required service is unavailable."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                  "title": "Opaque broker payload"
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "description": "Opaque broker response bytes.",
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "description": "Opaque broker event stream.",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Upstream broker response; status, body and selected headers are forwarded."
+          }
+        },
+        "security": [
+          {
+            "hostBearer": []
+          }
+        ],
+        "summary": "Refresh a credential",
+        "x-client-semantics": {
+          "Effects": "The upstream receives the request; its status and body are passed through, potentially as a stream.",
+          "Inputs": "Supply host bearer authentication, an allowed path and a body no larger than 1 MiB; queries and selected headers are forwarded.",
+          "Invariants": "Admission is checked before forwarding and after reading the body; broker payload semantics are opaque to this proxy.",
+          "Recovery": "A revoked host or aborted request may leave upstream outcome uncertain; consult broker state before repeating a mutation.",
+          "Usage": "Send an allowed auth-broker mutation through the credential-sharing proxy."
+        }
+      }
+    },
+    "/api/hosts/broker/v1/credentials/disabled": {
+      "get": {
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "operationId": "hostBrokerDisabledCredentials",
+        "responses": {
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing or invalid host bearer token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Credential sharing is disabled for this host."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Method and path are not allowed, or the upstream returned 404."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body exceeds 1 MiB."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The broker request failed or was aborted."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host registry or required service is unavailable."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                  "title": "Opaque broker payload"
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "description": "Opaque broker response bytes.",
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "description": "Opaque broker event stream.",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Upstream broker response; status, body and selected headers are forwarded."
+          }
+        },
+        "security": [
+          {
+            "hostBearer": []
+          }
+        ],
+        "summary": "Get disabled credentials",
+        "x-client-semantics": {
+          "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
+          "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
+          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
+        }
+      }
+    },
+    "/api/hosts/broker/v1/healthz": {
+      "get": {
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "operationId": "hostBrokerHealth",
+        "responses": {
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing or invalid host bearer token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Credential sharing is disabled for this host."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Method and path are not allowed, or the upstream returned 404."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body exceeds 1 MiB."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The broker request failed or was aborted."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host registry or required service is unavailable."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                  "title": "Opaque broker payload"
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "description": "Opaque broker response bytes.",
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "description": "Opaque broker event stream.",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Upstream broker response; status, body and selected headers are forwarded."
+          }
+        },
+        "security": [
+          {
+            "hostBearer": []
+          }
+        ],
+        "summary": "Get broker health",
+        "x-client-semantics": {
+          "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
+          "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
+          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
+        }
+      }
+    },
+    "/api/hosts/broker/v1/snapshot": {
+      "get": {
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "operationId": "hostBrokerSnapshot",
+        "responses": {
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing or invalid host bearer token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Credential sharing is disabled for this host."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Method and path are not allowed, or the upstream returned 404."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body exceeds 1 MiB."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The broker request failed or was aborted."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host registry or required service is unavailable."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                  "title": "Opaque broker payload"
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "description": "Opaque broker response bytes.",
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "description": "Opaque broker event stream.",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Upstream broker response; status, body and selected headers are forwarded."
+          }
+        },
+        "security": [
+          {
+            "hostBearer": []
+          }
+        ],
+        "summary": "Get broker snapshot",
+        "x-client-semantics": {
+          "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
+          "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
+          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
+        }
+      }
+    },
+    "/api/hosts/broker/v1/snapshot/stream": {
+      "get": {
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "operationId": "hostBrokerSnapshotStream",
+        "responses": {
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing or invalid host bearer token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Credential sharing is disabled for this host."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Method and path are not allowed, or the upstream returned 404."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body exceeds 1 MiB."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The broker request failed or was aborted."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host registry or required service is unavailable."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                  "title": "Opaque broker payload"
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "description": "Opaque broker response bytes.",
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "description": "Opaque broker event stream.",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Upstream broker response; status, body and selected headers are forwarded."
+          }
+        },
+        "security": [
+          {
+            "hostBearer": []
+          }
+        ],
+        "summary": "Stream broker snapshots",
+        "x-client-semantics": {
+          "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
+          "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
+          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
+        }
+      }
+    },
+    "/api/hosts/broker/v1/usage": {
+      "get": {
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "operationId": "hostBrokerUsage",
+        "responses": {
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing or invalid host bearer token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Credential sharing is disabled for this host."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Method and path are not allowed, or the upstream returned 404."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body exceeds 1 MiB."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The broker request failed or was aborted."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host registry or required service is unavailable."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                  "title": "Opaque broker payload"
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "description": "Opaque broker response bytes.",
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "description": "Opaque broker event stream.",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Upstream broker response; status, body and selected headers are forwarded."
+          }
+        },
+        "security": [
+          {
+            "hostBearer": []
+          }
+        ],
+        "summary": "Get broker usage",
+        "x-client-semantics": {
+          "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
+          "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
+          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
+        }
+      }
+    },
+    "/api/hosts/broker/v1/usage/clients": {
+      "get": {
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "operationId": "hostBrokerUsageClients",
+        "responses": {
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing or invalid host bearer token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Credential sharing is disabled for this host."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Method and path are not allowed, or the upstream returned 404."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body exceeds 1 MiB."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The broker request failed or was aborted."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host registry or required service is unavailable."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                  "title": "Opaque broker payload"
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "description": "Opaque broker response bytes.",
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "description": "Opaque broker event stream.",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Upstream broker response; status, body and selected headers are forwarded."
+          }
+        },
+        "security": [
+          {
+            "hostBearer": []
+          }
+        ],
+        "summary": "Get broker usage clients",
+        "x-client-semantics": {
+          "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
+          "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
+          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
+        }
+      }
+    },
+    "/api/hosts/broker/v1/usage/history": {
+      "get": {
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "operationId": "hostBrokerUsageHistory",
+        "responses": {
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing or invalid host bearer token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Credential sharing is disabled for this host."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Method and path are not allowed, or the upstream returned 404."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body exceeds 1 MiB."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The broker request failed or was aborted."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host registry or required service is unavailable."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                  "title": "Opaque broker payload"
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "description": "Opaque broker response bytes.",
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "description": "Opaque broker event stream.",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Upstream broker response; status, body and selected headers are forwarded."
+          }
+        },
+        "security": [
+          {
+            "hostBearer": []
+          }
+        ],
+        "summary": "Get broker usage history",
+        "x-client-semantics": {
+          "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
+          "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
+          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
+        }
+      }
+    },
+    "/api/hosts/broker/v1/usage/observed": {
+      "post": {
+        "description": "### Usage\n\nSend an allowed auth-broker mutation through the credential-sharing proxy.\n\n### Inputs\n\nSupply host bearer authentication, an allowed path and a body no larger than 1 MiB; queries and selected headers are forwarded.\n\n### Invariants\n\nAdmission is checked before forwarding and after reading the body; broker payload semantics are opaque to this proxy.\n\n### Effects\n\nThe upstream receives the request; its status and body are passed through, potentially as a stream.\n\n### Recovery\n\nA revoked host or aborted request may leave upstream outcome uncertain; consult broker state before repeating a mutation.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "operationId": "hostBrokerObservedUsage",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                "title": "Opaque broker payload"
+              }
+            },
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "description": "Opaque broker request body, at most 1 MiB.",
+          "required": false
+        },
+        "responses": {
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing or invalid host bearer token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Credential sharing is disabled for this host."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Method and path are not allowed, or the upstream returned 404."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body exceeds 1 MiB."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The broker request failed or was aborted."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host registry or required service is unavailable."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                  "title": "Opaque broker payload"
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "description": "Opaque broker response bytes.",
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "description": "Opaque broker event stream.",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Upstream broker response; status, body and selected headers are forwarded."
+          }
+        },
+        "security": [
+          {
+            "hostBearer": []
+          }
+        ],
+        "summary": "Report observed usage",
+        "x-client-semantics": {
+          "Effects": "The upstream receives the request; its status and body are passed through, potentially as a stream.",
+          "Inputs": "Supply host bearer authentication, an allowed path and a body no larger than 1 MiB; queries and selected headers are forwarded.",
+          "Invariants": "Admission is checked before forwarding and after reading the body; broker payload semantics are opaque to this proxy.",
+          "Recovery": "A revoked host or aborted request may leave upstream outcome uncertain; consult broker state before repeating a mutation.",
+          "Usage": "Send an allowed auth-broker mutation through the credential-sharing proxy."
+        }
+      }
+    },
+    "/api/hosts/broker/v1/usage/stale": {
+      "post": {
+        "description": "### Usage\n\nSend an allowed auth-broker mutation through the credential-sharing proxy.\n\n### Inputs\n\nSupply host bearer authentication, an allowed path and a body no larger than 1 MiB; queries and selected headers are forwarded.\n\n### Invariants\n\nAdmission is checked before forwarding and after reading the body; broker payload semantics are opaque to this proxy.\n\n### Effects\n\nThe upstream receives the request; its status and body are passed through, potentially as a stream.\n\n### Recovery\n\nA revoked host or aborted request may leave upstream outcome uncertain; consult broker state before repeating a mutation.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "operationId": "hostBrokerStaleUsage",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                "title": "Opaque broker payload"
+              }
+            },
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "description": "Opaque broker request body, at most 1 MiB.",
+          "required": false
+        },
+        "responses": {
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing or invalid host bearer token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Credential sharing is disabled for this host."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Method and path are not allowed, or the upstream returned 404."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body exceeds 1 MiB."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The broker request failed or was aborted."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host registry or required service is unavailable."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Payload interpreted by the upstream auth broker; this proxy does not define or validate its shape.",
+                  "title": "Opaque broker payload"
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "description": "Opaque broker response bytes.",
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "description": "Opaque broker event stream.",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Upstream broker response; status, body and selected headers are forwarded."
+          }
+        },
+        "security": [
+          {
+            "hostBearer": []
+          }
+        ],
+        "summary": "Report stale usage",
+        "x-client-semantics": {
+          "Effects": "The upstream receives the request; its status and body are passed through, potentially as a stream.",
+          "Inputs": "Supply host bearer authentication, an allowed path and a body no larger than 1 MiB; queries and selected headers are forwarded.",
+          "Invariants": "Admission is checked before forwarding and after reading the body; broker payload semantics are opaque to this proxy.",
+          "Recovery": "A revoked host or aborted request may leave upstream outcome uncertain; consult broker state before repeating a mutation.",
+          "Usage": "Send an allowed auth-broker mutation through the credential-sharing proxy."
+        }
+      }
+    },
+    "/api/hosts/cluster-config/file/{hash}": {
+      "get": {
+        "description": "### Usage\n\nDownload a file belonging to the current cluster configuration.\n\n### Inputs\n\nAuthenticate as a cluster member and supply the lowercase 64-character content hash in the path.\n\n### Invariants\n\nMembership is checked again after building the configuration; hashes absent from the current manifest, including older versions, return 404.\n\n### Effects\n\nReturns raw application/octet-stream bytes with no-store; it does not apply configuration.\n\n### Recovery\n\nFetch a fresh manifest if the hash is no longer present; restore membership or service availability after an admission failure.\n\n### Additional protocol details\n\nThe hash addresses content in the current manifest, not an older configuration.",
+        "operationId": "hostClusterFile",
+        "parameters": [
+          {
+            "description": "Lowercase SHA-256 content hash.",
+            "in": "path",
+            "name": "hash",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Current file bytes."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing or invalid host bearer token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host is not a cluster member."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Hash is invalid or absent from the current manifest."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "code"],
+                  "title": "Configuration error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The configuration cannot be built."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The configuration cannot be served."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host registry or required service is unavailable."
+          }
+        },
+        "security": [
+          {
+            "hostBearer": []
+          }
+        ],
+        "summary": "Get a mirrored configuration file",
+        "x-client-semantics": {
+          "Effects": "Returns raw application/octet-stream bytes with no-store; it does not apply configuration.",
+          "Inputs": "Authenticate as a cluster member and supply the lowercase 64-character content hash in the path.",
+          "Invariants": "Membership is checked again after building the configuration; hashes absent from the current manifest, including older versions, return 404.",
+          "Recovery": "Fetch a fresh manifest if the hash is no longer present; restore membership or service availability after an admission failure.",
+          "Usage": "Download a file belonging to the current cluster configuration."
+        }
+      }
+    },
+    "/api/hosts/cluster-config/manifest": {
+      "get": {
+        "description": "### Usage\n\nFetch the master's current mirrored configuration manifest.\n\n### Inputs\n\nAuthenticate with a cluster member's host bearer token.\n\n### Invariants\n\nMembership is checked both before and after building the current configuration; the response is not cached by HTTP clients.\n\n### Effects\n\nReads the current configuration and returns JSON; it does not apply it to the daemon.\n\n### Recovery\n\nOn revoked membership or unavailable configuration, restore admission or configuration availability before retrying.\n\n### Additional protocol details\n\nReturns the master's current mirrored configuration.",
+        "operationId": "hostClusterManifest",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "The master's current mirrored files, agent environment, and plugin state.",
+                  "properties": {
+                    "agentEnv": {
+                      "description": "Agent environment values mirrored from the master.",
+                      "patternProperties": {
+                        "^(.*)$": {
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "files": {
+                      "items": {
+                        "description": "A mirrored configuration file.",
+                        "properties": {
+                          "exec": {
+                            "description": "Whether the file is executable.",
+                            "type": "boolean"
+                          },
+                          "hash": {
+                            "description": "Content hash used to fetch the file.",
+                            "type": "string"
+                          },
+                          "path": {
+                            "description": "Path relative to the selected root.",
+                            "type": "string"
+                          },
+                          "root": {
+                            "anyOf": [
+                              {
+                                "const": "agent",
+                                "type": "string"
+                              },
+                              {
+                                "const": "home",
+                                "type": "string"
+                              }
+                            ],
+                            "description": "The omp agent directory or the host's home directory.",
+                            "title": "Configuration root"
+                          },
+                          "size": {
+                            "description": "File size in bytes.",
+                            "type": "number"
+                          }
+                        },
+                        "required": ["root", "path", "hash", "size", "exec"],
+                        "title": "Manifest file",
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "plugins": {
+                      "items": {
+                        "description": "A plugin and its desired state on cluster members.",
+                        "properties": {
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "anyOf": [
+                              {
+                                "const": "npm",
+                                "type": "string"
+                              },
+                              {
+                                "const": "marketplace",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "source": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "For npm plugins, the master's dependency spec; null for a linked plugin and absent when unreadable."
+                          },
+                          "version": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["kind", "id", "version", "enabled"],
+                        "title": "Plugin entry",
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "version": {
+                      "description": "Version of the mirrored configuration.",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["version", "files", "agentEnv", "plugins"],
+                  "title": "Cluster configuration manifest",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Current manifest."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing or invalid host bearer token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host is not a cluster member."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "code"],
+                  "title": "Configuration error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The configuration cannot be built."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The configuration cannot be served."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host registry or required service is unavailable."
+          }
+        },
+        "security": [
+          {
+            "hostBearer": []
+          }
+        ],
+        "summary": "Get cluster configuration manifest",
+        "x-client-semantics": {
+          "Effects": "Reads the current configuration and returns JSON; it does not apply it to the daemon.",
+          "Inputs": "Authenticate with a cluster member's host bearer token.",
+          "Invariants": "Membership is checked both before and after building the current configuration; the response is not cached by HTTP clients.",
+          "Recovery": "On revoked membership or unavailable configuration, restore admission or configuration availability before retrying.",
+          "Usage": "Fetch the master's current mirrored configuration manifest."
+        }
+      }
+    },
+    "/api/hosts/link": {
+      "get": {
+        "description": "### Usage\n\nConnect a host daemon's WebSocket to the server hub.\n\n### Inputs\n\nSupply the host bearer token and WebSocket upgrade request.\n\n### Invariants\n\nThe hub authenticates before upgrading; the ordinary proxy gate does not handle this path.\n\n### Effects\n\nA successful upgrade hands the socket to the hub rather than returning a normal HTTP response.\n\n### Recovery\n\nReconnect after a dropped link; an upgrade refusal requires correcting authentication or availability.\n\n### Additional protocol details\n\nThe hello is the first WebSocket frame. The server refuses upgrades while shutting down.",
+        "operationId": "hostLinkUpgrade",
+        "responses": {
+          "101": {
+            "description": "WebSocket upgrade accepted."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing or invalid host bearer token."
+          },
+          "426": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A WebSocket upgrade is required."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host registry or required service is unavailable."
+          }
+        },
+        "security": [
+          {
+            "hostBearer": []
+          }
+        ],
+        "summary": "Upgrade the host link",
+        "x-client-semantics": {
+          "Effects": "A successful upgrade hands the socket to the hub rather than returning a normal HTTP response.",
+          "Inputs": "Supply the host bearer token and WebSocket upgrade request.",
+          "Invariants": "The hub authenticates before upgrading; the ordinary proxy gate does not handle this path.",
+          "Recovery": "Reconnect after a dropped link; an upgrade refusal requires correcting authentication or availability.",
+          "Usage": "Connect a host daemon's WebSocket to the server hub."
+        }
+      },
+      "post": {
+        "description": "### Usage\n\nDetect a daemon using the obsolete HTTP hello protocol.\n\n### Inputs\n\nThe legacy hello POST is not used to establish a link.\n\n### Invariants\n\nThis endpoint refuses legacy clients rather than negotiating a session.\n\n### Effects\n\nReturns an upgrade-required response; no WebSocket is established.\n\n### Recovery\n\nUpdate the daemon and connect using the WebSocket link.\n\n### Additional protocol details\n\nThe hello body is inspected for its version, but malformed or oversized bodies are also refused.",
+        "operationId": "hostLinkLegacyHello",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "Obsolete hello payload; only an integer v is inspected.",
+                "title": "Legacy hello"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing or invalid host bearer token."
+          },
+          "426": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostVersion": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "serverVersion": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["error", "hostVersion", "serverVersion"],
+                  "title": "Link protocol mismatch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host must update its link protocol."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "Host request error",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host registry or required service is unavailable."
+          }
+        },
+        "security": [
+          {
+            "hostBearer": []
+          }
+        ],
+        "summary": "Refuse an obsolete host link",
+        "x-client-semantics": {
+          "Effects": "Returns an upgrade-required response; no WebSocket is established.",
+          "Inputs": "The legacy hello POST is not used to establish a link.",
+          "Invariants": "This endpoint refuses legacy clients rather than negotiating a session.",
+          "Recovery": "Update the daemon and connect using the WebSocket link.",
+          "Usage": "Detect a daemon using the obsolete HTTP hello protocol."
+        }
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ]
+}

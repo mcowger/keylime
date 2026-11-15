@@ -1,91 +1,39 @@
-export interface SkillSearchResult {
-  package: string;
-  installs: string;
-  url: string;
-}
+import type {
+  SkillSearchResult as ContractSkillSearchResult,
+  SkillInstallScope as ContractSkillInstallScope,
+  SkillInstallInfo as ContractSkillInstallInfo,
+  SkillUpdateState as ContractSkillUpdateState,
+  SkillUpdateResult as ContractSkillUpdateResult,
+  SkillInfo as ContractSkillInfo,
+  PluginScope as ContractPluginScope,
+  PluginResourceKind as ContractPluginResourceKind,
+  PluginResourceCounts as ContractPluginResourceCounts,
+  PluginDiagnostic as ContractPluginDiagnostic,
+  PluginResourceInfo as ContractPluginResourceInfo,
+  PluginPackageInfo as ContractPluginPackageInfo,
+  PluginsResponse as ContractPluginsResponse,
+} from "./api-contracts/configuration-models";
+export type SkillSearchResult = ContractSkillSearchResult;
 
-export type SkillInstallScope = "global" | "project";
+export type SkillInstallScope = ContractSkillInstallScope;
 
-export interface SkillInstallInfo {
-  package: string;
-  scope: SkillInstallScope;
-  source: string;
-  sourceType?: string;
-  skillsShUrl?: string;
-  skillPath?: string;
-  ref?: string;
-  versionHash?: string;
-  canCheckForUpdates: boolean;
-}
+export type SkillInstallInfo = ContractSkillInstallInfo;
 
-export type SkillUpdateState =
-  "up-to-date" | "update-available" | "unsupported" | "error";
+export type SkillUpdateState = ContractSkillUpdateState;
 
-export interface SkillUpdateResult {
-  package: string;
-  scope: SkillInstallScope;
-  state: SkillUpdateState;
-  currentVersion?: string;
-  latestVersion?: string;
-  message?: string;
-}
+export type SkillUpdateResult = ContractSkillUpdateResult;
 
-export interface SkillInfo {
-  name: string;
-  description: string;
-  filePath: string;
-  baseDir: string;
-  disableModelInvocation: boolean;
-  sourceInfo: {
-    source?: string;
-    scope?: string;
-  };
-  install?: SkillInstallInfo;
-  /** False when the SKILL.md sits outside the user-owned skill roots
-   * (plugin, registry, custom directory): listed, but not rewritable. */
-  togglable?: boolean;
-}
+export type SkillInfo = ContractSkillInfo;
 
-export type PluginScope = "global" | "project";
-export type PluginResourceKind = "extension" | "skill" | "prompt" | "theme";
+export type PluginScope = ContractPluginScope;
+export type PluginResourceKind = ContractPluginResourceKind;
 
-export interface PluginResourceCounts {
-  extensions: number;
-  skills: number;
-  prompts: number;
-  themes: number;
-}
+export type PluginResourceCounts = ContractPluginResourceCounts;
 
-export interface PluginDiagnostic {
-  type: "warning" | "error";
-  message: string;
-  source?: string;
-  path?: string;
-}
+export type PluginDiagnostic = ContractPluginDiagnostic;
 
-export interface PluginResourceInfo {
-  kind: PluginResourceKind;
-  name: string;
-  path: string;
-  relativePath: string;
-}
+export type PluginResourceInfo = ContractPluginResourceInfo;
 
-export interface PluginPackageInfo {
-  source: string;
-  scope: PluginScope;
-  filtered: boolean;
-  disabled: boolean;
-  installedPath?: string;
-  packageName?: string;
-  version?: string;
-  configuredVersion?: string;
-  counts: PluginResourceCounts;
-  resources: PluginResourceInfo[];
-  status: "loaded" | "installed" | "missing" | "disabled";
-}
+export type PluginPackageInfo = ContractPluginPackageInfo;
 
-export interface PluginsResponse {
-  packages: PluginPackageInfo[];
-  totals: PluginResourceCounts;
-  diagnostics: PluginDiagnostic[];
-}
+export type PluginsResponse = ContractPluginsResponse;

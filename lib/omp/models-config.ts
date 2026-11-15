@@ -1,3 +1,9 @@
+import type {
+  ModelThinkingConfig as ContractModelThinkingConfig,
+  ModelDefinition as ContractModelDefinition,
+  ProviderConfig as ContractProviderConfig,
+  ModelsFileConfig as ContractModelsFileConfig,
+} from "../api-contracts/configuration-models";
 import {
   existsSync,
   mkdirSync,
@@ -25,51 +31,13 @@ import { isRecord } from "../type-guards";
  * web editor round-trips; unknown fields are preserved untouched.
  */
 
-export interface ModelThinkingConfig {
-  mode?: string;
-  efforts?: string[];
-  defaultLevel?: string;
-  effortMap?: Record<string, string>;
-  [key: string]: unknown;
-}
+export type ModelThinkingConfig = ContractModelThinkingConfig;
 
-export interface ModelDefinition {
-  id: string;
-  name?: string;
-  api?: string;
-  baseUrl?: string;
-  reasoning?: boolean;
-  thinking?: ModelThinkingConfig;
-  input?: string[];
-  contextWindow?: number;
-  maxTokens?: number;
-  headers?: Record<string, string>;
-  cost?: {
-    input?: number;
-    output?: number;
-    cacheRead?: number;
-    cacheWrite?: number;
-  };
-  compat?: Record<string, unknown>;
-  [key: string]: unknown;
-}
+export type ModelDefinition = ContractModelDefinition;
 
-export interface ProviderConfig {
-  baseUrl?: string;
-  apiKey?: string;
-  api?: string;
-  auth?: "apiKey" | "none" | "oauth";
-  headers?: Record<string, string>;
-  compat?: Record<string, unknown>;
-  models?: ModelDefinition[];
-  modelOverrides?: Record<string, unknown>;
-  [key: string]: unknown;
-}
+export type ProviderConfig = ContractProviderConfig;
 
-export interface ModelsFileConfig {
-  providers?: Record<string, ProviderConfig>;
-  [key: string]: unknown;
-}
+export type ModelsFileConfig = ContractModelsFileConfig;
 
 /** Mirrors validateProviderConfiguration(mode: "models-config") closely enough
  * to reject configs omp itself would refuse to load. Throws on failure. */

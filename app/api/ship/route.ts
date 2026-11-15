@@ -7,6 +7,14 @@ import { parseJsonWithinLimit } from "@/lib/bounded-form-data";
 import { isRecord } from "@/lib/type-guards";
 import type { ShipRequest } from "@/lib/workspace-ship-types";
 
+/**
+ * @apiContract workspaceShipGet
+ * @apiUsage Preview a ship operation.
+ * @apiInputs Provide host, projectPath and path on the daemon machine.
+ * @apiInvariants The host checks the requested project and workspace.
+ * @apiEffects Returns a preview snapshot; it does not start shipping.
+ * @apiRecovery Refresh the preview if repository state changes.
+ */
 export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
@@ -21,6 +29,14 @@ export async function GET(request: Request) {
     return apiErrorResponse(error);
   }
 }
+/**
+ * @apiContract workspaceShipPost
+ * @apiUsage Start a ship job.
+ * @apiInputs Send host and the ship input object for its project and workspace.
+ * @apiInvariants The host validates ship preconditions; job acceptance is not completion.
+ * @apiEffects Starts a host job that may mutate Git and remote state.
+ * @apiRecovery Poll job status and inspect repository state after an uncertain response before starting another job.
+ */
 export async function POST(request: Request) {
   try {
     const body: unknown = await parseJsonWithinLimit(request, 64 * 1024);

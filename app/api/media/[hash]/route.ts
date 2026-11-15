@@ -39,6 +39,14 @@ async function readIfPresent(file: string): Promise<Buffer | null> {
 }
 
 /** GET /api/media/<sha256>[?thumb=1] — a tool-result image, or its small WebP preview. */
+/**
+ * @apiContract workspaceMediaGet
+ * @apiUsage Fetch a content-addressed tool-result image or thumbnail.
+ * @apiInputs hash is a SHA-256 content identifier; presence of thumb requests a preview.
+ * @apiInvariants Remote bytes must match the hash; non-images return 415 and missing images return 404.
+ * @apiEffects May fetch from linked hosts and cache a local copy or thumbnail; full images are privately immutable-cached.
+ * @apiRecovery If thumbnail generation fails the full image is served without immutable caching, allowing a later preview.
+ */
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ hash: string }> },

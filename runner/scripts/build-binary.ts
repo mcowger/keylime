@@ -13,6 +13,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { USER_AGENT } from "@oh-my-pi/pi-utils/dirs";
+import { runApiGeneration } from "../../scripts/api-lifecycle";
 import { createJsonParsePlugin } from "../node_modules/@oh-my-pi/pi-coding-agent/scripts/json-parse-plugin";
 import { createLegacyPiVirtualModulePlugin } from "../node_modules/@oh-my-pi/pi-coding-agent/scripts/legacy-pi-virtual-module";
 
@@ -242,6 +243,13 @@ for (const id of ids) {
       `unknown target ${id}; expected one of ${Object.keys(TARGETS).join(", ")}`,
     );
 }
+const root = path.resolve(runnerDir, "..");
+await runApiGeneration(root);
+await fs.cp(
+  path.join(root, "docs", "api"),
+  path.join(runnerDir, "release", "docs", "api"),
+  { recursive: true },
+);
 // npm packs the docs corpus the compiled binary would otherwise embed from the monorepo's `docs/`.
 const docsEmbed = (
   await Bun.file(

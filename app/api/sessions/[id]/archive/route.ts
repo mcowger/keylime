@@ -10,6 +10,14 @@ import { clearExitedRpcSession, getRpcSession } from "@/lib/rpc-manager";
 
 /** POST /api/sessions/[id]/archive — stop the live child, then archive the
  * native OMP JSONL and its sibling artifacts using OMP's gc layout. */
+/**
+ * @apiContract archiveSession
+ * @apiUsage Move a session and its sibling artifacts into its host's native archive.
+ * @apiInputs id selects the active session; no body is used.
+ * @apiInvariants Archive child sessions first: a parent with active children is rejected. The host must be online and a live child must flush before the move.
+ * @apiEffects Stops the session process as needed, archives its files, clears exited state and invalidates the host inventory.
+ * @apiRecovery After an uncertain response inspect both active and archive inventories on the owning host; an unavailable host's omission is not proof of absence.
+ */
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },

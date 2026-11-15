@@ -6,6 +6,7 @@
 import { cpSync, existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
+import { runApiGeneration } from "./api-lifecycle";
 import { bundledPackageDirs, writeLicenses } from "./licenses";
 
 const root = path.join(import.meta.dir, "..");
@@ -29,6 +30,7 @@ if (!/^bun-(linux|darwin)-(x64|arm64)(-baseline)?$/.test(target)) {
 const name = `ompweb-${target.replace(/^bun-/, "").replace(/-baseline$/, "")}`;
 const release = path.join(root, "release");
 const out = path.join(release, name);
+await runApiGeneration(root);
 rmSync(out, { recursive: true, force: true });
 
 // build-client.ts lists the npm packages in the client bundle; the binary embeds this Bun's runtime.
@@ -69,7 +71,7 @@ if (!result.success) process.exit(1);
 // it spawns (`ompweb-omp`, lib/omp/omp-cli.ts), built first by runner/scripts/build-binary.ts.
 const copy = (from: string, to: string) =>
   cpSync(from, path.join(out, to), { recursive: true });
-for (const file of ["dist", "public", "LICENSE"])
+for (const file of ["dist", "public", "docs/api", "LICENSE"])
   copy(path.join(root, file), file);
 if (!values["no-runner"]) {
   const runnerTarget = name.slice("ompweb-".length);

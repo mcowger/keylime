@@ -41,6 +41,14 @@ function getLoginRegistry(): Map<string, PendingLogin> {
 }
 
 // POST /api/auth/login/[provider] — frontend sends redirect URL or auth code
+/**
+ * @apiContract postAuthLoginProvider
+ * @apiUsage Submit the authorization code or redirect URL to a pending streamed login.
+ * @apiInputs Provide token and code from the same provider's login flow.
+ * @apiInvariants Tokens are process-local and bound to the exact provider; they expire when the stream is cleaned up.
+ * @apiEffects Delivers or buffers the input for the login runner; success here does not mean login completed.
+ * @apiRecovery If the token is missing or expired, start a new stream; observe its terminal event before retrying.
+ */
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ provider: string }> },
@@ -80,6 +88,14 @@ export async function POST(
 }
 
 // GET /api/auth/login/[provider] — SSE stream for the login flow
+/**
+ * @apiContract getAuthLoginProvider
+ * @apiUsage Start an interactive provider login and consume SSE auth, prompt_request, progress and terminal events.
+ * @apiInputs Provider is the exact provider ID; submit the emitted token with the pasted code via POST.
+ * @apiInvariants The token lives only in this process and this stream; login times out after 15 minutes and emits heartbeats every 30 seconds.
+ * @apiEffects Starts a dedicated runner; successful login enables the provider and invalidates cached utility state. Disconnect cleans up the runner and token.
+ * @apiRecovery After disconnect or an uncertain terminal event, inspect accounts before starting another login.
+ */
 export async function GET(
   req: Request,
   {

@@ -25,6 +25,14 @@ const manifest = {
 };
 
 // Authentication is enforced by the existing /api/ web-password proxy guard.
+/**
+ * @apiContract getManifest
+ * @apiUsage Retrieve the installable web app manifest, subject to the configured web-password guard.
+ * @apiInputs The optional theme query supplies a theme color; invalid or absent values use black. Request headers determine the install name.
+ * @apiInvariants Packaged icon bytes are read and encoded once when the server module loads; the name and color are resolved per request. The response is private and must be revalidated.
+ * @apiEffects Reads a snapshot; embedded data URLs let installers load icons without separate authenticated requests.
+ * @apiRecovery Retry after authentication if required; changed packaged icons require a server module reload.
+ */
 export function GET(request: Request) {
   const name = getInstallName(request.headers);
   // ?theme= comes from the page's manifest link (lib/manifest-theme.ts).

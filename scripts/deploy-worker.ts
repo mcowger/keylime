@@ -98,6 +98,7 @@ const text = (cmd: string[]) => {
 };
 try {
   onPhase("accepted");
+  // Recovery selects an immutable, already-built release; it has no build dependencies.
   if (values.recover) {
     const active = realpathSync(path.join(base, "current"));
     const pointer = path.join(base, "frontend-current");
@@ -112,6 +113,7 @@ try {
     onPhase("building");
     let candidate: string;
     if (values.activate) {
+      // Activation uses an immutable, already-built release, not source to regenerate.
       candidate = realpathSync(path.resolve(values.activate));
       if (!existsSync(path.join(candidate, "keylime-release.json")))
         throw new Error("Not a Keylime release directory");
@@ -142,9 +144,13 @@ try {
           : 0;
       run(["mise", "trust"], scratch);
       run(["mise", "install"], scratch);
+      const sourceEnv = { ...env };
+      delete sourceEnv.NODE_ENV;
       const bun = (...args: string[]) =>
-        run(["mise", "exec", "--", "bun", ...args], scratch);
+        run(["mise", "exec", "--", "bun", ...args], scratch, sourceEnv);
       bun("install", "--frozen-lockfile");
+      // Generate only in the exported committed source, before reuse or deployment.
+      bun("--no-env-file", "scripts/generate-api-docs.ts");
       if (values.frontend) {
         const active = realpathSync(path.join(base, "current"));
         const metadata = JSON.parse(
@@ -218,6 +224,7 @@ try {
           run(
             ["mise", "exec", "--", "bun", "install", "--frozen-lockfile"],
             path.join(scratch, "runner"),
+            sourceEnv,
           );
           bun("runner/scripts/build-binary.ts");
         }

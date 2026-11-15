@@ -96,6 +96,14 @@ function requestOrigin(req: Request): string {
   }
 }
 
+/**
+ * @apiContract getHosts
+ * @apiUsage Load the linked-host snapshot and pool configuration for host management.
+ * @apiInputs No request parameters.
+ * @apiInvariants Responses are not cached; pool storage must be readable.
+ * @apiEffects Reads the host snapshot and pool registry.
+ * @apiRecovery A 503 requires repairing the pool registry before retrying.
+ */
 export function GET() {
   let pools: HostPool[];
   try {
@@ -106,6 +114,14 @@ export function GET() {
   return Response.json({ ...hostsSnapshot(), pools }, { headers: noStore });
 }
 
+/**
+ * @apiContract putHosts
+ * @apiUsage Replace the complete pool registry.
+ * @apiInputs JSON object with a pools array of pool, member and project configurations.
+ * @apiInvariants Members must reference known hosts; pool configurations are validated before persistence.
+ * @apiEffects Saves pools, notifies listeners and aborts broker requests for hosts that lose credential sharing.
+ * @apiRecovery Correct invalid configurations on 400; repair unreadable or unwritable registries on 503.
+ */
 export async function PUT(req: Request) {
   const body = await readBody(req);
   if (!hasOnlyKeys(body, ["pools"]) || !Array.isArray(body.pools))
@@ -187,6 +203,14 @@ export async function PUT(req: Request) {
   return Response.json({ pools: after }, { headers: noStore });
 }
 
+/**
+ * @apiContract postHosts
+ * @apiUsage Create a linked host and obtain its one-time enrollment token.
+ * @apiInputs JSON label, trimmed and non-empty, at most 100 characters.
+ * @apiInvariants The token is returned at creation, not in subsequent host snapshots; the login command uses the request's externally visible origin.
+ * @apiEffects Persists the host and notifies listeners.
+ * @apiRecovery Correct an invalid label or repair the host registry before retrying.
+ */
 export async function POST(req: Request) {
   const body = await readBody(req);
   const label = parseLabel(body?.label);
@@ -211,6 +235,14 @@ export async function POST(req: Request) {
   }
 }
 
+/**
+ * @apiContract patchHosts
+ * @apiUsage Update host settings or rename one pool without replacing the registry.
+ * @apiInputs JSON host id and at least one of label, allowAgentStart or shareCredentials; alternatively poolId and label.
+ * @apiInvariants The local host cannot change agent-start or credential-sharing settings; an empty local label resets its name.
+ * @apiEffects Persists changes and notifies listeners; disabling effective credential sharing aborts broker requests.
+ * @apiRecovery Correct invalid input, use an existing host or pool, or repair unavailable registry storage.
+ */
 export async function PATCH(req: Request) {
   const body = await readBody(req);
   if (body && body.poolId !== undefined) return renamePool(body);
@@ -291,6 +323,14 @@ function renamePool(body: Record<string, unknown>) {
   return Response.json({ pools }, { headers: noStore });
 }
 
+/**
+ * @apiContract deleteHosts
+ * @apiUsage Revoke a linked host by id.
+ * @apiInputs The id query parameter identifies the remote host; local cannot be revoked.
+ * @apiInvariants A cluster member leaves before its host record is revoked; an unreadable host registry prevents pool changes.
+ * @apiEffects Removes the record, closes its link, aborts broker requests and notifies listeners; future daemon reconnects are unauthorized.
+ * @apiRecovery Supply a known remote id or repair registry storage before retrying.
+ */
 export async function DELETE(req: Request) {
   const id = new URL(req.url).searchParams.get("id");
   if (!id) return fail("id is required", 400);

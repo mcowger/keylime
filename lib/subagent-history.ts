@@ -148,10 +148,11 @@ export function extractSubagentHistory(
       if (
         !isRecord(block) ||
         block.type !== "toolCall" ||
+        !("name" in block) ||
         block.name !== "task"
       )
         continue;
-      const callId = asString(block.id);
+      const callId = asString("id" in block ? block.id : undefined);
       if (callId !== undefined && !callOrder.has(callId))
         callOrder.set(callId, callOrder.size);
     }

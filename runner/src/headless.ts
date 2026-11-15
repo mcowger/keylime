@@ -226,6 +226,7 @@ export async function runHeadless(
     // What extensions see: a UI-capable remote client, as they did under rpc-ui.
     mode: "rpc",
     uiContext: ui,
+    /** @apiEvent extension_error */
     reportSendError: (action, err) =>
       writeFrame({ t: "extension_error", action, error: err.message }),
     reportRuntimeError: (err) =>

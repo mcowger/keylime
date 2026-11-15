@@ -14,6 +14,14 @@ import {
   type SessionSyncResponse,
 } from "@/lib/session-sync";
 
+/**
+ * @apiContract getSessionContext
+ * @apiUsage Read the selected transcript context, synchronize display history, or obtain the current persisted boundary.
+ * @apiInputs leafId selects a branch; presence of deferThinking, deferMedia or includePreCompaction enables each option. sync=1 accepts an opaque cursor and a positive limit up to 200; boundary=1 excludes sync, leafId, includePreCompaction, cursor and limit.
+ * @apiInvariants Sync pages append or replace when a branch or compaction invalidates the cursor; use the returned cursor in the same session and view. Live output is sampled after the disk read only for the current tip, so it is not an atomic disk snapshot. Boundary returns current active entry IDs only.
+ * @apiEffects Reads persisted history and samples an existing live wrapper; it never spawns one. Sync and boundary responses are no-store. A live session without a file can return an empty initial boundary or sync history.
+ * @apiRecovery Honor replace and hasMore when applying pages; do not discard confirmed history merely because a file is temporarily missing. Restart synchronization when the cursor is invalidated.
+ */
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> },

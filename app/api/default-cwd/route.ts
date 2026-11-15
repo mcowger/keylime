@@ -4,6 +4,14 @@ import {
   resolveWorkspaceHost,
 } from "@/lib/api-utils";
 
+/**
+ * @apiContract workspaceDefaultCwd
+ * @apiUsage Get the selected host’s default workspace directory.
+ * @apiInputs hostId is optional and selects the daemon machine.
+ * @apiInvariants The returned path is host-local, not a browser filesystem path.
+ * @apiEffects Reads the host default without selecting or registering a project.
+ * @apiRecovery Request it again if host configuration changes.
+ */
 export async function POST(request: Request) {
   try {
     const params = new URL(request.url).searchParams;

@@ -122,6 +122,14 @@ function parsePresentation(
   };
 }
 
+/**
+ * @apiContract workspaceProjectsGet
+ * @apiUsage List managed projects across hosts.
+ * @apiInputs This request has no path input; each project retains its owning host.
+ * @apiInvariants The list aggregates registered projects rather than browsing every directory.
+ * @apiEffects Returns a snapshot assembled from host state.
+ * @apiRecovery Refresh when hosts reconnect or registrations change.
+ */
 export async function GET() {
   try {
     return Response.json({ projects: await listProjectsAllHosts() });
@@ -130,6 +138,14 @@ export async function GET() {
   }
 }
 
+/**
+ * @apiContract workspaceProjectsPost
+ * @apiUsage Register a project on its owning host.
+ * @apiInputs Send cwd and optional hostId; poolId is rejected.
+ * @apiInvariants cwd is a daemon-machine path; registration is explicit rather than discovery.
+ * @apiEffects Updates hierarchy registration and returns projects.
+ * @apiRecovery After an uncertain response fetch projects before retrying registration.
+ */
 export async function POST(req: Request) {
   try {
     const body: unknown = await req.json();
@@ -175,6 +191,14 @@ export async function POST(req: Request) {
   }
 }
 
+/**
+ * @apiContract workspaceProjectsPatch
+ * @apiUsage Update registered project presentation.
+ * @apiInputs Send hostId and a project update or updates array of at most 500 entries.
+ * @apiInvariants Each cwd must match a registered project; poolId is rejected.
+ * @apiEffects Updates are applied sequentially, so earlier changes may survive a later error.
+ * @apiRecovery Fetch the project list after an error or disconnect before retrying.
+ */
 export async function PATCH(req: Request) {
   try {
     const body: unknown = await req.json();
@@ -219,6 +243,14 @@ export async function PATCH(req: Request) {
   }
 }
 
+/**
+ * @apiContract workspaceProjectsDelete
+ * @apiUsage Unregister a managed project.
+ * @apiInputs Send cwd and optional hostId; poolId is rejected.
+ * @apiInvariants The cwd must match a registered project on that host.
+ * @apiEffects Removes its hierarchy registration; this endpoint does not itself request filesystem deletion.
+ * @apiRecovery Refresh project registrations after an uncertain response before retrying.
+ */
 export async function DELETE(req: Request) {
   try {
     const body: unknown = await req.json();

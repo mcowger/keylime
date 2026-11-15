@@ -24,6 +24,14 @@ function errorResponse(error: unknown): Response {
   return fail("The host update request failed", "host_update_failed", 500);
 }
 
+/**
+ * @apiContract getHostsIdUpdates
+ * @apiUsage Check software update status on the selected host's daemon, including this machine's daemon.
+ * @apiInputs Host id path parameter; force=1 requests a fresh check.
+ * @apiInvariants Responses are not cached; incompatible or unverifiable candidate link protocols block automatic updates.
+ * @apiEffects Requests update status from the daemon, not the web server installation.
+ * @apiRecovery Resolve host connectivity or daemon errors and retry; update the server first when its protocol range is incompatible.
+ */
 export async function GET(request: Request, { params }: Context) {
   try {
     const { id } = await params;
@@ -39,6 +47,14 @@ export async function GET(request: Request, { params }: Context) {
   }
 }
 
+/**
+ * @apiContract postHostsIdUpdates
+ * @apiUsage Start an ompweb daemon update on the selected host.
+ * @apiInputs Host id and JSON containing exactly target=ompweb and a release version of at most 100 characters.
+ * @apiInvariants The server force-checks the candidate and requires the same available version, update eligibility and protocol compatibility before accepting it.
+ * @apiEffects Requests the daemon to start the update and returns its operation with HTTP 202.
+ * @apiRecovery On 409 check status again and resolve the blocked reason or changed version; fix request, origin or host errors before retrying.
+ */
 export async function POST(request: Request, { params }: Context) {
   if (
     shouldCheckApiRequestOrigin(request) &&

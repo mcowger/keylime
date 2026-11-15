@@ -2,6 +2,10 @@ import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
+import {
+  watchApiContracts,
+  type ApiContractWatcher,
+} from "./dev-api-contracts";
 
 const { values } = parseArgs({
   args: Bun.argv.slice(2),
@@ -67,10 +71,14 @@ const children: Bun.Subprocess[] = [];
 let stopping = false;
 let exitCode = 0;
 const { promise: finished, resolve: finish } = Promise.withResolvers<void>();
+let contracts: ApiContractWatcher | undefined;
+let startupChild: Bun.Subprocess | undefined;
 function stop(code: number) {
   if (stopping) return;
   stopping = true;
   exitCode = code;
+  void contracts?.close();
+  startupChild?.kill();
   finish();
 }
 function spawn(args: string[]) {
@@ -103,6 +111,12 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const)
   process.on(signal, () => stop(0));
 
 try {
+  contracts = watchApiContracts(root, env, (error) => {
+    console.error("[dev] API generation failed:", error);
+    stop(1);
+  });
+  await contracts.start();
+  if (stopping) throw new Error("Development startup stopped");
   // Bootstrap in a child so module-level config caches only ever see the isolated environment.
   const bootstrap = Bun.spawn(
     [
@@ -113,8 +127,10 @@ try {
     ],
     { cwd: root, env, stdout: "inherit", stderr: "inherit" },
   );
+  startupChild = bootstrap;
   const bootstrapExit = await bootstrap.exited;
-  if (bootstrapExit !== 0)
+  startupChild = undefined;
+  if (bootstrapExit !== 0 && !stopping)
     throw new Error("Could not configure isolated host link");
   if (!stopping) {
     const seed = Bun.spawn(
@@ -126,7 +142,10 @@ try {
         stderr: "inherit",
       },
     );
-    if ((await seed.exited) !== 0)
+    startupChild = seed;
+    const seedExit = await seed.exited;
+    startupChild = undefined;
+    if (seedExit !== 0 && !stopping)
       throw new Error("Could not seed isolated UI fixtures");
   }
   if (!stopping) {
@@ -143,10 +162,13 @@ try {
   }
   await finished;
 } catch (error) {
-  console.error(error);
-  exitCode = 1;
+  if (!stopping) {
+    console.error(error);
+    exitCode = 1;
+  }
 } finally {
   stopping = true;
+  await contracts?.close();
   for (const child of children) signalGroup(child, "SIGTERM");
   const force = setTimeout(() => {
     for (const child of children) signalGroup(child, "SIGKILL");

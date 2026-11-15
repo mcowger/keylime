@@ -184,6 +184,7 @@ export class PromptResults {
     if (!this.#open.delete(ticket)) return;
     // Next macrotask: keeps prompt_result behind the cmd's own `res` and lets queue drains land before
     // `sessionSettled` is read.
+    /** @apiEvent prompt_result */
     setImmediate(() =>
       this.#send({
         t: "prompt_result",

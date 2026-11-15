@@ -8,6 +8,14 @@ const NO_SINK = { ack() {}, error() {} };
 
 /** POST /api/uploads {id, host, name, size, type} → {received}: open, or resume, an upload on `host` (spec U4, the
  * HTTP form of `up_start`). */
+/**
+ * @apiContract workspaceUploadStart
+ * @apiUsage Open or resume an owner-bound staged upload.
+ * @apiInputs Send id, host, name, size in bytes and type.
+ * @apiInvariants The upload id is bound to its owner and host; matching generation metadata matters when resuming.
+ * @apiEffects Creates or resumes staged host data and returns received bytes and possibly a completion proof.
+ * @apiRecovery Use the returned offset to resume; do not assume a lost response means nothing was staged.
+ */
 export async function POST(req: Request) {
   try {
     const body = await parseJsonWithinLimit<unknown>(req, 16 * 1024);

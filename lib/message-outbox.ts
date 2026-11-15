@@ -1675,6 +1675,7 @@ async function deliver(entry: Row): Promise<Outcome> {
         if (
           boundary.ok &&
           isRecord(boundary.value) &&
+          "entryIds" in boundary.value &&
           Array.isArray(boundary.value.entryIds) &&
           boundary.value.entryIds.every((id) => typeof id === "string")
         ) {

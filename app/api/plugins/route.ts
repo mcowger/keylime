@@ -295,6 +295,14 @@ function pluginErrorResponse(error: unknown): Response {
   return Response.json({ error: message }, { status: 500 });
 }
 
+/**
+ * @apiContract getPlugins
+ * @apiUsage List installed plugins, resources and diagnostics.
+ * @apiInputs Optional cwd must be allowed; without it only user-level plugins are listed.
+ * @apiInvariants Inventory reflects the local omp installation.
+ * @apiEffects Executes omp plugin listing and scans resources.
+ * @apiRecovery Correct access or CLI errors and retry the read.
+ */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const cwd = searchParams.get("cwd");
@@ -313,6 +321,14 @@ export async function GET(req: Request) {
 }
 
 // POST /api/plugins body: { action, source?, scope?, cwd? }; without a cwd, global changes only.
+/**
+ * @apiContract postPlugins
+ * @apiUsage Install, remove, update, enable or disable plugins through omp.
+ * @apiInputs Provide action, scope and source; update may omit source. Project scope requires allowed cwd.
+ * @apiInvariants Without cwd only global changes are available; update without source upgrades all.
+ * @apiEffects Executes the local omp CLI, potentially downloading packages and changing files and configuration.
+ * @apiRecovery Inspect plugin inventory after timeout or disconnect before repeating a mutation.
+ */
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as {

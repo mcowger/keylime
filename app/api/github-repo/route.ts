@@ -4,6 +4,14 @@ import {
   resolveWorkspaceHost,
 } from "@/lib/api-utils";
 
+/**
+ * @apiContract workspaceGithubRepo
+ * @apiUsage Resolve GitHub repository information for a directory.
+ * @apiInputs cwd is a path on the selected host, not the browser machine.
+ * @apiInvariants The selected host performs repository lookup.
+ * @apiEffects Reads repository information without registering a project.
+ * @apiRecovery Check the host and repository configuration if lookup fails.
+ */
 export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;

@@ -20,12 +20,28 @@ const notFound = () =>
  * discarded it. Job failures are 200 payloads, not 5xx, so an intermediate
  * proxy cannot swap them for its own error page.
  */
+/**
+ * @apiContract getSttJobid
+ * @apiUsage Poll a transcription job until done, error or gone before claiming it.
+ * @apiInputs Path jobId identifies the process-local job.
+ * @apiInvariants The view never contains transcript text; upstream failures are 200 error-status views.
+ * @apiEffects Reads job status without claiming or starting work.
+ * @apiRecovery Unknown or expired jobs return 404; settled jobs expire after one hour and tombstones after ten minutes or earlier pruning; restart loses the store.
+ */
 export async function GET(_req: Request, { params }: Params) {
   const job = getSttJob((await params).jobId);
   return job ? Response.json(job) : notFound();
 }
 
 /** POST /api/stt/[jobId]?owner=<token> — retry a failed job with the audio the server kept. */
+/**
+ * @apiContract postSttJobid
+ * @apiUsage Retry a failed transcription using its retained audio rather than uploading another job.
+ * @apiInputs Path jobId and optional query owner, truncated to 128 characters, identify the job and retrying tab.
+ * @apiInvariants Only an error job with audio starts a new attempt; pending or settled jobs return their current view, preventing duplicate attempts.
+ * @apiEffects Reassigns ownership to the retrying tab and launches an upstream request when eligible.
+ * @apiRecovery Returns 501 if unconfigured, 429 if pending capacity is full and 404 if missing or expired; retry a busy request later.
+ */
 export async function POST(req: Request, { params }: Params) {
   const config = readSttConfig();
   if (!config) {
@@ -56,6 +72,14 @@ export async function POST(req: Request, { params }: Params) {
  * status "done" with its text (repeatable with the same claim token), and
  * only the job's owner also gets its send/queue `after`; everyone else sees
  * "gone".
+ */
+/**
+ * @apiContract deleteSttJobid
+ * @apiUsage Claim a done transcript or omit claim to discard the job.
+ * @apiInputs Path jobId and optional query claim (per composer instance) and owner (tab identity), each truncated to 128 characters.
+ * @apiInvariants Only the first claim token receives text; the same token can replay its result. Owner has a 15-second first-claim grace and alone receives after; duplicated tabs may share owner but must use distinct claim tokens.
+ * @apiEffects A successful claim or discard frees audio, aborts any attempt and leaves a gone tombstone; a claim on unfinished work changes nothing.
+ * @apiRecovery Repeat a lost claim response with the same claim token; done without text during owner grace means retry, while other claimants see gone. Missing or expired jobs return 404; tombstones last up to ten minutes and may be pruned.
  */
 export async function DELETE(req: Request, { params }: Params) {
   const query = new URL(req.url).searchParams;

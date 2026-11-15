@@ -1,12 +1,12 @@
-import type { FileIndexEntry } from "./file-fuzzy";
+import type { Static } from "@sinclair/typebox";
+import type * as M from "./api-contracts/workspace-models";
+import type { WorkspaceFileEvent as SchemaWorkspaceFileEvent } from "./api-contracts/host-schemas";
 import type {
   UploadConflictStrategy,
   UploadTargetInspection,
 } from "./file-upload";
 import type { OpResult } from "./hosts/session-ops";
 import type { GitFileDiffResponse, GitStatusResponse } from "./git-types";
-import type { WorktreeInfo } from "./worktree";
-import type { BrowsableDirectory } from "./directory-browser";
 import type { CloneProgress } from "./git-clone";
 
 import type {
@@ -24,89 +24,35 @@ import type {
 } from "./workspace-creation-types";
 import type { ShipJob, ShipPreview, ShipRequest } from "./workspace-ship-types";
 
-export interface WorkspaceFileSource {
-  hostId: string;
-  cwd: string | null;
-  sessionId: string | null;
-}
-/** Main derives this hint from a live wrapper or durable creation journal, never browser cwd. */
-export interface WorkspaceOwner {
-  sessionId: string;
-  cwd: string;
-}
-
-/** `sessionFile` is main's hint of a live session's file: the host trusts it only after checking it is that session's own. */
-export interface WorkspaceFileRequest {
-  segments: string[];
-  sessionId: string | null;
-  sessionFile?: string | null;
-  owner?: WorkspaceOwner;
-}
-export interface WorkspaceFileInfo {
-  path: string;
-  name: string;
-  size: number;
-  mtimeMs: number;
-  isDirectory: boolean;
-  language: string;
-  mime: string;
-  previewKind: "pdf" | "docx" | null;
-}
-export interface WorkspaceDirectoryListing {
-  path: string;
-  entries: Array<{
-    name: string;
-    isDir: boolean;
-    size: number;
-    modified: string;
-    linkTarget?: string;
-    outsideRoot?: boolean;
-  }>;
-}
-export interface WorkspaceRead {
-  id: string;
-  info: WorkspaceFileInfo;
-}
-export type WorkspaceIndex =
-  | { files: string[]; truncated: boolean }
-  | { matches: FileIndexEntry[]; truncated?: boolean };
-export type WorkspaceBashOutput =
-  | { tooLarge: true; size: number; maxBytes: number }
-  | { tooLarge: false; output: string };
-export interface WorkspaceUploadResult {
-  path: string;
-  name: string;
-  skipped: boolean;
-}
-export type WorkspaceFileEvent =
-  | { type: "change"; mtime: string; size: number }
-  | { type: "error"; message: string };
-export interface WorkspaceWorktrees {
-  projectRoot: string;
-  projectKey: string;
-  isGit: boolean;
-  isTopLevel: boolean;
-  currentWorktreePath: string | null;
-  worktrees: WorktreeInfo[];
-}
-/** `mainCheckout`: the folder is the top level of an independent checkout (`.git` a real directory). */
-export interface GitOrigin {
-  path: string;
-  origin: string | null;
-  mainCheckout: boolean;
-}
-export type WorkspaceDirectoryBrowse =
-  | {
-      path: string;
-      parentPath: string | null;
-      directories: BrowsableDirectory[];
-    }
-  | {
-      path: "";
-      parentPath: null;
-      directories: [];
-      drives: BrowsableDirectory[];
-    };
+/** Host identity and session context used to locate workspace files. */
+export type WorkspaceFileSource = Static<typeof M.WorkspaceFileSourceSchema>;
+/** Authoritative session ownership derived from the wrapper or creation journal, not browser cwd. */
+export type WorkspaceOwner = Static<typeof M.WorkspaceOwnerSchema>;
+/** Host-resolved path segments and optional session owner for file access checks. */
+export type WorkspaceFileRequest = Static<typeof M.WorkspaceFileRequestSchema>;
+/** Point-in-time host file metadata; size is bytes and mtimeMs is Unix milliseconds. */
+export type WorkspaceFileInfo = Static<typeof M.WorkspaceFileInfoSchema>;
+export type WorkspaceDirectoryListing = Static<
+  typeof M.WorkspaceDirectoryListingSchema
+>;
+/** Handle for chunked host file reads; close it when finished. */
+export type WorkspaceRead = Static<typeof M.WorkspaceReadSchema>;
+/** Indexed paths or matches; truncation means the result is incomplete. */
+export type WorkspaceIndex = Static<typeof M.WorkspaceIndexSchema>;
+/** Bash output text or an oversized result carrying actual and maximum byte counts. */
+export type WorkspaceBashOutput = Static<typeof M.WorkspaceBashOutputSchema>;
+/** Destination of a published upload, including whether conflict policy skipped it. */
+export type WorkspaceUploadResult = Static<
+  typeof M.WorkspaceUploadResultSchema
+>;
+export type WorkspaceFileEvent = SchemaWorkspaceFileEvent;
+/** Discovered Git worktrees, not necessarily canonical workspace registrations. */
+export type WorkspaceWorktrees = Static<typeof M.WorkspaceWorktreesSchema>;
+export type GitOrigin = Static<typeof M.GitOriginSchema>;
+/** Host filesystem directory-picker snapshot, distinct from project registration. */
+export type WorkspaceDirectoryBrowse = Static<
+  typeof M.WorkspaceDirectoryBrowseSchema
+>;
 
 import type { WorkspaceTerminal } from "./terminal-types";
 

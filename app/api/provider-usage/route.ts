@@ -9,6 +9,14 @@ function readIdentifier(value: string | null): string | undefined {
   return IDENTIFIER_RE.test(trimmed) ? trimmed : undefined;
 }
 
+/**
+ * @apiContract getProviderUsage
+ * @apiUsage Read provider usage for an optional provider and model context.
+ * @apiInputs Identifiers are trimmed, 1–200 characters from letters, digits, dot, underscore, colon, slash and hyphen; refresh=true requests refresh.
+ * @apiInvariants Invalid supplied identifiers return 400; omitted identifiers are not filters.
+ * @apiEffects May query upstream usage and use cached usage data; no provider configuration is changed.
+ * @apiRecovery Retry a 502 when usage becomes available, optionally requesting refresh.
+ */
 export async function GET(request: Request) {
   const searchParams = new URL(request.url).searchParams;
   const rawProvider = searchParams.get("provider");

@@ -7,6 +7,14 @@ import { getContentDisposition } from "@/lib/content-disposition";
 import { LOCAL_HOST_ID } from "@/lib/hosts/registry";
 
 /** Render a session to self-contained HTML with the omp binary on its host (`omp --export`). */
+/**
+ * @apiContract exportSession
+ * @apiUsage Render persisted session history as self-contained HTML using omp on the owning host.
+ * @apiInputs id identifies the session; inline=1 requests inline disposition only for the local host.
+ * @apiInvariants Remote host HTML is always an attachment, even when inline was requested. The result reflects the host's export at request time.
+ * @apiEffects Runs the host export operation and returns HTML; it does not mutate the session.
+ * @apiRecovery Retry the read when the host and its omp binary are available; restart an interrupted download.
+ */
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> },

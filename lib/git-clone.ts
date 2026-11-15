@@ -1,17 +1,15 @@
 // Pure helpers for cloning a repository into a new workspace. Shared by the
 // clone route (validation) and the directory picker (target preview, progress).
+import type { Static } from "@sinclair/typebox";
+import type {
+  CloneFrameSchema,
+  CloneProgressSchema,
+} from "./api-contracts/workspace-models";
 
-export type CloneFrame =
-  | { type: "output"; text: string }
-  | { type: "done"; path: string }
-  | { type: "cancelled"; path: string }
-  | { type: "error"; error: string; code: string };
-export interface CloneProgress {
-  cursor: number;
-  reset: boolean;
-  frames: CloneFrame[];
-  terminal: boolean;
-}
+/** Clone output or terminal completion, cancellation or error event. */
+export type CloneFrame = Static<typeof CloneFrameSchema>;
+/** Retained progress frames and next cursor; reset requires replacing the previous view. */
+export type CloneProgress = Static<typeof CloneProgressSchema>;
 const HTTPS_URL = /^https:\/\/[^\s/@]+(?:@[^\s/]+)?\/\S+$/;
 const SSH_URL = /^ssh:\/\/(?:[^\s/@]+@)?[^\s/]+\/\S+$/;
 // scp-like `user@host:path` / `alias:path`. A 2+ char host and no backslashes

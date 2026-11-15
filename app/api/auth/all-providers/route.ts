@@ -11,6 +11,14 @@ import {
 // via get_available_models — so this endpoint lists configured providers only.
 // Unconfigured API-key providers cannot be set up from the web UI (see the
 // api-key route), so they are intentionally absent.
+/**
+ * @apiContract getAuthAllProviders
+ * @apiUsage List configured non-OAuth, non-custom providers with available models.
+ * @apiInputs No request parameters are used.
+ * @apiInvariants Excludes authenticated OAuth and models.yml providers, and sorts by display name; unconfigured providers are absent.
+ * @apiEffects Reads configuration and queries utility-process model and login state.
+ * @apiRecovery Retry the read after a utility error.
+ */
 export async function GET() {
   try {
     const modelsResponse = await runUtilityCommand<{ models?: unknown }>(

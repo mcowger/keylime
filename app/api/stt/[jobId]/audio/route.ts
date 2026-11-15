@@ -1,6 +1,14 @@
 import { getSttJobAudio } from "@/lib/stt-jobs";
 
 /** GET /api/stt/[jobId]/audio — the recording kept with a live job, for playback in any browser. */
+/**
+ * @apiContract getSttJobidAudio
+ * @apiUsage Play back retained audio for a live transcription job.
+ * @apiInputs Path jobId identifies the job; no owner or claim token is required.
+ * @apiInvariants Audio is process-local and unavailable after claim, discard, expiry or restart; content type is restricted to bare audio types or octet-stream.
+ * @apiEffects Reads audio without claiming it; response is private, no-store and nosniff.
+ * @apiRecovery Missing audio or job returns 404; recording browsers may retain local audio for recovery.
+ */
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ jobId: string }> },

@@ -1,27 +1,11 @@
-export type GitFileStatusKind =
-  "modified" | "added" | "deleted" | "renamed" | "untracked" | "conflict";
+import type { Static } from "@sinclair/typebox";
+import type * as M from "./api-contracts/workspace-models";
 
-/** Why `.gitattributes` moves a changed file out of the main review list. */
-export type GitCollapseReason =
-  "generated" | "vendored" | "documentation" | "no-diff";
-
-export interface GitFileStatus {
-  filePath: string;
-  status: GitFileStatusKind;
-  code: "M" | "A" | "D" | "R" | "U" | "C";
-  indexStatus: string;
-  worktreeStatus: string;
-  collapseReason?: GitCollapseReason;
-}
-
-export interface GitStatusResponse {
-  isGitRepository: boolean;
-  repositoryRoot: string | null;
-  files: GitFileStatus[];
-}
-
-export interface GitFileDiffResponse {
-  supported: boolean;
-  status?: GitFileStatusKind;
-  patch?: string;
-}
+export type GitFileStatusKind = Static<typeof M.GitFileStatusKindSchema>;
+export type GitCollapseReason = Static<typeof M.GitCollapseReasonSchema>;
+/** Normalized file category plus separate Git index and working-tree status codes. */
+export type GitFileStatus = Static<typeof M.GitFileStatusSchema>;
+/** Point-in-time Git status with a nullable host repository root. */
+export type GitStatusResponse = Static<typeof M.GitStatusResponseSchema>;
+/** File diff observation; unsupported files do not necessarily have a patch. */
+export type GitFileDiffResponse = Static<typeof M.GitFileDiffResponseSchema>;

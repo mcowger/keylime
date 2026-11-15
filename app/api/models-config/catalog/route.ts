@@ -67,6 +67,14 @@ async function loadCatalog(): Promise<ModelCatalogEntry[]> {
 // Searches the models.dev catalog (1h TTL, in-flight dedup) and derives an
 // "add model" preset recommendation for the query. Provider/base-url hints
 // steer both search ranking and the recommendation's metadata/pricing source.
+/**
+ * @apiContract getModelsConfigCatalog
+ * @apiUsage Search models.dev and obtain a model preset recommendation.
+ * @apiInputs q and provider are truncated to 120 characters, baseUrl to 500; limit defaults to 50.
+ * @apiInvariants Provider and base URL are ranking and recommendation hints, not credentials. Catalog entries cache for one hour and stale entries survive fetch failure.
+ * @apiEffects May fetch the remote catalog; does not write model configuration.
+ * @apiRecovery If no cached catalog exists and the fetch fails, retry after the upstream service recovers.
+ */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const query = (searchParams.get("q") ?? "").slice(0, 120);

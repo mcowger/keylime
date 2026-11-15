@@ -253,7 +253,10 @@ class Roster {
   }
 }
 
-/** Complete transcript lines from `fromByte` on; a `fromByte` past the end (file rewritten) restarts at 0. */
+/**
+ * Read complete UTF-8 JSONL lines from a session-owned transcript. Offsets count bytes, not
+ * characters; a partial final line remains for the next read. An offset past EOF resets to zero.
+ */
 async function readTranscript(sessionFile: string, fromByte = 0) {
   let start = Number.isFinite(fromByte) ? Math.max(0, Math.trunc(fromByte)) : 0;
   let size: number;
@@ -357,10 +360,12 @@ function askHost(
 }
 
 export const agentsCommands: CommandTable = {
+  /** @apiCommand get_subagents */
   get_subagents: async ({ session }) => ({
     subagents: subagents(session, "get_subagents").list(),
   }),
 
+  /** @apiCommand get_subagent_messages */
   get_subagent_messages: async ({ session }, args) => {
     const roster = subagents(session, "get_subagent_messages");
     const { subagentId, sessionFile, fromByte } = args;
@@ -384,6 +389,7 @@ export const agentsCommands: CommandTable = {
     );
   },
 
+  /** @apiCommand set_subagent_subscription */
   set_subagent_subscription: async ({ session }, args) => {
     const roster = subagents(session, "set_subagent_subscription");
     if (!isSubscriptionLevel(args.level)) {
@@ -395,7 +401,9 @@ export const agentsCommands: CommandTable = {
     return { level: roster.level };
   },
 
-  /** Hard-kill a running subagent, as the Agent Hub `kill` does; `cancelled:false` when it is already gone. */
+  /** Hard-kill a running subagent; cancelled is false when already gone.
+   * @apiCommand cancel_subagent
+   */
   cancel_subagent: async ({ session }, args) => {
     const id = subagentId("cancel_subagent", args);
     const owned = subagents(session, "cancel_subagent").owned(id);
@@ -412,7 +420,9 @@ export const agentsCommands: CommandTable = {
     return { cancelled: released.value };
   },
 
-  /** Send a message to a running subagent as its user (Agent Hub chat); resolves once the subagent accepts it. */
+  /** Send a message to a running subagent and wait for acceptance.
+   * @apiCommand steer_subagent
+   */
   steer_subagent: async ({ session }, args) => {
     const roster = subagents(session, "steer_subagent");
     const id = subagentId("steer_subagent", args);
@@ -460,6 +470,7 @@ export const agentsCommands: CommandTable = {
     }
   },
 
+  /** @apiCommand get_login_providers */
   get_login_providers: async ({ session }) => ({
     providers: getOAuthProviders().map((provider) => ({
       id: provider.id,
@@ -472,6 +483,7 @@ export const agentsCommands: CommandTable = {
     })),
   }),
 
+  /** @apiCommand login */
   login: async (ctx, args) => {
     const { session } = ctx;
     const { providerId } = args;
@@ -513,6 +525,7 @@ export const agentsCommands: CommandTable = {
     return { providerId };
   },
 
+  /** @apiCommand get_logout_accounts */
   get_logout_accounts: async ({ session }, args) => {
     // An absent provider would list every provider's credentials.
     if (typeof args.providerId !== "string")
@@ -526,6 +539,7 @@ export const agentsCommands: CommandTable = {
     };
   },
 
+  /** @apiCommand logout */
   logout: async ({ session }, args) => {
     const { providerId, credentialId } = args;
     if (

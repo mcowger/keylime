@@ -1,3 +1,4 @@
+import type { NativeSettings as ContractNativeSettings } from "../api-contracts/configuration-models";
 import {
   existsSync,
   mkdirSync,
@@ -12,67 +13,9 @@ import { isRecord } from "../type-guards";
 import {
   effectiveCompactionMethodOrder,
   isCompactionMethodOrder,
-  type CompactionMethod,
 } from "../compaction-methods";
 
-export type NativeSettings = {
-  defaultThinkingLevel?:
-    "auto" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-  providers?: { autoThinkingSource?: "classifier" | "vendor" };
-  hideThinkingBlock?: boolean;
-  externalThinking?: boolean;
-  textVerbosity?: "low" | "medium" | "high";
-  personality?: "default" | "friendly" | "pragmatic" | "none";
-  advisor?: {
-    enabled?: boolean;
-    subagents?: boolean;
-    syncBacklog?: "off" | "1" | "3" | "5";
-    immuneTurns?: number;
-  };
-  tools?: {
-    approvalMode?: "always-ask" | "write" | "yolo";
-    approval?: {
-      bash?: "allow" | "prompt" | "deny";
-      extension?: "allow" | "prompt";
-    };
-  };
-  enabledModels?: string[];
-  disabledProviders?: string[];
-  modelProviderOrder?: string[];
-  registryHasScopedEntries?: boolean;
-  retry?: {
-    enabled?: boolean;
-    maxRetries?: number;
-    modelFallback?: boolean;
-    fallbackRevertPolicy?: "cooldown-expiry" | "never";
-    fallbackChains?: Record<string, string[]>;
-  };
-  compaction?: {
-    enabled?: boolean;
-    midTurnEnabled?: boolean;
-    methodOrder?: CompactionMethod[];
-    autoContinue?: boolean;
-    keepRecentTokens?: number;
-  };
-  memory?: { backend?: "off" | "local" | "mnemopi" | "hindsight" };
-  autolearn?: {
-    enabled?: boolean;
-    autoContinue?: boolean;
-    minToolCalls?: number;
-  };
-  mnemopi?: {
-    scoping?: "global" | "per-project" | "per-project-tagged";
-    autoRecall?: boolean;
-    autoRetain?: boolean;
-    noEmbeddings?: boolean;
-  };
-  mcp?: {
-    enableProjectConfig?: boolean;
-    renderMarkdownResults?: boolean;
-    notifications?: boolean;
-    notificationDebounceMs?: number;
-  };
-};
+export type NativeSettings = ContractNativeSettings;
 
 const THINKING_LEVELS = new Set([
   "auto",

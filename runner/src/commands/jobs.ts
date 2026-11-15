@@ -220,7 +220,10 @@ async function service(ctx: CommandContext, id: string) {
   return { client, daemon };
 }
 
+/** Jobs are scoped to the current session. Snapshot generation and incarnation tokens fence
+ * output and cancellation against a restarted runner or a replaced job; cancellation is only a request. */
 export const jobsCommands: CommandTable = {
+  /** @apiCommand get_jobs */
   async get_jobs(ctx): Promise<JobSnapshot> {
     const scope = scopedJobs(ctx);
     const snapshot: JobSnapshot = {
@@ -243,6 +246,7 @@ export const jobsCommands: CommandTable = {
     }
     return snapshot;
   },
+  /** @apiCommand get_job_output */
   async get_job_output(ctx, args): Promise<JobDetail> {
     const { id, kind, incarnation: token, cursor } = parseArgs(args);
     if (kind === "service") {
@@ -333,6 +337,7 @@ export const jobsCommands: CommandTable = {
       truncated,
     };
   },
+  /** @apiCommand cancel_job */
   async cancel_job(ctx, args): Promise<{ requested: boolean }> {
     const { id, kind, incarnation: token } = parseArgs(args);
     if (kind === "service") {

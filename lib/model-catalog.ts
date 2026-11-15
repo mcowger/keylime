@@ -1,3 +1,12 @@
+import type {
+  ModelCatalogCost as ContractModelCatalogCost,
+  CompleteModelCatalogCost as ContractCompleteModelCatalogCost,
+  ModelCatalogEntry as ContractModelCatalogEntry,
+  ModelCatalogPreset as ContractModelCatalogPreset,
+  ModelCatalogMatchMethod as ContractModelCatalogMatchMethod,
+  ModelCatalogPriceRecommendation as ContractModelCatalogPriceRecommendation,
+  ModelCatalogRecommendation as ContractModelCatalogRecommendation,
+} from "./api-contracts/configuration-models";
 /**
  * models.dev catalog helpers. Ported from agegr/pi-web (lib/model-catalog.ts)
  * and adapted for omp-web: flattens the models.dev/api.json payload into a
@@ -8,70 +17,20 @@
 
 import { isRecord } from "./type-guards";
 
-export interface ModelCatalogCost {
-  input?: number;
-  output?: number;
-  cacheRead?: number;
-  cacheWrite?: number;
-}
+export type ModelCatalogCost = ContractModelCatalogCost;
 
-export type CompleteModelCatalogCost = Required<ModelCatalogCost>;
+export type CompleteModelCatalogCost = ContractCompleteModelCatalogCost;
 
-export interface ModelCatalogEntry {
-  key: string;
-  providerId: string;
-  providerName: string;
-  providerBaseUrl?: string;
-  id: string;
-  name: string;
-  reasoning?: boolean;
-  input?: string[];
-  contextWindow?: number;
-  maxTokens?: number;
-  cost: ModelCatalogCost;
-}
+export type ModelCatalogEntry = ContractModelCatalogEntry;
 
-export interface ModelCatalogPreset {
-  name?: string;
-  reasoning?: boolean;
-  input?: string[];
-  contextWindow?: number;
-  maxTokens?: number;
-  cost?: CompleteModelCatalogCost;
-}
+export type ModelCatalogPreset = ContractModelCatalogPreset;
 
-export type ModelCatalogMatchMethod =
-  "provider" | "base-url" | "consensus" | "none";
+export type ModelCatalogMatchMethod = ContractModelCatalogMatchMethod;
 
 export type ModelCatalogPriceRecommendation =
-  | {
-      status: "reliable";
-      method: Exclude<ModelCatalogMatchMethod, "none">;
-      cost: CompleteModelCatalogCost;
-      providerId?: string;
-      providerName?: string;
-      support: number;
-      total: number;
-    }
-  | {
-      status: "unreliable";
-      reason:
-        | "no-exact-match"
-        | "no-valid-price"
-        | "insufficient-support"
-        | "conflict";
-      support: number;
-      total: number;
-    };
+  ContractModelCatalogPriceRecommendation;
 
-export interface ModelCatalogRecommendation {
-  exactMatches: number;
-  metadataMethod: ModelCatalogMatchMethod;
-  matchedProviderId?: string;
-  matchedProviderName?: string;
-  preset: ModelCatalogPreset;
-  price: ModelCatalogPriceRecommendation;
-}
+export type ModelCatalogRecommendation = ContractModelCatalogRecommendation;
 
 const CONSENSUS_MIN_SHARE = 0.6;
 const CONSENSUS_MIN_SUPPORT = 5;

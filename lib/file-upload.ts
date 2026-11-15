@@ -2,23 +2,30 @@ import fs from "fs";
 import path from "path";
 import { isOmpSecretFile } from "./file-access";
 import { HostOpError } from "./hosts/link-protocol";
+import type { Static } from "@sinclair/typebox";
+import type {
+  UploadConflictStrategySchema,
+  UploadTargetInspectionSchema,
+} from "./api-contracts/workspace-models";
 
 export const UPLOAD_CONFLICT_STRATEGIES = [
   "error",
   "overwrite",
   "skip",
 ] as const;
-export type UploadConflictStrategy =
-  (typeof UPLOAD_CONFLICT_STRATEGIES)[number];
+/** Existing-target policy; overwrite is limited to replaceable regular files. */
+export type UploadConflictStrategy = Static<
+  typeof UploadConflictStrategySchema
+>;
 
 const UPLOAD_CONFLICT_STRATEGY_SET = new Set<string>(
   UPLOAD_CONFLICT_STRATEGIES,
 );
 
-export interface UploadTargetInspection {
-  conflicts: string[];
-  nonReplaceable: string[];
-}
+/** Existing names and the subset that cannot be replaced, including symlinks and directories. */
+export type UploadTargetInspection = Static<
+  typeof UploadTargetInspectionSchema
+>;
 
 export function parseUploadConflictStrategy(
   value: string | null,

@@ -9,8 +9,8 @@ import { parseConfiguredThinkingLevel } from "@oh-my-pi/pi-tui/thinking";
 import { activityFor } from "../activity";
 import type { CommandTable, FrameTable } from "./types";
 
-// shortcut: RPC's get_state first awaits its goal controller and counts a scheduled goal turn as unsettled;
-// that controller is RPC transport state, so add it here when the runner ports goals.
+/** A live in-process snapshot, not a durable completion receipt. The settled flag includes pending
+ * asynchronous work; clients should refresh it as the session changes. */
 export function sessionState(session: AgentSession) {
   const queued = session.getQueuedMessages();
   return {
@@ -81,9 +81,11 @@ function bool(op: string, value: unknown): boolean {
 }
 
 export const modelCommands: CommandTable = {
+  /** @apiCommand get_state */
   async get_state({ session }) {
     return sessionState(session);
   },
+  /** @apiCommand set_model */
   async set_model({ session }, { provider, modelId }) {
     if (typeof provider !== "string" || typeof modelId !== "string")
       throw new Error("set_model: provider and modelId must be strings");
@@ -92,13 +94,16 @@ export const modelCommands: CommandTable = {
     await session.setModel(model);
     return model;
   },
+  /** @apiCommand cycle_model */
   async cycle_model({ session }) {
     return (await session.cycleModel()) ?? null;
   },
+  /** @apiCommand get_available_models */
   async get_available_models({ session }) {
     await session.modelRegistry.awaitBackgroundRefresh();
     return { models: session.getAvailableModels() };
   },
+  /** @apiCommand set_thinking_level */
   async set_thinking_level({ session }, { level }) {
     const parsed =
       typeof level === "string"
@@ -108,15 +113,18 @@ export const modelCommands: CommandTable = {
       throw new Error(`set_thinking_level: invalid level ${String(level)}`);
     session.setThinkingLevel(parsed);
   },
+  /** @apiCommand cycle_thinking_level */
   async cycle_thinking_level({ session }) {
     const level = session.cycleThinkingLevel();
     return level ? { level } : null;
   },
+  /** @apiCommand get_available_thinking_levels */
   async get_available_thinking_levels({ session }) {
     return {
       levels: [ThinkingLevel.Off, ...session.getAvailableThinkingLevels()],
     };
   },
+  /** @apiCommand set_fast_mode */
   async set_fast_mode({ session }, { enabled }) {
     const on = bool("set_fast_mode", enabled);
     if (!session.setFastMode(on) && on)
@@ -126,26 +134,32 @@ export const modelCommands: CommandTable = {
       active: session.isFastModeActive(),
     };
   },
+  /** @apiCommand set_slow_mode */
   async set_slow_mode({ session }, { enabled }) {
     const on = bool("set_slow_mode", enabled);
     if (!session.setSlowMode(on) && on)
       throw new Error("Slow mode is unavailable for the current model.");
     return { enabled: session.isSlowModeEnabled() };
   },
+  /** @apiCommand set_auto_compaction */
   async set_auto_compaction({ session }, { enabled }) {
     session.setAutoCompactionEnabled(bool("set_auto_compaction", enabled));
   },
+  /** @apiCommand set_auto_retry */
   async set_auto_retry({ session }, { enabled }) {
     session.setAutoRetryEnabled(bool("set_auto_retry", enabled));
   },
+  /** @apiCommand abort_retry */
   async abort_retry({ session }) {
     session.abortRetry();
   },
+  /** @apiCommand set_cache_warming */
   async set_cache_warming({ session }, { mode }) {
     const valid = CACHE_WARMING_MODES.find((m) => m === mode);
     if (!valid) throw new Error(`Invalid cache warming mode: ${String(mode)}`);
     return { mode: session.setCacheWarmingMode(valid) };
   },
+  /** @apiCommand compact */
   async compact({ session }, { customInstructions }) {
     if (
       customInstructions !== undefined &&
@@ -154,10 +168,12 @@ export const modelCommands: CommandTable = {
       throw new Error("compact: customInstructions must be a string");
     return session.compact(customInstructions);
   },
+  /** @apiCommand abort_compaction */
   async abort_compaction({ session }) {
     session.abortCompaction();
   },
   // The runner's own command; mirrors argument-less `/rename`: generate, persist as a user title, return it.
+  /** @apiCommand generate_title */
   async generate_title({ session }) {
     const title = await session.renameTitle();
     if (!title) return { title: null };
@@ -165,9 +181,11 @@ export const modelCommands: CommandTable = {
       throw new Error("generate_title: a user-set name takes precedence");
     return { title };
   },
+  /** @apiCommand get_session_stats */
   async get_session_stats({ session }) {
     return session.getSessionStats();
   },
+  /** @apiCommand get_available_commands */
   async get_available_commands({ session }) {
     return { commands: await buildAvailableSlashCommands(session) };
   },

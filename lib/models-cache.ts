@@ -1,17 +1,5 @@
-export interface ModelsData {
-  models: Record<string, string>;
-  modelList: {
-    id: string;
-    name: string;
-    provider: string;
-    supportsFastMode?: boolean;
-    supportsSlowMode?: boolean;
-  }[];
-  defaultModel: { provider: string; modelId: string } | null;
-  thinkingLevels: Record<string, string[]>;
-  connectedProviders?: { id: string; name: string; disabled: boolean }[];
-  modelError?: string;
-}
+import type { ModelsData as ContractModelsData } from "./api-contracts/configuration-models";
+export type ModelsData = ContractModelsData;
 
 interface ModelsCacheState {
   entries: Map<string, { data: ModelsData; expiresAt: number }>;

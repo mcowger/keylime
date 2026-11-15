@@ -26,6 +26,14 @@ import {
  * first user message, and saves that fallback (through the live process when
  * there is one). `generated` tells the caller which path produced the title.
  */
+/**
+ * @apiContract autoNameSession
+ * @apiUsage Generate a session title or fall back to an existing or first-message-derived title.
+ * @apiInputs id selects the session; no request body is used.
+ * @apiInvariants generated distinguishes native generation from fallback; usage is null. No user message and no existing title yields a conflict; a history edit fences fallback writes.
+ * @apiEffects May start an RPC process and invoke native title generation; a derived fallback is persisted and synced to a live process best-effort.
+ * @apiRecovery Wait for a busy session; after an uncertain response read its current title before requesting another generation.
+ */
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },

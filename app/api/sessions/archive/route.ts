@@ -147,6 +147,14 @@ async function linkedHostArchives(): Promise<{
   };
 }
 
+/**
+ * @apiContract listSessionArchives
+ * @apiUsage Discover archives across the local and registered linked hosts.
+ * @apiInputs No request body or query is used.
+ * @apiInvariants Results are sorted newest archivedAt first and tagged with hostId; unavailableHosts identifies hosts whose archives could not be listed. Pending restores remain discovery evidence, not restore targets.
+ * @apiEffects Reads archive inventories without starting sessions; the response is no-store.
+ * @apiRecovery An absent archive on an unavailable host is not proven absent; reconnect or repair that host and list again before acting on absence.
+ */
 export async function GET() {
   try {
     const [local, linked] = await Promise.allSettled([
@@ -177,6 +185,14 @@ export async function GET() {
   }
 }
 
+/**
+ * @apiContract restoreSessionArchive
+ * @apiUsage Restore a discovered archive to its original owning host.
+ * @apiInputs JSON key identifies an archive on hostId; omitted hostId selects the local host, while blank or null host IDs are invalid.
+ * @apiInvariants Pending archives cannot be restored. A serialized session claim requires fresh active-session inventories from every registered host and rejects any active duplicate. Remote restores reserve a daemon-specific token; an uncertain claim remains held until that same daemon fences it and confirms it stopped.
+ * @apiEffects Restores the native session and artifacts, invalidates session lists and pumps held outbox messages. A remote restore can continue after a lost connection or server restart.
+ * @apiRecovery Do not assume a timeout or replacement daemon proves failure: inspect the owning restore and resolve archive_restore_unconfirmed before retrying. If the original daemon cannot be fenced, operator recovery is required; unavailable hosts prevent the conflict check.
+ */
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as { key?: unknown; hostId?: unknown };

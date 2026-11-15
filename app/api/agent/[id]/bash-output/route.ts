@@ -5,6 +5,14 @@ import {
 } from "@/lib/api-utils";
 import { workspaceReadStream } from "@/lib/workspace-http";
 
+/**
+ * @apiContract getAgentBashOutput
+ * @apiUsage Read or download full bash output referenced by a session.
+ * @apiInputs path is required; hostId may select the host and download=1 streams the file instead of returning JSON text.
+ * @apiInvariants The owning host authorizes the session reference; display reads have a size cap, while downloads stream bytes as UTF-8 text without that display cap.
+ * @apiEffects Reads host storage; the download stream stops with the request signal. No process is started.
+ * @apiRecovery On display size 413 use download=1; reconnect and restart the download after an interrupted stream.
+ */
 export async function GET(
   request: Request,
   {

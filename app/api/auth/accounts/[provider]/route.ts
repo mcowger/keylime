@@ -23,6 +23,14 @@ function isAccount(value: unknown): value is OmpProviderAccount {
 // omp's `active` flag is relative to the utility process's own throwaway
 // session, not to any chat, so it is deliberately not passed on.
 /** Stored credentials omp holds for one provider. */
+/**
+ * @apiContract getAuthAccountsProvider
+ * @apiUsage List stored credentials for one provider, not the active account of a chat.
+ * @apiInputs The path provider is the omp provider ID.
+ * @apiInvariants Credential IDs identify individual accounts, not providers; labels do not expose keys.
+ * @apiEffects Queries the utility process; no credential is changed.
+ * @apiRecovery On failure inspect the error and retry the read.
+ */
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ provider: string }> },
@@ -52,6 +60,14 @@ export async function GET(
 }
 
 /** Remove one stored credential (`?credentialId=`); omp picks the next account. */
+/**
+ * @apiContract deleteAuthAccountsProvider
+ * @apiUsage Remove one stored provider credential; omp chooses the next account.
+ * @apiInputs Path provider is the provider ID; credentialId is a decimal safe integer query parameter.
+ * @apiInvariants The credential ID is distinct from the provider ID.
+ * @apiEffects Logs out that credential and invalidates the model cache.
+ * @apiRecovery After an uncertain response, list accounts before attempting another removal.
+ */
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ provider: string }> },

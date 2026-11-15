@@ -1,3 +1,8 @@
+import type {
+  AgentSource as ContractAgentSource,
+  AgentInfo as ContractAgentInfo,
+  AgentDiagnostic as ContractAgentDiagnostic,
+} from "../api-contracts/configuration-models";
 import { execFileSync } from "child_process";
 import { createChildProcessEnvironment } from "../project-command-env";
 import {
@@ -31,32 +36,10 @@ import {
   getUserAgentsDir,
 } from "./paths";
 
-export type AgentSource = "bundled" | "user" | "project";
-export type AgentInfo = {
-  name: string;
-  description: string;
-  model?: string[];
-  tools?: string[];
-  spawns?: string[] | "*";
-  thinkingLevel?: string;
-  output?: unknown;
-  blocking?: boolean;
-  prewalk?: boolean | string;
-  advisor?: boolean | string;
-  source: AgentSource;
-  scope: "user" | "project" | "bundled";
-  filePath: string;
-  valid: boolean;
-  enabled: boolean;
-  body?: string;
-  rawFrontmatter?: Record<string, unknown>;
-};
+export type AgentSource = ContractAgentSource;
+export type AgentInfo = ContractAgentInfo;
 
-export type AgentDiagnostic = {
-  type: "error" | "warning" | "info";
-  message: string;
-  path?: string;
-};
+export type AgentDiagnostic = ContractAgentDiagnostic;
 export type ParsedAgentFrontmatter = {
   frontmatter: Record<string, unknown>;
   body: string;

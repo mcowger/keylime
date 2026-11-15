@@ -197,6 +197,14 @@ const EMPTY_MODELS: ModelsData = {
   thinkingLevels: {},
 };
 
+/**
+ * @apiContract getModels
+ * @apiUsage Read the global model selector snapshot and current Anthropic slow-mode setting.
+ * @apiInputs The legacy cwd query does not affect the result.
+ * @apiInvariants Model data is cached globally for 60 seconds; models.yml changes invalidate the cache and restart the utility process. Slow mode is read separately on every request. The HTTP response adds anthropicSlowMode, and each modelList entry includes thinkingLevels plus contextWindow and maxTokens when supplied by omp, in tokens.
+ * @apiEffects Queries omp on cache misses; failures return a safe empty snapshot with an error marker.
+ * @apiRecovery Inspect the error marker and configuration before retrying.
+ */
 export async function GET() {
   refreshModelsIfConfigChanged();
   // Outside the cache: `/slow` on a Claude model rewrites config.yml.

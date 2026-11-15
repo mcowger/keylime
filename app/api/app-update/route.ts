@@ -59,6 +59,14 @@ function errorResponse(error: unknown): Response {
   );
 }
 
+/**
+ * @apiContract getAppUpdate
+ * @apiUsage Inspect the web application's available package update and self-update support.
+ * @apiInputs Set force=1 to bypass the npm update check's process cache; other values do not force it.
+ * @apiInvariants This is a no-store response, but the underlying npm check normally uses a process-local cache. Self-update status is omitted when updates are disabled.
+ * @apiEffects May contact the package registry; it does not start an update.
+ * @apiRecovery A failed registry check may leave availability unknown; retry or force a fresh check rather than treating it as proof that no update exists.
+ */
 export async function GET(request: Request) {
   const force = new URL(request.url).searchParams.get("force") === "1";
   const status = await checkNpmUpdate(force);
@@ -76,6 +84,14 @@ export async function GET(request: Request) {
   );
 }
 
+/**
+ * @apiContract postAppUpdate
+ * @apiUsage Prepare and commit a web application self-update, inspect its status, or acknowledge completion. This is distinct from restarting omp sessions or updating a daemon.
+ * @apiInputs Send application/json of at most 4096 bytes: exactly {action:"prepare"}, {action:"status"}, or {action:"commit"|"acknowledge", attemptId:string}.
+ * @apiInvariants Browser-origin requests must pass the origin check. Commit requires the prepared attempt and its state preconditions; a replay of an accepted commit returns acceptance again. A 202 is acceptance, not installation completion.
+ * @apiEffects Preparation creates update state; commit arms the launcher and initiates stopping, installation and restart. Status is no-store; acknowledgment changes retained completion state.
+ * @apiRecovery After an uncertain commit, inspect status using the attempt ID before acting; replaying that same commit is recognized. A failure before the launcher is armed aborts the prepared attempt.
+ */
 export async function POST(request: Request) {
   if (
     shouldCheckApiRequestOrigin(request) &&

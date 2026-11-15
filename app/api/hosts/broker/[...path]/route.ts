@@ -149,6 +149,41 @@ async function forward(
   });
 }
 
+/**
+ * @apiContract hostBrokerHealth
+ * @apiContract hostBrokerSnapshot
+ * @apiContract hostBrokerSnapshotStream
+ * @apiContract hostBrokerDisabledCredentials
+ * @apiContract hostBrokerUsage
+ * @apiContract hostBrokerUsageHistory
+ * @apiContract hostBrokerUsageClients
+ * @apiUsage Read an allowed auth-broker resource through the host credential-sharing proxy.
+ * @apiInputs Supply a host bearer token, allowed path and optional query; only selected request headers pass through.
+ * @apiInvariants The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.
+ * @apiEffects Forwards the request and streams the upstream status and body with selected response headers.
+ * @apiRecovery Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.
+ */
 export const GET = forward;
+/**
+ * @apiContract hostBrokerRefreshCredential
+ * @apiContract hostBrokerDisableCredential
+ * @apiContract hostBrokerBlockCredential
+ * @apiContract hostBrokerObservedUsage
+ * @apiContract hostBrokerStaleUsage
+ * @apiUsage Send an allowed auth-broker mutation through the credential-sharing proxy.
+ * @apiInputs Supply host bearer authentication, an allowed path and a body no larger than 1 MiB; queries and selected headers are forwarded.
+ * @apiInvariants Admission is checked before forwarding and after reading the body; broker payload semantics are opaque to this proxy.
+ * @apiEffects The upstream receives the request; its status and body are passed through, potentially as a stream.
+ * @apiRecovery A revoked host or aborted request may leave upstream outcome uncertain; consult broker state before repeating a mutation.
+ */
 export const POST = forward;
+/**
+ * @apiContract hostBrokerDeleteCredentialBlock
+ * @apiContract hostBrokerDeleteCredentialBlocks
+ * @apiUsage Delete an allowed auth-broker credential block through the sharing proxy.
+ * @apiInputs Supply host bearer authentication and an allowed path; query and selected headers pass through, and a body is limited to 1 MiB.
+ * @apiInvariants Admission is repeated after reading the body; disallowed paths are refused and payload semantics belong to the broker.
+ * @apiEffects Forwards the deletion and passes through upstream status and body; revocation can abort in-flight work.
+ * @apiRecovery After an uncertain response, consult broker state before repeating the deletion.
+ */
 export const DELETE = forward;

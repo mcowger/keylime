@@ -4,6 +4,14 @@ import {
   resolveWorkspaceHost,
 } from "@/lib/api-utils";
 
+/**
+ * @apiContract workspaceGitStatus
+ * @apiUsage Read Git status for a workspace.
+ * @apiInputs Provide cwd on the selected host, optionally bound to sessionId.
+ * @apiInvariants A session determines the authoritative host and cwd.
+ * @apiEffects Reads a current Git snapshot rather than changing the repository.
+ * @apiRecovery Repeat the read to observe later repository changes.
+ */
 export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;

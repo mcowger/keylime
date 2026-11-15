@@ -82,6 +82,14 @@ function parseScope(
   throw new Error("scope must be all, user, project, or bundled");
 }
 
+/**
+ * @apiContract getAgents
+ * @apiUsage Discover agent definitions and diagnostics.
+ * @apiInputs Scope defaults to all; project scope requires an allowed cwd. Without cwd, all includes only user and bundled agents.
+ * @apiInvariants Paths and discovery are local to this server; bundled definitions are read-only.
+ * @apiEffects Reads local agent files without mutation.
+ * @apiRecovery Fix access or discovery errors and repeat the read.
+ */
 export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
@@ -117,6 +125,14 @@ export async function GET(request: Request) {
   }
 }
 
+/**
+ * @apiContract postAgents
+ * @apiUsage Write an agent definition or unpack bundled agents into a writable scope.
+ * @apiInputs Scope is user or project; project requires an allowed cwd. Writing requires name and agent, with optional previousName.
+ * @apiInvariants Bundled scope is not writable; request and agent sizes are bounded.
+ * @apiEffects Writes agent files or unpacks bundled files on the local server.
+ * @apiRecovery Re-list the scope after an uncertain response before repeating a write or unpack.
+ */
 export async function POST(request: Request) {
   try {
     const body = await parseJsonWithinLimit<{
@@ -184,6 +200,14 @@ export async function POST(request: Request) {
   }
 }
 
+/**
+ * @apiContract putAgents
+ * @apiUsage Write or rename an agent definition.
+ * @apiInputs Provide user or project scope, name and agent; previousName identifies a rename, and project requires an allowed cwd.
+ * @apiInvariants Bundled agents are not writable and payload size is bounded.
+ * @apiEffects Writes local agent files and returns the resulting definition.
+ * @apiRecovery Re-list the scope after an uncertain response before repeating the write.
+ */
 export async function PUT(request: Request) {
   try {
     const body = await parseJsonWithinLimit<{
@@ -239,6 +263,14 @@ export async function PUT(request: Request) {
   }
 }
 
+/**
+ * @apiContract deleteAgents
+ * @apiUsage Delete a user or project agent definition.
+ * @apiInputs Provide scope and name; project scope requires an allowed cwd.
+ * @apiInvariants References are validated within the selected scope; bundled agents cannot be deleted here.
+ * @apiEffects Deletes the corresponding local agent file.
+ * @apiRecovery Re-list the scope after an uncertain response; a missing agent returns 404.
+ */
 export async function DELETE(request: Request) {
   try {
     const body = await parseJsonWithinLimit<{

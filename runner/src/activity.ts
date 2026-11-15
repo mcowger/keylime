@@ -1,5 +1,11 @@
 import type { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 
+/**
+ * @apiEvent model_activity
+ * In-memory per-session activity snapshot, not persisted history. startedAt is Unix milliseconds;
+ * rate estimates tokens per second as sampled UTF-16 length divided by four over a five-second
+ * window. epoch identifies the tracker, while version advances on updates including resets.
+ */
 export type ModelActivity = {
   kind: "idle" | "waiting" | "streaming" | "tools";
   startedAt: number;

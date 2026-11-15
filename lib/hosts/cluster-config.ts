@@ -8,6 +8,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { isMap, parseDocument, YAMLMap, type Document } from "yaml";
+import { Type, type Static } from "@sinclair/typebox";
 
 /** `manifestBytes`: the longest manifest a member reads (daemon-cluster-config.ts), as the routes serialize it. */
 export const CONFIG_LIMITS = {
@@ -16,7 +17,15 @@ export const CONFIG_LIMITS = {
   manifestBytes: 5_242_880,
 };
 
-export type ConfigRoot = "agent" | "home";
+/** Root against which a mirrored path is resolved. */
+export const ConfigRootSchema = Type.Union(
+  [Type.Literal("agent"), Type.Literal("home")],
+  {
+    title: "Configuration root",
+    description: "The omp agent directory or the host's home directory.",
+  },
+);
+export type ConfigRoot = Static<typeof ConfigRootSchema>;
 
 /** Mirrored entries: files and directories, relative to the omp agent directory or to the home directory. */
 export const MIRRORED: readonly {
@@ -78,27 +87,56 @@ export const LOCAL_SETTINGS: readonly (readonly string[])[] = [
   ["auth", "broker"],
 ];
 
-export interface ManifestFile {
-  root: ConfigRoot;
-  path: string;
-  hash: string;
-  size: number;
-  exec: boolean;
-}
-/** `source` (npm only): the master's dependency spec for the plugin (`github:…`, a range, `file:…`); null for a linked plugin; absent from a master that cannot read it. */
-export interface PluginEntry {
-  kind: "npm" | "marketplace";
-  id: string;
-  version: string | null;
-  enabled: boolean;
-  source?: string | null;
-}
-export interface ConfigManifest {
-  version: string;
-  files: ManifestFile[];
-  agentEnv: Record<string, string>;
-  plugins: PluginEntry[];
-}
+export const ManifestFileSchema = Type.Object(
+  {
+    root: ConfigRootSchema,
+    path: Type.String({ description: "Path relative to the selected root." }),
+    hash: Type.String({ description: "Content hash used to fetch the file." }),
+    size: Type.Number({ description: "File size in bytes." }),
+    exec: Type.Boolean({ description: "Whether the file is executable." }),
+  },
+  { title: "Manifest file", description: "A mirrored configuration file." },
+);
+export type ManifestFile = Static<typeof ManifestFileSchema>;
+
+export const PluginEntrySchema = Type.Object(
+  {
+    kind: Type.Union([Type.Literal("npm"), Type.Literal("marketplace")]),
+    id: Type.String(),
+    version: Type.Union([Type.String(), Type.Null()]),
+    enabled: Type.Boolean(),
+    source: Type.Optional(
+      Type.Union([Type.String(), Type.Null()], {
+        description:
+          "For npm plugins, the master's dependency spec; null for a linked plugin and absent when unreadable.",
+      }),
+    ),
+  },
+  {
+    title: "Plugin entry",
+    description: "A plugin and its desired state on cluster members.",
+  },
+);
+export type PluginEntry = Static<typeof PluginEntrySchema>;
+
+export const ConfigManifestSchema = Type.Object(
+  {
+    version: Type.String({
+      description: "Version of the mirrored configuration.",
+    }),
+    files: Type.Array(ManifestFileSchema),
+    agentEnv: Type.Record(Type.String(), Type.String(), {
+      description: "Agent environment values mirrored from the master.",
+    }),
+    plugins: Type.Array(PluginEntrySchema),
+  },
+  {
+    title: "Cluster configuration manifest",
+    description:
+      "The master's current mirrored files, agent environment, and plugin state.",
+  },
+);
+export type ConfigManifest = Static<typeof ConfigManifestSchema>;
 
 export class ClusterConfigError extends Error {
   constructor(

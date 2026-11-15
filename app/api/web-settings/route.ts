@@ -17,6 +17,14 @@ import { isRecord } from "@/lib/type-guards";
 import { isUploadRetentionDays } from "@/lib/upload-limits";
 
 /** GET/PUT /api/web-settings - omp-web's own server-side settings. */
+/**
+ * @apiContract getWebSettings
+ * @apiUsage Read persisted server-side web settings, not per-browser preferences.
+ * @apiInputs No workspace is selected.
+ * @apiInvariants Invalid or reserved agent environment names are filtered from the response.
+ * @apiEffects Reads server settings without mutation.
+ * @apiRecovery Retry the read if the server is available again.
+ */
 export async function GET() {
   return Response.json(readSettings());
 }
@@ -30,6 +38,14 @@ function readSettings(): WebServerSettings {
   };
 }
 
+/**
+ * @apiContract putWebSettings
+ * @apiUsage Patch persisted server settings; browser-local preferences are separate.
+ * @apiInputs Optional fields include agentEnv as KEY=VALUE text or an object and uploadRetentionDays as 1–3650 days or null.
+ * @apiInvariants Omitted fields are preserved; supplied agentEnv replaces its map and invalid or reserved names are rejected.
+ * @apiEffects Saves settings, may sync running sessions, broadcasts changed browser transport and pushes retention to hosts.
+ * @apiRecovery Read server settings after an uncertain response before retrying the patch.
+ */
 export async function PUT(req: Request) {
   let body: unknown;
   try {

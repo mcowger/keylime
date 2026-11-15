@@ -11,6 +11,14 @@ import {
   isExistingFilePathAllowed,
 } from "@/lib/file-access";
 
+/**
+ * @apiContract postSkillsUpdate
+ * @apiUsage Update one installed skill package.
+ * @apiInputs Provide package and global or project scope; project requires an allowed cwd.
+ * @apiInvariants The selected package must support automatic updates; no cwd means user-level only.
+ * @apiEffects Executes the skills CLI, changes installed files and returns refreshed metadata and the last 500 output characters.
+ * @apiRecovery Inspect the installed skill after timeout or disconnect before repeating the update.
+ */
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as {

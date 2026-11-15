@@ -14,6 +14,8 @@ import {
   type CommandReply,
 } from "@/lib/event-stream";
 import { formatApiError } from "@/lib/i18n/api-error";
+import type { Static } from "@sinclair/typebox";
+import type { OutboxScopeResultSchema } from "@/lib/api-contracts/browser-agent-operations";
 
 // Sessions whose per-chat advisor toggle is on: their lazily spawned omp
 // process must start with --advisor. Keyed by session id because the spawn
@@ -42,7 +44,9 @@ export async function getOutboxScope(sessionId: string): Promise<string> {
     }
   }
   if (!outboxScope) {
-    const result = await sendAgentCommand<{ scope: string }>(sessionId, {
+    const result = await sendAgentCommand<
+      Static<typeof OutboxScopeResultSchema>
+    >(sessionId, {
       type: "outbox_scope",
     });
     if (!result?.scope)
@@ -90,6 +94,8 @@ export function setSessionAdvisorSpawn(sessionId: string, enabled: boolean) {
   else advisorSpawnSessions.delete(sessionId);
 }
 
+/** A successful command reply acknowledges the command, not necessarily prompt completion.
+ * On transport uncertainty reconcile correlated input before retrying: the server may have accepted it. */
 export async function sendAgentCommand<T = unknown>(
   sessionId: string,
   command: Record<string, unknown>,

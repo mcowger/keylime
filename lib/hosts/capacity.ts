@@ -1,15 +1,9 @@
+import type { HostCapacity as SchemaHostCapacity } from "../api-contracts/host-schemas";
 import { readFileSync } from "node:fs";
 import { availableParallelism, loadavg } from "node:os";
 import { posix } from "node:path";
 
-export interface HostCapacity {
-  effectiveCpus: number;
-  load1: number;
-  busyFraction: number;
-  stealFraction: number;
-  availableMemoryBytes: number;
-  activeSessions: number;
-}
+export type HostCapacity = SchemaHostCapacity;
 
 interface CpuCounters {
   busy: number;

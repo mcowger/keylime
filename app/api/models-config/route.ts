@@ -9,6 +9,14 @@ import {
   type ModelsFileConfig,
 } from "@/lib/omp/models-config";
 
+/**
+ * @apiContract getModelsConfig
+ * @apiUsage Read the user models.yml for editing.
+ * @apiInputs No workspace or request parameters are used.
+ * @apiInvariants An unparseable file returns a parseError and path instead of pretending the empty providers map is the real configuration.
+ * @apiEffects Reads the file on each request; no configuration is changed.
+ * @apiRecovery Repair malformed YAML before saving, or explicitly opt into overwriting it.
+ */
 export async function GET() {
   const file = readModelsConfigFile();
   if (file.parseError) {
@@ -26,6 +34,14 @@ export async function GET() {
 
 // PUT /api/models-config[?overwrite=true]
 // Refuses to write while models.yml is unparseable unless ?overwrite=true.
+/**
+ * @apiContract putModelsConfig
+ * @apiUsage Save the user model provider configuration.
+ * @apiInputs Send the configuration object; overwrite=true explicitly permits replacement of an unparseable file.
+ * @apiInvariants Validation precedes writing; malformed existing YAML otherwise returns 409.
+ * @apiEffects Writes models.yml, invalidates the model cache and disposes the utility process.
+ * @apiRecovery After an uncertain response read the file before retrying; repair malformed YAML to preserve its contents.
+ */
 export async function PUT(req: Request) {
   try {
     const overwriteUnparseable =

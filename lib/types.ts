@@ -1,39 +1,78 @@
+import type { Static } from "@sinclair/typebox";
+import type {
+  SessionTitleSourceSchema,
+  SessionHeaderSchema,
+  SessionEntryBaseSchema,
+  TextContentSchema,
+  ImageContentSchema,
+  ThinkingContentSchema,
+  ToolCallContentSchema,
+  AssistantContentBlockSchema,
+  UserMessageSchema,
+  AssistantMessageSchema,
+  ToolResultMessageSchema,
+  CustomMessageSchema,
+  BashExecutionMessageSchema,
+  DeveloperMessageSchema,
+  PythonExecutionMessageSchema,
+  FileMentionMessageSchema,
+  AgentMessageSchema,
+  UiDialogOptionsSchema,
+  UiSelectItemSchema,
+  UiApprovalPromptSchema,
+  UiApprovalAnswerSchema,
+  UiAskDialogResultSchema,
+  UiFormDialogResultSchema,
+  UiDialogValueSchema,
+  UiDialogRequestSchema,
+  UiPresentationFrameSchema,
+  UiCustomFrameSchema,
+  ExtensionStatusItemSchema,
+  ExtensionWidgetItemSchema,
+  SessionMessageEntrySchema,
+  ThinkingLevelChangeEntrySchema,
+  ModelChangeEntrySchema,
+  ServiceTierChangeEntrySchema,
+  CompactionEntrySchema,
+  BranchSummaryEntrySchema,
+  CustomEntrySchema,
+  CustomMessageEntrySchema,
+  LabelEntrySchema,
+  SessionInfoEntrySchema,
+  TitleChangeEntrySchema,
+  TtsrInjectionEntrySchema,
+  SessionInitEntrySchema,
+  ModeChangeEntrySchema,
+  SessionEntrySchema,
+  FileEntrySchema,
+  BranchPreviewSchema,
+  SessionTreeNodeSchema,
+  SessionInfoSchema,
+  ArchivedSessionInfoSchema,
+  ProjectLaunchConfigSchema,
+  ManagedProjectSchema,
+  SessionContextSchema,
+  CrossSessionHostToolCallSchema,
+  CrossSessionHostToolEventSchema,
+  ExitedRpcSessionSchema,
+  OutboxModeSchema,
+  OutboxEntrySchema,
+  OutboxUpdateFrameSchema,
+} from "./api-contracts/domain";
 // Types mirrored from oh-my-pi coding-agent session-entries (v3 format).
-import type { HtmlFormData, RpcAskDialogQuestion, TodoPhase } from "./pi-types";
 
 // omp-web cannot import the Bun-only @oh-my-pi packages, so the on-disk
 // shapes are re-declared here. Legacy pi v1/v2 fields are kept optional.
 
-export type SessionTitleSource = "auto" | "user";
+export type SessionTitleSource = Static<typeof SessionTitleSourceSchema>;
 
-export interface SessionHeader {
-  type: "session";
-  version?: number;
-  id: string;
-  /** Current title, folded in from the fixed-width title slot (line 1) on load. */
-  title?: string;
-  titleSource?: SessionTitleSource;
-  timestamp: string;
-  cwd: string;
-  /** Extra workspace roots beyond cwd (multi-root workspace). */
-  additionalDirectories?: string[];
-  parentSession?: string;
-  providerPromptCacheKey?: string;
-}
+/** File header and session identity; title is folded from the mutable title slot on load. */
+export type SessionHeader = Static<typeof SessionHeaderSchema>;
 
-export interface SessionEntryBase {
-  type: string;
-  id: string;
-  parentId: string | null;
-  timestamp: string;
-  /** Client intent metadata stored on native message/custom-message entries, never sent to the model. */
-  clientMessageId?: string;
-}
+/** Append-history identity and parent link; a null parent marks a root. */
+export type SessionEntryBase = Static<typeof SessionEntryBaseSchema>;
 
-export interface TextContent {
-  type: "text";
-  text: string;
-}
+export type TextContent = Static<typeof TextContentSchema>;
 
 /**
  * Image block. omp persists the flat {data, mimeType} shape (data may be a
@@ -42,603 +81,158 @@ export interface TextContent {
  * reach the browser as `url` (`/api/media/<sha256>`, `?thumb=1` for a small
  * preview) instead of inline base64.
  */
-export interface ImageContent {
-  type: "image";
-  data?: string;
-  mimeType?: string;
-  url?: string;
-  source?: {
-    type: "base64" | "url";
-    media_type?: string;
-    data?: string;
-    url?: string;
-  };
-}
+export type ImageContent = Static<typeof ImageContentSchema>;
 
-export interface ThinkingContent {
-  type: "thinking";
-  thinking: string;
-  /** Historical content omitted from the initial response and loaded on demand. */
-  deferred?: boolean;
-}
+export type ThinkingContent = Static<typeof ThinkingContentSchema>;
 
-export interface ToolCallContent {
-  type: "toolCall";
-  toolCallId: string;
-  toolName: string;
-  input: Record<string, unknown>;
-}
+export type ToolCallContent = Static<typeof ToolCallContentSchema>;
 
-export type AssistantContentBlock =
-  TextContent | ImageContent | ThinkingContent | ToolCallContent;
+export type AssistantContentBlock = Static<typeof AssistantContentBlockSchema>;
 
-export interface UserMessage {
-  role: "user";
-  content: string | (TextContent | ImageContent)[];
-  timestamp?: number;
-  clientMessageId?: string;
-  /** Rendered from a `branch_summary` entry, not a real prompt: omp cannot branch at it. */
-  branchSummary?: true;
-}
+/** User input; a branchSummary is a display projection, not a branchable prompt. */
+export type UserMessage = Static<typeof UserMessageSchema>;
 
-export interface AssistantMessage {
-  role: "assistant";
-  content: AssistantContentBlock[];
-  model: string;
-  provider: string;
-  stopReason?: string;
-  errorMessage?: string;
-  timestamp?: number;
-  usage?: {
-    input: number;
-    output: number;
-    cacheRead: number;
-    cacheWrite: number;
-    totalTokens?: number;
-    cost: {
-      input: number;
-      output: number;
-      cacheRead: number;
-      cacheWrite: number;
-      total: number;
-    };
-  };
-}
+/** Provider/model response with ordered blocks and optional reported token usage. */
+export type AssistantMessage = Static<typeof AssistantMessageSchema>;
 
-export interface ToolResultMessage {
-  role: "toolResult";
-  toolCallId: string;
-  toolName?: string;
-  content: (TextContent | ImageContent)[];
-  isError?: boolean;
-  details?: unknown;
-  timestamp?: number;
-  /** Live snapshot of a tool that is still executing (omp's
-   * `tool_execution_update`), not a committed result. Rendering treats it as
-   * "running" and keeps it out of the session's toolResult list. */
-  partial?: boolean;
-  /** Sanitized one-line passive context omp emitted after this result's tool
-   * batch (`collectToolResults`); display-only, never part of the result. */
-  passiveContext?: string;
-}
+/** Result correlated to a tool call; partial results are live snapshots. */
+export type ToolResultMessage = Static<typeof ToolResultMessageSchema>;
 
-export interface CustomMessage {
-  role: "custom";
-  customType: string;
-  content: string | (TextContent | ImageContent)[];
-  display: boolean;
-  details?: unknown;
-  timestamp?: number;
-  clientMessageId?: string;
-}
+export type CustomMessage = Static<typeof CustomMessageSchema>;
 
-export interface BashExecutionMessage {
-  role: "bashExecution";
-  command: string;
-  output: string;
-  exitCode?: number;
-  cancelled?: boolean;
-  truncated?: boolean;
-  fullOutputPath?: string;
-  excludeFromContext?: boolean;
-  timestamp?: number;
-}
+export type BashExecutionMessage = Static<typeof BashExecutionMessageSchema>;
 
 /** System-slot instruction message (steering envelopes, file-mention text). */
-export interface DeveloperMessage {
-  role: "developer";
-  content: string | (TextContent | ImageContent)[];
-  timestamp?: number;
-}
+export type DeveloperMessage = Static<typeof DeveloperMessageSchema>;
 
 /** User-initiated Python execution via the $ command (omp-only). */
-export interface PythonExecutionMessage {
-  role: "pythonExecution";
-  code: string;
-  output: string;
-  exitCode?: number;
-  cancelled?: boolean;
-  truncated?: boolean;
-  excludeFromContext?: boolean;
-  timestamp?: number;
-}
+export type PythonExecutionMessage = Static<
+  typeof PythonExecutionMessageSchema
+>;
 
 /** Auto-read @filepath mentions packed into a single message (omp-only). */
-export interface FileMentionMessage {
-  role: "fileMention";
-  files: Array<{
-    path: string;
-    content: string;
-    lineCount?: number;
-    byteSize?: number;
-    skippedReason?: "tooLarge" | "binary";
-    image?: ImageContent;
-  }>;
-  timestamp?: number;
-}
+export type FileMentionMessage = Static<typeof FileMentionMessageSchema>;
 
-export type AgentMessage =
-  | UserMessage
-  | AssistantMessage
-  | ToolResultMessage
-  | CustomMessage
-  | BashExecutionMessage
-  | DeveloperMessage
-  | PythonExecutionMessage
-  | FileMentionMessage;
+export type AgentMessage = Static<typeof AgentMessageSchema>;
 
 /** omp's `ExtensionUIDialogOptions` as the runner sends them (no signal or callbacks). */
-export interface UiDialogOptions {
-  timeout?: number;
-  /** `input`: mask the entered text. */
-  secret?: boolean;
-  /** omp's checkbox list (ask multi-select): `checkedIndices` is the authoritative checked state. */
-  selectionMarker?: "radio" | "checkbox";
-  checkedIndices?: number[];
-  /** Leading options that get a marker; the rest are actions such as Other and Done. */
-  markableCount?: number;
-}
+export type UiDialogOptions = Static<typeof UiDialogOptionsSchema>;
 
 // JSON turns an omitted middle argument into null.
-type UiDialogOptionsArg = UiDialogOptions | null;
 
-export type UiSelectItem = string | { label: string; description?: string };
+export type UiSelectItem = Static<typeof UiSelectItemSchema>;
 
 /** omp's `ExtensionApprovalPrompt`: a title line then details. */
-export interface UiApprovalPrompt {
-  full: string;
-  compact: string;
-  session?: string;
-  grants?: { scope: "folder" | "target"; label: string; alwaysLabel: string }[];
-}
+export type UiApprovalPrompt = Static<typeof UiApprovalPromptSchema>;
 
-export type UiApprovalAnswer =
-  "once" | "session" | "deny" | { grant: "folder" | "target"; always: boolean };
+export type UiApprovalAnswer = Static<typeof UiApprovalAnswerSchema>;
 
 /** omp's `ExtensionAskDialogSubmitResult`. */
-export interface UiAskDialogResult {
-  kind: "submit";
-  results: {
-    id: string;
-    question: string;
-    options: string[];
-    multi: boolean;
-    selectedOptions: string[];
-    customInput?: string;
-  }[];
-}
+export type UiAskDialogResult = Static<typeof UiAskDialogResultSchema>;
 
 /** omp's `ExtensionFormDialogResult`. */
-export interface UiFormDialogResult {
-  data: HtmlFormData;
-}
+export type UiFormDialogResult = Static<typeof UiFormDialogResultSchema>;
 
 /** What an omp dialog method returns; a cancel sends no value. */
-export type UiDialogValue =
-  string | boolean | UiAskDialogResult | UiFormDialogResult | UiApprovalAnswer;
+export type UiDialogValue = Static<typeof UiDialogValueSchema>;
 
 /**
  * A dialog the runner opened: `method` is omp's `ExtensionUIContext` method, `args` its positional
  * arguments. omp-web's own confirms carry string ids. `expiresAt` (epoch ms) is set when it times out.
  */
-export type UiDialogRequest = {
-  type: "ui_request";
-  id: number | string;
-  expiresAt?: number;
-} & (
-  | {
-      method: "select";
-      args: [
-        title: string,
-        options: UiSelectItem[],
-        dialogOptions?: UiDialogOptionsArg,
-      ];
-    }
-  | {
-      method: "confirm";
-      args: [
-        title: string,
-        message: string,
-        dialogOptions?: UiDialogOptionsArg,
-      ];
-    }
-  | {
-      method: "input";
-      args: [
-        title: string,
-        placeholder?: string | null,
-        dialogOptions?: UiDialogOptionsArg,
-      ];
-    }
-  | {
-      method: "editor";
-      args: [
-        title: string,
-        prefill?: string | null,
-        dialogOptions?: UiDialogOptionsArg,
-        editorOptions?: { promptStyle?: boolean } | null,
-      ];
-    }
-  | {
-      method: "askDialog";
-      args: [
-        questions: RpcAskDialogQuestion[],
-        dialogOptions?: UiDialogOptionsArg,
-      ];
-    }
-  /** omp's whole-form ask: the agent's `<form>` HTML, rendered as controls, never as markup. */
-  | {
-      method: "formDialog";
-      args: [html: string, dialogOptions?: UiDialogOptionsArg];
-    }
-  | {
-      method: "approve";
-      args: [prompt: UiApprovalPrompt, dialogOptions?: UiDialogOptionsArg];
-    }
-);
+export type UiDialogRequest = Static<typeof UiDialogRequestSchema>;
 
 /** A presentation call from the runner. */
-export type UiPresentationFrame = { type: "ui" } & (
-  | {
-      method: "notify";
-      message: string;
-      notifyType?: "info" | "warning" | "error";
-    }
-  | { method: "setStatus"; statusKey: string; statusText?: string }
-  | {
-      method: "setWidget";
-      widgetKey: string;
-      widgetLines?: string[];
-      widgetPlacement?: "aboveEditor" | "belowEditor";
-    }
-  | { method: "setTitle"; title: string }
-  | { method: "set_editor_text"; text: string }
-  | { method: "setWorkingMessage"; message?: string }
-  /** A custom component's rendered lines; keys go back as `ui_input`. */
-  | { method: "custom"; id: number; lines: string[]; closed?: boolean }
-);
+export type UiPresentationFrame = Static<typeof UiPresentationFrameSchema>;
 
-export type UiCustomFrame = Extract<UiPresentationFrame, { method: "custom" }>;
+export type UiCustomFrame = Static<typeof UiCustomFrameSchema>;
 
-export interface ExtensionStatusItem {
-  key: string;
-  text: string;
-}
+export type ExtensionStatusItem = Static<typeof ExtensionStatusItemSchema>;
 
-export interface ExtensionWidgetItem {
-  key: string;
-  lines: string[];
-  placement: "aboveEditor" | "belowEditor";
-}
+export type ExtensionWidgetItem = Static<typeof ExtensionWidgetItemSchema>;
 
-export interface SessionMessageEntry extends SessionEntryBase {
-  type: "message";
-  message: AgentMessage;
-}
+export type SessionMessageEntry = Static<typeof SessionMessageEntrySchema>;
 
-export interface ThinkingLevelChangeEntry extends SessionEntryBase {
-  type: "thinking_level_change";
-  thinkingLevel?: string | null;
-  /** Configured selector ("auto" or a concrete level); absent on old entries. */
-  configured?: string | null;
-}
+export type ThinkingLevelChangeEntry = Static<
+  typeof ThinkingLevelChangeEntrySchema
+>;
 
-export interface ModelChangeEntry extends SessionEntryBase {
-  type: "model_change";
-  /** omp format: "provider/modelId". */
-  model?: string;
-  /** Model role ("default", "smol", ...); undefined means "default". */
-  role?: string;
-  /** Legacy pi format kept for pre-migration files. */
-  provider?: string;
-  modelId?: string;
-}
+export type ModelChangeEntry = Static<typeof ModelChangeEntrySchema>;
 
-export interface ServiceTierChangeEntry extends SessionEntryBase {
-  type: "service_tier_change";
-  serviceTier: unknown;
-}
+export type ServiceTierChangeEntry = Static<
+  typeof ServiceTierChangeEntrySchema
+>;
 
-export interface CompactionEntry extends SessionEntryBase {
-  type: "compaction";
-  summary: string;
-  shortSummary?: string;
-  firstKeptEntryId: string;
-  tokensBefore: number;
-  /** omp ≥17.4: maintenance method that fired (e.g. "remote-compacted", "handoff"). */
-  method?: string;
-  tokensAfter?: number;
-  details?: unknown;
-  preserveData?: Record<string, unknown>;
-  fromExtension?: boolean;
-  fromHook?: boolean;
-  warning?: string;
-}
+export type CompactionEntry = Static<typeof CompactionEntrySchema>;
 
-export interface BranchSummaryEntry extends SessionEntryBase {
-  type: "branch_summary";
-  fromId: string;
-  summary: string;
-  details?: unknown;
-  fromExtension?: boolean;
-  fromHook?: boolean;
-}
+export type BranchSummaryEntry = Static<typeof BranchSummaryEntrySchema>;
 
-export interface CustomEntry extends SessionEntryBase {
-  type: "custom";
-  customType: string;
-  data?: unknown;
-}
+export type CustomEntry = Static<typeof CustomEntrySchema>;
 
-export interface CustomMessageEntry extends SessionEntryBase {
-  type: "custom_message";
-  customType: string;
-  content: string | (TextContent | ImageContent)[];
-  details?: unknown;
-  display: boolean;
-}
+export type CustomMessageEntry = Static<typeof CustomMessageEntrySchema>;
 
-export interface LabelEntry extends SessionEntryBase {
-  type: "label";
-  targetId: string;
-  label: string | undefined;
-}
+export type LabelEntry = Static<typeof LabelEntrySchema>;
 
 /** Legacy pi rename entry; omp replaced it with the title slot + title_change. */
-export interface SessionInfoEntry extends SessionEntryBase {
-  type: "session_info";
-  name?: string;
-}
+export type SessionInfoEntry = Static<typeof SessionInfoEntrySchema>;
 
 /** Append-only audit entry recording a session title change (omp). */
-export interface TitleChangeEntry extends SessionEntryBase {
-  type: "title_change";
-  title: string;
-  previousTitle?: string;
-  source: SessionTitleSource;
-  trigger?: string;
-}
+export type TitleChangeEntry = Static<typeof TitleChangeEntrySchema>;
 
 /** Tracks which time-traveling rules have been injected this session (omp). */
-export interface TtsrInjectionEntry extends SessionEntryBase {
-  type: "ttsr_injection";
-  injectedRules: string[];
-}
+export type TtsrInjectionEntry = Static<typeof TtsrInjectionEntrySchema>;
 
 /** Initial context capture for subagent sessions (omp). */
-export interface SessionInitEntry extends SessionEntryBase {
-  type: "session_init";
-  systemPrompt: string;
-  task: string;
-  tools: string[];
-  outputSchema?: unknown;
-  outputSchemaMode?: string;
-  restrictToolNames?: boolean;
-  spawns?: string;
-  readSummarize?: boolean;
-}
+export type SessionInitEntry = Static<typeof SessionInitEntrySchema>;
 
 /** Agent mode transitions, e.g. plan mode (omp). */
-export interface ModeChangeEntry extends SessionEntryBase {
-  type: "mode_change";
-  /** Current mode name, or "none" when exiting a mode. */
-  mode: string;
-  data?: Record<string, unknown>;
-}
+export type ModeChangeEntry = Static<typeof ModeChangeEntrySchema>;
 
-export type SessionEntry =
-  | SessionMessageEntry
-  | ThinkingLevelChangeEntry
-  | ModelChangeEntry
-  | ServiceTierChangeEntry
-  | CompactionEntry
-  | BranchSummaryEntry
-  | CustomEntry
-  | CustomMessageEntry
-  | LabelEntry
-  | SessionInfoEntry
-  | TitleChangeEntry
-  | TtsrInjectionEntry
-  | SessionInitEntry
-  | ModeChangeEntry;
+/** One append-history record; parentId links it into the session tree. */
+export type SessionEntry = Static<typeof SessionEntrySchema>;
 
-export type FileEntry = SessionHeader | SessionEntry;
+export type FileEntry = Static<typeof FileEntrySchema>;
 
-export interface BranchPreview {
-  role?: "user" | "assistant";
-  text: string;
-}
+/** Optional role and text shown for a projected branch. */
+export type BranchPreview = Static<typeof BranchPreviewSchema>;
 
-export interface SessionTreeNode {
-  entry: SessionEntry;
-  children: SessionTreeNode[];
-  label?: string;
-  compressedEntryIds?: string[];
-  branchPreview?: BranchPreview;
-}
+/** Tree node indexed by entry ID; projected edges can contain compressed entry IDs. */
+export type SessionTreeNode = Static<typeof SessionTreeNodeSchema>;
 
-export interface SessionInfo {
-  path: string;
-  id: string;
-  cwd: string;
-  name?: string;
-  created: string;
-  modified: string;
-  /** ISO time of the last message entry (absent when the tail scan found none). */
-  lastMessageAt?: string;
-  messageCount: number;
-  firstMessage: string;
-  parentSessionId?: string; // set if this session was forked from another
-  /** Main repo root shared by all worktrees of this cwd (cwd itself for non-git dirs).
-   *  Always set by the server; optional because the client builds transient
-   *  SessionInfo objects before the first refresh. Fall back to cwd. */
-  projectRoot?: string;
-  /** Stable identity key for grouping and comparison. */
-  projectKey?: string;
-  /** Branch name when cwd is a linked git worktree (not the main checkout) */
-  worktreeBranch?: string;
-  /** Host the session's file lives on ("local" for this machine). Set by the
-   *  all-hosts session list; a host's own list leaves it out. */
-  hostId?: string;
-  /** Registered logical identity; physical owner/cwd/projectRoot remain unchanged. */
-  poolId?: string;
-  projectId?: string;
-}
+/** Session listing snapshot; paths belong to the owning host, not necessarily this machine. */
+export type SessionInfo = Static<typeof SessionInfoSchema>;
 
 /** Metadata for a gzip-compressed session in OMP's archive tree. */
-export interface ArchivedSessionInfo {
-  key: string;
-  id: string;
-  cwd: string;
-  name?: string;
-  created: string;
-  archivedAt: string;
-  messageCount: number;
-  firstMessage: string;
-  size: number;
-  status?:
-    "complete" | "interrupted" | "aborted" | "error" | "pending" | "unknown";
-  /** In-progress/interrupted restore evidence; its unique capture key is not an actionable restore target. */
-  restorePending?: true;
-  /** Host whose archive holds it ("local" for this machine). Set by the all-hosts list; a host's own list leaves it out. */
-  hostId?: string;
-}
+export type ArchivedSessionInfo = Static<typeof ArchivedSessionInfoSchema>;
 
 /** Workspace-level omp launch configuration; only affects omp children spawned for that workspace. */
-export interface ProjectLaunchConfig {
-  /** The OMP profile to use. */
-  profile?: string;
-  /** Whether to launch with advisor mode. */
-  advisor?: boolean;
-  /** Extra OMP CLI args, stored as an array. */
-  extraArgs?: string[];
-}
+export type ProjectLaunchConfig = Static<typeof ProjectLaunchConfigSchema>;
 
 /** A project in the sidebar: an explicitly added directory (registered in the
  *  on-disk registry) or one discovered from existing sessions. Paths are the
  *  canonical projectRoot — worktrees resolve to their main repository. */
-export interface ManagedProject {
-  path: string;
-  /** ISO timestamp of the last explicit add. */
-  addedAt?: string;
-  /** User-defined display name; never changes the directory path. */
-  alias?: string;
-  /** Explicit sidebar position for registered projects. */
-  sortOrder?: number;
-  /** Set when pinned: position among pinned workspaces (lower first). Pins
-   *  only apply while the sidebar sorts by name or activity. */
-  pinOrder?: number;
-  /** Workspace-level omp launch configuration. */
-  launchConfig?: ProjectLaunchConfig;
-  /** Host the project lives on ("local" for this machine). Set by GET /api/projects. */
-  hostId?: string;
-  /** Logical pool target; path/hostId, when present, are diagnostic only. */
-  poolId?: string;
-  projectId?: string;
-  workspaceId?: string;
-  projectPath?: string;
-  projectName?: string;
-  projectKind?: "git" | "directory";
-  isDefaultWorkspace?: boolean;
-  projectKey?: string;
-  origin?: string;
-  name?: string;
-  defaultRef?: string;
-}
+export type ManagedProject = Static<typeof ManagedProjectSchema>;
 
-export interface SessionContext {
-  messages: AgentMessage[];
-  entryIds: string[]; // parallel to messages — the session entry id for each message
-  thinkingLevel: string;
-  model: { provider: string; modelId: string } | null;
-  /** Latest persisted todo snapshot on the selected session branch. */
-  todoPhases: TodoPhase[];
-  /** Correlated native messages retained in the session's append history, including compacted entries. */
-  persistedClientMessageIds?: string[];
-  /** Explicit native withdrawals/consumption records; absence alone never resolves a handoff. */
-  resolvedClientMessageIds?: string[];
-}
+/** Reconstructed selected-branch messages, entry IDs and native intent evidence. */
+export type SessionContext = Static<typeof SessionContextSchema>;
+
+/** A host tool call for a session no tab is watching, sent to every open tab. */
+export type CrossSessionHostToolCall = Static<
+  typeof CrossSessionHostToolCallSchema
+>;
+
+export type CrossSessionHostToolEvent = Static<
+  typeof CrossSessionHostToolEventSchema
+>;
 
 /** An omp child that exited unexpectedly; retained until that session starts again. */
-/** A host tool call for a session no tab is watching, sent to every open tab. */
-export interface CrossSessionHostToolCall {
-  sessionId: string;
-  hostId: string;
-  cwd: string;
-  id: string;
-  toolName: string;
-  arguments: Record<string, unknown>;
-}
-
-export type CrossSessionHostToolEvent =
-  | (CrossSessionHostToolCall & { type?: "host_tool_call" })
-  | {
-      type: "host_tool_cancel";
-      sessionId: string;
-      targetId: string;
-    };
-
-export interface ExitedRpcSession {
-  id: string;
-  cwd: string;
-  /** Absent on this machine, as on `SessionInfo`. */
-  hostId?: string;
-  at: number;
-  code: number | null;
-  signal: string | null;
-  /** Last stderr line, if any. */
-  detail: string;
-}
+export type ExitedRpcSession = Static<typeof ExitedRpcSessionSchema>;
 
 /** How a held message goes to omp (docs/specs/2026-11-04-message-outbox-design.md O3). */
-export type OutboxMode = "prompt" | "followUp" | "steer";
+export type OutboxMode = Static<typeof OutboxModeSchema>;
 
-/** A message omp-web holds for a session until omp has it (the web server's outbox, lib/message-outbox.ts). */
-export interface OutboxEntry {
-  id: string;
-  sessionId: string;
-  mode: OutboxMode;
-  /** Captured at the original send; an explicit retry must not use current preferences. */
-  advisor?: boolean;
-  message: string;
-  images?: { type: "image"; data: string; mimeType: string }[];
-  uploads?: string[];
-  state: "held" | "waiting_host" | "delivering" | "failed" | "delivered";
-  error?: string;
-  /** A lost reply: omp may have it; never resent by itself. */
-  mayHaveBeenSent?: boolean;
-  /** Only while delivering: authoritative persisted history captured before dispatch, never retained in tombstones. */
-  previousEntryIds?: string[];
-  /** Delivered native input still needs its correlated view; none is an explicit non-message completion. */
-  settlement?: "native" | "none" | "uncorrelated";
-  createdAt: number;
-}
+/** Server-owned intent: acceptance into the outbox is not native admission; uncertain handoffs are not automatically resent. */
+export type OutboxEntry = Static<typeof OutboxEntrySchema>;
 
 /** The session channel's outbox snapshot: every entry not yet delivered, in submission order. */
-export interface OutboxUpdateFrame {
-  type: "outbox_update";
-  entries: OutboxEntry[];
-  /** Recent delivered/removed ids: a late first subscription can retire browser copies without seeing their removal. */
-  settledIds: string[];
-  nativeSettledIds?: string[];
-}
+export type OutboxUpdateFrame = Static<typeof OutboxUpdateFrameSchema>;

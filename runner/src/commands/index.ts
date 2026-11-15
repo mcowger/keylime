@@ -22,6 +22,7 @@ export const commands: CommandTable = {
   ...correlationCommands,
 };
 
+/** Host-to-runner non-command frames are inventoried by the owning groups. */
 /** Every non-command host frame by `t`; each group file owns its frame types. */
 export const frames: FrameTable = {
   ...promptingFrames,

@@ -106,6 +106,14 @@ function parseInstallCount(installs: string): number {
 }
 
 // POST /api/skills/search  body: { query: string, limit?: number }
+/**
+ * @apiContract postSkillsSearch
+ * @apiUsage Search the skills catalog by text.
+ * @apiInputs query must be nonblank; limit defaults to 50 and is clamped to 1–50.
+ * @apiInvariants Results are catalog snapshots, not installed skills; API results are ordered by install count.
+ * @apiEffects Requests the remote search API and falls back to bunx skills find.
+ * @apiRecovery Retry after the catalog or fallback CLI is available.
+ */
 export async function POST(req: Request) {
   try {
     const { query, limit: rawLimit } = (await req.json()) as {

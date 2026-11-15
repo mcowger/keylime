@@ -8,6 +8,14 @@ import {
 const ANSI_RE = /\x1B\[[0-9;]*m/g;
 
 // POST /api/skills/install  body: { package: string; scope: "global" | "project"; cwd?: string }
+/**
+ * @apiContract postSkillsInstall
+ * @apiUsage Install a skills package for the universal agent.
+ * @apiInputs package must match accepted npm-style name grammar; scope project requires an allowed cwd, otherwise installation is global.
+ * @apiInvariants Project installs target cwd/.agents/skills; global installs target the user skills directory.
+ * @apiEffects Runs bunx skills add, potentially downloading packages and writing installed files.
+ * @apiRecovery Inspect installed skills after an uncertain response before repeating installation.
+ */
 export async function POST(req: Request) {
   try {
     const {

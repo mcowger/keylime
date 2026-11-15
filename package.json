@@ -27,6 +27,7 @@
     "app/fonts/*-LICENSE.*",
     "server",
     "dist",
+    "docs/api",
     "public",
     "scripts",
     "proxy.ts",
@@ -45,6 +46,9 @@
     "start:lan": "bun server/main.ts -H 0.0.0.0 -p 30177",
     "test": "bun test --parallel --timeout 30000 ./app ./bin ./components ./hooks ./lib ./scripts ./server ./tests",
     "typecheck": "bun check && bun check -p runner",
+    "api:generate": "bun scripts/generate-api-docs.ts",
+    "api:check": "bun scripts/generate-api-docs.ts --check",
+    "api:bootstrap": "bun scripts/bootstrap-api-schema.ts",
     "format": "bun fmt",
     "format:check": "bun fmt --check",
     "systemd:install": "bun bin/omp-web-systemd.ts install",
@@ -54,10 +58,11 @@
     "systemd:status": "bun bin/omp-web-systemd.ts status",
     "prepack": "bun run build",
     "smoke": "bun scripts/smoke.ts",
-    "release:check": "bun run format:check && bun run typecheck && bun run test && bun run build && bun run smoke"
+    "release:check": "bun run api:generate && bun run api:check && bun run format:check && bun run typecheck && bun run test && bun run build && bun run smoke"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
+    "@sinclair/typebox": "0.34.52",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-serialize": "^0.14.0",
     "@xterm/headless": "^6.0.0",
@@ -82,6 +87,9 @@
     "yaml": "^2"
   },
   "devDependencies": {
+    "@apidevtools/swagger-parser": "13.1.0",
+    "@asyncapi/parser": "3.6.6",
+    "@sinclair/typebox-codegen": "0.11.1",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
@@ -93,9 +101,11 @@
     "@types/react-dom": "^19",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/web-push": "^3.6.4",
+    "ajv": "8.20.0",
     "bun-plugin-tailwind": "0.1.2",
     "jsdom": "^29.1.1",
     "micromark-util-types": "^2.0.2",
-    "tailwindcss": "^4.3.3"
+    "tailwindcss": "^4.3.3",
+    "typescript": "5.9.3"
   }
 }

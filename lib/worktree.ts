@@ -17,6 +17,9 @@ const execFileAsync = promisify(execFile);
 // (hot-reload safe) with a short TTL; add/remove worktree invalidates eagerly.
 // ============================================================================
 
+import type { Static } from "@sinclair/typebox";
+import type { WorktreeInfoSchema } from "./api-contracts/workspace-models";
+
 export interface ProjectInfo {
   projectRoot: string;
   /** Current branch of the cwd, null for non-git dirs or detached HEAD */
@@ -29,11 +32,7 @@ export interface ProjectInfo {
   isTopLevel: boolean;
 }
 
-export interface WorktreeInfo {
-  path: string;
-  branch: string | null;
-  isMain: boolean;
-}
+export type WorktreeInfo = Static<typeof WorktreeInfoSchema>;
 
 declare global {
   var __piProjectCache:

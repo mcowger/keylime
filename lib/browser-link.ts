@@ -1,3 +1,9 @@
+import type {
+  BrowserDown,
+  BrowserUploadAck,
+  BrowserUploadError,
+  BrowserWelcome,
+} from "./api-contracts/browser-link";
 import { randomBytes } from "crypto";
 import { runAgentCommand } from "./agent-command";
 import {
@@ -295,7 +301,11 @@ function linkSink(link: BrowserLink): FrameSink {
     // Replaceable updates merge while the socket is gone or lines wait for the window; every ack resumes them.
     backpressured: () => !link.socket || link.sender.queuedBytes > 0,
     heartbeat: () => {
-      if (link.socket) control(link.socket, { type: "ping", at: Date.now() });
+      if (link.socket)
+        control(link.socket, {
+          type: "ping",
+          at: Date.now(),
+        } satisfies BrowserDown);
       return true;
     },
     close: () => dispose(link, CLOSE.gone),
@@ -527,7 +537,11 @@ function onFrame(ws: BrowserSocket, data: string | Uint8Array): void {
       return;
     }
     case "ping":
-      return control(ws, { type: "pong", c: message.c, at: Date.now() });
+      return control(ws, {
+        type: "pong",
+        c: message.c,
+        at: Date.now(),
+      } satisfies BrowserDown);
     case "pong":
       return;
   }
@@ -557,7 +571,8 @@ function onFrame(ws: BrowserSocket, data: string | Uint8Array): void {
       }
     }
   }
-  if (link.socket === ws) control(ws, { type: "ack", ack: link.up.acked });
+  if (link.socket === ws)
+    control(ws, { type: "ack", ack: link.up.acked } satisfies BrowserDown);
 }
 
 /** A binary frame `[n][id][payload]`: the next chunk of an upload this link started, of at most a piece. Bytes go on
@@ -626,7 +641,7 @@ function onHello(ws: BrowserSocket, hello: Record<string, unknown>): void {
     serverId: serverId(),
     resumed,
     ack: link.up.acked,
-  });
+  } satisfies BrowserWelcome);
   sawBrowser(link);
   flush(link);
   // Updates merged while the socket was gone go now: no ack may come to resume them.
@@ -738,7 +753,7 @@ function onUploadStart(
           code,
           message: error,
           start: n,
-        }),
+        } satisfies Omit<BrowserUploadError, "seq">),
       ),
   };
   if (!link.uploads.has(id)) link.uploads.set(id, sink);
@@ -772,7 +787,7 @@ function onUploadStart(
           done: received >= size,
           start: n,
           ...(proof ? { proof } : {}),
-        }),
+        } satisfies Omit<BrowserUploadAck, "seq">),
       );
     },
     (error: unknown) => {

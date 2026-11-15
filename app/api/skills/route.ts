@@ -18,6 +18,14 @@ import {
 // of omp's skill roots on binaries that predate the command. Each skill
 // carries `togglable`, the same check PATCH applies. Without a cwd: the user
 // level only.
+/**
+ * @apiContract getSkills
+ * @apiUsage List skills with install information and toggle eligibility.
+ * @apiInputs Optional cwd must be allowed.
+ * @apiInvariants Without cwd only user-level skills are listed; discovery uses omp or a filesystem fallback.
+ * @apiEffects Reads skill files and may run omp listing.
+ * @apiRecovery Correct access or discovery errors and repeat the read.
+ */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const cwd = searchParams.get("cwd");
@@ -44,6 +52,14 @@ export async function GET(req: Request) {
 }
 
 // PATCH /api/skills — toggle disable-model-invocation on a SKILL.md file
+/**
+ * @apiContract patchSkills
+ * @apiUsage Toggle disable-model-invocation in a skill's frontmatter.
+ * @apiInputs Provide filePath ending in SKILL.md and disableModelInvocation; cwd may add allowed project roots.
+ * @apiInvariants The resolved path must be in an allowed writable skill root; plugin and registry skills are read-only.
+ * @apiEffects Writes the resolved file only when content changes and returns the resulting setting.
+ * @apiRecovery Re-read the skill after an uncertain response before retrying.
+ */
 export async function PATCH(req: Request) {
   try {
     const body = (await req.json()) as {

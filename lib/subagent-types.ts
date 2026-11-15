@@ -4,130 +4,28 @@
 // plus the roster fold both the hook and its tests run on (mergeSubagentRoster).
 
 import { asNumber, asString, isRecord } from "./type-guards";
+import type { Static } from "@sinclair/typebox";
+import type {
+  SubagentAgentSourceSchema,
+  SubagentRetryStateSchema,
+  SubagentProgressSchema,
+  SubagentActivityEventSchema,
+  SubagentHistoryResultSchema,
+  SubagentHistoryEntrySchema,
+  SubagentSnapshotLikeSchema,
+  SubagentInfoSchema,
+} from "./api-contracts/runner-tools";
 
 /** A subagent id as omp writes it into artifact filenames (`<id>.jsonl`); rejects path separators and `..`. */
 export const SUBAGENT_ID_RE = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
 
-export type SubagentAgentSource = "bundled" | "user" | "project";
-
-export interface SubagentRetryState {
-  attempt: number;
-  maxAttempts: number;
-  delayMs: number;
-  errorMessage: string;
-  startedAtMs: number;
-}
-
-/** Live per-subagent progress snapshot (oh-my-pi AgentProgress). */
-export interface SubagentProgress {
-  index?: number;
-  id?: string;
-  agent?: string;
-  agentSource?: SubagentAgentSource;
-  status?: "pending" | "running" | "completed" | "failed" | "aborted";
-  task?: string;
-  assignment?: string;
-  description?: string;
-  lastIntent?: string;
-  currentTool?: string;
-  currentToolArgs?: string;
-  currentToolStartMs?: number;
-  recentTools?: Array<{ tool: string; args: string; endMs: number }>;
-  recentOutput?: string[];
-  toolCount?: number;
-  requests?: number;
-  tokens?: number;
-  contextTokens?: number;
-  contextWindow?: number;
-  cost?: number;
-  durationMs?: number;
-  modelOverride?: string | string[];
-  modelRole?: string;
-  resolvedModel?: string;
-  resolvedModelIsFallback?: boolean;
-  retryState?: SubagentRetryState;
-  retryFailure?: { attempt: number; errorMessage: string };
-  inflightTaskDetails?: unknown;
-  extractedToolData?: Record<string, unknown[]>;
-}
-
-/** Compact live-activity entry derived from subagent_event frames. */
-export interface SubagentActivityEvent {
-  kind: "tool" | "text" | "notice";
-  label: string;
-  ts: number;
-}
-
-/** Settled per-subagent result from a parent task toolResult (SingleResult). */
-export interface SubagentHistoryResult {
-  exitCode?: number;
-  truncated?: boolean;
-  cost?: number;
-  structuredOutput?: {
-    source?: string;
-    mode?: string;
-    status?: string;
-    error?: string;
-  };
-  error?: string;
-  aborted?: boolean;
-  abortReason?: string;
-  outputPath?: string;
-  patchPath?: string;
-  branchName?: string;
-}
-
-/** On-disk subagent history recovered from a parent session's task toolResults. */
-export interface SubagentHistoryEntry {
-  id: string;
-  agent: string;
-  agentSource?: SubagentAgentSource;
-  status: "started" | "completed" | "failed" | "aborted";
-  task?: string;
-  assignment?: string;
-  description?: string;
-  index: number;
-  /** Id of the `task` call that spawned this agent, and that call's position in
-   * the session's sequence of `task` calls. Together with `index` they place the
-   * agent without relying on the order entries happen to arrive in. */
-  parentToolCallId?: string;
-  batchSeq?: number;
-  sessionFile?: string;
-  transcriptAvailable: boolean;
-  /** True when the spawn was detached/async (parent turn kept working). */
-  detached?: boolean;
-  lastIntent?: string;
-  toolCount?: number;
-  requests?: number;
-  tokens?: number;
-  contextTokens?: number;
-  contextWindow?: number;
-  cost?: number;
-  durationMs?: number;
-  modelOverride?: string | string[];
-  modelRole?: string;
-  resolvedModel?: string;
-  resolvedModelIsFallback?: boolean;
-  retryFailure?: { attempt: number; errorMessage: string };
-  result?: SubagentHistoryResult;
-}
-
-/** get_subagents snapshot (RpcSubagentSnapshot) as seen over the wire. */
-export interface SubagentSnapshotLike {
-  id: string;
-  index: number;
-  agent: string;
-  agentSource?: SubagentAgentSource;
-  description?: string;
-  status:
-    "started" | "completed" | "failed" | "aborted" | "pending" | "running";
-  task?: string;
-  assignment?: string;
-  sessionFile?: string;
-  lastUpdate?: number;
-  progress?: unknown;
-  parentToolCallId?: string;
-}
+export type SubagentAgentSource = Static<typeof SubagentAgentSourceSchema>;
+export type SubagentRetryState = Static<typeof SubagentRetryStateSchema>;
+export type SubagentProgress = Static<typeof SubagentProgressSchema>;
+export type SubagentActivityEvent = Static<typeof SubagentActivityEventSchema>;
+export type SubagentHistoryResult = Static<typeof SubagentHistoryResultSchema>;
+export type SubagentHistoryEntry = Static<typeof SubagentHistoryEntrySchema>;
+export type SubagentSnapshotLike = Static<typeof SubagentSnapshotLikeSchema>;
 
 export function asAgentSource(value: unknown): SubagentAgentSource | undefined {
   return value === "bundled" || value === "user" || value === "project"
@@ -394,32 +292,7 @@ export function parseSubagentActivityEvent(
 
 // SubagentInfo is defined here so server-side history and the hook share the
 // same roster shape; hooks/useAgentSession re-exports it for components.
-export interface SubagentInfo {
-  id: string;
-  agent: string;
-  agentSource?: SubagentAgentSource;
-  description?: string;
-  status: "started" | "completed" | "failed" | "aborted";
-  task?: string;
-  assignment?: string;
-  sessionFile?: string;
-  parentToolCallId?: string;
-  /** Position inside the spawning `task` call's batch. Restarts at 0 for every
-   * call, so it orders siblings but never the roster — pair it with `batchSeq`.
-   * Also the matching key for id-less progress frames. */
-  index: number;
-  detached?: boolean;
-  progress?: SubagentProgress;
-  lastUpdate?: number;
-  /** Settled result for history entries (SingleResult-derived). */
-  result?: SubagentHistoryResult;
-  /** Roster origin: live frames/snapshots (default) vs on-disk history. */
-  source?: "live" | "history";
-  /** Ordinal of the `task` call that spawned this agent, as recorded in the
-   * session file. Authoritative launch order, but only available once that
-   * call's result is on disk — `extractSubagentHistory` supplies it. */
-  batchSeq?: number;
-}
+export type SubagentInfo = Static<typeof SubagentInfoSchema>;
 
 /** Ordinal for sorting: a batch the file has not recorded yet sorts last. */
 const batchSeqOf = (subagent: SubagentInfo): number =>

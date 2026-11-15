@@ -1,4 +1,13 @@
-import type { TerminalEvent } from "../terminal-types";
+import type {
+  HostUriScheme as SchemaHostUriScheme,
+  Part as SchemaPart,
+  DownMessage as SchemaDownMessage,
+  HelloChannel as SchemaHelloChannel,
+  LinkStatSample as SchemaLinkStatSample,
+  UpMessage as SchemaUpMessage,
+} from "../api-contracts/host-schemas";
+import { CREATION_ID_RE } from "./creation-identity";
+export { CREATION_ID_RE } from "./creation-identity";
 // Wire format between the main omp-web server and the `ompweb host` daemon.
 // Pure: no I/O and no Next or `@/` imports, so both sides share it. The browser link (lib/browser-link.ts and the
 // worker it talks to, lib/event-stream-worker.ts) reuses its transport pieces: LINK_LIMITS' piece, window and liveness
@@ -8,9 +17,11 @@ import { UPLOAD_ID_RE } from "../upload-limits";
 import type { SessionOps } from "./session-ops";
 import type { HostCapacity } from "./capacity";
 import type { ConfigState } from "./daemon-cluster-config";
-import type { SpawnRequest } from "./host";
+import type {
+  OpenChannelRequest as SchemaOpenChannelRequest,
+  OpenChannelResult as SchemaOpenChannelResult,
+} from "../api-contracts/host-control-models";
 import { isWorkspaceOp, WORKSPACE_OP_PARAMS } from "../workspace-types";
-import type { WorkspaceFileEvent } from "../workspace-types";
 
 /** 11: the same wire as 10, renumbered: prerelease daemons already sent 10 with omp RPC channel lines, which this
  * server cannot read. 10: channel stdin/stdout lines are the runner's `{t}` frames (`cmd`/`res`/`hello`/…), no longer omp RPC frames;
@@ -28,8 +39,7 @@ export const LINK_PROTOCOL_VERSION = 11;
 export const MIN_LINK_PROTOCOL_VERSION = 11;
 /** A configuration version: the manifest's SHA-256, in lowercase hex. */
 export const CONFIG_VERSION_RE = /^[0-9a-f]{64}$/;
-/** Safe identity shared by spawn requests and reconnect channel metadata. */
-export const CREATION_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+// CREATION_ID_RE is shared with the host-link schema.
 
 export const LINK_LIMITS = {
   pingMs: 15_000,
@@ -118,7 +128,7 @@ export const PEER_MESSAGE_FRAME = "peer_message_command";
 /** Shared-channel frame `{t, outcome}` a daemon puts in the other members' output for one link's `prompt_result` or
  * `prompt_error` (its command id dropped): the elected notifier must hear a run failed whichever server prompted it. */
 export const PEER_PROMPT_OUTCOME_FRAME = "peer_prompt_outcome";
-export type HostUriScheme = { scheme: string; writable: boolean };
+export type HostUriScheme = SchemaHostUriScheme;
 
 /** Named `req.args` keys for each session op, in parameter order. Named, not
  * positional, so an omitted optional argument never turns into `null`. */
@@ -169,26 +179,9 @@ export const HOST_OP_NAMES = [
 
 export type HostOpName = (typeof HOST_OP_NAMES)[number];
 
-export type OpenChannelRequest = {
-  sessionId: string | null;
-  launch: SpawnRequest;
-  replaceAdvisor?: boolean;
-  preparing?: boolean;
-  expectedChannel?: string;
-};
-/** `continuous`: the opening link was already a member and got every output line in order, so `streaming` repeats lines it has. */
-export type OpenChannelResult = {
-  ch: string;
-  joined: boolean;
-  pending: string[] | null;
-  streaming: string | null;
-  cwd: string;
-  fellBack: boolean;
-  launchAdvisor: boolean;
-  advisorSpawned: boolean;
-  autoApproveExtension: boolean;
-  continuous?: boolean;
-};
+export type OpenChannelRequest = SchemaOpenChannelRequest;
+/** Membership snapshot; continuous means the link already observed the replayed stream. */
+export type OpenChannelResult = SchemaOpenChannelResult;
 
 /** A failed host op, as carried by `res {ok: false, error}`. */
 export class HostOpError extends Error {
@@ -205,140 +198,20 @@ export class HostOpError extends Error {
 
 /** v5: one slice of a sequenced line longer than `pieceBytes` (`LinkSender` cuts it, `PartJoiner` joins it): `data`
  * starts at UTF-16 offset `at` of the line; `end` marks the last slice. */
-export type Part = {
-  type: "part";
-  seq: number;
-  at: number;
-  end: boolean;
-  data: string;
-};
+export type Part = SchemaPart;
 
-export type DownMessage =
-  | { type: "welcome"; v: number; hostId: string }
-  | { type: "stdin"; seq: number; ch: string; line: string }
-  | { type: "kill"; seq: number; ch: string; force: boolean }
-  | {
-      type: "interest";
-      seq: number;
-      ch: string;
-      on: boolean;
-      preparing: boolean;
-    }
-  | {
-      type: "host_tools";
-      seq: number;
-      ch: string;
-      tools: unknown[];
-      schemes: HostUriScheme[];
-    }
-  /** `op` is whatever the sender named: the daemon answers one it does not know with 501 `unknown_op`. */
-  | { type: "req"; seq: number; id: string; op: string; args: unknown }
-  | { type: "ping" }
-  | { type: "pong" }
-  /** Unsequenced: the highest uplink `seq` the hub applied. */
-  | { type: "ack"; ack: number }
-  | Part;
+export type DownMessage = SchemaDownMessage;
 
 /** `sessionId`: the session the child last reported (null before it named one); `cwd`: where the
  * daemon spawned it; `pending`: raw stdout lines of its open blocking requests, or null when over `pendingBytes`. */
-export type HelloChannel = {
-  ch: string;
-  sessionId: string | null;
-  cwd: string;
-  pending: string[] | null;
-  creationId?: string;
-};
+export type HelloChannel = SchemaHelloChannel;
 
 /** One uplink message the daemon measured: enqueued at `at` (its wall clock) with `bytesAhead` bytes unacked ahead of
  * it (messages and result blobs), `bytes` its own size (with its blob), acked by the hub `ackMs` later (a monotonic
  * interval). */
-export type LinkStatSample = {
-  session: string | null;
-  bytes: number;
-  bytesAhead: number;
-  ackMs: number;
-  at: number;
-};
+export type LinkStatSample = SchemaLinkStatSample;
 
-export type UpMessage =
-  | {
-      type: "hello";
-      v: number;
-      ompVersion: string | null;
-      /** Running daemon's application version; absent on older hosts. */
-      ompwebVersion?: string;
-      link?: { id: string; notifier: boolean };
-      workspaceOps?: string[];
-      platform: string;
-      home: string;
-      /** omp's `tools.approval.extension: allow` on the host: a run adopted after a web restart had no spawn to report it. */
-      autoApproveExtension: boolean;
-      ack: number;
-      channels: HelloChannel[];
-    }
-  | { type: "stdout"; seq: number; ch: string; line: string }
-  | { type: "stderr"; seq: number; ch: string; chunk: string }
-  /** `reason`: v7, the daemon stopped it on purpose (abandoned, idle, asked); absent for a crash. */
-  | {
-      type: "exit";
-      seq: number;
-      ch: string;
-      code: number | null;
-      signal: string | null;
-      reason?: string;
-    }
-  | { type: "resync"; seq: number; ch: string }
-  | { type: "notifier"; seq: number; on: boolean }
-  | { type: "sessions_changed"; seq: number }
-  | { type: "channels_changed"; seq: number; channels: HelloChannel[] }
-  /** The daemon's link samples, at most LINK_LIMITS.statsSamples; a hub that predates it skips the type. Advisory: the
-   * receiver keeps the valid ones and counts the rest in `invalid` (decodeUp only; a sender leaves it out). */
-  | { type: "stats"; seq: number; samples: LinkStatSample[]; invalid?: number }
-  /** v8: a fresh resource sample; unsequenced and never retained for replay. */
-  | { type: "capacity"; sample: HostCapacity }
-  /** v10: the daemon's cluster configuration state, at link up, on each change and after each host.json reload, and
-   * whether the configuration it holds is this link's server's (`owned`); unsequenced and never retained for replay,
-   * but the latest one that found the send window full goes once there is room. */
-  | { type: "config_state"; state: ConfigState; owned: boolean }
-  /** v6: the daemon has written `received` bytes of upload `id` for this start `attempt`, `done` once all of them are
-   * written and synced; with `error` the upload failed and its staged file is gone. */
-  | {
-      type: "upload_ack";
-      seq: number;
-      id: string;
-      attempt: string;
-      received: number;
-      done: boolean;
-      error?: { status: number; code: string; message: string };
-    }
-  | { type: "terminal_event"; seq: number; id: string; event: TerminalEvent }
-  | {
-      type: "workspace_file";
-      seq: number;
-      id: string;
-      epoch: string;
-      event: WorkspaceFileEvent;
-    }
-  | {
-      type: "res";
-      seq: number;
-      id: string;
-      ok: true;
-      result?: unknown;
-      blob?: { bytes: number };
-    }
-  | {
-      type: "res";
-      seq: number;
-      id: string;
-      ok: false;
-      error: { status: number; code: string; message: string };
-    }
-  | { type: "ping" }
-  | { type: "pong" }
-  /** Unsequenced: the highest downlink `seq` the daemon applied. */
-  | { type: "ack"; ack: number }
-  | Part;
+export type UpMessage = SchemaUpMessage;
 
 /** A message this side cannot decode by type (a newer peer's), or one that only the other side may send
  * (`wrongDirection`): receivers skip it, but ack its `seq` (null when it carries none) so it is never resent. */

@@ -9,6 +9,14 @@ import {
   isExistingFilePathAllowed,
 } from "@/lib/file-access";
 
+/**
+ * @apiContract postSkillsCheck
+ * @apiUsage Check installed skills for updates without installing them.
+ * @apiInputs package and scope must be supplied together; project scope requires an allowed cwd.
+ * @apiInvariants Without cwd only user-level installs are checked; a selected missing install returns 404.
+ * @apiEffects Reads installed metadata and checks upstream sources.
+ * @apiRecovery Correct scope or installation selection, or retry upstream failures.
+ */
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as {

@@ -13,6 +13,14 @@ function timed(receivedAt: number, res: Response): Response {
 }
 
 // POST /api/agent/[id] - Send a command to an existing session
+/**
+ * @apiContract sendAgentCommand
+ * @apiUsage Send an RPC command or manage held messages for an existing session.
+ * @apiInputs The bounded JSON body needs a nonempty type; advisor=1 selects the advisor spawn flag. Upload proofs belong to the caller's web session and are attached before sending.
+ * @apiInvariants Outbox commands are handled by the web outbox, not directly by omp: acceptance is not delivery. Status reconciliation accepts 1 to 32 unique client message IDs. Some background commands do not spawn a process.
+ * @apiEffects Commands may start or replace an idle RPC process, mutate session state, attach files, or queue and dispatch messages; response timing headers are milliseconds since epoch.
+ * @apiRecovery On uncertain delivery reconcile client message IDs and inspect session/outbox state before resending; a transport failure does not prove the command was not executed.
+ */
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -42,6 +50,14 @@ export async function POST(
 }
 
 // GET /api/agent/[id] - Get current agent state
+/**
+ * @apiContract getAgentState
+ * @apiUsage Inspect the current web-owned RPC wrapper, not a durable session inventory.
+ * @apiInputs id identifies the session; no body or query is used.
+ * @apiInvariants A missing or dead wrapper returns running false; an unresponsive wrapper returns recovered true. This live request is not a cached transcript read.
+ * @apiEffects A running wrapper receives get_state; no new process is spawned.
+ * @apiRecovery For durable or exited state and held messages use session state; retry a read after connectivity or responsiveness recovers.
+ */
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },

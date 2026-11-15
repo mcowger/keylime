@@ -49,6 +49,14 @@ function sessionsErrorResponse(error: unknown): Response {
   );
 }
 
+/**
+ * @apiContract getSession
+ * @apiUsage Read a session's persisted transcript from its owning host, optionally with live agent state.
+ * @apiInputs id selects the session; presence of deferThinking or deferMedia defers those payloads, and presence of includeState requests the live wrapper state.
+ * @apiInvariants agent is omitted if its live state request fails, rather than invalidating the transcript; a nonrunning wrapper reports running false. The disk read and live state are not an atomic snapshot.
+ * @apiEffects Reads host session storage and may send get_state to an existing wrapper; it does not start a process.
+ * @apiRecovery Fetch agent state separately when agent is omitted; retry reads when the host is available, and preserve confirmed history if a new session file has not landed yet.
+ */
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -99,6 +107,14 @@ export async function GET(
 }
 
 // PATCH /api/sessions/[id]  body: { name: string }
+/**
+ * @apiContract renameSession
+ * @apiUsage Set a session title on its owning process or persisted file.
+ * @apiInputs JSON name must be nonblank; surrounding whitespace is removed. The request is limited to 64 KiB.
+ * @apiInvariants A live process owns its file; a busy history edit fences fallback file writes. A new live session can be renamed before its file exists.
+ * @apiEffects Sends set_session_name to the live process or updates the host file and invalidates session lists.
+ * @apiRecovery Wait for a busy edit to finish; after a lost response read the current title before deciding whether to retry.
+ */
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -158,6 +174,14 @@ export async function PATCH(
 }
 
 // DELETE /api/sessions/[id]
+/**
+ * @apiContract deleteSession
+ * @apiUsage Permanently remove an active session from its owning host.
+ * @apiInputs id identifies the session; no body is used.
+ * @apiInvariants The host must be online; the live child is stopped and flushed before deletion. Live children are excluded from on-disk reparenting because their processes own their files.
+ * @apiEffects Deletes the session, updates eligible child references, clears exited state and invalidates the host list; unpinned replacement metadata is cleaned up best-effort.
+ * @apiRecovery A lost response may follow deletion; inspect the owning host before retrying. Offline or failed discovery is not evidence of deletion.
+ */
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },

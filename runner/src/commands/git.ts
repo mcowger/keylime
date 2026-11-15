@@ -204,6 +204,7 @@ async function existingEntries(
   return result;
 }
 
+/** Planning stages the entire workspace before inspecting the index; a later error does not undo staging. */
 async function planCommit(ctx: CommandContext, args: Record<string, unknown>) {
   settled(ctx);
   const context = optionalString(args.context, "context");
@@ -320,6 +321,7 @@ async function planCommit(ctx: CommandContext, args: Record<string, unknown>) {
   };
 }
 
+/** Changelog writes and commits happen incrementally; callers must inspect Git after a partial failure. */
 async function applyCommit(ctx: CommandContext, args: Record<string, unknown>) {
   settled(ctx);
   const plan = parsePlan(args.plan);
@@ -506,7 +508,10 @@ async function prDescription(
 }
 
 export const gitCommands: CommandTable = {
+  /** @apiCommand commit_plan */
   commit_plan: planCommit,
+  /** @apiCommand commit_apply */
   commit_apply: applyCommit,
+  /** @apiCommand generate_pr_description */
   generate_pr_description: prDescription,
 };

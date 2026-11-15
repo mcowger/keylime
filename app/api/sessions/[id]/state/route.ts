@@ -12,6 +12,14 @@ import { outboxScope, outboxSnapshot } from "@/lib/message-outbox";
 
 /** Every answer, an offline host's 503 included, carries the session's held messages (`outbox`): a tab opening a
  * session with no omp running learns from it that there is an outbox to subscribe to. */
+/**
+ * @apiContract getSessionState
+ * @apiUsage Reconcile live, exited or host session state together with the web outbox snapshot.
+ * @apiInputs id identifies the session; no query or body is used.
+ * @apiInvariants Outbox entries, scope and settlement identifiers accompany every response, including errors and offline hosts. A live wrapper is queried first, then exited state or host state; these are not one atomic snapshot.
+ * @apiEffects Reads outbox state and may send get_state to a running wrapper; it does not start an agent.
+ * @apiRecovery Treat queued acceptance and settled IDs according to their reported status, not as proof of delivery; reconcile uncertain message IDs before resending and refresh after reconnect.
+ */
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },

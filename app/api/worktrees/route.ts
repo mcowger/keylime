@@ -13,6 +13,14 @@ import type {
   WorkspaceSettingsRequest,
 } from "@/lib/workspace-creation-types";
 
+/**
+ * @apiContract workspaceWorktreesGet
+ * @apiUsage List worktrees or inspect branches, creation settings or creation status.
+ * @apiInputs action selects branches, settings or status; otherwise cwd lists worktrees. hostId selects the daemon.
+ * @apiInvariants projectPath and cwd are host-machine paths; status uses the job id.
+ * @apiEffects Returns host snapshots without creating a worktree.
+ * @apiRecovery Poll status or refresh the listing as creation progresses.
+ */
 export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
@@ -45,6 +53,14 @@ export async function GET(request: Request) {
   }
 }
 
+/**
+ * @apiContract workspaceWorktreesPost
+ * @apiUsage Prepare, create, configure or delete a registered workspace.
+ * @apiInputs Send action, action-specific input and optional hostId; prepare requires projectPath and nonblank prompt.
+ * @apiInvariants Prepare requires a registered Git project and default base ref; deletion uses the host’s confirmation preconditions.
+ * @apiEffects Prepare and create start creation; settings can change configuration; delete removes a registered worktree and invalidates session lists.
+ * @apiRecovery After an uncertain result inspect job status and worktree state before retrying; deletion is not assumed rolled back.
+ */
 export async function POST(request: Request) {
   try {
     const body: unknown = await parseJsonWithinLimit(request, 64 * 1024);

@@ -1,6 +1,7 @@
 import type { RpcTransport } from "../omp/rpc-transport";
 import type { SessionOps } from "./session-ops";
 import type { WorkspaceOps } from "../workspace-types";
+import type { SpawnRequest as SchemaSpawnRequest } from "../api-contracts/host-control-models";
 
 export type HostStatus = "online" | "offline" | "needs-upgrade" | "omp-missing";
 
@@ -10,23 +11,8 @@ export function isLinkUp(status: HostStatus): boolean {
   return status === "online" || status === "omp-missing";
 }
 
-export interface SpawnRequest {
-  /** Stable identity of one independent start; retries must preserve its spawn arguments. */
-  creationId?: string;
-  /** Hub → daemon (v9): run this process with the opening server's provider logins. */
-  shareCredentials?: true;
-  /** Daemon only: the server URL whose link supplies the credentials. Never trusted from the wire. */
-  credentialsServer?: string;
-  /** Hub → daemon (v10): the master's configuration version this process must run with; the daemon applies it first. Never recorded for resume. */
-  configVersion?: string;
-  cwd: string;
-  recordedCwd: string | null;
-  sessionFile: string;
-  toolNames?: string[];
-  advisor: boolean;
-  /** `provider/modelId` bound at spawn (--model); resume only. */
-  spawnModel?: string;
-}
+/** Canonical launch shape; daemon-only authority fields are re-established from the owning link. */
+export type SpawnRequest = SchemaSpawnRequest;
 
 export interface SpawnResult {
   transport: RpcTransport;

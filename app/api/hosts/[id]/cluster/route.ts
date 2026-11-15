@@ -170,6 +170,14 @@ async function localProjectsRoot(host: Host): Promise<string> {
   return `${home}${home.includes("\\") ? "\\" : "/"}${CLUSTER_PROJECTS_DIR}`;
 }
 
+/**
+ * @apiContract putHostsIdCluster
+ * @apiUsage Join a linked remote host to this server's cluster.
+ * @apiInputs Host id path parameter and JSON object containing only an absolute projectsRoot.
+ * @apiInvariants Joining hosts must be ready and cannot hold another server's cluster configuration; the local master is added automatically when needed.
+ * @apiEffects Gathers project facts, saves the cluster, notifies listeners and attempts to apply the master configuration to the joined daemon; an apply failure does not undo the join.
+ * @apiRecovery Resolve readiness or ownership conflicts, retry a concurrent cluster change, or repair pool storage; daemon synchronization can apply a missed configuration later.
+ */
 export async function PUT(request: Request, { params }: Context) {
   if (
     shouldCheckApiRequestOrigin(request) &&
@@ -297,6 +305,14 @@ export async function PUT(request: Request, { params }: Context) {
   }
 }
 
+/**
+ * @apiContract deleteHostsIdCluster
+ * @apiUsage Remove a host from the cluster and restore its prior daemon configuration.
+ * @apiInputs Host id path parameter; no JSON body is required.
+ * @apiInvariants Pool removal is persisted before restoration; restoration failure does not undo the leave.
+ * @apiEffects Saves pools, notifies listeners, aborts broker requests unless independently shared, and attempts daemon configuration restore.
+ * @apiRecovery Inspect optional restoreError in a successful response; synchronization can retry a missed restore. Repair pool storage on 503.
+ */
 export async function DELETE(request: Request, { params }: Context) {
   if (
     shouldCheckApiRequestOrigin(request) &&

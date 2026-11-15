@@ -9,6 +9,14 @@ import { comparableProjectPath } from "@/lib/comparable-path";
 
 // POST /api/cwd/validate  body: { cwd: string; hostId?: string }
 // Validates a candidate workspace on `hostId` (this machine when absent) before the UI selects it.
+/**
+ * @apiContract workspaceValidateCwd
+ * @apiUsage Validate a candidate working directory before selection.
+ * @apiInputs Send cwd and optional hostId; cwd is trimmed.
+ * @apiInvariants The daemon validates its own filesystem path; validation is not a session grant.
+ * @apiEffects Checks the candidate without selecting it.
+ * @apiRecovery Correct the path or host and validate again after a failure.
+ */
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as { cwd?: unknown; hostId?: unknown };

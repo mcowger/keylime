@@ -21,6 +21,19 @@ import * as fsRuntime from "fs";
 import { homedir, tmpdir } from "os";
 import { basename, dirname, isAbsolute, join, resolve } from "path";
 import { promisify } from "util";
+import type { Static } from "@sinclair/typebox";
+import type {
+  ContextReadOptionsSchema,
+  ContextReadValueSchema,
+  OperationResult,
+  ProjectUpdateSchema,
+  SessionReadOptionsSchema,
+  SessionReadValueSchema,
+  SessionStateValueSchema,
+  SubagentHistoryValueSchema,
+  SubagentTranscriptValueSchema,
+  ThinkingReadValueSchema,
+} from "../api-contracts/host-session-operations";
 import { comparableProjectPath } from "../comparable-path";
 import { mediaFilePath } from "../media-cache";
 import { OMP_NOT_FOUND, resolveOmpBin } from "../omp/omp-cli";
@@ -69,7 +82,6 @@ import {
   resolveSessionPath,
   SessionFileTooLargeError,
 } from "../session-reader";
-import type { SessionHistoryCursor } from "../session-sync";
 import {
   extractSubagentHistory,
   readCompletionArtifact,
@@ -83,76 +95,54 @@ import type {
   ArchivedSessionInfo,
   ManagedProject,
   ProjectLaunchConfig,
-  SessionContext,
   SessionInfo,
   SessionTitleSource,
 } from "../types";
 import { resolveProject } from "../worktree";
 
-export type OpResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; status: number; code: string; error: string };
-
-export interface SessionReadOptions {
-  deferThinking: boolean;
-  deferMedia: boolean;
-}
-
-export interface ContextReadOptions extends SessionReadOptions {
-  /** Read-only transcript mode: include entries omitted from the active agent context. */
-  includePreCompaction: boolean;
-  /** Return only the active context's entry ids. */
-  boundary: boolean;
-  /** Paged history read (`?sync=1`). */
-  sync: { cursor: SessionHistoryCursor | null; limit: number } | null;
-}
-
+/** Logical result returned inside the host link response; transport success alone does not imply operation success. */
+export type OpResult<T> = OperationResult<T>;
+export type SessionReadOptions = Static<typeof SessionReadOptionsSchema>;
+export type ContextReadOptions = Static<typeof ContextReadOptionsSchema>;
 /** `GET /api/sessions/[id]` minus the route's `sessionId` and live `agent`. */
-export interface SessionReadValue {
-  filePath: string;
-  info: Omit<
-    SessionInfo,
-    "lastMessageAt" | "projectRoot" | "projectKey" | "worktreeBranch"
-  >;
-  leafId: string | null;
-  tree: unknown[];
-  context: SessionContext;
-}
-
-export interface ProjectUpdate {
-  cwd: string;
-  alias?: string | null;
-  sortOrder?: number | null;
-  pinOrder?: number | null;
-  launchConfig?: ProjectLaunchConfig | null;
-}
+export type SessionReadValue = Static<typeof SessionReadValueSchema>;
+export type ProjectUpdate = Static<typeof ProjectUpdateSchema>;
 
 export interface SessionOps {
   listSessions(): Promise<SessionInfo[]>;
   /** Strict, uncached active-ID inventory for restore conflict checks; errors mean absence cannot be established. */
   listSessionIdsForRestore(): Promise<string[]>;
+  /** Load metadata, projected navigation tree and display context for a session ID. */
   readSession(
     id: string,
     options: SessionReadOptions,
   ): Promise<OpResult<SessionReadValue>>;
+  /** Read context, active entry IDs or a cursor-based history page according to options. */
   readContext(
     id: string,
     leafId: string | undefined,
     options: ContextReadOptions,
-  ): Promise<OpResult<unknown>>;
+  ): Promise<OpResult<Static<typeof ContextReadValueSchema>>>;
+  /** Resolve a deferred thinking block from an assistant message. */
   readThinking(
     id: string,
     entryId: string,
     block: number,
-  ): Promise<OpResult<unknown>>;
-  readSessionState(id: string): Promise<OpResult<unknown>>;
-  readSubagentHistory(id: string): Promise<OpResult<unknown>>;
+  ): Promise<OpResult<Static<typeof ThinkingReadValueSchema>>>;
+  /** File-only state; live process state is supplied by main. */
+  readSessionState(
+    id: string,
+  ): Promise<OpResult<Static<typeof SessionStateValueSchema>>>;
+  readSubagentHistory(
+    id: string,
+  ): Promise<OpResult<Static<typeof SubagentHistoryValueSchema>>>;
+  /** Page a subagent transcript by byte offset or read its completion artifact. */
   readSubagentTranscript(
     id: string,
     subagentId: string,
     mode: "page" | "completion",
     cursor: number,
-  ): Promise<OpResult<unknown>>;
+  ): Promise<OpResult<Static<typeof SubagentTranscriptValueSchema>>>;
   renameSessionFile(
     id: string,
     title: string,
@@ -186,6 +176,7 @@ export interface SessionOps {
   exportSession(
     id: string,
   ): Promise<OpResult<{ html: string; fileName: string }>>;
+  /** Return raw media bytes; link transport carries the bytes as binary payload. */
   readMedia(hash: string): Promise<OpResult<Uint8Array>>;
   /** Raw registry entries, hidden ones included (main merges session-discovered projects). */
   listProjects(): Promise<ProjectRegistryEntry[]>;

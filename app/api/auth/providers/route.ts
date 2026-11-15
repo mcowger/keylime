@@ -6,6 +6,14 @@ import {
 // Login-capable providers via the omp RPC get_login_providers command. This is
 // omp's own /login list (OAuth subscriptions plus key-creation flows), so no
 // hardcoded exclusions or display-name overrides are needed anymore.
+/**
+ * @apiContract getAuthProviders
+ * @apiUsage List available omp login providers and authentication status.
+ * @apiInputs No request parameters are used.
+ * @apiInvariants Unavailable providers are omitted; this is not a list of all known providers.
+ * @apiEffects Queries the utility process without changing credentials.
+ * @apiRecovery Retry the read after a utility error.
+ */
 export async function GET() {
   try {
     const response = await runUtilityCommand<{ providers?: unknown }>(

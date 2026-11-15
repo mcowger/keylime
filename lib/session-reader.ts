@@ -680,8 +680,8 @@ function historyEntryMetadata(entry: SessionEntry): SessionEntry {
     const message = entry.message;
     compact.message = {
       role: message.role,
-      provider: message.provider,
-      model: message.model,
+      provider: "provider" in message ? message.provider : undefined,
+      model: "model" in message ? message.model : undefined,
       ...(message.role === "toolResult" && message.toolName === "todo"
         ? {
             toolName: message.toolName,
@@ -1564,7 +1564,8 @@ export function entryToUiMessage(
       if (raw.role === "developer") {
         // Passive tool context is display-only: it rides on its tool card
         // (collectToolResults), never as a row or in copied transcripts.
-        const passive = raw.passiveToolContext === true;
+        const passive =
+          "passiveToolContext" in raw && raw.passiveToolContext === true;
         return {
           role: "custom",
           customType: passive ? PASSIVE_TOOL_CONTEXT : "developer",

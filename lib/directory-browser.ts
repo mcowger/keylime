@@ -2,10 +2,10 @@ import * as fsPromises from "fs/promises";
 import { homedir } from "os";
 import path from "path";
 
-export interface BrowsableDirectory {
-  name: string;
-  path: string;
-}
+import type { Static } from "@sinclair/typebox";
+import type { BrowsableDirectorySchema } from "./api-contracts/workspace-models";
+
+export type BrowsableDirectory = Static<typeof BrowsableDirectorySchema>;
 
 export function getBrowseStartDirectory(directory?: string): string {
   return directory || homedir();

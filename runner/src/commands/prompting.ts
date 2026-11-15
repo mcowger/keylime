@@ -205,6 +205,7 @@ function readInput(
   };
 }
 
+/** @apiEvent prompt_error */
 const onPromptError =
   (ctx: CommandContext, input: UserInput) => (error: Error) =>
     ctx.send({
@@ -357,6 +358,7 @@ function dispatchInput(
 async function runBuiltin(ctx: CommandContext, state: Prompting, text: string) {
   const { session, send } = ctx;
   const refreshCommands = async () => {
+    /** @apiEvent available_commands_update */
     send({
       t: "available_commands_update",
       commands: await buildAvailableSlashCommands(session),
@@ -372,6 +374,7 @@ async function runBuiltin(ctx: CommandContext, state: Prompting, text: string) {
       settings: session.settings,
       cwd: session.sessionManager.getCwd(),
       signal: abort.signal,
+      /** @apiEvent command_output */
       output: (text) => send({ t: "command_output", text }),
       refreshCommands,
       reloadPlugins: async () => {
@@ -392,12 +395,14 @@ async function runBuiltin(ctx: CommandContext, state: Prompting, text: string) {
           )
           .finally(() => state.builtinAborts.delete(abort));
       },
+      /** @apiEvent session_info_update */
       notifyTitleChanged: () =>
         send({
           t: "session_info_update",
           title: session.sessionName,
           sessionId: session.sessionId,
         }),
+      /** @apiEvent config_update */
       notifyConfigChanged: () =>
         send({
           t: "config_update",
@@ -425,6 +430,9 @@ function readQueueMode(op: string, mode: unknown): "all" | "one-at-a-time" {
 }
 
 export const promptingCommands: CommandTable = {
+  /** @apiCommand prompt
+   * The response fences admission, not completion. A local builtin can finish without an agent turn;
+   * prompt_result and settled state are separate observations. Correlated IDs are session-scoped. */
   async prompt(ctx, args) {
     const input = readInput(ctx, "prompt", args);
     const { results } = prompting(ctx);
@@ -446,14 +454,18 @@ export const promptingCommands: CommandTable = {
       throw error;
     }
   },
+  /** @apiCommand steer
+   * Ordered input admission makes a successful reply a fence for subsequent queue edits, not a turn result. */
   async steer(ctx, args) {
     await dispatchInput(ctx, readInput(ctx, "steer", args));
     return undefined;
   },
+  /** @apiCommand follow_up */
   async follow_up(ctx, args) {
     await dispatchInput(ctx, readInput(ctx, "follow_up", args));
     return undefined;
   },
+  /** @apiCommand remove_queued_message */
   async remove_queued_message({ session }, args) {
     if (typeof args.message !== "string")
       throw new Error("remove_queued_message: message must be a string");
@@ -468,16 +480,19 @@ export const promptingCommands: CommandTable = {
       ? { removed: true, images: removed.images }
       : { removed: removed !== undefined };
   },
+  /** @apiCommand promote_queued_message */
   async promote_queued_message({ session }, args) {
     if (typeof args.message !== "string")
       throw new Error("promote_queued_message: message must be a string");
     return { promoted: session.promoteQueuedMessage(args.message) };
   },
+  /** @apiCommand abort */
   async abort(ctx) {
     stopForAbort(ctx);
     await ctx.session.abort({ reason: USER_INTERRUPT_LABEL });
     return undefined;
   },
+  /** @apiCommand abort_and_restore_queue */
   async abort_and_restore_queue(ctx) {
     // The TUI's Esc restore: withdraw queued user input (including input the run dequeued but never
     // recorded) before aborting, so neither the aborted turn nor abort()'s queue drain runs it.
@@ -486,6 +501,8 @@ export const promptingCommands: CommandTable = {
     await ctx.session.abort({ reason: USER_INTERRUPT_LABEL });
     return restored;
   },
+  /** @apiCommand abort_and_prompt
+   * The replacement is dispatched asynchronously after abort; failures after the reply emit prompt_error and prompt_result. */
   async abort_and_prompt(ctx, args) {
     const input = readInput(ctx, "abort_and_prompt", args);
     const state = prompting(ctx);
@@ -515,6 +532,7 @@ export const promptingCommands: CommandTable = {
     return undefined;
   },
   // Queue modes apply to this session only (`persist: false`), as in RPC.
+  /** @apiCommand set_steering_mode */
   async set_steering_mode({ session }, args) {
     session.setSteeringMode(
       readQueueMode("set_steering_mode", args.mode),
@@ -522,6 +540,7 @@ export const promptingCommands: CommandTable = {
     );
     return undefined;
   },
+  /** @apiCommand set_follow_up_mode */
   async set_follow_up_mode({ session }, args) {
     session.setFollowUpMode(
       readQueueMode("set_follow_up_mode", args.mode),
@@ -529,6 +548,7 @@ export const promptingCommands: CommandTable = {
     );
     return undefined;
   },
+  /** @apiCommand set_interrupt_mode */
   async set_interrupt_mode({ session }, args) {
     if (args.mode !== "immediate" && args.mode !== "wait") {
       throw new Error('set_interrupt_mode: mode must be "immediate" or "wait"');
@@ -536,6 +556,7 @@ export const promptingCommands: CommandTable = {
     session.setInterruptMode(args.mode, false);
     return undefined;
   },
+  /** @apiCommand handoff */
   async handoff({ session }, args) {
     if (
       args.customInstructions !== undefined &&
@@ -549,6 +570,7 @@ export const promptingCommands: CommandTable = {
     const result = await session.handoff(args.customInstructions);
     return result ? { savedPath: result.savedPath } : null;
   },
+  /** @apiCommand goal */
   async goal(ctx, args) {
     const op = GOAL_OPS.find((candidate) => candidate === args.op);
     if (!op) throw new Error(`goal: op must be one of ${GOAL_OPS.join(", ")}`);
@@ -567,6 +589,7 @@ export const promptingCommands: CommandTable = {
       token_budget: args.token_budget,
     });
   },
+  /** @apiCommand set_todos */
   async set_todos({ session }, args) {
     const phases = args.phases;
     if (!Array.isArray(phases) || !phases.every(isTodoPhase)) {
@@ -577,6 +600,7 @@ export const promptingCommands: CommandTable = {
     session.commitTodoPhases(phases);
     return { todoPhases: session.getTodoPhases() };
   },
+  /** @apiCommand bash */
   async bash({ session, send, id }, args) {
     if (typeof args.command !== "string")
       throw new Error("bash: command must be a string");
@@ -589,12 +613,14 @@ export const promptingCommands: CommandTable = {
     }
     return session.executeBash(
       args.command,
+      /** @apiEvent bash_output */
       (chunk) => send({ t: "bash_output", id, chunk }),
       {
         excludeFromContext: args.excludeFromContext,
       },
     );
   },
+  /** @apiCommand abort_bash */
   async abort_bash({ session }) {
     session.abortBash();
     return undefined;

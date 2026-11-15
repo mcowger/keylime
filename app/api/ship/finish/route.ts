@@ -6,6 +6,14 @@ import {
 import { parseJsonWithinLimit } from "@/lib/bounded-form-data";
 import { isRecord } from "@/lib/type-guards";
 
+/**
+ * @apiContract workspaceShipFinish
+ * @apiUsage Finish the ship workflow for a workspace.
+ * @apiInputs Send host, projectPath and path as daemon-machine paths.
+ * @apiInvariants The host checks the workspace and workflow preconditions.
+ * @apiEffects Requests the host finish operation, which can change workspace state.
+ * @apiRecovery Inspect workspace and ship state after uncertainty before repeating the request.
+ */
 export async function POST(request: Request) {
   try {
     const body: unknown = await parseJsonWithinLimit(request, 64 * 1024);

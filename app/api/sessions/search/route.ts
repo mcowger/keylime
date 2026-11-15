@@ -6,6 +6,14 @@ const MAX_QUERY_LENGTH = 500;
 // GET /api/sessions/search?q= — NDJSON, one `{ scores }` line per batch of
 // scanned sessions (empty batches too, so the scan keeps reaching the reader).
 // Closing the request stops the scan after the batch being read (no resume).
+/**
+ * @apiContract searchSessions
+ * @apiUsage Stream session content search scores as newline-delimited JSON batches.
+ * @apiInputs q defaults to empty and is limited to 500 characters; each line contains a scores object keyed by session ID.
+ * @apiInvariants The allowed session IDs are captured from the cross-host list before scanning; even empty batches are emitted. This is a pull-driven scan, not a resumable cursor or an atomic snapshot.
+ * @apiEffects Scans session content as the client reads; response is no-store and proxy buffering is disabled.
+ * @apiRecovery Closing the stream stops after the current batch; restart the search from the beginning after disconnect and replace accumulated results as appropriate.
+ */
 export async function GET(
   req: Request,
   { disableIdleTimeout }: { disableIdleTimeout: () => void },

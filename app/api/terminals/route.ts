@@ -6,6 +6,14 @@ import {
 import { parseJsonWithinLimit } from "@/lib/bounded-form-data";
 import { isRecord } from "@/lib/type-guards";
 
+/**
+ * @apiContract workspaceTerminalsGet
+ * @apiUsage List terminals on a host.
+ * @apiInputs Optional hostId selects the host and cwd filters its terminals.
+ * @apiInvariants cwd is a daemon-machine path.
+ * @apiEffects Returns a no-store snapshot; listing does not close terminals.
+ * @apiRecovery Refresh the list after terminal state changes.
+ */
 export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
@@ -26,6 +34,14 @@ export async function GET(request: Request) {
     return apiErrorResponse(error);
   }
 }
+/**
+ * @apiContract workspaceTerminalsPost
+ * @apiUsage Create a host terminal.
+ * @apiInputs Send hostId, cwd and optional cols and rows.
+ * @apiInvariants The terminal belongs to the selected host; dimensions are terminal cells.
+ * @apiEffects Starts a terminal process, which is distinct from a client connection.
+ * @apiRecovery After a lost response list terminals before retrying to avoid creating another process.
+ */
 export async function POST(request: Request) {
   try {
     const body = await parseJsonWithinLimit(request, 65536);

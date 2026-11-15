@@ -251,6 +251,7 @@ export function watchSessionIdentity(
     const now = `${session.sessionId}\0${session.sessionFile ?? ""}`;
     if (now === sent) return;
     sent = now;
+    /** @apiEvent session */
     send({
       t: "session",
       sessionId: session.sessionId,
@@ -272,6 +273,7 @@ export function watchSessionIdentity(
 }
 
 export const sessionCommands: CommandTable = {
+  /** @apiCommand new_session */
   async new_session(ctx, args) {
     const sequence = prompting(ctx).accept();
     const parentSession = optionalString("new_session", args, "parentSession");
@@ -286,6 +288,7 @@ export const sessionCommands: CommandTable = {
       detachesUnlessCancelled,
     );
   },
+  /** @apiCommand switch_session */
   async switch_session(ctx, args) {
     const sequence = prompting(ctx).accept();
     const { session } = ctx;
@@ -307,6 +310,7 @@ export const sessionCommands: CommandTable = {
    * Continue the newest non-empty session in `sessionDir`, or start one there: `--session-dir
    * <dir> --continue` at runtime. Reopening the active session is a no-op and leaves a live run going.
    */
+  /** @apiCommand open_session */
   async open_session(ctx, args) {
     const sequence = prompting(ctx).accept();
     const { session } = ctx;
@@ -354,6 +358,7 @@ export const sessionCommands: CommandTable = {
       () => session.sessionFile !== fileBeforeOpen,
     );
   },
+  /** @apiCommand fork */
   async fork(ctx, args) {
     const sequence = prompting(ctx).accept();
     const { session } = ctx;
@@ -371,6 +376,7 @@ export const sessionCommands: CommandTable = {
         .catch(rethrowBusy)),
     }));
   },
+  /** @apiCommand branch */
   async branch(ctx, args) {
     const sequence = prompting(ctx).accept();
     const entryId = requiredString("branch", args, "entryId");
@@ -380,6 +386,7 @@ export const sessionCommands: CommandTable = {
     );
     return { text: result.selectedText, cancelled: result.cancelled };
   },
+  /** @apiCommand navigate_tree */
   async navigate_tree(ctx, args) {
     const { session } = ctx;
     const entryId = requiredString("navigate_tree", args, "entryId");
@@ -424,6 +431,7 @@ export const sessionCommands: CommandTable = {
    * Move the leaf to just before a user message so the host can resend an edited version; the old
    * branch stays in the tree. Formerly ompweb's `omp-web-edit` extension command.
    */
+  /** @apiCommand edit_message */
   async edit_message(ctx, args) {
     const { session } = ctx;
     const entryId = requiredString("edit_message", args, "entryId");
@@ -453,16 +461,19 @@ export const sessionCommands: CommandTable = {
       leafId: session.sessionManager.getLeafId(),
     };
   },
+  /** @apiCommand abort_branch_summary */
   async abort_branch_summary({ session }) {
     session.abortBranchSummary();
     return undefined;
   },
+  /** @apiCommand get_tree */
   async get_tree({ session }) {
     return {
       tree: session.sessionManager.getTree(),
       leafId: session.sessionManager.getLeafId(),
     };
   },
+  /** @apiCommand get_entries */
   async get_entries({ session }, args) {
     const since = optionalString("get_entries", args, "since");
     const entries = session.sessionManager.getEntries();
@@ -476,9 +487,11 @@ export const sessionCommands: CommandTable = {
       );
     return { entries: entries.slice(index + 1), leafId };
   },
+  /** @apiCommand get_messages */
   async get_messages({ session }) {
     return { messages: session.messages };
   },
+  /** @apiCommand get_messages_page */
   async get_messages_page({ session }, args) {
     const cursor = optionalString("get_messages_page", args, "cursor");
     const { limit } = args;
@@ -492,18 +505,22 @@ export const sessionCommands: CommandTable = {
     }
     return pageMessages(session, cursor, limit);
   },
+  /** @apiCommand get_branch_messages */
   async get_branch_messages({ session }) {
     return { messages: session.getUserMessagesForBranching() };
   },
+  /** @apiCommand get_last_assistant_text */
   async get_last_assistant_text({ session }) {
     return { text: session.getLastAssistantText() };
   },
+  /** @apiCommand set_session_name */
   async set_session_name({ session }, args) {
     const name = requiredString("set_session_name", args, "name").trim();
     if (!name || !(await session.setSessionName(name, "user")))
       throw new Error("Session name cannot be empty");
     return undefined;
   },
+  /** @apiCommand set_label */
   async set_label({ session }, args) {
     const entryId = requiredString("set_label", args, "entryId");
     session.sessionManager.appendLabelChange(
@@ -512,6 +529,7 @@ export const sessionCommands: CommandTable = {
     );
     return undefined;
   },
+  /** @apiCommand export_html */
   async export_html({ session }, args) {
     return {
       path: await session.exportToHtml(
@@ -519,6 +537,7 @@ export const sessionCommands: CommandTable = {
       ),
     };
   },
+  /** @apiCommand get_session_lease */
   async get_session_lease(_ctx, args) {
     const { sessionIds } = args;
     if (

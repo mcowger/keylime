@@ -1,4 +1,11 @@
 import { isRecord } from "./type-guards";
+import type { Static } from "@sinclair/typebox";
+import type {
+  NotificationTypeSchema,
+  NotificationEventSchema,
+  NotificationHistoryEntrySchema,
+  NotificationPrefsSchema,
+} from "./api-contracts/notification-models";
 
 /**
  * Notification events shared by the server (detection, routing, push) and the
@@ -11,35 +18,12 @@ export const NOTIFICATION_TYPES = [
   "error",
   "modelSwitch",
 ] as const;
-export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
-
-export interface NotificationEvent {
-  /** `test` is only sent by the settings "Send test notification" button. */
-  type: NotificationType | "test";
-  sessionId: string;
-  sessionName: string | null;
-  /** Question, error text, or model-switch reason. */
-  detail?: string;
-  from?: string;
-  to?: string;
-  /** Earlier ids of this conversation (omp moved it to a new file); tabs may still show one. */
-  aliases?: string[];
-}
-
-/** One entry of the persisted notification history; `id` is the replace-tag `<sessionId>:<type>`. */
-export interface NotificationHistoryEntry {
-  id: string;
-  event: NotificationEvent;
-  at: number;
-  read: boolean;
-}
-
-export interface NotificationPrefs {
-  enabled: boolean;
-  types: Record<NotificationType, boolean>;
-  /** While the user is active in another omp-web tab: in-app toast or system notification. */
-  whenActive: "toast" | "system";
-}
+export type NotificationType = Static<typeof NotificationTypeSchema>;
+export type NotificationEvent = Static<typeof NotificationEventSchema>;
+export type NotificationHistoryEntry = Static<
+  typeof NotificationHistoryEntrySchema
+>;
+export type NotificationPrefs = Static<typeof NotificationPrefsSchema>;
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   enabled: false,

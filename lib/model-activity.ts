@@ -1,10 +1,7 @@
-export type ModelActivity = {
-  kind: "idle" | "waiting" | "streaming" | "tools";
-  startedAt: number;
-  rate: number;
-  version: number;
-  epoch: number;
-};
+import type { Static } from "@sinclair/typebox";
+import type { ModelActivitySchema } from "./api-contracts/domain";
+/** Transient runner activity snapshot; version and epoch distinguish successive updates. */
+export type ModelActivity = Static<typeof ModelActivitySchema>;
 
 export const IDLE_MODEL_ACTIVITY: ModelActivity = {
   kind: "idle",

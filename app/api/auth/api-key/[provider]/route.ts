@@ -18,6 +18,14 @@ const API_KEY_WRITE_GUIDANCE =
   "custom provider in ~/.omp/agent/models.yml.";
 
 // GET /api/auth/api-key/[provider] — returns auth status (never returns the actual key)
+/**
+ * @apiContract getAuthApiKeyProvider
+ * @apiUsage Inspect whether a provider resolves models or is authenticated.
+ * @apiInputs Provider is an omp provider ID in the path.
+ * @apiInvariants Configured is derived from available models or login status, not a direct key lookup; keys are never returned.
+ * @apiEffects Queries utility-process model and login state without changing credentials.
+ * @apiRecovery Retry the read after a utility error.
+ */
 export async function GET(_req: Request, { params }: Params) {
   const { provider } = await params;
   try {
@@ -42,6 +50,14 @@ export async function GET(_req: Request, { params }: Params) {
 }
 
 // POST /api/auth/api-key/[provider] — not supported against omp's credential store
+/**
+ * @apiContract postAuthApiKeyProvider
+ * @apiUsage API-key storage through this endpoint is unsupported.
+ * @apiInputs Provider identifies the provider; the request body is not used.
+ * @apiInvariants Always returns 501 and never stores a key.
+ * @apiEffects No credential mutation occurs.
+ * @apiRecovery Use omp terminal login, the provider environment variable, or custom models.yml configuration.
+ */
 export async function POST(_req: Request, { params }: Params) {
   const { provider } = await params;
   return Response.json(
@@ -54,6 +70,14 @@ export async function POST(_req: Request, { params }: Params) {
 }
 
 // DELETE /api/auth/api-key/[provider] — not supported against omp's credential store
+/**
+ * @apiContract deleteAuthApiKeyProvider
+ * @apiUsage API-key removal through this endpoint is unsupported.
+ * @apiInputs Provider identifies the provider; the request body is not used.
+ * @apiInvariants Always returns 501 and does not reveal a key.
+ * @apiEffects No credential mutation occurs.
+ * @apiRecovery Use omp terminal logout or remove the relevant external configuration.
+ */
 export async function DELETE(_req: Request, { params }: Params) {
   const { provider } = await params;
   return Response.json(

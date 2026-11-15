@@ -1,3 +1,4 @@
+import type { ConfigState as SchemaConfigState } from "../api-contracts/host-schemas";
 // Host daemon only (Bun's native TypeScript runtime): relative imports, `node:*` modules and the global fetch.
 // A cluster member runs on the master's omp configuration (docs/specs/2026-11-11-cluster-configuration-design.md, K3-K6):
 // a version is applied whole or not at all, and the member's own configuration waits in `own-config/` until it leaves.
@@ -30,13 +31,7 @@ import {
 } from "./cluster-config";
 import { HostOpError } from "./link-protocol";
 
-export interface ConfigState {
-  version: string | null;
-  files: "none" | "current" | "failed";
-  plugins: "none" | "pending" | "current" | "failed";
-  error: string | null;
-  missingCommands: string[];
-}
+export type ConfigState = SchemaConfigState;
 /** Every request to the master, its body included, must finish within `fetchMs`; a failed plugin step runs again at most
  * once per `pluginRetryMs` (the hub's sync interval). Tests shorten them. */
 export const clusterConfigTimings = { fetchMs: 30_000, pluginRetryMs: 30_000 };

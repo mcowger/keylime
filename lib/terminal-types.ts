@@ -1,19 +1,9 @@
-export interface WorkspaceTerminal {
-  id: string;
-  cwd: string;
-  title: string;
-  cols: number;
-  rows: number;
-}
+import type { Static } from "@sinclair/typebox";
+import type * as M from "./api-contracts/workspace-models";
+import type { TerminalEvent as SchemaTerminalEvent } from "./api-contracts/host-schemas";
 
-export interface TerminalSnapshot {
-  terminal: WorkspaceTerminal;
-  snapshot: string;
-  cursor: number;
-}
-
-export type TerminalEvent =
-  | { type: "resize"; cols: number; rows: number; cursor: number }
-  | { type: "disconnected" }
-  | { type: "output"; data: string; cursor: number }
-  | { type: "closed" };
+/** Terminal process and screen are owned by the host daemon rather than a web connection. */
+export type WorkspaceTerminal = Static<typeof M.WorkspaceTerminalSchema>;
+/** Serialized terminal screen paired with the output cursor at snapshot time. */
+export type TerminalSnapshot = Static<typeof M.TerminalSnapshotSchema>;
+export type TerminalEvent = SchemaTerminalEvent;

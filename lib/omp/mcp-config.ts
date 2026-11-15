@@ -1,3 +1,7 @@
+import type {
+  McpLiveStatus as ContractMcpLiveStatus,
+  McpLiveServer as ContractMcpLiveServer,
+} from "../api-contracts/configuration-models";
 import { execFileSync } from "child_process";
 import {
   closeSync,
@@ -40,20 +44,8 @@ export type McpUserConfig = {
   error?: string;
 };
 
-export type McpLiveStatus =
-  | "connected"
-  | "connecting"
-  | "not_connected"
-  | "inactive"
-  | "disabled"
-  | "configured";
-export type McpLiveServer = {
-  name: string;
-  source: string;
-  status: McpLiveStatus;
-  type?: string;
-  sourcePath?: string;
-};
+export type McpLiveStatus = ContractMcpLiveStatus;
+export type McpLiveServer = ContractMcpLiveServer;
 
 /** Browser-facing project config must never expose environment variables or HTTP headers. */
 export function redactMcpServer(server: McpServer): McpServer {
