@@ -1,9 +1,11 @@
 import type { TerminalSnapshot, WorkspaceTerminal } from "./terminal-types";
 
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
+async function request<T>(url: string, init?: RequestInit, missingIsClosed = false): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) {
     const body = await response.json().catch(() => null);
+    if (missingIsClosed && response.status === 404 && body?.code === "terminal_not_found")
+      return undefined as T;
     throw new Error(
       body?.error?.message ??
         body?.error ??
@@ -46,5 +48,5 @@ export function terminalCommand(
   });
 }
 export function closeTerminal(id: string, hostId: string) {
-  return request<unknown>(terminalUrl(id, hostId), { method: "DELETE" });
+  return request<unknown>(terminalUrl(id, hostId), { method: "DELETE" }, true);
 }
