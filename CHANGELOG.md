@@ -37,6 +37,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - The new-session screen uses a narrower content column
 
 ### Fixed
+- Creating a workspace or session from a mobile project row closes the sidebar to reveal the new composer.
 - Workspace removal refuses teardown-induced HEAD or branch changes before archival or deletion, preserving new commits instead of using stale merge and branch-deletion decisions.
 - Custom provider cards show discovered models alongside configured ones without duplicates, and show loading while discovery is in progress.
 - Hiding Jobs during a pending Cancel/Stop no longer leaves its controls disabled after the request fails or is refused.

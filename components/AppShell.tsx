@@ -1909,7 +1909,7 @@ export function AppShell({ appName }: { appName: string }) {
           project.hostId,
           project,
           undefined,
-          true,
+          false,
         );
         return;
       }
@@ -1925,7 +1925,8 @@ export function AppShell({ appName }: { appName: string }) {
       activateChat(tab);
       setSettingsTab(null);
       router.replace("/");
-      if (!isMobile) requestAnimationFrame(() => chatInputRef.current?.focus());
+      if (isMobile) setSidebarOpen(false);
+      else requestAnimationFrame(() => chatInputRef.current?.focus());
     },
     [handleNewSession, updateChatTabs, activateChat, router, isMobile],
   );
