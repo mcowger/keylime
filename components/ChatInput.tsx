@@ -3021,15 +3021,36 @@ export const ChatInput = memo(
     const handlePaste = useCallback(
       (e: React.ClipboardEvent) => {
         const items = Array.from(e.clipboardData?.items ?? []);
-        const imageItems = items.filter((item) =>
-          item.type.startsWith("image/"),
-        );
-        if (!imageItems.length) return;
-        e.preventDefault();
-        const files = imageItems
+        const files = items
+          .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
           .map((item) => item.getAsFile())
-          .filter((f): f is File => f !== null);
-        processFiles(files);
+          .filter((file): file is File => file !== null);
+        if (files.length) {
+          if (!e.clipboardData.getData("text/plain")) e.preventDefault();
+          processFiles(files);
+          return;
+        }
+        // Rich text may carry image bytes only in its HTML, not as file items.
+        // A template is inert: do not fetch external image URLs on paste.
+        const html = e.clipboardData.getData("text/html");
+        if (!html) return;
+        const template = document.createElement("template");
+        template.innerHTML = html;
+        const sources = Array.from(template.content.querySelectorAll("img[src]"))
+          .map((image) => image.getAttribute("src") ?? "")
+          .filter((src) => /^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(src));
+        if (!sources.length) return;
+        const embedded = sources.flatMap((src) => {
+          try {
+            const comma = src.indexOf(",");
+            const mimeType = src.slice(5, src.indexOf(";"));
+            const bytes = Uint8Array.from(atob(src.slice(comma + 1)), (char) => char.charCodeAt(0));
+            return [new File([bytes], "clipboard-image", { type: mimeType })];
+          } catch {
+            return [];
+          }
+        });
+        if (embedded.length) processFiles(embedded);
       },
       [processFiles],
     );

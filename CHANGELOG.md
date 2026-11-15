@@ -6,13 +6,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ## [Unreleased]
 
-### Fixed
-
-- Clear a host's sidebar loading error when its workspace hierarchy reconnects successfully.
-- Corrected API contracts for plain upload IDs in binary headers, merged-delta `web.first` ranges, host-offline delivery uncertainty, preserved child sessions during deletion, and inline logical failures from binary host operations.
-
 ### Added
-
 - Added canonical TypeBox contracts and TypeBox Codegen bootstrapping across all HTTP handlers, host operations, browser commands, runner commands and events. OpenAPI, AsyncAPI and reusable JSON Schema are generated from source metadata with exhaustive registry and artifact drift checks; runtime validation is unchanged.
 - Generated API docs now include source-authored usage, input rules, invariants, side effects and recovery guidance. Route JSDoc is extracted into OpenAPI; generation rejects missing semantic sections or undocumented canonical schemas.
 - Development now generates API contracts before startup and on watched source changes; source packaging, release checks, deployment preparation, and standalone web/runner binary builds also generate and validate contracts before proceeding. Build failures block the cycle without activating production changes.
@@ -44,7 +38,6 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Paseo workspace setup commands can run as blocking or background jobs, with background status and logs available after workspace creation
 
 ### Changed
-
 - Reloading without a session link leaves projects unselected instead of activating the newest project.
 - Open workspace chats appear across clients connected to the same web server rather than only in the client that opened them.
 - Project names and workspace creation settings save automatically without separate save buttons.
@@ -59,7 +52,9 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Paseo setup command parsing and ordering now distinguish multiline command lists from shell scripts; blocking command selections are revalidated when recipes change
 
 ### Fixed
-
+- Preserve pasted text alongside image files or embedded data images in rich-text clipboard content.
+- Clear a host's sidebar loading error when its workspace hierarchy reconnects successfully.
+- Corrected API contracts for plain upload IDs in binary headers, merged-delta `web.first` ranges, host-offline delivery uncertainty, preserved child sessions during deletion, and inline logical failures from binary host operations.
 - Workspace terminal queries are answered once by the host, even without a browser: device attributes, color and character dimensions no longer depend on connected viewers. Focus reporting aggregates viewer leases.
 - Workspace creation identifies its project, and mobile branch inputs use 16px text to avoid iOS focus zoom.
 - A new workspace no longer inherits the parent workspace's tabs, terminals, or restored active-chat selection before it exists.
@@ -113,7 +108,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Workspace terminal queries are answered once by the host, even without a browser: device attributes, color and character dimensions no longer depend on connected viewers. Focus reporting aggregates viewer leases
 - Prompt-first workspace creation starts the agent after blocking setup completes without waiting for background setup commands
 - Pull request descriptions now wait for the commit plan and use planned commit messages when the workspace has no commits
-
+- Preserve pasted text alongside image files or embedded data images in rich-text clipboard content
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

@@ -2,7 +2,7 @@ import "../tests/setup-dom.ts";
 import assert from "node:assert/strict";
 import test, { after, afterEach } from "node:test";
 import React from "react";
-const { act, cleanup, render, screen } = await import("@testing-library/react");
+const { act, cleanup, render, screen, waitFor } = await import("@testing-library/react");
 
 const { ChatInput } = await import("./ChatInput");
 const { MAX_ATTACHED_IMAGE_BYTES } = await import("@/lib/image-attachments");
@@ -181,6 +181,39 @@ afterEach(() => {
     objectUrls.created.length = 0;
     objectUrls.revoked.length = 0;
   }
+});
+
+test("mixed clipboard paste leaves text insertion to the browser and attaches the image", async () => {
+  const container = renderComposer();
+  const textarea = container.querySelector("textarea")!;
+  const image = new File([new Uint8Array([1, 2, 3])], "paste.png", { type: "image/png" });
+  const event = new Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", {
+    value: {
+      items: [{ kind: "file", type: "image/png", getAsFile: () => image }],
+      getData: (type: string) => type === "text/plain" ? "pasted text" : "",
+    },
+  });
+  await act(async () => { textarea.dispatchEvent(event); });
+  assert.equal(event.defaultPrevented, false);
+  await waitFor(() => assert.equal(previews(container).length, 1));
+});
+
+test("rich text with an embedded image attaches the image without cancelling text", async () => {
+  const container = renderComposer();
+  const textarea = container.querySelector("textarea")!;
+  const event = new Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", {
+    value: {
+      items: [{ kind: "string", type: "text/html" }, { kind: "string", type: "text/plain" }],
+      getData: (type: string) => type === "text/html"
+        ? '<p>Hello <img src="data:image/png;base64,AQID"></p>'
+        : type === "text/plain" ? "Hello" : "",
+    },
+  });
+  await act(async () => { textarea.dispatchEvent(event); });
+  assert.equal(event.defaultPrevented, false);
+  await waitFor(() => assert.equal(previews(container).length, 1));
 });
 
 test("attaches a clipboard image through the shared composer attachment path", async () => {
