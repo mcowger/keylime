@@ -42,6 +42,8 @@ export function CreationPipelineEditor({
   const [error, setError] = useState("");
   const [previewError, setPreviewError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [invalidStored, setInvalidStored] = useState(false);
+  const [replacement, setReplacement] = useState({ pre: "", create: "", postBlocking: "", postNonBlocking: "" });
   const [refreshing, setRefreshing] = useState(false);
   const [revision, setRevision] = useState(0);
   const generation = useRef(0);
@@ -57,6 +59,8 @@ export function CreationPipelineEditor({
     ++previewGeneration.current;
     setSettings(null);
     setError("");
+    setInvalidStored(false);
+    setReplacement({ pre: "", create: "", postBlocking: "", postNonBlocking: "" });
     setPreviewError("");
     latestSettings.current = null;
     ++editGeneration.current;
@@ -69,7 +73,10 @@ export function CreationPipelineEditor({
       if (controller.signal.aborted) return;
       const response = await fetch(`/api/worktrees?${params}`, { signal: controller.signal });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
+      if (!response.ok) {
+        if (data.code === "invalid_workspace_settings" && !controller.signal.aborted && generation.current === current) setInvalidStored(true);
+        throw new Error(data.error ?? `HTTP ${response.status}`);
+      }
       if (!controller.signal.aborted && generation.current === current) {
         latestSettings.current = data;
         setSettings(data);
@@ -144,9 +151,33 @@ export function CreationPipelineEditor({
     pendingWrites.set(key, settled);
     void settled.then(() => { if (pendingWrites.get(key) === settled) pendingWrites.delete(key); });
   }
+  async function replaceInvalidPipeline() {
+    const current = generation.current;
+    setSaving(true);
+    const pipeline = Object.fromEntries(Object.entries(replacement).map(([stage, value]) => [stage, value.split("\n").filter((line) => line.trim())]));
+    try {
+      const response = await fetch("/api/worktrees", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hostId, action: "settings", input: projectPath === undefined ? { defaults: pipeline } : { projectPath, override: pipeline } }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
+      if (generation.current === current) setRevision((n) => n + 1);
+    } catch (e) {
+      if (generation.current === current) setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (generation.current === current) setSaving(false);
+    }
+  }
   return (
     <section style={{ display: "grid", gap: 10, minWidth: 0, overflowWrap: "anywhere" }}>
       <h3>Creation commands</h3>
+      {invalidStored && !settings && <div style={{ display: "grid", gap: 8 }}>
+        <p>Stored workspace commands are invalid and cannot be displayed. Enter replacement {projectPath === undefined ? "host defaults" : "project commands"} below. Saving replaces the stored commands; it does not run them.{projectPath !== undefined && " If host defaults are also invalid, replace them first in Settings → Hosts."}</p>
+        {([ ["pre", "Pre"], ["create", "Create"], ["postBlocking", "Post-blocking"], ["postNonBlocking", "Post-non-blocking"] ] as const).map(([stage, label]) => <label key={stage} style={{ display: "grid", gap: 4 }}>{label} commands (one per line)<textarea style={fieldStyle} rows={3} value={replacement[stage]} onChange={(e) => setReplacement({ ...replacement, [stage]: e.target.value })} /></label>)}
+        <div><button type="button" style={buttonStyle} disabled={saving} onClick={() => void replaceInvalidPipeline()}>Replace invalid commands</button></div>
+      </div>}
       {gitProject && settings && (
         <fieldset style={{ minWidth: 0 }}>
           <legend>Workspace configuration source</legend>

@@ -26,6 +26,8 @@ Open a project's sidebar actions menu and choose **Project settings**, or use **
 
 Manual is the default. Projects inherit the host pipeline unless they have a whole-project override. Custom create commands can delegate to Worktrunk or another worktree manager. Switching to Follow Paseo preserves the saved manual pipeline; switching back restores its use.
 
+If stored creation commands are invalid, the settings editor shows replacement fields instead of loading the old commands. Enter the desired commands and choose **Replace invalid commands**; this replaces the stored pipeline without running it. Repair invalid host defaults in **Settings → Hosts** before replacing an invalid project override in **Project settings**. Existing invalid commands are not migrated automatically.
+
 Each pipeline has ordered pre, create, post-blocking and post-non-blocking stages. Commands have no interactive stdin or automatic retries. With no create command, Git creates the worktree. Pre and create commands run in the project directory; both post stages run in the actual worktree. Post-blocking commands finish successfully before the new chat's agent starts; post-non-blocking commands run in the background.
 
 Commands receive `OMP_PROJECT_PATH`, `OMP_WORKSPACE_PATH`, `OMP_BRANCH`, `OMP_BASE_REF`, `OMP_BRANCH_MODE`, and `OMP_CREATE_RESULT`. A create command may write JSON such as `{"path":"/absolute/path"}` to `OMP_CREATE_RESULT`; otherwise the requested path is used. The result must resolve to a linked worktree of the project. The host registers it before post commands run.
