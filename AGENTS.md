@@ -2051,7 +2051,7 @@ btw` → localized "requires a newer omp" toast (`toastBtwError`); background
 - `hooks/useAudio.ts` stores the toggle in `localStorage` and reuses one `AudioContext`.
 - Browser autoplay policy means sound must be unlocked from a user gesture; `ChatInput` calls the unlock hook from interactive controls, and `ChatWindow` plays the tone from `onAgentEnd`.
 
-### Notifications (`lib/notification-*.ts`, `public/sw.js`, Settings → Notifications)
+### Notifications (`lib/notification-*.ts`, `lib/service-worker.ts`, Settings → Notifications)
 
 - Detection runs on the server in `AgentSessionWrapper.handleFrame` (and
   `handleProcessExit` for crashes), so sessions no tab watches still notify.
@@ -2085,7 +2085,7 @@ btw` → localized "requires a newer omp" toast (`toastBtwError`); background
 "toast"` devices get a toast on their active tabs only; else push (subscribed
   devices) or in-page `showNotification` (tabs with an open stream).
 - The server decides before pushing: iOS revokes push permission for pushes
-  that display nothing, so `public/sw.js` always shows what it receives.
+  that display nothing, so the service worker always shows what it receives.
 - Notifications have their own `notifications` channel (`clientId` = the
   tab's notification client id), opened by `useNotifications` in `AppShell`,
   so a tab stays reachable on every view, Settings included. A tab on
@@ -2105,6 +2105,7 @@ btw` → localized "requires a newer omp" toast (`toastBtwError`); background
   notification otherwise, or a toast where none are allowed.
 - `/sw.js` and `/badge-96.png` are exempt from the password gate (`proxy.ts`):
   browsers re-fetch the worker for updates without the session cookie.
+- `lib/service-worker.ts` is bundled as a classic script at `dist/sw.js` by the client build; dev serves the bundle from memory. Production and frontend-pointer releases serve the selected frontend's `dist/sw.js` with `no-cache`.
 - Notification clicks survive an expired sign-in: `proxy.ts` sends `/?session=…`
   to `/login?next=/?session=…`, and `LoginForm` returns there (only `/?…`
   targets are accepted). The worker navigates non-app windows to the session

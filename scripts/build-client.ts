@@ -1,12 +1,15 @@
-// Bundles the SPA (app/index.html) into dist/: index.html plus hashed files under dist/assets/, and the event-stream
-// worker as dist/event-stream-worker.js (its content hash versions its URL). Lists the npm packages in the bundle in
-// build/client-packages.json, for the binary release's licenses (scripts/build-binary.ts); the worker bundles none.
+// Bundles the SPA and classic workers into dist/. Lists client npm packages in build/client-packages.json for the
+// binary release's licenses (scripts/build-binary.ts); the worker bundles none.
 import { rmSync } from "node:fs";
 import path from "node:path";
 import type { BunPlugin } from "bun";
 import { bundledPackageDirs } from "./licenses";
 import tailwind from "./tailwind-plugin";
-import { buildEventStreamWorker, clientEnv } from "../server/client-env";
+import {
+  buildEventStreamWorker,
+  buildServiceWorker,
+  clientEnv,
+} from "../server/client-env";
 import { stylesheetFirst } from "../server/http";
 
 const root = path.join(import.meta.dir, "..");
@@ -31,6 +34,7 @@ const emitFonts: BunPlugin = {
 };
 
 const worker = await buildEventStreamWorker(root);
+const serviceWorker = await buildServiceWorker(root);
 const result = await Bun.build({
   entrypoints: [path.join(root, "app", "index.html")],
   outdir,
@@ -63,6 +67,7 @@ if (!result.success) process.exit(1);
 for (const [url, source] of fonts)
   await Bun.write(path.join(outdir, url), Bun.file(source));
 await Bun.write(path.join(outdir, "event-stream-worker.js"), worker);
+await Bun.write(path.join(outdir, "sw.js"), serviceWorker);
 const indexPath = path.join(outdir, "index.html");
 await Bun.write(indexPath, stylesheetFirst(await Bun.file(indexPath).text()));
 // Tailwind's plugin writes its CSS (preflight included) into the bundle, so the metafile never names tailwindcss.
@@ -84,5 +89,5 @@ await Bun.write(
   )}\n`,
 );
 console.log(
-  `built ${result.outputs.length + fonts.size + 1} files into ${path.relative(process.cwd(), outdir) || "."}`,
+  `built ${result.outputs.length + fonts.size + 2} files into ${path.relative(process.cwd(), outdir) || "."}`,
 );

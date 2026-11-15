@@ -13,7 +13,7 @@
 // it in node:vm with fake browser globals.
 //
 // It also owns the browser's message outbox (docs/specs/2026-11-04-message-outbox-design.md O2): IndexedDB
-// `omp-web-outbox`, sent as `outbox_add` agent commands until the server has stored each (public/sw.js reads it too).
+// `omp-web-outbox`, sent as `outbox_add` agent commands until the server has stored each (lib/service-worker.ts reads it too).
 //
 // Tab -> worker:  { op: "open", id, channel } | { op: "close", id }
 //                 { op: "lock", name }  (tab holds this Web Lock while alive)

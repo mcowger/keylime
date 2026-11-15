@@ -170,7 +170,7 @@ function frontendRoot(root: string): string | undefined {
   return undefined;
 }
 
-/** `worker`: the event-stream worker bundle (server/client-env.ts) dev serves from memory; prod serves dist/'s copy. */
+/** Dev serves worker bundles from memory; production serves the copies in the active frontend's dist/. */
 export function startServer(options: {
   port: number;
   hostname: string;
@@ -178,8 +178,9 @@ export function startServer(options: {
   root: string;
   html?: Bun.HTMLBundle;
   worker?: string;
+  serviceWorker?: string;
 }): Bun.Server<ServerSocketData> {
-  const { dev, root, html, worker } = options;
+  const { dev, root, html, worker, serviceWorker } = options;
   const frontend = dev ? undefined : frontendRoot(root);
   // A configured frontend is read on each request; the normal package keeps its startup snapshot.
   const index =
@@ -262,8 +263,19 @@ export function startServer(options: {
             },
           });
         }
-        if (worker !== undefined && pathname === "/event-stream-worker.js") {
-          return new Response(worker, {
+        const bundle =
+          pathname === "/event-stream-worker.js"
+            ? worker
+            : pathname === "/sw.js"
+              ? serviceWorker
+              : undefined;
+        if (dev && bundle !== undefined) {
+          if (request.method !== "GET" && request.method !== "HEAD")
+            return new Response(null, {
+              status: 405,
+              headers: { Allow: "GET, HEAD" },
+            });
+          return new Response(request.method === "HEAD" ? null : bundle, {
             headers: {
               "content-type": "text/javascript; charset=utf-8",
               "cache-control": "no-cache",

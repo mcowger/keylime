@@ -182,6 +182,11 @@ test(
     await ready();
     const origin = `http://127.0.0.1:${port}`;
     assert.equal((await fetch(origin)).status, 200);
+    const serviceWorker = await fetch(`${origin}/sw.js`);
+    assert.equal(serviceWorker.status, 200);
+    assert.match(serviceWorker.headers.get("content-type") ?? "", /javascript/);
+    assert.equal(serviceWorker.headers.get("cache-control"), "no-cache");
+    assert.match(await serviceWorker.text(), /push/);
     appendFileSync(
       path.join(source, "lib", "hosts", "link-protocol.ts"),
       '\nconsole.info("hot-reload-worker-probe");\n',

@@ -196,7 +196,20 @@ test("serveFile refuses traversal and sets the cache policy", async () => {
   ]) {
     assert.equal(await get(pathname), null, pathname);
   }
-  assert.equal((await get("/sw.js"))?.headers.get("cache-control"), "no-cache");
+  const fixture = mkdtempSync(path.join(os.tmpdir(), "omp-web-sw-"));
+  try {
+    mkdirSync(path.join(fixture, "dist"));
+    mkdirSync(path.join(fixture, "public"));
+    writeFileSync(path.join(fixture, "public", "sw.js"), "obsolete");
+    const request = new Request("http://localhost/sw.js");
+    assert.equal(await serveFile(request, fixture, false), null);
+    writeFileSync(path.join(fixture, "dist", "sw.js"), "built");
+    const response = await serveFile(request, fixture, false);
+    assert.equal(response?.headers.get("cache-control"), "no-cache");
+    assert.equal(await response?.text(), "built");
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
   assert.equal(
     (await get("/icon.svg"))?.headers.get("cache-control"),
     "public, max-age=0",

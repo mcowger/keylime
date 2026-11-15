@@ -23,6 +23,7 @@ writeFileSync(
   path.join(root, "dist", "index.html"),
   "<!doctype html><html><head><title>omp web</title></head><body></body></html>",
 );
+writeFileSync(path.join(root, "dist", "sw.js"), "production service worker");
 for (const dir of ["public", "node_modules"])
   symlinkSync(path.join(repo, dir), path.join(root, dir));
 
@@ -134,6 +135,7 @@ test("production switches frontend releases without restarting and retains versi
       path.join(release, "dist", "event-stream-worker.js"),
       `worker ${i}`,
     );
+    writeFileSync(path.join(release, "dist", "sw.js"), `service worker ${i}`);
     writeFileSync(path.join(release, "public", "probe.txt"), `public ${i}`);
   }
   symlinkSync(releases[0], pointer);
@@ -154,9 +156,11 @@ test("production switches frontend releases without restarting and retains versi
   const get = (name: string) =>
     fetch(new URL(name, switched.url), { proxy: false });
   assert.match(await (await get("/")).text(), /release 0/);
+  assert.equal(await (await get("/sw.js")).text(), "service worker 0");
   rmSync(pointer);
   symlinkSync(releases[1], pointer);
   assert.match(await (await get("/")).text(), /release 1/);
+  assert.equal(await (await get("/sw.js")).text(), "service worker 1");
   assert.equal(await (await get("/public-probe-missing.txt")).status, 404);
   assert.equal(await (await get("/probe.txt")).text(), "public 1");
   assert.equal(await (await get("/assets/old.js")).text(), "old asset");
@@ -520,6 +524,7 @@ test("dev pages put the stylesheet before the pre-paint scripts, even when HTTP_
     root,
     html,
     worker: "(()=>{})();\n",
+    serviceWorker: "(()=>{ /* service worker */ })();\n",
   });
   Object.assign(process.env, {
     HTTP_PROXY: "http://127.0.0.1:9",
@@ -552,6 +557,23 @@ test("dev pages put the stylesheet before the pre-paint scripts, even when HTTP_
   assert.equal(await worker.text(), "(()=>{})();\n");
   assert.match(worker.headers.get("content-type") ?? "", /^text\/javascript/);
   assert.equal(worker.headers.get("cache-control"), "no-cache");
+  const serviceWorker = await fetch(new URL("/sw.js", dev.url), {
+    proxy: false,
+  });
+  assert.equal(
+    await serviceWorker.text(),
+    "(()=>{ /* service worker */ })();\n",
+  );
+  assert.match(
+    serviceWorker.headers.get("content-type") ?? "",
+    /^text\/javascript/,
+  );
+  assert.equal(serviceWorker.headers.get("cache-control"), "no-cache");
+  assert.equal(
+    (await fetch(new URL("/sw.js", dev.url), { method: "POST", proxy: false }))
+      .status,
+    405,
+  );
 });
 
 /** Sends `head` (request line and headers) and nothing more; resolves once the server hangs up. */

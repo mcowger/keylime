@@ -1,18 +1,32 @@
+/// <reference lib="webworker" />
+import type { LocalOutboxEntry } from "./event-stream";
+import { isRecord } from "./type-guards";
+
+const worker = self as unknown as ServiceWorkerGlobalScope;
+type SyncEvent = ExtendableEvent & { tag: string };
+
 // omp-web service worker: shows notifications and opens their session on click, and sends the message outbox a closed
 // tab left (Background Sync). It does not cache anything; the app stays online-only.
 
-self.addEventListener("install", () => self.skipWaiting());
-self.addEventListener("activate", (event) =>
-  event.waitUntil(self.clients.claim()),
+worker.addEventListener("install", () => worker.skipWaiting());
+worker.addEventListener("activate", (event) =>
+  event.waitUntil(worker.clients.claim()),
 );
 
-self.addEventListener("message", (event) => {
+worker.addEventListener("message", (event) => {
   if (event.data?.type === "omp-outbox-capability")
     event.ports[0]?.postMessage({ type: "omp-outbox-capability", version: 2 });
 });
 
-self.addEventListener("push", (event) => {
-  let data = {};
+worker.addEventListener("push", (event) => {
+  let data: {
+    type?: string;
+    title?: string;
+    body?: string;
+    tag?: string;
+    sessionId?: string;
+    url?: string;
+  } = {};
   try {
     data = event.data ? event.data.json() : {};
   } catch {
@@ -27,16 +41,16 @@ self.addEventListener("push", (event) => {
   };
   event.waitUntil(
     (async () => {
-      await self.registration.showNotification(shown.title, {
+      await worker.registration.showNotification(shown.title, {
         body: shown.body,
         icon: "/icon-192.png",
         badge: "/badge-96.png",
         tag: shown.tag || undefined,
         renotify: Boolean(shown.tag),
         data: { url: data.url || "/", sessionId: shown.sessionId },
-      });
+      } as NotificationOptions & { renotify: boolean });
       // Open tabs list it in their Notifications tab, like a notification the page showed itself.
-      const windows = await self.clients.matchAll({
+      const windows = await worker.clients.matchAll({
         type: "window",
         includeUncontrolled: true,
       });
@@ -49,12 +63,12 @@ self.addEventListener("push", (event) => {
   );
 });
 
-self.addEventListener("notificationclick", (event) => {
+worker.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const { url = "/", sessionId = "" } = event.notification.data || {};
   event.waitUntil(
     (async () => {
-      const windows = await self.clients.matchAll({
+      const windows = await worker.clients.matchAll({
         type: "window",
         includeUncontrolled: true,
       });
@@ -79,25 +93,25 @@ self.addEventListener("notificationclick", (event) => {
           // focus() or navigate() can be refused; open a window instead.
         }
       }
-      await self.clients.openWindow(url);
+      await worker.clients.openWindow(url);
     })(),
   );
 });
 
 // Background Sync (docs/specs/2026-11-04-message-outbox-design.md O2): the browser fires it once online, even with no
 // tab open. The event-stream worker's IndexedDB outbox (lib/event-stream-worker.ts) is sent like the worker sends it.
-self.addEventListener("sync", (event) => {
+worker.addEventListener("sync", ((event: SyncEvent) => {
   if (event.tag === "omp-outbox") event.waitUntil(flushOutbox());
-});
+}) as EventListener);
 
-const done = (request) =>
-  new Promise((resolve, reject) => {
+const done = <T>(request: IDBRequest<T>) =>
+  new Promise<T>((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
 
-function markOutboxFailed(db, id, error) {
-  return new Promise((resolve, reject) => {
+function markOutboxFailed(db: IDBDatabase, id: string, error: string) {
+  return new Promise<void>((resolve, reject) => {
     const transaction = db.transaction("entries", "readwrite");
     transaction.oncomplete = () => resolve();
     transaction.onabort = transaction.onerror = () =>
@@ -117,8 +131,14 @@ function markOutboxFailed(db, id, error) {
 
 // Adapted from ompweb 13d8eb21095f: closed-page delivery must retire only proven retry lineage, while retaining upload proofs in the outgoing request.
 /** Remove the accepted local add and its same-session, exact-intent retry lineage atomically. */
-function deleteOutboxEntry(db, id, replaces, sessionId, intent) {
-  return new Promise((resolve, reject) => {
+function deleteOutboxEntry(
+  db: IDBDatabase,
+  id: string,
+  replaces: string | undefined,
+  sessionId: string,
+  intent: LocalOutboxEntry,
+) {
+  return new Promise<void>((resolve, reject) => {
     const transaction = db.transaction("entries", "readwrite");
     transaction.oncomplete = () => resolve();
     transaction.onabort = transaction.onerror = () =>
@@ -128,13 +148,14 @@ function deleteOutboxEntry(db, id, replaces, sessionId, intent) {
     const store = transaction.objectStore("entries");
     const request = store.getAll();
     request.onsuccess = () => {
-      const entries = request.result;
+      const entries: LocalOutboxEntry[] = request.result;
       const byId = new Map(entries.map((entry) => [entry.id, entry]));
       let lineageRoot = replaces;
       if (lineageRoot === undefined && intent.replaces !== undefined) {
         const root = replacementRoot(intent, byId);
         const original = root === null ? undefined : byId.get(root);
         if (
+          root !== null &&
           original?.sessionId === sessionId &&
           original.state === "failed" &&
           sameOutboxIntent(original, intent)
@@ -161,7 +182,7 @@ function deleteOutboxEntry(db, id, replaces, sessionId, intent) {
 }
 
 // The immutable intent used by the server's retry digest: mode, text, images and upload IDs.
-function sameOutboxIntent(a, b) {
+function sameOutboxIntent(a: LocalOutboxEntry, b: LocalOutboxEntry) {
   if (a.mode !== b.mode || a.message !== b.message) return false;
   const aImages = a.images;
   const bImages = b.images;
@@ -187,7 +208,10 @@ function sameOutboxIntent(a, b) {
 }
 
 // Only same-session failed parents with the exact intent prove a local retry lineage.
-function replacementRoot(entry, entries) {
+function replacementRoot(
+  entry: LocalOutboxEntry,
+  entries: Map<string, LocalOutboxEntry>,
+): string | null {
   if (entry.replaces === undefined) return entry.id;
   const seen = new Set([entry.id]);
   let id = entry.replaces;
@@ -209,7 +233,7 @@ function replacementRoot(entry, entries) {
   }
 }
 // Legacy rows predate every sequenced add; timestamp ties already lost their original ordering.
-function compareOutbox(a, b) {
+function compareOutbox(a: LocalOutboxEntry, b: LocalOutboxEntry) {
   return (
     (a.enqueueOrder ?? 0) - (b.enqueueOrder ?? 0) ||
     a.createdAt - b.createdAt ||
@@ -217,9 +241,9 @@ function compareOutbox(a, b) {
   );
 }
 
-function readOutboxForSync(db) {
-  return new Promise((resolve, reject) => {
-    let entries;
+function readOutboxForSync(db: IDBDatabase) {
+  return new Promise<LocalOutboxEntry[]>((resolve, reject) => {
+    let entries: LocalOutboxEntry[] = [];
     try {
       const transaction = db.transaction("entries", "readwrite");
       const store = transaction.objectStore("entries");
@@ -243,7 +267,7 @@ function readOutboxForSync(db) {
             continue;
           const root = replacementRoot(entry, byId);
           if (root === null) {
-            const failed = {
+            const failed: LocalOutboxEntry = {
               ...entry,
               state: "failed",
               error: "This retry chain is invalid; retry the original message.",
@@ -265,27 +289,37 @@ function readOutboxForSync(db) {
   });
 }
 
-function acceptedOutboxEntry(reply, id) {
-  const entry = reply?.data?.entry;
+function acceptedOutboxEntry(
+  reply: unknown,
+  id: string,
+): { replaces?: string } | null {
+  if (!isRecord(reply) || !isRecord(reply.data) || !isRecord(reply.data.entry))
+    return null;
+  const entry = reply.data.entry;
   return reply?.success === true &&
     entry?.id === id &&
     typeof entry.sessionId === "string" &&
     entry.sessionId.length > 0 &&
+    typeof entry.mode === "string" &&
     ["prompt", "followUp", "steer"].includes(entry.mode) &&
+    typeof entry.state === "string" &&
     ["held", "waiting_host", "delivering", "failed", "delivered"].includes(
       entry.state,
     ) &&
     (entry.images === undefined ||
       (Array.isArray(entry.images) &&
         entry.images.every(
-          (image) =>
-            image?.type === "image" &&
+          (image: unknown) =>
+            isRecord(image) &&
+            image.type === "image" &&
             typeof image.data === "string" &&
             typeof image.mimeType === "string",
         ))) &&
     (entry.uploads === undefined ||
       (Array.isArray(entry.uploads) &&
-        entry.uploads.every((upload) => typeof upload === "string"))) &&
+        entry.uploads.every(
+          (upload: unknown) => typeof upload === "string",
+        ))) &&
     (entry.error === undefined || typeof entry.error === "string") &&
     (entry.mayHaveBeenSent === undefined ||
       typeof entry.mayHaveBeenSent === "boolean") &&
@@ -296,7 +330,7 @@ function acceptedOutboxEntry(reply, id) {
     typeof entry.createdAt === "number" &&
     Number.isFinite(entry.createdAt) &&
     entry.createdAt >= 0
-    ? entry
+    ? { replaces: entry.replaces as string | undefined }
     : null;
 }
 
@@ -309,7 +343,7 @@ async function flushOutbox() {
     const entries = await readOutboxForSync(db);
     // Oldest first, and a session's later entries wait while an earlier one fails: the server queues by arrival.
     entries.sort(compareOutbox);
-    const waiting = new Set();
+    const waiting = new Set<string>();
     for (const initial of entries) {
       const { id, sessionId } = initial;
       if (initial.state !== "sending" || waiting.has(sessionId)) continue;
@@ -344,9 +378,9 @@ async function flushOutbox() {
         continue;
       }
       let status = 0;
-      let error;
-      let accepted = null;
-      let timer;
+      let error: string | undefined;
+      let accepted: { replaces?: string } | null = null;
+      let timer: number | NodeJS.Timeout | undefined;
       try {
         // Include the body read: a half-open POST must not keep every later sync entry waiting forever.
         const body = JSON.stringify({
@@ -374,10 +408,11 @@ async function flushOutbox() {
             signal: controller.signal,
           },
         );
-        const reply = await response.json().catch((error) => {
+        const reply: unknown = await response.json().catch((error) => {
           if (controller.signal.aborted) throw error;
         });
-        if (typeof reply?.error === "string") error = reply.error;
+        if (isRecord(reply) && typeof reply.error === "string")
+          error = reply.error;
         accepted = acceptedOutboxEntry(reply, id);
         status =
           response.status >= 200 && response.status < 300 && !accepted
@@ -390,7 +425,9 @@ async function flushOutbox() {
       }
       if (status >= 200 && status < 300) {
         const confirmedReplaces =
-          accepted?.replaces === replaces ? accepted.replaces : undefined;
+          accepted && accepted.replaces === replaces
+            ? accepted.replaces
+            : undefined;
         await deleteOutboxEntry(db, id, confirmedReplaces, sessionId, head);
       } else if (
         status === 0 ||

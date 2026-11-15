@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
+import { fileURLToPath } from "node:url";
 import { fakeIndexedDB } from "../tests/fake-indexeddb.ts";
 type ShownMessage = {
   type: string;
@@ -33,8 +33,15 @@ type OutboxRequest = {
   uploadProofs?: Record<string, string>;
 };
 
-// Runs public/sw.js against a fake worker scope. Messages are cloned as
-// postMessage does, which also drops the vm realm.
+// Run the real TypeScript worker as a classic bundled script against a fake scope.
+// Messages are cloned as postMessage does, which also drops the vm realm.
+const built = await Bun.build({
+  entrypoints: [fileURLToPath(new URL("./service-worker.ts", import.meta.url))],
+  target: "browser",
+  format: "iife",
+});
+assert.ok(built.success, built.logs.join("\n"));
+const workerSource = await built.outputs[0].text();
 function loadWorker(
   windows: { postMessage: (message: ShownMessage) => void }[] = [],
   globals: WorkerGlobals = {},
@@ -56,10 +63,14 @@ function loadWorker(
     },
     clients: { claim: async () => {}, matchAll: async () => windows },
   };
-  vm.runInNewContext(
-    readFileSync(new URL("../public/sw.js", import.meta.url), "utf8"),
-    { self, URL, setTimeout, clearTimeout, AbortController, ...globals },
-  );
+  vm.runInNewContext(workerSource, {
+    self,
+    URL,
+    setTimeout,
+    clearTimeout,
+    AbortController,
+    ...globals,
+  });
   return {
     shown,
     message: (event: WorkerEvent) => listeners.message(event),

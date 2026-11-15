@@ -130,7 +130,9 @@ export async function serveFile(
       ]
     : [
         ...(dev ? [] : [path.resolve(frontendRoot ?? root, "dist")]),
-        path.resolve(frontendRoot ?? root, "public"),
+        ...(pathname === "/sw.js"
+          ? []
+          : [path.resolve(frontendRoot ?? root, "public")]),
       ];
   for (const base of bases) {
     const file = path.resolve(base, relative);

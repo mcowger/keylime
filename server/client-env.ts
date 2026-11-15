@@ -24,6 +24,23 @@ export async function buildEventStreamWorker(root: string): Promise<string> {
   return result.outputs[0].text();
 }
 
+/** Bundle the service worker as a classic script, served at /sw.js in dev and from dist/ in production. */
+export async function buildServiceWorker(root: string): Promise<string> {
+  const result = await Bun.build({
+    entrypoints: [path.join(root, "lib", "service-worker.ts")],
+    target: "browser",
+    format: "iife",
+    minify: true,
+    throw: false,
+  });
+  if (!result.success)
+    throw new AggregateError(
+      result.logs,
+      "Could not bundle lib/service-worker.ts",
+    );
+  return result.outputs[0].text();
+}
+
 // Build-time constants for the browser bundle; the build script and the dev server use the same values.
 export function clientEnv(root: string, worker: string) {
   const { version } = JSON.parse(

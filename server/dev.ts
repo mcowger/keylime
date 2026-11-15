@@ -1,6 +1,10 @@
 // Dev entry (`bun run dev`): API plus the SPA from Bun's HTML import with HMR, bundled in memory; never reads dist/.
 import html from "../app/index.html";
-import { buildEventStreamWorker, clientEnv } from "./client-env";
+import {
+  buildEventStreamWorker,
+  buildServiceWorker,
+  clientEnv,
+} from "./client-env";
 
 declare global {
   var __ompWebRegistered: Promise<void> | undefined;
@@ -10,6 +14,7 @@ declare global {
 const root = process.env.OMP_WEB_PACKAGE_DIR ?? process.cwd();
 // Bundled on each start (and each --hot re-evaluation); its hash, like a build's, versions the worker's URL.
 const worker = await buildEventStreamWorker(root);
+const serviceWorker = await buildServiceWorker(root);
 const env = clientEnv(root, worker);
 // Empty commit fields are initialized values; a new worker hash during hot reload must not start a second listener.
 if (Object.keys(env).some((name) => process.env[name] === undefined)) {
@@ -35,6 +40,7 @@ const server = startServer({
   root,
   html,
   worker,
+  serviceWorker,
 });
 // `bun --hot` re-evaluates this file on every edit; register() must run once per process.
 globalThis.__ompWebRegistered ??= import("../instrumentation.node").then(
