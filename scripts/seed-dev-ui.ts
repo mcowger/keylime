@@ -5,7 +5,7 @@ import { hierarchyOperation } from "../lib/hosts/project-hierarchy";
 import { getSessionDirNameForCwd, getSessionsDir } from "../lib/omp/paths";
 import { saveWebServerSettings } from "../lib/web-settings";
 
-// Invoked only by dev-isolated, before the host starts and caches its hierarchy.
+// Invoked only by the dev launcher, before the host starts and caches its hierarchy.
 const root = process.env.KEYLIME_UI_FIXTURE_ROOT;
 if (
   !root ||
@@ -137,5 +137,5 @@ for (const session of sessions) {
 }
 saveWebServerSettings({ uploadRetentionDays: 14, agentToolsEnabled: true });
 console.log(
-  "[dev:isolated] UI fixtures seeded: atlas, atlas-feature, field-notes (3 saved conversations)",
+  "[dev] UI fixtures seeded: atlas, atlas-feature, field-notes (3 saved conversations)",
 );

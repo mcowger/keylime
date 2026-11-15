@@ -887,7 +887,7 @@ A dev server does not take over the local daemon: only the production web
 server writes the daemon's `host.json`, so "This machine" shows offline in dev
 and the daemon stays linked to your installed ompweb.
 
-`bun run dev` runs the server with Bun hot reload. `bun run build` bundles the browser app into `dist/`, and `bun run start` serves it on port 30177 (`bun run smoke` checks the result). `bun run dev:lan` binds the dev server to all interfaces. `bun run build:binary` builds the [single binary](#single-binary) for this machine into `release/` (`-- --target bun-linux-arm64` and the like for another platform; `bun run smoke -- --binary release/ompweb-linux-x64/ompweb` checks it).
+`bun run dev` starts a seeded development environment with Bun hot reload and a separate host daemon, printing its temporary directory and URL. Pass `--port 30278` to select a port. See [CONTRIBUTING.md](CONTRIBUTING.md) for details. `bun run build` bundles the browser app into `dist/`, and `bun run start` serves it on port 30177 (`bun run smoke` checks the result). `bun run build:binary` builds the [single binary](#single-binary) for this machine into `release/` (`-- --target bun-linux-arm64` and the like for another platform; `bun run smoke -- --binary release/ompweb-linux-x64/ompweb` checks it).
 
 ### Checks
 

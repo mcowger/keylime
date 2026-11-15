@@ -11,19 +11,18 @@ mise trust
 mise install
 bun install
 bun runner/scripts/use-omp-build.ts && (cd runner && bun install --frozen-lockfile)   # ompweb's omp build; bun run test needs it too
-bun run dev   # http://127.0.0.1:30178, Bun hot reload
+bun run dev   # seeded development server; prints its URL
 ```
 
 For live sessions, build the runner for this machine with `bun runner/scripts/build-binary.ts`: ompweb finds
 `runner/release/ompweb-omp-<os>-<arch>` by itself (`OMP_WEB_OMP_BIN` overrides it). A stock `omp` does not
 speak ompweb's channel.
 
-### Isolated development
+### Development and browser testing
 
 ```bash
-bun run dev:isolated                # random free loopback port
-bun run dev:isolated --port 30278    # fixed loopback port
-bun run dev:ui                      # isolated server with UI fixtures; accepts --port
+bun run dev                 # seeded, random free loopback port
+bun run dev --port 30278    # seeded, fixed loopback port
 ```
 
 Each invocation creates a randomly named temporary directory with its own home,
@@ -38,10 +37,14 @@ and XDG settings are cleared, and subprocesses don't load `.env` files. Other
 environment variables, including provider API keys, remain available. The runner
 uses this checkout's normal discovery; build it as described above for live sessions.
 
-`dev:ui` (or `dev:isolated --seed`) creates two sample projects, including a
-Git worktree with an untracked file, three saved conversations, and sample web
-settings in the temporary home. It never seeds the normal installation. Git is
-required; fixture changes are disposable and retained in the printed directory.
+Each run creates two sample projects, including a Git worktree with an untracked
+file, three saved conversations, and sample web settings in the temporary home.
+It never seeds the normal installation. Git is required; fixture changes are
+disposable and retained in the printed directory.
+
+`paseo.json` installs the pinned runtime, dependencies and runner for new Paseo
+worktrees. Its `dev` service starts the same seeded environment on Paseo's
+allocated port; `test` and `typecheck` are available as named scripts.
 
 The repository tracks a [graphify](https://github.com/Graphify-Labs/graphify) code
 graph in `graphify-out/graph.json`. To keep it current, install the graphify release

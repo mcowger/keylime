@@ -19,7 +19,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Mobile workspace navigation uses a compact tab switcher and bottom sheet instead of a session-title pill. Saved chats remain searchable from workspace navigation; the sidebar focuses on projects and workspaces with contextual management actions.
 - Workspaces support multiple chat tabs alongside terminals, with independent unsent drafts, saved-session tabs and reload restoration.
 - Workspaces support independent interactive terminal tabs on local and linked hosts, with daemon-owned PTY shells, resizing, full-screen applications, Unicode and bundled Nerd Font symbols. Reconnect restores retained screen state; browser disconnects and web restarts leave shells running.
-- `bun run dev:isolated` starts the hot-reloading web server and host daemon with a fresh temporary home/config, private socket, and random loopback port. `--port` selects a fixed port; shutdown retains the temporary files for inspection.
+- `bun run dev` starts the seeded hot-reloading web server and host daemon with a fresh temporary home/config, private socket, and random loopback port. `--port` selects a fixed port; shutdown retains the temporary files for inspection.
 - Todo and subagents now share the right sidepanel's Activity tab on desktop and mobile. Live updates, completed agents and transcript access remain available without opening the panel automatically; `/btw` stays above the composer.
 - Thinking supports paragraphs, bold, italics, lists, inline code and fenced code at a uniform font size. Unsupported Markdown stays literal, and diagram fences remain code rather than invoking rich renderers.
 - The context control shows model-request wait time, estimated streaming tokens/second, and tool execution status. Timing starts at actual main-agent model requests, not queued submission; the rate includes thinking and excludes subagents.
@@ -29,6 +29,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Added a live-only Jobs tab to inspect background jobs and project services, view bounded output, cancel owned jobs, and stop services without starting an agent or calling a model. Selected completed output remains visible until deselected; no durable history is stored
 - Git projects can follow their current on-disk `paseo.json` for workspace setup and teardown, including uncommitted edits, with `.worktreeinclude` copying and live previews. Manual commands remain available, and project settings are accessible directly from each sidebar project menu on desktop and mobile
 - The composer shows advisor review activity while the advisor model reviews a run
+- `bun run dev` replaces the separate development launchers with a seeded hot-reloading web server and host daemon in an isolated temporary environment. `--port` selects the port; temporary files are retained after shutdown
 
 ### Changed
 - The mobile workspace switcher shows the active chat or terminal title instead of the workspace directory name.

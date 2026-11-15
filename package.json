@@ -35,10 +35,7 @@
     "package.json"
   ],
   "scripts": {
-    "dev": "bun --hot server/dev.ts -H 127.0.0.1 -p 30178",
-    "dev:lan": "bun --hot server/dev.ts -H 0.0.0.0 -p 30178",
-    "dev:isolated": "bun --no-env-file scripts/dev-isolated.ts",
-    "dev:ui": "bun --no-env-file scripts/dev-isolated.ts --seed",
+    "dev": "bun --no-env-file scripts/dev.ts",
     "deploy:local": "bun --no-env-file scripts/deploy-local.ts",
     "deploy:local:fast": "bun --no-env-file scripts/deploy-local.ts --timeout 10",
     "deploy:local:frontend": "bun --no-env-file scripts/deploy-local.ts --frontend",

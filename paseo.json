@@ -1,0 +1,19 @@
+{
+  "worktree": {
+    "setup": [
+      "mise trust && mise install",
+      "mise exec -- bun install --frozen-lockfile",
+      "mise exec -- bun runner/scripts/use-omp-build.ts",
+      "cd runner && mise exec -- bun install --frozen-lockfile",
+      "mise exec -- bun runner/scripts/build-binary.ts"
+    ]
+  },
+  "scripts": {
+    "dev": {
+      "type": "service",
+      "command": "mise exec -- bun run dev --port \"$PASEO_PORT\""
+    },
+    "test": { "command": "mise exec -- bun run test" },
+    "typecheck": { "command": "mise exec -- bun run typecheck" }
+  }
+}

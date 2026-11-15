@@ -7,14 +7,13 @@ const { values } = parseArgs({
   args: Bun.argv.slice(2),
   options: {
     port: { type: "string" },
-    seed: { type: "boolean" },
     help: { type: "boolean", short: "h" },
   },
   strict: true,
 });
 if (values.help) {
   console.log(
-    "Usage: bun run dev:isolated [--port <port>] [--seed]\nDefaults to a free loopback port. Each run keeps its temporary home/config after exit.",
+    "Usage: bun run dev [--port <port>]\nDefaults to a free loopback port. Each run keeps its temporary home/config after exit.",
   );
   process.exit(0);
 }
@@ -63,7 +62,7 @@ const port = probe.port;
 probe.stop(true);
 const url = `http://127.0.0.1:${port}`;
 console.log(
-  `[dev:isolated] Directory: ${directory}\n[dev:isolated] URL: ${url}`,
+  `[dev] Directory: ${directory}\n[dev] URL: ${url}`,
 );
 
 const children: Bun.Subprocess[] = [];
@@ -88,7 +87,7 @@ function spawn(args: string[]) {
   children.push(child);
   void child.exited.then((code) => {
     if (!stopping) {
-      console.error(`[dev:isolated] Child ${child.pid} exited (${code})`);
+      console.error(`[dev] Child ${child.pid} exited (${code})`);
       stop(code || 1);
     }
   });
@@ -119,7 +118,7 @@ try {
   const bootstrapExit = await bootstrap.exited;
   if (bootstrapExit !== 0)
     throw new Error("Could not configure isolated host link");
-  if (values.seed && !stopping) {
+  if (!stopping) {
     const seed = Bun.spawn(
       [process.execPath, "--no-env-file", "scripts/seed-dev-ui.ts"],
       {
@@ -156,6 +155,6 @@ try {
   }, 5000);
   await Promise.all(children.map((child) => child.exited));
   clearTimeout(force);
-  console.log(`[dev:isolated] Stopped. Files retained at ${directory}`);
+  console.log(`[dev] Stopped. Files retained at ${directory}`);
 }
 process.exit(exitCode);
