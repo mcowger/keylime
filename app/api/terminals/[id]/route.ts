@@ -33,7 +33,7 @@ export async function POST(request: Request, context: Context) {
     if (
       !isRecord(body) ||
       typeof body.hostId !== "string" ||
-      (body.action !== "input" && body.action !== "resize")
+      (body.action !== "input" && body.action !== "resize" && body.action !== "focus")
     )
       return Response.json(
         { error: "Invalid request", code: "invalid_request" },
@@ -46,6 +46,8 @@ export async function POST(request: Request, context: Context) {
       data: body.data,
       cols: body.cols,
       rows: body.rows,
+      viewer: body.viewer,
+      focused: body.focused,
     });
     return result.ok ? Response.json(result.value) : opErrorResponse(result);
   } catch (error) {

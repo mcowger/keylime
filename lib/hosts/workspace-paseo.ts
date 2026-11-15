@@ -48,7 +48,10 @@ export function readPaseo(projectPath: string): WorkspacePaseoPreview {
       if (Array.isArray(value) && value.every((v) => typeof v === "string" && v.trim())) return value;
       throw new Error(`worktree.${name} must be a string or an array of nonempty strings`);
     };
-    preview.setup = commands(hooks.setup, "setup");
+    // String setup is selectable per nonempty line; array entries remain whole shell commands.
+    preview.setup = typeof hooks.setup === "string"
+      ? hooks.setup.split(/\r?\n/).filter((line) => !!line.trim())
+      : commands(hooks.setup, "setup");
     preview.teardown = commands(hooks.teardown, "teardown");
     preview.includePatterns = include.split(/\r?\n/);
     if (preview.includePatterns.at(-1) === "") preview.includePatterns.pop();

@@ -35,6 +35,7 @@ import { StreamSnapshot } from "./stream-snapshot";
 import { ChannelLifecycle } from "./channel-lifecycle";
 import { SharedRequests } from "./shared-requests";
 import { RESUME_PROMPT, type HostResumeEntry } from "./host-resume";
+import { readHierarchy } from "./project-hierarchy";
 
 type Output = Unsequenced<
   Extract<UpMessage, { type: "stdout" | "stderr" | "exit" }>
@@ -304,6 +305,10 @@ export class ChannelTable {
         "workspace_deleting",
         "This workspace is being deleted",
       );
+    if (readHierarchy().projects.some((project) => project.workspaces.some((workspace) =>
+      workspace.setup?.status === "running" && workspace.setup.stage === "postBlocking" &&
+      this.workspaceContains(workspace.path, cwd))))
+      throw new HostOpError(409, "workspace_setup_blocking", "Workspace setup is still running blocking commands");
   }
 
   private identity(launch: SpawnRequest): string | null {

@@ -46,6 +46,66 @@ export function WorkspaceTerminal({
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(element);
+    // The daemon answers terminal queries, including while no tab is attached.
+    for (const prefix of [undefined, ">"] as const)
+      term.parser.registerCsiHandler({ prefix, final: "c" }, () => true);
+    for (const prefix of [undefined, "?"] as const)
+      term.parser.registerCsiHandler({ prefix, final: "n" }, () => true);
+    for (const prefix of [undefined, "?"] as const)
+      term.parser.registerCsiHandler({ prefix, intermediates: "$", final: "p" }, () => true);
+    term.parser.registerDcsHandler({ intermediates: "$", final: "q" }, () => true);
+    // xterm 6's internal core service retains the user-input flag that its
+    // public onData event omits. Filter generated replies here so color sets
+    // stay in parser order and literal pasted escape sequences remain input.
+    const terminalCore = term as unknown as {
+      _core: { coreService: { triggerDataEvent: (data: string, wasUserInput?: boolean) => void } };
+    };
+    const coreService = terminalCore._core.coreService;
+    const triggerDataEvent = coreService.triggerDataEvent;
+    coreService.triggerDataEvent = function (data, wasUserInput) {
+      if (!wasUserInput && (
+        /^\x1b\](?:4;\d+|10|11|12);rgb:[^\x1b]*\x1b\\$/.test(data) ||
+        data === "\x1b[I" || data === "\x1b[O"
+      )) return;
+      triggerDataEvent.call(this, data, wasUserInput);
+    };
+    const viewer = `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+    let focused = false;
+    let focusDirty = false;
+    let focusSending = false;
+    const sendFocus = () => {
+      focusDirty = true;
+      if (focusSending) return;
+      focusSending = true;
+      void (async () => {
+        while (focusDirty) {
+          focusDirty = false;
+          const current = focused;
+          try {
+            await terminalCommand(terminal.id, hostId, { action: "focus", viewer, focused: current });
+          } catch {
+            // A later heartbeat or reconnect will renew the lease.
+          }
+        }
+        focusSending = false;
+      })();
+    };
+    const updateFocus = (value: boolean) => {
+      if (focused === value) return;
+      focused = value;
+      sendFocus();
+    };
+    const onFocusIn = () => updateFocus(document.hasFocus());
+    const onFocusOut = (event: FocusEvent) => {
+      if (!(event.relatedTarget instanceof Node) || !element.contains(event.relatedTarget)) updateFocus(false);
+    };
+    const onWindowFocus = () => updateFocus(element.contains(document.activeElement));
+    const onWindowBlur = () => updateFocus(false);
+    element.addEventListener("focusin", onFocusIn);
+    element.addEventListener("focusout", onFocusOut);
+    window.addEventListener("focus", onWindowFocus);
+    window.addEventListener("blur", onWindowBlur);
+    const focusHeartbeat = setInterval(() => { if (focused) sendFocus(); }, 5000);
     const applyTheme = () => {
       const style = getComputedStyle(document.documentElement);
       term.options.theme = {
@@ -142,7 +202,7 @@ export function WorkspaceTerminal({
       const arrows: Record<string, string> = { Up: "A", Down: "B", Right: "C", Left: "D" };
       if (arrows[key]) {
         const modifier = ctrlRef.current ? ";5" : "";
-        sendInput(modifier ? `\x1b[1${modifier}${arrows[key]}` : `\x1b${term.modes.applicationCursorKeys ? "O" : "["}${arrows[key]}`);
+        sendInput(modifier ? `\x1b[1${modifier}${arrows[key]}` : `\x1b${term.modes.applicationCursorKeysMode ? "O" : "["}${arrows[key]}`);
       } else {
         sendInput(({ Esc: "\x1b", Tab: "\t", "Ctrl-C": "\x03" } as Record<string, string>)[key]);
       }
@@ -202,6 +262,7 @@ export function WorkspaceTerminal({
             setError(null);
             resize();
             void flush();
+            if (focused) sendFocus();
           });
         })
         .catch((err) => {
@@ -266,6 +327,13 @@ export function WorkspaceTerminal({
     });
     return () => {
       disposed = true;
+      clearInterval(focusHeartbeat);
+      element.removeEventListener("focusin", onFocusIn);
+      element.removeEventListener("focusout", onFocusOut);
+      window.removeEventListener("focus", onWindowFocus);
+      window.removeEventListener("blur", onWindowBlur);
+      focused = false;
+      sendFocus();
       generation++;
       fitRef.current = null;
       sendKeyRef.current = null;

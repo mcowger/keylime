@@ -2018,7 +2018,7 @@ export function AppShell({ appName }: { appName: string }) {
           job = data as WorkspaceCreationJob;
           save(job);
         }
-        while (job.status === "running") {
+        while (job.status === "running" && job.stage !== "postNonBlocking") {
           await new Promise((resolve) => setTimeout(resolve, 500));
           const response = await fetch(
             `/api/worktrees?${new URLSearchParams({ action: "status", hostId: tab.hostId ?? "local", id: job.id })}`,
@@ -2029,7 +2029,7 @@ export function AppShell({ appName }: { appName: string }) {
           job = data as WorkspaceCreationJob;
           save(job);
         }
-        if (job.status !== "complete" || !job.workspacePath)
+        if (!job.workspaceId || !job.workspacePath || job.stage !== "postNonBlocking")
           throw new Error(
             job.error ??
               "Workspace setup did not complete. Check Manage workspaces for logs.",

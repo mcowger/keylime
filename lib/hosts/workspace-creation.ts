@@ -40,7 +40,7 @@ export function setWorkspaceDeletionAdapter(
 ): void {
   deletionAdapter = adapter;
 }
-const empty = (): WorkspacePipeline => ({ pre: [], create: [], post: [] });
+const empty = (): WorkspacePipeline => ({ pre: [], create: [], postBlocking: [], postNonBlocking: [] });
 const root = () => path.join(getAgentDir(), "omp-web", "workspace-creation");
 const settingsFile = () => path.join(root(), "settings.json");
 const jobsDir = () => path.join(root(), "jobs");
@@ -73,7 +73,7 @@ function project(projectPath: string) {
 function validPipeline(p: WorkspacePipeline): boolean {
   return (
     !!p &&
-    [p.pre, p.create, p.post].every(
+    [p.pre, p.create, p.postBlocking, p.postNonBlocking].every(
       (a) =>
         Array.isArray(a) && a.every((s) => typeof s === "string" && !!s.trim()),
     )
@@ -83,6 +83,7 @@ type StoredSettings = {
   defaults: WorkspacePipeline;
   projects: Record<string, WorkspacePipeline>;
   sources?: Record<string, "manual" | "paseo">;
+  paseoBlocking?: Record<string, { index: number; command: string }[]>;
 };
 function settings(): StoredSettings {
   return read(settingsFile(), { defaults: empty(), projects: {} });
@@ -114,6 +115,8 @@ export async function workspaceCreationSettings(
       "invalid_request",
       "Project overrides require a project",
     );
+  if (input.paseoBlocking !== undefined && (!input.projectPath || registered?.kind !== "git"))
+    throw new HostOpError(400, "invalid_request", "Paseo blocking commands require a Git project");
   const data = settings();
   if (input.defaults !== undefined) {
     if (!validPipeline(input.defaults))
@@ -136,7 +139,21 @@ export async function workspaceCreationSettings(
     data.sources ??= {};
     data.sources[input.projectPath!] = input.source;
   }
-  if (input.defaults !== undefined || input.override !== undefined || input.source !== undefined)
+  if (input.paseoBlocking !== undefined) {
+    const seen = new Set<number>();
+    const recipe = Array.isArray(input.paseoBlocking) && input.paseoBlocking.length
+      ? readPaseo(input.projectPath!) : null;
+    if (!Array.isArray(input.paseoBlocking) || (recipe && (recipe.error || !recipe.fingerprint)) ||
+        !input.paseoBlocking.every((entry) => entry && Number.isInteger(entry.index) && entry.index >= 0 &&
+          typeof entry.command === "string" && recipe?.setup[entry.index] === entry.command &&
+          !seen.has(entry.index) && !!seen.add(entry.index)))
+      throw new HostOpError(400, "invalid_request", "Invalid Paseo blocking commands");
+    data.paseoBlocking ??= {};
+    data.paseoBlocking[input.projectPath!] = input.paseoBlocking;
+  }
+  if (!validPipeline(data.defaults) || (input.projectPath && data.projects[input.projectPath] !== undefined && !validPipeline(data.projects[input.projectPath])))
+    throw new HostOpError(400, "invalid_workspace_settings", "Stored workspace pipeline is invalid; replace it in workspace settings");
+  if (input.defaults !== undefined || input.override !== undefined || input.source !== undefined || input.paseoBlocking !== undefined)
     save(settingsFile(), data);
   return {
     defaults: data.defaults,
@@ -144,6 +161,7 @@ export async function workspaceCreationSettings(
       ? (data.projects[input.projectPath] ?? null)
       : null,
     source: input.projectPath ? (data.sources?.[input.projectPath] ?? "manual") : "manual",
+    paseoBlocking: input.projectPath ? (data.paseoBlocking?.[input.projectPath] ?? []) : [],
     paseo: registered?.kind === "git" ? readPaseo(registered.path) : null,
   };
 }
@@ -372,7 +390,7 @@ async function execute(job: WorkspaceCreationJob, requested: string, paseo: Work
     if (!worktree)
       throw new Error("Create result is not a linked worktree of this project");
     job.workspacePath = worktree.path;
-    job.stage = "post";
+    job.stage = "postBlocking";
     const workspace = registerCreatedWorkspace(
       input.projectPath,
       worktree.path,
@@ -388,7 +406,11 @@ async function execute(job: WorkspaceCreationJob, requested: string, paseo: Work
       env.PASEO_WORKTREE_PATH = worktree.path;
       copyPaseoIncludes(input.projectPath, worktree.path, paseo);
     }
-    for (const cmd of pipeline.post) await run(cmd, worktree.path, env, job);
+    for (const cmd of pipeline.postBlocking) await run(cmd, worktree.path, env, job);
+    job.stage = "postNonBlocking";
+    persist(job);
+    updateWorkspaceSetup(workspace.id, { status: "running", jobId: job.id, stage: job.stage });
+    for (const cmd of pipeline.postNonBlocking) await run(cmd, worktree.path, env, job);
     job.status = "complete";
     updateWorkspaceSetup(workspace.id, {
       status: "complete",
@@ -456,10 +478,16 @@ export async function createWorkspace(
   const paseo = config.source === "paseo" ? config.paseo : null;
   if (config.source === "paseo" && (!paseo || paseo.error || !paseo.fingerprint))
     throw new HostOpError(400, "paseo_invalid", paseo?.error ?? "Paseo recipe unavailable");
+  if (paseo && config.paseoBlocking.some(({ index, command }) => paseo.setup[index] !== command))
+    throw new HostOpError(400, "paseo_stale_blocking", "Paseo setup changed; review blocking commands in project settings");
   const job: WorkspaceCreationJob = {
     id: randomUUID(),
     input,
-    pipeline: paseo ? { pre: [], create: [], post: paseo.setup } : (config.override ?? config.defaults),
+    pipeline: paseo ? {
+      pre: [], create: [],
+      postBlocking: paseo.setup.filter((command, index) => config.paseoBlocking.some((entry) => entry.index === index && entry.command === command)),
+      postNonBlocking: paseo.setup.filter((command, index) => !config.paseoBlocking.some((entry) => entry.index === index && entry.command === command)),
+    } : (config.override ?? config.defaults),
     source: config.source,
     ...(paseo?.fingerprint ? { paseo: { path: paseo.path, fingerprint: paseo.fingerprint } } : {}),
     status: "running",
@@ -670,9 +698,9 @@ export async function removeRegisteredWorktree(
       const teardown: WorkspaceCreationJob = {
         id: randomUUID(),
         input: { projectPath: input.projectPath, branch: branch ?? "", mode: "local", baseRef: "", name: "Paseo teardown" },
-        pipeline: { pre: [], create: [], post: recipe.teardown },
+        pipeline: { pre: [], create: [], postBlocking: recipe.teardown, postNonBlocking: [] },
         source: "paseo", paseo: { path: recipe.path, fingerprint: recipe.fingerprint },
-        status: "running", stage: "post", workspacePath: workspace.path,
+        status: "running", stage: "postBlocking", workspacePath: workspace.path,
         logs: `Paseo teardown: ${recipe.path} (sha256 ${recipe.fingerprint})\n`,
       };
       const env = createGitEnvironment({
