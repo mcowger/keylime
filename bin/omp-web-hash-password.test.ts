@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-const require = createRequire(import.meta.url);
-const { verifyPassword } = require("./omp-web-password-hash.js");
+import { verifyPassword } from "./omp-web-password-hash";
 const launcher = fileURLToPath(new URL("./omp-web.js", import.meta.url));
 
 // util-linux `script` gives the command a real terminal, so the prompt runs in raw mode.

@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
 import test from "node:test";
 
-const require = createRequire(import.meta.url);
-const {
+import {
   isWildcardHost,
   isLoopbackHost,
   getBrowserUrl,
@@ -11,7 +9,7 @@ const {
   isIgnoredAddress,
   getAccessibleAddresses,
   formatAddressBanner,
-} = require("../bin/network-addresses.js");
+} from "../bin/network-addresses";
 
 test("identifies wildcard hostnames", () => {
   assert.equal(isWildcardHost("0.0.0.0"), true);

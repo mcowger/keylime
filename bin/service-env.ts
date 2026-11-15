@@ -4,11 +4,11 @@
 // Runtime settings live in ~/.omp/agent/web-service.env so changing the
 // port, bind address, or password does not require regenerating the unit.
 
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
-function getServiceEnvPath(home = os.homedir()) {
+export function getServiceEnvPath(home = os.homedir()): string {
   const configuredDir = process.env.PI_CODING_AGENT_DIR?.replace(
     /^~(?=\/|$)/,
     home,
@@ -20,14 +20,14 @@ function getServiceEnvPath(home = os.homedir()) {
 }
 
 // Escape a value for a double-quoted systemd env-file assignment.
-function escapeEnvValue(value) {
+export function escapeEnvValue(value: unknown): string {
   return String(value)
     .replace(/\\/g, "\\\\")
     .replace(/"/g, '\\"')
     .replace(/\r?\n/g, " ");
 }
 
-function serializeServiceEnv(entries) {
+export function serializeServiceEnv(entries: Record<string, unknown>): string {
   return (
     Object.entries(entries)
       .map(([key, value]) => `${key}="${escapeEnvValue(value)}"`)
@@ -37,8 +37,8 @@ function serializeServiceEnv(entries) {
 
 // Parse KEY="value" lines. Tolerate comments, blank lines, and unquoted
 // values so the file can also be edited by hand.
-function parseServiceEnv(text) {
-  const entries = {};
+export function parseServiceEnv(text: unknown): Record<string, string> {
+  const entries: Record<string, string> = {};
   for (const rawLine of String(text ?? "").split("\n")) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#") || line.startsWith(";")) continue;
@@ -58,7 +58,9 @@ function parseServiceEnv(text) {
   return entries;
 }
 
-function readServiceEnv(envPath = getServiceEnvPath()) {
+export function readServiceEnv(
+  envPath = getServiceEnvPath(),
+): Record<string, string> {
   try {
     return parseServiceEnv(fs.readFileSync(envPath, "utf8"));
   } catch {
@@ -67,7 +69,10 @@ function readServiceEnv(envPath = getServiceEnvPath()) {
 }
 
 // Atomic write, user-readable only: this file may contain the web password.
-function writeServiceEnv(entries, envPath = getServiceEnvPath()) {
+export function writeServiceEnv(
+  entries: Record<string, unknown>,
+  envPath = getServiceEnvPath(),
+): string {
   fs.mkdirSync(path.dirname(envPath), { recursive: true });
   const temporary = `${envPath}.${process.pid}.tmp`;
   fs.writeFileSync(temporary, serializeServiceEnv(entries), { mode: 0o600 });
@@ -75,12 +80,3 @@ function writeServiceEnv(entries, envPath = getServiceEnvPath()) {
   fs.chmodSync(envPath, 0o600);
   return envPath;
 }
-
-module.exports = {
-  escapeEnvValue,
-  getServiceEnvPath,
-  parseServiceEnv,
-  readServiceEnv,
-  serializeServiceEnv,
-  writeServiceEnv,
-};

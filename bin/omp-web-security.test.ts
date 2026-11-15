@@ -9,14 +9,12 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-const require = createRequire(import.meta.url);
-const { verifyPassword } = require("./omp-web-password-hash.js");
+import { hashPassword, verifyPassword } from "./omp-web-password-hash";
 const binDir = fileURLToPath(new URL(".", import.meta.url));
 
 /** Run the launcher against a stub `server/main.ts` that records the environment it was started with. */
@@ -25,7 +23,10 @@ async function launch(env: NodeJS.ProcessEnv, args: string[] = []) {
   try {
     await mkdir(join(pkg, "bin"));
     for (const name of await readdir(binDir)) {
-      if (name.endsWith(".js"))
+      if (
+        name.endsWith(".js") ||
+        (name.endsWith(".ts") && !name.endsWith(".test.ts"))
+      )
         await copyFile(join(binDir, name), join(pkg, "bin", name));
     }
     await mkdir(join(pkg, "dist"));
@@ -81,7 +82,6 @@ test("launcher hands the server a hash of a plaintext OMP_WEB_PASSWORD, never th
 });
 
 test("launcher refuses a plaintext OMP_WEB_PASSWORD next to a hash", async () => {
-  const { hashPassword } = require("./omp-web-password-hash.js");
   const { status, serverEnv } = await launch({
     OMP_WEB_PASSWORD: "s3cret pw",
     OMP_WEB_PASSWORD_HASH: hashPassword("other"),

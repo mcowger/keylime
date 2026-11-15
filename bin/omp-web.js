@@ -16,7 +16,7 @@ if (
   process.argv[2] === "hash-password" ||
   process.argv[2] === "hash_password"
 ) {
-  const { runHashPasswordCommand } = require("./omp-web-hash-password");
+  const { runHashPasswordCommand } = require("./omp-web-hash-password.ts");
   runHashPasswordCommand()
     .then((exitCode) => {
       process.exit(exitCode);
@@ -95,18 +95,18 @@ function startLauncher() {
   const {
     checkLaunchSecurity,
     parseLaunchOptions,
-  } = require("./omp-web-options");
-  const { isPortAvailable } = require("./port-availability");
+  } = require("./omp-web-options.ts");
+  const { isPortAvailable } = require("./port-availability.ts");
   const {
     terminateChildProcess,
     wireChildProcessLifecycle,
-  } = require("./process-lifecycle");
+  } = require("./process-lifecycle.ts");
   const {
     getAccessibleAddresses,
     getBrowserUrl,
     formatAddressBanner,
     openInBrowser,
-  } = require("./network-addresses");
+  } = require("./network-addresses.ts");
 
   const UPDATE_PROTOCOL = 1;
   const UPDATE_MESSAGE = "ompweb:update-control";

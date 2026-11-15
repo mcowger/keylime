@@ -1,6 +1,28 @@
-"use strict";
+import os from "node:os";
 
-const os = require("os");
+type AddressEntry = {
+  label: string;
+  url: string;
+  name?: string;
+  address?: string;
+};
+type InterfaceAddress = {
+  family: string | number;
+  internal: boolean;
+  address: string;
+};
+type AccessibleAddressOptions = {
+  hostname?: string | null;
+  port: string | number;
+  interfaces?: Record<string, InterfaceAddress[] | undefined>;
+};
+type BannerOptions = {
+  version?: string;
+  entries?: AddressEntry[];
+  hint?: string;
+  passwordEnabled?: boolean;
+  isTTY?: boolean;
+};
 
 const LOOPBACK_HOSTNAMES = new Set([
   "127.0.0.1",
@@ -19,19 +41,22 @@ const WILDCARD_HOSTNAMES = new Set([
   "",
 ]);
 
-function isWildcardHost(hostname) {
+export function isWildcardHost(hostname: unknown): boolean {
   if (hostname == null) return true;
   if (typeof hostname !== "string") return false;
   return WILDCARD_HOSTNAMES.has(hostname.trim());
 }
 
-function isLoopbackHost(hostname) {
+export function isLoopbackHost(hostname: unknown): boolean {
   if (typeof hostname !== "string") return false;
   const h = hostname.trim().toLowerCase();
   if (h.startsWith("127.")) return true;
   return LOOPBACK_HOSTNAMES.has(h);
 }
-function getBrowserUrl(hostname, port) {
+export function getBrowserUrl(
+  hostname: string | null | undefined,
+  port: string | number,
+): string {
   if (isWildcardHost(hostname)) {
     return `http://localhost:${port}`;
   }
@@ -46,7 +71,7 @@ function getBrowserUrl(hostname, port) {
 }
 
 /** Open `url` in the default browser; a failure only warns. */
-function openInBrowser(url) {
+export function openInBrowser(url: string): void {
   const { spawn } = process.getBuiltinModule("node:child_process");
   const command = process.platform === "darwin" ? "open" : "xdg-open";
   const opener = spawn(command, [url], { stdio: "ignore", detached: true });
@@ -56,7 +81,10 @@ function openInBrowser(url) {
   opener.unref();
 }
 
-function isTailscaleAddress(ifaceName, address) {
+export function isTailscaleAddress(
+  ifaceName: unknown,
+  address: unknown,
+): boolean {
   if (
     typeof ifaceName === "string" &&
     ifaceName.toLowerCase().includes("tailscale")
@@ -78,7 +106,10 @@ function isTailscaleAddress(ifaceName, address) {
   return false;
 }
 
-function isIgnoredAddress(ifaceName, address) {
+export function isIgnoredAddress(
+  ifaceName: unknown,
+  address: unknown,
+): boolean {
   if (!address || typeof address !== "string") return true;
   // APIPA (Automatic Private IP Addressing: 169.254.0.0/16)
   if (address.startsWith("169.254.")) return true;
@@ -89,7 +120,7 @@ function isIgnoredAddress(ifaceName, address) {
   return false;
 }
 
-function isVirtualBridge(ifaceName) {
+export function isVirtualBridge(ifaceName: unknown): boolean {
   if (!ifaceName || typeof ifaceName !== "string") return false;
   const name = ifaceName.toLowerCase();
   return (
@@ -104,7 +135,7 @@ function isVirtualBridge(ifaceName) {
   );
 }
 
-function isStandardPhysicalInterface(name) {
+export function isStandardPhysicalInterface(name: unknown): boolean {
   if (!name || typeof name !== "string") return false;
   if (isVirtualBridge(name)) return false;
   const lower = name.toLowerCase();
@@ -123,11 +154,11 @@ function isStandardPhysicalInterface(name) {
   );
 }
 
-function getAccessibleAddresses({
+export function getAccessibleAddresses({
   hostname,
   port,
   interfaces = os.networkInterfaces(),
-}) {
+}: AccessibleAddressOptions): { entries: AddressEntry[]; hint?: string } {
   if (isLoopbackHost(hostname)) {
     return {
       entries: [{ label: "Local", url: `http://localhost:${port}` }],
@@ -141,10 +172,12 @@ function getAccessibleAddresses({
     };
   }
 
-  const entries = [{ label: "Local", url: `http://localhost:${port}` }];
-  const lanEntries = [];
-  const tailscaleEntries = [];
-  const otherEntries = [];
+  const entries: AddressEntry[] = [
+    { label: "Local", url: `http://localhost:${port}` },
+  ];
+  const lanEntries: AddressEntry[] = [];
+  const tailscaleEntries: AddressEntry[] = [];
+  const otherEntries: AddressEntry[] = [];
   const seenAddresses = new Set(["127.0.0.1", "localhost"]);
 
   for (const [name, addrs] of Object.entries(interfaces)) {
@@ -187,18 +220,17 @@ function getAccessibleAddresses({
   return { entries };
 }
 
-/** @param {{ version?: string, entries?: { label: string, url: string }[], hint?: string, passwordEnabled?: boolean, isTTY?: boolean }} options */
-function formatAddressBanner({
+export function formatAddressBanner({
   version = "0.0.0",
   entries = [],
   hint,
   passwordEnabled = false,
   isTTY = process.stdout.isTTY,
-}) {
-  const dim = isTTY ? (s) => `\x1b[90m${s}\x1b[0m` : (s) => s;
-  const bold = isTTY ? (s) => `\x1b[1m${s}\x1b[0m` : (s) => s;
-  const green = isTTY ? (s) => `\x1b[32m${s}\x1b[0m` : (s) => s;
-  const cyan = isTTY ? (s) => `\x1b[36m${s}\x1b[0m` : (s) => s;
+}: BannerOptions): string {
+  const dim = isTTY ? (s: string) => `\x1b[90m${s}\x1b[0m` : (s: string) => s;
+  const bold = isTTY ? (s: string) => `\x1b[1m${s}\x1b[0m` : (s: string) => s;
+  const green = isTTY ? (s: string) => `\x1b[32m${s}\x1b[0m` : (s: string) => s;
+  const cyan = isTTY ? (s: string) => `\x1b[36m${s}\x1b[0m` : (s: string) => s;
 
   const lines = [];
   lines.push("");
@@ -229,16 +261,3 @@ function formatAddressBanner({
   lines.push("");
   return lines.join("\n");
 }
-
-module.exports = {
-  isWildcardHost,
-  isLoopbackHost,
-  getBrowserUrl,
-  isTailscaleAddress,
-  isIgnoredAddress,
-  isStandardPhysicalInterface,
-  isVirtualBridge,
-  getAccessibleAddresses,
-  formatAddressBanner,
-  openInBrowser,
-};

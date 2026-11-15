@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import net from "node:net";
-import { createRequire } from "node:module";
 import test from "node:test";
 
-const require = createRequire(import.meta.url);
-const { isPortAvailable } = require("../bin/port-availability.js");
+import { isPortAvailable } from "../bin/port-availability";
 
 test("reports a port occupied by another server", async () => {
   const server = net.createServer();

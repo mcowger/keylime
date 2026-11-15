@@ -1,13 +1,14 @@
-"use strict";
+import net from "node:net";
 
-const net = require("net");
-
-function isPortAvailable(port, hostname) {
-  return new Promise((resolve, reject) => {
+export function isPortAvailable(
+  port: string | number,
+  hostname?: string,
+): Promise<boolean> {
+  return new Promise<boolean>((resolve, reject) => {
     const server = net.createServer();
 
     server.once("error", (error) => {
-      if (error.code === "EADDRINUSE") {
+      if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") {
         resolve(false);
       } else {
         reject(error);
@@ -22,5 +23,3 @@ function isPortAvailable(port, hostname) {
     });
   });
 }
-
-module.exports = { isPortAvailable };

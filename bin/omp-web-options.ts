@@ -1,19 +1,32 @@
-"use strict";
-
-const { parseArgs } = require("util");
-const { hashPassword, isPasswordHash } = require("./omp-web-password-hash");
-const { isLoopbackHost } = require("./network-addresses");
+import { parseArgs } from "node:util";
+import { hashPassword, isPasswordHash } from "./omp-web-password-hash";
+import { isLoopbackHost } from "./network-addresses";
 
 const TRUE_VALUES = new Set(["1", "true", "yes", "on"]);
 
-function isEnabled(value) {
+export interface LaunchOptions {
+  port: string;
+  hostname: string;
+  passwordHash?: string;
+  legacyPassword?: string;
+  legacyPasswordSource?: "env" | "flag";
+  openBrowser: boolean;
+  help?: boolean;
+  version?: boolean;
+  error?: string;
+}
+
+function isEnabled(value: unknown) {
   return (
     typeof value === "string" && TRUE_VALUES.has(value.trim().toLowerCase())
   );
 }
 
 /** Legacy plaintext credential: detected so `ompweb` can migrate (env) or refuse (flag) it. */
-function legacyPassword(args, env) {
+function legacyPassword(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+): { value: string; source: "flag" | "env" } | undefined {
   const flagIndex = args.findIndex(
     (arg) => arg === "--password" || arg.startsWith("--password="),
   );
@@ -31,7 +44,7 @@ function legacyPassword(args, env) {
   return undefined;
 }
 
-function printHelp() {
+export function printHelp() {
   console.log(`Usage: ompweb [options]
 
 Options:
@@ -67,7 +80,10 @@ non-loopback hostname, so the password and session cookie stay private.`);
  * reported in `error`, which the caller prints before exiting with 2.
  * @returns {{ port: string, hostname: string, passwordHash?: string, legacyPassword?: string, legacyPasswordSource?: "env" | "flag", openBrowser: boolean, help?: boolean, version?: boolean, error?: string }}
  */
-function parseLaunchOptions(args = process.argv.slice(2), env = process.env) {
+export function parseLaunchOptions(
+  args: string[] = process.argv.slice(2),
+  env: NodeJS.ProcessEnv = process.env,
+): LaunchOptions {
   const { values: cliArgs } = parseArgs({
     args,
     options: {
@@ -89,7 +105,10 @@ function parseLaunchOptions(args = process.argv.slice(2), env = process.env) {
   const port = String(cliArgs.port ?? env.PORT ?? "30177");
   const shared = {
     port,
-    hostname: cliArgs.hostname ?? env.OMP_WEB_HOSTNAME ?? "127.0.0.1",
+    hostname:
+      (cliArgs.hostname as string | undefined) ??
+      env.OMP_WEB_HOSTNAME ??
+      "127.0.0.1",
     passwordHash,
     legacyPassword: legacy?.value,
     legacyPasswordSource: legacy?.source,
@@ -125,10 +144,10 @@ function parseLaunchOptions(args = process.argv.slice(2), env = process.env) {
  * Authentication is optional on every bind address.
  * @returns {string | undefined} the password hash, if any
  */
-function checkLaunchSecurity(launchOptions) {
+export function checkLaunchSecurity(launchOptions: LaunchOptions) {
   let passwordHash = launchOptions.passwordHash;
   if (launchOptions.legacyPasswordSource === "env" && !passwordHash) {
-    passwordHash = hashPassword(process.env.OMP_WEB_PASSWORD);
+    passwordHash = hashPassword(process.env.OMP_WEB_PASSWORD!);
     process.env.OMP_WEB_PASSWORD_HASH = passwordHash;
     delete process.env.OMP_WEB_PASSWORD;
     console.warn(
@@ -182,5 +201,3 @@ function checkLaunchSecurity(launchOptions) {
   }
   return passwordHash;
 }
-
-module.exports = { checkLaunchSecurity, parseLaunchOptions, printHelp };

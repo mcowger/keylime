@@ -20,8 +20,8 @@ const {
   getServiceEnvPath,
   readServiceEnv,
   writeServiceEnv,
-} = require("./service-env");
-const { resolvePasswordHash } = require("./omp-web-hash-password");
+} = require("./service-env.ts");
+const { resolvePasswordHash } = require("./omp-web-hash-password.ts");
 
 const UNIT_NAME = "ompweb";
 const UNIT = `${UNIT_NAME}.service`;

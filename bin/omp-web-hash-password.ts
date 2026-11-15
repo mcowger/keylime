@@ -1,17 +1,15 @@
-"use strict";
-
 // `ompweb hash-password` plus the password prompt the launcher and the service
 // installers use. The password is read from stdin, never from argv, so it
 // stays out of shell history and out of `ps` output (issue #239).
 
-const { hashPassword, isPasswordHash } = require("./omp-web-password-hash");
+import { hashPassword, isPasswordHash } from "./omp-web-password-hash";
 
 /** Key sent when the user presses Ctrl+C at a prompt. */
 const INTERRUPT_KEY = Buffer.from([0x03]);
 
-function readStdin() {
+function readStdin(): Promise<string> {
   return new Promise((resolve, reject) => {
-    const chunks = [];
+    const chunks: Buffer[] = [];
     process.stdin.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
     process.stdin.once("end", () =>
       resolve(Buffer.concat(chunks).toString("utf8")),
@@ -35,14 +33,14 @@ async function readPipedLine() {
  * desktops provide. Raw mode keeps every byte from reaching the caller while
  * stopping the terminal from echoing it.
  */
-function readHiddenLine(prompt) {
+function readHiddenLine(prompt: string): Promise<string | null> {
   return new Promise((resolve, reject) => {
     const input = process.stdin;
     const output = process.stdout;
     output.write(prompt);
     input.resume();
     input.setRawMode(true);
-    const chunks = [];
+    const chunks: Buffer[] = [];
     let settled = false;
     const cleanup = () => {
       input.setRawMode(false);
@@ -51,14 +49,14 @@ function readHiddenLine(prompt) {
       input.removeListener("end", onEnd);
       input.removeListener("error", onError);
     };
-    const finish = (value) => {
+    const finish = (value: string | null) => {
       if (settled) return;
       settled = true;
       cleanup();
       output.write("\n");
       resolve(value);
     };
-    const onData = (chunk) => {
+    const onData = (chunk: Buffer) => {
       const bytes = Buffer.from(chunk);
       // Ctrl+C: stop waiting, and let the caller treat it as a cancel.
       if (bytes.includes(INTERRUPT_KEY)) return finish(null);
@@ -72,7 +70,7 @@ function readHiddenLine(prompt) {
       finish(Buffer.concat(chunks).toString("utf8"));
     };
     const onEnd = () => finish(null);
-    const onError = (error) => {
+    const onError = (error: Error) => {
       if (settled) return;
       settled = true;
       cleanup();
@@ -89,7 +87,9 @@ function readHiddenLine(prompt) {
  * Ask for the password, twice when a terminal can confirm it. Piped stdin
  * cannot ask twice, so it is taken as-is. Resolves null when the user cancels.
  */
-async function promptPassword(options = {}) {
+export async function promptPassword(
+  options: { confirm?: boolean; label?: string } = {},
+) {
   const { confirm = false, label = "Web sign-in password" } = options;
   if (!process.stdin.isTTY) return readPipedLine();
 
@@ -115,7 +115,14 @@ async function promptPassword(options = {}) {
  * password read from stdin.
  * @returns {Promise<number>} process exit code
  */
-async function runHashPasswordCommand(options = {}) {
+export async function runHashPasswordCommand(
+  options: {
+    stdout?: Pick<NodeJS.WriteStream, "write">;
+    stderr?: Pick<NodeJS.WriteStream, "write">;
+    confirm?: boolean;
+    label?: string;
+  } = {},
+) {
   const { stdout = process.stdout, stderr = process.stderr, confirm } = options;
   let password;
   try {
@@ -151,7 +158,7 @@ async function runHashPasswordCommand(options = {}) {
  * process. Returns null when neither is configured, and throws when a hash was
  * given but is unusable (silently dropping it would disable auth).
  */
-function resolvePasswordHash(env = process.env) {
+export function resolvePasswordHash(env: NodeJS.ProcessEnv = process.env) {
   const existing =
     typeof env.OMP_WEB_PASSWORD_HASH === "string"
       ? env.OMP_WEB_PASSWORD_HASH.trim()
@@ -169,9 +176,3 @@ function resolvePasswordHash(env = process.env) {
     ? hashPassword(plaintext)
     : null;
 }
-
-module.exports = {
-  promptPassword,
-  resolvePasswordHash,
-  runHashPasswordCommand,
-};

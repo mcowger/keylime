@@ -1,8 +1,9 @@
-// The `OMP_WEB_PASSWORD_HASH` format lives in bin/omp-web-password-hash.js:
-// the packaged launcher and the service installers must hash and validate a
-// password before the server (and this module) exists. This file is the typed
-// view of it for the server — never a second implementation.
-import * as passwordHash from "../bin/omp-web-password-hash.js";
+// The launcher, installers and server share one password hash implementation.
+import * as passwordHash from "../bin/omp-web-password-hash";
+export type {
+  PasswordHashOptions,
+  ParsedPasswordHash,
+} from "../bin/omp-web-password-hash";
 
 /**
  * Self-describing scrypt password hash. omp-web only ever stores and compares
@@ -22,22 +23,6 @@ import * as passwordHash from "../bin/omp-web-password-hash.js";
  * brute-force gift for anyone who reads the hash out of `web-service.env`.
  */
 
-/** Overridable cost, so tests hash at a fraction of the production cost. */
-export interface PasswordHashOptions {
-  logN?: number;
-  r?: number;
-  p?: number;
-}
-
-/** Parsed hash parameters. */
-export interface ParsedPasswordHash {
-  logN: number;
-  r: number;
-  p: number;
-  salt: string;
-  digest: string;
-}
-
 /** Salt length in bytes. */
 export const PASSWORD_HASH_SALT_BYTES: number = passwordHash.SALT_BYTES;
 /** Derived key length in bytes. */
@@ -50,30 +35,17 @@ export const PASSWORD_HASH_P: number = passwordHash.DEFAULT_P;
 export const PASSWORD_HASH_MIN_LOG_N: number = passwordHash.MIN_LOG_N;
 
 /** Hash a password for `OMP_WEB_PASSWORD_HASH`. */
-export const hashPassword = passwordHash.hashPassword as (
-  password: string,
-  options?: PasswordHashOptions,
-) => string;
-
+export const hashPassword = passwordHash.hashPassword;
 /**
  * Parse a stored hash without verifying anything. Returns null when the text
  * is not a plausible hash — callers use this to reject a plaintext password
  * before it can be mistaken for one.
  */
-export const parsePasswordHash = passwordHash.parsePasswordHash as (
-  value: unknown,
-) => ParsedPasswordHash | null;
-
+export const parsePasswordHash = passwordHash.parsePasswordHash;
 /** True when the value is a hash this build is willing to verify. */
-export const isPasswordHash = passwordHash.isPasswordHash as (
-  value: unknown,
-) => value is string;
-
+export const isPasswordHash = passwordHash.isPasswordHash;
 /**
  * Check a candidate password against a stored hash. A malformed or too-weak
  * hash never matches: configured-but-unusable must fail closed, not open.
  */
-export const verifyPassword = passwordHash.verifyPassword as (
-  candidate: string,
-  stored: string,
-) => boolean;
+export const verifyPassword = passwordHash.verifyPassword;

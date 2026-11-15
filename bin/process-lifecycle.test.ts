@@ -3,15 +3,7 @@ import { EventEmitter } from "node:events";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 
-const {
-  wireChildProcessLifecycle,
-}: {
-  wireChildProcessLifecycle: (
-    child: EventEmitter & { kill(signal: NodeJS.Signals): boolean },
-    parent: EventEmitter & { exit(code: number): void },
-    timeoutMs?: number,
-  ) => void;
-} = require("./process-lifecycle.js");
+import { wireChildProcessLifecycle } from "./process-lifecycle.ts";
 
 function createProcesses() {
   const forwardedSignals: NodeJS.Signals[] = [];

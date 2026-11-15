@@ -11,7 +11,7 @@ const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { resolvePasswordHash } = require("./omp-web-hash-password");
+const { resolvePasswordHash } = require("./omp-web-hash-password.ts");
 
 const LABEL = "com.kahme247.ompweb";
 // The host daemon links this machine to an omp-web (`ompweb host`); it runs next to the web agent.

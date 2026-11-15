@@ -30,12 +30,12 @@ const {
   validateHostname,
   validatePort,
 } = require("./omp-web-systemd.js");
-const {
+import {
   parseServiceEnv,
   serializeServiceEnv,
   writeServiceEnv,
-} = require("./service-env.js");
-const { hashPassword, verifyPassword } = require("./omp-web-password-hash.js");
+} from "./service-env.ts";
+import { hashPassword, verifyPassword } from "./omp-web-password-hash.ts";
 
 test("service env files round-trip quoted values", () => {
   const serialized = serializeServiceEnv({

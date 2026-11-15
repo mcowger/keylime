@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
 import test from "node:test";
 
-const require = createRequire(import.meta.url);
+import * as launcherImpl from "../bin/omp-web-password-hash";
 
 const {
   hashPassword,
@@ -11,8 +10,6 @@ const {
   verifyPassword,
   PASSWORD_HASH_MIN_LOG_N,
 } = await import("./web-password-hash");
-// The shipped implementation, used by the launcher and the service installers.
-const launcherImpl = require("../bin/omp-web-password-hash.js");
 
 test("accepts only a self-describing scrypt hash", () => {
   const hash = hashPassword("correct horse", { logN: 12 });

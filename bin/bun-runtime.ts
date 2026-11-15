@@ -1,8 +1,6 @@
 "use strict";
 
 // Child processes use the same Bun executable as their parent.
-function resolveBunBinary() {
+export function resolveBunBinary(..._args: unknown[]): string {
   return process.execPath;
 }
-
-module.exports = { resolveBunBinary };
