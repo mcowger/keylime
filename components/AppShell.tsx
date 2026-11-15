@@ -188,6 +188,7 @@ function tabInWorkspace(
   hostId: string | undefined,
   projects: ManagedProject[],
 ) {
+  if (tab.workspaceProject && !tab.session) return false;
   if (remoteHostId(tab.hostId) !== remoteHostId(hostId)) return false;
   const path = comparableProjectPath(tab.cwd);
   const roots = projects
@@ -290,7 +291,7 @@ export function AppShell({ appName }: { appName: string }) {
       return;
     }
     activeChatIdRef.current = tab?.id ?? null;
-    if (tab) {
+    if (tab && !tab.workspaceProject) {
       try {
         sessionStorage.setItem(
           `${CHAT_TABS_STORAGE_KEY}:active:${tab.hostId ?? LOCAL_HOST_ID}:${tab.cwd}`,
@@ -1734,11 +1735,13 @@ export function AppShell({ appName }: { appName: string }) {
       _projectRoot: string | null,
       hostId: string,
       _project?: ManagedProject,
+      synchronized = false,
     ) => {
       setActiveTerminalId(null);
       setActiveCwd(cwd);
       setActiveHostId(remoteHostId(hostId));
       if (initialSessionId && !initialSessionRestored) return;
+      if (synchronized && chatTabsRef.current.find((tab) => tab.id === activeChatIdRef.current)?.workspaceProject) return;
       if (!cwd) return;
       const workspaceKey = `${remoteHostId(hostId) ?? LOCAL_HOST_ID}:${cwd}`;
       const currentTab = chatTabsRef.current.find(
@@ -2354,6 +2357,8 @@ export function AppShell({ appName }: { appName: string }) {
           item.id === tabId
             ? {
                 ...item,
+                workspaceProject: undefined,
+                workspaceJob: undefined,
                 session,
                 cwd: session.cwd,
                 hostId: remoteHostId(session.hostId),
@@ -2859,11 +2864,13 @@ export function AppShell({ appName }: { appName: string }) {
   const workspaceHostId = currentHostId ?? LOCAL_HOST_ID;
   const sidebarCwd =
     (activeHostId ?? LOCAL_HOST_ID) === workspaceHostId ? activeCwd : null;
-  const explorerCwd = selectedSession
-    ? sessionWorktreeRemoved
-      ? sidebarCwd
-      : sessionCwd
-    : (newSessionCwd ?? sidebarCwd);
+  const explorerCwd = pendingWorkspace
+    ? null
+    : selectedSession
+      ? sessionWorktreeRemoved
+        ? sidebarCwd
+        : sessionCwd
+      : (newSessionCwd ?? sidebarCwd);
 
   // File-panel integrations: every action works on the active tab so the right
   // panel behaves like an editor toolbar, not just a tab strip.

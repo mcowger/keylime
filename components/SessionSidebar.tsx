@@ -146,6 +146,7 @@ interface Props {
     projectRoot: string | null,
     hostId: string,
     project?: ManagedProject,
+    synchronized?: boolean,
   ) => void;
   onWorkspaceOptionsChange?: (
     projects: ManagedProject[],
@@ -762,15 +763,20 @@ export const SessionSidebar = memo(function SessionSidebar({
   // Notify parent only when the effective cwd actually changes (not when
   // projectRootFor identity changes due to session/worktree refreshes).
   const lastNotifiedCwdRef = useRef<string | null>(null);
+  const synchronizedCwdRef = useRef<string | null>(null);
   useEffect(() => {
     const notifyKey =
       selectedCwd === null ? null : hostProjectKey(selectedHostId, selectedCwd);
     if (lastNotifiedCwdRef.current === notifyKey) return;
     lastNotifiedCwdRef.current = notifyKey;
+    const synchronized = notifyKey !== null && synchronizedCwdRef.current === notifyKey;
+    synchronizedCwdRef.current = null;
     onCwdChange?.(
       selectedCwd,
       projectRootFor(selectedCwd, selectedHostId),
       selectedHostId,
+      undefined,
+      synchronized,
     );
   }, [selectedCwd, selectedHostId, onCwdChange, projectRootFor]);
 
@@ -794,6 +800,8 @@ export const SessionSidebar = memo(function SessionSidebar({
     if (syncKey !== lastSyncedCwdPropRef.current) {
       provisionalSelectionRef.current = false;
       lastSyncedCwdPropRef.current = syncKey;
+      synchronizedCwdRef.current =
+        selectedCwd !== selectedCwdProp || selectedHostId !== hostId ? syncKey : null;
       setSelectedCwd(selectedCwdProp);
       setSelectedHostId(hostId);
       const project = projectRootFor(selectedCwdProp, hostId);
@@ -2033,6 +2041,8 @@ export const SessionSidebar = memo(function SessionSidebar({
           selectedHostId={selectedHostId}
           onSelectWorkspace={(path, host) => {
             provisionalSelectionRef.current = false;
+            if (selectedCwd === path && selectedHostId === host)
+              onCwdChange?.(path, projectRootFor(path, host), host);
             setSelectedCwd(path);
             setSelectedHostId(host);
             onClose?.();

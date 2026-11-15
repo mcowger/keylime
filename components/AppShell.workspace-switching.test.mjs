@@ -18,7 +18,7 @@ mock.module("./SessionSidebar", () => ({
     }, []);
     React.useEffect(() => {
       if (props.selectedCwd)
-        props.onCwdChange(props.selectedCwd, props.selectedCwd, "local");
+        props.onCwdChange(props.selectedCwd, props.selectedCwd, "local", undefined, true);
     }, [props.selectedCwd]);
     return React.createElement(
       "nav",
@@ -30,6 +30,9 @@ mock.module("./SessionSidebar", () => ({
           path,
         ),
       ),
+      React.createElement("button", {
+        onClick: () => props.onNewWorkspace({ path: "/repo", hostId: "local", projectKind: "git" }),
+      }, "New workspace"),
       React.createElement(
         "button",
         {
@@ -80,11 +83,13 @@ for (const [path, name] of [
   ["./SettingsConfig", "SettingsConfig"],
   ["./CommandPaletteMount", "CommandPaletteMount"],
   ["./LocalDaemonBanner", "LocalDaemonBanner"],
-  ["./WorkspaceTerminalTabs", "WorkspaceTerminalTabs"],
   ["./NotificationBell", "NotificationBell"],
 ]) {
   mock.module(path, () => ({ [name]: empty }));
 }
+mock.module("./WorkspaceTerminalTabs", () => ({
+  WorkspaceTerminalTabs: (props) => React.createElement("output", { "data-testid": "workspace-tabs" }, JSON.stringify({ cwd: props.cwd, tabs: props.chatTabs })),
+}));
 mock.module("@/hooks/useHostRows", () => ({
   useHostRows: () => ({ hosts: [], pools: [] }),
 }));
@@ -146,5 +151,44 @@ test("a quick-created workspace session leaves the parent workspace clickable", 
     view.getByRole("button", { name: "/repo/worktrees/B", exact: true }),
   );
   await waitFor(() => assert.equal(main(), "/repo/worktrees/B"));
+  cleanup();
+});
+
+test("a pending workspace does not own the parent workspace tabs or its restored selection", async () => {
+  sessionStorage.clear();
+  window.history.replaceState(null, "", "/?cwd=%2Frepo");
+  const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+  const tabs = () => JSON.parse(view.getByTestId("workspace-tabs").textContent);
+  await waitFor(() => assert.equal(tabs().cwd, "/repo"));
+  const key = "keylime:workspace-chat-tabs:active:local:/repo";
+  const parent = sessionStorage.getItem(key);
+  assert.ok(parent);
+  fireEvent.click(view.getByRole("button", { name: "New workspace", exact: true }));
+  await waitFor(() => assert.equal(tabs().cwd, null));
+  assert.deepEqual(tabs().tabs, []);
+  assert.equal(sessionStorage.getItem(key), parent);
+  fireEvent.click(view.getByRole("button", { name: "/repo", exact: true }));
+  await waitFor(() => assert.equal(tabs().cwd, "/repo"));
+  assert.equal(tabs().tabs.length, 1);
+  assert.equal(sessionStorage.getItem(key), parent);
+  cleanup();
+});
+
+test("creating a workspace from another workspace survives sidebar synchronization", async () => {
+  sessionStorage.clear();
+  window.history.replaceState(null, "", "/?cwd=%2Frepo");
+  const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+  const tabs = () => JSON.parse(view.getByTestId("workspace-tabs").textContent);
+  await waitFor(() => assert.equal(tabs().cwd, "/repo"));
+  const parent = sessionStorage.getItem("keylime:workspace-chat-tabs:active:local:/repo");
+  fireEvent.click(view.getByRole("button", { name: "/other", exact: true }));
+  await waitFor(() => assert.equal(tabs().cwd, "/other"));
+  fireEvent.click(view.getByRole("button", { name: "New workspace", exact: true }));
+  await waitFor(() => assert.equal(tabs().cwd, null));
+  assert.deepEqual(tabs().tabs, []);
+  assert.equal(sessionStorage.getItem("keylime:workspace-chat-tabs:active:local:/repo"), parent);
+  fireEvent.click(view.getByRole("button", { name: "/repo", exact: true }));
+  await waitFor(() => assert.equal(tabs().cwd, "/repo"));
+  assert.equal(tabs().tabs.length, 1);
   cleanup();
 });
