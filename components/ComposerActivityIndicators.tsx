@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Network, X } from "lucide-react";
+import { Bot, Check, X } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { SubagentInfo } from "@/hooks/useAgentSession";
 import { useI18n } from "@/lib/i18n";
@@ -132,7 +132,7 @@ export function ComposerActivityIndicators({
           aria-expanded={openPanel === "agents"}
           onClick={toggle("agents")}
         >
-          <Network size={14} aria-hidden />
+          <Bot size={14} aria-hidden />
           <span>{activeAgents.length}</span>
         </button>
       )}
@@ -198,15 +198,6 @@ export function ComposerActivityIndicators({
                       {subagent.id}
                     </span>{" "}
                     <span className="text-text-muted">({subagent.agent})</span>
-                    {(subagent.task ||
-                      subagent.description ||
-                      subagent.assignment) && (
-                      <span className="mt-1 block">
-                        {subagent.task ??
-                          subagent.description ??
-                          subagent.assignment}
-                      </span>
-                    )}
                     <SubagentActivityLine subagent={subagent} />
                   </span>
                 </button>
