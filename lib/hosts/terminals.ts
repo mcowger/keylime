@@ -35,6 +35,82 @@ function contains(root: string, cwd: string): boolean {
     (!isAbsolute(rel) && rel !== ".." && !rel.startsWith(".." + sep))
   );
 }
+type RGB = [number, number, number];
+const ansiDefaults = [
+  0x2e3436, 0xcc0000, 0x4e9a06, 0xc4a000, 0x3465a4, 0x75507b, 0x06989a, 0xd3d7cf,
+  0x555753, 0xef2929, 0x8ae234, 0xfce94f, 0x729fcf, 0xad7fa8, 0x34e2e2, 0xeeeeec,
+].map((c): RGB => [c >> 16, (c >> 8) & 255, c & 255]);
+const levels = [0, 95, 135, 175, 215, 255];
+for (let i = 0; i < 216; i++)
+  ansiDefaults.push([levels[Math.floor(i / 36)], levels[Math.floor(i / 6) % 6], levels[i % 6]]);
+for (let i = 0; i < 24; i++) ansiDefaults.push([8 + i * 10, 8 + i * 10, 8 + i * 10]);
+const specialDefaults: RGB[] = [[255, 255, 255], [0, 0, 0], [255, 255, 255]];
+
+// Match xterm.js XParseColor, including its distinct #RGB and rgb:R/G/B scaling.
+function parseColor(spec: string): RGB | undefined {
+  let parts: string[];
+  let rgb = false;
+  if (/^rgb:/i.test(spec)) {
+    parts = spec.slice(4).split("/");
+    rgb = true;
+    if (parts.length !== 3 || !parts.every((p) => /^[\da-f]{1,4}$/i.test(p) && p.length === parts[0].length)) return;
+  } else if (/^#[\da-f]+$/i.test(spec) && [4, 7, 10, 13].includes(spec.length)) {
+    const width = (spec.length - 1) / 3;
+    parts = [spec.slice(1, 1 + width), spec.slice(1 + width, 1 + width * 2), spec.slice(1 + width * 2)];
+  } else return;
+  return parts.map((part) => {
+    const value = parseInt(part, 16);
+    return rgb ? Math.round(value * 255 / (16 ** part.length - 1)) : part.length === 1 ? value << 4 : part.length === 2 ? value : value >> (4 * (part.length - 2));
+  }) as RGB;
+}
+function colorReply(color: RGB): string {
+  return "rgb:" + color.map((c) => c.toString(16).padStart(2, "0").repeat(2)).join("/");
+}
+
+function installColorHandlers(screen: Terminal, reply: (data: string) => void): void {
+  const palette = ansiDefaults.slice();
+  const special = specialDefaults.slice();
+  screen.parser.registerOscHandler(4, (data) => {
+    const parts = data.split(";");
+    for (let i = 0; i + 1 < parts.length; i += 2) {
+      if (!/^\d+$/.test(parts[i])) continue;
+      const index = Number(parts[i]);
+      if (index > 255) continue;
+      if (parts[i + 1] === "?") reply(`\x1b]4;${index};${colorReply(palette[index])}\x1b\\`);
+      else {
+        const color = parseColor(parts[i + 1]);
+        if (color) palette[index] = color;
+      }
+    }
+    return true;
+  });
+  for (let id = 10; id <= 12; id++) {
+    screen.parser.registerOscHandler(id, (data) => {
+      const parts = data.split(";");
+      for (let i = 0; i < parts.length && id + i <= 12; i++) {
+        const index = id + i - 10;
+        if (parts[i] === "?") reply(`\x1b]${id + i};${colorReply(special[index])}\x1b\\`);
+        else {
+          const color = parseColor(parts[i]);
+          if (color) special[index] = color;
+        }
+      }
+      return true;
+    });
+    screen.parser.registerOscHandler(id + 100, () => {
+      special[id - 10] = specialDefaults[id - 10];
+      return true;
+    });
+  }
+  screen.parser.registerOscHandler(104, (data) => {
+    if (!data) for (let i = 0; i < 256; i++) palette[i] = ansiDefaults[i];
+    else for (const part of data.split(";")) {
+      const index = Number(part);
+      if (/^\d+$/.test(part) && index <= 255) palette[index] = ansiDefaults[index];
+    }
+    return true;
+  });
+}
 /** A PTY shell owns its session; foreground jobs use different process groups within it. */
 function signalSession(pid: number, signal: NodeJS.Signals): void {
   const rows = execFileSync("ps", ["-A", "-o", "pid=", "-o", "sess="], {
@@ -67,6 +143,8 @@ type Entry = {
   decoder: TextDecoder;
   closed: boolean;
   pending: number;
+  viewers: Map<string, NodeJS.Timeout>;
+  focusReported: boolean | null;
 };
 
 /** Processes and screen state belong to the daemon, not to a web link. */
@@ -141,6 +219,7 @@ export class TerminalManager {
       rows,
       scrollback: 2000,
       allowProposedApi: true,
+      windowOptions: { getWinSizeChars: true },
     });
     const serializer = new SerializeAddon();
     screen.loadAddon(serializer);
@@ -169,6 +248,7 @@ export class TerminalManager {
             }
             screen.write(data, () => {
               entry.pending -= data.length;
+              if (!entry.closed) this.syncFocus(entry);
               if (!entry.closed)
                 this.emit(id, { type: "output", data, cursor: ++entry.cursor });
             });
@@ -185,8 +265,16 @@ export class TerminalManager {
       decoder,
       closed: false,
       pending: 0,
+      viewers: new Map(),
+      focusReported: null,
     };
     this.entries.set(id, entry);
+    installColorHandlers(screen, (data) => {
+      if (!entry.closed) entry.process.terminal?.write(data);
+    });
+    screen.onData((data) => {
+      if (!entry.closed) entry.process.terminal?.write(data);
+    });
     void process.exited.then(() => this.remove(entry));
     return { ...terminal };
   }
@@ -201,6 +289,31 @@ export class TerminalManager {
       snapshot: entry.serializer.serialize(),
       cursor: entry.cursor,
     };
+  }
+  private syncFocus(entry: Entry): void {
+    if (!entry.screen.modes.sendFocusMode) {
+      entry.focusReported = null;
+      return;
+    }
+    const focused = entry.viewers.size > 0;
+    if (focused !== entry.focusReported) {
+      entry.focusReported = focused;
+      entry.process.terminal?.write(focused ? "\x1b[I" : "\x1b[O");
+    }
+  }
+  focus(id: string, viewer: string, focused: boolean): void {
+    if (typeof viewer !== "string" || viewer.length < 1 || viewer.length > 128 || typeof focused !== "boolean") throw invalid();
+    const entry = this.get(id);
+    if (focused && !entry.viewers.has(viewer) && entry.viewers.size >= 128)
+      throw new HostOpError(409, "terminal_viewer_limit", "Too many terminal viewers");
+    clearTimeout(entry.viewers.get(viewer));
+    if (focused) {
+      entry.viewers.set(viewer, setTimeout(() => {
+        entry.viewers.delete(viewer);
+        if (!entry.closed) this.syncFocus(entry);
+      }, 15000));
+    } else entry.viewers.delete(viewer);
+    this.syncFocus(entry);
   }
   input(id: string, data: string): void {
     if (typeof data !== "string" || data.length > 65536) throw invalid();
@@ -241,6 +354,8 @@ export class TerminalManager {
   private remove(entry: Entry): void {
     if (entry.closed) return;
     entry.closed = true;
+    for (const timer of entry.viewers.values()) clearTimeout(timer);
+    entry.viewers.clear();
     this.entries.delete(entry.terminal.id);
     entry.screen.dispose();
     this.emit(entry.terminal.id, { type: "closed" });

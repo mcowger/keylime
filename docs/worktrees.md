@@ -72,6 +72,10 @@ Open terminals from a workspace. Each terminal has its own application tab and s
 
 Switching tabs, closing the browser, or restarting the web server leaves shells running. Reopening the workspace discovers its terminals and restores their retained display. Explicitly closing a terminal ends its shell; stopping the host daemon ends all its terminals. Terminal state is in daemon memory, not durable across daemon restarts.
 
+Terminal queries are answered by the host, including when no browser is connected. Color reports use a daemon-owned palette rather than the browser theme; character-size reports use the PTY dimensions. Pixel-size queries are not enabled. Focus reports reflect whether any connected viewer is focused; a disconnected viewer's focus expires after a short lease.
+
+The browser suppresses generated color and focus replies using xterm 6's internal input service, because its public input event does not distinguish replies from typed or pasted bytes. When upgrading xterm, verify that boundary and test queries with zero, one and multiple viewers.
+
 Workspace deletion includes terminals in its process confirmation and stops them before removing the worktree.
 
 Each daemon allows 32 terminals and retains 2,000 scrollback lines per terminal. Screens resize up to 500 columns by 300 rows. A pathological output burst that leaves more than 16 MiB awaiting terminal parsing stops that terminal to bound daemon memory; ordinary browser or host-link backpressure instead reconnects the display without stopping its shell.

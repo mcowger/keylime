@@ -36,7 +36,8 @@ export function terminalCommand(
   hostId: string,
   command:
     | { action: "input"; data: string }
-    | { action: "resize"; cols: number; rows: number },
+    | { action: "resize"; cols: number; rows: number }
+    | { action: "focus"; viewer: string; focused: boolean },
 ) {
   return request<unknown>(terminalUrl(id, hostId), {
     method: "POST",
