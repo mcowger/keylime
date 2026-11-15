@@ -2035,6 +2035,7 @@ export const SessionSidebar = memo(function SessionSidebar({
             provisionalSelectionRef.current = false;
             setSelectedCwd(path);
             setSelectedHostId(host);
+            if (path !== selectedCwd || host !== selectedHostId) onClose?.();
           }}
           onWorkspaceRemoved={(path, host) => {
             if (selectedCwd === path && selectedHostId === host) {

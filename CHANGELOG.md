@@ -64,6 +64,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Workspace deletion and project/session unregistration now use in-app confirmation dialogs instead of browser prompts
 - Thinking and wait-tool Markdown blocks have consistent spacing without extra space after the last block.
 - Wait tool output renders restricted Markdown with styled headings and collapsible system notices and reminders.
+- Selecting a different workspace closes the mobile sidebar
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
