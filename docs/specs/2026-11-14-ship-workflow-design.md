@@ -24,18 +24,18 @@ A **Ship** button on a linked (non-default) workspace's chat opens one sheet:
 
 `runner/src/commands/git.ts`, sent through the existing command path (`POST /api/agent/[id]`):
 
-- `commit_plan { context?, changelog? }`: refuses while the session is not settled. Stages everything when nothing is
-  staged, then runs omp's commit agent (`runCommitAgentSession`) on the session's own model registry, settings and
+- `commit_plan { context?, changelog? }`: refuses while the session is not settled. Stages the entire workspace,
+  then runs omp's commit agent (`runCommitAgentSession`) on the session's own model registry, settings and
   auth storage, with omp's trivial-change and fallback paths. Returns the plan, never commits.
 - `commit_apply { plan }`: applies the plan's changelog edits (`applyChangelogProposals`), then creates the commits:
   one commit with the staged tree, or each split group in dependency order with its hunks staged, as omp's own split
   commit does. Messages are used verbatim.
-- `generate_pr_description { base, context? }`: one stateless completion on the `commit` role model (the same
-  resolution as `omp commit`: `commit`, then `smol`, then chat roles) over the commits, diff stat and diff (60 KB cap)
-  of `base..HEAD`, plus the session's first user-attributed prompt on the active branch (4 KB cap) as the reason for
-  the change. The rest of the conversation is deliberately not sent: the description is about the outcome, not the
-  path that produced it, and the diff wins where it and the request differ. Returns `{ title, body }`; unparseable
-  output falls back to the commit log.
+- `generate_pr_description { base, context?, plannedMessages? }`: after planning, one stateless completion on the
+  `commit` role model (the same resolution as `omp commit`: `commit`, then `smol`, then chat roles) over the commits,
+  planned messages and staged tree diff against the merge base (60 KB cap), plus the session's first user-attributed
+  prompt on the active branch (4 KB cap) as the reason for the change. The rest of the conversation is not sent;
+  the diff wins where it and the request differ. Returns `{ title, body }`; unparseable output falls back to the
+  commit log or staged diff stat.
 
 Main gives these three commands a long timeout; a timeout never recycles the child.
 

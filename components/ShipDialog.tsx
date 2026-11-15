@@ -139,12 +139,13 @@ export function ShipDialog({
   }, [open, host, projectPath, path, sessionId]);
 
   useEffect(() => {
-    if (!open || mode === "local" || !preview || preview.issues.length || pr || prLoading) return;
+    if (!open || mode === "local" || !preview || preview.issues.length || plan === undefined || (plan === null && preview.ahead === 0) || pr || prLoading) return;
     const current = generation.current;
     setPrLoading(true);
     void sendAgentCommand<PrDescription>(sessionId, {
       type: "generate_pr_description",
       base: preview.base,
+      plannedMessages: plan?.commits.map((commit) => commit.message) ?? [],
     })
       .then((value) => {
         if (generation.current === current) setPr(value);
@@ -158,7 +159,7 @@ export function ShipDialog({
       .finally(() => {
         if (generation.current === current) setPrLoading(false);
       });
-  }, [open, mode, preview, pr, prLoading, sessionId]);
+  }, [open, mode, preview, plan, pr, prLoading, sessionId]);
 
   async function ship() {
     if (!preview || plan === undefined || !controller.current) return;

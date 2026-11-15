@@ -85,6 +85,41 @@ test("ship loads a plan and submits edited commit messages", async () => {
   }
 });
 
+test("PR generation waits for the commit plan when the base is dirty", async () => {
+  const originalFetch = globalThis.fetch;
+  const commands = [];
+  let finishPlan;
+  const pendingPlan = new Promise((resolve) => { finishPlan = resolve; });
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).startsWith("/api/ship?")) return Response.json({
+      branch: "work", base: "main", ahead: 0, behind: 0, dirty: true,
+      baseDirty: true, issues: [], github: { repo: "owner/repo", gh: "ok" },
+    });
+    const command = JSON.parse(init.body);
+    commands.push(command);
+    if (command.type === "commit_plan") return pendingPlan;
+    if (command.type === "generate_pr_description") return Response.json({ success: true, data: { title: "Add feature", body: "Changes" } });
+    throw new Error(`Unexpected command ${command.type}`);
+  };
+  try {
+    const view = render(React.createElement(ShipDialog, {
+      open: true, onOpenChange() {}, host: "local", projectPath: "/repo",
+      path: "/work", sessionId: "session", onAskAgentToResolve: async () => {},
+    }));
+    await waitFor(() => assert.equal(commands.length, 1));
+    assert.equal(commands[0].type, "commit_plan");
+    finishPlan(Response.json({ success: true, data: { plan: {
+      kind: "single", commits: [{ message: "Add feature", files: ["feature.txt"] }],
+      changelog: [], warnings: [], usedFallback: false,
+    } } }));
+    await view.findByLabelText("PR description");
+    assert.deepEqual(commands[1].plannedMessages, ["Add feature"]);
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("preflight issues prevent commit planning and can be sent to the agent", async () => {
   const originalFetch = globalThis.fetch;
   const commands = [];

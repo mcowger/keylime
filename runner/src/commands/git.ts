@@ -428,17 +428,21 @@ async function prDescription(
 ) {
   const base = optionalString(args.base, "base");
   const context = optionalString(args.context, "context");
+  if (args.plannedMessages !== undefined && !strings(args.plannedMessages))
+    throw new Error("plannedMessages must be an array of strings");
+  const plannedMessages = (args.plannedMessages as string[] | undefined) ?? [];
   if (!base || base.startsWith("-"))
     throw new Error("base must be a valid git ref");
   const cwd = ctx.session.sessionManager.getCwd();
   await git(cwd, ["check-ref-format", "--allow-onelevel", base]);
+  const mergeBase = (await git(cwd, ["merge-base", base, "HEAD"])).trim();
   const [log, stat, diff] = await Promise.all([
     git(cwd, ["log", "--reverse", "--format=%s%n%n%b", `${base}..HEAD`]),
-    git(cwd, ["diff", "--stat", `${base}...HEAD`]),
-    gitBounded(cwd, ["diff", "--no-color", `${base}...HEAD`], 60_000),
+    git(cwd, ["diff", "--cached", "--stat", mergeBase]),
+    gitBounded(cwd, ["diff", "--cached", "--no-color", mergeBase], 60_000),
   ]);
-  if (!log.trim())
-    throw new CommandError("No commits to describe", "no_commits");
+  if (!log.trim() && !diff.text.trim())
+    throw new CommandError("No changes to describe", "no_commits");
   // The outcome (commits and diff) plus the request that started the session, for the why; never the conversation.
   let request = "";
   for (const entry of ctx.session.sessionManager.getBranch()) {
@@ -465,7 +469,7 @@ async function prDescription(
     ctx.session.settings,
     ctx.session.modelRegistry,
   );
-  const userPrompt = `${request ? `Author's original request:\n${request}\n\n` : ""}${context ? `Requester's note: ${context}\n\n` : ""}Commits (oldest first):\n${log}\nDiff stat:\n${stat}\nDiff${diff.truncated ? " (truncated)" : ""}:\n${diff.text}`;
+  const userPrompt = `${request ? `Author's original request:\n${request}\n\n` : ""}${context ? `Requester's note: ${context}\n\n` : ""}Commits (oldest first):\n${log}\nPlanned commit messages:\n${plannedMessages.join("\n\n")}\nDiff stat:\n${stat}\nDiff${diff.truncated ? " (truncated)" : ""}:\n${diff.text}`;
   const message = await completeSimple(
     model,
     {
@@ -493,7 +497,7 @@ async function prDescription(
   } catch {
     /* Fall back to the commit log. */
   }
-  return { title: log.split("\n")[0], body: `## Commits\n\n${log.trim()}` };
+  return { title: log.trim() ? log.split("\n")[0] : plannedMessages[0]?.split("\n")[0] || "Changes", body: `## Changes\n\n${log.trim() || stat.trim()}` };
 }
 
 export const gitCommands: CommandTable = {

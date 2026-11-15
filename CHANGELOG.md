@@ -104,6 +104,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Workspace creation identifies its project, and mobile branch inputs use 16px text to avoid iOS focus zoom
 - Workspace terminal queries are answered once by the host, even without a browser: device attributes, color and character dimensions no longer depend on connected viewers. Focus reporting aggregates viewer leases
 - Prompt-first workspace creation starts the agent after blocking setup completes without waiting for background setup commands
+- Pull request descriptions now wait for the commit plan and use planned commit messages when the workspace has no commits
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
