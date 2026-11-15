@@ -222,10 +222,12 @@ test("manual edits preserve stale Paseo choices without revalidating them", asyn
 test("invalid stored commands can be replaced explicitly without losing typed replacements on failure", async () => {
   let saved;
   let fail = true;
+  let recovered = false;
   globalThis.fetch = async (_url, options) => {
-    if (!options?.method) return Response.json({ error: "Stored workspace pipeline is invalid", code: "invalid_workspace_settings" }, { status: 400 });
+    if (!options?.method) return recovered ? Response.json({ ...settings(), override: saved.override }) : Response.json({ error: "Stored workspace pipeline is invalid", code: "invalid_workspace_settings" }, { status: 400 });
     saved = JSON.parse(options.body).input;
     if (fail) return Response.json({ error: "Repair host defaults first" }, { status: 400 });
+    recovered = true;
     return Response.json(settings());
   };
   const view = render(React.createElement(CreationPipelineEditor, { hostId: "local", projectPath: "/repo", gitProject: true }));
@@ -237,5 +239,8 @@ test("invalid stored commands can be replaced explicitly without losing typed re
   assert.deepEqual(saved, { projectPath: "/repo", override: { pre: ["echo setup"], create: [], postBlocking: [], postNonBlocking: [] } });
   fail = false;
   fireEvent.click(view.getByRole("button", { name: "Replace invalid commands" }));
-  await waitFor(() => assert.deepEqual(saved.override.pre, ["echo setup"]));
+  await waitFor(() => assert.equal(view.queryByRole("button", { name: "Replace invalid commands" }), null));
+  assert.equal(view.queryByText(/Stored workspace commands are invalid/), null);
+  assert.equal(view.getByRole("textbox", { name: "Pre commands (one per line)" }).value, "echo setup");
+  assert.ok(view.getByRole("checkbox", { name: /Override all stages/ }));
 });
