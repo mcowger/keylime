@@ -15,6 +15,17 @@ const fieldStyle = {
   color: "var(--text)",
 } as const;
 
+const buttonStyle = {
+  padding: "6px 14px",
+  background: "var(--accent-strong)",
+  border: "none",
+  borderRadius: "var(--radius-control)",
+  color: "var(--on-accent)",
+  cursor: "pointer",
+  fontSize: 13,
+  fontWeight: 600,
+} as const;
+
 export function CreationPipelineEditor({
   hostId,
   projectPath,
@@ -116,14 +127,15 @@ export function CreationPipelineEditor({
         <fieldset disabled={busy} style={{ minWidth: 0 }}>
           <legend>Workspace configuration source</legend>
           <label><input type="radio" name={`source-${hostId}-${projectPath}`} checked={settings.source === "manual"} onChange={() => setSettings({ ...settings, source: "manual" })} /> Manual</label>{" "}
-          <label><input type="radio" name={`source-${hostId}-${projectPath}`} checked={settings.source === "paseo"} onChange={() => setSettings({ ...settings, source: "paseo" })} /> Follow Paseo workspace setup</label>
+          {!settings.paseo?.missing && <label><input type="radio" name={`source-${hostId}-${projectPath}`} checked={settings.source === "paseo"} onChange={() => setSettings({ ...settings, source: "paseo" })} /> Follow Paseo workspace setup</label>}
         </fieldset>
       )}
       {gitProject && settings?.source === "paseo" && (
         <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
           <p>Follow Paseo uses the current on-disk project file, including uncommitted changes. It bypasses all manual project and host commands and uses built-in Git workspace creation, .worktreeinclude copying, setup and teardown.</p>
           <p>Services, scripts, terminals and port runtime are not supported. Future edits to the recipe will execute as your user when workspaces are created or deleted. Only enable this for a trusted project. Saving settings does not run the recipe.</p>
-          <button type="button" disabled={refreshing || busy} onClick={() => void refreshPreview()}>{refreshing ? "Refreshing preview..." : "Refresh preview"}</button>
+          <p style={{ color: "var(--text-dim)", fontSize: 12 }}>Setup and teardown commands receive PASEO_SOURCE_CHECKOUT_PATH (the project checkout), PASEO_WORKTREE_PATH, and PASEO_BRANCH_NAME. Workspace commands also receive PASEO_PROJECT_PATH, PASEO_WORKSPACE_PATH, PASEO_BRANCH, PASEO_BASE_REF, PASEO_BRANCH_MODE, and PASEO_CREATE_RESULT as available; the create-result file is not used in Paseo mode.</p>
+          <div><button type="button" className="dialog-action" style={buttonStyle} disabled={refreshing || busy} onClick={() => void refreshPreview()}>{refreshing ? "Refreshing preview..." : "Refresh preview"}</button></div>
           {previewError && <div role="alert">Preview refresh failed: {previewError}</div>}
           {settings.paseo ? (
             <div style={{ minWidth: 0 }}>
@@ -156,7 +168,7 @@ export function CreationPipelineEditor({
       </>}
       {error && <div role="alert">{error} {!settings && <button type="button" onClick={() => setRevision((n) => n + 1)}>Retry</button>}</div>}
       {!settings && !error && <div role="status">Loading creation commands...</div>}
-      <div><button type="button" disabled={!settings || busy} onClick={() => void save()}>{busy ? "Saving..." : "Save commands"}</button></div>
+      <div><button type="button" className="dialog-action" style={buttonStyle} disabled={!settings || busy} onClick={() => void save()}>{busy ? "Saving..." : "Save commands"}</button></div>
     </section>
   );
 }

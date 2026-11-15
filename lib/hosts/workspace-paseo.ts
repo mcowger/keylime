@@ -28,7 +28,13 @@ export function readPaseo(projectPath: string): WorkspacePaseoPreview {
   const includePath = path.join(projectPath, ".worktreeinclude");
   const preview: WorkspacePaseoPreview = { path: recipePath, setup: [], teardown: [], includePath, includePatterns: [], unsupportedFeatures: [] };
   try {
-    const raw = readRegular(recipePath);
+    let raw: string;
+    try {
+      raw = readRegular(recipePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") preview.missing = true;
+      throw error;
+    }
     const include = readRegular(includePath, true);
     const data: unknown = JSON.parse(raw);
     if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("paseo.json must contain an object");

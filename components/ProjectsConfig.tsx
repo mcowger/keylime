@@ -158,10 +158,10 @@ export function ProjectSettings({
       </div>
       <label>
         Display name{" "}
-        <input value={name} onChange={(e) => setName(e.target.value)} />
+        <input style={{ width: "100%", padding: 8, border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg-panel)", color: "var(--text)" }} value={name} onChange={(e) => setName(e.target.value)} />
       </label>
       <div>
-        <button type="button" disabled={busy} onClick={() => void saveName()}>
+        <button type="button" className="dialog-action" style={{ padding: "6px 14px", background: "var(--accent-strong)", border: "none", borderRadius: "var(--radius-control)", color: "var(--on-accent)", cursor: "pointer", fontSize: 13, fontWeight: 600 }} disabled={busy} onClick={() => void saveName()}>
           {busy ? "Saving..." : "Save name"}
         </button>
       </div>

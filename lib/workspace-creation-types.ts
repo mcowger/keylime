@@ -12,6 +12,7 @@ export interface WorkspacePaseoPreview {
   includePatterns: string[];
   unsupportedFeatures: string[];
   fingerprint?: string;
+  missing?: boolean;
   error?: string;
 }
 export interface WorkspaceCreationSettings {

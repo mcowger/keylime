@@ -1021,7 +1021,7 @@ export function HierarchySidebar({
       </Dialog>
       {settingsProject && (
         <Dialog open onOpenChange={(open) => { if (!open) setSettingsProject(null); }}>
-          <DialogContent style={{ width: 640, maxWidth: "92vw", maxHeight: "90vh", overflowY: "auto" }}>
+          <DialogContent style={{ width: 640, maxWidth: "92vw" }}>
             <DialogTitle>Project settings</DialogTitle>
             <ProjectSettings
               key={`${settingsProject.host}:${settingsProject.project.id}`}

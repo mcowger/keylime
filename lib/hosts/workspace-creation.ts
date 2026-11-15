@@ -326,6 +326,12 @@ async function execute(job: WorkspaceCreationJob, requested: string, paseo: Work
     OMP_CREATE_RESULT: resultFile,
     GIT_TERMINAL_PROMPT: "0",
     ...(paseo ? {
+      PASEO_PROJECT_PATH: input.projectPath,
+      PASEO_WORKSPACE_PATH: requested,
+      PASEO_BRANCH: input.branch,
+      PASEO_BASE_REF: input.baseRef,
+      PASEO_BRANCH_MODE: input.mode,
+      PASEO_CREATE_RESULT: resultFile,
       PASEO_SOURCE_CHECKOUT_PATH: input.projectPath,
       PASEO_WORKTREE_PATH: requested,
       PASEO_BRANCH_NAME: input.branch,
@@ -378,6 +384,7 @@ async function execute(job: WorkspaceCreationJob, requested: string, paseo: Work
     persist(job);
     env.OMP_WORKSPACE_PATH = worktree.path;
     if (paseo) {
+      env.PASEO_WORKSPACE_PATH = worktree.path;
       env.PASEO_WORKTREE_PATH = worktree.path;
       copyPaseoIncludes(input.projectPath, worktree.path, paseo);
     }
@@ -670,7 +677,9 @@ export async function removeRegisteredWorktree(
       };
       const env = createGitEnvironment({
         OMP_PROJECT_PATH: input.projectPath, OMP_WORKSPACE_PATH: workspace.path,
-        OMP_BRANCH: branch ?? "", PASEO_SOURCE_CHECKOUT_PATH: input.projectPath,
+        OMP_BRANCH: branch ?? "", PASEO_PROJECT_PATH: input.projectPath,
+        PASEO_WORKSPACE_PATH: workspace.path, PASEO_BRANCH: branch ?? "",
+        PASEO_SOURCE_CHECKOUT_PATH: input.projectPath,
         PASEO_WORKTREE_PATH: workspace.path, PASEO_BRANCH_NAME: branch ?? "",
         GIT_TERMINAL_PROMPT: "0",
       });

@@ -81,6 +81,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Ship checks for blocking Git operations and potential conflicts before generating a commit plan, without changing the workspace or index. Ask agent to resolve submits the request directly and keeps the dialog open if submission fails
 - Ship uses the configured commit model and thinking level instead of the session model when generating commit plans
 - Selecting the current workspace dismisses the mobile sidebar, just like selecting another workspace
+- Paseo setup and teardown commands now receive documented OMP_* and PASEO_* workspace environment aliases; invalid but present recipes remain selectable for error inspection
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
