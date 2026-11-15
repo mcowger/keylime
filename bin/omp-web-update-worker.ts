@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 "use strict";
-// Dependency-free CommonJS, copied outside pkgDir to survive replacement.
-const fs = require("node:fs");
-const path = require("node:path");
-const cp = require("node:child_process");
-const os = require("node:os");
+// Dependency-free, copied outside pkgDir to survive replacement.
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as cp from "node:child_process";
+import * as os from "node:os";
 
 const STAGES = [
   "preparing",
@@ -14,13 +14,13 @@ const STAGES = [
   "finalizing",
 ];
 
-function arg(name) {
+function arg(name: string): string | undefined {
   const idx = process.argv.indexOf(name);
   return idx >= 0 ? process.argv[idx + 1] : undefined;
 }
-const attemptId = arg("--attempt");
-const root = arg("--root");
-const packageDir = arg("--package-dir");
+const attemptId = arg("--attempt")!;
+const root = arg("--root")!;
+const packageDir = arg("--package-dir")!;
 const managerPath = arg("--manager-path");
 const target = arg("--target");
 const from = arg("--from");
@@ -29,7 +29,7 @@ const serverPid = Number(arg("--server-pid"));
 // Set when the server runs as this systemd unit; systemd stops and starts it.
 const systemdUnit = arg("--systemd-unit");
 const systemctlScope = arg("--systemd-user") === "1" ? ["--user"] : [];
-let descriptor;
+let descriptor: { port?: number; hostname?: string } | null;
 try {
   descriptor = JSON.parse(arg("--descriptor") || "null");
 } catch {
@@ -42,21 +42,21 @@ function leaseFile() {
 function statusFile() {
   return path.join(root, "status.json");
 }
-function markerFile(m) {
+function markerFile(m: string) {
   return path.join(root, attemptId + "." + m);
 }
 function abortFile() {
   return markerFile("abort.json");
 }
 
-function readJson(file) {
+function readJson(file: string): any {
   try {
     return JSON.parse(fs.readFileSync(file, "utf8"));
   } catch {
     return null;
   }
 }
-function atomicWrite(file, obj) {
+function atomicWrite(file: string, obj: unknown) {
   const tmp = file + "." + process.pid + ".tmp";
   fs.writeFileSync(tmp, JSON.stringify(obj), {
     encoding: "utf8",
@@ -72,7 +72,7 @@ function atomicWrite(file, obj) {
     throw e;
   }
 }
-function updateStatus(patch) {
+function updateStatus(patch: Record<string, unknown>) {
   const cur = readJson(statusFile()) || {};
   const next = { ...cur, ...patch };
   // atomic write via tmp+rename
@@ -85,10 +85,10 @@ function updateStatus(patch) {
   });
   fs.renameSync(tmp, statusFile());
 }
-function sleep(ms) {
+function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
-// The launcher (bin/omp-web.js watchUpdateCompletion) was armed at commit: an attempt that ends without a restart must
+// The launcher (bin/omp-web.ts watchUpdateCompletion) was armed at commit: an attempt that ends without a restart must
 // disarm it, or it takes the running server's next exit for this update's restart and waits forever.
 function disarmLauncher() {
   try {
@@ -113,10 +113,10 @@ function isLaunchdActive() {
     return false;
   }
 }
-function systemctl(action) {
+function systemctl(action: string) {
   const result = cp.spawnSync(
     "systemctl",
-    [...systemctlScope, action, systemdUnit],
+    [...systemctlScope, action, systemdUnit!],
     { encoding: "utf8", timeout: 120000 },
   );
   if (result.status !== 0) {
@@ -203,10 +203,10 @@ function preflightCandidate() {
       return;
     }
     // OMP_WEB_PACKAGE_DIR: the launcher set it to the running install, whose omp this must not check.
-    const candidate = (command, timeout) => {
+    const candidate = (command: string, timeout: number) => {
       const result = cp.spawnSync(
         process.execPath,
-        [path.join(release, "bin", "omp-web.js"), command],
+        [path.join(release, "bin", "omp-web.ts"), command],
         {
           cwd: prefix,
           timeout,
@@ -258,11 +258,10 @@ async function runManagerGate() {
     });
     lastResult = result;
     const stderr = result.stderr ? result.stderr.toString() : "";
-    const spawnError = result.error
-      ? String(result.error.code || result.error.message || "")
-      : "";
+    const error = result.error as NodeJS.ErrnoException | undefined;
+    const spawnError = error ? String(error.code || error.message || "") : "";
     const isBusy =
-      (result.error && ["EBUSY", "EPERM"].includes(result.error.code || "")) ||
+      (error && ["EBUSY", "EPERM"].includes(error.code || "")) ||
       /EBUSY|EPERM/.test(stderr) ||
       /EBUSY|EPERM/.test(spawnError);
     if (isBusy && retries === 0) {
@@ -277,10 +276,11 @@ async function runManagerGate() {
       ? lastResult.stderr.toString().trim().slice(0, 500)
       : "";
     const spawnErr = lastResult.error
-      ? String(lastResult.error.message || lastResult.error.code || "").slice(
-          0,
-          200,
-        )
+      ? String(
+          lastResult.error.message ||
+            (lastResult.error as NodeJS.ErrnoException).code ||
+            "",
+        ).slice(0, 200)
       : "";
     const detail = stderr || spawnErr;
     throw new Error(
@@ -289,7 +289,7 @@ async function runManagerGate() {
   }
 }
 
-async function restartServices(info) {
+async function restartServices(info: { systemd?: boolean; launchd: boolean }) {
   updateStatus({ stage: "restarting" });
   if (info.systemd) {
     systemctl("start");

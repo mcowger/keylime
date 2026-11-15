@@ -1,17 +1,15 @@
 #!/usr/bin/env bun
-"use strict";
+import { spawnSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { resolvePasswordHash } from "./omp-web-hash-password.ts";
 
 // Install ompweb as a macOS launchd user agent (starts at login, restarts on crash).
 //
 // Usage (installed as the `ompweb-launchd` bin, or run via bunx / bun directly):
 //   ompweb-launchd [install [package-spec]|uninstall|status]
 //   bunx --package @kahme247/ompweb@latest ompweb-launchd install
-
-const { spawnSync } = require("node:child_process");
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-const { resolvePasswordHash } = require("./omp-web-hash-password.ts");
 
 const LABEL = "com.kahme247.ompweb";
 // The host daemon links this machine to an omp-web (`ompweb host`); it runs next to the web agent.
@@ -27,12 +25,12 @@ const HOST_PLIST = path.join(
 const LOG_DIR = path.join(HOME, "Library", "Logs", "ompweb");
 const DOMAIN = `gui/${process.getuid?.() ?? 0}`;
 
-function fail(message) {
+function fail(message: string): never {
   console.error(`error: ${message}`);
   process.exit(1);
 }
 
-function isExecutableFile(candidate) {
+function isExecutableFile(candidate: string) {
   try {
     fs.accessSync(candidate, fs.constants.X_OK);
     return fs.statSync(candidate).isFile();
@@ -41,7 +39,7 @@ function isExecutableFile(candidate) {
   }
 }
 
-function which(name) {
+function which(name: string) {
   for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
     if (dir && isExecutableFile(path.join(dir, name)))
       return path.join(dir, name);
@@ -49,14 +47,17 @@ function which(name) {
   return null;
 }
 
-function xmlEscape(value) {
+function xmlEscape(value: string) {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 }
 
-function launchctl(args, { ignoreFailure = false } = {}) {
+function launchctl(
+  args: string[],
+  { ignoreFailure = false }: { ignoreFailure?: boolean } = {},
+) {
   const result = spawnSync("launchctl", args, { encoding: "utf8" });
   if (result.error) fail(`launchctl not runnable: ${result.error.message}`);
   if (result.status !== 0 && !ignoreFailure) {
@@ -66,7 +67,19 @@ function launchctl(args, { ignoreFailure = false } = {}) {
 }
 
 // One launch agent; `throttleInterval` (seconds) spaces out KeepAlive restarts.
-function buildPlist({ label, args, env, logName, throttleInterval }) {
+function buildPlist({
+  label,
+  args,
+  env,
+  logName,
+  throttleInterval,
+}: {
+  label: string;
+  args: string[];
+  env: Record<string, string>;
+  logName: string;
+  throttleInterval?: number;
+}) {
   const argsXml = args
     .map((arg) => `    <string>${xmlEscape(arg)}</string>`)
     .join("\n");
@@ -100,7 +113,15 @@ ${envXml}
 }
 
 // The daemon needs the web agent's PATH, omp binary and agent dir (host.json), not its password.
-function buildHostEnv({ svcPath, ompBin, agentDir }) {
+function buildHostEnv({
+  svcPath,
+  ompBin,
+  agentDir,
+}: {
+  svcPath: string;
+  ompBin?: string | null;
+  agentDir?: string;
+}) {
   return {
     PATH: svcPath,
     ...(ompBin ? { OMP_WEB_OMP_BIN: ompBin } : {}),
@@ -108,7 +129,7 @@ function buildHostEnv({ svcPath, ompBin, agentDir }) {
   };
 }
 
-function install(pkgArg) {
+function install(pkgArg?: string) {
   const bunBin = process.execPath;
 
   // Only an explicit override: ompweb runs its own omp (ompweb-omp). A stock omp on PATH cannot run its sessions.
@@ -267,6 +288,6 @@ function main() {
   }
 }
 
-if (require.main === module) main();
+if (import.meta.main) main();
 
-module.exports = { HOST_LABEL, LABEL, buildHostEnv, buildPlist };
+export { HOST_LABEL, LABEL, buildHostEnv, buildPlist };

@@ -1,5 +1,18 @@
 #!/usr/bin/env bun
-"use strict";
+import { parseArgs } from "node:util";
+import { spawnSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import {
+  getServiceEnvPath,
+  readServiceEnv,
+  writeServiceEnv,
+} from "./service-env.ts";
+import { resolvePasswordHash } from "./omp-web-hash-password.ts";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 
 // Install ompweb as a Linux systemd user service.
 //
@@ -10,18 +23,6 @@
 // `install` creates ~/.omp/agent/web-service.env. The file is deliberately
 // separate from the unit so port, hostname, password, and omp path can be
 // edited without reinstalling the service.
-
-const { parseArgs } = require("node:util");
-const { spawnSync } = require("node:child_process");
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-const {
-  getServiceEnvPath,
-  readServiceEnv,
-  writeServiceEnv,
-} = require("./service-env.ts");
-const { resolvePasswordHash } = require("./omp-web-hash-password.ts");
 
 const UNIT_NAME = "ompweb";
 const UNIT = `${UNIT_NAME}.service`;
@@ -65,12 +66,12 @@ For LAN access, install with:
 `);
 }
 
-function fail(message) {
+function fail(message: string): never {
   console.error(`error: ${message}`);
   process.exit(1);
 }
 
-function isExecutableFile(candidate) {
+function isExecutableFile(candidate: string) {
   try {
     fs.accessSync(candidate, fs.constants.X_OK);
     return fs.statSync(candidate).isFile();
@@ -79,7 +80,7 @@ function isExecutableFile(candidate) {
   }
 }
 
-function which(name, env = process.env) {
+function which(name: string, env: NodeJS.ProcessEnv = process.env) {
   for (const dir of (env.PATH ?? "").split(path.delimiter)) {
     if (dir && isExecutableFile(path.join(dir, name)))
       return path.join(dir, name);
@@ -94,7 +95,7 @@ function which(name, env = process.env) {
 // `/opt/bun/bin/bun`), or null when the file is a native binary,
 // unreadable, or has no shebang. Symlinks are resolved first: the `omp` on
 // PATH is usually a link to the real launcher.
-function readLauncherInterpreter(binPath) {
+function readLauncherInterpreter(binPath: string) {
   let target = binPath;
   try {
     target = fs.realpathSync(binPath);
@@ -142,7 +143,10 @@ function readLauncherInterpreter(binPath) {
 // null when the binary is native / the interpreter is unknown. An absolute
 // shebang path's own directory wins; otherwise the interpreter is looked up
 // on the installer's PATH (split on `:` — unit files are Linux-only).
-function launcherInterpreterDir(binPath, env = process.env) {
+function launcherInterpreterDir(
+  binPath: string,
+  env: NodeJS.ProcessEnv = process.env,
+) {
   const interpreter = readLauncherInterpreter(binPath);
   if (!interpreter) return null;
   if (path.isAbsolute(interpreter)) {
@@ -169,20 +173,20 @@ function readPackageVersion() {
 }
 
 // Escape a value for a quoted systemd Environment="K=V" pair.
-function escapeUnitValue(value) {
+function escapeUnitValue(value: unknown) {
   return String(value)
     .replace(/\\/g, "\\\\")
     .replace(/"/g, '\\"')
     .replace(/%/g, "%%");
 }
 
-function environmentLine(entries) {
+function environmentLine(entries: [string, string][]) {
   return entries
     .map(([key, value]) => `"${key}=${escapeUnitValue(value)}"`)
     .join(" ");
 }
 
-function escapeUnitPath(value) {
+function escapeUnitPath(value: unknown) {
   return String(value)
     .replace(/\\/g, "\\\\")
     .replace(/%/g, "%%")
@@ -190,14 +194,14 @@ function escapeUnitPath(value) {
     .replace(/\t/g, "\\x09");
 }
 
-function formatExecStart(value) {
+function formatExecStart(value: unknown) {
   const escaped = escapeUnitValue(value);
   return /\s/.test(String(value)) ? `"${escaped}"` : escaped;
 }
 
 // Resolve the ompweb binary the unit will run. An explicit override wins,
 // followed by the sibling of Bun, then PATH.
-function resolveOmpwebBin(env = process.env) {
+function resolveOmpwebBin(env: NodeJS.ProcessEnv = process.env) {
   const override = env.OMP_WEB_SYSTEMD_BIN;
   if (override) {
     if (!isExecutableFile(override))
@@ -214,7 +218,7 @@ function resolveOmpwebBin(env = process.env) {
     "ompweb binary not found (next to bun or on PATH); set OMP_WEB_SYSTEMD_BIN",
   );
 }
-function validatePort(value) {
+function validatePort(value: unknown) {
   const port = Number(value);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error(`invalid port: ${value}`);
@@ -222,7 +226,7 @@ function validatePort(value) {
   return String(port);
 }
 
-function validateHostname(value) {
+function validateHostname(value: unknown) {
   const hostname = String(value ?? "").trim();
   if (!hostname) throw new Error("hostname must not be empty");
   return hostname;
@@ -232,6 +236,13 @@ function validateHostname(value) {
 // an editor can change them without reinstalling the unit. The web and
 // host units share the env file: same user, same HOME and PI_CODING_AGENT_DIR,
 // so both read the same <agent dir>/omp-web/host.json.
+type UnitOptions = {
+  ompwebBin: string;
+  env?: NodeJS.ProcessEnv;
+  home?: string;
+  envPath?: string;
+};
+
 function buildUnitText({
   description,
   execArgs,
@@ -240,6 +251,14 @@ function buildUnitText({
   env: extraEnv,
   home,
   envPath,
+}: {
+  description: string;
+  execArgs: string;
+  restart: { policy: string; delay: number; startLimit: string };
+  ompwebBin: string;
+  env: NodeJS.ProcessEnv;
+  home: string;
+  envPath: string;
 }) {
   const ompBin = extraEnv.OMP_WEB_OMP_BIN ?? null;
   const interpreterDir = ompBin ? launcherInterpreterDir(ompBin) : null;
@@ -283,7 +302,7 @@ function buildUnit({
   env = {},
   home = HOME,
   envPath = getServiceEnvPath(home),
-}) {
+}: UnitOptions) {
   return buildUnitText({
     description: "ompweb web service (oh-my-pi web UI)",
     execArgs: "",
@@ -308,7 +327,7 @@ function buildHostUnit({
   env = {},
   home = HOME,
   envPath = getServiceEnvPath(home),
-}) {
+}: UnitOptions) {
   return buildUnitText({
     description: "ompweb host daemon (links this machine to an ompweb server)",
     execArgs: " host",
@@ -324,7 +343,10 @@ function buildHostUnit({
   });
 }
 
-function systemctl(args, { ignoreFailure = false } = {}) {
+function systemctl(
+  args: string[],
+  { ignoreFailure = false }: { ignoreFailure?: boolean } = {},
+) {
   const result = spawnSync("systemctl", ["--user", ...args], {
     encoding: "utf8",
   });
@@ -343,7 +365,7 @@ function systemctl(args, { ignoreFailure = false } = {}) {
   return { ok, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
 }
 
-function systemdQuery(args) {
+function systemdQuery(args: string[]) {
   const result = spawnSync("systemctl", ["--user", ...args], {
     encoding: "utf8",
   });
@@ -351,7 +373,13 @@ function systemdQuery(args) {
   return { ok: result.status === 0, stdout: (result.stdout ?? "").trim() };
 }
 
-function install(options = {}) {
+function install(
+  options: {
+    port?: string | boolean;
+    hostname?: string | boolean;
+    autostart?: boolean;
+  } = {},
+) {
   let ompwebBin;
   try {
     ompwebBin = resolveOmpwebBin();
@@ -467,7 +495,7 @@ function install(options = {}) {
   );
 }
 
-function uninstall(options = {}) {
+function uninstall(options: { cleanConfig?: string | boolean } = {}) {
   systemctl(["disable", "--now", ...UNITS], { ignoreFailure: true });
   fs.rmSync(UNIT_PATH, { force: true });
   fs.rmSync(HOST_UNIT_PATH, { force: true });
@@ -482,7 +510,7 @@ function uninstall(options = {}) {
   console.log(`uninstalled: ${UNIT_NAME}, ${HOST_UNIT_NAME}`);
 }
 
-function readFileOrNull(file) {
+function readFileOrNull(file: string) {
   try {
     return fs.readFileSync(file, "utf8");
   } catch {
@@ -495,7 +523,7 @@ function installedUnits() {
   return UNITS.filter((unit) => unit === UNIT || fs.existsSync(HOST_UNIT_PATH));
 }
 
-const unitNames = (units) =>
+const unitNames = (units: string[]) =>
   units.map((unit) => unit.replace(/\.service$/, "")).join(", ");
 
 function start() {
@@ -516,7 +544,7 @@ function restart() {
   console.log(`restarted: ${UNIT_NAME}`);
 }
 
-function readUnitStatus(unit, unitPath) {
+function readUnitStatus(unit: string, unitPath: string) {
   const active = systemdQuery(["is-active", unit]);
   const enabled = systemdQuery(["is-enabled", unit]);
   const pid = systemdQuery(["show", "--property", "MainPID", "--value", unit]);
@@ -556,7 +584,7 @@ function readStatus() {
   };
 }
 
-function printStatus(asJson) {
+function printStatus(asJson?: string | boolean) {
   const status = readStatus();
   if (asJson) {
     console.log(JSON.stringify(status, null, 2));
@@ -587,10 +615,8 @@ function printStatus(asJson) {
 function openInBrowser() {
   const status = readStatus();
   const openBin = process.env.OMP_WEB_OPEN ?? which("xdg-open") ?? "xdg-open";
-  const child = spawnSync(openBin, [status.serviceUrl], {
-    stdio: "ignore",
-    detached: true,
-  });
+  const options = { stdio: "ignore" as const, detached: true };
+  const child = spawnSync(openBin, [status.serviceUrl], options);
   if (child.error)
     console.error(`Failed to open browser: ${child.error.message}`);
   else console.log(`Opening ${status.serviceUrl}...`);
@@ -695,7 +721,7 @@ async function runCli(argv = process.argv.slice(2)) {
   return { exitCode: 0 };
 }
 
-if (require.main === module) {
+if (import.meta.main) {
   runCli()
     .then(({ exitCode }) => {
       if (exitCode !== undefined && exitCode !== 0) process.exit(exitCode);
@@ -706,7 +732,7 @@ if (require.main === module) {
     });
 }
 
-module.exports = {
+export {
   DEFAULT_HOSTNAME,
   DEFAULT_PORT,
   ENV_PATH,

@@ -234,7 +234,7 @@ test(
     };
     const a = await server();
     const b = await server();
-    const daemon = launch([join(root, "bin", "omp-web-host.js")]);
+    const daemon = launch([join(root, "bin", "omp-web-host.ts")]);
     await until(
       async () => {
         const [ah, bh] = await Promise.all([

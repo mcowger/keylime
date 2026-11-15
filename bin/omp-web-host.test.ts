@@ -15,7 +15,7 @@ import type { TestContext } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const bin = fileURLToPath(new URL("./omp-web.js", import.meta.url));
+const bin = fileURLToPath(new URL("./omp-web.ts", import.meta.url));
 
 test("SIGTERM to `ompweb host` stops the daemon itself, leaving no orphan", async (t) => {
   const scratch = mkdtempSync(join(tmpdir(), "omp-web-host-cli-"));

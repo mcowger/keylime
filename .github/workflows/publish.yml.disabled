@@ -62,9 +62,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            bun bin/generate-release-notes.js --tag "$TAG" --output release-notes.md
-            printf '\nomp: ompweb-dev/oh-my-pi %s\n' "$OMP_TAG" >> release-notes.md
-            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$TAG" --notes-file release-notes.md --draft
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$TAG" --generate-notes --notes "omp: ompweb-dev/oh-my-pi $OMP_TAG" --draft
           fi
 
       # The runners, by the names and checksum listing lib/omp/runner-fetch.ts fetches (OMP_RUNNER_ASSET,

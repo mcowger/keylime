@@ -1,12 +1,34 @@
 #!/usr/bin/env bun
 "use strict";
+import type { ChildProcess } from "node:child_process";
+import type { Stats } from "node:fs";
+import type * as ChildProcessModule from "node:child_process";
+import type * as PathModule from "node:path";
+import type * as FsModule from "node:fs";
+import type * as CryptoModule from "node:crypto";
+import type * as OsModule from "node:os";
+import type * as HashPasswordModule from "./omp-web-hash-password";
+import type * as OptionsModule from "./omp-web-options";
+import type * as PortModule from "./port-availability";
+import type * as LifecycleModule from "./process-lifecycle";
+import type * as NetworkModule from "./network-addresses";
+
+type ServerChild = ChildProcess;
+type UpdateControl = { root: string; attemptId: string };
+type UpdateMessage = {
+  type?: string;
+  protocol?: number;
+  attemptId?: string;
+  root?: string;
+};
+type RestartRequest = { generation: number };
 
 // Forward service subcommands without requiring callers to know the secondary executable path.
-const forwardedServiceScripts = {
-  launchd: "omp-web-launchd.js",
-  "ompweb-launchd": "omp-web-launchd.js",
-  systemd: "omp-web-systemd.js",
-  "ompweb-systemd": "omp-web-systemd.js",
+const forwardedServiceScripts: Record<string, string> = {
+  launchd: "omp-web-launchd.ts",
+  "ompweb-launchd": "omp-web-launchd.ts",
+  systemd: "omp-web-systemd.ts",
+  "ompweb-systemd": "omp-web-systemd.ts",
 };
 
 // `ompweb hash-password` reads the password on stdin and prints the value for
@@ -16,7 +38,8 @@ if (
   process.argv[2] === "hash-password" ||
   process.argv[2] === "hash_password"
 ) {
-  const { runHashPasswordCommand } = require("./omp-web-hash-password.ts");
+  const { runHashPasswordCommand } =
+    require("./omp-web-hash-password.ts") as typeof HashPasswordModule;
   runHashPasswordCommand()
     .then((exitCode) => {
       process.exit(exitCode);
@@ -67,7 +90,7 @@ function startLauncher() {
   // `ompweb host` runs in this process: a supervisor's SIGTERM must reach the daemon, not a wrapper.
   if (process.argv[2] === "host") {
     process.argv.splice(2, 1);
-    require("./omp-web-host.js");
+    require("./omp-web-host.ts");
     return;
   }
   const forwardedServiceScript = forwardedServiceScripts[process.argv[2]];
@@ -88,25 +111,22 @@ function startLauncher() {
     process.exit(result.status ?? 1);
   }
 
-  const { spawn } = require("node:child_process");
-  const path = require("node:path");
-  const fs = require("node:fs");
-  const crypto = require("node:crypto");
-  const {
-    checkLaunchSecurity,
-    parseLaunchOptions,
-  } = require("./omp-web-options.ts");
-  const { isPortAvailable } = require("./port-availability.ts");
-  const {
-    terminateChildProcess,
-    wireChildProcessLifecycle,
-  } = require("./process-lifecycle.ts");
+  const { spawn } = require("node:child_process") as typeof ChildProcessModule;
+  const path = require("node:path") as typeof PathModule;
+  const fs = require("node:fs") as typeof FsModule;
+  const crypto = require("node:crypto") as typeof CryptoModule;
+  const { checkLaunchSecurity, parseLaunchOptions } =
+    require("./omp-web-options.ts") as typeof OptionsModule;
+  const { isPortAvailable } =
+    require("./port-availability.ts") as typeof PortModule;
+  const { terminateChildProcess, wireChildProcessLifecycle } =
+    require("./process-lifecycle.ts") as typeof LifecycleModule;
   const {
     getAccessibleAddresses,
     getBrowserUrl,
     formatAddressBanner,
     openInBrowser,
-  } = require("./network-addresses.ts");
+  } = require("./network-addresses.ts") as typeof NetworkModule;
 
   const UPDATE_PROTOCOL = 1;
   const UPDATE_MESSAGE = "ompweb:update-control";
@@ -115,28 +135,29 @@ function startLauncher() {
   const RESTART_ACK_RETRY_MS = 100;
   const RESTART_GATE_START = "ompweb:restart-gate-start";
 
-  function runRestartGate(startMessageType) {
-    const { spawn: spawnChild } = require("node:child_process");
-    const os = require("node:os");
-    let child;
-    let forceTimer;
+  function runRestartGate(startMessageType: string) {
+    const { spawn: spawnChild } =
+      require("node:child_process") as typeof ChildProcessModule;
+    const os = require("node:os") as typeof OsModule;
+    let child: ServerChild | undefined;
+    let forceTimer: NodeJS.Timeout | undefined;
     let finished = false;
     let stopping = false;
 
-    const exitCode = (code, signal) => {
+    const exitCode = (code?: number | null, signal?: NodeJS.Signals | null) => {
       const signalNumber = signal ? os.constants.signals[signal] : undefined;
       return (
         code ?? (typeof signalNumber === "number" ? 128 + signalNumber : 1)
       );
     };
-    const finish = (code, signal) => {
+    const finish = (code?: number | null, signal?: NodeJS.Signals | null) => {
       if (finished) return;
       finished = true;
       clearTimeout(forceTimer);
       process.exitCode = exitCode(code, signal);
-      if (process.connected) process.disconnect();
+      if (process.connected) process.disconnect?.();
     };
-    const killTree = (signal) => {
+    const killTree = (signal: NodeJS.Signals) => {
       if (!child) return finish(undefined, signal);
       try {
         process.kill(-process.pid, signal);
@@ -146,7 +167,7 @@ function startLauncher() {
         } catch {}
       }
     };
-    const stop = (signal = "SIGTERM") => {
+    const stop = (signal: NodeJS.Signals = "SIGTERM") => {
       if (finished || stopping) return;
       stopping = true;
       if (!child) return finish(undefined, signal);
@@ -158,7 +179,8 @@ function startLauncher() {
     process.on("SIGINT", () => stop("SIGINT"));
     process.on("SIGTERM", () => stop("SIGTERM"));
     process.once("disconnect", () => stop());
-    process.on("message", (message) => {
+    process.on("message", (rawMessage) => {
+      const message = rawMessage as { type?: string; args?: string[] };
       if (!child) {
         if (
           message?.type !== startMessageType ||
@@ -171,11 +193,11 @@ function startLauncher() {
           env: process.env,
           stdio: ["inherit", "pipe", "inherit", "ipc"],
         });
-        child.stdout.pipe(process.stdout, { end: false });
+        child.stdout!.pipe(process.stdout, { end: false });
         child.on("message", (childMessage) => {
           if (!process.connected) return;
           try {
-            process.send(childMessage, () => {});
+            process.send?.(childMessage, () => {});
           } catch {}
         });
         child.once("error", () => finish(1));
@@ -215,28 +237,28 @@ function startLauncher() {
     ];
   }
   const restartDescriptor = JSON.stringify({
-    launcherPath: path.join(pkgDir, "bin", "omp-web.js"),
+    launcherPath: path.join(pkgDir, "bin", "omp-web.ts"),
     hostname: String(hostname),
     port: String(port),
   });
   const browserUrl = getBrowserUrl(hostname, port);
   let browserOpened = false;
-  let currentChild = null;
+  let currentChild: ServerChild | null = null;
   let currentGeneration = 0;
-  let updateControl = null;
+  let updateControl: UpdateControl | null = null;
   let waitingForRestart = false;
 
-  function updatePath(control, suffix) {
+  function updatePath(control: UpdateControl, suffix: string) {
     return path.join(control.root, `${control.attemptId}.${suffix}`);
   }
 
-  function ownedByCurrentUser(info) {
+  function ownedByCurrentUser(info: Stats) {
     return (
       typeof process.getuid !== "function" || info.uid === process.getuid()
     );
   }
 
-  function secureDirectory(directory) {
+  function secureDirectory(directory: string) {
     const info = fs.lstatSync(directory);
     if (
       !info.isDirectory() ||
@@ -247,12 +269,12 @@ function startLauncher() {
     return info;
   }
 
-  function secureRegularFile(file) {
+  function secureRegularFile(file: string) {
     let info;
     try {
       info = fs.lstatSync(file);
     } catch (error) {
-      if (error?.code === "ENOENT") return null;
+      if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return null;
       throw error;
     }
     if (
@@ -266,7 +288,7 @@ function startLauncher() {
     return info;
   }
 
-  function atomicWrite(file, value) {
+  function atomicWrite(file: string, value: string) {
     secureDirectory(path.dirname(file));
     secureRegularFile(file);
     const temporary = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
@@ -283,16 +305,21 @@ function startLauncher() {
     }
   }
 
-  function readControlJson(file) {
+  function readControlJson(file: string): Record<string, unknown> | null {
     if (!secureRegularFile(file)) return null;
     try {
-      return JSON.parse(fs.readFileSync(file, "utf8"));
+      const value: unknown = JSON.parse(fs.readFileSync(file, "utf8"));
+      return value !== null &&
+        typeof value === "object" &&
+        !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : null;
     } catch {
       return null;
     }
   }
 
-  function removeSecureFile(file) {
+  function removeSecureFile(file: string) {
     if (!secureRegularFile(file)) return true;
     fs.rmSync(file);
     return true;
@@ -309,7 +336,7 @@ function startLauncher() {
     }
   }
 
-  function isExternalControlRoot(root) {
+  function isExternalControlRoot(root: unknown): root is string {
     if (typeof root !== "string" || !path.isAbsolute(root)) return false;
     try {
       const packageRoot = fs.realpathSync(pkgDir);
@@ -326,7 +353,11 @@ function startLauncher() {
     }
   }
 
-  function acknowledgeArm(child, message, error) {
+  function acknowledgeArm(
+    child: ServerChild,
+    message: UpdateMessage,
+    error?: string,
+  ) {
     if (!child.connected) return;
     child.send({
       type: UPDATE_ACK,
@@ -337,25 +368,27 @@ function startLauncher() {
     });
   }
 
-  function isProcessAlive(pid) {
+  function isProcessAlive(pid: number) {
     if (!Number.isInteger(pid) || pid <= 0) return false;
     try {
       process.kill(pid, 0);
       return true;
     } catch (error) {
-      return error?.code !== "ESRCH";
+      return (error as NodeJS.ErrnoException)?.code !== "ESRCH";
     }
   }
 
-  function hasLivePreparedOwnership(control) {
+  function hasLivePreparedOwnership(control: UpdateControl) {
     const status = readControlJson(path.join(control.root, "status.json"));
     const lease = readControlJson(path.join(control.root, "lease.json"));
     return (
       status?.attemptId === control.attemptId &&
       (status.state === "prepared" || status.state === "running") &&
       status.stage === "stopping" &&
+      typeof status.workerPid === "number" &&
       isProcessAlive(status.workerPid) &&
       lease?.attemptId === control.attemptId &&
+      typeof lease.expiresAt === "number" &&
       Number.isFinite(lease.expiresAt) &&
       lease.expiresAt > Date.now() &&
       !secureRegularFile(updatePath(control, "abort.json")) &&
@@ -363,7 +396,7 @@ function startLauncher() {
     );
   }
 
-  function watchUpdateCompletion(control) {
+  function watchUpdateCompletion(control: UpdateControl) {
     const poll = () => {
       if (updateControl !== control) return;
       let completion;
@@ -403,7 +436,7 @@ function startLauncher() {
     poll();
   }
 
-  function handleUpdateArm(child, message) {
+  function handleUpdateArm(child: ServerChild, message: UpdateMessage) {
     if (
       !message ||
       message.type !== UPDATE_MESSAGE ||
@@ -411,7 +444,8 @@ function startLauncher() {
     )
       return;
     if (
-      !/^[0-9a-f-]{36}$/i.test(message.attemptId ?? "") ||
+      typeof message.attemptId !== "string" ||
+      !/^[0-9a-f-]{36}$/i.test(message.attemptId) ||
       !isExternalControlRoot(message.root)
     ) {
       acknowledgeArm(child, message, "invalid update control");
@@ -464,10 +498,10 @@ function startLauncher() {
     acknowledgeArm(child, message);
   }
 
-  function attachOutput(child) {
+  function attachOutput(child: ServerChild) {
     let bannerPrinted = false;
     let readyBuffer = "";
-    child.stdout.on("data", (chunk) => {
+    child.stdout!.on("data", (chunk) => {
       const text = chunk.toString();
       process.stdout.write(text);
       readyBuffer += text;
@@ -505,12 +539,14 @@ function startLauncher() {
     };
   }
 
-  function trackServer(child) {
+  function trackServer(child: ServerChild) {
     currentChild = child;
-    child.on("message", (message) => handleUpdateArm(child, message));
+    child.on("message", (message) =>
+      handleUpdateArm(child, message as UpdateMessage),
+    );
     child.once("error", (error) => {
       console.error(`Could not start ompweb: ${error.message}`);
-      if (Number.isInteger(child.pid) && child.pid > 0) return;
+      if (child.pid !== undefined && child.pid > 0) return;
       if (currentChild === child) currentChild = null;
       if (updateControl) {
         waitForRestartRequest(updateControl).catch((restartError) => {
@@ -532,7 +568,7 @@ function startLauncher() {
     return child;
   }
 
-  function spawnServer(command) {
+  function spawnServer(command: string[]) {
     return trackServer(
       spawn(command[0], command.slice(1), {
         cwd: pkgDir,
@@ -558,8 +594,8 @@ function startLauncher() {
     );
   }
 
-  function startRestartGate(child, args) {
-    return new Promise((resolve, reject) => {
+  function startRestartGate(child: ServerChild, args: string[]) {
+    return new Promise<void>((resolve, reject) => {
       if (!child.connected)
         return reject(new Error("restart gate IPC is unavailable"));
       child.send({ type: RESTART_GATE_START, args }, (error) => {
@@ -569,8 +605,12 @@ function startLauncher() {
     });
   }
 
-  async function acknowledgeRestartRequest(control, request, child) {
-    if (!Number.isInteger(child.pid) || child.pid <= 0) {
+  async function acknowledgeRestartRequest(
+    control: UpdateControl,
+    request: RestartRequest,
+    child: ServerChild,
+  ) {
+    if (child.pid === undefined || child.pid <= 0) {
       if (currentChild === child) currentChild = null;
       return false;
     }
@@ -608,14 +648,19 @@ function startLauncher() {
     }
   }
 
-  async function acknowledgeAndStartRestart(control, request, child, args) {
+  async function acknowledgeAndStartRestart(
+    control: UpdateControl,
+    request: RestartRequest,
+    child: ServerChild,
+    args: string[],
+  ) {
     if (!(await acknowledgeRestartRequest(control, request, child)))
       return false;
     await startRestartGate(child, args);
     return true;
   }
 
-  async function waitForRestartRequest(control) {
+  async function waitForRestartRequest(control: UpdateControl) {
     if (waitingForRestart || updateControl !== control) return;
     waitingForRestart = true;
     const requestFile = updatePath(control, "restart-request.json");
@@ -629,6 +674,7 @@ function startLauncher() {
           request?.attemptId === control.attemptId &&
           request.protocol === UPDATE_PROTOCOL &&
           request.action === "start" &&
+          typeof request.generation === "number" &&
           Number.isInteger(request.generation) &&
           request.generation === currentGeneration + 1
         ) {
@@ -638,14 +684,19 @@ function startLauncher() {
           } catch (error) {
             // Retried while the update is active; one line per attempt, not a spin.
             console.error(
-              `Could not start the updated server: ${error.message}`,
+              `Could not start the updated server: ${error instanceof Error ? error.message : String(error)}`,
             );
             await new Promise((resolve) => setTimeout(resolve, 1_000));
             continue;
           }
           const child = trackServer(spawnRestartGate());
           if (
-            await acknowledgeAndStartRestart(control, request, child, command)
+            await acknowledgeAndStartRestart(
+              control,
+              { generation: request.generation },
+              child,
+              command,
+            )
           )
             return;
         }
@@ -685,7 +736,7 @@ function startLauncher() {
     try {
       command = serverCommand();
     } catch (error) {
-      console.error(error.message);
+      console.error(error instanceof Error ? error.message : String(error));
       process.exit(1);
     }
     spawnServer(command);

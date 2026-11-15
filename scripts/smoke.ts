@@ -1,4 +1,4 @@
-// `bun run smoke [--package <dir> | --binary <path>]`: starts ompweb (`bun <dir>/bin/omp-web.js`, or the compiled
+// `bun run smoke [--package <dir> | --binary <path>]`: starts ompweb (`bun <dir>/bin/omp-web.ts`, or the compiled
 // binary) on a free port with a throwaway HOME, then `ompweb host` from the same install, and checks the shipped
 // bundle, the SPA, a hashed asset, the API, a session listed through the daemon, a live session started through the
 // omp runner (no model call) and the SSE stream, then stops both.
@@ -33,7 +33,7 @@ const dir = binary
   : path.resolve(values.package ?? path.join(import.meta.dir, ".."));
 const ompweb = binary
   ? [binary]
-  : [process.execPath, path.join(dir, "bin", "omp-web.js")];
+  : [process.execPath, path.join(dir, "bin", "omp-web.ts")];
 
 let failed = false;
 async function step(name: string, run: () => unknown): Promise<boolean> {

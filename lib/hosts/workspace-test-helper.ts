@@ -137,7 +137,7 @@ export async function workspaceHarness(): Promise<WorkspaceHarness> {
     );
     const child = spawn(
       process.execPath,
-      [fileURLToPath(new URL("../../bin/omp-web-host.js", import.meta.url))],
+      [fileURLToPath(new URL("../../bin/omp-web-host.ts", import.meta.url))],
       {
         cwd: home,
         env: {

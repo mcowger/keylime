@@ -255,7 +255,7 @@ test(
   },
 );
 
-const bin = fileURLToPath(new URL("../../bin/omp-web.js", import.meta.url));
+const bin = fileURLToPath(new URL("../../bin/omp-web.ts", import.meta.url));
 function writer(t: test.TestContext, args: string[], token: string) {
   const child = spawn(process.execPath, [bin, "host", "login", ...args], {
     env: { ...process.env, PI_CODING_AGENT_DIR: agentDir },

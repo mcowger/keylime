@@ -154,7 +154,7 @@ test("daemon refuses new sessions while a persisted daemon update is running", a
 function updatableInstall(t: TestContext) {
   const install = join(scratch, "node_modules", "@kahme247", "ompweb");
   mkdirSync(join(install, "bin"), { recursive: true });
-  const launcher = join(install, "bin", "omp-web-host.js");
+  const launcher = join(install, "bin", "omp-web-host.ts");
   writeFileSync(launcher, "");
   writeFileSync(
     join(install, "package.json"),

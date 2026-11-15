@@ -97,7 +97,7 @@ export function writeRelease(
       },
     }),
   );
-  writeFileSync(join(dir, "bin", "omp-web-host.js"), hostScript(kind, pidFile));
+  writeFileSync(join(dir, "bin", "omp-web-host.ts"), hostScript(kind, pidFile));
   writeFileSync(join(dir, "bin", "idle-web.js"), "setInterval(()=>{},1000);\n");
   if (!binary) return;
   // The compiled release: an executable that answers --version and otherwise runs this release's host.
@@ -123,7 +123,7 @@ export function writeRelease(
       : `# ompweb-preflight-scratch-\nif [ "$1" = "preflight" ]; then if [ "${kind === "no-hello" ? "" : "hello"}" ]; then echo "preflight ok: $(dirname "$0")/ompweb-omp runner ${version}"; exit 0; fi; echo "preflight failed: $(dirname "$0")/ompweb-omp: no hello within 30 s" >&2; exit 1; fi\n`;
   writeFileSync(
     join(dir, "ompweb"),
-    `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "${version}"; exit 0; fi\n${fetch}${preflight}exec "${nodeBinary()}" "$(dirname "$0")/bin/omp-web-host.js"\n`,
+    `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "${version}"; exit 0; fi\n${fetch}${preflight}exec "${nodeBinary()}" "$(dirname "$0")/bin/omp-web-host.ts"\n`,
     { mode: 0o755 },
   );
   chmodSync(join(dir, "ompweb"), 0o755);

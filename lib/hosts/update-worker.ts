@@ -531,7 +531,7 @@ async function stagePackage(
   if (
     metadata.name !== "@kahme247/ompweb" ||
     metadata.version !== d.version ||
-    !existsSync(join(packageDir, "bin", "omp-web-host.js"))
+    !existsSync(join(packageDir, "bin", "omp-web-host.ts"))
   )
     throw new Error(
       "Installed host package does not match the requested version",
@@ -675,8 +675,8 @@ export async function verifyHostServiceInstall(
   if (!executable || !args)
     throw new Error("Cannot verify this host service's restart command");
   const start = realpathSync(executable);
-  const launcher = join(installDir, "bin", "omp-web.js");
-  const host = join(installDir, "bin", "omp-web-host.js");
+  const launcher = join(installDir, "bin", "omp-web.ts");
+  const host = join(installDir, "bin", "omp-web-host.ts");
   const expected = join(installDir, "ompweb");
   const hostFlag = /(?:^|\s)host(?:\s|$)/.test(args);
   const valid = binary
@@ -721,7 +721,7 @@ async function preflightHostRelease(
   const binary = d.installMethod === "binary";
   const entry = binary
     ? join(release, "ompweb")
-    : join(release, "bin", "omp-web.js");
+    : join(release, "bin", "omp-web.ts");
   // Detected statically: an older ompweb takes `preflight` for a positional and starts the web server.
   if (
     !(binary
@@ -974,7 +974,7 @@ async function launchDaemon(
     const args =
       d.installMethod === "binary"
         ? ["host", ...d.hostArgs]
-        : [join(d.installDir, "bin", "omp-web-host.js"), ...d.hostArgs];
+        : [join(d.installDir, "bin", "omp-web-host.ts"), ...d.hostArgs];
     child = spawn(runtime, args, {
       cwd: d.cwd,
       detached: true,

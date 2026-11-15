@@ -113,7 +113,7 @@ Browser tabs
                       └─ ompweb-omp: native OMP session runtime, NDJSON channel
 ```
 
-The launcher (`bin/omp-web.js`), host daemon (`bin/omp-web-host.js`),
+The launcher (`bin/omp-web.ts`), host daemon (`bin/omp-web-host.ts`),
 server and update workers run on Bun. Install Bun before running from source or
 a package; Node is not required. The server serves the SPA from `dist/`, the
 API routes and the password gate in one process. The compiled binary
@@ -351,7 +351,7 @@ hooks/
   useChatSearchHighlights.ts  find-in-page for the sidebar search: CSS Custom Highlight API paint + jump to a picked hit
 
 bin/
-  omp-web-host.js     `ompweb host [login]`: loads lib/hosts/host-cli.ts natively through Bun; token read from stdin, never argv. `omp-web.js host` loads it in-process (no child) so SIGTERM/SIGINT reach the daemon's stop
+  omp-web-host.ts     `ompweb host [login]`: loads lib/hosts/host-cli.ts natively through Bun; token read from stdin, never argv. `omp-web.ts host` loads it in-process (no child) so SIGTERM/SIGINT reach the daemon's stop
 
 scripts/
   build-client.ts     `bun run build`: bundles app/index.html into dist/ (Bun.build + tailwind-plugin.ts; fonts emitted as /assets files)
@@ -453,7 +453,7 @@ The table is static imports, not a runtime glob, so `bun build --compile` (`scri
 - Known limit: resume does not detect a terminal `omp --resume <id>` started
   on the same session while omp-web was down; both would write the file.
 
-### Remote hosts (`lib/hosts/`, `app/api/hosts/`, `bin/omp-web-host.js`)
+### Remote hosts (`lib/hosts/`, `app/api/hosts/`, `bin/omp-web-host.ts`)
 
 - **Shared v7 hosts** (`docs/specs/2026-11-06-multi-server-host-design.md`):
   one daemon links every configured server in `host.json.links`. `open` joins

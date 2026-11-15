@@ -15,7 +15,7 @@ import test from "node:test";
 import type { TestContext } from "node:test";
 
 const WORKER = fileURLToPath(
-  new URL("./omp-web-update-worker.js", import.meta.url),
+  new URL("./omp-web-update-worker.ts", import.meta.url),
 );
 const ATTEMPT = "11111111-2222-3333-4444-555555555555";
 const REPO = dirname(dirname(WORKER));
@@ -27,7 +27,7 @@ const PLATFORM = `${process.platform}-${process.arch}`;
 const RUNNER = `#!/bin/sh\nif [ "$1" = "--version" ]; then echo 18.99.0; exit 0; fi\necho '{"t":"hello","proto":1}'\nexec cat >/dev/null\n`;
 
 /** The new release as npm installs it. "old": no preflight command; "ok": this checkout's real fetch-omp and preflight,
- * its runner already fetched; "stub" / "fetch-fails": a `bin/omp-web.js` that logs `candidate <command>` and passes,
+ * its runner already fetched; "stub" / "fetch-fails": a `bin/omp-web.ts` that logs `candidate <command>` and passes,
  * or fails `fetch-omp` as an offline fetch does. */
 function writeCandidate(
   dir: string,
@@ -46,7 +46,7 @@ function writeCandidate(
     return;
   }
   for (const file of [
-    "bin/omp-web.js",
+    "bin/omp-web.ts",
     "lib/hosts/preflight.ts",
     "lib/omp/runner-fetch.ts",
   ])
@@ -58,7 +58,7 @@ function writeCandidate(
       ? `if (command === "fetch-omp") { console.error("fetch-omp failed: Could not fetch ompweb's omp from https://github.com/x: fetch failed"); process.exit(1); }\n`
       : "";
   writeFileSync(
-    join(dir, "bin", "omp-web.js"),
+    join(dir, "bin", "omp-web.ts"),
     `const command = process.argv[2];\nrequire("node:fs").appendFileSync(${JSON.stringify(log)}, "candidate " + command + "\\n");\n${fail}`,
   );
 }
@@ -235,7 +235,7 @@ test("a candidate that cannot fetch its omp never stops the running server", (t)
     status.error,
     "the new release could not fetch its omp: fetch-omp failed: Could not fetch ompweb's omp from https://github.com/x: fetch failed",
   );
-  // What bin/omp-web.js watchUpdateCompletion accepts to disarm the launcher armed at commit.
+  // What bin/omp-web.ts watchUpdateCompletion accepts to disarm the launcher armed at commit.
   assert.equal(complete?.protocol, 1);
   assert.equal(complete?.attemptId, ATTEMPT);
 });

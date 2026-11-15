@@ -17,7 +17,7 @@ import test from "node:test";
 // Some tests narrow PATH, so use the current Bun executable by absolute path.
 const NODE = process.execPath;
 const require = createRequire(import.meta.url);
-const {
+import {
   buildHostUnit,
   buildUnit,
   escapeUnitPath,
@@ -29,7 +29,7 @@ const {
   runCli,
   validateHostname,
   validatePort,
-} = require("./omp-web-systemd.js");
+} from "./omp-web-systemd.ts";
 import {
   parseServiceEnv,
   serializeServiceEnv,
@@ -122,7 +122,7 @@ test("buildHostUnit runs `ompweb host` with the web unit's env file and never gi
   assert.equal(
     buildHostUnit({ ...options, ompwebBin: "/opt/my tools/ompweb" }).match(
       /^ExecStart=(.*)$/m,
-    )[1],
+    )![1],
     '"/opt/my tools/ompweb" host',
   );
 });
@@ -272,7 +272,7 @@ test(
       const result = spawnSync(
         NODE,
         [
-          path.join(process.cwd(), "bin", "omp-web-systemd.js"),
+          path.join(process.cwd(), "bin", "omp-web-systemd.ts"),
           "install",
           "--no-autostart",
         ],
@@ -367,7 +367,7 @@ test(
       const ok = spawnSync(
         NODE,
         [
-          path.join(process.cwd(), "bin", "omp-web-systemd.js"),
+          path.join(process.cwd(), "bin", "omp-web-systemd.ts"),
           "install",
           "--no-autostart",
         ],
@@ -390,7 +390,7 @@ test(
       const broken = spawnSync(
         NODE,
         [
-          path.join(process.cwd(), "bin", "omp-web-systemd.js"),
+          path.join(process.cwd(), "bin", "omp-web-systemd.ts"),
           "install",
           "--no-autostart",
         ],
@@ -432,7 +432,7 @@ test("install fails loudly when the omp launcher interpreter is missing", () => 
     const result = spawnSync(
       NODE,
       [
-        path.join(process.cwd(), "bin", "omp-web-systemd.js"),
+        path.join(process.cwd(), "bin", "omp-web-systemd.ts"),
         "install",
         "--no-autostart",
       ],
@@ -452,7 +452,7 @@ test("install fails loudly when the omp launcher interpreter is missing", () => 
 test("main ompweb bin forwards the systemd subcommand", () => {
   const result = spawnSync(
     NODE,
-    [path.join(process.cwd(), "bin", "omp-web.js"), "systemd", "--version"],
+    [path.join(process.cwd(), "bin", "omp-web.ts"), "systemd", "--version"],
     {
       encoding: "utf8",
     },
@@ -516,7 +516,7 @@ function runWithFakeSystemctl(
     delete env[key];
   const result = spawnSync(
     NODE,
-    [path.join(process.cwd(), "bin", "omp-web-systemd.js"), command],
+    [path.join(process.cwd(), "bin", "omp-web-systemd.ts"), command],
     { env, encoding: "utf8" },
   );
   const calls = existsSync(log)

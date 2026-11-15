@@ -57,7 +57,7 @@ function host() {
 // A real `ompweb host` process with its own HOME (a second "machine") linked
 // over a loopback WebSocket to the link route and the hub's socket handler, served here through Bun.serve.
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
-const hostBin = join(repoRoot, "bin", "omp-web-host.js");
+const hostBin = join(repoRoot, "bin", "omp-web-host.ts");
 const scratch = mkdtempSync(join(tmpdir(), "omp-web-link-it-"));
 const mainAgentDir = join(scratch, "main-agent");
 const daemonHome = join(scratch, "laptop");

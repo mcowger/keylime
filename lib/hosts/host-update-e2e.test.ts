@@ -172,7 +172,7 @@ async function runUpdate(name: string, candidateKind: string) {
     const assert = require("node:assert/strict");
     require("node:fs").appendFileSync(${JSON.stringify(hostPids)}, process.pid + "\\n");
     globalThis.fetch = async (url) => String(url).startsWith("https://registry.npmjs.org/") ? Response.json({ version: "99.0.0" }) : new Response("export const LINK_PROTOCOL_VERSION = 3;");
-    process.argv = [process.execPath, ${JSON.stringify(join(install, "bin", "omp-web-host.js"))}, "--allow-http"];
+    process.argv = [process.execPath, ${JSON.stringify(join(install, "bin", "omp-web-host.ts"))}, "--allow-http"];
     import(${JSON.stringify(join(repo, "lib", "hosts", "updates.ts"))}).then(async (api) => {
       api.configureHostUpdateSafety(() => null);
       const info = await api.checkHostUpdates({ min: 3, max: 3 }, true);

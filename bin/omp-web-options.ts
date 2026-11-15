@@ -127,7 +127,7 @@ export function parseLaunchOptions(
     }
     return { ...shared, version: true };
   }
-  // Expose help flag without exiting here — caller (bin/omp-web.js) decides
+  // Expose help flag without exiting here — caller (bin/omp-web.ts) decides
   // whether to exit, keeping parseLaunchOptions testable. Print here so
   // --help works even when the caller is a test.
   if (cliArgs.help) {
@@ -138,7 +138,7 @@ export function parseLaunchOptions(
 }
 
 /**
- * Password validation before a server starts (bin/omp-web.js, server/binary.ts). Only a password hash reaches
+ * Password validation before a server starts (bin/omp-web.ts, server/binary.ts). Only a password hash reaches
  * the server: a plaintext OMP_WEB_PASSWORD alone is hashed into OMP_WEB_PASSWORD_HASH and removed from process.env.
  * The removed --password flag, a plaintext set next to a hash, or an invalid hash print why and exit 1.
  * Authentication is optional on every bind address.

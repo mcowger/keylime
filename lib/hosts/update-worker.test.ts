@@ -885,7 +885,7 @@ test(
     const executable = join(bin, "systemctl");
     const answer = (target: string) =>
       `#!/bin/sh\nprintf '%s\\n' '{ path=${process.execPath} ; argv[]=${process.execPath} ${target} --allow-http ; ignore_errors=no ; }'\n`;
-    writeFileSync(executable, answer(`${f.install}/bin/omp-web-host.js`), {
+    writeFileSync(executable, answer(`${f.install}/bin/omp-web-host.ts`), {
       mode: 0o700,
     });
     const path = process.env.PATH;
@@ -897,7 +897,7 @@ test(
         false,
         process.execPath,
       );
-      writeFileSync(executable, answer("/new-release/bin/omp-web-host.js"), {
+      writeFileSync(executable, answer("/new-release/bin/omp-web-host.ts"), {
         mode: 0o700,
       });
       await assert.rejects(

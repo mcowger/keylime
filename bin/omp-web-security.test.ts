@@ -39,7 +39,7 @@ async function launch(env: NodeJS.ProcessEnv, args: string[] = []) {
     );
     const result = spawnSync(
       process.execPath,
-      [join(pkg, "bin", "omp-web.js"), "--no-open", "-p", "0", ...args],
+      [join(pkg, "bin", "omp-web.ts"), "--no-open", "-p", "0", ...args],
       {
         env: {
           ...process.env,

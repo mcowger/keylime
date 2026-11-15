@@ -277,7 +277,7 @@ function removeAttemptDirectory(attemptId: string): boolean {
     throw error;
   }
   const entries = readdirSync(dir);
-  if (entries.some((e) => e !== "worker.js")) {
+  if (entries.some((e) => e !== "worker.ts")) {
     throw new SelfUpdateError(
       "unsafe_update_state",
       "The temporary update attempt contains unexpected files",
@@ -285,8 +285,8 @@ function removeAttemptDirectory(attemptId: string): boolean {
     );
   }
   if (
-    entries.includes("worker.js") &&
-    !removeSecureFile(join(dir, "worker.js"))
+    entries.includes("worker.ts") &&
+    !removeSecureFile(join(dir, "worker.ts"))
   )
     return false;
   return removeSecureEmptyDirectory(dir);
@@ -539,9 +539,9 @@ export async function prepareSelfUpdate(): Promise<PrepareResult> {
   const workerSrc = join(
     process.env.OMP_WEB_PACKAGE_DIR ?? process.cwd(),
     "bin",
-    "omp-web-update-worker.js",
+    "omp-web-update-worker.ts",
   );
-  const destWorker = join(attemptDir, "worker.js");
+  const destWorker = join(attemptDir, "worker.ts");
   if (existsSync(workerSrc)) {
     copyFileSync(workerSrc, destWorker);
     try {
@@ -656,7 +656,7 @@ export async function commitSelfUpdate(
   }
   // spawn worker detached
   const attempts = attemptsDir(false);
-  const workerPath = attempts ? join(attempts, attemptId, "worker.js") : null;
+  const workerPath = attempts ? join(attempts, attemptId, "worker.ts") : null;
   const root = rootDir();
   const packageDir = process.env.OMP_WEB_PACKAGE_DIR ?? process.cwd();
   const managerPath = process.execPath;
@@ -664,7 +664,7 @@ export async function commitSelfUpdate(
   const targetVersion = status.targetVersion;
   const launcherPid = Number(process.env.OMP_WEB_LAUNCHER_PID ?? process.pid);
   const descriptor = {
-    launcherPath: join(resolve(packageDir), "bin", "omp-web.js"),
+    launcherPath: join(resolve(packageDir), "bin", "omp-web.ts"),
     hostname:
       process.env.OMP_WEB_HOSTNAME ?? process.env.HOSTNAME ?? "127.0.0.1",
     port: Number(process.env.OMP_WEB_PORT ?? process.env.PORT ?? 30178),

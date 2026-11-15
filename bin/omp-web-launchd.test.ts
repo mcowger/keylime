@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
 import test from "node:test";
 
-const require = createRequire(import.meta.url);
-const {
+import {
   HOST_LABEL,
   LABEL,
   buildHostEnv,
   buildPlist,
-} = require("./omp-web-launchd.js");
+} from "./omp-web-launchd.ts";
 
 const env = { PATH: "/usr/bin", PI_CODING_AGENT_DIR: "/Users/u/agent" };
 

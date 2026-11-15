@@ -139,7 +139,7 @@ try {
       "--port",
       String(port),
     ]);
-    spawn(["--hot", "--no-clear-screen", "bin/omp-web-host.js"]);
+    spawn(["--hot", "--no-clear-screen", "bin/omp-web-host.ts"]);
   }
   await finished;
 } catch (error) {

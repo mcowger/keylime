@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { verifyPassword } from "./omp-web-password-hash";
-const launcher = fileURLToPath(new URL("./omp-web.js", import.meta.url));
+const launcher = fileURLToPath(new URL("./omp-web.ts", import.meta.url));
 
 // util-linux `script` gives the command a real terminal, so the prompt runs in raw mode.
 const hasScript =
@@ -17,7 +17,7 @@ test(
   async (t) => {
     const child = spawn("script", [
       "-qec",
-      `node "${launcher}" hash-password`,
+      `${process.execPath} "${launcher}" hash-password`,
       "/dev/null",
     ]);
     // A prompt that never ends must not keep the test file alive after the timeout.

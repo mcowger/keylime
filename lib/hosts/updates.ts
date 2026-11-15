@@ -201,7 +201,7 @@ function hostArguments(binary: boolean): string[] {
   if (binary && process.argv[2] === "host") return process.argv.slice(3);
   if (
     !binary &&
-    ["omp-web.js", "omp-web-host.js"].includes(
+    ["omp-web.ts", "omp-web-host.ts"].includes(
       basename(realpathSync(process.argv[1] || "")),
     )
   ) {

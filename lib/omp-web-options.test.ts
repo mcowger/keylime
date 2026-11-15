@@ -59,7 +59,7 @@ test("a port that is not an integer from 0 to 65535 is an error, from the flag o
 });
 
 test("ompweb with a bad port says so in one line and exits 2", () => {
-  const launcher = fileURLToPath(new URL("../bin/omp-web.js", import.meta.url));
+  const launcher = fileURLToPath(new URL("../bin/omp-web.ts", import.meta.url));
   const result = spawnSync(
     process.execPath,
     [launcher, "-p", "abc", "--no-open"],

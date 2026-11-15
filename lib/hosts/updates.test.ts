@@ -518,7 +518,7 @@ async function runEngineChild(
   const install = join(root, name, "node_modules", "@kahme247", "ompweb");
   mkdirSync(join(install, "bin"), { recursive: true });
   writeFileSync(
-    join(install, "bin", "omp-web-host.js"),
+    join(install, "bin", "omp-web-host.ts"),
     "setInterval(()=>{},1000)",
   );
   writeFileSync(
@@ -535,7 +535,7 @@ async function runEngineChild(
     assert.equal(typeof Bun,"object");
     globalThis.fetch=async url=>String(url).startsWith("https://registry.npmjs.org/")?Response.json({version:"99.0.0"}):new Response("export const LINK_PROTOCOL_VERSION = 3;");
     process.env.OMP_WEB_PACKAGE_DIR=${JSON.stringify(install)};
-    process.argv=[process.execPath,${JSON.stringify(join(install, "bin", "omp-web-host.js"))},"--allow-http"];
+    process.argv=[process.execPath,${JSON.stringify(join(install, "bin", "omp-web-host.ts"))},"--allow-http"];
     const install=${JSON.stringify(install)};
     import(${JSON.stringify(fileURLToPath(new URL("./updates.ts", import.meta.url)))}).then(async api=>{
       ${body}
@@ -571,7 +571,7 @@ test("Bun host discovery honors protocol boundaries and shared-install rules", a
       let info=await api.checkHostUpdates({min:3,max:3},true);
       assert.equal(info.ompweb.canUpdate,true,info.ompweb.blockedReason);
       assert.equal(info.ompweb.protocolVersion,3);
-      const web=require("node:child_process").spawn(process.execPath,[install+"/bin/omp-web-host.js"],{stdio:"ignore"});
+      const web=require("node:child_process").spawn(process.execPath,[install+"/bin/omp-web-host.ts"],{stdio:"ignore"});
       try {
         await new Promise(done=>setTimeout(done,300));
         info=await api.checkHostUpdates({min:3,max:3},true);

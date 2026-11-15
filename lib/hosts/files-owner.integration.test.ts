@@ -64,7 +64,7 @@ const scratch = realpathSync(
   mkdtempSync(join(tmpdir(), "ompweb-owner-files-")),
 );
 const hostBin = fileURLToPath(
-  new URL("../../bin/omp-web-host.js", import.meta.url),
+  new URL("../../bin/omp-web-host.ts", import.meta.url),
 );
 const originalEnv = { ...process.env };
 const MAIN_ID = "11111111-2222-4333-8444-000000000011";
