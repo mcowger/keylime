@@ -28,6 +28,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - `bun run dev:ui` starts an isolated development server seeded with sample projects, workspaces, conversations, and settings for UI testing
 - Added a live-only Jobs tab to inspect background jobs and project services, view bounded output, cancel owned jobs, and stop services without starting an agent or calling a model. Selected completed output remains visible until deselected; no durable history is stored
 - Git projects can follow their current on-disk `paseo.json` for workspace setup and teardown, including uncommitted edits, with `.worktreeinclude` copying and live previews. Manual commands remain available, and project settings are accessible directly from each sidebar project menu on desktop and mobile
+- The composer shows advisor review activity while the advisor model reviews a run
 
 ### Changed
 - Settings and other selectors use shared themed menus; file actions are quieter while remaining available on focus and touch.

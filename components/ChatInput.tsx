@@ -5046,6 +5046,41 @@ export const ChatInput = memo(
                     </div>
                   )}
                 </div>
+                {/* Advisor activity — thunder while the advisor model reviews this run */}
+                {advisorActive && (
+                  <span
+                    title={t("chatInput.advisorReviewingTitle", {
+                      model:
+                        advisorModel?.name ?? t("messageView.advisorLabel"),
+                      reasoning:
+                        advisorModel?.reasoning ??
+                        t("chatInput.advisorReasoningDefault"),
+                    })}
+                    aria-label={t("chatInput.advisorReviewingTitle", {
+                      model:
+                        advisorModel?.name ?? t("messageView.advisorLabel"),
+                      reasoning:
+                        advisorModel?.reasoning ??
+                        t("chatInput.advisorReasoningDefault"),
+                    })}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: 26,
+                      height: 26,
+                      flexShrink: 0,
+                      color: "var(--accent)",
+                    }}
+                  >
+                    <Zap
+                      size={14}
+                      strokeWidth={2}
+                      fill="currentColor"
+                      aria-hidden="true"
+                    />
+                  </span>
+                )}
                 {/* Model selector — compact text button with dropdown */}
                 {(modelOptions.length > 0 ||
                   currentName ||
@@ -5341,42 +5376,6 @@ export const ChatInput = memo(
                   >
                     {usageLimitLabel}
                   </div>
-                )}
-
-                {/* Advisor activity — thunder while the advisor model reviews this run */}
-                {advisorActive && (
-                  <span
-                    title={t("chatInput.advisorReviewingTitle", {
-                      model:
-                        advisorModel?.name ?? t("messageView.advisorLabel"),
-                      reasoning:
-                        advisorModel?.reasoning ??
-                        t("chatInput.advisorReasoningDefault"),
-                    })}
-                    aria-label={t("chatInput.advisorReviewingTitle", {
-                      model:
-                        advisorModel?.name ?? t("messageView.advisorLabel"),
-                      reasoning:
-                        advisorModel?.reasoning ??
-                        t("chatInput.advisorReasoningDefault"),
-                    })}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      width: 26,
-                      height: 26,
-                      flexShrink: 0,
-                      color: "var(--accent)",
-                    }}
-                  >
-                    <Zap
-                      size={14}
-                      strokeWidth={2}
-                      fill="currentColor"
-                      aria-hidden="true"
-                    />
-                  </span>
                 )}
 
                 <ModelActivityIndicator activity={modelActivity} />
