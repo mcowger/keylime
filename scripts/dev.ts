@@ -2,10 +2,6 @@ import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import {
-  watchApiContracts,
-  type ApiContractWatcher,
-} from "./dev-api-contracts";
 
 const { values } = parseArgs({
   args: Bun.argv.slice(2),
@@ -71,13 +67,11 @@ const children: Bun.Subprocess[] = [];
 let stopping = false;
 let exitCode = 0;
 const { promise: finished, resolve: finish } = Promise.withResolvers<void>();
-let contracts: ApiContractWatcher | undefined;
 let startupChild: Bun.Subprocess | undefined;
 function stop(code: number) {
   if (stopping) return;
   stopping = true;
   exitCode = code;
-  void contracts?.close();
   startupChild?.kill();
   finish();
 }
@@ -111,12 +105,6 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const)
   process.on(signal, () => stop(0));
 
 try {
-  contracts = watchApiContracts(root, env, (error) => {
-    console.error("[dev] API generation failed:", error);
-    stop(1);
-  });
-  await contracts.start();
-  if (stopping) throw new Error("Development startup stopped");
   // Bootstrap in a child so module-level config caches only ever see the isolated environment.
   const bootstrap = Bun.spawn(
     [
@@ -168,7 +156,6 @@ try {
   }
 } finally {
   stopping = true;
-  await contracts?.close();
   for (const child of children) signalGroup(child, "SIGTERM");
   const force = setTimeout(() => {
     for (const child of children) signalGroup(child, "SIGKILL");

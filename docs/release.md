@@ -15,18 +15,14 @@ run the local release checks before delivery:
 
 ```bash
 bun install --frozen-lockfile
-bun run api:check
+# Run bun run api:check separately when verifying API documentation.
 bun run release:check
 ```
 
-`release:check` includes API freshness, formatting, typechecking, tests, the
-production build and smoke checks. `bun run smoke` builds the runner first.
-Standalone builds and runner/binary generation
-also regenerate the API documents and fail if generation fails. Source deployment
-preparation does likewise before service cutover, including cached and frontend-only
-candidates; activation and recovery of prebuilt releases and installed runtime use
-do not require compiler tools. Development generates at startup and after watched
-API source changes, and generation failures block the dev cycle.
+`release:check` includes formatting, typechecking, tests, the production build and
+smoke checks. `bun run smoke` builds the runner first. API documentation generation
+and freshness checks are explicit and do not gate development, builds or deployments;
+releases include the checked-in documents, which may be stale.
 
 Release publication is not automated by this repository. Verify any publication
 procedure and destination separately; inherited upstream release settings are not

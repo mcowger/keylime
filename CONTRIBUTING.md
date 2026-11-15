@@ -44,10 +44,6 @@ file, three saved conversations, and sample web settings in the temporary home.
 It never seeds the normal installation. Git is required; fixture changes are
 disposable and retained in the printed directory.
 
-API documents are generated before development services start and regenerated when
-watched API source changes. A generation failure blocks startup or stops the dev
-cycle rather than allowing it to continue with stale contracts.
-
 `paseo.json` installs the pinned runtime, dependencies and runner for new Paseo
 worktrees. Its `dev` service starts the same seeded environment on Paseo's
 allocated port; `test` and `typecheck` are available as named scripts.
@@ -90,11 +86,9 @@ source analysis; `bun check` remains the project's typechecker.
 
 When API behavior changes, update the source schemas, semantics, and annotations,
 regenerate and commit the generated documents, and run `bun run api:check` before
-delivery. Generation also runs automatically for standalone builds and runner/binary
-generation; failures block those builds. Source deployment preparation generates
-contracts even for cached runner and frontend-only candidates, before live cutover.
-Activation and recovery of prebuilt releases and installed runtime use do not need
-compiler tools.
+delivery. These commands are explicit: development, builds, packaging, deployment
+and release checks do not run them. Releases include the checked-in documents, which
+may be stale until regenerated.
 
 Maintain shapes, field descriptions, examples and constraints inline in the canonical
 TypeBox declarations. Every exported `*Schema` needs an intended-use description;
@@ -117,8 +111,7 @@ ownership, snapshot validity, destructive effects and what to do after uncertain
 Never recommend blind retries of possibly delivered mutations. Shared wording must
 reflect a genuinely shared implementation guarantee, not generic filler. Transport
 descriptions additionally explain framing, sequencing, replay and authentication.
-Never hand-edit the generated OpenAPI/AsyncAPI documents. `release:check` includes
-`api:check`; GitHub Actions remain disabled.
+Never hand-edit the generated OpenAPI/AsyncAPI documents. GitHub Actions remain disabled.
 
 Generated client-facing artifacts:
 

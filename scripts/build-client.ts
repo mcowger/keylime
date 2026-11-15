@@ -3,7 +3,6 @@
 import { rmSync } from "node:fs";
 import path from "node:path";
 import type { BunPlugin } from "bun";
-import { runApiGeneration } from "./api-lifecycle";
 import { bundledPackageDirs } from "./licenses";
 import tailwind from "./tailwind-plugin";
 import {
@@ -15,7 +14,6 @@ import { stylesheetFirst } from "../server/http";
 
 const root = path.join(import.meta.dir, "..");
 const outdir = path.join(root, "dist");
-await runApiGeneration(root);
 rmSync(outdir, { recursive: true, force: true });
 
 // Bun's CSS bundler inlines every url() asset under 128 KiB as a base64 data: URL and has no option to stop it

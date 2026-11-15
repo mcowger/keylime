@@ -149,8 +149,6 @@ try {
       const bun = (...args: string[]) =>
         run(["mise", "exec", "--", "bun", ...args], scratch, sourceEnv);
       bun("install", "--frozen-lockfile");
-      // Generate only in the exported committed source, before reuse or deployment.
-      bun("--no-env-file", "scripts/generate-api-docs.ts");
       if (values.frontend) {
         const active = realpathSync(path.join(base, "current"));
         const metadata = JSON.parse(

@@ -1,15 +1,17 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { readDeployState } from "./deploy-state";
 import { detachDeployWorker } from "./deploy-detach";
+import { followDeployment } from "./deploy-follow";
 
 const { values } = parseArgs({
   args: Bun.argv.slice(2),
   options: {
     activate: { type: "string" },
     frontend: { type: "boolean" },
+    follow: { type: "boolean" },
     wait: { type: "boolean" },
     status: { type: "boolean" },
     recover: { type: "boolean" },
@@ -20,7 +22,7 @@ const { values } = parseArgs({
 const base = path.join(homedir(), ".local/share/keylime");
 if (values.help) {
   console.log(
-    "keylime-deploy [--frontend] [--activate <release>] [--timeout <seconds>] [--wait]\n  Submit an independent deployment; --frontend builds and switches compatible frontend assets without restarting services.\n  Full deployments give active work 60 seconds by default before forced cutover.\nkeylime-deploy --status\n  Show durable phase/result and log path.\nkeylime-deploy --recover\n  Restart services at the currently selected release after an interrupted worker.\n--wait observes completion but disconnecting never cancels deployment.",
+    "keylime-deploy [--frontend] [--activate <release>] [--timeout <seconds>] [--wait|--follow]\n  Submit an independent deployment; --frontend builds and switches compatible frontend assets without restarting services.\n  Full deployments give active work 60 seconds by default before forced cutover.\nkeylime-deploy --status\n  Show durable phase/result and log path.\nkeylime-deploy --recover\n  Restart services at the currently selected release after an interrupted worker.\n--wait observes completion; --follow also streams the log. Disconnecting never cancels deployment.",
   );
   process.exit(0);
 }
@@ -85,15 +87,21 @@ while (performance.now() < acknowledgementDeadline) {
     );
     break;
   }
-  if (child.exitCode !== null)
+  if (child.exitCode !== null) {
+    if (values.follow) process.stdout.write(readFileSync(logPath));
     throw new Error(`Deployment not accepted; inspect ${logPath}`);
+  }
   await Bun.sleep(50);
 }
 if (!accepted)
   throw new Error(
     `Worker did not acknowledge submission; inspect ${logPath} and --status before retrying`,
   );
-if (values.wait) {
+if (values.follow) {
+  const state = await followDeployment(base, id, logPath, child);
+  console.log(JSON.stringify(state, null, 2));
+  process.exitCode = state.phase === "failed" || child.exitCode !== 0 ? 1 : 0;
+} else if (values.wait) {
   for (;;) {
     const state = readDeployState(base);
     if (!state || state.id !== id)

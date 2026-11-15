@@ -31,23 +31,20 @@ checks the candidate runner before activation, and activation verifies service
 readiness. Run `bun run smoke` separately when needed; deployment no longer checks
 the SPA, APIs, or event stream before switching.
 
-Source deployment preparation generates API documents before any live service
-cutover, including for cached runner and frontend-only candidates. Generation failure
-blocks deployment without changing the active services. `--activate` and `--recover`
-operate on immutable prebuilt releases and do not require compiler tools; neither
-does normal use of an installed release.
-Generation logs its coverage, document-building, and per-document validation stages
-to the deployment log, so a slow or failing prerequisite can be identified.
+Deployment does not generate or validate API documentation. Binary releases include
+the checked-in documents, which may be stale; use `bun run api:generate` and
+`bun run api:check` explicitly when maintaining them.
 
 Activation gives active runs and protected host work up to 60 seconds to finish.
 Use `keylime-deploy --timeout 10` or `mise exec -- bun run deploy:local:fast`
-to shorten that grace period to 10 seconds. `--timeout` takes positive whole
-seconds and applies to staged-release activation too.
+to shorten that grace period to 10 seconds. `mise exec -- bun run deploy:local:fast:follow`
+uses the same deadline, streams the deployment log and waits for the worker to exit.
+`--timeout` takes positive whole seconds and applies to staged-release activation too.
 Confirmed-idle session processes close automatically. At the deadline deployment
 continues forcibly: remaining active runs and host operations are terminated.
 Deployment runs in a detached worker with file-backed logs, outside the agent's
 process group. Closing the terminal or terminating the submitting session cannot
-interrupt it. `--wait` only observes that worker; it does not own deployment.
+interrupt it. `--wait` observes completion; `--follow` also displays the log. Disconnecting either observer does not cancel deployment.
 
 Older daemons without maintenance controls use the full configured grace period,
 then the web service and host process group are stopped for the initial upgrade.

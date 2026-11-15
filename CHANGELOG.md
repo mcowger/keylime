@@ -7,9 +7,9 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 ## [Unreleased]
 
 ### Added
+- `bun run deploy:local:fast:follow` streams the fast deployment log and waits for its detached worker to finish.
 - Added canonical TypeBox contracts and TypeBox Codegen bootstrapping across all HTTP handlers, host operations, browser commands, runner commands and events. OpenAPI, AsyncAPI and reusable JSON Schema are generated from source metadata with exhaustive registry and artifact drift checks; runtime validation is unchanged.
 - Generated API docs now include source-authored usage, input rules, invariants, side effects and recovery guidance. Route JSDoc is extracted into OpenAPI; generation rejects missing semantic sections or undocumented canonical schemas.
-- Development now generates API contracts before startup and on watched source changes; source packaging, release checks, deployment preparation, and standalone web/runner binary builds also generate and validate contracts before proceeding. Build failures block the cycle without activating production changes.
 - Touch terminals have an accessory row for Escape, Tab, Ctrl, Ctrl-C and arrow keys; Ctrl applies to the next typed key.
 - Git projects can follow their current on-disk `paseo.json` for workspace setup and teardown, including uncommitted edits, with `.worktreeinclude` copying and live previews. Manual commands remain available, and project settings are accessible directly from each sidebar project menu on desktop and mobile.
 - Failed held messages can be retried without reconstructing their contents or attachments. Retries warn when the original may already have been sent.
@@ -52,6 +52,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Paseo setup command parsing and ordering now distinguish multiline command lists from shell scripts; blocking command selections are revalidated when recipes change
 
 ### Fixed
+- Development, builds and local deployments no longer generate or validate API documentation; releases ship the checked-in documents.
 - API generation validates AsyncAPI documents without materializing unused parsed models, avoiding excessive deployment build time and memory. Generation now logs each validation stage.
 - Preserve pasted text alongside image files or embedded data images in rich-text clipboard content.
 - Closing an exited terminal tab now removes it even after its shell has disappeared.

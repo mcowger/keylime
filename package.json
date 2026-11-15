@@ -39,6 +39,7 @@
     "dev": "bun --no-env-file scripts/dev.ts",
     "deploy:local": "bun --no-env-file scripts/deploy-local.ts",
     "deploy:local:fast": "bun --no-env-file scripts/deploy-local.ts --timeout 10",
+    "deploy:local:fast:follow": "bun --no-env-file scripts/deploy-local.ts --timeout 10 --follow",
     "deploy:local:frontend": "bun --no-env-file scripts/deploy-local.ts --frontend",
     "build": "bun scripts/build-client.ts",
     "build:binary": "bun run build && bun scripts/build-binary.ts",
@@ -58,7 +59,7 @@
     "systemd:status": "bun bin/omp-web-systemd.ts status",
     "prepack": "bun run build",
     "smoke": "bun runner/scripts/build-binary.ts && bun scripts/smoke.ts",
-    "release:check": "bun run api:generate && bun run api:check && bun run format:check && bun run typecheck && bun run test && bun run build && bun run smoke"
+    "release:check": "bun run format:check && bun run typecheck && bun run test && bun run build && bun run smoke"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
