@@ -2,6 +2,7 @@ import { correlationCommands } from "../correlation";
 import { eventsCommands } from "../events";
 import { agentsCommands, agentsFrames } from "./agents";
 import { gitCommands } from "./git";
+import { jobsCommands } from "./jobs";
 import { modelCommands, modelFrames } from "./model";
 import { promptingCommands, promptingFrames } from "./prompting";
 import { sessionCommands, sessionFrames } from "./session";
@@ -16,6 +17,7 @@ export const commands: CommandTable = {
   ...toolsCommands,
   ...agentsCommands,
   ...gitCommands,
+  ...jobsCommands,
   ...eventsCommands,
   ...correlationCommands,
 };

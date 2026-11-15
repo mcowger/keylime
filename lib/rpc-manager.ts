@@ -229,6 +229,9 @@ const PASSTHROUGH_COMMANDS = new Set([
   "btw",
   "btw_cancel",
   "get_btw_history",
+  "get_jobs",
+  "get_job_output",
+  "cancel_job",
   "get_client_message_status",
 ]);
 

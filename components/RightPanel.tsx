@@ -30,12 +30,19 @@ import { FileViewer } from "./FileViewer";
 import { NotificationActions, NotificationList } from "./NotificationList";
 import { useUnreadNotificationCount } from "@/lib/notification-history";
 import { ConnectionDiagnosticsPanel } from "./ConnectionDiagnostics";
+import { JobsPanel } from "./JobsPanel";
 import { useI18n } from "@/lib/i18n";
 import { getFileName } from "@/lib/file-paths";
 import type { WorkspaceFileSource } from "@/lib/workspace-types";
 
 export type RightPanelView =
-  "explorer" | "git" | "notifications" | "connection" | "file" | "activity";
+  | "explorer"
+  | "git"
+  | "notifications"
+  | "connection"
+  | "file"
+  | "activity"
+  | "jobs";
 
 interface Props {
   fileTabs: Tab[];
@@ -262,7 +269,9 @@ export const RightPanel = memo(function RightPanel({
           >
             <TabBar
               tabs={fileTabs}
-              activeTabId={rightView === "file" ? (activeFileTabId ?? "") : ""}
+              activeTabId={
+                rightView === "file" ? (activeFileTabId ?? "") : rightView
+              }
               onSelectTab={onSelectFileTab}
               onCloseTab={onCloseFileTab}
               explorerSelected={rightView === "explorer"}
@@ -278,6 +287,8 @@ export const RightPanel = memo(function RightPanel({
               notificationsBadge={unreadNotifications}
               activitySelected={rightView === "activity"}
               onSelectActivity={() => onSelectView("activity")}
+              jobsSelected={rightView === "jobs"}
+              onSelectJobs={() => onSelectView("jobs")}
               connectionSelected={rightView === "connection"}
               onSelectConnection={
                 connectionDiagnosticsOn
@@ -952,6 +963,23 @@ export const RightPanel = memo(function RightPanel({
           }}
         >
           <div ref={onActivityContainerChange} />
+        </div>
+        <div
+          id="workspace-file-panel-jobs"
+          role="tabpanel"
+          aria-label={t("jobs.title")}
+          style={{
+            display: rightView === "jobs" ? "flex" : "none",
+            flex: 1,
+            minHeight: 0,
+            overflow: "hidden",
+          }}
+        >
+          <JobsPanel
+            sessionId={sourceSessionId ?? null}
+            enabled={rightPanelOpen && rightView === "jobs"}
+            isMobile={isMobile}
+          />
         </div>
         {connectionDiagnosticsOn && (
           <div

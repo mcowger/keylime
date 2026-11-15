@@ -7,7 +7,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { Activity, Bell, Folder, GitBranch, X } from "lucide-react";
+import { Activity, Bell, Folder, GitBranch, ListTodo, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { getFileIcon } from "./FileIcons";
 
@@ -43,6 +43,8 @@ interface Props {
   notificationsBadge?: number;
   activitySelected?: boolean;
   onSelectActivity?: () => void;
+  jobsSelected?: boolean;
+  onSelectJobs?: () => void;
   /** Pinned Connection tab rendered last (connection diagnostics on). */
   connectionSelected?: boolean;
   onSelectConnection?: () => void;
@@ -175,6 +177,8 @@ export function TabBar({
   notificationsBadge = 0,
   activitySelected = false,
   onSelectActivity,
+  jobsSelected = false,
+  onSelectJobs,
   connectionSelected = false,
   onSelectConnection,
 }: Props) {
@@ -186,6 +190,7 @@ export function TabBar({
     ...(onSelectExplorer ? ["explorer"] : []),
     ...(onSelectGit ? ["git"] : []),
     ...(onSelectActivity ? ["activity"] : []),
+    ...(onSelectJobs ? ["jobs"] : []),
     ...(onSelectConnection ? ["connection"] : []),
     ...tabs.map((tab) => tab.id),
   ];
@@ -195,6 +200,7 @@ export function TabBar({
     else if (id === "git") onSelectGit?.();
     else if (id === "notifications") onSelectNotifications?.();
     else if (id === "activity") onSelectActivity?.();
+    else if (id === "jobs") onSelectJobs?.();
     else if (id === "connection") onSelectConnection?.();
     else {
       const tab = tabs.find((item) => item.id === id);
@@ -343,6 +349,20 @@ export function TabBar({
           badge={0}
           badgeColor="var(--accent)"
           onSelect={onSelectActivity}
+          onKeyDown={handleTabKeyDown}
+        />
+      )}
+      {onSelectJobs && (
+        <PinnedTab
+          id="jobs"
+          panelId="workspace-file-panel-jobs"
+          label={t("jobs.title")}
+          title={t("jobs.title")}
+          icon={<ListTodo size={13} strokeWidth={2} aria-hidden="true" />}
+          selected={jobsSelected}
+          badge={0}
+          badgeColor="var(--accent)"
+          onSelect={onSelectJobs}
           onKeyDown={handleTabKeyDown}
         />
       )}

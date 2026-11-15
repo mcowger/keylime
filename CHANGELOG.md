@@ -8,6 +8,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Added
 - Failed held messages can be retried without reconstructing their contents or attachments. Retries warn when the original may already have been sent.
+- Added a live-only Jobs tab to the right panel: inspect background jobs and project services, commands, elapsed time, process details and bounded live output; cancel owned jobs or stop services without starting an agent or generating model-authored widgets. Selected completed output stays visible until deselected; no durable job history is stored.
 - **Ship** finishes a linked workspace from its chat: omp's commit agent proposes the commit message(s) (split commits and changelog edits included) through the session, then Ship lands locally (rebase on local main, fast-forward, archive sessions, delete the workspace and branch) or opens a GitHub PR with a generated title and description, optionally with squash auto-merge. The sidebar shows each PR's state; once GitHub reports it merged, cleanup and a local main pull run automatically or from **Clean up**.
 - Project rows have a + button for prompt-first workspace creation. The first prompt supplies a display name and branch through the smol task model before setup and agent startup.
 - The desktop sidebar shows active agents and pending or in-progress tasks for the selected chat. Select an agent to open its details.
@@ -24,6 +25,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - `bun run deploy:local` builds committed source into versioned production releases, smoke-tests before activation, waits for an empty host, and backs up production data before switching Pitchfork services. Verified older releases can be selected with `--activate`.
 - `bun run deploy:local` builds committed source into versioned production releases and supports activating older releases with `--activate`
 - `bun run dev:ui` starts an isolated development server seeded with sample projects, workspaces, conversations, and settings for UI testing
+- Added a live-only Jobs tab to inspect background jobs and project services, view bounded output, cancel owned jobs, and stop services without starting an agent or calling a model. Selected completed output remains visible until deselected; no durable history is stored
 
 ### Changed
 - Settings and other selectors use shared themed menus; file actions are quieter while remaining available on focus and touch.
@@ -34,6 +36,10 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Fixed
 - Custom provider cards show discovered models alongside configured ones without duplicates, and show loading while discovery is in progress.
+- Hiding Jobs during a pending Cancel/Stop no longer leaves its controls disabled after the request fails or is refused.
+- Jobs reads and cancellation are fenced to each native job incarnation, so reused IDs cannot replace retained output or cancel newer work.
+- Switching sessions during a pending Cancel/Stop no longer disables the new session's controls.
+- Service-output truncation warnings now use bounded, size-pinned log ranges instead of comparing raw byte counts with sanitized text.
 - Ship uses a header button and an aligned dialog with distinct progress, error and file details.
 - Workspace deletion recognizes squash-integrated branches in the default workspace and offers a button-based dialog when integration cannot be confirmed.
 - Workspace deletion and project/session unregistration now use in-app confirmation dialogs instead of browser prompts.

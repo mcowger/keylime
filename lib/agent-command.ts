@@ -33,6 +33,9 @@ export const NO_SPAWN_REPLIES: Record<string, unknown> = {
   predict_word_feedback: null,
   get_btw_history: { records: [] },
   btw_cancel: { cancelled: false },
+  get_jobs: { available: false, generation: "", jobs: [], services: [] },
+  get_job_output: null,
+  cancel_job: null,
 };
 
 /** omp-web's own failures carry a stable code the client can localize; omp's
@@ -120,12 +123,10 @@ export async function runAgentCommand(
     }
     // Attached files go to the session's host first; nothing reaches omp when one fails (spec U3).
     const uploads = takeUploads(command, owner, trustedUploads);
-    // Hold later wrapper selection as well as dispatch behind attachment preparation, so an
-    // advisor toggle cannot replace the child and a Stop cannot overtake the preparing prompt.
-    // A moved session answers to several ids: a command through any of them waits.
-    const held = getRpcSessionKeys(id).flatMap(
-      (key) => sendFences().get(key) ?? [],
-    );
+    const held =
+      type === "get_jobs" || type === "get_job_output"
+        ? []
+        : getRpcSessionKeys(id).flatMap((key) => sendFences().get(key) ?? []);
     const prior = held.length ? Promise.all(held).then(() => {}) : undefined;
     if (uploads) {
       const gate = new Promise<void>((resolve) => (release = resolve));
@@ -186,8 +187,17 @@ export async function runAgentCommand(
       if (!existing.hostOwnedLifecycle)
         await existing.destroyAndWait("advisor", true);
     }
-    if (noSpawn)
+    if (noSpawn) {
+      if (type === "get_job_output" || type === "cancel_job")
+        return Response.json(
+          {
+            error: "Job session is unavailable",
+            code: "job_session_unavailable",
+          },
+          { status: 409 },
+        );
       return Response.json({ success: true, data: NO_SPAWN_REPLIES[type] });
+    }
 
     const resolved = resumeHost
       ? { host: resumeHost }
