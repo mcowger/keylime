@@ -24,6 +24,17 @@
     />
     <link rel="icon" href="../public/favicon.ico" sizes="any" />
     <meta name="theme-color" content="#000000" />
+    <!-- Bun's CSS bundler does not recognize ::highlight; browsers parse these rules directly. -->
+    <style>
+      ::highlight(omp-search) {
+        background-color: color-mix(in srgb, var(--status-warning) 32%, transparent);
+        color: inherit;
+      }
+      ::highlight(omp-search-current) {
+        background-color: var(--status-warning);
+        color: var(--bg);
+      }
+    </style>
     <script>
       (function () {
         try {

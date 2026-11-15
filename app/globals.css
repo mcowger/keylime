@@ -6130,16 +6130,11 @@ html[data-touch-targets="accessible"] :is(.extension-choice, .extension-field) {
   margin-bottom: 0;
 }
 
-/* Sidebar search hits in the chat (CSS Custom Highlight API, set by
-   useChatSearchHighlights) and in the sidebar's match list. */
-::highlight(omp-search),
+/* Sidebar search match list. Chat highlights live in the HTML shell because
+   Bun's CSS bundler does not recognize the Custom Highlight pseudo-element. */
 .session-search-match-hit {
   background-color: color-mix(in srgb, var(--status-warning) 32%, transparent);
   color: inherit;
-}
-::highlight(omp-search-current) {
-  background-color: var(--status-warning);
-  color: var(--bg);
 }
 .session-search-match {
   background: none;

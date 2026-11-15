@@ -54,6 +54,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Explicit skill prompts start collapsed; select the header to show their full instructions
 
 ### Fixed
+- Client builds no longer warn about search highlight selectors.
 - Development, builds and local deployments no longer generate or validate API documentation; releases ship the checked-in documents.
 - API generation validates AsyncAPI documents without materializing unused parsed models, avoiding excessive deployment build time and memory. Generation now logs each validation stage.
 - Preserve pasted text alongside image files or embedded data images in rich-text clipboard content.
@@ -119,6 +120,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Closing an exited terminal tab now removes it even after its shell has disappeared
 - Opening a workspace selects its first chat open on another browser and shows shared chats in the workspace tab bar
 - Background job completion notices show structured job summaries with status and duration; their original JSON remains available
+- Client builds no longer warn about search highlight selectors
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
