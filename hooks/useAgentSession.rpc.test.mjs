@@ -15485,6 +15485,33 @@ test("deleting a failed browser-held message removes it only after the durable I
   assert.deepEqual(w.latest.notices, []);
 });
 
+test("retry preserves local upload proofs, advisor and lineage until the replacement is stored", async () => {
+  resetWorld();
+  const sid = "retry-local-provenance";
+  primeSession(sid, [userMsg("u0", "before")]);
+  world.outboxHold = true;
+  const w = await mountSession(sid);
+  const root = {
+    id: "retry-root", sessionId: sid, scope: "test-scope", advisor: true,
+    mode: "followUp", message: "retry", uploads: ["/tmp/file"],
+    uploadProofs: { "/tmp/file": "proof" }, state: "failed", createdAt: 1,
+  };
+  world.outbox.push(root);
+  await act(() => workerPort.onmessage({ data: { outbox: [root] } }));
+  await act(async () => { await w.latest.retryHeldMessage(root.id); });
+  const copy = world.lastOutboxAdd.entry;
+  assert.equal(copy.replaces, root.id);
+  assert.equal(copy.advisor, true);
+  assert.equal(copy.mode, root.mode);
+  assert.deepEqual(copy.uploads, root.uploads);
+  assert.deepEqual(copy.uploadProofs, root.uploadProofs);
+  assert.ok(world.outbox.some((entry) => entry.id === root.id));
+  await act(async () => { await w.latest.retryHeldMessage(root.id); });
+  assert.equal(world.outbox.length, 2, "pending replacement blocks another retry");
+  await act(() => workerPort.onmessage({ data: { outboxStored: { ...copy, state: "held" } } }));
+  assert.equal(w.latest.heldMessages.some((entry) => entry.id === root.id), false);
+});
+
 test("a failed durable browser deletion keeps the held message and shows a notice", async (t) => {
   resetWorld();
   const { getDraft, clearDraft } = await import("@/lib/draft-store");

@@ -39,6 +39,7 @@ import {
   Square,
   Trash2,
   Paperclip,
+  RotateCcw,
 } from "lucide-react";
 import { MarkdownBody } from "./MarkdownBody";
 import { ThinkingMarkdown } from "./ThinkingMarkdown";
@@ -959,18 +960,21 @@ const heldActionStyle = {
 } as const;
 
 /** A message omp-web holds until omp has it (docs/specs/2026-11-04-message-outbox-design.md O1): dimmed, after the
- * live turn, naming the leg it waits on. Delete only while nothing of it can have reached omp. */
+ * live turn, naming the leg it waits on. Retry failed messages; uncertain delivery needs confirmation. */
 export function HeldMessageView({
   held,
   hostLabel,
   onDelete,
+  onRetry,
 }: {
   held: HeldMessage;
   hostLabel?: string;
   onDelete?: (id: string) => void;
+  onRetry?: (id: string) => void;
 }) {
   const { t, locale } = useI18n();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingRetry, setConfirmingRetry] = useState(false);
   const failed = held.state === "failed";
   const status = failed
     ? held.mayHaveBeenSent
@@ -1119,6 +1123,29 @@ export function HeldMessageView({
             />
             {status}
           </span>
+          {failed && onRetry && (
+            <>
+              <button
+                type="button"
+                className="ui-focus-ring"
+                style={heldActionStyle}
+                onClick={() => held.mayHaveBeenSent ? setConfirmingRetry(true) : onRetry(held.id)}
+                aria-label={t("heldMessage.retryTitle")}
+              >
+                <RotateCcw size={11} strokeWidth={1.8} aria-hidden />
+                {t("heldMessage.retry")}
+              </button>
+              <ConfirmDialog
+                open={confirmingRetry}
+                onOpenChange={setConfirmingRetry}
+                title={t("heldMessage.retryTitle")}
+                description={t("heldMessage.retryConfirmMayHaveBeenSent")}
+                confirmLabel={t("heldMessage.retry")}
+                cancelLabel={t("chatInput.cancel")}
+                onConfirm={() => { setConfirmingRetry(false); onRetry(held.id); }}
+              />
+            </>
+          )}
           {canDelete && (
             <>
               <button

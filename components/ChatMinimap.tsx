@@ -190,6 +190,7 @@ export const ChatMinimap = memo(function ChatMinimap({
   const [railScrollTop, setRailScrollTop] = useState(0);
   const railRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
+  const dragCleanupRef = useRef<(() => void) | null>(null);
   const scrollRafRef = useRef<number | null>(null);
 
   // Extract navigation nodes: user prompts first (as the chapters of context),
@@ -385,18 +386,19 @@ export const ChatMinimap = memo(function ChatMinimap({
   useEffect(() => {
     const rail = railRef.current;
     if (!rail) return;
-    const revealActiveRow = () => {
-      if (!railOverflows(rail.scrollHeight, rail.clientHeight)) return;
+    const revealActiveRow = (smooth: boolean) => {
+      // A scrub owns the rail position; resize notifications should not animate it.
+      if (draggingRef.current || !railOverflows(rail.scrollHeight, rail.clientHeight)) return;
       const activeRow = rail.querySelector(
         `[data-index="${activeIndex}"]`,
       ) as HTMLElement | null;
       activeRow?.scrollIntoView({
         block: "nearest",
-        behavior: reducedMotion ? "auto" : "smooth",
+        behavior: smooth && !reducedMotion ? "smooth" : "instant",
       });
     };
-    revealActiveRow();
-    const resize = new ResizeObserver(revealActiveRow);
+    revealActiveRow(true);
+    const resize = new ResizeObserver(() => revealActiveRow(false));
     resize.observe(rail);
     return () => resize.disconnect();
   }, [activeIndex, nodes.length, reducedMotion]);
@@ -405,7 +407,12 @@ export const ChatMinimap = memo(function ChatMinimap({
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (nodes.length === 0) return;
+      e.preventDefault();
+      dragCleanupRef.current?.();
       draggingRef.current = true;
+      let lastTarget = -1;
+      let clientY = e.clientY;
+      let frame: number | null = null;
 
       const handlePointerY = (clientY: number) => {
         const railEl = railRef.current;
@@ -417,7 +424,8 @@ export const ChatMinimap = memo(function ChatMinimap({
           railEl.scrollTop,
           nodes.length,
         );
-        if (nodes[targetIdx]) {
+        if (nodes[targetIdx] && targetIdx !== lastTarget) {
+          lastTarget = targetIdx;
           scrollToNodeRef.current(nodes[targetIdx], false);
           setActiveIndex(targetIdx);
           setHoveredIndex(targetIdx);
@@ -428,14 +436,28 @@ export const ChatMinimap = memo(function ChatMinimap({
 
       const onMove = (ev: MouseEvent) => {
         if (!draggingRef.current) return;
-        handlePointerY(ev.clientY);
+        clientY = ev.clientY;
+        if (frame !== null) return;
+        frame = requestAnimationFrame(() => {
+          frame = null;
+          handlePointerY(clientY);
+        });
       };
 
-      const onUp = () => {
+      const cleanup = () => {
         draggingRef.current = false;
+        if (frame !== null) cancelAnimationFrame(frame);
+        frame = null;
         window.removeEventListener("mousemove", onMove);
         window.removeEventListener("mouseup", onUp);
+        dragCleanupRef.current = null;
       };
+      const onUp = (ev: MouseEvent) => {
+        // Flush the final pointer position even if its frame has not run yet.
+        handlePointerY(ev.clientY);
+        cleanup();
+      };
+      dragCleanupRef.current = cleanup;
 
       window.addEventListener("mousemove", onMove);
       window.addEventListener("mouseup", onUp);
@@ -446,7 +468,7 @@ export const ChatMinimap = memo(function ChatMinimap({
   // Interrupted drag cleanup on unmount
   useEffect(() => {
     return () => {
-      draggingRef.current = false;
+      dragCleanupRef.current?.();
     };
   }, []);
 

@@ -12,6 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Alert } from "@/components/ui/field";
+import { ThemedSelect } from "@/components/ui/primitives";
 import { toast } from "@/components/ui/toast";
 import { useI18n } from "@/lib/i18n";
 
@@ -58,7 +59,7 @@ const textareaStyle = {
 } as const;
 const nativeSelectStyle = {
   minHeight: 32,
-  padding: "4px 28px 4px 10px",
+  padding: "4px 10px",
   border: "1px solid var(--border)",
   borderRadius: "var(--radius-control)",
   background: "var(--bg)",
@@ -989,26 +990,17 @@ export function AgentsConfig({
                       }}
                     >
                       {t("agentsConfig.scope")}
-                      <select
+                      <ThemedSelect
+                        aria-label={t("agentsConfig.scope")}
                         value={createScope}
-                        onChange={(e) =>
-                          setCreateScope(e.target.value as "user" | "project")
-                        }
-                        style={{
-                          ...nativeSelectStyle,
-                          fontSize: 11,
-                          minHeight: 28,
-                        }}
-                      >
-                        <option value="user">
-                          {t("agentsConfig.scopeUser")}
-                        </option>
-                        {!userOnly && (
-                          <option value="project" disabled={!canEditProject}>
-                            {t("agentsConfig.scopeProject")}
-                          </option>
-                        )}
-                      </select>
+                        onChange={(value) => setCreateScope(value as "user" | "project")}
+                        style={{ ...nativeSelectStyle, fontSize: 11, minHeight: 28 }}
+                        options={[
+                          { value: "user", label: t("agentsConfig.scopeUser") },
+                          // Keep project creation unavailable when the project cannot be edited.
+                          ...(!userOnly ? [{ value: "project", label: t("agentsConfig.scopeProject"), disabled: !canEditProject }] : []),
+                        ]}
+                      />
                     </label>
                   ) : null}
                 </div>
@@ -1065,17 +1057,13 @@ export function AgentsConfig({
                     <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
                       {t("agentsConfig.thinkingLevel")}
                     </span>
-                    <select
+                    <ThemedSelect
+                      aria-label={t("agentsConfig.thinkingLevel")}
                       value={thinkingLevel}
-                      onChange={(e) => setThinkingLevel(e.target.value)}
+                      onChange={setThinkingLevel}
                       style={nativeSelectStyle}
-                    >
-                      {THINKING_LEVELS.map((lv) => (
-                        <option key={lv} value={lv}>
-                          {lv || t("agentsConfig.defaultThinking")}
-                        </option>
-                      ))}
-                    </select>
+                      options={THINKING_LEVELS.map((lv) => ({ value: lv, label: lv || t("agentsConfig.defaultThinking") }))}
+                    />
                   </label>
                 </div>
                 <div

@@ -6,6 +6,7 @@ import {
 } from "@/lib/api-utils";
 import { HostOpError } from "@/lib/hosts/link-protocol";
 import { invalidateHostSessionList } from "@/lib/hosts/session-index";
+import { forgetSessionReplacementMappings } from "@/lib/message-outbox";
 import { invalidateSessionCaches } from "@/lib/session-reader";
 import {
   parseJsonWithinLimit,
@@ -179,6 +180,14 @@ export async function DELETE(
       getLiveRpcSessionIds(),
     );
     if (!result.ok) return opErrorResponse(result);
+    // Upstream retry lineages outlive settled rows to prevent duplicate sends.
+    // Once deletion succeeds, discard only this session's unpinned metadata;
+    // cleanup failure must not turn a successfully deleted session into an error.
+    try {
+      forgetSessionReplacementMappings(id);
+    } catch (error) {
+      console.warn(`[api/sessions] could not clear deleted-session retry metadata: ${error instanceof Error ? error.message : String(error)}`);
+    }
     invalidateHostSessionList(resolved.host.id);
     clearExitedRpcSession(id);
     return Response.json({ ok: true, ...result.value });

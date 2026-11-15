@@ -618,6 +618,8 @@ export interface OutboxEntry {
   id: string;
   sessionId: string;
   mode: OutboxMode;
+  /** Captured at the original send; an explicit retry must not use current preferences. */
+  advisor?: boolean;
   message: string;
   images?: { type: "image"; data: string; mimeType: string }[];
   uploads?: string[];

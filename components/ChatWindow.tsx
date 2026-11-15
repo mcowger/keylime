@@ -777,6 +777,7 @@ export function ChatWindow({
     handleCompact,
     heldMessages,
     deleteHeldMessage,
+    retryHeldMessage,
     removeQueuedMessage,
     promoteQueuedToSteer,
     handleBuiltinSlashCommand,
@@ -2145,6 +2146,7 @@ export function ChatWindow({
                               held={held}
                               hostLabel={hostLabel}
                               onDelete={deleteHeldMessage}
+                              onRetry={retryHeldMessage}
                             />
                           ))}
 

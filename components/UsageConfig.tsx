@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ChevronDown, Loader2, RefreshCw } from "lucide-react";
+import { AlertCircle, Loader2, RefreshCw } from "lucide-react";
+import { ThemedSelect } from "@/components/ui/primitives";
 import { useI18n } from "@/lib/i18n";
 import type {
   UsageBreakdownView,
@@ -425,13 +426,12 @@ export function UsageConfig() {
               alignItems: "center",
             }}
           >
-            <select
+            <ThemedSelect
               value={timeRange}
               aria-label={t("usageConfig.timeRange")}
-              onChange={(e) => setTimeRange(e.target.value as UsageTimeRange)}
+              onChange={(value) => setTimeRange(value as UsageTimeRange)}
               style={{
-                appearance: "none",
-                padding: "5px 28px 5px 10px",
+                padding: "5px 10px",
                 fontSize: 12,
                 borderRadius: "var(--radius-control)",
                 border: "1px solid var(--border)",
@@ -439,22 +439,14 @@ export function UsageConfig() {
                 color: "var(--text)",
                 cursor: "pointer",
               }}
-            >
-              <option value="today">{t("usageConfig.rangeToday")}</option>
-              <option value="7d">{t("usageConfig.range7d")}</option>
-              <option value="30d">{t("usageConfig.range30d")}</option>
-              <option value="90d">{t("usageConfig.range90d")}</option>
-              <option value="month">{t("usageConfig.rangeMonth")}</option>
-              <option value="all">{t("usageConfig.rangeAll")}</option>
-            </select>
-            <ChevronDown
-              size={14}
-              style={{
-                position: "absolute",
-                right: 8,
-                pointerEvents: "none",
-                color: "var(--text-dim)",
-              }}
+              options={[
+                { value: "today", label: t("usageConfig.rangeToday") },
+                { value: "7d", label: t("usageConfig.range7d") },
+                { value: "30d", label: t("usageConfig.range30d") },
+                { value: "90d", label: t("usageConfig.range90d") },
+                { value: "month", label: t("usageConfig.rangeMonth") },
+                { value: "all", label: t("usageConfig.rangeAll") },
+              ]}
             />
           </div>
 

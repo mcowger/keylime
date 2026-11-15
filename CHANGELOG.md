@@ -7,6 +7,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 ## [Unreleased]
 
 ### Added
+- Failed held messages can be retried without reconstructing their contents or attachments. Retries warn when the original may already have been sent.
 - **Ship** finishes a linked workspace from its chat: omp's commit agent proposes the commit message(s) (split commits and changelog edits included) through the session, then Ship lands locally (rebase on local main, fast-forward, archive sessions, delete the workspace and branch) or opens a GitHub PR with a generated title and description, optionally with squash auto-merge. The sidebar shows each PR's state; once GitHub reports it merged, cleanup and a local main pull run automatically or from **Clean up**.
 - Project rows have a + button for prompt-first workspace creation. The first prompt supplies a display name and branch through the smol task model before setup and agent startup.
 - The desktop sidebar shows active agents and pending or in-progress tasks for the selected chat. Select an agent to open its details.
@@ -25,10 +26,13 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - `bun run dev:ui` starts an isolated development server seeded with sample projects, workspaces, conversations, and settings for UI testing
 
 ### Changed
+- Settings and other selectors use shared themed menus; file actions are quieter while remaining available on focus and touch.
+- Panel resizing, file-explorer scrolling and minimap dragging coalesce updates for smoother interaction.
 - Local deployment reuses an unchanged runner and skips archive creation to reduce build time. It no longer smoke-tests releases or backs up production data before activation
 - The new-session screen uses a narrower content column
 
 ### Fixed
+- Custom provider cards show discovered models alongside configured ones without duplicates, and show loading while discovery is in progress.
 - Ship uses a header button and an aligned dialog with distinct progress, error and file details.
 - Workspace deletion recognizes squash-integrated branches in the default workspace and offers a button-based dialog when integration cannot be confirmed.
 - Workspace deletion and project/session unregistration now use in-app confirmation dialogs instead of browser prompts.

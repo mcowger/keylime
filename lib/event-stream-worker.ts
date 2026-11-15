@@ -42,7 +42,7 @@
 //                 { outbox: LocalOutboxEntry[], partial?: true }  (every entry, in submission order: on attach once loaded
 //                   if any, back from the bfcache, and on every change; partial: the last shared read failed, so earlier
 //                   entries of other workers may be missing and the tab must not keepalive from it)
-//                 { outboxStored: OutboxEntry }  (the server stored one; the list without it follows)
+//                 { outboxStored: OutboxEntry & { replaces? } }  (the server stored one; the list without it follows)
 import {
   BROWSER_LINK_PATH,
   BROWSER_LINK_VERSION,
@@ -2140,6 +2140,59 @@ const OUTBOX_DB = "omp-web-outbox";
 const OUTBOX_STORE = "entries";
 /** The server keeps delivered ids 8 days: an older entry is never sent again, or a resend could deliver it twice. */
 const OUTBOX_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+// Adapted from ompweb 13d8eb21095f: retries retain upload proofs for delivery, but lineage compares only server-visible upload IDs; proofs must never enter receipts.
+/** The immutable intent used by server retry validation: mode, text, images and upload IDs. */
+function sameOutboxIntent(a: LocalOutboxEntry, b: LocalOutboxEntry): boolean {
+  if (a.mode !== b.mode || a.message !== b.message) return false;
+  const aImages = a.images;
+  const bImages = b.images;
+  const imageCount = aImages?.length ?? 0;
+  if (imageCount !== (bImages?.length ?? 0)) return false;
+  for (let index = 0; index < imageCount; index++) {
+    const left = aImages?.[index];
+    const right = bImages?.[index];
+    if (left?.type !== right?.type || left?.data !== right?.data || left?.mimeType !== right?.mimeType) return false;
+  }
+  const aUploads = a.uploads;
+  const bUploads = b.uploads;
+  const uploadCount = aUploads?.length ?? 0;
+  if (uploadCount !== (bUploads?.length ?? 0)) return false;
+  for (let index = 0; index < uploadCount; index++) if (aUploads?.[index] !== bUploads?.[index]) return false;
+  return true;
+}
+
+// A local failed ancestor proves lineage only in the same session with the exact original intent.
+function replacementRoot(entry: LocalOutboxEntry, entries: ReadonlyMap<string, LocalOutboxEntry>): string | null {
+  if (entry.replaces === undefined) return entry.id;
+  const seen = new Set([entry.id]);
+  let id = entry.replaces;
+  if (!id) return null;
+  while (true) {
+    if (seen.has(id)) return null;
+    seen.add(id);
+    const parent = entries.get(id);
+    if (!parent || parent.sessionId !== entry.sessionId || parent.state !== "failed") return id;
+    if (!sameOutboxIntent(parent, entry)) return null;
+    if (parent.replaces === undefined) return id;
+    id = parent.replaces;
+    if (!id) return null;
+  }
+}
+function replacementDescendsFrom(entry: LocalOutboxEntry, ancestorId: string, entries: ReadonlyMap<string, LocalOutboxEntry>): boolean {
+  const seen = new Set([entry.id]);
+  let id = entry.replaces;
+  while (id) {
+    if (id === ancestorId) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    const parent = entries.get(id);
+    if (!parent || parent.sessionId !== entry.sessionId || parent.state !== "failed"
+      || !sameOutboxIntent(parent, entry) || parent.replaces === undefined) return false;
+    id = parent.replaces;
+  }
+  return false;
+}
+
 
 interface OutboxItem {
   entry: LocalOutboxEntry;
@@ -2156,10 +2209,7 @@ const outboxItems = new Map<string, OutboxItem>();
 const outboxReading = new Set<string>();
 const outboxDropping = new Set<string>();
 /** A session whose shared-list read failed reads again after this delay (1 s doubling to 30 s): no send goes before it. */
-const outboxReadRetry = new Map<
-  string,
-  { timer: Timer | undefined; ms: number }
->();
+const outboxReadRetry = new Map<string, { timer: Timer | undefined; ms: number }>();
 /** The last read of the shared list failed: this worker's list may miss other workers' earlier entries. */
 let outboxPartial = false;
 const outboxDb = openOutboxDb();
@@ -2181,8 +2231,7 @@ function openOutboxDb(): Promise<IDBDatabase | null> {
     if (!factory) return resolve(null);
     try {
       const request = factory.open(OUTBOX_DB, 1);
-      request.onupgradeneeded = () =>
-        request.result.createObjectStore(OUTBOX_STORE, { keyPath: "id" });
+      request.onupgradeneeded = () => request.result.createObjectStore(OUTBOX_STORE, { keyPath: "id" });
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => resolve(null);
     } catch {
@@ -2192,19 +2241,44 @@ function openOutboxDb(): Promise<IDBDatabase | null> {
 }
 
 /** A failed read must not let a private worker's incomplete snapshot choose which message goes first. */
-function readOutbox(
-  db: IDBDatabase | null,
-): Promise<LocalOutboxEntry[] | null> {
+function readOutbox(db: IDBDatabase | null): Promise<LocalOutboxEntry[] | null> {
   return new Promise((resolve) => {
     if (!db) return resolve(null);
     try {
       const transaction = db.transaction(OUTBOX_STORE);
       const request = transaction.objectStore(OUTBOX_STORE).getAll();
       transaction.oncomplete = () => resolve(request.result);
-      transaction.onerror =
-        transaction.onabort =
-        request.onerror =
-          () => resolve(null);
+      transaction.onerror = transaction.onabort = request.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+/** Normalize legacy retry chains atomically before any sending row can reach the server. */
+function readOutboxForSend(db: IDBDatabase | null): Promise<LocalOutboxEntry[] | null> {
+  return new Promise((resolve) => {
+    if (!db) return resolve(null);
+    let entries: LocalOutboxEntry[] | null = null;
+    try {
+      const transaction = db.transaction(OUTBOX_STORE, "readwrite");
+      const store = transaction.objectStore(OUTBOX_STORE);
+      const request = store.getAll();
+      transaction.oncomplete = () => resolve(entries);
+      transaction.onerror = transaction.onabort = request.onerror = () => resolve(null);
+      request.onsuccess = () => {
+        entries = request.result as LocalOutboxEntry[];
+        const byId = new Map(entries.map((entry) => [entry.id, entry] as const));
+        for (let index = 0; index < entries.length; index++) {
+          const entry = entries[index];
+          if (entry.state !== "sending" || entry.replaces === undefined) continue;
+          const root = replacementRoot(entry, byId);
+          if (root === null || root === entry.replaces) continue;
+          const normalized = { ...entry, replaces: root };
+          entries[index] = normalized;
+          byId.set(entry.id, normalized);
+          store.put(normalized);
+        }
+      };
     } catch {
       resolve(null);
     }
@@ -2215,25 +2289,13 @@ function readOutbox(
 async function loadOutbox(db: IDBDatabase | null): Promise<boolean> {
   const stored = await readOutbox(db);
   if (!stored) return false;
-  for (const entry of stored)
-    outboxItems.set(entry.id, {
-      entry,
-      inFlight: false,
-      retryTimer: undefined,
-      retryMs: RECONNECT_MIN_MS,
-    });
-  await Promise.all(
-    [...new Set(stored.map((entry) => entry.sessionId))].map((sessionId) =>
-      sendOutbox(sessionId),
-    ),
-  );
+  for (const entry of stored) outboxItems.set(entry.id, { entry, inFlight: false, retryTimer: undefined, retryMs: RECONNECT_MIN_MS });
+  await Promise.all([...new Set(stored.map((entry) => entry.sessionId))].map((sessionId) => sendOutbox(sessionId)));
   return true;
 }
 
 /** True only once a write commits: a quota error or abort must not clear the composer's draft. */
-async function writeOutbox(
-  change: (store: IDBObjectStore) => void,
-): Promise<boolean> {
+async function writeOutbox(change: (store: IDBObjectStore) => void): Promise<boolean> {
   const db = await outboxDb;
   if (!db) return false;
   return await new Promise<boolean>((resolve) => {
@@ -2250,69 +2312,83 @@ async function writeOutbox(
 
 /** Unsequenced legacy rows precede new adds; their already-lost timestamp ties use a deterministic id fallback. */
 function compareOutbox(a: LocalOutboxEntry, b: LocalOutboxEntry): number {
-  return (
-    (a.enqueueOrder ?? 0) - (b.enqueueOrder ?? 0) ||
-    a.createdAt - b.createdAt ||
-    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
-  );
+  return (a.enqueueOrder ?? 0) - (b.enqueueOrder ?? 0) || a.createdAt - b.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 
 /** Every entry, in submission order. */
 function outboxList(): LocalOutboxEntry[] {
-  return [...outboxItems.values()]
-    .map((item) => item.entry)
-    .sort(compareOutbox);
+  return [...outboxItems.values()].map((item) => item.entry).sort(compareOutbox);
 }
 
 function broadcastOutbox(): void {
   const list = outboxList();
-  for (const client of clients)
-    post(
-      client,
-      outboxPartial ? { outbox: list, partial: true } : { outbox: list },
-    );
+  for (const client of clients) post(client, outboxPartial ? { outbox: list, partial: true } : { outbox: list });
 }
 
 /** A tab's list once loaded. An empty one only when `always`: a tab back from the bfcache may still show gone entries. */
 function tellOutbox(client: Client, always: boolean): void {
   void ensureOutboxReady().then((loaded) => {
-    if (loaded && (always || outboxItems.size > 0))
-      post(
-        client,
-        outboxPartial
-          ? { outbox: outboxList(), partial: true }
-          : { outbox: outboxList() },
-      );
+    if (loaded && (always || outboxItems.size > 0)) post(client, outboxPartial ? { outbox: outboxList(), partial: true } : { outbox: outboxList() });
   });
 }
 
 function addOutbox(client: Client, n: number, entry: LocalOutboxEntry): void {
   void ensureOutboxReady().then(async (loaded) => {
-    const item: OutboxItem = {
-      entry: { ...entry, state: "sending" },
-      inFlight: false,
-      retryTimer: undefined,
-      retryMs: RECONNECT_MIN_MS,
-    };
-    const committed =
-      loaded &&
-      (await writeOutbox((store) => {
-        const request = store.getAll();
-        request.onsuccess = () => {
-          // The store's readwrite lock serializes allocation with every other worker's acceptance.
-          item.entry.enqueueOrder =
-            (request.result as LocalOutboxEntry[]).reduce(
-              (max, row) => Math.max(max, row.enqueueOrder ?? 0),
-              0,
-            ) + 1;
-          store.add(item.entry);
+    const item: OutboxItem = { entry: { ...entry, state: "sending" }, inFlight: false, retryTimer: undefined, retryMs: RECONNECT_MIN_MS };
+    let invalidRetry = false;
+    let reused: LocalOutboxEntry | undefined;
+    const committed = loaded && await writeOutbox((store) => {
+      const request = store.getAll();
+      request.onsuccess = () => {
+        const entries = request.result as LocalOutboxEntry[];
+        const byId = new Map(entries.map((saved) => [saved.id, saved] as const));
+        const root = replacementRoot(entry, byId);
+        if (root === null) {
+          invalidRetry = true;
+          return;
+        }
+        const normalized = entry.replaces === undefined ? entry : { ...entry, replaces: root };
+        if (entry.replaces !== undefined) {
+          let pending: LocalOutboxEntry | undefined;
+          for (const saved of entries) {
+            if (saved.sessionId !== entry.sessionId || saved.state !== "sending" || saved.replaces === undefined
+              || replacementRoot(saved, byId) !== root) continue;
+            if (!pending || compareOutbox(saved, pending) < 0) pending = saved;
+          }
+          if (pending) {
+            if (sameOutboxIntent(pending, normalized)) reused = pending;
+            else invalidRetry = true;
+            return;
+          }
+          const localRoot = byId.get(root);
+          if (localRoot?.sessionId === entry.sessionId
+            && (localRoot.state !== "failed" || !sameOutboxIntent(localRoot, normalized))) {
+            invalidRetry = true;
+            return;
+          }
+        }
+        item.entry = {
+          ...normalized,
+          state: "sending",
+          enqueueOrder: entries.reduce((max, row) => Math.max(max, row.enqueueOrder ?? 0), 0) + 1,
         };
-      }));
-    if (!committed) {
+        store.add(item.entry);
+      };
+    });
+    if (!committed || invalidRetry) {
       post(client, {
         outboxAdded: n,
-        error: "The message could not be saved to this browser. Send it again.",
+        error: invalidRetry ? "This retry chain is invalid. Retry the original message instead." : "The message could not be saved to this browser. Send it again.",
       });
+      return;
+    }
+    if (reused) {
+      if (!outboxItems.has(reused.id)) outboxItems.set(reused.id, { entry: reused, inFlight: false, retryTimer: undefined, retryMs: RECONNECT_MIN_MS });
+      await refreshOutbox();
+      broadcastOutbox();
+      post(client, { outboxAdded: n });
+      // A peer may commit and exit before sending; replaying the existing ID remains idempotent.
+      sendOutbox(reused.sessionId);
       return;
     }
     // Committed: the entry is accepted whatever follows, or a resend from the composer would duplicate it under a new id.
@@ -2330,13 +2406,10 @@ function dropOutbox(client: Client, n: number, id: string): void {
   void ensureOutboxReady().then(async (loaded) => {
     const item = outboxItems.get(id);
     outboxDropping.add(id);
-    const removed = loaded && (await writeOutbox((store) => store.delete(id)));
+    const removed = loaded && await writeOutbox((store) => store.delete(id));
     outboxDropping.delete(id);
     if (!removed) {
-      post(client, {
-        outboxDropped: n,
-        error: "The message could not be removed from this browser. Try again.",
-      });
+      post(client, { outboxDropped: n, error: "The message could not be removed from this browser. Try again." });
       return;
     }
     clearTimeout(item?.retryTimer);
@@ -2346,10 +2419,57 @@ function dropOutbox(client: Client, n: number, id: string): void {
     if (item) sendOutbox(item.entry.sessionId);
   });
 }
+/** Server identity snapshots can prove a browser's local copy was accepted even when its POST reply was lost. */
+function reconcileOutbox(client: Client, n: number, sessionId: string, value: unknown): void {
+  void ensureOutboxReady().then(async (loaded) => {
+    if (!loaded || !Array.isArray(value) || !value.every((id) => typeof id === "string")) {
+      post(client, { outboxReconciled: n, error: "The browser outbox could not be reconciled. Retry again." });
+      return;
+    }
+    const confirmed = new Set(value as string[]);
+    const removedIds = new Set<string>();
+    const committed = await writeOutbox((store) => {
+      const request = store.getAll();
+      request.onsuccess = () => {
+        const entries = request.result as LocalOutboxEntry[];
+        const byId = new Map(entries.map((entry) => [entry.id, entry] as const));
+        for (const entry of entries) {
+          if (entry.sessionId !== sessionId || !confirmed.has(entry.id)) continue;
+          removedIds.add(entry.id);
+          store.delete(entry.id);
+          if (entry.replaces === undefined) continue;
+          const root = replacementRoot(entry, byId);
+          if (root === null) continue;
+          const original = byId.get(root);
+          if (!original || original.sessionId !== sessionId || original.state !== "failed" || !sameOutboxIntent(original, entry)) continue;
+          for (const candidate of entries) {
+            if (candidate.id === entry.id || candidate.sessionId !== sessionId || candidate.state !== "failed"
+              || !sameOutboxIntent(candidate, entry) || replacementDescendsFrom(candidate, entry.id, byId)) continue;
+            if (candidate.id !== root && replacementRoot(candidate, byId) !== root) continue;
+            removedIds.add(candidate.id);
+            store.delete(candidate.id);
+          }
+        }
+      };
+    });
+    if (!committed) {
+      post(client, { outboxReconciled: n, error: "The browser outbox could not be reconciled. Retry again." });
+      return;
+    }
+    for (const id of removedIds) {
+      clearTimeout(outboxItems.get(id)?.retryTimer);
+      outboxItems.delete(id);
+    }
+    await refreshOutbox();
+    broadcastOutbox();
+    post(client, { outboxReconciled: n });
+    if (removedIds.size > 0) sendOutbox(sessionId);
+  });
+}
 
 /** Refresh the whole shared list before exposing an add or choosing a session head; null means the read failed. */
 async function refreshOutbox(): Promise<boolean | null> {
-  const entries = await readOutbox(await outboxDb);
+  const entries = await readOutboxForSend(await outboxDb);
   if (!entries) {
     outboxPartial = true;
     return null;
@@ -2367,17 +2487,9 @@ async function refreshOutbox(): Promise<boolean | null> {
   for (const entry of entries) {
     const item = outboxItems.get(entry.id);
     if (!item) {
-      outboxItems.set(entry.id, {
-        entry,
-        inFlight: false,
-        retryTimer: undefined,
-        retryMs: RECONNECT_MIN_MS,
-      });
+      outboxItems.set(entry.id, { entry, inFlight: false, retryTimer: undefined, retryMs: RECONNECT_MIN_MS });
       changed = true;
-    } else if (
-      item.entry.state !== entry.state ||
-      item.entry.error !== entry.error
-    ) {
+    } else if (item.entry.state !== entry.state || item.entry.error !== entry.error || item.entry.replaces !== entry.replaces) {
       item.entry = entry;
       changed = true;
     }
@@ -2392,10 +2504,7 @@ async function sendOutbox(sessionId: string): Promise<void> {
   const changed = await refreshOutbox();
   outboxReading.delete(sessionId);
   if (changed === null) {
-    const retry = outboxReadRetry.get(sessionId) ?? {
-      timer: undefined,
-      ms: RECONNECT_MIN_MS,
-    };
+    const retry = outboxReadRetry.get(sessionId) ?? { timer: undefined, ms: RECONNECT_MIN_MS };
     outboxReadRetry.set(sessionId, retry);
     if (retry.timer !== undefined) return;
     retry.timer = setTimeout(() => {
@@ -2408,58 +2517,27 @@ async function sendOutbox(sessionId: string): Promise<void> {
   clearTimeout(outboxReadRetry.get(sessionId)?.timer);
   outboxReadRetry.delete(sessionId);
   if (changed) broadcastOutbox();
-  const head = outboxList().find(
-    (entry) => entry.sessionId === sessionId && entry.state === "sending",
-  );
+  const entries = outboxList();
+  const head = entries.find((entry) => entry.sessionId === sessionId && entry.state === "sending");
   const item = head && outboxItems.get(head.id);
-  if (
-    !item ||
-    item.inFlight ||
-    item.retryTimer !== undefined ||
-    outboxDropping.has(item.entry.id)
-  )
-    return;
-  if (Date.now() - item.entry.createdAt > OUTBOX_MAX_AGE_MS)
-    return failOutbox(item, "Not sent within 7 days.");
-  if (typeof item.entry.scope !== "string" || !item.entry.scope)
-    return failOutbox(
-      item,
-      "This message has no saved installation or sign-in scope and cannot be sent.",
-    );
+  if (!item || item.inFlight || item.retryTimer !== undefined || outboxDropping.has(item.entry.id)) return;
+  if (item?.entry.replaces !== undefined && replacementRoot(item.entry, new Map(entries.map((entry) => [entry.id, entry] as const))) === null) {
+    return failOutbox(item, "This retry chain is invalid; remove this message and retry its original.");
+  }
+  if (Date.now() - item.entry.createdAt > OUTBOX_MAX_AGE_MS) return failOutbox(item, "Not sent within 7 days.");
+  if (typeof item.entry.scope !== "string" || !item.entry.scope) return failOutbox(item, "This message has no saved installation or sign-in scope and cannot be sent.");
   item.inFlight = true;
-  const { id, scope, advisor, mode, message, images, uploads, uploadProofs } =
-    item.entry;
-  const body = JSON.stringify({
-    type: "outbox_add",
-    id,
-    scope,
-    mode,
-    message,
-    images,
-    uploads,
-    uploadProofs,
-  });
+  const { id, scope, advisor, mode, message, images, uploads, uploadProofs, replaces } = item.entry;
+  const body = JSON.stringify({ type: "outbox_add", id, scope, mode, message, images, uploads, uploadProofs, replaces });
   // A tab of the worker's own (not in `clients`): the command takes the current transport as a tab's would.
   const port: Port = {
     onmessage: null,
     postMessage(answer) {
-      const {
-        http,
-        status,
-        body: reply,
-      } = answer as { http?: true; status: number; body: unknown };
+      const { http, status, body: reply } = answer as { http?: true; status: number; body: unknown };
       if (!http) return outboxAnswer(item, status, reply);
       // A half-open POST must not block this session forever; include the body read and allow 2 KB/s for its uplink.
       withDeadline(40_000 + Math.ceil(body.length / 2), async (signal) => {
-        const response = await fetch(
-          `/api/agent/${encodeURIComponent(sessionId)}${advisor === true ? "?advisor=1" : ""}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body,
-            signal,
-          },
-        );
+        const response = await fetch(`/api/agent/${encodeURIComponent(sessionId)}${advisor === true ? "?advisor=1" : ""}`, { method: "POST", headers: { "Content-Type": "application/json" }, body, signal });
         const reply = await response.json().catch((error) => {
           if (signal.aborted) throw error;
           return null;
@@ -2473,98 +2551,89 @@ async function sendOutbox(sessionId: string): Promise<void> {
   };
   // A fresh request id per attempt; the server dedupes outbox_add by the entry's id.
   const req = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
-  queueCommand(
-    { port, streams: new Map(), visible: false },
-    {
-      n: 0,
-      req,
-      sessionId,
-      advisor: advisor === true,
-      body,
-      type: "outbox_add",
-    },
-  );
+  queueCommand({ port, streams: new Map(), visible: false }, { n: 0, req, sessionId, advisor: advisor === true, body, type: "outbox_add" });
 }
 
 /** A transport success is not a storage receipt (a sign-in page can also answer 200). */
 function acceptedOutboxEntry(body: unknown, id: string): unknown {
-  const reply = body as {
-    success?: unknown;
-    data?: { entry?: Record<string, unknown> };
-  } | null;
+  const reply = body as { success?: unknown; data?: { entry?: Record<string, unknown> } } | null;
   const entry = reply?.data?.entry;
-  return reply?.success === true &&
-    entry?.id === id &&
-    typeof entry.sessionId === "string" &&
-    entry.sessionId.length > 0 &&
+  return reply?.success === true && entry?.id === id &&
+    typeof entry.sessionId === "string" && entry.sessionId.length > 0 &&
     ["prompt", "followUp", "steer"].includes(entry.mode as string) &&
-    ["held", "waiting_host", "delivering", "failed", "delivered"].includes(
-      entry.state as string,
-    ) &&
-    (entry.images === undefined ||
-      (Array.isArray(entry.images) &&
-        entry.images.every(
-          (image) =>
-            image?.type === "image" &&
-            typeof image.data === "string" &&
-            typeof image.mimeType === "string",
-        ))) &&
-    (entry.uploads === undefined ||
-      (Array.isArray(entry.uploads) &&
-        entry.uploads.every((upload) => typeof upload === "string"))) &&
+    ["held", "waiting_host", "delivering", "failed", "delivered"].includes(entry.state as string) &&
+    (entry.images === undefined || Array.isArray(entry.images) && entry.images.every((image) => image?.type === "image" && typeof image.data === "string" && typeof image.mimeType === "string")) &&
+    (entry.uploads === undefined || Array.isArray(entry.uploads) && entry.uploads.every((upload) => typeof upload === "string")) &&
     (entry.error === undefined || typeof entry.error === "string") &&
-    (entry.mayHaveBeenSent === undefined ||
-      typeof entry.mayHaveBeenSent === "boolean") &&
-    (entry.settlement === undefined ||
-      ["native", "none", "uncorrelated"].includes(
-        entry.settlement as string,
-      )) &&
-    typeof entry.message === "string" &&
-    typeof entry.createdAt === "number" &&
-    Number.isFinite(entry.createdAt) &&
-    entry.createdAt >= 0
-    ? entry
-    : null;
+    (entry.mayHaveBeenSent === undefined || typeof entry.mayHaveBeenSent === "boolean") &&
+    (entry.settlement === undefined || ["native", "none", "uncorrelated"].includes(entry.settlement as string)) &&
+    (entry.replaces === undefined || typeof entry.replaces === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(entry.replaces)) &&
+    typeof entry.message === "string" && typeof entry.createdAt === "number" && Number.isFinite(entry.createdAt) && entry.createdAt >= 0
+    ? entry : null;
 }
 
 /**
  * Valid 2xx acceptance: stored, gone from here. Unconfirmed success, no answer, 401, 408, 429 or a 5xx: again after the entry's
  * delay. Any other refusal is final (O6): "failed" until a tab drops it, and the session's next entry goes.
  */
-async function outboxAnswer(
-  item: OutboxItem,
-  status: number,
-  body: unknown,
-): Promise<void> {
-  const { id, sessionId } = item.entry;
+async function outboxAnswer(item: OutboxItem, status: number, body: unknown): Promise<void> {
+  const { id, sessionId, replaces } = item.entry;
   if (outboxItems.get(id) !== item) return;
   const reply = (body ?? {}) as { error?: unknown };
   const accepted = acceptedOutboxEntry(body, id);
   if (status >= 200 && status < 300 && !accepted) status = 0;
   if (status >= 200 && status < 300) {
-    if (!(await writeOutbox((store) => store.delete(id))))
-      return outboxAnswer(item, 0, null);
-    outboxItems.delete(id);
-    const stored =
-      isRecord(accepted) &&
-      accepted.state === "delivered" &&
-      (accepted.settlement === "native" ||
-        accepted.settlement === "uncorrelated")
-        ? {
-            ...accepted,
-            message: item.entry.message,
-            ...(item.entry.images ? { images: item.entry.images } : {}),
-            ...(item.entry.uploads ? { uploads: item.entry.uploads } : {}),
+    // Commit the accepted ID and only server-confirmed or locally proven retry lineage together.
+    const confirmedReplaces = isRecord(accepted) && typeof accepted.replaces === "string" && accepted.replaces === replaces
+      ? accepted.replaces : undefined;
+    const removedIds = new Set([id]);
+    let localReplaces: string | undefined;
+    if (!(await writeOutbox((store) => {
+      const request = store.getAll();
+      request.onsuccess = () => {
+        const entries = request.result as LocalOutboxEntry[];
+        const byId = new Map(entries.map((entry) => [entry.id, entry] as const));
+        let lineageRoot = confirmedReplaces;
+        if (lineageRoot === undefined && replaces !== undefined) {
+          const localRoot = replacementRoot(item.entry, byId);
+          const original = localRoot === null ? undefined : byId.get(localRoot);
+          if (localRoot !== null && original?.sessionId === sessionId && original.state === "failed" && sameOutboxIntent(original, item.entry)) {
+            lineageRoot = localRoot;
+            localReplaces = localRoot;
           }
-        : accepted;
-    for (const client of clients) post(client, { outboxStored: stored });
-  } else if (
-    status === 0 ||
-    status === 401 ||
-    status === 408 ||
-    status === 429 ||
-    status >= 500
-  ) {
+        } else localReplaces = confirmedReplaces;
+        for (const entry of entries) {
+          if (entry.sessionId !== sessionId) continue;
+          if (entry.id === id) {
+            removedIds.add(entry.id);
+            store.delete(entry.id);
+            continue;
+          }
+          if (lineageRoot === undefined || !sameOutboxIntent(entry, item.entry)
+            || entry.id !== lineageRoot && replacementRoot(entry, byId) !== lineageRoot) continue;
+          removedIds.add(entry.id);
+          store.delete(entry.id);
+        }
+      };
+    }))) return outboxAnswer(item, 0, null);
+    for (const removedId of removedIds) {
+      clearTimeout(outboxItems.get(removedId)?.retryTimer);
+      outboxItems.delete(removedId);
+    }
+    const stored = isRecord(accepted) && accepted.state === "delivered"
+      && (accepted.settlement === "native" || accepted.settlement === "uncorrelated")
+      ? {
+          ...accepted,
+          message: item.entry.message,
+          ...(item.entry.images ? { images: item.entry.images } : {}),
+          ...(item.entry.uploads ? { uploads: item.entry.uploads } : {}),
+        }
+      : accepted;
+    const representedRoot = confirmedReplaces ?? localReplaces;
+    for (const client of clients) post(client, {
+      outboxStored: representedRoot && isRecord(stored) ? { ...stored, replaces: representedRoot } : stored,
+    });
+  } else if (status === 0 || status === 401 || status === 408 || status === 429 || status >= 500) {
     item.inFlight = false;
     item.retryTimer = setTimeout(() => {
       item.retryTimer = undefined;
@@ -2573,10 +2642,7 @@ async function outboxAnswer(
     item.retryMs = Math.min(item.retryMs * 2, RECONNECT_MAX_MS);
     return;
   } else {
-    return failOutbox(
-      item,
-      typeof reply.error === "string" ? reply.error : `HTTP ${status}`,
-    );
+    return failOutbox(item, typeof reply.error === "string" ? reply.error : `HTTP ${status}`);
   }
   broadcastOutbox();
   sendOutbox(sessionId);
@@ -2614,8 +2680,7 @@ function retryOutbox(): void {
     item.retryTimer = undefined;
     item.retryMs = RECONNECT_MIN_MS;
   }
-  for (const item of [...outboxItems.values()])
-    sendOutbox(item.entry.sessionId);
+  for (const item of [...outboxItems.values()]) sendOutbox(item.entry.sessionId);
 }
 
 function attach(port: Port): void {
@@ -2682,6 +2747,9 @@ function attach(port: Port): void {
         break;
       case "outbox_drop":
         dropOutbox(client, Number(data.n), String(data.id));
+        break;
+      case "outbox_reconcile":
+        reconcileOutbox(client, Number(data.n), typeof data.sessionId === "string" ? data.sessionId : "", data.confirmedIds);
         break;
       case "lock":
         // MessagePort has no close event. The tab holds this lock for its

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, type CSSProperties } from "react";
 import { useI18n } from "@/lib/i18n";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/primitives";
+import { Dialog, DialogContent, DialogTitle, ThemedSelect } from "@/components/ui/primitives";
 import { Plus, Trash2, ArrowDown, ArrowUp } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import {
@@ -19,6 +19,7 @@ import {
 
 // Presentational panels extracted from ModelsConfig.tsx
 // (pure extraction, no behavior change).
+// Upstream 280a9b5 shares themed selects; keep Keylime's panel behavior and options.
 
 export function ModelsConfigSurface({
   embedded,
@@ -300,12 +301,13 @@ export function RetryFallbackDetail({
           }}
         >
           {t("modelsConfig.retryAttempts")}{" "}
-          <select
+          <ThemedSelect
+            aria-label={t("modelsConfig.retryAttempts")}
             value={retry.maxRetries ?? 10}
-            onChange={(event) =>
+            onChange={(value) =>
               void save({
                 ...settings,
-                retry: { ...retry, maxRetries: Number(event.target.value) },
+                retry: { ...retry, maxRetries: Number(value) },
               })
             }
             style={{
@@ -316,13 +318,8 @@ export function RetryFallbackDetail({
               background: "var(--bg)",
               color: "var(--text)",
             }}
-          >
-            {[0, 1, 2, 3, 5, 10, 15, 20].map((count) => (
-              <option key={count} value={count}>
-                {count}
-              </option>
-            ))}
-          </select>
+            options={[0, 1, 2, 3, 5, 10, 15, 20].map((count) => ({ value: count, label: count }))}
+          />
         </label>
         <label
           style={{
@@ -335,15 +332,15 @@ export function RetryFallbackDetail({
           }}
         >
           {t("modelsConfig.returnToPrimary")}{" "}
-          <select
+          <ThemedSelect
+            aria-label={t("modelsConfig.returnToPrimary")}
             value={retry.fallbackRevertPolicy ?? "cooldown-expiry"}
-            onChange={(event) =>
+            onChange={(value) =>
               void save({
                 ...settings,
                 retry: {
                   ...retry,
-                  fallbackRevertPolicy: event.target.value as
-                    "cooldown-expiry" | "never",
+                  fallbackRevertPolicy: value as "cooldown-expiry" | "never",
                 },
               })
             }
@@ -355,12 +352,11 @@ export function RetryFallbackDetail({
               background: "var(--bg)",
               color: "var(--text)",
             }}
-          >
-            <option value="cooldown-expiry">
-              {t("modelsConfig.afterCooldown")}
-            </option>
-            <option value="never">{t("modelsConfig.never")}</option>
-          </select>
+            options={[
+              { value: "cooldown-expiry", label: t("modelsConfig.afterCooldown") },
+              { value: "never", label: t("modelsConfig.never") },
+            ]}
+          />
         </label>
       </div>
       <section
@@ -382,10 +378,10 @@ export function RetryFallbackDetail({
           <span style={{ color: "var(--text)", fontSize: 12, fontWeight: 600 }}>
             {t("modelsConfig.fallbackChainFor")}
           </span>
-          <select
+          <ThemedSelect
             aria-label={t("modelsConfig.fallbackChainFor")}
             value={role}
-            onChange={(event) => setRole(event.target.value)}
+            onChange={(value) => setRole(value)}
             style={{
               padding: "4px 8px",
               border: "1px solid var(--border)",
@@ -393,19 +389,14 @@ export function RetryFallbackDetail({
               background: "var(--bg)",
               color: "var(--text)",
             }}
-          >
-            {NATIVE_MODEL_ROLES.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
+            options={NATIVE_MODEL_ROLES.map((value) => ({ value, label: value }))}
+          />
         </div>
         <div style={{ padding: 12, display: "flex", gap: 8 }}>
-          <select
+          <ThemedSelect
             aria-label={t("modelsConfig.selectFallbackModel")}
             value={candidate}
-            onChange={(event) => setCandidate(event.target.value)}
+            onChange={(value) => setCandidate(value)}
             style={{
               flex: 1,
               minWidth: 0,
@@ -415,16 +406,13 @@ export function RetryFallbackDetail({
               background: "var(--bg)",
               color: "var(--text)",
             }}
-          >
-            <option value="">{t("modelsConfig.selectFallbackModel")}</option>
-            {modelOptions
-              .filter((value) => !chain.includes(value))
-              .map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-          </select>
+            options={[
+              { value: "", label: t("modelsConfig.selectFallbackModel") },
+              ...modelOptions
+                .filter((value) => !chain.includes(value))
+                .map((value) => ({ value, label: value })),
+            ]}
+          />
           <button
             type="button"
             disabled={!candidate}
@@ -1074,12 +1062,10 @@ export function ModelRolesDetail({ models }: { models: RuntimeModelEntry[] }) {
               const modelKnown = !selectedModel || Boolean(model);
               return (
                 <>
-                  <select
+                  <ThemedSelect
                     aria-label={`Model override for ${role}`}
                     value={selectedModel}
-                    onChange={(event) =>
-                      updateRoleModel(role, event.target.value)
-                    }
+                    onChange={(value) => updateRoleModel(role, value)}
                     style={{
                       minWidth: 0,
                       padding: "7px 9px",
@@ -1089,29 +1075,20 @@ export function ModelRolesDetail({ models }: { models: RuntimeModelEntry[] }) {
                       color: "var(--text)",
                       fontSize: 12,
                     }}
-                  >
-                    <option value="">{t("modelsConfig.noOverride")}</option>
-                    {!modelKnown && (
-                      <option value={selectedModel}>
-                        {selectedModel} (not currently available)
-                      </option>
-                    )}
-                    {models.map((item) => (
-                      <option
-                        key={`${item.provider}:${item.id}`}
-                        value={`${item.provider}/${item.id}`}
-                      >
-                        {item.name || item.id} ({item.provider}/{item.id})
-                      </option>
-                    ))}
-                  </select>
-                  <select
+                    options={[
+                      { value: "", label: t("modelsConfig.noOverride") },
+                      ...(!modelKnown ? [{ value: selectedModel, label: `${selectedModel} (not currently available)` }] : []),
+                      ...models.map((item) => ({
+                        value: `${item.provider}/${item.id}`,
+                        label: `${item.name || item.id} (${item.provider}/${item.id})`,
+                      })),
+                    ]}
+                  />
+                  <ThemedSelect
                     aria-label={`Thinking level for ${role}`}
                     value={selectedThinking}
                     disabled={!model}
-                    onChange={(event) =>
-                      updateRoleThinking(role, event.target.value)
-                    }
+                    onChange={(value) => updateRoleThinking(role, value)}
                     style={{
                       minWidth: 0,
                       padding: "7px 9px",
@@ -1122,16 +1099,13 @@ export function ModelRolesDetail({ models }: { models: RuntimeModelEntry[] }) {
                       fontSize: 12,
                       opacity: model ? 1 : 0.55,
                     }}
-                  >
-                    <option value="">{t("modelsConfig.modelDefault")}</option>
-                    {(model?.thinkingLevels ?? [])
-                      .filter((level) => level !== "off")
-                      .map((level) => (
-                        <option key={level} value={level}>
-                          {level}
-                        </option>
-                      ))}
-                  </select>
+                    options={[
+                      { value: "", label: t("modelsConfig.modelDefault") },
+                      ...(model?.thinkingLevels ?? [])
+                        .filter((level) => level !== "off")
+                        .map((level) => ({ value: level, label: level })),
+                    ]}
+                  />
                 </>
               );
             })()}

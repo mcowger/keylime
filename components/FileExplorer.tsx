@@ -330,7 +330,6 @@ const ExplorerRow = memo(function ExplorerRow({
   onFocusRow,
 }: ExplorerRowProps) {
   const { t } = useI18n();
-  const [hovered, setHovered] = useState(false);
 
   if (row.kind === "empty") {
     return (
@@ -364,11 +363,12 @@ const ExplorerRow = memo(function ExplorerRow({
     node.linkTarget !== undefined ? ", link to " + node.linkTarget : "";
 
   return (
+    // Upstream 280a9b5 moves hover and focus styling to CSS; Keylime keeps
+    // blocked links non-activatable and retains their status indicators.
     <div
+      className="file-explorer-row"
       onClick={() => onActivate(node, index)}
       onKeyDown={(e) => onKeyDown(e, node, index)}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
       onFocus={(e) => {
         if (e.target === e.currentTarget) onFocusRow(index);
       }}
@@ -414,19 +414,10 @@ const ExplorerRow = memo(function ExplorerRow({
         height: rowHeight,
         cursor: blocked ? "default" : "pointer",
         opacity: blocked ? 0.5 : 1,
-        background: isActiveFile
-          ? "var(--bg-selected)"
-          : hovered && !blocked
-            ? "var(--bg-hover)"
-            : "transparent",
+        background: isActiveFile ? "var(--bg-selected)" : undefined,
         borderRadius: "var(--radius-control)",
         userSelect: "none",
-        boxShadow: focused
-          ? "inset 0 0 0 1px color-mix(in srgb, var(--accent) 70%, transparent)"
-          : isActiveFile
-            ? "inset 2px 0 0 var(--accent)"
-            : "none",
-        outline: "none",
+        boxShadow: isActiveFile ? "inset 2px 0 0 var(--accent)" : undefined,
         transition: `background var(--dur-fast) var(--ease-out-warm)`,
       }}
     >
@@ -521,6 +512,7 @@ const ExplorerRow = memo(function ExplorerRow({
           {secondaryLabel}
         </span>
       )}
+      <span className="file-explorer-row-status">
       {highlighted && (
         <span
           title={t("fileExplorer.newlyUploaded")}
@@ -573,40 +565,24 @@ const ExplorerRow = memo(function ExplorerRow({
           aria-hidden="true"
         />
       )}
+      </span>
+      <span className="file-explorer-row-actions">
       {onAtMention && (
         <Tooltip content={mentionLabel}>
           <button
+            type="button"
+            className="file-explorer-row-action"
             onClick={(e) => {
               e.stopPropagation();
               onAtMention(getRelativeFilePath(node.fullPath, cwd), node.isDir);
             }}
             aria-label={mentionLabel}
-            style={{
-              flexShrink: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 4,
-              padding: "0 8px",
-              minWidth: 24,
-              height: 24,
-              background: "var(--bg-panel)",
-              border: "1px solid var(--border)",
-              borderRadius: "var(--radius-control)",
-              color: "var(--accent)",
-              cursor: "pointer",
-              fontSize: 11,
-              fontWeight: 600,
-              whiteSpace: "nowrap",
-              transition: `background var(--dur-fast) var(--ease-out-warm), color var(--dur-fast) var(--ease-out-warm)`,
-            }}
           >
-            <AtSign size={11} strokeWidth={2.2} aria-hidden="true" />
-            {t("fileExplorer.mention")}
+            <AtSign size={14} strokeWidth={1.8} aria-hidden="true" />
           </button>
         </Tooltip>
       )}
-      {!node.isDir && !blocked && (
+      {!node.isDir && !blocked ? (
         <Tooltip content={downloadLabel}>
           <a
             href={getFileApiUrl(
@@ -618,31 +594,13 @@ const ExplorerRow = memo(function ExplorerRow({
             download
             onClick={(e) => e.stopPropagation()}
             aria-label={downloadLabel}
-            style={{
-              flexShrink: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 4,
-              padding: "0 5px",
-              minWidth: 24,
-              height: 24,
-              background: "var(--bg-panel)",
-              border: "1px solid var(--border)",
-              borderRadius: "var(--radius-control)",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontSize: 11,
-              fontWeight: 600,
-              whiteSpace: "nowrap",
-              textDecoration: "none",
-              transition: `background var(--dur-fast) var(--ease-out-warm), color var(--dur-fast) var(--ease-out-warm)`,
-            }}
+            className="file-explorer-row-action"
           >
-            <Download size={11} strokeWidth={2.2} aria-hidden="true" />
+            <Download size={14} strokeWidth={1.8} aria-hidden="true" />
           </a>
         </Tooltip>
-      )}
+      ) : <span className="file-explorer-row-action-slot" aria-hidden="true" />}
+      </span>
     </div>
   );
 });
@@ -719,6 +677,7 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(
       [workspaceKey],
     );
     const scrollRef = useRef<HTMLDivElement>(null);
+    const scrollFrameRef = useRef<number | null>(null);
     const loadingPathsRef = useRef<Set<string>>(new Set());
     // Listing generation: advanced whenever every cached listing is dropped
     // (cwd change). An in-flight fetch carries the generation it started on; a
@@ -1085,11 +1044,21 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(
     );
 
     const handleTreeScroll = useCallback(() => {
-      const el = scrollRef.current;
-      if (!el) return;
-      setScrollTop(el.scrollTop);
-      setViewportHeight(el.clientHeight);
-    }, []);
+      if (scrollFrameRef.current !== null) return;
+      scrollFrameRef.current = requestAnimationFrame(() => {
+        scrollFrameRef.current = null;
+        const el = scrollRef.current;
+        if (!el) return;
+        // Upstream 22394e3 coalesces scroll events; the virtual window only
+        // changes at row boundaries, while ResizeObserver tracks its height.
+        setScrollTop(Math.floor(el.scrollTop / rowHeight) * rowHeight);
+      });
+    }, [rowHeight]);
+
+    useEffect(() => () => {
+      if (scrollFrameRef.current !== null) cancelAnimationFrame(scrollFrameRef.current);
+      scrollFrameRef.current = null;
+    }, [rowHeight]);
 
     // Track the viewport height so the window math stays correct across panel
     // resizes; rows themselves are fixed-height and never measured.

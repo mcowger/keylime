@@ -32,6 +32,7 @@ import {
   useUnreadNotificationCount,
 } from "@/lib/notification-history";
 import { ConfirmDialog } from "./ui/field";
+import { ThemedSelect } from "./ui/primitives";
 import { ChatWindow } from "./ChatWindow";
 import { type Tab } from "./TabBar";
 import { WorkspaceTerminalTabs } from "./WorkspaceTerminalTabs";
@@ -1374,9 +1375,7 @@ export function AppShell({ appName }: { appName: string }) {
       // Live rect, not state: it always reflects the committed width (custom or
       // fluid default), and keeps this callback above the state declarations
       // without a TDZ cycle. The handle only exists while the panel is open.
-      const startWidth =
-        rightPanelRef.current?.getBoundingClientRect().width ??
-        RIGHT_PANEL_MIN_WIDTH;
+      const measuredWidth = rightPanelRef.current?.getBoundingClientRect().width;
       // Same --ui-scale ground truth as the left sidebar handle: clientX is in
       // viewport pixels while the panel width is zoomed layout pixels.
       let uiScale = 1;
@@ -1389,23 +1388,34 @@ export function AppShell({ appName }: { appName: string }) {
       } catch {
         // SSR/unavailable: fall back to unscaled math.
       }
+      // The rect is in viewport pixels; persisted panel widths are unscaled.
+      const startWidth = measuredWidth === undefined ? RIGHT_PANEL_MIN_WIDTH : measuredWidth / uiScale;
       setRightPanelResizing(true);
-      const onMove = (ev: MouseEvent) => {
-        // Dragging the left edge left grows the panel: inverse of the sidebar.
-        const next = clampRightPanelWidth(
-          startWidth - (ev.clientX - startX) / uiScale,
-        );
-        // Write the CSS variable straight to the DOM: the flex row follows the
-        // pointer without re-rendering the whole AppShell on every mousemove.
+      // Coalesce pointer writes per frame, but retain the latest width for mouseup.
+      let frame: number | null = null;
+      const cancelFrame = () => {
+        if (frame !== null) cancelAnimationFrame(frame);
+        frame = null;
+      };
+      const applyWidth = () => {
+        frame = null;
         rightPanelRef.current?.style.setProperty(
           "--right-panel-width",
-          `${next}px`,
+          `${pendingRightPanelWidthRef.current}px`,
         );
-        pendingRightPanelWidthRef.current = next;
+      };
+      const onMove = (ev: MouseEvent) => {
+        // Dragging the left edge left grows the panel: inverse of the sidebar.
+        pendingRightPanelWidthRef.current = clampRightPanelWidth(
+          startWidth - (ev.clientX - startX) / uiScale,
+        );
+        if (frame === null) frame = requestAnimationFrame(applyWidth);
       };
       const onUp = () => {
         window.removeEventListener("mousemove", onMove);
         window.removeEventListener("mouseup", onUp);
+        cancelFrame();
+        applyWidth();
         rightResizeHandlersRef.current = null;
         setRightPanelResizing(false);
         // Commit the final width so state and the persisted value agree with
@@ -1417,7 +1427,7 @@ export function AppShell({ appName }: { appName: string }) {
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
       pendingRightPanelWidthRef.current = startWidth;
-      rightResizeHandlersRef.current = { onMove, onUp };
+      rightResizeHandlersRef.current = { onMove, onUp, cancelFrame };
       window.addEventListener("mousemove", onMove);
       window.addEventListener("mouseup", onUp);
     },
@@ -1432,6 +1442,7 @@ export function AppShell({ appName }: { appName: string }) {
       if (!handlers) return;
       window.removeEventListener("mousemove", handlers.onMove);
       window.removeEventListener("mouseup", handlers.onUp);
+      handlers.cancelFrame();
       rightResizeHandlersRef.current = null;
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
@@ -1553,6 +1564,7 @@ export function AppShell({ appName }: { appName: string }) {
   const rightResizeHandlersRef = useRef<{
     onMove: (ev: MouseEvent) => void;
     onUp: () => void;
+    cancelFrame: () => void;
   } | null>(null);
   useEffect(() => {
     setRightPanelWidth(loadRightPanelWidth());
@@ -4322,21 +4334,21 @@ export function AppShell({ appName }: { appName: string }) {
                                   >
                                     <Server size={17} strokeWidth={1.8} />
                                   </span>
-                                  <select
+                                  <ThemedSelect
+                                    className="workspace-select-trigger"
                                     id="new-session-host"
                                     value={newSessionGroupKey}
-                                    onChange={(event) => {
+                                    onChange={(key) => {
                                       const first =
                                         workspaceOptions.projects.find(
                                           (project) =>
                                             (project.hostId ??
                                               LOCAL_HOST_ID) ===
-                                            event.target.value,
+                                            key,
                                         );
                                       if (
                                         !first ||
-                                        event.target.value ===
-                                          newSessionGroupKey
+                                        key === newSessionGroupKey
                                       )
                                         return;
                                       setActiveCwd(first.path);
@@ -4350,23 +4362,14 @@ export function AppShell({ appName }: { appName: string }) {
                                         first,
                                       );
                                     }}
-                                  >
-                                    {creationTargets.map((target) => (
-                                      <option
-                                        key={target.id}
-                                        value={target.id}
-                                        disabled={
-                                          !workspaceOptions.projects.some(
-                                            (project) =>
-                                              (project.hostId ??
-                                                LOCAL_HOST_ID) === target.id,
-                                          )
-                                        }
-                                      >
-                                        {target.label}
-                                      </option>
-                                    ))}
-                                  </select>
+                                    options={creationTargets.map((target) => ({
+                                      value: target.id,
+                                      label: target.label,
+                                      disabled: !workspaceOptions.projects.some(
+                                        (project) => (project.hostId ?? LOCAL_HOST_ID) === target.id,
+                                      ),
+                                    }))}
+                                  />
                                   <ChevronDown
                                     className="new-session-workspace-chevron"
                                     size={16}
@@ -4391,11 +4394,12 @@ export function AppShell({ appName }: { appName: string }) {
                                   >
                                     <Folder size={17} strokeWidth={1.8} />
                                   </span>
-                                  <select
+                                  <ThemedSelect
+                                    className="workspace-select-trigger"
                                     id="new-session-project"
                                     value={selectedNewProjectId}
-                                    onChange={(event) => {
-                                      if (!event.target.value) {
+                                    onChange={(key) => {
+                                      if (!key) {
                                         openAddProject(
                                           true,
                                           newSessionGroupKey,
@@ -4405,14 +4409,12 @@ export function AppShell({ appName }: { appName: string }) {
                                       const workspace =
                                         hostProjects.find(
                                           (candidate) =>
-                                            candidate.projectId ===
-                                              event.target.value &&
+                                            candidate.projectId === key &&
                                             candidate.isDefaultWorkspace,
                                         ) ??
                                         hostProjects.find(
                                           (candidate) =>
-                                            candidate.projectId ===
-                                            event.target.value,
+                                            candidate.projectId === key,
                                         );
                                       if (!workspace) return;
                                       setActiveCwd(workspace.path);
@@ -4426,22 +4428,15 @@ export function AppShell({ appName }: { appName: string }) {
                                         workspace,
                                       );
                                     }}
-                                  >
-                                    {newSessionProjects.map((project) => (
-                                      <option
-                                        key={project.projectId}
-                                        value={project.projectId}
-                                      >
-                                        {project.projectName ??
-                                          projectLabel(
-                                            project.projectPath ?? project.path,
-                                          )}
-                                      </option>
-                                    ))}
-                                    <option value="">
-                                      + {t("projects.add")}
-                                    </option>
-                                  </select>
+                                    options={[
+                                      ...newSessionProjects.map((project) => {
+                                        const label = project.projectName ?? projectLabel(project.projectPath ?? project.path);
+                                        // Native option values fall back to their text when value is undefined.
+                                        return { value: project.projectId ?? label, label };
+                                      }),
+                                      { value: "", label: t("projects.add"), action: true },
+                                    ]}
+                                  />
                                   <ChevronDown
                                     className="new-session-workspace-chevron"
                                     size={16}
@@ -4465,12 +4460,12 @@ export function AppShell({ appName }: { appName: string }) {
                                   >
                                     <Folder size={17} strokeWidth={1.8} />
                                   </span>
-                                  <select
+                                  <ThemedSelect
+                                    className="workspace-select-trigger"
                                     id="new-session-workspace"
                                     aria-describedby="new-session-workspace-path"
                                     value={newSessionWorkspaceValue}
-                                    onChange={(event) => {
-                                      const key = event.target.value;
+                                    onChange={(key) => {
                                       if (key === "__add_workspace__") {
                                         if (selectedNewWorkspace)
                                           handleNewWorkspace(
@@ -4497,30 +4492,17 @@ export function AppShell({ appName }: { appName: string }) {
                                         project,
                                       );
                                     }}
-                                  >
-                                    {projectWorkspaces.map((project) => (
-                                      <option
-                                        key={hostProjectKey(
-                                          project.hostId,
-                                          project.path,
-                                        )}
-                                        value={hostProjectKey(
-                                          project.hostId,
-                                          project.path,
-                                        )}
-                                      >
-                                        {project.alias ??
-                                          project.name ??
-                                          projectLabel(project.path)}
-                                      </option>
-                                    ))}
-                                    {selectedNewWorkspace?.projectKind ===
-                                      "git" && (
-                                      <option value="__add_workspace__">
-                                        + Add workspace
-                                      </option>
-                                    )}
-                                  </select>
+                                    options={[
+                                      // Keylime creates a workspace for the selected project rather than an upstream worktree selection.
+                                      ...projectWorkspaces.map((project) => ({
+                                        value: hostProjectKey(project.hostId, project.path),
+                                        label: project.alias ?? project.name ?? projectLabel(project.path),
+                                      })),
+                                      ...(selectedNewWorkspace?.projectKind === "git"
+                                        ? [{ value: "__add_workspace__", label: "Add workspace", action: true }]
+                                        : []),
+                                    ]}
+                                  />
                                   <ChevronDown
                                     className="new-session-workspace-chevron"
                                     size={16}

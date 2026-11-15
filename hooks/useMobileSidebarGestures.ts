@@ -76,7 +76,7 @@ export function useMobileSidebarGestures({
       // [data-swipe-dismiss]: notifications own their sideways swipes.
       if (
         event.target.closest(
-          'input, textarea, select, [contenteditable]:not([contenteditable="false"]), .shell-topbar-overflow[open], [data-top-panel], [data-swipe-dismiss]',
+          'input, textarea, select, .themed-select-trigger, [contenteditable]:not([contenteditable="false"]), .shell-topbar-overflow[open], [data-top-panel], [data-swipe-dismiss]',
         )
       )
         return;

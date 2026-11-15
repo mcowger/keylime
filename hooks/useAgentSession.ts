@@ -103,6 +103,7 @@ import {
   dropFromOutbox,
   newOutboxId,
   openEventStream,
+  reconcileOutbox,
   subscribeOutbox,
   type EventStream,
   type LocalOutboxEntry,
@@ -481,6 +482,12 @@ function unrecordedHeldBash<T extends { command: string; after: number }>(
   });
 }
 
+// Upstream 13d8eb2: settle local replacement copies already observed at the server before redriving a retry.
+function reconcileConfirmedLocalOutbox(sessionId: string, entries: LocalOutboxEntry[], confirmedIds: ReadonlySet<string>): Promise<void> {
+  const ids = entries.filter((entry) => entry.sessionId === sessionId && entry.replaces !== undefined && confirmedIds.has(entry.id)).map((entry) => entry.id);
+  return ids.length ? reconcileOutbox(sessionId, ids) : Promise.resolve();
+}
+
 export function useAgentSession(opts: UseAgentSessionOptions) {
   const {
     session,
@@ -628,6 +635,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   // event-stream worker's), the server's for this one (`outbox_update`, or the state route's until the first frame),
   // and server confirmations no snapshot has covered yet (the command's answer and the frame race).
   const [localOutbox, setLocalOutbox] = useState<LocalOutboxEntry[]>([]);
+  const localOutboxRef = useRef(localOutbox);
   const [serverOutbox, setServerOutbox] =
     useState<ServerOutbox>(EMPTY_SERVER_OUTBOX);
   const serverOutboxRef = useRef(EMPTY_SERVER_OUTBOX);
@@ -2753,6 +2761,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       );
       setServerOutbox(serverOutboxRef.current);
     }
+    void reconcileConfirmedLocalOutbox(sid, localOutboxRef.current, serverOutboxRef.current.seen)
+      .catch((error) => console.warn(`[omp-web] browser outbox reconciliation failed: ${error instanceof Error ? error.message : String(error)}`));
     // Held messages open the session channel even without a wrapper: subscribe to follow them.
     if (entries.length > 0 && !eventSourceRef.current)
       void connectEvents(sid, "connected");
@@ -2762,6 +2772,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     () =>
       subscribeOutbox((event) => {
         if ("entries" in event) {
+          // Retry reads this before React renders, preventing a second copy while one is pending.
+          localOutboxRef.current = event.entries;
           setLocalOutbox(event.entries);
           serverOutboxRef.current = rememberLocalOutbox(
             serverOutboxRef.current,
@@ -2769,11 +2781,16 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
             sessionIdRef.current,
           );
           setServerOutbox(serverOutboxRef.current);
+          const sid = sessionIdRef.current;
+          if (sid) void reconcileConfirmedLocalOutbox(sid, event.entries, serverOutboxRef.current.seen)
+            .catch((error) => console.warn(`[omp-web] browser outbox reconciliation failed: ${error instanceof Error ? error.message : String(error)}`));
           return;
         }
         const { stored } = event;
         const sid = sessionIdRef.current;
         if (stored.sessionId !== sid) return;
+        // The receipt proves replacement for this session, even before its next snapshot.
+        if (stored.replaces) markOutboxRepresented([stored.replaces]);
         serverOutboxRef.current = rememberOutboxEntries(
           serverOutboxRef.current,
           [stored],
@@ -2789,7 +2806,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         if (hookAliveRef.current && !eventSourceRef.current)
           void connectEvents(sid, "connected");
       }),
-    [connectEvents],
+    [connectEvents, markOutboxRepresented],
   );
 
   // ---------------------------------------------------------------------
@@ -3968,6 +3985,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
                 : [],
             );
             setServerOutbox(serverOutboxRef.current);
+            const sid = sessionIdRef.current;
+            if (sid) void reconcileConfirmedLocalOutbox(sid, localOutboxRef.current, serverOutboxRef.current.seen)
+              .catch((error) => console.warn(`[omp-web] browser outbox reconciliation failed: ${error instanceof Error ? error.message : String(error)}`));
             // Retire only confirmations the server has listed or settled; an older empty snapshot can overtake an ACK.
             setStoredOutbox((current) =>
               current.filter(
@@ -5048,16 +5068,18 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       sid: string,
       mode: OutboxMode,
       message: string,
-      images?: AttachedImage[],
+      images?: Pick<AttachedImage, "data" | "mimeType">[],
       uploads?: string[],
       uploadProofs?: Record<string, string>,
+      replaces?: string,
+      retryAdvisor?: boolean,
     ) => {
       try {
         await addToOutbox({
           id: newOutboxId(),
           sessionId: sid,
           scope: await getOutboxScope(sid),
-          advisor: advisorEnabled,
+          advisor: retryAdvisor ?? advisorEnabled,
           mode,
           message,
           ...(images?.length
@@ -5071,6 +5093,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
             : {}),
           ...(uploads?.length ? { uploads } : {}),
           ...(uploadProofs ? { uploadProofs } : {}),
+          ...(replaces ? { replaces } : {}),
           createdAt: Date.now(),
         });
       } catch (e) {
@@ -6746,7 +6769,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
   const heldMessagesRef = useRef(heldMessages);
   heldMessagesRef.current = heldMessages;
-  const localOutboxRef = useRef(localOutbox);
   localOutboxRef.current = localOutbox;
   const heldDeletionsRef = useRef(new Set<string>());
   /** Delete of a held bubble: one this browser still holds leaves IndexedDB; the server's only until dispatched (omp
@@ -6791,6 +6813,39 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     },
     [addNotice, markOutboxRepresented],
   );
+
+  const heldRetriesRef = useRef(new Set<string>());
+  /** Upstream 13d8eb2: persist replacement lineage; never remove the failed root before acceptance.
+   * Keylime also preserves advisor routing and local upload proofs from the original intent. */
+  const retryHeldMessage = useCallback(async (id: string) => {
+    const sid = sessionIdRef.current;
+    const held = heldMessagesRef.current.find((entry) => entry.id === id);
+    if (!sid || !held || held.state !== "failed" || editInFlightRef.current || heldRetriesRef.current.has(id) || heldDeletionsRef.current.has(id)) return;
+    if (serverOutboxRef.current.represented.has(id)) return;
+    if (localOutboxRef.current.some((entry) => entry.sessionId === sid && entry.replaces === id && entry.state === "sending")) return;
+    heldRetriesRef.current.add(id);
+    try {
+      const serverIds = serverOutboxRef.current.seen;
+      const confirmedIds = new Set(localOutboxRef.current
+        .filter((entry) => entry.sessionId === sid && entry.replaces !== undefined && serverIds.has(entry.id))
+        .map((entry) => entry.id));
+      if (serverIds.has(id)) confirmedIds.add(id);
+      if (confirmedIds.size) await reconcileOutbox(sid, [...confirmedIds]);
+      if (!hookAliveRef.current || sessionIdRef.current !== sid || editInFlightRef.current || serverOutboxRef.current.represented.has(id)) return;
+      const current = heldMessagesRef.current.find((entry) => entry.id === id);
+      if (!current || current.state !== "failed") return;
+      if (held.local && !localOutboxRef.current.some((entry) => entry.id === id)) return;
+      if (localOutboxRef.current.some((entry) => entry.sessionId === sid && entry.replaces === id && entry.state === "sending")) return;
+      // Only this browser's durable row can supply a proof; server snapshots never expose one.
+      const local = localOutboxRef.current.find((entry) => entry.sessionId === sid && entry.id === id);
+      await holdMessage(sid, current.mode, current.message, current.images, current.uploads, local?.uploadProofs, id, current.advisor ?? local?.advisor ?? false);
+    } catch (error) {
+      if (hookAliveRef.current && sessionIdRef.current === sid)
+        addNotice({ type: "error", message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      heldRetriesRef.current.delete(id);
+    }
+  }, [addNotice, holdMessage]);
 
   const handleAbortCompaction = useCallback(async () => {
     const sid = sessionIdRef.current;
@@ -7513,6 +7568,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     handleAbortCompaction,
     heldMessages,
     deleteHeldMessage,
+    retryHeldMessage,
     handleBuiltinSlashCommand,
     togglePreCompactionHistory,
     handleToolPresetChange,

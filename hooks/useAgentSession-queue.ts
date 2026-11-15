@@ -38,6 +38,9 @@ export interface HeldMessage {
   message: string;
   images?: { type: "image"; data: string; mimeType: string }[];
   uploads?: string[];
+  /** Local upload proofs are retained only on this browser, never sourced from a server snapshot. */
+  uploadProofs?: Record<string, string>;
+  advisor?: boolean;
   state: LocalOutboxEntry["state"] | Exclude<OutboxEntry["state"], "delivered">;
   error?: string;
   mayHaveBeenSent?: boolean;

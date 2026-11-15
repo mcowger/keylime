@@ -1,6 +1,7 @@
 "use client";
 
 import { ToggleSwitch } from "@/components/ui/ToggleSwitch";
+import { ThemedSelect } from "@/components/ui/primitives";
 
 import {
   createContext,
@@ -195,7 +196,7 @@ type NativeSettings = {
 
 const nativeSelectStyle = {
   minHeight: "var(--control-height)",
-  padding: "4px 28px 4px var(--control-padding-inline)",
+  padding: "4px var(--control-padding-inline)",
   border: "1px solid var(--border)",
   borderRadius: "var(--radius-control)",
   background: "var(--bg)",
@@ -207,21 +208,6 @@ const nativeSelectStyle = {
   whiteSpace: "nowrap",
   fontFamily: "inherit",
   cursor: "pointer",
-  appearance: "none" as const,
-  WebkitAppearance: "none" as const,
-  MozAppearance: "none" as const,
-  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
-  backgroundRepeat: "no-repeat" as const,
-  backgroundPosition: "right 8px center" as const,
-  outline: "none",
-  colorScheme: "dark light",
-} as const;
-
-const nativeOptionStyle = {
-  background: "var(--bg-panel)",
-  color: "var(--text)",
-  fontFamily: "inherit",
-  fontSize: 12,
 } as const;
 
 const chipStyle = {
@@ -1240,7 +1226,7 @@ function UploadRetentionSetting() {
       setSaving(false);
     }
   };
-  // A value set through the API (14 days) stays visible as its own choice.
+  // Preserve API-defined retention values when building the upstream themed select's options.
   const choices =
     days === undefined || UPLOAD_RETENTION_CHOICES.includes(days)
       ? UPLOAD_RETENTION_CHOICES
@@ -1251,30 +1237,17 @@ function UploadRetentionSetting() {
       label={t("settingsConfig.uploadRetention")}
       description={t("settingsConfig.uploadRetentionDesc")}
     >
-      <select
+      <ThemedSelect
         style={nativeSelectStyle}
         value={days === undefined ? "30" : String(days)}
         disabled={days === undefined || saving}
         onChange={(event) =>
           void change(
-            event.target.value === "null" ? null : Number(event.target.value),
+            event === "null" ? null : Number(event),
           )
         }
-      >
-        {choices.map((choice) => (
-          <option
-            key={String(choice)}
-            value={String(choice)}
-            style={nativeOptionStyle}
-          >
-            {choice === null
-              ? t("settingsConfig.uploadRetentionNever")
-              : tn("settingsConfig.uploadRetentionDays", choice, {
-                  count: choice,
-                })}
-          </option>
-        ))}
-      </select>
+        options={choices.map((choice) => ({ value: String(choice), label: choice === null ? t("settingsConfig.uploadRetentionNever") : tn("settingsConfig.uploadRetentionDays", choice, { count: choice }) }))}
+      />
     </NativeSetting>
   );
 }
@@ -1333,23 +1306,18 @@ function BrowserTransportSetting() {
       description={t("settingsConfig.browserTransportDesc")}
       scope="UI"
     >
-      <select
+      <ThemedSelect
         style={nativeSelectStyle}
         value={transport ?? "ws"}
         disabled={transport === null || saving}
         onChange={(event) => {
           const next = BROWSER_TRANSPORTS.find(
-            (mode) => mode === event.target.value,
+            (mode) => mode === event,
           );
           if (next) void change(next);
         }}
-      >
-        {BROWSER_TRANSPORTS.map((mode) => (
-          <option key={mode} value={mode} style={nativeOptionStyle}>
-            {t(BROWSER_TRANSPORT_LABELS[mode])}
-          </option>
-        ))}
-      </select>
+        options={BROWSER_TRANSPORTS.map((mode) => ({ value: mode, label: t(BROWSER_TRANSPORT_LABELS[mode]) }))}
+      />
     </NativeSetting>
   );
 }
@@ -1750,23 +1718,20 @@ function NotificationSettingsPanel() {
         label={t("notifications.whenActive")}
         description={t("notifications.whenActiveDesc")}
       >
-        <select
+        <ThemedSelect
           style={nativeSelectStyle}
           value={prefs.whenActive}
           disabled={!prefs.enabled}
           onChange={(event) =>
             save({
-              whenActive: event.target.value === "system" ? "system" : "toast",
+              whenActive: event === "system" ? "system" : "toast",
             })
           }
-        >
-          <option value="toast" style={nativeOptionStyle}>
-            {t("notifications.whenActiveToast")}
-          </option>
-          <option value="system" style={nativeOptionStyle}>
-            {t("notifications.whenActiveSystem")}
-          </option>
-        </select>
+          options={[
+            { value: "toast", label: t("notifications.whenActiveToast") },
+            { value: "system", label: t("notifications.whenActiveSystem") },
+          ]}
+        />
       </NativeSetting>
       <div>
         <button
@@ -2746,7 +2711,7 @@ export function SettingsConfig({
                           )}
                           scope="UI"
                         >
-                          <select
+                          <ThemedSelect
                             style={nativeSelectStyle}
                             aria-label={t(
                               "settingsConfig.expandThinkingByDefault",
@@ -2754,21 +2719,16 @@ export function SettingsConfig({
                             value={expandThinkingByDefault}
                             onChange={(event) =>
                               onExpandThinkingByDefaultChange(
-                                event.target.value as
+                                event as
                                   "off" | "latest" | "always",
                               )
                             }
-                          >
-                            <option value="off">
-                              {t("settingsConfig.expandThinkingOff")}
-                            </option>
-                            <option value="latest">
-                              {t("settingsConfig.expandThinkingLatest")}
-                            </option>
-                            <option value="always">
-                              {t("settingsConfig.expandThinkingAlways")}
-                            </option>
-                          </select>
+                            options={[
+                              { value: "off", label: t("settingsConfig.expandThinkingOff") },
+                              { value: "latest", label: t("settingsConfig.expandThinkingLatest") },
+                              { value: "always", label: t("settingsConfig.expandThinkingAlways") },
+                            ]}
+                          />
                         </NativeSetting>
                         <NativeSetting
                           searchId="hide-tool-activity"
@@ -2890,24 +2850,15 @@ export function SettingsConfig({
                           }
                           scope="UI"
                         >
-                          <select
+                          <ThemedSelect
                             style={nativeSelectStyle}
                             value={ttsVoiceURI || ""}
                             disabled={!ttsSupported || ttsVoices.length === 0}
                             onChange={(e) =>
-                              setTtsVoiceURI(e.target.value || null)
+                              setTtsVoiceURI(e || null)
                             }
-                          >
-                            <option value="">
-                              {t("settingsConfig.defaultVoice") ||
-                                "Default system voice"}
-                            </option>
-                            {ttsVoices.map((v) => (
-                              <option key={v.voiceURI} value={v.voiceURI}>
-                                {v.name} ({v.lang})
-                              </option>
-                            ))}
-                          </select>
+                            options={[{ value: "", label: t("settingsConfig.defaultVoice") || "Default system voice" }, ...ttsVoices.map((v) => ({ value: v.voiceURI, label: `${v.name} (${v.lang})` }))]}
+                          />
                         </NativeSetting>
                         <NativeSetting
                           searchId="provider-usage"
@@ -2926,28 +2877,21 @@ export function SettingsConfig({
                           description={t("settingsConfig.chatFontSizeDesc")}
                           scope="UI"
                         >
-                          <select
+                          <ThemedSelect
                             style={nativeSelectStyle}
                             value={fontSize}
                             onChange={(event) =>
                               setFontSize(
-                                event.target.value as FontSizePreference,
+                                event as FontSizePreference,
                               )
                             }
-                          >
-                            <option value="sm" style={nativeOptionStyle}>
-                              {t("settingsConfig.fontSizeSmall")}
-                            </option>
-                            <option value="md" style={nativeOptionStyle}>
-                              {t("settingsConfig.fontSizeMedium")}
-                            </option>
-                            <option value="lg" style={nativeOptionStyle}>
-                              {t("settingsConfig.fontSizeLarge")}
-                            </option>
-                            <option value="xl" style={nativeOptionStyle}>
-                              {t("settingsConfig.fontSizeXLarge")}
-                            </option>
-                          </select>
+                            options={[
+                              { value: "sm", label: t("settingsConfig.fontSizeSmall") },
+                              { value: "md", label: t("settingsConfig.fontSizeMedium") },
+                              { value: "lg", label: t("settingsConfig.fontSizeLarge") },
+                              { value: "xl", label: t("settingsConfig.fontSizeXLarge") },
+                            ]}
+                          />
                         </NativeSetting>
                         <NativeSetting
                           searchId="recent-runs-limit"
@@ -2963,28 +2907,22 @@ export function SettingsConfig({
                               flexWrap: "wrap",
                             }}
                           >
-                            <select
+                            <ThemedSelect
                               style={nativeSelectStyle}
+                              aria-label={t("settingsConfig.recentRunsLimit")}
                               value={recentRunsPreset}
                               onChange={(e) =>
                                 setRecentRunsPreset(
-                                  e.target.value as RecentRunsLimitPreset,
+                                  e as RecentRunsLimitPreset,
                                 )
                               }
-                            >
-                              <option value="10" style={nativeOptionStyle}>
-                                {t("settingsConfig.recentRunsOption10")}
-                              </option>
-                              <option value="15" style={nativeOptionStyle}>
-                                {t("settingsConfig.recentRunsOption15")}
-                              </option>
-                              <option value="20" style={nativeOptionStyle}>
-                                {t("settingsConfig.recentRunsOption20")}
-                              </option>
-                              <option value="custom" style={nativeOptionStyle}>
-                                {t("settingsConfig.recentRunsOptionCustom")}
-                              </option>
-                            </select>
+                              options={[
+                                { value: "10", label: t("settingsConfig.recentRunsOption10") },
+                                { value: "15", label: t("settingsConfig.recentRunsOption15") },
+                                { value: "20", label: t("settingsConfig.recentRunsOption20") },
+                                { value: "custom", label: t("settingsConfig.recentRunsOptionCustom") },
+                              ]}
+                            />
                             {recentRunsPreset === "custom" && (
                               <input
                                 type="number"
@@ -3019,26 +2957,15 @@ export function SettingsConfig({
                           description={t("settingsConfig.chatWidthDesc")}
                           scope="UI"
                         >
-                          <select
+                          <ThemedSelect
                             aria-label={t("settingsConfig.chatWidth")}
                             style={nativeSelectStyle}
                             value={chatWidth}
                             onChange={(event) =>
-                              setChatWidth(Number(event.target.value))
+                              setChatWidth(Number(event))
                             }
-                          >
-                            <option value={0}>
-                              {t("settingsConfig.chatWidthDefault")}
-                            </option>
-                            {Array.from(
-                              { length: 15 },
-                              (_, i) => 30 + i * 5,
-                            ).map((width) => (
-                              <option key={width} value={width}>
-                                {width}%
-                              </option>
-                            ))}
-                          </select>
+                            options={[{ value: 0, label: t("settingsConfig.chatWidthDefault") }, ...Array.from({ length: 15 }, (_, i) => 30 + i * 5).map((width) => ({ value: width, label: `${width}%` }))]}
+                          />
                         </NativeSetting>
                         <NativeSetting
                           searchId="ui-scale"
@@ -3046,31 +2973,21 @@ export function SettingsConfig({
                           description={t("settingsConfig.uiScaleDesc")}
                           scope="UI"
                         >
-                          <select
+                          <ThemedSelect
                             style={nativeSelectStyle}
                             value={uiScale}
                             onChange={(event) =>
                               setUiScale(
-                                event.target.value as UiScalePreference,
+                                event as UiScalePreference,
                               )
                             }
-                          >
-                            <option value="compact" style={nativeOptionStyle}>
-                              {t("settingsConfig.uiScaleCompact")}
-                            </option>
-                            <option value="standard" style={nativeOptionStyle}>
-                              {t("settingsConfig.uiScaleStandard")}
-                            </option>
-                            <option
-                              value="comfortable"
-                              style={nativeOptionStyle}
-                            >
-                              {t("settingsConfig.uiScaleComfortable")}
-                            </option>
-                            <option value="large" style={nativeOptionStyle}>
-                              {t("settingsConfig.uiScaleLarge")}
-                            </option>
-                          </select>
+                            options={[
+                              { value: "compact", label: t("settingsConfig.uiScaleCompact") },
+                              { value: "standard", label: t("settingsConfig.uiScaleStandard") },
+                              { value: "comfortable", label: t("settingsConfig.uiScaleComfortable") },
+                              { value: "large", label: t("settingsConfig.uiScaleLarge") },
+                            ]}
+                          />
                         </NativeSetting>
                         <NativeSetting
                           searchId="touch-targets"
@@ -3078,28 +2995,20 @@ export function SettingsConfig({
                           description={t("settingsConfig.touchTargetsDesc")}
                           scope="UI"
                         >
-                          <select
+                          <ThemedSelect
                             style={nativeSelectStyle}
                             value={touchTargets}
                             onChange={(event) =>
                               setTouchTargets(
-                                event.target.value as TouchTargetsPreference,
+                                event as TouchTargetsPreference,
                               )
                             }
-                          >
-                            <option value="auto" style={nativeOptionStyle}>
-                              {t("settingsConfig.touchTargetsAuto")}
-                            </option>
-                            <option value="compact" style={nativeOptionStyle}>
-                              {t("settingsConfig.touchTargetsCompact")}
-                            </option>
-                            <option
-                              value="accessible"
-                              style={nativeOptionStyle}
-                            >
-                              {t("settingsConfig.touchTargetsAccessible")}
-                            </option>
-                          </select>
+                            options={[
+                              { value: "auto", label: t("settingsConfig.touchTargetsAuto") },
+                              { value: "compact", label: t("settingsConfig.touchTargetsCompact") },
+                              { value: "accessible", label: t("settingsConfig.touchTargetsAccessible") },
+                            ]}
+                          />
                         </NativeSetting>
                         <NativeSetting
                           searchId="message-during-active-run"
@@ -3109,23 +3018,19 @@ export function SettingsConfig({
                           )}
                           scope="UI"
                         >
-                          <select
+                          <ThemedSelect
                             style={nativeSelectStyle}
                             value={submitBehavior}
                             onChange={(event) => {
-                              const next = event.target
-                                .value as SubmitDuringRunBehavior;
+                              const next = event as SubmitDuringRunBehavior;
                               setSubmitDuringRunBehavior(next);
                               setSubmitBehavior(next);
                             }}
-                          >
-                            <option value="steer" style={nativeOptionStyle}>
-                              {t("settingsConfig.steerCurrentRun")}
-                            </option>
-                            <option value="queue" style={nativeOptionStyle}>
-                              {t("settingsConfig.queueFollowUp")}
-                            </option>
-                          </select>
+                            options={[
+                              { value: "steer", label: t("settingsConfig.steerCurrentRun") },
+                              { value: "queue", label: t("settingsConfig.queueFollowUp") },
+                            ]}
+                          />
                         </NativeSetting>
                         <NativeSetting
                           searchId="word-completion"
@@ -3133,26 +3038,20 @@ export function SettingsConfig({
                           description={t("settingsConfig.wordCompletionDesc")}
                           scope="UI"
                         >
-                          <select
+                          <ThemedSelect
                             style={nativeSelectStyle}
                             value={wordCompletion}
                             onChange={(event) => {
-                              const next = event.target
-                                .value as WordCompletionMode;
+                              const next = event as WordCompletionMode;
                               setWordCompletionMode(next);
                               setWordCompletion(next);
                             }}
-                          >
-                            <option value="auto" style={nativeOptionStyle}>
-                              {t("settingsConfig.wordCompletionAuto")}
-                            </option>
-                            <option value="on" style={nativeOptionStyle}>
-                              {t("settingsConfig.wordCompletionOn")}
-                            </option>
-                            <option value="off" style={nativeOptionStyle}>
-                              {t("settingsConfig.wordCompletionOff")}
-                            </option>
-                          </select>
+                            options={[
+                              { value: "auto", label: t("settingsConfig.wordCompletionAuto") },
+                              { value: "on", label: t("settingsConfig.wordCompletionOn") },
+                              { value: "off", label: t("settingsConfig.wordCompletionOff") },
+                            ]}
+                          />
                         </NativeSetting>
                         <BrowserTransportSetting />
                         <NativeSetting
@@ -3223,31 +3122,23 @@ export function SettingsConfig({
                           description={t("settingsConfig.approvalModeDesc")}
                           scope="Native OMP"
                         >
-                          <select
+                          <ThemedSelect
                             style={nativeSelectStyle}
                             value={
                               nativeSettings?.tools?.approvalMode ?? "yolo"
                             }
                             onChange={(event) =>
                               patchSection("tools", {
-                                approvalMode: event.target.value as
+                                approvalMode: event as
                                   "always-ask" | "write" | "yolo",
                               })
                             }
-                          >
-                            <option
-                              value="always-ask"
-                              style={nativeOptionStyle}
-                            >
-                              {t("settingsConfig.alwaysAsk")}
-                            </option>
-                            <option value="write" style={nativeOptionStyle}>
-                              {t("settingsConfig.allowWrites")}
-                            </option>
-                            <option value="yolo" style={nativeOptionStyle}>
-                              {t("settingsConfig.autoApproveYolo")}
-                            </option>
-                          </select>
+                            options={[
+                              { value: "always-ask", label: t("settingsConfig.alwaysAsk") },
+                              { value: "write", label: t("settingsConfig.allowWrites") },
+                              { value: "yolo", label: t("settingsConfig.autoApproveYolo") },
+                            ]}
+                          />
                         </NativeSetting>
                         <NativeSetting
                           searchId="bash-override"
@@ -3255,28 +3146,23 @@ export function SettingsConfig({
                           description={t("settingsConfig.bashOverrideDesc")}
                           scope="Native OMP"
                         >
-                          <select
+                          <ThemedSelect
                             style={nativeSelectStyle}
                             value={
                               nativeSettings?.tools?.approval?.bash ?? "prompt"
                             }
                             onChange={(event) =>
                               patchApproval({
-                                bash: event.target.value as
+                                bash: event as
                                   "allow" | "prompt" | "deny",
                               })
                             }
-                          >
-                            <option value="allow" style={nativeOptionStyle}>
-                              {t("settingsConfig.allow")}
-                            </option>
-                            <option value="prompt" style={nativeOptionStyle}>
-                              {t("settingsConfig.alwaysAsk")}
-                            </option>
-                            <option value="deny" style={nativeOptionStyle}>
-                              {t("settingsConfig.deny")}
-                            </option>
-                          </select>
+                            options={[
+                              { value: "allow", label: t("settingsConfig.allow") },
+                              { value: "prompt", label: t("settingsConfig.alwaysAsk") },
+                              { value: "deny", label: t("settingsConfig.deny") },
+                            ]}
+                          />
                         </NativeSetting>
                         <NativeSetting
                           searchId="extension-tool-requests"
@@ -3286,7 +3172,7 @@ export function SettingsConfig({
                           )}
                           scope="Native OMP"
                         >
-                          <select
+                          <ThemedSelect
                             style={nativeSelectStyle}
                             value={
                               nativeSettings?.tools?.approval?.extension ??
@@ -3294,18 +3180,15 @@ export function SettingsConfig({
                             }
                             onChange={(event) =>
                               patchApproval({
-                                extension: event.target.value as
+                                extension: event as
                                   "allow" | "prompt",
                               })
                             }
-                          >
-                            <option value="prompt" style={nativeOptionStyle}>
-                              {t("settingsConfig.askEveryTime")}
-                            </option>
-                            <option value="allow" style={nativeOptionStyle}>
-                              {t("settingsConfig.autoApprove")}
-                            </option>
-                          </select>
+                            options={[
+                              { value: "prompt", label: t("settingsConfig.askEveryTime") },
+                              { value: "allow", label: t("settingsConfig.autoApprove") },
+                            ]}
+                          />
                         </NativeSetting>
                       </div>
                     </div>
@@ -3362,36 +3245,18 @@ export function SettingsConfig({
                           description={t("settingsConfig.reasoningDesc")}
                           scope="Native OMP"
                         >
-                          <select
+                          <ThemedSelect
                             style={nativeSelectStyle}
                             value={
                               nativeSettings?.defaultThinkingLevel ?? "high"
                             }
                             onChange={(e) =>
                               patchSettings({
-                                defaultThinkingLevel: e.target
-                                  .value as NativeSettings["defaultThinkingLevel"],
+                                defaultThinkingLevel: e as NativeSettings["defaultThinkingLevel"],
                               })
                             }
-                          >
-                            {[
-                              "auto",
-                              "minimal",
-                              "low",
-                              "medium",
-                              "high",
-                              "xhigh",
-                              "max",
-                            ].map((l) => (
-                              <option
-                                key={l}
-                                value={l}
-                                style={nativeOptionStyle}
-                              >
-                                {l}
-                              </option>
-                            ))}
-                          </select>
+                            options={["auto", "minimal", "low", "medium", "high", "xhigh", "max"].map((l) => ({ value: l, label: l }))}
+                          />
                         </NativeSetting>
                         {nativeSettings?.defaultThinkingLevel === "auto" && (
                           <NativeSetting
@@ -3402,7 +3267,7 @@ export function SettingsConfig({
                             )}
                             scope="Native OMP"
                           >
-                            <select
+                            <ThemedSelect
                               style={nativeSelectStyle}
                               value={
                                 nativeSettings.providers?.autoThinkingSource ??
@@ -3411,22 +3276,16 @@ export function SettingsConfig({
                               onChange={(e) =>
                                 patchSection("providers", {
                                   autoThinkingSource:
-                                    e.target.value === "vendor"
+                                    e === "vendor"
                                       ? "vendor"
                                       : "classifier",
                                 })
                               }
-                            >
-                              <option
-                                value="classifier"
-                                style={nativeOptionStyle}
-                              >
-                                {t("settingsConfig.autoThinkingClassifier")}
-                              </option>
-                              <option value="vendor" style={nativeOptionStyle}>
-                                {t("settingsConfig.autoThinkingVendor")}
-                              </option>
-                            </select>
+                              options={[
+                                { value: "classifier", label: t("settingsConfig.autoThinkingClassifier") },
+                                { value: "vendor", label: t("settingsConfig.autoThinkingVendor") },
+                              ]}
+                            />
                           </NativeSetting>
                         )}
                         <NativeSetting
@@ -3435,26 +3294,20 @@ export function SettingsConfig({
                           description={t("settingsConfig.verbosityDesc")}
                           scope="Native OMP"
                         >
-                          <select
+                          <ThemedSelect
                             style={nativeSelectStyle}
                             value={nativeSettings?.textVerbosity ?? "medium"}
                             onChange={(e) =>
                               patchSettings({
-                                textVerbosity: e.target
-                                  .value as NativeSettings["textVerbosity"],
+                                textVerbosity: e as NativeSettings["textVerbosity"],
                               })
                             }
-                          >
-                            <option value="low" style={nativeOptionStyle}>
-                              {t("settingsConfig.verbosityLow")}
-                            </option>
-                            <option value="medium" style={nativeOptionStyle}>
-                              {t("settingsConfig.verbosityMedium")}
-                            </option>
-                            <option value="high" style={nativeOptionStyle}>
-                              {t("settingsConfig.verbosityHigh")}
-                            </option>
-                          </select>
+                            options={[
+                              { value: "low", label: t("settingsConfig.verbosityLow") },
+                              { value: "medium", label: t("settingsConfig.verbosityMedium") },
+                              { value: "high", label: t("settingsConfig.verbosityHigh") },
+                            ]}
+                          />
                         </NativeSetting>
                         <NativeSetting
                           searchId="personality"
@@ -3462,29 +3315,21 @@ export function SettingsConfig({
                           description={t("settingsConfig.personalityDesc")}
                           scope="Native OMP"
                         >
-                          <select
+                          <ThemedSelect
                             style={nativeSelectStyle}
                             value={nativeSettings?.personality ?? "default"}
                             onChange={(e) =>
                               patchSettings({
-                                personality: e.target
-                                  .value as NativeSettings["personality"],
+                                personality: e as NativeSettings["personality"],
                               })
                             }
-                          >
-                            <option value="default" style={nativeOptionStyle}>
-                              {t("settingsConfig.personalityDefault")}
-                            </option>
-                            <option value="friendly" style={nativeOptionStyle}>
-                              {t("settingsConfig.personalityFriendly")}
-                            </option>
-                            <option value="pragmatic" style={nativeOptionStyle}>
-                              {t("settingsConfig.personalityPragmatic")}
-                            </option>
-                            <option value="none" style={nativeOptionStyle}>
-                              {t("settingsConfig.personalityNone")}
-                            </option>
-                          </select>
+                            options={[
+                              { value: "default", label: t("settingsConfig.personalityDefault") },
+                              { value: "friendly", label: t("settingsConfig.personalityFriendly") },
+                              { value: "pragmatic", label: t("settingsConfig.personalityPragmatic") },
+                              { value: "none", label: t("settingsConfig.personalityNone") },
+                            ]}
+                          />
                         </NativeSetting>
                         <NativeSetting
                           searchId="thinking-blocks"
@@ -3776,35 +3621,25 @@ export function SettingsConfig({
                             description={t("settingsConfig.memoryBackendDesc")}
                             scope="Native OMP"
                           >
-                            <select
+                            <ThemedSelect
                               style={nativeSelectStyle}
                               value={
                                 nativeSettings?.memory?.backend ?? "mnemopi"
                               }
                               onChange={(e) =>
                                 patchSection("memory", {
-                                  backend: e.target.value as NonNullable<
+                                  backend: e as NonNullable<
                                     NativeSettings["memory"]
                                   >["backend"],
                                 })
                               }
-                            >
-                              <option value="off" style={nativeOptionStyle}>
-                                {t("settingsConfig.memoryBackendOff")}
-                              </option>
-                              <option value="local" style={nativeOptionStyle}>
-                                {t("settingsConfig.memoryBackendLocal")}
-                              </option>
-                              <option value="mnemopi" style={nativeOptionStyle}>
-                                {t("settingsConfig.memoryBackendMnemopi")}
-                              </option>
-                              <option
-                                value="hindsight"
-                                style={nativeOptionStyle}
-                              >
-                                {t("settingsConfig.memoryBackendHindsight")}
-                              </option>
-                            </select>
+                              options={[
+                                { value: "off", label: t("settingsConfig.memoryBackendOff") },
+                                { value: "local", label: t("settingsConfig.memoryBackendLocal") },
+                                { value: "mnemopi", label: t("settingsConfig.memoryBackendMnemopi") },
+                                { value: "hindsight", label: t("settingsConfig.memoryBackendHindsight") },
+                              ]}
+                            />
                           </NativeSetting>
                           <NativeSetting
                             searchId="enable-auto-learn"
@@ -3848,7 +3683,7 @@ export function SettingsConfig({
                             description={t("settingsConfig.memoryScopeDesc")}
                             scope="Native OMP"
                           >
-                            <select
+                            <ThemedSelect
                               style={nativeSelectStyle}
                               value={
                                 nativeSettings?.mnemopi?.scoping ??
@@ -3856,30 +3691,17 @@ export function SettingsConfig({
                               }
                               onChange={(e) =>
                                 patchSection("mnemopi", {
-                                  scoping: e.target.value as NonNullable<
+                                  scoping: e as NonNullable<
                                     NativeSettings["mnemopi"]
                                   >["scoping"],
                                 })
                               }
-                            >
-                              <option
-                                value="per-project"
-                                style={nativeOptionStyle}
-                              >
-                                {t("settingsConfig.memoryScopePerProject")}
-                              </option>
-                              <option
-                                value="per-project-tagged"
-                                style={nativeOptionStyle}
-                              >
-                                {t(
-                                  "settingsConfig.memoryScopePerProjectTagged",
-                                )}
-                              </option>
-                              <option value="global" style={nativeOptionStyle}>
-                                {t("settingsConfig.memoryScopeGlobal")}
-                              </option>
-                            </select>
+                              options={[
+                                { value: "per-project", label: t("settingsConfig.memoryScopePerProject") },
+                                { value: "per-project-tagged", label: t( "settingsConfig.memoryScopePerProjectTagged", ) },
+                                { value: "global", label: t("settingsConfig.memoryScopeGlobal") },
+                              ]}
+                            />
                           </NativeSetting>
                           <NativeSetting
                             searchId="recall-on-session-start"
@@ -3973,27 +3795,18 @@ export function SettingsConfig({
                             description={t("settingsConfig.maxAttemptsDesc")}
                             scope="Native OMP"
                           >
-                            <select
+                            <ThemedSelect
                               style={nativeSelectStyle}
                               value={String(
                                 nativeSettings?.retry?.maxRetries ?? 2,
                               )}
                               onChange={(e) =>
                                 patchSection("retry", {
-                                  maxRetries: Number(e.target.value),
+                                  maxRetries: Number(e),
                                 })
                               }
-                            >
-                              {[0, 1, 2, 3, 4, 5].map((n) => (
-                                <option
-                                  key={n}
-                                  value={n}
-                                  style={nativeOptionStyle}
-                                >
-                                  {n}
-                                </option>
-                              ))}
-                            </select>
+                              options={[0, 1, 2, 3, 4, 5].map((n) => ({ value: n, label: String(n) }))}
+                            />
                           </NativeSetting>
                           <NativeSetting
                             searchId="model-fallback"

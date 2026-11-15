@@ -94,6 +94,8 @@ export interface LocalOutboxEntry {
   images?: { type: "image"; data: string; mimeType: string }[];
   uploads?: string[];
   uploadProofs?: Record<string, string>;
+  /** Retry lineage is rooted in the same session and exact immutable intent. */
+  replaces?: string;
   createdAt: number;
   /** Allocated atomically by IndexedDB acceptance; absent only on preexisting rows. */
   enqueueOrder?: number;
@@ -105,14 +107,18 @@ export interface LocalOutboxEntry {
 
 /** Every local entry (on subscribe once known, then on every change), or one the server answered 200 for. */
 export type OutboxEvent =
-  { entries: LocalOutboxEntry[] } | { stored: OutboxEntry };
+  { entries: LocalOutboxEntry[] } | { stored: StoredOutboxEntry };
+
+/** A receipt's retry root is server-confirmed or locally proven. */
+export type StoredOutboxEntry = OutboxEntry & { replaces?: string };
 
 /** The worker about the outbox: an add committed, the whole list, or one the server stored. */
 type OutboxMessage =
   | { outboxAdded: number; error?: string }
   | { outboxDropped: number; error?: string }
+  | { outboxReconciled: number; error?: string }
   | { outbox: LocalOutboxEntry[]; partial?: true }
-  | { outboxStored: OutboxEntry };
+  | { outboxStored: StoredOutboxEntry };
 
 type WakeReason = "init" | "visible" | "hidden" | "online" | "network";
 
@@ -178,11 +184,9 @@ class Transport {
       else if ("up" in message) this.uploads.get(message.up)?.(message);
       else if ("diag" in message)
         this.diagnostics.get(message.diag)?.(message.data);
-      else if ("outboxAdded" in message || "outboxDropped" in message) {
-        const n =
-          "outboxAdded" in message
-            ? message.outboxAdded
-            : message.outboxDropped;
+      else if ("outboxAdded" in message || "outboxDropped" in message || "outboxReconciled" in message) {
+        const n = "outboxAdded" in message ? message.outboxAdded
+          : "outboxDropped" in message ? message.outboxDropped : message.outboxReconciled;
         const pending = this.outboxWrites.get(n);
         if (message.error !== undefined)
           pending?.reject(new Error(message.error));
@@ -296,6 +300,14 @@ class Transport {
       const n = this.nextId++;
       this.outboxWrites.set(n, { resolve, reject });
       this.port.postMessage({ op: "outbox_drop", n, id });
+    });
+  }
+
+  reconcileOutbox(sessionId: string, confirmedIds: string[]): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const n = this.nextId++;
+      this.outboxWrites.set(n, { resolve, reject });
+      this.port.postMessage({ op: "outbox_reconcile", n, sessionId, confirmedIds });
     });
   }
 
@@ -487,6 +499,7 @@ function postOutboxOnExit(): void {
     images,
     uploads,
     uploadProofs,
+    replaces,
     state,
     createdAt,
   } of outboxEntries ?? []) {
@@ -509,6 +522,7 @@ function postOutboxOnExit(): void {
       images,
       uploads,
       uploadProofs,
+      replaces,
     });
     const bytes = new Blob([body]).size;
     if (bytes > left) continue;
@@ -590,6 +604,12 @@ export async function addToOutbox(
   void registerOutboxSync();
 }
 
+/** Remove browser copies only after an authoritative server identity snapshot. */
+export async function reconcileOutbox(sessionId: string, confirmedIds: string[]): Promise<void> {
+  transport ??= connectTransport();
+  await transport.reconcileOutbox(sessionId, confirmedIds);
+}
+
 function supportsOutboxSync(worker: ServiceWorker | null): Promise<boolean> {
   if (!worker) return Promise.resolve(false);
   return new Promise((resolve) => {
@@ -602,7 +622,7 @@ function supportsOutboxSync(worker: ServiceWorker | null): Promise<boolean> {
     };
     const timer = setTimeout(() => finish(false), 1_000);
     channel.port1.onmessage = ({ data }) =>
-      finish(data?.type === "omp-outbox-capability" && data.version === 1);
+      finish(data?.type === "omp-outbox-capability" && data.version === 2);
     try {
       worker.postMessage({ type: "omp-outbox-capability" }, [channel.port2]);
     } catch {

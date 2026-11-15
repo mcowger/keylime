@@ -49,6 +49,26 @@ test("held messages name every delivery leg and only offer Delete before dispatc
   }
 });
 
+test("Retry is offered only for failures and confirms uncertain delivery", async () => {
+  const base = { id: "held", mode: "prompt", message: "Again", createdAt: Date.now(), local: false };
+  for (const state of ["sending", "waiting_host", "held", "delivering"]) {
+    const html = renderToStaticMarkup(React.createElement(HeldMessageView, { held: { ...base, state }, onRetry() {} }));
+    assert.equal(html.includes("Retry sending this message"), false, state);
+  }
+  const retried = [];
+  const view = render(React.createElement(HeldMessageView, { held: { ...base, state: "failed", mayHaveBeenSent: true }, onRetry: (id) => retried.push(id) }));
+  fireEvent.click(view.getByRole("button", { name: "Retry sending this message" }));
+  assert.deepEqual(retried, []);
+  const dialog = await waitFor(() => view.getByRole("dialog"));
+  assert.match(dialog.textContent, /run it twice/);
+  fireEvent.click(view.getByRole("button", { name: "Retry" }));
+  assert.deepEqual(retried, ["held"]);
+  view.unmount();
+  const direct = render(React.createElement(HeldMessageView, { held: { ...base, state: "failed" }, onRetry: (id) => retried.push(id) }));
+  fireEvent.click(direct.getByRole("button", { name: "Retry sending this message" }));
+  assert.deepEqual(retried, ["held", "held"]);
+});
+
 test("Delete confirmation never claims omp has not seen a message that may have been sent, nor cancellation", async () => {
   const base = {
     id: "held",

@@ -1,7 +1,7 @@
 // The web server's leg of the message outbox (docs/specs/2026-11-04-message-outbox-design.md, O2 to O4 and O6): a
 // message sent to an existing session is stored here before `outbox_add` answers, then sent to omp by one dispatcher
 // per session, oldest first and one at a time, and leaves once omp has it. The `session` channel shows the entries.
-import { chmodSync, closeSync, mkdirSync, openSync } from "fs";
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync } from "fs";
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { join } from "path";
 import { Database } from "bun:sqlite";
@@ -65,7 +65,7 @@ const MODES: Record<OutboxMode, true> = {
 };
 
 const COLUMNS =
-  "id, session_id, mode, message, images, uploads, owner, advisor, state, error, may_have_been_sent, created_at, upload_receipts, previous_entry_ids, source_session_id, settlement";
+  "id, session_id, mode, message, images, uploads, owner, advisor, state, error, may_have_been_sent, created_at, upload_receipts, previous_entry_ids, source_session_id, settlement, replacement_id, replacement_digest, payload_bytes";
 
 /** `owner`: the web session whose uploads the entry attaches; `advisor`: the chat's spawn flag at Send. */
 interface Row {
@@ -85,7 +85,17 @@ interface Row {
   created_at: number;
   previous_entry_ids: string | null;
   settlement: string | null;
+  replacement_id: string | null;
+  replacement_digest: string | null;
+  payload_bytes: number;
 }
+
+type AddResult =
+  | { kind: "full" }
+  | { kind: "conflict" }
+  | { kind: "existing"; entry: Row; replaces?: string }
+  | { kind: "duplicate"; entry: Row; originalSession: string; replaces: string }
+  | { kind: "inserted"; entry: Row; replaced: Row | null };
 
 type NotificationProgress = { revision?: string; retryAt: number };
 type OutboxState = {
@@ -169,6 +179,8 @@ function db(): Database {
           ["previous_entry_ids", "TEXT"],
           ["source_session_id", "TEXT"],
           ["settlement", "TEXT"],
+          ["replacement_id", "TEXT"],
+          ["replacement_digest", "TEXT"],
         ]) {
           if (!columns.some((column) => column.name === name))
             database.exec(`ALTER TABLE entries ADD COLUMN ${name} ${type}`);
@@ -398,6 +410,7 @@ function toEntry(entry: Row): OutboxEntry {
     id: entry.id,
     sessionId: entry.session_id,
     mode: entry.mode,
+    advisor: Boolean(entry.advisor),
     message: entry.message,
     ...(entry.images
       ? { images: JSON.parse(entry.images) as OutboxEntry["images"] }
@@ -519,6 +532,28 @@ function entryBelongsToSession(entry: Row, sessionId: string): boolean {
       )
       .get(entry.id, ...keys, ...keys, ...keys) !== null
   );
+}
+
+// Upstream 13d8eb2 retains content-free retry roots past ordinary tombstone expiry: stale clients may
+// create a new copy long after the winning copy has expired. Keep Keylime's session aliases in cleanup.
+function receiptPinCondition(database: Database): string {
+  return database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'github_receipt_pins'").get()
+    ? " AND NOT EXISTS (SELECT 1 FROM github_receipt_pins WHERE entry_id = entries.id)"
+    : "";
+}
+
+function pruneDelivered(database: Database, cutoff: number): void {
+  database.prepare(`DELETE FROM entries WHERE state = 'delivered' AND done_at < ? AND (replacement_id IS NULL OR replacement_digest IS NULL)${receiptPinCondition(database)}`).run(cutoff);
+}
+
+export function forgetSessionReplacementMappings(sessionId: string): void {
+  if (!existsSync(join(getAgentDir(), "omp-web", "outbox.db"))) return;
+  const database = db();
+  const keys = sessionKeys(sessionId);
+  database.transaction(() => {
+    database.prepare(`DELETE FROM entries WHERE ${entrySessionMatch(keys)} AND state = 'delivered' AND replacement_id IS NOT NULL AND replacement_digest IS NOT NULL${receiptPinCondition(database)}`)
+      .run(...keys, ...keys, ...keys);
+  }).immediate();
 }
 
 /** Call `listener` with the session's entries after every change. */
@@ -656,12 +691,14 @@ function setState(
 function retire(
   id: string,
   settlement: "native" | "none" | "uncorrelated",
+  replacementId?: string,
+  replacementDigest?: string,
 ): void {
   db()
     .prepare(
-      "UPDATE entries SET state = 'delivered', message = '', images = NULL, uploads = NULL, upload_receipts = NULL, previous_entry_ids = NULL, error = NULL, done_at = ?, settlement = ? WHERE id = ?",
+      "UPDATE entries SET state = 'delivered', message = '', images = NULL, uploads = NULL, upload_receipts = NULL, previous_entry_ids = NULL, error = NULL, done_at = ?, settlement = ?, replacement_id = COALESCE(?, replacement_id), replacement_digest = COALESCE(?, replacement_digest) WHERE id = ?",
     )
-    .run(Date.now(), settlement, id);
+    .run(Date.now(), settlement, replacementId ?? null, replacementDigest ?? null, id);
 }
 
 const invalid = (error: string) =>
@@ -676,6 +713,14 @@ export function outboxScope(): string {
       `omp-web-outbox-scope-v1\0${secret.salt}\0${(process.env.OMP_WEB_PASSWORD_HASH ?? "").trim()}\0${(process.env.OMP_WEB_TRUSTED_HEADER_SHA256 ?? "").trim()}`,
     )
     .digest("base64url");
+}
+
+function confirmedReplacementId(entry: Row, sessionId: string, value: unknown): string | undefined {
+  if (typeof value !== "string" || !ENTRY_ID_RE.test(value)) return undefined;
+  const original = row(value);
+  if (!original || !entryBelongsToSession(original, sessionId) || !original.replacement_id) return undefined;
+  return original.replacement_id === entry.id || (entry.replacement_id !== null && original.replacement_id === entry.replacement_id)
+    ? value : undefined;
 }
 
 /** `outbox_add` / `outbox_remove` for `sessionId`, as runAgentCommand answers them. */
@@ -712,9 +757,13 @@ export async function runOutboxCommand(
         },
         { status: 409 },
       );
-    return Response.json({ success: true, data: { entry: toEntry(known) } });
+    const replaces = confirmedReplacementId(known, sessionId, command.replaces);
+    const entry = toEntry(known);
+    return Response.json({ success: true, data: { entry: replaces ? { ...entry, replaces } : entry } });
   }
-  const { mode, message, images, uploads } = command;
+  const { mode, message, images, uploads, replaces } = command;
+  if (replaces !== undefined && (typeof replaces !== "string" || !ENTRY_ID_RE.test(replaces) || replaces === id))
+    return invalid("replaces must be another entry's id");
   if (typeof mode !== "string" || !Object.hasOwn(MODES, mode))
     return invalid("mode must be prompt, followUp or steer");
   if (typeof message !== "string") return invalid("message must be a string");
@@ -760,6 +809,11 @@ export async function runOutboxCommand(
       `uploads must be at most ${MAX_UPLOADS_PER_MESSAGE} upload ids`,
     );
   }
+  const imagePayload = Array.isArray(images) && images.length ? JSON.stringify(images) : null;
+  const uploadIds = Array.isArray(uploads) ? uploads as string[] : [];
+  const uploadPayload = uploadIds.length ? JSON.stringify(uploadIds) : null;
+  const digestKey = resolveWebAuthSecret().key;
+  const retryDigest = createHmac("sha256", digestKey).update(JSON.stringify([outboxScope(), advisor, mode, message, imagePayload, uploadPayload])).digest("base64url");
   const resolved = await resolveSessionHostOr404(sessionId);
   // Unavailable host lists cannot prove absence: retain the entry until discovery can resolve its owner. An archived
   // session (on this machine or a linked host) is not gone either: its entries wait until it is restored (spec O6),
@@ -778,9 +832,7 @@ export async function runOutboxCommand(
 
   const now = Date.now();
   const database = db();
-  database
-    .prepare("DELETE FROM entries WHERE state = 'delivered' AND done_at < ?")
-    .run(now - KEEP_DELIVERED_MS);
+  pruneDelivered(database, now - KEEP_DELIVERED_MS);
   const keys = sessionKeys(sessionId);
   const entryBytes =
     Buffer.byteLength(
@@ -795,86 +847,93 @@ export async function runOutboxCommand(
         createdAt: now,
       }),
     ) + 8192;
-  let accepted: boolean;
+  let result: AddResult;
   try {
-    accepted = database
-      .transaction(() => {
-        if (row(id)) return true; // a concurrent repeat takes no capacity or renewed proof
-        const uploadReceipts = snapshotOutboxUploads(
-          Array.isArray(uploads) ? (uploads as string[]) : [],
-          owner,
-          command.uploadProofs,
-        );
-        const savedUploads = uploadReceipts.length
-          ? JSON.stringify(uploadReceipts)
-          : null;
-        const payloadBytes =
-          entryBytes + (savedUploads ? Buffer.byteLength(savedUploads) : 0);
-        const total = database
-          .prepare(
-            `SELECT COALESCE(SUM(payload_bytes), 0) AS bytes FROM entries WHERE ${entrySessionMatch(keys)} AND state != 'delivered'`,
-          )
-          .get(...keys, ...keys, ...keys) as { bytes: number };
-        if (total.bytes + payloadBytes > MAX_OUTBOX_BYTES - 64 * 1024)
-          return false;
-        const global = database
-          .prepare(
-            "SELECT COALESCE(SUM(payload_bytes), 0) AS bytes, COUNT(*) AS count FROM entries WHERE state != 'delivered'",
-          )
-          .get() as { bytes: number; count: number };
-        if (
-          global.bytes + payloadBytes > MAX_GLOBAL_OUTBOX_BYTES ||
-          global.count >= MAX_GLOBAL_OUTBOX_ENTRIES
-        )
-          return false;
-        database
-          .prepare(
-            `INSERT INTO entries (${COLUMNS}, payload_bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'held', NULL, 0, ?, ?, NULL, ?, NULL, ?)`,
-          )
-          .run(
-            id,
-            sessionId,
-            mode,
-            message,
-            Array.isArray(images) && images.length
-              ? JSON.stringify(images)
-              : null,
-            Array.isArray(uploads) && uploads.length
-              ? JSON.stringify(uploads)
-              : null,
-            owner,
-            advisor ? 1 : 0,
-            now,
-            savedUploads,
-            sessionId,
-            payloadBytes,
-          );
-        return true;
-      })
-      .immediate();
+    result = database.transaction((): AddResult => {
+      const concurrent = row(id);
+      if (concurrent) {
+        if (!entryBelongsToSession(concurrent, sessionId)) return { kind: "conflict" };
+        const confirmed = confirmedReplacementId(concurrent, sessionId, replaces);
+        return { kind: "existing", entry: concurrent, ...(confirmed ? { replaces: confirmed } : {}) };
+      }
+      const original = typeof replaces === "string" ? row(replaces) : null;
+      const matchesSession = original !== null && entryBelongsToSession(original, sessionId);
+      if (original && matchesSession && original.replacement_id) {
+        if (original.replacement_digest !== retryDigest)
+          throw new UploadError(409, "outbox_replacement_conflict", "A retry must keep its original mode, message and attachments");
+        const settledAt = Date.now();
+        database.prepare("UPDATE entries SET done_at = ? WHERE id = ? AND replacement_id = ?").run(settledAt, original.id, original.replacement_id);
+        database.prepare(`INSERT INTO entries (${COLUMNS}, done_at) VALUES (?, ?, ?, '', NULL, NULL, ?, ?, 'delivered', NULL, 0, ?, NULL, NULL, ?, 'none', ?, NULL, 0, ?)`)
+          .run(id, original.session_id, original.mode, original.owner, original.advisor, settledAt, original.source_session_id, original.replacement_id, settledAt);
+        return { kind: "duplicate", entry: row(id)!, originalSession: original.session_id, replaces: original.id };
+      }
+      if (original && matchesSession && original.state !== "failed" && original.state !== "delivered")
+        throw new UploadError(409, "outbox_original_pending", "The original message is still waiting or being delivered. Check the outbox before retrying.");
+      const replaceable = original && matchesSession && original.state === "failed" ? original : null;
+      if (replaceable && createHmac("sha256", digestKey).update(JSON.stringify([outboxScope(), !!replaceable.advisor, replaceable.mode, replaceable.message, replaceable.images, replaceable.uploads])).digest("base64url") !== retryDigest)
+        throw new UploadError(409, "outbox_replacement_conflict", "A retry must keep its original mode, message and attachments");
+      // Upstream 13d8eb2 atomically transfers a failed entry's accepted authority to its retry. Keylime
+      // binds each receipt to a completion generation and scope: never trust browser-supplied receipts,
+      // revive expired staging, or bypass an explicitly supplied (possibly invalid) completion proof.
+      let entryOwner = owner;
+      let uploadReceipts: OutboxUploadReceipt[];
+      if (replaceable && uploadIds.length && owner !== replaceable.owner && command.uploadProofs === undefined) {
+        const receipts = replaceable.upload_receipts ? JSON.parse(replaceable.upload_receipts) as OutboxUploadReceipt[] : [];
+        const now = Date.now();
+        const valid = now - replaceable.created_at <= STAGED_MAX_AGE_MS && receipts.length === uploadIds.length && receipts.every((receipt, index) => {
+          const stored = completedUpload(receipt.id);
+          return receipt.id === uploadIds[index] && stored !== null && stored.owner === (receipt.owner ?? replaceable.owner)
+            && stored.scope === outboxScope() && now - stored.at <= STAGED_MAX_AGE_MS
+            && (receipt.completedAt === undefined || receipt.completedAt === stored.at)
+            && stored.receipt.hostId === receipt.hostId && stored.receipt.name === receipt.name
+            && stored.receipt.size === receipt.size && stored.receipt.type === receipt.type
+            && (stored.proof ? createHash("sha256").update(stored.proof).digest("hex") : undefined) === receipt.completionKey;
+        });
+        if (!valid) throw new UploadError(404, "upload_missing", "The upload is gone: attach the file again");
+        uploadReceipts = receipts;
+        entryOwner = replaceable.owner;
+      } else uploadReceipts = snapshotOutboxUploads(uploadIds, owner, command.uploadProofs);
+      const savedUploads = uploadReceipts.length ? JSON.stringify(uploadReceipts) : null;
+      const payloadBytes = entryBytes + (savedUploads ? Buffer.byteLength(savedUploads) : 0);
+      const replacedBytes = replaceable?.payload_bytes ?? 0;
+      const total = database.prepare(`SELECT COALESCE(SUM(payload_bytes), 0) AS bytes FROM entries WHERE ${entrySessionMatch(keys)} AND state != 'delivered'`).get(...keys, ...keys, ...keys) as { bytes: number };
+      if (total.bytes - replacedBytes + payloadBytes > MAX_OUTBOX_BYTES - 64 * 1024) return { kind: "full" };
+      const global = database.prepare("SELECT COALESCE(SUM(payload_bytes), 0) AS bytes, COUNT(*) AS count FROM entries WHERE state != 'delivered'").get() as { bytes: number; count: number };
+      if (global.bytes - replacedBytes + payloadBytes > MAX_GLOBAL_OUTBOX_BYTES || global.count - (replaceable ? 1 : 0) >= MAX_GLOBAL_OUTBOX_ENTRIES) return { kind: "full" };
+      database.prepare(`INSERT INTO entries (${COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'held', NULL, 0, ?, ?, NULL, ?, NULL, NULL, ?, ?)`)
+        .run(id, sessionId, mode, message, imagePayload, uploadPayload, entryOwner, advisor ? 1 : 0, now, savedUploads, sessionId, retryDigest, payloadBytes);
+      let retiredRoot = replaceable;
+      if (replaceable) retire(replaceable.id, "none", id, retryDigest);
+      else if (original && matchesSession && original.state === "delivered") {
+        // Preserve native/uncorrelated settlement while recording the explicit retry identity.
+        database.prepare("UPDATE entries SET replacement_id = ?, replacement_digest = ?, done_at = ? WHERE id = ?").run(id, retryDigest, now, original.id);
+        retiredRoot = original;
+      } else if (!original && typeof replaces === "string") {
+        database.prepare(`INSERT INTO entries (${COLUMNS}, done_at) VALUES (?, ?, ?, '', NULL, NULL, ?, ?, 'delivered', NULL, 0, ?, NULL, NULL, ?, 'none', ?, ?, 0, ?)`)
+          .run(replaces, sessionId, mode, owner, advisor ? 1 : 0, now, sessionId, id, retryDigest, now);
+        retiredRoot = row(replaces);
+      }
+      return { kind: "inserted", entry: row(id)!, replaced: retiredRoot };
+    }).immediate();
   } catch (error) {
     return commandErrorResponse(error);
   }
-  if (!accepted)
-    return Response.json(
-      {
-        error:
-          "The message outbox is full. It will accept more messages after held entries drain or are deleted.",
-        code: "outbox_full",
-      },
-      { status: 429 },
-    );
-  if (!entryBelongsToSession(row(id)!, sessionId))
-    return Response.json(
-      {
-        error: "This message id belongs to another session",
-        code: "outbox_id_conflict",
-      },
-      { status: 409 },
-    );
+  if (result.kind === "conflict") return Response.json({ error: "This message id belongs to another session", code: "outbox_id_conflict" }, { status: 409 });
+  if (result.kind === "full") return Response.json({ error: "The message outbox is full. It will accept more messages after held entries drain or are deleted.", code: "outbox_full" }, { status: 429 });
+  if (result.kind === "existing") {
+    const entry = toEntry(result.entry);
+    return Response.json({ success: true, data: { entry: result.replaces ? { ...entry, replaces: result.replaces } : entry } });
+  }
+  if (result.kind === "duplicate") {
+    publish(result.originalSession);
+    if (result.originalSession !== sessionId) publish(sessionId);
+    return Response.json({ success: true, data: { entry: { ...toEntry(result.entry), replaces: result.replaces } } });
+  }
   publish(sessionId);
+  if (result.replaced && result.replaced.session_id !== sessionId) publish(result.replaced.session_id);
   pumpOutbox(sessionId);
-  return Response.json({ success: true, data: { entry: toEntry(row(id)!) } });
+  const entry = toEntry(result.entry);
+  return Response.json({ success: true, data: { entry: result.replaced ? { ...entry, replaces: result.replaced.id } : entry } });
 }
 
 function removeEntry(sessionId: string, id: string): Response {
@@ -1008,9 +1067,7 @@ export function startOutbox(): void {
   try {
     db();
     recoverDelivering(undefined, true);
-    db()
-      .prepare("DELETE FROM entries WHERE state = 'delivered' AND done_at < ?")
-      .run(Date.now() - KEEP_DELIVERED_MS);
+    pruneDelivered(db(), Date.now() - KEEP_DELIVERED_MS);
     db()
       .prepare("DELETE FROM completed_uploads WHERE at < ?")
       .run(Date.now() - STAGED_MAX_AGE_MS);
