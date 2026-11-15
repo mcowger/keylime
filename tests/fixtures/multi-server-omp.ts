@@ -6,29 +6,34 @@ if (process.argv.includes("--version")) {
   process.exit(0);
 }
 const sessionId = process.env.OMP_MULTI_SESSION_ID;
-const sessionFile = process.env.OMP_MULTI_SESSION_FILE;
-const record = (entry) =>
+const sessionFile = process.env.OMP_MULTI_SESSION_FILE!;
+const record = (entry: Record<string, unknown>) =>
   fs.appendFileSync(
-    process.env.OMP_MULTI_LOG,
+    process.env.OMP_MULTI_LOG!,
     `${JSON.stringify({ pid: process.pid, ...entry })}\n`,
   );
-const send = (frame) => process.stdout.write(`${JSON.stringify(frame)}\n`);
-const out = (event) => send({ t: "event", event });
+const send = (frame: Record<string, unknown>) =>
+  process.stdout.write(`${JSON.stringify(frame)}\n`);
+const out = (event: Record<string, unknown>) => send({ t: "event", event });
 const resumed = process.argv.includes("--resume");
 record({ type: "start", resumed });
 let streaming = false;
-let messages = [];
-let timer;
+let messages: Array<{
+  role: string;
+  content: Array<{ type: string; text: string }>;
+  timestamp: number;
+}> = [];
+let timer: ReturnType<typeof setInterval> | undefined;
 let promptNumber = 0;
 const saved = fs
   .readFileSync(sessionFile, "utf8")
   .trim()
   .split("\n")
-  .map(JSON.parse);
+  .map((line) => JSON.parse(line));
 let parentId =
   saved.findLast((entry) => entry.type !== "session" && entry.id)?.id ?? null;
 let entryNumber = 0;
-const persist = (message, clientMessageId) => {
+const persist = (message: unknown, clientMessageId?: string) => {
   const id = `native-${process.pid}-${++entryNumber}`;
   fs.appendFileSync(
     sessionFile,
@@ -166,7 +171,7 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
         () => {
           if (
             args.message === "slow" &&
-            !fs.existsSync(process.env.OMP_MULTI_RELEASE_FILE)
+            !fs.existsSync(process.env.OMP_MULTI_RELEASE_FILE!)
           )
             return;
           assistant.content[0].text = "one two";

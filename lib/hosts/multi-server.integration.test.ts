@@ -167,7 +167,7 @@ test(
     );
     const ompLog = join(scratch, "omp.jsonl");
     const fake = join(scratch, "omp");
-    const source = `import(${JSON.stringify(pathToFileURL(join(fixture, "multi-server-omp.mjs")).href)});\n`;
+    const source = `import(${JSON.stringify(pathToFileURL(join(fixture, "multi-server-omp.ts")).href)});\n`;
     writeFileSync(fake, `#!${process.execPath}\n${source}`, { mode: 0o755 });
     const env: NodeJS.ProcessEnv = {
       ...process.env,

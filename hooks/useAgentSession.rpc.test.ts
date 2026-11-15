@@ -674,7 +674,7 @@ afterEach(async () => {
 // notification UI keeps the real provider, descriptions, gestures and icons.
 const realToastExports = { ...(await import("@/components/ui/toast")) };
 const { toast: testToast, toastCalls: testToastCalls } =
-  await import("./__fixtures__/toast-stub.mjs");
+  await import("./__fixtures__/toast-stub.ts");
 mock.module("@/components/ui/toast", () => ({
   ...realToastExports,
   toast: testToast,
