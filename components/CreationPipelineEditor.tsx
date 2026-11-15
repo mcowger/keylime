@@ -26,6 +26,9 @@ const buttonStyle = {
   fontWeight: 600,
 } as const;
 
+// Keep writes ordered even if an editor is closed and reopened while a request is pending.
+const pendingWrites = new Map<string, Promise<void>>();
+
 export function CreationPipelineEditor({
   hostId,
   projectPath,
@@ -38,11 +41,14 @@ export function CreationPipelineEditor({
   const [settings, setSettings] = useState<WorkspaceCreationSettings | null>(null);
   const [error, setError] = useState("");
   const [previewError, setPreviewError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [revision, setRevision] = useState(0);
   const generation = useRef(0);
   const previewGeneration = useRef(0);
+  const editGeneration = useRef(0);
+  const latestSettings = useRef<WorkspaceCreationSettings | null>(null);
+  const key = JSON.stringify([hostId, projectPath]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -51,22 +57,28 @@ export function CreationPipelineEditor({
     setSettings(null);
     setError("");
     setPreviewError("");
-    setBusy(false);
+    latestSettings.current = null;
+    ++editGeneration.current;
+    setSaving(false);
     setRefreshing(false);
     const params = new URLSearchParams({ hostId, action: "settings" });
     if (projectPath !== undefined) params.set("projectPath", projectPath);
-    void fetch(`/api/worktrees?${params}`, { signal: controller.signal })
-      .then(async (response) => {
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
-        if (!controller.signal.aborted && generation.current === current) setSettings(data);
-      })
-      .catch((e) => {
-        if (!controller.signal.aborted && generation.current === current)
-          setError(e instanceof Error ? e.message : String(e));
-      });
+    void (async () => {
+      await pendingWrites.get(key);
+      if (controller.signal.aborted) return;
+      const response = await fetch(`/api/worktrees?${params}`, { signal: controller.signal });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
+      if (!controller.signal.aborted && generation.current === current) {
+        latestSettings.current = data;
+        setSettings(data);
+      }
+    })().catch((e) => {
+      if (!controller.signal.aborted && generation.current === current)
+        setError(e instanceof Error ? e.message : String(e));
+    });
     return () => { controller.abort(); ++generation.current; };
-  }, [hostId, projectPath, revision]);
+  }, [hostId, projectPath, revision, key]);
 
   async function refreshPreview() {
     const current = generation.current;
@@ -78,8 +90,13 @@ export function CreationPipelineEditor({
       const response = await fetch(`/api/worktrees?${params}`);
       const data: WorkspaceCreationSettings & { error?: string } = await response.json();
       if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
-      if (generation.current === current && previewGeneration.current === preview)
-        setSettings((previous) => previous ? { ...previous, paseo: data.paseo } : previous);
+      if (generation.current === current && previewGeneration.current === preview) {
+        setSettings((previous) => {
+          const next = previous ? { ...previous, paseo: data.paseo } : previous;
+          latestSettings.current = next;
+          return next;
+        });
+      }
     } catch (e) {
       if (generation.current === current && previewGeneration.current === preview)
         setPreviewError(e instanceof Error ? e.message : String(e));
@@ -89,23 +106,24 @@ export function CreationPipelineEditor({
   }
 
   const pipeline = projectPath === undefined ? settings?.defaults : settings?.override;
-  async function save() {
-    if (!settings) return;
+  function save(next: WorkspaceCreationSettings) {
+    latestSettings.current = next;
+    setSettings(next);
     const current = generation.current;
-    ++previewGeneration.current;
-    setRefreshing(false);
-    setBusy(true);
+    const edit = ++editGeneration.current;
+    setSaving(true);
     setError("");
     const clean = (value: WorkspacePipeline) => ({
       pre: value.pre.filter((s) => s.trim()),
       create: value.create.filter((s) => s.trim()),
       post: value.post.filter((s) => s.trim()),
     });
-    try {
-      const input = projectPath === undefined
-        ? { defaults: clean(settings.defaults) }
-        : { projectPath, override: settings.override ? clean(settings.override) : null,
-            ...(gitProject ? { source: settings.source } : {}) };
+    const input = projectPath === undefined
+      ? { defaults: clean(next.defaults) }
+      : { projectPath, override: next.override ? clean(next.override) : null,
+          ...(gitProject ? { source: next.source } : {}) };
+    const previous = pendingWrites.get(key) ?? Promise.resolve();
+    const write = previous.then(async () => {
       const response = await fetch("/api/worktrees", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -113,21 +131,24 @@ export function CreationPipelineEditor({
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
-      if (generation.current === current) setSettings(data);
-    } catch (e) {
-      if (generation.current === current) setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      if (generation.current === current) setBusy(false);
-    }
+    });
+    const settled = write.catch((e) => {
+      if (generation.current === current && editGeneration.current === edit)
+        setError(e instanceof Error ? e.message : String(e));
+    }).finally(() => {
+      if (generation.current === current && editGeneration.current === edit) setSaving(false);
+    });
+    pendingWrites.set(key, settled);
+    void settled.then(() => { if (pendingWrites.get(key) === settled) pendingWrites.delete(key); });
   }
   return (
     <section style={{ display: "grid", gap: 10, minWidth: 0, overflowWrap: "anywhere" }}>
       <h3>Creation commands</h3>
       {gitProject && settings && (
-        <fieldset disabled={busy} style={{ minWidth: 0 }}>
+        <fieldset style={{ minWidth: 0 }}>
           <legend>Workspace configuration source</legend>
-          <label><input type="radio" name={`source-${hostId}-${projectPath}`} checked={settings.source === "manual"} onChange={() => setSettings({ ...settings, source: "manual" })} /> Manual</label>{" "}
-          {!settings.paseo?.missing && <label><input type="radio" name={`source-${hostId}-${projectPath}`} checked={settings.source === "paseo"} onChange={() => setSettings({ ...settings, source: "paseo" })} /> Follow Paseo workspace setup</label>}
+          <label><input type="radio" name={`source-${hostId}-${projectPath}`} checked={settings.source === "manual"} onChange={() => save({ ...settings, source: "manual" })} /> Manual</label>{" "}
+          {!settings.paseo?.missing && <label><input type="radio" name={`source-${hostId}-${projectPath}`} checked={settings.source === "paseo"} onChange={() => save({ ...settings, source: "paseo" })} /> Follow Paseo workspace setup</label>}
         </fieldset>
       )}
       {gitProject && settings?.source === "paseo" && (
@@ -135,7 +156,7 @@ export function CreationPipelineEditor({
           <p>Follow Paseo uses the current on-disk project file, including uncommitted changes. It bypasses all manual project and host commands and uses built-in Git workspace creation, .worktreeinclude copying, setup and teardown.</p>
           <p>Services, scripts, terminals and port runtime are not supported. Future edits to the recipe will execute as your user when workspaces are created or deleted. Only enable this for a trusted project. Saving settings does not run the recipe.</p>
           <p style={{ color: "var(--text-dim)", fontSize: 12 }}>Setup and teardown commands receive PASEO_SOURCE_CHECKOUT_PATH (the project checkout), PASEO_WORKTREE_PATH, and PASEO_BRANCH_NAME. Workspace commands also receive PASEO_PROJECT_PATH, PASEO_WORKSPACE_PATH, PASEO_BRANCH, PASEO_BASE_REF, PASEO_BRANCH_MODE, and PASEO_CREATE_RESULT as available; the create-result file is not used in Paseo mode.</p>
-          <div><button type="button" className="dialog-action" style={buttonStyle} disabled={refreshing || busy} onClick={() => void refreshPreview()}>{refreshing ? "Refreshing preview..." : "Refresh preview"}</button></div>
+          <div><button type="button" className="dialog-action" style={buttonStyle} disabled={refreshing} onClick={() => void refreshPreview()}>{refreshing ? "Refreshing preview..." : "Refresh preview"}</button></div>
           {previewError && <div role="alert">Preview refresh failed: {previewError}</div>}
           {settings.paseo ? (
             <div style={{ minWidth: 0 }}>
@@ -151,14 +172,14 @@ export function CreationPipelineEditor({
       )}
       {(!gitProject || settings?.source !== "paseo") && <>
         {projectPath !== undefined && settings && (
-          <label><input type="checkbox" disabled={busy} checked={settings.override !== null} onChange={(e) => setSettings({ ...settings, override: e.target.checked ? structuredClone(settings.defaults) : null })} /> Override all stages (otherwise inherit host defaults)</label>
+          <label><input type="checkbox" checked={settings.override !== null} onChange={(e) => save({ ...settings, override: e.target.checked ? structuredClone(settings.defaults) : null })} /> Override all stages (otherwise inherit host defaults)</label>
         )}
         {pipeline && (["pre", "create", "post"] as const).map((stage) => (
           <label key={stage} style={{ display: "grid", gap: 4 }}>
             {stage} commands (one per line)
-            <textarea style={fieldStyle} rows={3} disabled={busy} value={pipeline[stage].join("\n")} onChange={(e) => {
+            <textarea style={fieldStyle} rows={3} value={pipeline[stage].join("\n")} onChange={(e) => {
               const next = { ...pipeline, [stage]: e.target.value.split("\n") };
-              setSettings(settings && (projectPath === undefined ? { ...settings, defaults: next } : { ...settings, override: next }));
+              if (settings) save(projectPath === undefined ? { ...settings, defaults: next } : { ...settings, override: next });
             }} />
           </label>
         ))}
@@ -166,9 +187,9 @@ export function CreationPipelineEditor({
           Commands receive OMP_PROJECT_PATH, OMP_WORKSPACE_PATH, OMP_BRANCH, OMP_BASE_REF, OMP_BRANCH_MODE and OMP_CREATE_RESULT. Write {`{"path":"/absolute/worktree/path"}`} to OMP_CREATE_RESULT to return a custom path. An empty create stage uses Git.
         </p>
       </>}
-      {error && <div role="alert">{error} {!settings && <button type="button" onClick={() => setRevision((n) => n + 1)}>Retry</button>}</div>}
+      {error && <div role="alert">{error} <button type="button" onClick={() => settings && latestSettings.current ? save(latestSettings.current) : setRevision((n) => n + 1)}>Retry</button></div>}
       {!settings && !error && <div role="status">Loading creation commands...</div>}
-      <div><button type="button" className="dialog-action" style={buttonStyle} disabled={!settings || busy} onClick={() => void save()}>{busy ? "Saving..." : "Save commands"}</button></div>
+      {saving && <div role="status">Saving commands...</div>}
     </section>
   );
 }

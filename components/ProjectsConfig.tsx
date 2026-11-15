@@ -99,6 +99,61 @@ export function ProjectsConfig() {
   );
 }
 
+type NameSave = {
+  name: string;
+  saved: string | null;
+  version: number;
+  running: boolean;
+  error: string;
+  listeners: Set<() => void>;
+  updated: Set<(snapshot: HierarchySnapshot) => void>;
+};
+
+// Keep pending edits alive when a settings dialog closes or its host changes.
+const nameSaves = new Map<string, NameSave>();
+
+function notifyNameSave(save: NameSave) {
+  for (const listener of save.listeners) listener();
+}
+
+async function saveProjectName(key: string, hostId: string, projectId: string, save: NameSave) {
+  if (save.running) return;
+  save.running = true;
+  while (true) {
+    const version = save.version;
+    const alias = save.name.trim() || null;
+    save.error = "";
+    notifyNameSave(save);
+    try {
+      const response = await fetch("/api/hierarchy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          host: hostId,
+          input: { action: "updateProject", projectId, alias },
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok)
+        throw new Error(data.error ?? `HTTP ${response.status}`);
+      save.saved = alias;
+      for (const updated of save.updated) updated(data);
+    } catch (e) {
+      if (version === save.version) {
+        save.error = e instanceof Error ? e.message : String(e);
+        break;
+      }
+      continue;
+    }
+    if (version === save.version || (save.name.trim() || null) === save.saved) break;
+  }
+  save.running = false;
+  notifyNameSave(save);
+  if (!save.listeners.size && !save.error && nameSaves.get(key) === save)
+    nameSaves.delete(key);
+}
+
+
 export function ProjectSettings({
   hostId,
   project,
@@ -108,38 +163,54 @@ export function ProjectSettings({
   project: HierarchyProject;
   onUpdated: (snapshot: HierarchySnapshot) => void;
 }) {
-  const [name, setName] = useState(project.alias ?? project.name);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  useEffect(() => {
-    setName(project.alias ?? project.name);
-  }, [project.alias, project.name]);
-  async function saveName() {
-    setBusy(true);
-    setError("");
-    try {
-      const response = await fetch("/api/hierarchy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          host: hostId,
-          input: {
-            action: "updateProject",
-            projectId: project.id,
-            alias: name.trim() || null,
-          },
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok)
-        throw new Error(data.error ?? `HTTP ${response.status}`);
-      onUpdated(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
+  const key = JSON.stringify([hostId, project.id]);
+  const [save] = useState(() => {
+    let current = nameSaves.get(key);
+    if (!current) {
+      current = {
+        name: project.alias ?? project.name,
+        saved: project.alias ?? null,
+        version: 0,
+        running: false,
+        error: "",
+        listeners: new Set(),
+        updated: new Set(),
+      };
+      nameSaves.set(key, current);
     }
+    return current;
+  });
+  const [, setRevision] = useState(0);
+  const onUpdatedRef = useRef(onUpdated);
+  onUpdatedRef.current = onUpdated;
+  useEffect(() => {
+    nameSaves.set(key, save);
+    const listener = () => setRevision((n) => n + 1);
+    const updated = (snapshot: HierarchySnapshot) => onUpdatedRef.current(snapshot);
+    save.listeners.add(listener);
+    save.updated.add(updated);
+    return () => {
+      save.listeners.delete(listener);
+      save.updated.delete(updated);
+      if (!save.listeners.size && !save.running && !save.error && nameSaves.get(key) === save)
+        nameSaves.delete(key);
+    };
+  }, [key, save]);
+  useEffect(() => {
+    if (!save.running && !save.error) {
+      save.name = project.alias ?? project.name;
+      save.saved = project.alias ?? null;
+      notifyNameSave(save);
+    }
+  }, [project.alias, project.name, save]);
+  function changeName(name: string) {
+    save.name = name;
+    save.version++;
+    save.error = "";
+    notifyNameSave(save);
+    void saveProjectName(key, hostId, project.id, save);
   }
+
   return (
     <section
       style={{
@@ -158,14 +229,9 @@ export function ProjectSettings({
       </div>
       <label>
         Display name{" "}
-        <input style={{ width: "100%", padding: 8, border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg-panel)", color: "var(--text)" }} value={name} onChange={(e) => setName(e.target.value)} />
+        <input style={{ width: "100%", padding: 8, border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg-panel)", color: "var(--text)" }} value={save.name} onChange={(e) => changeName(e.target.value)} />
       </label>
-      <div>
-        <button type="button" className="dialog-action" style={{ padding: "6px 14px", background: "var(--accent-strong)", border: "none", borderRadius: "var(--radius-control)", color: "var(--on-accent)", cursor: "pointer", fontSize: 13, fontWeight: 600 }} disabled={busy} onClick={() => void saveName()}>
-          {busy ? "Saving..." : "Save name"}
-        </button>
-      </div>
-      {error && <div role="alert">{error}</div>}
+      {save.error && <div role="alert">{save.error} <button type="button" onClick={() => void saveProjectName(key, hostId, project.id, save)}>Retry</button></div>}
       <CreationPipelineEditor
         key={`${hostId}:${project.path}`}
         hostId={hostId}

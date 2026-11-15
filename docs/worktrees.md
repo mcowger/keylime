@@ -20,7 +20,7 @@ For a Git project, create a workspace from an existing local branch, a remote br
 
 New branch names, including local branches created from remote refs, are normalized before creation. For example, `option to Expand only latest thinking` becomes `option-to-Expand-only-latest-thinking`. The panel previews the Git branch and checkout directory; case and valid slash namespaces are preserved. Existing local branches and base refs are used unchanged. Empty normalized names are rejected, and Git validates the resulting branch name.
 
-Open a project's sidebar actions menu and choose **Project settings**, or use **Settings → Projects**, to edit its display name and workspace configuration source. The project dialog is available on desktop and mobile. Configure manual host creation defaults in **Settings → Hosts**. These settings live on the owning daemon and are shared with other linked web servers; the workspace creation panel creates workspaces and displays job output.
+Open a project's sidebar actions menu and choose **Project settings**, or use **Settings → Projects**, to edit its display name and workspace configuration source. Changes save automatically. The project dialog is available on desktop and mobile. Configure manual host creation defaults in **Settings → Hosts**. These settings live on the owning daemon and are shared with other linked web servers; the workspace creation panel creates workspaces and displays job output.
 
 ### Manual configuration
 
@@ -34,7 +34,7 @@ The daemon records the captured pipeline, status, and command output. A browser 
 
 ### Follow Paseo workspace setup
 
-For a Git project, select **Follow Paseo workspace setup** and save. The canonical recipe is the project's current on-disk root `paseo.json`, including uncommitted or untracked changes. Keylime does not import its commands into settings, read a committed Git version, or substitute the target branch's file. Each creation or deletion reads a fresh snapshot from the project checkout on its owning host. A running operation keeps its captured snapshot; subsequent operations see edits without resaving project settings. The preview can be refreshed independently, and saving settings does not run commands.
+For a Git project, select **Follow Paseo workspace setup**. The canonical recipe is the project's current on-disk root `paseo.json`, including uncommitted or untracked changes. Keylime does not import its commands into settings, read a committed Git version, or substitute the target branch's file. Each creation or deletion reads a fresh snapshot from the project checkout on its owning host. A running operation keeps its captured snapshot; subsequent operations see edits without resaving project settings. The preview can be refreshed independently, and saving settings does not run commands.
 
 ```json
 {

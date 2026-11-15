@@ -34,6 +34,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Touch terminals have an accessory row for Escape, Tab, Ctrl, Ctrl-C and arrow keys; Ctrl applies to the next typed key
 
 ### Changed
+- Project names and workspace creation settings save automatically without separate save buttons.
 - The mobile workspace switcher shows the active chat or terminal title instead of the workspace directory name.
 - Settings and other selectors use shared themed menus; file actions are quieter while remaining available on focus and touch.
 - Panel resizing, file-explorer scrolling and minimap dragging coalesce updates for smoother interaction.
@@ -41,6 +42,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Local deployment reuses an unchanged runner and skips archive creation to reduce build time. It no longer smoke-tests releases or backs up production data before activation
 - The new-session screen uses a narrower content column
 - The mobile workspace switcher shows the active chat or terminal title instead of the workspace directory name
+- Project names and workspace creation settings save automatically without separate save buttons
 
 ### Fixed
 - Workspace creation identifies its project, and mobile branch inputs use 16px text to avoid iOS focus zoom.
