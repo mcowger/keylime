@@ -4,14 +4,27 @@ export interface WorkspacePipeline {
   create: string[];
   post: string[];
 }
+export interface WorkspacePaseoPreview {
+  path: string;
+  setup: string[];
+  teardown: string[];
+  includePath: string;
+  includePatterns: string[];
+  unsupportedFeatures: string[];
+  fingerprint?: string;
+  error?: string;
+}
 export interface WorkspaceCreationSettings {
   defaults: WorkspacePipeline;
   override: WorkspacePipeline | null;
+  source: "manual" | "paseo";
+  paseo: WorkspacePaseoPreview | null;
 }
 export interface WorkspaceSettingsRequest {
   projectPath?: string;
   defaults?: WorkspacePipeline;
   override?: WorkspacePipeline | null;
+  source?: "manual" | "paseo";
 }
 export interface WorkspaceCreateRequest {
   projectPath: string;
@@ -24,6 +37,8 @@ export interface WorkspaceCreationJob {
   id: string;
   input: WorkspaceCreateRequest;
   pipeline: WorkspacePipeline;
+  source?: "manual" | "paseo";
+  paseo?: { path: string; fingerprint: string };
   status: "running" | "complete" | "failed" | "interrupted";
   stage: "pre" | "create" | "post";
   logs: string;

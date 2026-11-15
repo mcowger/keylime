@@ -99,7 +99,7 @@ export function ProjectsConfig() {
   );
 }
 
-function ProjectSettings({
+export function ProjectSettings({
   hostId,
   project,
   onUpdated,
@@ -148,10 +148,12 @@ function ProjectSettings({
         padding: 16,
         display: "grid",
         gap: 12,
+        minWidth: 0,
+        overflowWrap: "anywhere",
       }}
     >
       <h3>{project.alias ?? project.name}</h3>
-      <div style={{ color: "var(--text-dim)", fontSize: 12 }}>
+      <div style={{ color: "var(--text-dim)", fontSize: 12, overflowWrap: "anywhere" }}>
         {project.path}
       </div>
       <label>
@@ -168,6 +170,7 @@ function ProjectSettings({
         key={`${hostId}:${project.path}`}
         hostId={hostId}
         projectPath={project.path}
+        gitProject={project.kind === "git"}
       />
     </section>
   );

@@ -23,6 +23,7 @@ import { WorktreesPanel } from "./WorktreesPanel";
 import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
 import { ShipDialog } from "./ShipDialog";
 import { ConfirmDialog } from "./ui/field";
+import { ProjectSettings } from "./ProjectsConfig";
 import { toast } from "./ui/toast";
 
 type Host = { id: string; label: string };
@@ -105,6 +106,10 @@ export function HierarchySidebar({
   const [error, setError] = useState<string | null>(null);
   const [discovery, setDiscovery] = useState<Discovery | null>(null);
   const [managedProject, setManagedProject] = useState<{
+    host: string;
+    project: HierarchyProject;
+  } | null>(null);
+  const [settingsProject, setSettingsProject] = useState<{
     host: string;
     project: HierarchyProject;
   } | null>(null);
@@ -564,6 +569,18 @@ export function HierarchySidebar({
                         <MoreHorizontal size={16} aria-hidden="true" />
                       </summary>
                       <div style={menu}>
+                        <button
+                          style={menuButton}
+                          type="button"
+                          aria-label="Project settings"
+                          title="Project settings"
+                          onClick={(e) => {
+                            e.currentTarget.closest("details")?.removeAttribute("open");
+                            setSettingsProject({ host: host.id, project });
+                          }}
+                        >
+                          <Wrench size={16} aria-hidden="true" /> Project settings
+                        </button>
                         {project.kind === "git" && (
                           <button
                             style={menuButton}
@@ -983,6 +1000,28 @@ export function HierarchySidebar({
           </div>
         </DialogContent>
       </Dialog>
+      {settingsProject && (
+        <Dialog open onOpenChange={(open) => { if (!open) setSettingsProject(null); }}>
+          <DialogContent style={{ width: 640, maxWidth: "92vw", maxHeight: "90vh", overflowY: "auto" }}>
+            <DialogTitle>Project settings</DialogTitle>
+            <ProjectSettings
+              key={`${settingsProject.host}:${settingsProject.project.id}`}
+              hostId={settingsProject.host}
+              project={settingsProject.project}
+              onUpdated={(snapshot) => {
+                const host = settingsProject.host;
+                setSnapshots((previous) => ({ ...previous, [host]: snapshot }));
+                setSettingsProject((previous) => {
+                  if (!previous || previous.host !== host || previous.project.id !== settingsProject.project.id) return previous;
+                  const project = snapshot.projects.find((item) => item.id === previous.project.id);
+                  return project ? { ...previous, project } : previous;
+                });
+                onChanged();
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
       {managedProject && (
         <Dialog
           open

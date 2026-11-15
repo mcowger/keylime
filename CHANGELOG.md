@@ -7,6 +7,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 ## [Unreleased]
 
 ### Added
+- Git projects can follow their current on-disk `paseo.json` for workspace setup and teardown, including uncommitted edits, with `.worktreeinclude` copying and live previews. Manual commands remain available, and project settings are accessible directly from each sidebar project menu on desktop and mobile.
 - Failed held messages can be retried without reconstructing their contents or attachments. Retries warn when the original may already have been sent.
 - Added a live-only Jobs tab to the right panel: inspect background jobs and project services, commands, elapsed time, process details and bounded live output; cancel owned jobs or stop services without starting an agent or generating model-authored widgets. Selected completed output stays visible until deselected; no durable job history is stored.
 - **Ship** finishes a linked workspace from its chat: omp's commit agent proposes the commit message(s) (split commits and changelog edits included) through the session, then Ship lands locally (rebase on local main, fast-forward, archive sessions, delete the workspace and branch) or opens a GitHub PR with a generated title and description, optionally with squash auto-merge. The sidebar shows each PR's state; once GitHub reports it merged, cleanup and a local main pull run automatically or from **Clean up**.
@@ -26,6 +27,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - `bun run deploy:local` builds committed source into versioned production releases and supports activating older releases with `--activate`
 - `bun run dev:ui` starts an isolated development server seeded with sample projects, workspaces, conversations, and settings for UI testing
 - Added a live-only Jobs tab to inspect background jobs and project services, view bounded output, cancel owned jobs, and stop services without starting an agent or calling a model. Selected completed output remains visible until deselected; no durable history is stored
+- Git projects can follow their current on-disk `paseo.json` for workspace setup and teardown, including uncommitted edits, with `.worktreeinclude` copying and live previews. Manual commands remain available, and project settings are accessible directly from each sidebar project menu on desktop and mobile
 
 ### Changed
 - Settings and other selectors use shared themed menus; file actions are quieter while remaining available on focus and touch.
@@ -35,6 +37,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - The new-session screen uses a narrower content column
 
 ### Fixed
+- Workspace removal refuses teardown-induced HEAD or branch changes before archival or deletion, preserving new commits instead of using stale merge and branch-deletion decisions.
 - Custom provider cards show discovered models alongside configured ones without duplicates, and show loading while discovery is in progress.
 - Hiding Jobs during a pending Cancel/Stop no longer leaves its controls disabled after the request fails or is refused.
 - Jobs reads and cancellation are fenced to each native job incarnation, so reused IDs cannot replace retained output or cancel newer work.
@@ -71,6 +74,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Thinking and wait-tool Markdown blocks have consistent spacing without extra space after the last block.
 - Wait tool output renders restricted Markdown with styled headings and collapsible system notices and reminders.
 - Selecting a different workspace closes the mobile sidebar
+- Workspace removal refuses teardown-induced HEAD or branch changes before archival or deletion, preserving new commits instead of using stale merge and branch-deletion decisions
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

@@ -223,7 +223,15 @@ export function validWorkspaceResult(
         );
       return (
         pipeline(value.defaults) &&
-        (value.override === null || pipeline(value.override))
+        (value.override === null || pipeline(value.override)) &&
+        (value.source === "manual" || value.source === "paseo") &&
+        (value.paseo === null || (isRecord(value.paseo) &&
+          text(value.paseo.path) && text(value.paseo.includePath) &&
+          [value.paseo.setup, value.paseo.teardown, value.paseo.includePatterns, value.paseo.unsupportedFeatures].every(
+            (items) => Array.isArray(items) && items.every(text),
+          ) &&
+          (value.paseo.fingerprint === undefined || text(value.paseo.fingerprint)) &&
+          (value.paseo.error === undefined || text(value.paseo.error))))
       );
     }
     case "createWorkspace":
