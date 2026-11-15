@@ -243,13 +243,16 @@ async function planCommit(ctx: CommandContext, args: Record<string, unknown>) {
     };
   } else {
     try {
-      if (!session.model)
-        throw new Error("No active model available for commit generation");
+      const { model, thinkingLevel } = await resolvePrimaryModel(
+        undefined,
+        session.settings,
+        session.modelRegistry,
+      );
       state = await quietAgent(() =>
         runCommitAgentSession({
           cwd,
-          model: session.model!,
-          thinkingLevel: session.thinkingLevel,
+          model,
+          thinkingLevel,
           settings: session.settings,
           modelRegistry: session.modelRegistry,
           authStorage: session.modelRegistry.authStorage,
