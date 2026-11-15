@@ -54,7 +54,7 @@ const server = startServer({
   root,
 });
 const { linkLocalDaemon } =
-  await import("../lib/hosts/link-driver.test-helper.mjs");
+  await import("../lib/hosts/link-driver.test-helper.ts");
 const { flushLinkSamples } = await import("../lib/hosts/hub");
 const daemon = await linkLocalDaemon();
 const url = (pathname: string) => new URL(pathname, server.url);
@@ -625,6 +625,25 @@ test(
       );
       link.onopen = () => link.send(JSON.stringify(hostHello));
       assert.match(await welcome.promise, /"type":"welcome"/);
+      // Search lists every linked host; this hand-driven host must answer its request.
+      let hostSeq = 0;
+      link.addEventListener("message", ({ data }) => {
+        for (const line of String(data).split("\n")) {
+          if (!line) continue;
+          const frame = JSON.parse(line);
+          if (frame.type === "req" && frame.op === "listSessions") {
+            link.send(
+              JSON.stringify({
+                type: "res",
+                seq: ++hostSeq,
+                id: frame.id,
+                ok: true,
+                result: { ok: true, value: [] },
+              }),
+            );
+          }
+        }
+      });
       const ping = Promise.withResolvers<void>();
       link.addEventListener(
         "message",

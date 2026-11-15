@@ -1,0 +1,200 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test, { type TestContext } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
+import type { ShipJob } from "../workspace-ship-types";
+import {
+  hierarchyOperation,
+  registerCreatedWorkspace,
+} from "./project-hierarchy.ts";
+import { setWorkspaceDeletionAdapter } from "./workspace-creation.ts";
+import {
+  shipPreview,
+  startShip,
+  shipStatus,
+  refreshShipPrs,
+} from "./workspace-ship.ts";
+
+async function fixture(t: TestContext) {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "ship-test-")));
+  const oldDir = process.env.PI_CODING_AGENT_DIR,
+    oldPath = process.env.PATH;
+  process.env.PI_CODING_AGENT_DIR = join(root, "agent");
+  const bin = join(root, "bin");
+  mkdirSync(bin);
+  const gh = join(bin, "gh");
+  writeFileSync(
+    gh,
+    `#!/bin/sh\ncase "$1 $2" in\n  'auth status') exit 0;;\n  'pr create') cat >/dev/null; echo https://github.com/test/repo/pull/42;;\n  'pr view') echo '{"state":"MERGED","mergedAt":"2026-11-14T00:00:00Z","url":"https://github.com/test/repo/pull/42","number":42,"autoMergeRequest":null,"statusCheckRollup":[]}';;\n  *) exit 0;;\nesac\n`,
+  );
+  chmodSync(gh, 0o755);
+  process.env.PATH = `${bin}:${oldPath}`;
+  t.after(() => {
+    if (oldDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = oldDir;
+    if (oldPath === undefined) delete process.env.PATH;
+    else process.env.PATH = oldPath;
+    rmSync(root, { recursive: true, force: true });
+  });
+  const project = join(root, "project"),
+    workspace = join(root, "workspace"),
+    remote = join(root, "remote.git");
+  mkdirSync(project);
+  execFileSync("git", ["init", "--bare", "-q", remote]);
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
+  git(project, "init", "-q");
+  git(project, "config", "user.name", "Test");
+  git(project, "config", "user.email", "test@example.invalid");
+  writeFileSync(join(project, "file"), "base\n");
+  git(project, "add", ".");
+  git(project, "commit", "-qm", "base");
+  git(project, "remote", "add", "origin", remote);
+  git(project, "push", "-u", "origin", "HEAD");
+  const result = await hierarchyOperation({
+    action: "registerProject",
+    path: project,
+  });
+  assert.equal(result.ok, true);
+  git(project, "worktree", "add", "-qb", "feature", workspace);
+  registerCreatedWorkspace(project, workspace, "feature");
+  setWorkspaceDeletionAdapter({
+    fence: () => () => {},
+    inspect: async () => [],
+    stop: async () => {},
+  });
+  return {
+    project,
+    workspace,
+    git,
+    input: { projectPath: project, path: workspace },
+  };
+}
+async function finished(job: ShipJob) {
+  const deadline = Date.now() + 15000;
+  while (job.status === "running" && Date.now() < deadline) {
+    await delay(25);
+    job = await shipStatus(job.id);
+  }
+  return job;
+}
+test("preview counts and local landing deletes merged branch", async (t) => {
+  const f = await fixture(t);
+  writeFileSync(join(f.workspace, "feature"), "feature");
+  f.git(f.workspace, "add", ".");
+  f.git(f.workspace, "commit", "-qm", "feature");
+  const preview = await shipPreview(f.input);
+  assert.equal(preview.ahead, 1);
+  assert.equal(preview.behind, 0);
+  assert.equal(preview.dirty, false);
+  assert.deepEqual(preview.issues, []);
+  const job = await finished(
+    await startShip({ ...f.input, mode: "local", rebase: true, cleanup: true }),
+  );
+  assert.equal(job.status, "complete", job.error);
+  assert.equal(existsSync(f.workspace), false);
+  assert.throws(() =>
+    f.git(f.project, "rev-parse", "--verify", "refs/heads/feature"),
+  );
+  assert.equal(f.git(f.project, "rev-parse", "HEAD"), job.landedSha);
+});
+test("conflicted rebase is aborted", async (t) => {
+  const f = await fixture(t);
+  writeFileSync(join(f.workspace, "file"), "feature\n");
+  f.git(f.workspace, "commit", "-am", "feature");
+  const before = f.git(f.workspace, "rev-parse", "HEAD");
+  writeFileSync(join(f.project, "file"), "base change\n");
+  f.git(f.project, "commit", "-am", "base change");
+  const preview = await shipPreview(f.input);
+  assert.equal(preview.ahead, 1);
+  assert.equal(preview.behind, 1);
+  assert.deepEqual(preview.issues, [
+    `Potential conflicts with ${preview.base}: file`,
+  ]);
+  const job = await finished(
+    await startShip({
+      ...f.input,
+      mode: "local",
+      rebase: true,
+      cleanup: false,
+    }),
+  );
+  assert.equal(job.status, "conflict");
+  assert.deepEqual(job.conflictFiles, ["file"]);
+  assert.equal(f.git(f.workspace, "rev-parse", "HEAD"), before);
+  assert.equal(f.git(f.workspace, "status", "--porcelain"), "");
+});
+test("preview reports unmerged files and in-progress operations without changing the workspace", async (t) => {
+  const f = await fixture(t);
+  writeFileSync(join(f.workspace, "file"), "feature\n");
+  f.git(f.workspace, "commit", "-am", "feature");
+  writeFileSync(join(f.project, "file"), "base change\n");
+  f.git(f.project, "commit", "-am", "base change");
+  assert.throws(() =>
+    f.git(f.workspace, "merge", f.git(f.project, "branch", "--show-current")),
+  );
+  const before = f.git(f.workspace, "status", "--porcelain");
+  const preview = await shipPreview(f.input);
+  assert.ok(
+    preview.issues.some((issue) =>
+      issue.includes("Unresolved conflicts: file"),
+    ),
+  );
+  assert.ok(
+    preview.issues.some((issue) => issue.includes("merge is in progress")),
+  );
+  assert.equal(f.git(f.workspace, "status", "--porcelain"), before);
+});
+test("preview detects conflicts in uncommitted changes without modifying the index or worktree", async (t) => {
+  const f = await fixture(t);
+  writeFileSync(join(f.workspace, "file"), "staged feature\n");
+  f.git(f.workspace, "add", "file");
+  writeFileSync(join(f.workspace, "file"), "unstaged feature\n");
+  writeFileSync(join(f.project, "file"), "base change\n");
+  f.git(f.project, "commit", "-am", "base change");
+  const status = f.git(f.workspace, "status", "--porcelain");
+  const staged = f.git(f.workspace, "show", ":file");
+  const preview = await shipPreview(f.input);
+  assert.deepEqual(preview.issues, [
+    `Potential conflicts with ${preview.base}: file`,
+  ]);
+  assert.equal(f.git(f.workspace, "status", "--porcelain"), status);
+  assert.equal(f.git(f.workspace, "show", ":file"), staged);
+  assert.equal(
+    f.git(f.workspace, "diff", "--", "file").includes("unstaged feature"),
+    true,
+  );
+});
+test("merged PR watcher finishes and removes workspace", async (t) => {
+  const f = await fixture(t);
+  writeFileSync(join(f.workspace, "feature"), "feature");
+  f.git(f.workspace, "add", ".");
+  f.git(f.workspace, "commit", "-qm", "feature");
+  const job = await finished(
+    await startShip({
+      ...f.input,
+      mode: "pr",
+      rebase: false,
+      cleanup: true,
+      pr: { title: "Feature", body: "Details" },
+    }),
+  );
+  assert.equal(job.status, "complete", job.error);
+  assert.ok(job.pr);
+  assert.equal(job.pr.number, 42);
+  await refreshShipPrs();
+  const deadline = Date.now() + 15000;
+  while (existsSync(f.workspace) && Date.now() < deadline) await delay(25);
+  assert.equal(existsSync(f.workspace), false);
+});

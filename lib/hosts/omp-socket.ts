@@ -12,10 +12,10 @@ import type { SpawnRequest, SpawnResult } from "./host";
 const HELLO_TIMEOUT_MS = 10_000;
 const errno = (error: unknown) => (error as NodeJS.ErrnoException)?.code;
 
-/** Must match `CHANNEL_PROTO` in runner/src/channel.ts (omp-socket.test.mjs checks). */
+/** Must match `CHANNEL_PROTO` in runner/src/channel.ts (omp-socket.test.ts checks). */
 export const CHANNEL_PROTO = 1;
 
-/** Must match `hostSocketPath()` in runner/src/channel.ts (omp-socket.test.mjs checks). */
+/** Must match `hostSocketPath()` in runner/src/channel.ts (omp-socket.test.ts checks). */
 export function hostSocketPath(): string {
   return (
     process.env.OMPWEB_HOST_SOCKET ||

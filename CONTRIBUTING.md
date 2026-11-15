@@ -46,23 +46,6 @@ disposable and retained in the printed directory.
 worktrees. Its `dev` service starts the same seeded environment on Paseo's
 allocated port; `test` and `typecheck` are available as named scripts.
 
-The repository tracks a [graphify](https://github.com/Graphify-Labs/graphify) code
-graph in `graphify-out/graph.json`. To keep it current, install the graphify release
-that built it (`uv tool install graphifyy==0.9.99`; releases build different graphs
-from the same code, so bump this together with a rebuilt graph) and run
-`sh scripts/setup-hooks.sh` once per clone. The script enables the tracked
-`.githooks/pre-commit`, which rebuilds the graph and stages it with every commit
-that stages anything else, and registers graphify's merge driver for `graph.json`.
-The first commit in a new clone or worktree rebuilds from scratch (about two
-minutes); later ones take about a second. Set `GRAPHIFY_SKIP_HOOK=1` to commit
-without the rebuild. The rebuild reads the working tree, so unstaged code ends up in
-the committed graph: to commit only part of your changes, `git stash --keep-index
---include-untracked` first. The hook refuses `git commit <path>`, whose temporary
-index would leave the rebuilt graph unstaged; stage with `git add` and run a plain
-`git commit`. Git runs no pre-commit hook for rebases, cherry-picks or
-merges that complete without conflicts: run `PYTHONHASHSEED=0 graphify update .`
-afterwards and commit the graph.
-
 ## Checks (must pass before submitting)
 
 ```bash
@@ -79,8 +62,8 @@ starts the built server and checks it; the dev server never reads `dist/`.
 ### React tests
 
 Tests use `bun test` with `node:test`-style `test()` calls; no Jest or Vitest configuration is required.
-Mock a Node builtin with `mockBuiltin` (`tests/mock-builtin.mjs`, built on `mock.module`) and import the module under test afterwards with a fresh `?fresh=N` query.
-For interactive components and hooks, import `tests/setup-dom.mjs` before
+Mock a Node builtin with `mockBuiltin` (`tests/mock-builtin.ts`, built on `mock.module`) and import the module under test afterwards with a fresh `?fresh=N` query.
+For interactive components and hooks, import `tests/setup-dom.ts` before
 `@testing-library/react/pure.js` (both imported dynamically, in that order), and register `cleanup` with `afterEach`.
 Use DOM queries and `@testing-library/user-event` for component interactions,
 and `renderHook` for hook state and lifecycle tests. Keep the real jsdom

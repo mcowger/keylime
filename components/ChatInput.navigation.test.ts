@@ -1,0 +1,326 @@
+import "../tests/setup-dom.ts";
+import assert from "node:assert/strict";
+import test, { afterEach, beforeEach } from "node:test";
+import React, { act } from "react";
+import type { ChatInputHandle } from "./ChatInput";
+const { cleanup, fireEvent, render, screen, waitFor } =
+  await import("@testing-library/react/pure.js");
+const { default: userEvent } = await import("@testing-library/user-event");
+
+const { ChatInput } = await import("./ChatInput");
+const { useSidebarHistory } = await import("@/hooks/useSidebarHistory");
+const { clearDraft, getDraft } = await import("@/lib/draft-store");
+
+beforeEach(() => {
+  window.matchMedia = (media) => ({
+    media,
+    matches: false,
+    onchange: null,
+    addEventListener() {},
+    removeEventListener() {},
+    addListener() {},
+    removeListener() {},
+    dispatchEvent: () => false,
+  });
+});
+afterEach(() => {
+  cleanup();
+  clearDraft("new:unassigned");
+  clearDraft("draft-a");
+  clearDraft("draft-b");
+  localStorage.clear();
+  Reflect.deleteProperty(window, "matchMedia");
+});
+
+function warnsOnExit() {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
+function Guard() {
+  // The actual history protocol is exercised in useSidebarHistory.test.ts.
+  // This mounts the same document guard with the real composer/draft store.
+  useSidebarHistory({
+    active: false,
+    ready: false,
+    sidebarOpen: true,
+    setSidebarOpen() {},
+    panelOpen: false,
+    closePanel() {},
+    url: "",
+  });
+  return null;
+}
+
+test("no-key composer text survives minimization and warns on document exit until sent", async () => {
+  const user = userEvent.setup();
+  const sent: string[] = [];
+  function Shell({ minimized = false }: { minimized?: boolean }) {
+    return React.createElement(
+      React.Fragment,
+      null,
+      React.createElement(Guard),
+      React.createElement(
+        "div",
+        { style: { display: minimized ? "none" : undefined } },
+        React.createElement(ChatInput, {
+          onSend: async (text) => {
+            sent.push(text);
+            return { status: "accepted" };
+          },
+          onAbort() {},
+          isStreaming: false,
+        }),
+      ),
+    );
+  }
+  const { rerender } = render(React.createElement(Shell));
+  assert.equal(warnsOnExit(), false);
+  await user.type(screen.getByRole("textbox"), "unsent in a new composer");
+  assert.equal(warnsOnExit(), true);
+  rerender(React.createElement(Shell, { minimized: true }));
+  assert.equal(warnsOnExit(), true);
+  assert.equal(
+    (screen.getByRole("textbox", { hidden: true }) as HTMLTextAreaElement)
+      .value,
+    "unsent in a new composer",
+  );
+  rerender(React.createElement(Shell));
+  await user.click(screen.getByRole("textbox"));
+  await user.keyboard("{Enter}");
+  assert.deepEqual(sent, ["unsent in a new composer"]);
+  assert.equal(warnsOnExit(), false);
+});
+
+test("attachment-only drafts stay protected across live draft-key changes and restore without warning on internal picks", async () => {
+  const user = userEvent.setup();
+  const ref = React.createRef<ChatInputHandle>();
+  const sent: string[] = [];
+  function Shell({ session }: { session: string }) {
+    return React.createElement(
+      React.Fragment,
+      null,
+      React.createElement(Guard),
+      React.createElement(ChatInput, {
+        draftKey: session,
+        ref,
+        onSend: async (text) => {
+          sent.push(text);
+          return { status: "accepted" };
+        },
+        onAbort() {},
+        isStreaming: false,
+      }),
+    );
+  }
+  const { rerender } = render(
+    React.createElement(Shell, { session: "draft-a" }),
+  );
+  await act(async () => {
+    assert.ok(ref.current);
+    ref.current.addFiles([
+      new File(["important attachment"], "notes.txt", { type: "text/plain" }),
+    ]);
+  });
+  await waitFor(() =>
+    assert.equal(
+      getDraft("draft-a")?.files[0]?.content,
+      "important attachment",
+    ),
+  );
+  assert.equal(warnsOnExit(), true);
+  rerender(React.createElement(Shell, { session: "draft-b" }));
+  assert.equal((screen.getByRole("textbox") as HTMLTextAreaElement).value, "");
+  assert.equal(getDraft("draft-a")?.files[0]?.content, "important attachment");
+  assert.equal(warnsOnExit(), true);
+  rerender(React.createElement(Shell, { session: "draft-a" }));
+  await user.click(screen.getByRole("textbox"));
+  await user.keyboard("{Enter}");
+  assert.match(sent[0], /important attachment/);
+  assert.equal(warnsOnExit(), false);
+});
+
+// The removed message's images, as omp returns them with `removed: true`.
+const QUEUED_IMAGES = [
+  {
+    data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+    mimeType: "image/png",
+  },
+];
+
+for (const navigation of ["draft-key change", "unmount"]) {
+  test(`queued Edit recovers the old draft after ${navigation} while cancellation is pending`, async () => {
+    const oldKey = `edit-old-${navigation}`;
+    const newKey = `edit-new-${navigation}`;
+    const ref = React.createRef<ChatInputHandle>();
+    let release!: (images: typeof QUEUED_IMAGES) => void;
+    const cancellation = new Promise<typeof QUEUED_IMAGES>((resolve) => {
+      release = resolve;
+    });
+    const queuedMessages = { steering: [], followUp: ["queued question"] };
+    const chat = (draftKey: string) =>
+      React.createElement(ChatInput, {
+        ref,
+        draftKey,
+        queuedMessages,
+        isStreaming: true,
+        async onSend(): Promise<{ status: "accepted" }> {
+          return { status: "accepted" };
+        },
+        onAbort() {},
+        onRemoveQueuedMessage: () => cancellation,
+      });
+    let view = render(chat(oldKey));
+    try {
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: "original draft" },
+      });
+      await act(async () => {
+        assert.ok(ref.current);
+        ref.current.addFiles([
+          new File(["keep this attachment"], "notes.txt", {
+            type: "text/plain",
+          }),
+        ]);
+      });
+      const originalFiles = getDraft(oldKey)!.files;
+      fireEvent.click(screen.getByRole("button", { name: /^Edit$/ }));
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: "draft updated while waiting" },
+      });
+      assert.equal(
+        getDraft(oldKey)!.value,
+        "draft updated while waiting",
+        "Edit must wait for cancellation acknowledgement",
+      );
+
+      if (navigation === "unmount") {
+        view.unmount();
+        view = render(chat(newKey));
+      } else {
+        view.rerender(chat(newKey));
+      }
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: "new session draft" },
+      });
+      await act(async () => {
+        release(QUEUED_IMAGES);
+        await cancellation;
+      });
+      assert.equal(
+        (screen.getByRole("textbox") as HTMLTextAreaElement).value,
+        "new session draft",
+      );
+      assert.equal(getDraft(newKey)!.value, "new session draft");
+      assert.equal(
+        getDraft(oldKey)!.value,
+        "queued question\n\ndraft updated while waiting",
+      );
+      assert.deepEqual(getDraft(oldKey)!.files, originalFiles);
+      assert.deepEqual(
+        getDraft(oldKey)!.images,
+        QUEUED_IMAGES,
+        "the queued message's images come back with its text",
+      );
+
+      if (navigation === "unmount") {
+        view.unmount();
+        view = render(chat(oldKey));
+      } else {
+        view.rerender(chat(oldKey));
+      }
+      assert.equal(
+        (screen.getByRole("textbox") as HTMLTextAreaElement).value,
+        "queued question\n\ndraft updated while waiting",
+      );
+      assert.equal(
+        getDraft(newKey)!.value,
+        "new session draft",
+        "returning to the old chat preserves the new chat's draft",
+      );
+    } finally {
+      view.unmount();
+      clearDraft(oldKey);
+      clearDraft(newKey);
+    }
+  });
+}
+
+for (const navigation of ["original composer", "same-key remount"]) {
+  test(`queued Edit restores ${navigation} without losing batched typing or duplicating recalled text`, async () => {
+    const draftKey = `edit-recovery-${navigation}`;
+    const ref = React.createRef<ChatInputHandle>();
+    let release!: (images: typeof QUEUED_IMAGES) => void;
+    const cancellation = new Promise<typeof QUEUED_IMAGES>((resolve) => {
+      release = resolve;
+    });
+    const chat = () =>
+      React.createElement(ChatInput, {
+        ref,
+        draftKey,
+        queuedMessages: { steering: [], followUp: ["queued question"] },
+        isStreaming: true,
+        async onSend(): Promise<{ status: "accepted" }> {
+          return { status: "accepted" };
+        },
+        onAbort() {},
+        onRemoveQueuedMessage: () => cancellation,
+      });
+    let view = render(chat());
+    try {
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: "original draft" },
+      });
+      await act(async () => {
+        assert.ok(ref.current);
+        ref.current.addFiles([
+          new File(["keep this attachment"], "notes.txt", {
+            type: "text/plain",
+          }),
+        ]);
+      });
+      const originalFiles = getDraft(draftKey)!.files;
+      fireEvent.click(screen.getByRole("button", { name: /^Edit$/ }));
+      if (navigation === "same-key remount") {
+        view.unmount();
+        view = render(chat());
+      }
+      await act(async () => {
+        fireEvent.change(screen.getByRole("textbox"), {
+          target: { value: "typed while waiting" },
+        });
+        assert.ok(ref.current);
+        ref.current.insertText("and queued insertion");
+        release(QUEUED_IMAGES);
+        await cancellation;
+      });
+      const recovered =
+        "queued question\n\ntyped while waiting and queued insertion";
+      assert.equal(
+        (screen.getByRole("textbox") as HTMLTextAreaElement).value,
+        recovered,
+      );
+      assert.equal(getDraft(draftKey)!.value, recovered);
+      assert.deepEqual(getDraft(draftKey)!.files, originalFiles);
+      assert.deepEqual(
+        getDraft(draftKey)!.images,
+        QUEUED_IMAGES,
+        "the queued message's images come back with its text",
+      );
+
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: `${recovered}\nnext user edit` },
+      });
+      assert.equal(
+        (screen.getByRole("textbox") as HTMLTextAreaElement).value,
+        `${recovered}\nnext user edit`,
+      );
+      assert.equal(getDraft(draftKey)!.value, `${recovered}\nnext user edit`);
+      assert.deepEqual(getDraft(draftKey)!.files, originalFiles);
+    } finally {
+      view.unmount();
+      clearDraft(draftKey);
+    }
+  });
+}

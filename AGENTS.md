@@ -226,7 +226,7 @@ lib/
     plugins-cli.ts     `runOmpCli`, `listPlugins` (`omp plugin list --json` as `PluginEntry[]`), `parseJsonLoose`, `ANSI_RE`; loaded by the daemon too (relative imports only); used by `app/api/plugins/route.ts`, `cluster-config-server.ts` and `daemon-cluster-config.ts`
   hosts/               hosts and the local daemon (see "Remote hosts"); daemon-loaded files use relative imports, not `@/`
     host.ts            `Host` interface, `HostStatus`, `isLinkUp`
-    local-host.ts      `localHost`, the daemon's side: spawn + file checks on the daemon's machine; `resolveSpawnCwdResult`. Never imported by main, nor is `daemon.ts` (`no-direct-local.test.mjs`)
+    local-host.ts      `localHost`, the daemon's side: spawn + file checks on the daemon's machine; `resolveSpawnCwdResult`. Never imported by main, nor is `daemon.ts` (`no-direct-local.test.ts`)
     local-bootstrap.ts web server side of the local link: `localLinkUrl`, `ensureLocalHostLink` (the `local` record + `host.json`)
     host-login.ts      `host.json` (`loginHost`, `readHostLogin`) and `isLoopbackHost`, shared by the daemon and local-bootstrap
     session-ops.ts     file-reading half of the session/project routes, run on the owning host's daemon (this machine's too)
@@ -401,8 +401,8 @@ The table is static imports, not a runtime glob, so `bun build --compile` (`scri
 ### Tests (`bun run test`, or `bun test --parallel`)
 
 - `--parallel` is required, not just faster: Bun gives each file a fresh global/module registry. The transport singleton (`lib/event-stream.ts`) and each file's `SharedWorker`/fetch/DOM fakes otherwise leak into the next file; a shared-process run can send commands to another file's fake worker. These fixtures are deliberately file-isolated rather than reset between files. Use `--parallel` even for a multi-file subset.
-- DOM tests import `tests/setup-dom.mjs` first and then import Testing Library dynamically, so its queries bind to that document. Nothing is torn down.
-- A module under test that must see a fake builtin is imported with a fresh query (`?fresh=N`) after `mockBuiltin(t, name, overrides)` (`tests/mock-builtin.mjs`, built on `mock.module`; Bun's `mock.restore()` does not undo `mock.module`, so the helper restores by hand).
+- DOM tests import `tests/setup-dom.ts` first and then import Testing Library dynamically, so its queries bind to that document. Nothing is torn down.
+- A module under test that must see a fake builtin is imported with a fresh query (`?fresh=N`) after `mockBuiltin(t, name, overrides)` (`tests/mock-builtin.ts`, built on `mock.module`; Bun's `mock.restore()` does not undo `mock.module`, so the helper restores by hand).
 
 ### RPC session lifecycle (`lib/rpc-manager.ts`)
 
@@ -1003,7 +1003,7 @@ data}` messages (`PartJoiner` joins them, one partial line at a time, ≤ 512
 - **Adoption failure** or disposal closes the server's membership; the host decides abandonment and continues any peer's run. Explicit delete/archive is fenced on the host against a concurrent open, even before this server has a wrapper.
 - **Shutdown freezes the links and never kills daemon children.** The `cleanup` in `rpc-manager.ts` runs `markShuttingDown()` and `freezeHostLinks()`: link sockets are closed 1001 and from then on a link neither sends nor applies anything (no kill, no rejection of open host tool calls as tabs close); new upgrades get 503 "omp-web is shutting down". A real SIGTERM exits in the same tick (`process.exit` in `instrumentation.node.ts`), before Bun writes the close frame, so daemons usually see 1006 or ECONNREFUSED rather than 1001 and redial the same way. The daemon keeps the output unacked and redials for the next server. An adoption that fails after the freeze leaves its child to the next server instead of killing it.
 - **Install banner** (`components/LocalDaemonBanner.tsx`). In production, when the local row stays offline with `hostVersion === null` (no daemon has linked since this server started) for 90 s of a page view (well past the daemon's redial wait, at most 3 s on loopback, so a restarting daemon does not trip it), it shows the platform's install command and, for a foreground `ompweb` (terminal or bunx, no service), `ompweb host` to keep running in another terminal; Settings → Hosts shows both for an offline local row. Dismissal is kept in `localStorage`. Main never installs services or starts the daemon.
-- **No direct local path.** `local-host.ts` is the daemon's; `lib/hosts/no-direct-local.test.mjs` fails when anything outside its allow-list spawns omp or imports it. The utility omp (`rpc-utility.ts`, login) is the one deliberate exception: it is not a session.
+- **No direct local path.** `local-host.ts` is the daemon's; `lib/hosts/no-direct-local.test.ts` fails when anything outside its allow-list spawns omp or imports it. The utility omp (`rpc-utility.ts`, login) is the one deliberate exception: it is not a session.
 
 ### Session moves (omp >= 18.5 ownership) and title generation
 
@@ -1485,7 +1485,7 @@ reason:"shellRunning"}`). For an outbox entry the dispatcher treats it as a
     about a second of the link plus a piece per busy key, never behind a snapshot. The pacing loops
     are the browser link's own copies: the server's mirrors the hub's (`send` → `-1` → `drain`), the
     worker's the daemon's (`bufferedAmount` under 2 pieces); a fix to either original must be carried over
-    (`lib/browser-link.integration.test.mjs` runs the real worker against the real server end). A socket
+    (`lib/browser-link.integration.test.ts` runs the real worker against the real server end). A socket
     that has not said hello within 10 s is closed 1008.
   - **Liveness:** the server pings every 15 s; each side drops a socket after 30 s without any frame.
     Command delivery additionally watches sequence-ack progress, including multipart uploads: initially
@@ -1539,7 +1539,7 @@ dir>/omp-web/transport-metrics.jsonl` (`.jsonl.1` above 20 MiB). One worker-wide
     Without a SharedWorker (Chrome for Android) each tab has its own worker, so the numbers are that tab's.
   - **Worker rules.** Browser code: no `AbortSignal.timeout`/`any` or `Promise.withResolvers` (a test checks
     the bundle). Every global the worker uses must be injectable into the `vm` context of
-    `lib/event-stream-worker.test.mjs`. The link URL is absolute (`new URL(path, self.location.href)`,
+    `lib/event-stream-worker.test.ts`. The link URL is absolute (`new URL(path, self.location.href)`,
     `http`→`ws`). Ids are `Math.random().toString(36).slice(2, 12) + Date.now().toString(36)`: insecure LAN
     origins have no `crypto.randomUUID`.
   - **Limits:** a socket stays authorized after logout until it closes; Bun buffers a browser frame up to the host
@@ -1729,7 +1729,7 @@ btw` → localized "requires a newer omp" toast (`toastBtwError`); background
 - `invalidateSessionListCache()` (fired on `agent_end`, `session_info_update`,
   compaction, renames) must therefore ALSO clear the walk cache via
   `invalidateSessionFileListCache()` — never add a session-mutation path that
-  forgets this. Regression test: `session-reader.test.mjs`.
+  forgets this. Regression test: `session-reader.test.ts`.
 - A mutation that main triggers calls `invalidateLocalSessionLists()`: it clears main's per-host entry and sends the daemon `invalidateSessionLists` (the daemon runs the invalidation above). A route that changes this machine's session files and does not call it leaves the sidebar stale for up to 30 s.
 - **Still read on main, from this machine's own files:** transcript search (`session-content-search.ts`, `/api/sessions/search`), the session watcher (`session-watcher.ts`), this machine's archive list/restore (linked hosts' go through their daemons), import, usage (`usage-db.ts`), subagent history and local file-reference readers. Their main-side session caches are invalidated separately. Workspace shell-output authorization and bytes now come from the owning daemon; new remote-capable readers must use the host seam.
 
