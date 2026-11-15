@@ -3218,7 +3218,7 @@ export function AppShell({ appName }: { appName: string }) {
       onOpenArchive={() => setArchiveBrowserOpen(true)}
       navigation={sidebarNavigation}
       updateAvailable={Boolean(appUpdate?.updateAvailable)}
-      onClose={isMobile ? handleSidebarToggle : undefined}
+      onClose={isMobile ? () => setSidebarOpen(false) : undefined}
       onSearchQueryChange={handleSearchQueryChange}
       onOpenSearchMatch={setSearchMatchTarget}
     />

@@ -105,7 +105,7 @@ test("registered hierarchy workspaces can be selected and hosts collapsed", asyn
   }
 });
 
-test("selecting a different workspace closes the mobile sidebar", async () => {
+test("selecting any workspace closes the mobile sidebar", async () => {
   const restore = setup(() => Response.json(snapshot));
   let closes = 0;
   try {
@@ -115,7 +115,7 @@ test("selecting a different workspace closes the mobile sidebar", async () => {
     await waitFor(() => assert.equal(workspace.getAttribute("aria-pressed"), "true"));
     assert.equal(closes, 1);
     fireEvent.click(workspace);
-    assert.equal(closes, 1);
+    assert.equal(closes, 2);
   } finally {
     restore();
   }

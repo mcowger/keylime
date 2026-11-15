@@ -38,6 +38,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Fixed
 - Ship uses the configured commit model and thinking level instead of the session model when generating commit plans.
+- Selecting the current workspace dismisses the mobile sidebar, just like selecting another workspace.
 - Creating a workspace or session from a mobile project row closes the sidebar to reveal the new composer.
 - Workspace removal refuses teardown-induced HEAD or branch changes before archival or deletion, preserving new commits instead of using stale merge and branch-deletion decisions.
 - Custom provider cards show discovered models alongside configured ones without duplicates, and show loading while discovery is in progress.
@@ -79,6 +80,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Workspace removal refuses teardown-induced HEAD or branch changes before archival or deletion, preserving new commits instead of using stale merge and branch-deletion decisions
 - Ship checks for blocking Git operations and potential conflicts before generating a commit plan, without changing the workspace or index. Ask agent to resolve submits the request directly and keeps the dialog open if submission fails
 - Ship uses the configured commit model and thinking level instead of the session model when generating commit plans
+- Selecting the current workspace dismisses the mobile sidebar, just like selecting another workspace
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
