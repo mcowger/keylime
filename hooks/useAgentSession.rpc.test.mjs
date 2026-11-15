@@ -731,7 +731,7 @@ function resetWorld() {
   workerPort?.onmessage?.({ data: { outbox: [] } });
 }
 
-function servePooledWorkspace() {
+function serveManagedWorkspace() {
   const sessions = [
     {
       ...sessionInfo("worker-one"),
@@ -739,9 +739,6 @@ function servePooledWorkspace() {
       cwd: "/shared",
       projectRoot: "/shared",
       hostId: "h1",
-      poolId: "workers",
-      projectId: "app",
-      projectKey: "pool:workers:app",
     },
     {
       ...sessionInfo("worker-two"),
@@ -749,9 +746,6 @@ function servePooledWorkspace() {
       cwd: "/shared",
       projectRoot: "/shared",
       hostId: "h2",
-      poolId: "workers",
-      projectId: "app",
-      projectKey: "pool:workers:app",
     },
     {
       ...sessionInfo("legacy"),
@@ -769,15 +763,8 @@ function servePooledWorkspace() {
     },
   ];
   const projects = [
-    {
-      path: "/shared",
-      hostId: "h1",
-      poolId: "workers",
-      projectId: "app",
-      projectKey: "pool:workers:app",
-      name: "Pool app",
-      origin: "git@example.invalid:app.git",
-    },
+    { path: "/shared", hostId: "h1", name: "Worker app" },
+    { path: "/shared", hostId: "h2", name: "Worker app" },
     { path: "/legacy", hostId: "h1", alias: "Worker legacy project" },
     { path: "/shared", hostId: "local", alias: "Mac project" },
   ];
@@ -808,28 +795,33 @@ function servePooledWorkspace() {
       serverVersion: 2,
     })),
   ];
-  const pools = [
-    {
-      id: "workers",
-      label: "Worker pool",
-      enabled: true,
-      members: ["h1", "h2"].map((hostId) => ({
-        hostId,
-        projectsRoot: "/projects",
-        provisioned: true,
-        draining: false,
-      })),
-      projects: [
-        {
-          id: "app",
-          name: "Pool app",
-          origin: "git@example.invalid:app.git",
-          clonePaths: { h1: "/shared", h2: "/shared" },
-          addedAt: "2026-11-10T00:00:00.000Z",
-        },
-      ],
-    },
-  ];
+  const hierarchy = Object.fromEntries(
+    hosts.map(({ id: hostId }) => [
+      hostId,
+      {
+        projects: sessions
+          .filter((session) => session.hostId === hostId)
+          .map((session) => {
+            const id = `project-${session.id}`;
+            return {
+              id,
+              path: session.cwd,
+              name: session.id === "legacy" ? "Worker legacy project" : session.id === "mac" ? "Mac project" : "Worker app",
+              kind: "directory",
+              addedAt: "2026-11-10T00:00:00.000Z",
+              workspaces: [{
+                id: `workspace-${session.id}`,
+                projectId: id,
+                path: session.cwd,
+                name: session.cwd.slice(1),
+                isDefault: true,
+                sessionIds: [session.id],
+              }],
+            };
+          }),
+      },
+    ]),
+  );
   for (const session of sessions)
     primeSession(session.id, [
       userMsg(`${session.id}-u`, `Question for ${session.name}`),
@@ -843,10 +835,12 @@ function servePooledWorkspace() {
         runningSessionIds: [],
         runningSessions: [],
       });
+    if (url.pathname === "/api/hierarchy")
+      return jsonResponse(200, hierarchy[url.searchParams.get("host")] ?? { projects: [] });
     if (url.pathname === "/api/projects")
       return jsonResponse(200, { projects });
     if (url.pathname === "/api/hosts")
-      return jsonResponse(200, { hosts, pools });
+      return jsonResponse(200, { hosts, pools: [] });
     if (url.pathname === "/api/worktrees")
       return jsonResponse(200, {
         isGit: false,
@@ -895,11 +889,7 @@ function servePooledWorkspace() {
       });
     return null;
   };
-  localStorage.setItem(
-    "omp-web:expanded-projects",
-    JSON.stringify(["pool:workers:app", "h1:/legacy", "/shared"]),
-  );
-  return { sessions, projects, hosts, pools };
+  return { sessions, projects, hosts };
 }
 
 function primeSession(sid, messages) {
@@ -12352,78 +12342,51 @@ test("known-ID upload uncertainty retains the pending composer and retries the b
   view.unmount();
 });
 
-test("the rendered sidebar keeps member-owned legacy sessions accessible beside pooled and Mac projects", async () => {
+async function searchSidebar(view, query) {
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name: translate("sessionSidebar.search") }));
+  });
+  await until(() => view.queryByRole("textbox", { name: translate("sessionSidebar.search") }), "sidebar search opens");
+  await act(async () => {
+    fireEvent.change(view.getByRole("textbox", { name: translate("sessionSidebar.search") }), { target: { value: query } });
+  });
+}
+
+async function selectSidebarSession(view, name) {
+  await searchSidebar(view, name);
+  await until(() => view.queryByRole("button", { name }), `registered session ${name} appears`);
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name }));
+    fireEvent.click(view.getByRole("button", { name: translate("sessionSidebar.search") }));
+    await sleep(60);
+  });
+}
+
+test("registered remote sessions remain searchable alongside other hosts' projects", async () => {
   resetWorld();
-  servePooledWorkspace();
+  serveManagedWorkspace();
   const selected = [];
-  const view = ownRoot(
-    render(
-      React.createElement(SessionSidebar, {
-        selectedSessionId: null,
-        onSelectSession: (session) => selected.push(session),
-        addProjectOpen: false,
-        setAddProjectOpen() {},
-        usageVisible: false,
-      }),
-      { wrapper: TestRoot },
-    ),
-  );
-  await settle();
-  await until(
-    () => view.queryByText("Pool app"),
-    "the configured logical project renders",
-  );
-  assert.equal(view.queryAllByText("Pool app").length, 1);
-  assert.ok(view.queryByText("Worker one conversation"));
-  assert.ok(view.queryByText("Worker two conversation"));
-  assert.ok(view.queryByText("Mac conversation"));
-  assert.ok(
-    view.queryByText("Worker legacy conversation"),
-    "a member's unmatched physical workspace remains reachable",
-  );
-  assert.equal(
-    view.queryByRole("button", {
-      name: translate("hosts.addWorkspaceOn", { host: "Worker 1" }),
-    }),
-    null,
-    "existing-session presentation must not expose a member creation target",
-  );
-  await act(async () => {
-    fireEvent.click(
-      view.getByRole("button", { name: translate("sessionSidebar.search") }),
-    );
-  });
-  await until(
-    () =>
-      view.queryByRole("textbox", { name: translate("sessionSidebar.search") }),
-    "the user-opened search field commits",
-  );
-  await act(async () => {
-    fireEvent.change(
-      view.getByRole("textbox", { name: translate("sessionSidebar.search") }),
-      { target: { value: "legacy" } },
-    );
-    await sleep(30);
-  });
-  await act(async () => {
-    fireEvent.click(view.getByText("Worker legacy conversation"));
-  });
-  assert.deepEqual(
-    selected.map(({ id, hostId, cwd, poolId }) => ({
-      id,
-      hostId,
-      cwd,
-      poolId,
-    })),
-    [{ id: "legacy", hostId: "h1", cwd: "/legacy", poolId: undefined }],
-  );
+  const view = ownRoot(render(React.createElement(SessionSidebar, {
+    selectedSessionId: null,
+    onSelectSession: (session) => selected.push(session),
+    addProjectOpen: false,
+    setAddProjectOpen() {},
+    usageVisible: false,
+  }), { wrapper: TestRoot }));
+  await until(() => view.queryByText("Worker legacy project") && view.queryByText("Mac project"), "registered projects render per host");
+  await searchSidebar(view, "legacy");
+  await until(() => view.queryByRole("button", { name: "Worker legacy conversation" }), "registered remote session appears in search");
+  await act(async () => fireEvent.click(view.getByRole("button", { name: "Worker legacy conversation" })));
+  assert.deepEqual(selected.map(({ id, hostId, cwd }) => ({ id, hostId, cwd })), [
+    { id: "legacy", hostId: "h1", cwd: "/legacy" },
+  ]);
   view.unmount();
 });
 
 test("a selected remote session can browse its owner files without reading a same-path central decoy", async (t) => {
   resetWorld();
-  servePooledWorkspace();
-  window.history.replaceState(null, "", "?session=worker-one");
+  serveManagedWorkspace();
+  window.history.replaceState(null, "", "/");
   t.after(() => window.history.replaceState(null, "", "/"));
   const view = ownRoot(
     render(React.createElement(AppShell, { appName: "ompweb" }), {
@@ -12431,6 +12394,7 @@ test("a selected remote session can browse its owner files without reading a sam
     }),
   );
   await settle();
+  await selectSidebarSession(view, "Worker one conversation");
   await until(
     () =>
       view.queryByRole("button", { name: translate("appShell.showFilePanel") }),
@@ -12461,8 +12425,8 @@ test("a selected remote session can browse its owner files without reading a sam
 
 test("equal-path file tabs retain their originating session when the selected owner changes", async (t) => {
   resetWorld();
-  servePooledWorkspace();
-  window.history.replaceState(null, "", "?session=worker-one");
+  serveManagedWorkspace();
+  window.history.replaceState(null, "", "/");
   t.after(() => window.history.replaceState(null, "", "/"));
   const view = ownRoot(
     render(React.createElement(AppShell, { appName: "ompweb" }), {
@@ -12470,6 +12434,7 @@ test("equal-path file tabs retain their originating session when the selected ow
     }),
   );
   await settle();
+  await selectSidebarSession(view, "Worker one conversation");
   const stream = world.esInstances.find(
     ({ channel }) => channel.kind === "host-tools",
   );
@@ -12495,10 +12460,7 @@ test("equal-path file tabs retain their originating session when the selected ow
     () => view.queryByText("FIRST OWNER CONTENT"),
     "the first owner file opens",
   );
-  await act(async () => {
-    fireEvent.click(view.getByText("Worker two conversation"));
-    await sleep(60);
-  });
+  await selectSidebarSession(view, "Worker two conversation");
   await act(async () => {
     stream.emit({
       type: "host_tool_call",
@@ -12539,8 +12501,8 @@ test("equal-path file tabs retain their originating session when the selected ow
 
 test("a retained foreign-source tab cannot mention its path into the selected worker chat", async (t) => {
   resetWorld();
-  servePooledWorkspace();
-  window.history.replaceState(null, "", "?session=worker-one");
+  serveManagedWorkspace();
+  window.history.replaceState(null, "", "/");
   t.after(() => window.history.replaceState(null, "", "/"));
   const view = ownRoot(
     render(React.createElement(AppShell, { appName: "ompweb" }), {
@@ -12548,17 +12510,22 @@ test("a retained foreign-source tab cannot mention its path into the selected wo
     }),
   );
   await settle();
+  await selectSidebarSession(view, "Worker one conversation");
   const stream = world.esInstances.find(
     ({ channel }) => channel.kind === "host-tools",
   );
   assert.ok(stream);
+  const composer = () =>
+    view.queryAllByRole("textbox", { name: translate("chatInput.composerLabel") })[0] ??
+    view.queryAllByRole("combobox", { name: translate("chatInput.composerLabel") })[0];
+  await until(composer, "the source composer appears");
   await until(
     () =>
       view.queryByRole("button", { name: translate("appShell.showFilePanel") }),
     "the source conversation is selected",
   );
   await act(async () => {
-    fireEvent.change(view.getByRole("textbox"), {
+    fireEvent.change(composer(), {
       target: { value: "Worker one draft" },
     });
     stream.emit({
@@ -12576,12 +12543,10 @@ test("a retained foreign-source tab cannot mention its path into the selected wo
     () => view.queryByText("FIRST OWNER CONTENT"),
     "the first owner's file opens",
   );
+  await selectSidebarSession(view, "Worker two conversation");
+  await until(composer, "the selected worker's composer appears");
   await act(async () => {
-    fireEvent.click(view.getByText("Worker two conversation"));
-    await sleep(60);
-  });
-  await act(async () => {
-    fireEvent.change(view.getByRole("textbox"), {
+    fireEvent.change(composer(), {
       target: { value: "Worker two draft" },
     });
     stream.emit({
@@ -12619,7 +12584,7 @@ test("a retained foreign-source tab cannot mention its path into the selected wo
       fireEvent.click(foreignMention);
     });
   assert.equal(
-    view.getByRole("textbox").value,
+    composer().value,
     "Worker two draft",
     "a source-relative path must not be inserted into another worker's composer",
   );
@@ -12628,10 +12593,8 @@ test("a retained foreign-source tab cannot mention its path into the selected wo
     true,
     "the foreign-source action is unavailable",
   );
-  await act(async () => {
-    fireEvent.click(view.getByText("Worker one conversation"));
-    await sleep(60);
-  });
+  await selectSidebarSession(view, "Worker one conversation");
+  await until(composer, "the source composer returns");
   const sourceMention = view.getByRole("button", {
     name: translate("appShell.mentionFileInChat"),
   });
@@ -12640,78 +12603,36 @@ test("a retained foreign-source tab cannot mention its path into the selected wo
     false,
     "returning to the source session restores the action",
   );
+  const sourceComposer = composer();
   await act(async () => {
-    const composer = view.getByRole("textbox");
-    composer.focus();
-    composer.setSelectionRange(composer.value.length, composer.value.length);
+    sourceComposer.focus();
+    sourceComposer.setSelectionRange(sourceComposer.value.length, sourceComposer.value.length);
     fireEvent.click(sourceMention);
   });
-  assert.equal(view.getByRole("textbox").value.includes("@report.txt"), true);
-  assert.equal(
-    view.getByRole("textbox").value.startsWith("Worker one draft"),
-    true,
-  );
+  assert.equal(sourceComposer.value.includes("@report.txt"), true);
+  assert.equal(sourceComposer.value.startsWith("Worker one draft"), true);
   view.unmount();
 });
 
-test("a populated local pool member keeps legacy access without a physical add-workspace control", async () => {
-  for (const localMember of [false, true]) {
-    resetWorld();
-    const { pools } = servePooledWorkspace();
-    if (localMember)
-      pools[0].members.push({
-        hostId: "local",
-        projectsRoot: "/projects",
-        provisioned: true,
-        draining: false,
-      });
-    const selected = [];
-    const view = ownRoot(
-      render(
-        React.createElement(SessionSidebar, {
-          selectedSessionId: null,
-          onSelectSession: (session) => selected.push(session),
-          addProjectOpen: false,
-          setAddProjectOpen() {},
-          usageVisible: false,
-        }),
-        { wrapper: TestRoot },
-      ),
-    );
-    await settle();
-    await until(
-      () => view.queryByText("Mac conversation"),
-      "the local host's unmatched conversation remains reachable",
-    );
-    const add = view.queryByRole("button", {
-      name: translate("hosts.addWorkspaceOn", { host: "Mac" }),
-    });
-    if (localMember)
-      assert.equal(
-        add,
-        null,
-        "membership takes precedence over the reserved local host ID",
-      );
-    else
-      assert.equal(
-        add?.disabled,
-        false,
-        "a standalone non-member Mac keeps its add-workspace action",
-      );
-    await act(async () => {
-      fireEvent.click(view.getByText("Mac conversation"));
-    });
-    assert.deepEqual(
-      selected.map(({ id, hostId, cwd, poolId }) => ({
-        id,
-        hostId,
-        cwd,
-        poolId,
-      })),
-      [{ id: "mac", hostId: "local", cwd: "/shared", poolId: undefined }],
-    );
-    view.unmount();
-  }
+test("a registered local session remains accessible alongside remote projects", async () => {
+  resetWorld();
+  serveManagedWorkspace();
+  const selected = [];
+  const view = ownRoot(render(React.createElement(SessionSidebar, {
+    selectedSessionId: null,
+    onSelectSession: (session) => selected.push(session),
+    addProjectOpen: false,
+    setAddProjectOpen() {},
+    usageVisible: false,
+  }), { wrapper: TestRoot }));
+  await until(() => view.queryByText("Mac project"), "the local registered project renders");
+  await searchSidebar(view, "Mac conversation");
+  await until(() => view.queryByRole("button", { name: "Mac conversation" }), "the local registered session appears in search");
+  await act(async () => fireEvent.click(view.getByRole("button", { name: "Mac conversation" })));
+  assert.deepEqual(selected.map(({ id, hostId, cwd }) => ({ id, hostId, cwd })), [
+    { id: "mac", hostId: "local", cwd: "/shared" },
+  ]);
+  view.unmount();
 });
 
 test("local artifact images rendered from an assistant reply retain the reply's originating session", async () => {
@@ -12749,7 +12670,7 @@ test("local artifact images rendered from an assistant reply retain the reply's 
 
 test("workspace file search stays in its source session rather than a same-path central directory", async () => {
   resetWorld();
-  servePooledWorkspace();
+  serveManagedWorkspace();
   const view = ownRoot(
     render(
       React.createElement(FileExplorer, {
