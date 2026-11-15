@@ -271,6 +271,7 @@ export function AppShell({ appName }: { appName: string }) {
   const [hiddenSharedIds, setHiddenSharedIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const sharedDiscoveryComplete = useRef(false);
   const membershipStreams = useRef(new Map<string, EventStream>());
   useEffect(() => {
     const ids = new Set(
@@ -315,22 +316,26 @@ export function AppShell({ appName }: { appName: string }) {
           (hidden) => new Set([...hidden].filter((id) => ids.includes(id))),
         );
         const current = ++version;
+        sharedDiscoveryComplete.current = false;
         if (ids.length === 0) {
+          sharedDiscoveryComplete.current = true;
           setSharedSessions([]);
           return;
         }
         void fetch("/api/sessions")
           .then(async (response) => {
-            if (!response.ok) return;
+            if (!response.ok) { if (!closed && current === version) sharedDiscoveryComplete.current = true; return; }
             const result = (await response.json()) as {
               sessions: SessionInfo[];
             };
-            if (!closed && current === version)
+            if (!closed && current === version) {
+              sharedDiscoveryComplete.current = true;
               setSharedSessions(
                 result.sessions.filter((session) => ids.includes(session.id)),
               );
+            }
           })
-          .catch(() => {});
+          .catch(() => { if (!closed && current === version) sharedDiscoveryComplete.current = true; });
       } catch {
         // Ignore malformed event frames.
       }
@@ -343,6 +348,7 @@ export function AppShell({ appName }: { appName: string }) {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const activeChatIdRef = useRef<string | null>(null);
   const visitedWorkspaces = useRef(new Set<string>());
+  const pendingSharedWorkspace = useRef<{ cwd: string; hostId: string; tabId: string } | null>(null);
   const updateChatTabs = useCallback(
     (update: (tabs: ChatTab[]) => ChatTab[]) => {
       const next = update(chatTabsRef.current);
@@ -1831,10 +1837,12 @@ export function AppShell({ appName }: { appName: string }) {
         (tab) => tab.id === activeChatIdRef.current,
       );
       if (
+        synchronized &&
         currentTab &&
         tabInWorkspace(currentTab, cwd, hostId, workspaceOptions.projects)
       )
         return;
+      pendingSharedWorkspace.current = null;
       const alreadyVisited = visitedWorkspaces.current.has(workspaceKey);
       visitedWorkspaces.current.add(workspaceKey);
       let preferredId: string | null = null;
@@ -1848,11 +1856,22 @@ export function AppShell({ appName }: { appName: string }) {
       const candidates = chatTabsRef.current.filter((tab) =>
         tabInWorkspace(tab, cwd, hostId, workspaceOptions.projects),
       );
-      const existing =
-        preferredId === ""
+      const shared = sharedSessions.find((session) =>
+        openSessionIds.includes(session.id) && !hiddenSharedIds.has(session.id) &&
+        tabInWorkspace({ id: session.id, cwd: session.cwd, hostId: remoteHostId(session.hostId), session, creation: {} }, cwd, hostId, workspaceOptions.projects),
+      );
+      const existing = shared
+        ? candidates.find((tab) => tab.session?.id === shared.id) ?? {
+            id: browserUUID(), cwd: shared.cwd, hostId: remoteHostId(shared.hostId), session: shared, creation: {},
+          }
+        : preferredId === ""
           ? undefined
           : (candidates.find((tab) => tab.id === preferredId) ?? candidates[0]);
       if (existing) {
+        if (!shared && !sharedDiscoveryComplete.current) {
+          pendingSharedWorkspace.current = { cwd, hostId, tabId: existing.id };
+        }
+        if (shared && !candidates.includes(existing)) updateChatTabs((tabs) => [...tabs, existing]);
         activateChat(existing);
       } else if (!alreadyVisited && preferredId !== "") {
         const tab: ChatTab = {
@@ -1863,6 +1882,7 @@ export function AppShell({ appName }: { appName: string }) {
           creation: { id: browserUUID() },
         };
         updateChatTabs((tabs) => [...tabs, tab]);
+        if (!sharedDiscoveryComplete.current) pendingSharedWorkspace.current = { cwd, hostId, tabId: tab.id };
         activateChat(tab);
       } else {
         activateChat(null);
@@ -1882,11 +1902,33 @@ export function AppShell({ appName }: { appName: string }) {
       router,
       activateChat,
       updateChatTabs,
+      sharedSessions,
+      openSessionIds,
+      hiddenSharedIds,
       workspaceOptions.projects,
       initialSessionId,
       initialSessionRestored,
     ],
   );
+
+  useEffect(() => {
+    const pending = pendingSharedWorkspace.current;
+    if (!pending || activeChatIdRef.current !== pending.tabId) return;
+    const session = sharedSessions.find((item) =>
+      openSessionIds.includes(item.id) && !hiddenSharedIds.has(item.id) &&
+      tabInWorkspace({ id: item.id, cwd: item.cwd, hostId: remoteHostId(item.hostId), session: item, creation: {} }, pending.cwd, pending.hostId, workspaceOptions.projects),
+    );
+    if (!session) {
+      if (sharedDiscoveryComplete.current) pendingSharedWorkspace.current = null;
+      return;
+    }
+    pendingSharedWorkspace.current = null;
+    const existing = chatTabsRef.current.find((item) => item.session?.id === session.id && remoteHostId(item.hostId) === remoteHostId(session.hostId));
+    const tab: ChatTab = existing ?? { id: browserUUID(), cwd: session.cwd, hostId: remoteHostId(session.hostId), session, creation: {} };
+    if (!existing) updateChatTabs((tabs) => [...tabs, tab]);
+    activateChat(tab);
+    router.replace(`?session=${encodeURIComponent(session.id)}`);
+  }, [sharedSessions, openSessionIds, hiddenSharedIds, workspaceOptions.projects, updateChatTabs, activateChat, router]);
 
   const sessionLookupVersion = useRef(0);
   const handleSelectSession = useCallback(

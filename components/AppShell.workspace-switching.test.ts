@@ -341,6 +341,65 @@ test("shared chats appear without local membership and can be selected or dismis
   }
 });
 
+test("entering a workspace selects its first shared chat and shows all shared chats", async () => {
+  sessionStorage.clear();
+  streams.length = 0;
+  const originalFetch = globalThis.fetch;
+  const sessions = ["first", "second"].map((id) => ({
+    id, cwd: "/other", path: `/${id}.jsonl`, created: "2026-11-14",
+    modified: "2026-11-14", messageCount: 1, firstMessage: id, name: id,
+  }));
+  globalThis.fetch = (async (url, options) => String(url) === "/api/sessions"
+    ? Response.json({ sessions }) : originalFetch(url, options)) as typeof fetch;
+  try {
+    window.history.replaceState(null, "", "/?cwd=%2Frepo");
+    const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+    await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
+    const source = streams.find((stream) => stream.channel.kind === "open-chats");
+    assert.ok(source?.onmessage);
+    await act(async () => source.onmessage!({ data: JSON.stringify({ sessionIds: ["first", "second"] }) }));
+    await waitFor(() => assert.ok(tabProps.openSessionIds.includes("second")));
+    fireEvent.click(view.getByRole("button", { name: "/other" }));
+    await waitFor(() => assert.equal(tabProps.chatTabs.find((tab) => tab.id === tabProps.activeChatId)?.sessionId, "first"));
+    assert.deepEqual(tabProps.chatTabs.map((tab) => tab.sessionId), ["first", "second"]);
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("workspace entry reconciles a restored draft when shared chat discovery resolves", async () => {
+  sessionStorage.clear();
+  sessionStorage.setItem("keylime:workspace-chat-tabs", JSON.stringify([
+    { id: "draft", cwd: "/other", hostId: undefined, session: null, creation: { id: "draft-creation" } },
+  ]));
+  streams.length = 0;
+  const originalFetch = globalThis.fetch;
+  const { promise: delayed, resolve: resolveSessions } = Promise.withResolvers<Response>();
+  globalThis.fetch = (async (url, options) => String(url) === "/api/sessions"
+    ? delayed : originalFetch(url, options)) as typeof fetch;
+  try {
+    window.history.replaceState(null, "", "/?cwd=%2Frepo");
+    const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+    await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
+    const source = streams.find((stream) => stream.channel.kind === "open-chats");
+    assert.ok(source?.onmessage);
+    await act(async () => source.onmessage!({ data: JSON.stringify({ sessionIds: ["shared"] }) }));
+    fireEvent.click(view.getByRole("button", { name: "/other" }));
+    await waitFor(() => assert.equal(tabProps.activeChatId, "draft"));
+    fireEvent.click(view.getByRole("button", { name: "/other" }));
+    await act(async () => resolveSessions(Response.json({ sessions: [{
+      id: "shared", cwd: "/other", path: "/shared.jsonl", created: "2026-11-14",
+      modified: "2026-11-14", messageCount: 1, firstMessage: "shared", name: "Shared",
+    }] })));
+    await waitFor(() => assert.equal(tabProps.chatTabs.find((tab) => tab.id === tabProps.activeChatId)?.sessionId, "shared"));
+    assert.ok(tabProps.chatTabs.some((tab) => tab.id === "draft"));
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("new workspace chat proceeds while post setup is running or has failed", async () => {
   const originalFetch = globalThis.fetch;
   sessionStorage.clear();

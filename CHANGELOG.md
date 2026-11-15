@@ -54,6 +54,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 ### Fixed
 - Preserve pasted text alongside image files or embedded data images in rich-text clipboard content.
 - Closing an exited terminal tab now removes it even after its shell has disappeared.
+- Opening a workspace selects its first chat open on another browser and shows shared chats in the workspace tab bar.
 - Clear a host's sidebar loading error when its workspace hierarchy reconnects successfully.
 - Corrected API contracts for plain upload IDs in binary headers, merged-delta `web.first` ranges, host-offline delivery uncertainty, preserved child sessions during deletion, and inline logical failures from binary host operations.
 - Workspace terminal queries are answered once by the host, even without a browser: device attributes, color and character dimensions no longer depend on connected viewers. Focus reporting aggregates viewer leases.
@@ -111,6 +112,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Pull request descriptions now wait for the commit plan and use planned commit messages when the workspace has no commits
 - Preserve pasted text alongside image files or embedded data images in rich-text clipboard content
 - Closing an exited terminal tab now removes it even after its shell has disappeared
+- Opening a workspace selects its first chat open on another browser and shows shared chats in the workspace tab bar
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
