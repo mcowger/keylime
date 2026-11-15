@@ -7,6 +7,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 ## [Unreleased]
 
 ### Added
+- Touch terminals have an accessory row for Escape, Tab, Ctrl, Ctrl-C and arrow keys; Ctrl applies to the next typed key.
 - Git projects can follow their current on-disk `paseo.json` for workspace setup and teardown, including uncommitted edits, with `.worktreeinclude` copying and live previews. Manual commands remain available, and project settings are accessible directly from each sidebar project menu on desktop and mobile.
 - Failed held messages can be retried without reconstructing their contents or attachments. Retries warn when the original may already have been sent.
 - Added a live-only Jobs tab to the right panel: inspect background jobs and project services, commands, elapsed time, process details and bounded live output; cancel owned jobs or stop services without starting an agent or generating model-authored widgets. Selected completed output stays visible until deselected; no durable job history is stored.
@@ -30,6 +31,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Git projects can follow their current on-disk `paseo.json` for workspace setup and teardown, including uncommitted edits, with `.worktreeinclude` copying and live previews. Manual commands remain available, and project settings are accessible directly from each sidebar project menu on desktop and mobile
 - The composer shows advisor review activity while the advisor model reviews a run
 - `bun run dev` replaces the separate development launchers with a seeded hot-reloading web server and host daemon in an isolated temporary environment. `--port` selects the port; temporary files are retained after shutdown
+- Touch terminals have an accessory row for Escape, Tab, Ctrl, Ctrl-C and arrow keys; Ctrl applies to the next typed key
 
 ### Changed
 - The mobile workspace switcher shows the active chat or terminal title instead of the workspace directory name.

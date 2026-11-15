@@ -9,6 +9,7 @@ import {
   type EventStream,
 } from "@/lib/event-stream";
 import { terminalCommand, terminalSnapshot } from "@/lib/terminal-client";
+import { applyTerminalControl } from "@/lib/terminal-control";
 import type {
   TerminalEvent,
   WorkspaceTerminal as TerminalInfo,
@@ -25,6 +26,9 @@ export function WorkspaceTerminal({
 }) {
   const container = useRef<HTMLDivElement>(null);
   const fitRef = useRef<(() => void) | null>(null);
+  const sendKeyRef = useRef<((key: string) => void) | null>(null);
+  const ctrlRef = useRef(false);
+  const [ctrl, setCtrl] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -109,7 +113,7 @@ export function WorkspaceTerminal({
       resize();
       term.focus();
     };
-    const input = term.onData((data) => {
+    const sendInput = (data: string) => {
       if (replayingSnapshot) return;
       if (!ready) {
         setError(
@@ -125,7 +129,27 @@ export function WorkspaceTerminal({
       }
       pendingInput += data;
       void flush();
+    };
+    const input = term.onData((data) => {
+      const encoded = applyTerminalControl(data, ctrlRef.current);
+      if (encoded.consumed) {
+        ctrlRef.current = false;
+        setCtrl(false);
+      }
+      sendInput(encoded.data);
     });
+    sendKeyRef.current = (key) => {
+      const arrows: Record<string, string> = { Up: "A", Down: "B", Right: "C", Left: "D" };
+      if (arrows[key]) {
+        const modifier = ctrlRef.current ? ";5" : "";
+        sendInput(modifier ? `\x1b[1${modifier}${arrows[key]}` : `\x1b${term.modes.applicationCursorKeys ? "O" : "["}${arrows[key]}`);
+      } else {
+        sendInput(({ Esc: "\x1b", Tab: "\t", "Ctrl-C": "\x03" } as Record<string, string>)[key]);
+      }
+      ctrlRef.current = false;
+      setCtrl(false);
+      term.focus();
+    };
     const sizes = term.onResize(({ cols, rows }) => {
       if (ready && !remoteResize) {
         pendingResize = { cols, rows };
@@ -244,6 +268,9 @@ export function WorkspaceTerminal({
       disposed = true;
       generation++;
       fitRef.current = null;
+      sendKeyRef.current = null;
+      ctrlRef.current = false;
+      setCtrl(false);
       clearTimeout(retry);
       themeObserver.disconnect();
       stream?.close();
@@ -269,6 +296,26 @@ export function WorkspaceTerminal({
         ref={container}
         onKeyDown={(event) => event.stopPropagation()}
       />
+      <div className="workspace-terminal-keys" role="toolbar" aria-label="Terminal keys" onKeyDown={(event) => event.stopPropagation()}>
+        {["Esc", "Tab", "Ctrl", "Ctrl-C", "Left", "Down", "Up", "Right"].map((key) => (
+          <button
+            key={key}
+            type="button"
+            aria-label={key}
+            aria-pressed={key === "Ctrl" ? ctrl : undefined}
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={() => {
+              if (key === "Ctrl") {
+                ctrlRef.current = !ctrlRef.current;
+                setCtrl(ctrlRef.current);
+                container.current?.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")?.focus();
+              } else sendKeyRef.current?.(key);
+            }}
+          >
+            {({ Left: "←", Down: "↓", Up: "↑", Right: "→", "Ctrl-C": "^C" } as Record<string, string>)[key] ?? key}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

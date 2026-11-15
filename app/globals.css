@@ -59,6 +59,35 @@
   color: var(--status-error);
   font-size: 12px;
 }
+.workspace-terminal-keys {
+  display: none;
+}
+@media (pointer: coarse) {
+  .workspace-terminal-keys {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 6px 8px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-panel);
+  }
+  .workspace-terminal-keys button {
+    flex: 1 0 38px;
+    min-height: 40px;
+    padding: 0 7px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    color: var(--text);
+    background: var(--bg-subtle);
+    font-family: var(--font-mono);
+    cursor: pointer;
+  }
+  .workspace-terminal-keys button[aria-pressed="true"] {
+    color: var(--accent-strong);
+    border-color: var(--accent);
+    background: var(--bg-selected);
+  }
+}
 
 /* Table charts use native text, not a scaled terminal bitmap. */
 .table-auto-chart {
