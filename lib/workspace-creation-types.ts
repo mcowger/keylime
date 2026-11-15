@@ -2,7 +2,8 @@ export type WorkspaceBranchMode = "local" | "remote" | "new";
 export interface WorkspacePipeline {
   pre: string[];
   create: string[];
-  post: string[];
+  postBlocking: string[];
+  postNonBlocking: string[];
 }
 export interface WorkspacePaseoPreview {
   path: string;
@@ -19,6 +20,7 @@ export interface WorkspaceCreationSettings {
   defaults: WorkspacePipeline;
   override: WorkspacePipeline | null;
   source: "manual" | "paseo";
+  paseoBlocking: { index: number; command: string }[];
   paseo: WorkspacePaseoPreview | null;
 }
 export interface WorkspaceSettingsRequest {
@@ -26,6 +28,7 @@ export interface WorkspaceSettingsRequest {
   defaults?: WorkspacePipeline;
   override?: WorkspacePipeline | null;
   source?: "manual" | "paseo";
+  paseoBlocking?: { index: number; command: string }[];
 }
 export interface WorkspaceCreateRequest {
   projectPath: string;
@@ -41,7 +44,7 @@ export interface WorkspaceCreationJob {
   source?: "manual" | "paseo";
   paseo?: { path: string; fingerprint: string };
   status: "running" | "complete" | "failed" | "interrupted";
-  stage: "pre" | "create" | "post";
+  stage: "pre" | "create" | "postBlocking" | "postNonBlocking";
   logs: string;
   error?: string;
   workspacePath?: string;

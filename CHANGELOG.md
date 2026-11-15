@@ -32,6 +32,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - The composer shows advisor review activity while the advisor model reviews a run
 - `bun run dev` replaces the separate development launchers with a seeded hot-reloading web server and host daemon in an isolated temporary environment. `--port` selects the port; temporary files are retained after shutdown
 - Touch terminals have an accessory row for Escape, Tab, Ctrl, Ctrl-C and arrow keys; Ctrl applies to the next typed key
+- Paseo workspace setup commands can run as blocking or background jobs, with background status and logs available after workspace creation
 
 ### Changed
 - Project names and workspace creation settings save automatically without separate save buttons.
@@ -43,6 +44,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - The new-session screen uses a narrower content column
 - The mobile workspace switcher shows the active chat or terminal title instead of the workspace directory name
 - Project names and workspace creation settings save automatically without separate save buttons
+- Paseo setup command parsing and ordering now distinguish multiline command lists from shell scripts; blocking command selections are revalidated when recipes change
 
 ### Fixed
 - Workspace terminal queries are answered once by the host, even without a browser: device attributes, color and character dimensions no longer depend on connected viewers. Focus reporting aggregates viewer leases.
@@ -96,6 +98,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - A new workspace no longer inherits the parent workspace's tabs, terminals, or restored active-chat selection before it exists
 - Workspace creation identifies its project, and mobile branch inputs use 16px text to avoid iOS focus zoom
 - Workspace terminal queries are answered once by the host, even without a browser: device attributes, color and character dimensions no longer depend on connected viewers. Focus reporting aggregates viewer leases
+- Prompt-first workspace creation starts the agent after blocking setup completes without waiting for background setup commands
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

@@ -21,7 +21,7 @@ test("retries a failed project name save with the retained name", async () => {
         ? Response.json({ error: "Save failed" }, { status: 503 })
         : Response.json(snapshot);
     }
-    return Response.json({ defaults: { pre: [], create: [], post: [] }, override: null, source: "manual" });
+    return Response.json({ defaults: { pre: [], create: [], postBlocking: [], postNonBlocking: [] }, override: null, source: "manual", paseoBlocking: [] });
   };
   let updated;
   const view = render(React.createElement(ProjectSettings, {

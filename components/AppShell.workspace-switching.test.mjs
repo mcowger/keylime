@@ -51,9 +51,11 @@ mock.module("./SessionSidebar", () => ({
     );
   },
 }));
+let prepareWorkspace;
 mock.module("./ChatWindow", () => ({
-  ChatWindow: (props) =>
-    React.createElement(
+  ChatWindow: (props) => {
+    prepareWorkspace = props.prepareNewWorkspace;
+    return React.createElement(
       React.Fragment,
       null,
       React.createElement(
@@ -77,7 +79,8 @@ mock.module("./ChatWindow", () => ({
         },
         "Create session",
       ),
-    ),
+    );
+  },
 }));
 for (const [path, name] of [
   ["./SettingsConfig", "SettingsConfig"],
@@ -191,4 +194,76 @@ test("creating a workspace from another workspace survives sidebar synchronizati
   await waitFor(() => assert.equal(tabs().cwd, "/repo"));
   assert.equal(tabs().tabs.length, 1);
   cleanup();
+});
+
+test("new workspace chat proceeds while post setup is running or has failed", async () => {
+  const originalFetch = globalThis.fetch;
+  sessionStorage.clear();
+  window.history.replaceState(null, "", "/?cwd=%2Frepo");
+  let status = "running";
+  globalThis.fetch = async (url, options) => {
+    if (String(url) === "/api/worktrees" && options?.method === "POST")
+      return Response.json({ id: "job", input: { name: "Feature" }, status, stage: "postNonBlocking", workspaceId: "workspace", workspacePath: "/repo/worktrees/feature", error: status === "failed" ? "setup failed" : undefined });
+    return originalFetch(url, options);
+  };
+  try {
+    const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+    await waitFor(() => assert.ok(view.getByRole("button", { name: "New workspace" })));
+    fireEvent.click(view.getByRole("button", { name: "New workspace" }));
+    await waitFor(() => assert.equal(typeof prepareWorkspace, "function"));
+    assert.deepEqual(await prepareWorkspace("first prompt"), { cwd: "/repo/worktrees/feature", name: "Feature" });
+    cleanup();
+    status = "failed";
+    sessionStorage.clear();
+    const second = render(React.createElement(AppShell, { appName: "Keylime" }));
+    fireEvent.click(second.getByRole("button", { name: "New workspace" }));
+    await waitFor(() => assert.equal(typeof prepareWorkspace, "function"));
+    assert.deepEqual(await prepareWorkspace("first prompt"), { cwd: "/repo/worktrees/feature", name: "Feature" });
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("new workspace chat waits for blocking setup and rejects its failure", async () => {
+  const originalFetch = globalThis.fetch;
+  sessionStorage.clear();
+  window.history.replaceState(null, "", "/?cwd=%2Frepo");
+  let fail = false;
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const job = (stage, status = "running") => ({ id: "job", input: { name: "Feature" }, status, stage, workspaceId: "workspace", workspacePath: "/repo/worktrees/feature", ...(status === "failed" ? { error: "blocking failed" } : {}) });
+  globalThis.fetch = async (url, options) => {
+    if (String(url) === "/api/worktrees" && options?.method === "POST")
+      return Response.json(job("postBlocking", fail ? "failed" : "running"));
+    if (String(url).includes("action=status")) {
+      await gate;
+      return Response.json(job("postNonBlocking"));
+    }
+    return originalFetch(url, options);
+  };
+  try {
+    const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+    await waitFor(() => assert.equal(JSON.parse(view.getByTestId("workspace-tabs").textContent).cwd, "/repo"));
+    fireEvent.click(view.getByRole("button", { name: "New workspace" }));
+    await waitFor(() => assert.equal(typeof prepareWorkspace, "function"));
+    let settled = false;
+    const pending = prepareWorkspace("prompt").then((value) => { settled = true; return value; });
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    assert.equal(settled, false);
+    release();
+    assert.deepEqual(await pending, { cwd: "/repo/worktrees/feature", name: "Feature" });
+    cleanup();
+    fail = true;
+    sessionStorage.clear();
+    const second = render(React.createElement(AppShell, { appName: "Keylime" }));
+    fireEvent.click(second.getByRole("button", { name: "/repo", exact: true }));
+    await waitFor(() => assert.equal(JSON.parse(second.getByTestId("workspace-tabs").textContent).cwd, "/repo"));
+    fireEvent.click(second.getByRole("button", { name: "New workspace" }));
+    await waitFor(() => assert.equal(typeof prepareWorkspace, "function"));
+    await assert.rejects(prepareWorkspace("prompt"), /blocking failed/);
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
 });

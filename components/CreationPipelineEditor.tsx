@@ -48,6 +48,7 @@ export function CreationPipelineEditor({
   const previewGeneration = useRef(0);
   const editGeneration = useRef(0);
   const latestSettings = useRef<WorkspaceCreationSettings | null>(null);
+  const latestSaveIncludesPaseo = useRef(false);
   const key = JSON.stringify([hostId, projectPath]);
 
   useEffect(() => {
@@ -106,8 +107,9 @@ export function CreationPipelineEditor({
   }
 
   const pipeline = projectPath === undefined ? settings?.defaults : settings?.override;
-  function save(next: WorkspaceCreationSettings) {
+  function save(next: WorkspaceCreationSettings, includePaseo = false) {
     latestSettings.current = next;
+    latestSaveIncludesPaseo.current = includePaseo;
     setSettings(next);
     const current = generation.current;
     const edit = ++editGeneration.current;
@@ -116,12 +118,13 @@ export function CreationPipelineEditor({
     const clean = (value: WorkspacePipeline) => ({
       pre: value.pre.filter((s) => s.trim()),
       create: value.create.filter((s) => s.trim()),
-      post: value.post.filter((s) => s.trim()),
+      postBlocking: value.postBlocking.filter((s) => s.trim()),
+      postNonBlocking: value.postNonBlocking.filter((s) => s.trim()),
     });
     const input = projectPath === undefined
       ? { defaults: clean(next.defaults) }
       : { projectPath, override: next.override ? clean(next.override) : null,
-          ...(gitProject ? { source: next.source } : {}) };
+          ...(gitProject ? { source: next.source, ...(includePaseo ? { paseoBlocking: next.paseoBlocking } : {}) } : {}) };
     const previous = pendingWrites.get(key) ?? Promise.resolve();
     const write = previous.then(async () => {
       const response = await fetch("/api/worktrees", {
@@ -156,6 +159,7 @@ export function CreationPipelineEditor({
           <p>Follow Paseo uses the current on-disk project file, including uncommitted changes. It bypasses all manual project and host commands and uses built-in Git workspace creation, .worktreeinclude copying, setup and teardown.</p>
           <p>Services, scripts, terminals and port runtime are not supported. Future edits to the recipe will execute as your user when workspaces are created or deleted. Only enable this for a trusted project. Saving settings does not run the recipe.</p>
           <p style={{ color: "var(--text-dim)", fontSize: 12 }}>Setup and teardown commands receive PASEO_SOURCE_CHECKOUT_PATH (the project checkout), PASEO_WORKTREE_PATH, and PASEO_BRANCH_NAME. Workspace commands also receive PASEO_PROJECT_PATH, PASEO_WORKSPACE_PATH, PASEO_BRANCH, PASEO_BASE_REF, PASEO_BRANCH_MODE, and PASEO_CREATE_RESULT as available; the create-result file is not used in Paseo mode.</p>
+          <p style={{ color: "var(--text-dim)", fontSize: 12 }}>Blocking setup commands run first in recipe order after the workspace is registered; the workspace is ready after they finish. Nonblocking commands then run in recipe order. Commands are nonblocking by default. Refresh the preview after editing the recipe. A blocking choice must match both its line position and command; if a selected line changes or moves, workspace creation is blocked until you review and remove the stale choice, then select any commands that should block readiness.</p>
           <div><button type="button" className="dialog-action" style={buttonStyle} disabled={refreshing} onClick={() => void refreshPreview()}>{refreshing ? "Refreshing preview..." : "Refresh preview"}</button></div>
           {previewError && <div role="alert">Preview refresh failed: {previewError}</div>}
           {settings.paseo ? (
@@ -163,7 +167,25 @@ export function CreationPipelineEditor({
               <div>Project file: {settings.paseo.path}</div>
               {settings.paseo.fingerprint && <div>Fingerprint: {settings.paseo.fingerprint}</div>}
               {settings.paseo.error && <div role="alert">{settings.paseo.error}</div>}
-              {([['Setup', settings.paseo.setup], ['Teardown', settings.paseo.teardown], [`.worktreeinclude (${settings.paseo.includePath})`, settings.paseo.includePatterns], ['Unsupported features', settings.paseo.unsupportedFeatures]] as const).map(([label, values]) => (
+              {settings.paseoBlocking.filter((entry) => settings.paseo!.setup[entry.index] !== entry.command).map((entry) => (
+                <div key={`${entry.index}-${entry.command}`} role="alert">
+                  Blocking choice needs review: setup command {entry.index + 1}: {entry.command}. This selection no longer matches the recipe and blocks workspace creation.{" "}
+                  <button type="button" onClick={() => save({ ...settings, paseoBlocking: settings.paseoBlocking.filter((item) => item.index !== entry.index || item.command !== entry.command) }, true)}>Remove stale choice</button>
+                </div>
+              ))}
+              <div><strong>Setup</strong>
+                {settings.paseo.setup.length ? settings.paseo.setup.map((command, index) => (
+                  <label key={index} style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+                    <input type="checkbox" aria-label={`Block readiness for setup command ${index + 1}: ${command}`} disabled={settings.paseoBlocking.some((entry) => entry.index === index && entry.command !== command)} checked={settings.paseoBlocking.some((entry) => entry.index === index && entry.command === command)} onChange={(e) => {
+                      const paseoBlocking = settings.paseoBlocking.filter((entry) => entry.index !== index);
+                      if (e.target.checked) paseoBlocking.push({ index, command });
+                      save({ ...settings, paseoBlocking }, true);
+                    }} />
+                    <span>Blocking: {command}</span>
+                  </label>
+                )) : <div>None</div>}
+              </div>
+              {([['Teardown', settings.paseo.teardown], [`.worktreeinclude (${settings.paseo.includePath})`, settings.paseo.includePatterns], ['Unsupported features', settings.paseo.unsupportedFeatures]] as const).map(([label, values]) => (
                 <div key={label}><strong>{label}</strong><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{values.length ? values.join("\n") : "None"}</pre></div>
               ))}
             </div>
@@ -174,9 +196,9 @@ export function CreationPipelineEditor({
         {projectPath !== undefined && settings && (
           <label><input type="checkbox" checked={settings.override !== null} onChange={(e) => save({ ...settings, override: e.target.checked ? structuredClone(settings.defaults) : null })} /> Override all stages (otherwise inherit host defaults)</label>
         )}
-        {pipeline && (["pre", "create", "post"] as const).map((stage) => (
+        {pipeline && ([ ["pre", "Pre"], ["create", "Create"], ["postBlocking", "Post-blocking"], ["postNonBlocking", "Post-non-blocking"] ] as const).map(([stage, label]) => (
           <label key={stage} style={{ display: "grid", gap: 4 }}>
-            {stage} commands (one per line)
+            {label} commands (one per line)
             <textarea style={fieldStyle} rows={3} value={pipeline[stage].join("\n")} onChange={(e) => {
               const next = { ...pipeline, [stage]: e.target.value.split("\n") };
               if (settings) save(projectPath === undefined ? { ...settings, defaults: next } : { ...settings, override: next });
@@ -184,10 +206,12 @@ export function CreationPipelineEditor({
           </label>
         ))}
         <p style={{ color: "var(--text-dim)", fontSize: 12 }}>
+          Pre and create commands run before the workspace is registered. Post-blocking commands run after registration and must finish before the workspace is ready; post-nonblocking commands run afterward. Commands within each stage run in order.
+          {" "}
           Commands receive OMP_PROJECT_PATH, OMP_WORKSPACE_PATH, OMP_BRANCH, OMP_BASE_REF, OMP_BRANCH_MODE and OMP_CREATE_RESULT. Write {`{"path":"/absolute/worktree/path"}`} to OMP_CREATE_RESULT to return a custom path. An empty create stage uses Git.
         </p>
       </>}
-      {error && <div role="alert">{error} <button type="button" onClick={() => settings && latestSettings.current ? save(latestSettings.current) : setRevision((n) => n + 1)}>Retry</button></div>}
+      {error && <div role="alert">{error} <button type="button" onClick={() => settings && latestSettings.current ? save(latestSettings.current, latestSaveIncludesPaseo.current) : setRevision((n) => n + 1)}>Retry</button></div>}
       {!settings && !error && <div role="status">Loading creation commands...</div>}
       {saving && <div role="status">Saving commands...</div>}
     </section>

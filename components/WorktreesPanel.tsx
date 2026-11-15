@@ -211,8 +211,11 @@ export function WorktreesPanel({
                       id: w.setup!.jobId,
                     });
                     void fetch(`/api/worktrees?${params}`)
-                      .then((r) => r.json())
-                      .then(setJob)
+                      .then(async (r) => {
+                        const value = await r.json();
+                        if (!r.ok) throw new Error(value.error ?? "Request failed");
+                        setJob(value);
+                      })
                       .catch((e) => setError(String(e)));
                   }}
                 >
@@ -329,6 +332,16 @@ export function WorktreesPanel({
             )}
           </div>
         ))}
+      {!createOnly && !modalOpen && job && (
+        <section aria-label="Workspace setup logs">
+          <p>
+            Setup: {job.status} / {job.stage}
+            {job.error ? ` — ${job.error}` : ""}
+          </p>
+          <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{job.logs}</pre>
+          <button type="button" onClick={() => setJob(null)}>Close logs</button>
+        </section>
+      )}
       {!createOnly && project?.kind === "git" && (
         <button onClick={() => setModalOpen(true)}>Create workspace</button>
       )}
