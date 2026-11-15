@@ -40,6 +40,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - The mobile workspace switcher shows the active chat or terminal title instead of the workspace directory name
 
 ### Fixed
+- Workspace creation identifies its project, and mobile branch inputs use 16px text to avoid iOS focus zoom.
 - A new workspace no longer inherits the parent workspace's tabs, terminals, or restored active-chat selection before it exists.
 - Ship uses the configured commit model and thinking level instead of the session model when generating commit plans.
 - Selecting the current workspace dismisses the mobile sidebar, just like selecting another workspace.
@@ -87,6 +88,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Selecting the current workspace dismisses the mobile sidebar, just like selecting another workspace
 - Paseo setup and teardown commands now receive documented OMP_* and PASEO_* workspace environment aliases; invalid but present recipes remain selectable for error inspection
 - A new workspace no longer inherits the parent workspace's tabs, terminals, or restored active-chat selection before it exists
+- Workspace creation identifies its project, and mobile branch inputs use 16px text to avoid iOS focus zoom
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

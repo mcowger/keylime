@@ -4324,8 +4324,11 @@ export function AppShell({ appName }: { appName: string }) {
                       hostStatus={chatHost?.status}
                       hostLabel={chatHost ? hostName(t, chatHost) : undefined}
                       newSessionWorkspace={
-                        !pendingWorkspace &&
-                        effectiveNewSessionCwd && (
+                        pendingWorkspace ? (
+                          <div className="new-session-workspace" title={pendingWorkspace} style={{ color: "var(--text-muted)", overflowWrap: "anywhere" }}>
+                            New workspace in {hostProjects.find((project) => (project.projectPath ?? project.path) === pendingWorkspace)?.projectName ?? projectLabel(pendingWorkspace)}
+                          </div>
+                        ) : effectiveNewSessionCwd && (
                           <div className="new-session-workspace">
                             {creationTargets.length > 1 && (
                               <>

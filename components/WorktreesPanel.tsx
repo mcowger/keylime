@@ -333,8 +333,12 @@ export function WorktreesPanel({
         <button onClick={() => setModalOpen(true)}>Create workspace</button>
       )}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent style={{ width: 520 }}>
+        <DialogContent className="workspace-create-dialog" style={{ width: 520 }}>
           <DialogTitle>Create workspace</DialogTitle>
+          <div style={{ marginTop: 8, color: "var(--text-muted)", fontSize: 13, overflowWrap: "anywhere" }}>
+            Project: {project?.alias ?? project?.name ?? projectPath}
+            {projectPath && <div>{projectPath}</div>}
+          </div>
           {project?.kind === "git" && (
             <div
               style={{

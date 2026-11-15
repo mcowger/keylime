@@ -2400,6 +2400,10 @@ html[data-touch-targets="accessible"]
 .themed-select-item[data-highlighted] { background: var(--bg-hover); }
 .themed-select-item[data-selected] { font-weight: 600; }
 .themed-select-item[data-disabled] { color: var(--text-dim); cursor: not-allowed; }
+
+@media (max-width: 767px) {
+  .workspace-create-dialog input { font-size: 16px !important; }
+}
 .themed-select-item[data-action] { margin-top: 4px; border-top: 1px solid var(--border); border-radius: 0; color: var(--text-muted); }
 .themed-select-indicator { display: inline-flex; align-items: center; justify-content: center; color: var(--accent); }
 @media (max-width: 640px) { .themed-select-item { min-height: 44px; } }
