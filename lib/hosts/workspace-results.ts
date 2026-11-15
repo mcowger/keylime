@@ -157,6 +157,8 @@ export function validWorkspaceResult(
         count(value.behind) &&
         typeof value.dirty === "boolean" &&
         typeof value.baseDirty === "boolean" &&
+        Array.isArray(value.issues) &&
+        value.issues.every(text) &&
         isRecord(value.github) &&
         (value.github.repo === null || text(value.github.repo)) &&
         ["ok", "missing", "unauthenticated"].includes(

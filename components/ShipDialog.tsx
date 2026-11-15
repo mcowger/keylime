@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
 import { sendAgentCommand } from "@/lib/agent-client";
-import { recoverDraft } from "@/lib/draft-store";
 import type {
   CommitPlan,
   PrDescription,
@@ -23,6 +22,7 @@ interface Props {
   projectPath: string;
   path: string;
   sessionId: string;
+  onAskAgentToResolve: (message: string) => Promise<void>;
   onRemoved?: () => void;
 }
 
@@ -73,6 +73,7 @@ export function ShipDialog({
   projectPath,
   path,
   sessionId,
+  onAskAgentToResolve,
   onRemoved,
 }: Props) {
   const [preview, setPreview] = useState<ShipPreview | null>(null);
@@ -87,6 +88,8 @@ export function ShipDialog({
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
   const [job, setJob] = useState<ShipJob | null>(null);
+  const [asking, setAsking] = useState(false);
+  const askingRef = useRef(false);
   const controller = useRef<AbortController | null>(null);
   const generation = useRef(0);
 
@@ -105,6 +108,8 @@ export function ShipDialog({
     setError(null);
     setWorking(false);
     setJob(null);
+    setAsking(false);
+    askingRef.current = false;
     setMergeMethod("squash");
     const timer = setInterval(() => setElapsed((n) => n + 1), 1000);
     const query = new URLSearchParams({ host, projectPath, path });
@@ -115,19 +120,15 @@ export function ShipDialog({
         setRebase(value.behind > 0);
         if (value.baseDirty && value.github.gh === "ok" && value.github.repo)
           setMode("pr");
+        if (value.issues.length) return;
+        return sendAgentCommand<{ plan: CommitPlan | null }>(sessionId, {
+          type: "commit_plan",
+        }).then((result) => {
+          if (generation.current === current) setPlan(result.plan);
+        });
       })
       .catch((e: unknown) => {
-        if (!abort.signal.aborted)
-          setError(String(e instanceof Error ? e.message : e));
-      });
-    void sendAgentCommand<{ plan: CommitPlan | null }>(sessionId, {
-      type: "commit_plan",
-    })
-      .then((value) => {
-        if (generation.current === current) setPlan(value.plan);
-      })
-      .catch((e: unknown) => {
-        if (generation.current === current)
+        if (!abort.signal.aborted && generation.current === current)
           setError(String(e instanceof Error ? e.message : e));
       });
     return () => {
@@ -138,7 +139,7 @@ export function ShipDialog({
   }, [open, host, projectPath, path, sessionId]);
 
   useEffect(() => {
-    if (!open || mode === "local" || !preview || pr || prLoading) return;
+    if (!open || mode === "local" || !preview || preview.issues.length || pr || prLoading) return;
     const current = generation.current;
     setPrLoading(true);
     void sendAgentCommand<PrDescription>(sessionId, {
@@ -230,6 +231,23 @@ export function ShipDialog({
       if (generation.current === current) setWorking(false);
     }
   }
+  async function askAgent(message: string) {
+    if (askingRef.current) return;
+    askingRef.current = true;
+    setAsking(true);
+    setError(null);
+    const current = generation.current;
+    try {
+      await onAskAgentToResolve(message);
+      if (generation.current === current) onOpenChange(false);
+    } catch (e) {
+      if (generation.current === current)
+        setError(String(e instanceof Error ? e.message : e));
+    } finally {
+      askingRef.current = false;
+      if (generation.current === current) setAsking(false);
+    }
+  }
   const githubReason = !preview?.github.repo
     ? "No GitHub repository configured"
     : preview.github.gh !== "ok"
@@ -249,12 +267,20 @@ export function ShipDialog({
       >
         <DialogTitle>Ship workspace</DialogTitle>
         {error && <Alert variant="error" description={error} style={{ marginTop: 16 }} />}
-        {plan === undefined && !error && (
+        {plan === undefined && !error && !preview?.issues.length && (
           <p role="status" style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)", fontSize: 12 }}>
             <Loader2 size={16} aria-hidden="true" /> Generating commit plan ({elapsed}s)
           </p>
         )}
         {!preview && !error && <p style={{ color: "var(--text-muted)", fontSize: 12 }}>Loading workspace...</p>}
+        {!!preview?.issues.length && !job && (
+          <div style={{ display: "grid", gap: 8, marginTop: 16 }}>
+            {preview.issues.map((issue, i) => <Alert key={i} variant="warning" description={issue} />)}
+            <button type="button" style={{ ...secondaryButtonStyle, justifySelf: "start" }} disabled={asking} onClick={() => void askAgent(`Please resolve these issues preventing shipping this workspace:\n${preview.issues.map((issue) => `- ${issue}`).join("\n")}`)}>
+              {asking ? "Sending..." : "Ask agent to resolve"}
+            </button>
+          </div>
+        )}
         {preview && plan !== undefined && !job && (
           <div style={{ display: "grid", gap: 14, marginTop: 16 }}>
             {nothing && <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 13 }}>Nothing to ship.</p>}
@@ -405,14 +431,10 @@ export function ShipDialog({
                 <button
                   type="button"
                   style={{ ...secondaryButtonStyle, justifySelf: "start" }}
-                  onClick={() => {
-                    recoverDraft(sessionId, {
-                      text: `Rebasing onto ${preview?.base} conflicts in: ${job.conflictFiles?.join(", ")}. Rebase this branch onto ${preview?.base} and resolve the conflicts, keeping both sides' intent.`,
-                    });
-                    onOpenChange(false);
-                  }}
+                  disabled={asking}
+                  onClick={() => void askAgent(`Rebasing onto ${preview?.base} conflicts in: ${job.conflictFiles?.join(", ")}. Rebase this branch onto ${preview?.base} and resolve the conflicts, keeping both sides' intent.`)}
                 >
-                  Ask agent to resolve
+                  {asking ? "Sending..." : "Ask agent to resolve"}
                 </button>
               </>
             )}

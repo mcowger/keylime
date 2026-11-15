@@ -75,6 +75,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - Wait tool output renders restricted Markdown with styled headings and collapsible system notices and reminders.
 - Selecting a different workspace closes the mobile sidebar
 - Workspace removal refuses teardown-induced HEAD or branch changes before archival or deletion, preserving new commits instead of using stale merge and branch-deletion decisions
+- Ship checks for blocking Git operations and potential conflicts before generating a commit plan, without changing the workspace or index. Ask agent to resolve submits the request directly and keeps the dialog open if submission fails
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

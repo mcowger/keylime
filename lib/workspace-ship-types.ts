@@ -64,6 +64,8 @@ export interface ShipPreview {
   behind: number;
   dirty: boolean;
   baseDirty: boolean;
+  /** Blocking Git issues detected before generating a commit plan. */
+  issues: string[];
   github: { repo: string | null; gh: "ok" | "missing" | "unauthenticated" };
   pr: ShipPr | null;
 }

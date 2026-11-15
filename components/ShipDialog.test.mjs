@@ -39,6 +39,7 @@ test("ship loads a plan and submits edited commit messages", async () => {
         behind: 1,
         dirty: true,
         baseDirty: false,
+        issues: [],
         github: { repo: null, gh: "missing" },
         pr: null,
       });
@@ -64,6 +65,7 @@ test("ship loads a plan and submits edited commit messages", async () => {
         projectPath: "/repo",
         path: "/work",
         sessionId: "session",
+        onAskAgentToResolve: async () => {},
       }),
     );
     const message = await view.findByLabelText("Commit 1 message");
@@ -77,6 +79,91 @@ test("ship loads a plan and submits edited commit messages", async () => {
         .commits[0].message,
       "Edited",
     );
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("preflight issues prevent commit planning and can be sent to the agent", async () => {
+  const originalFetch = globalThis.fetch;
+  const commands = [];
+  const messages = [];
+  let closed = false;
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).startsWith("/api/agent/")) {
+      commands.push(JSON.parse(init.body));
+      throw new Error("Unexpected agent command");
+    }
+    return Response.json({
+      branch: "work", base: "main", baseCheckout: "/repo", ahead: 1, behind: 1,
+      dirty: true, baseDirty: false, issues: ["Unresolved conflicts: file"],
+      github: { repo: null, gh: "missing" }, pr: null,
+    });
+  };
+  try {
+    const view = render(React.createElement(ShipDialog, {
+      open: true, onOpenChange: (open) => { closed = !open; }, host: "local",
+      projectPath: "/repo", path: "/work", sessionId: "session",
+      onAskAgentToResolve: async (message) => { messages.push(message); },
+    }));
+    await view.findByText("Unresolved conflicts: file");
+    assert.deepEqual(commands, []);
+    assert.equal(view.getByRole("button", { name: "Ship" }).disabled, true);
+    fireEvent.click(view.getByRole("button", { name: "Ask agent to resolve" }));
+    await waitFor(() => assert.equal(closed, true));
+    assert.match(messages[0], /Unresolved conflicts: file/);
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("agent submission failure keeps the dialog open and reports the error", async () => {
+  const originalFetch = globalThis.fetch;
+  let closed = false;
+  globalThis.fetch = async () => Response.json({
+    branch: "work", base: "main", baseCheckout: "/repo", ahead: 0, behind: 0,
+    dirty: true, baseDirty: false, issues: ["Unresolved conflicts: file"],
+    github: { repo: null, gh: "missing" }, pr: null,
+  });
+  try {
+    const view = render(React.createElement(ShipDialog, {
+      open: true, onOpenChange: () => { closed = true; }, host: "local",
+      projectPath: "/repo", path: "/work", sessionId: "session",
+      onAskAgentToResolve: async () => { throw new Error("Send failed"); },
+    }));
+    fireEvent.click(await view.findByRole("button", { name: "Ask agent to resolve" }));
+    await view.findByText("Send failed");
+    assert.equal(closed, false);
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("agent resolution submission cannot be sent twice while pending", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  let finish;
+  const pending = new Promise((resolve) => { finish = resolve; });
+  globalThis.fetch = async () => Response.json({
+    branch: "work", base: "main", baseCheckout: "/repo", ahead: 0, behind: 0,
+    dirty: true, baseDirty: false, issues: ["Unresolved conflicts: file"],
+    github: { repo: null, gh: "missing" }, pr: null,
+  });
+  try {
+    const view = render(React.createElement(ShipDialog, {
+      open: true, onOpenChange() {}, host: "local", projectPath: "/repo",
+      path: "/work", sessionId: "session",
+      onAskAgentToResolve: () => { calls++; return pending; },
+    }));
+    const button = await view.findByRole("button", { name: "Ask agent to resolve" });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    assert.equal(calls, 1);
+    assert.equal(button.disabled, true);
+    finish();
   } finally {
     cleanup();
     globalThis.fetch = originalFetch;

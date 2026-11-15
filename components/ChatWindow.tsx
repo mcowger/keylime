@@ -1712,6 +1712,11 @@ export function ChatWindow({
                     projectPath={shipWorkspace.projectPath}
                     path={shipWorkspace.path}
                     sessionId={session.id}
+                    onAskAgentToResolve={async (message) => {
+                      const result = await handleSend(message);
+                      if (result.status !== "accepted")
+                        throw new Error("Could not submit the resolve request.");
+                    }}
                     onRemoved={shipWorkspace.onRemoved}
                   />
                 </>

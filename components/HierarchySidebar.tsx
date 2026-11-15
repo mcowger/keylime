@@ -12,6 +12,8 @@ import {
   Trash2,
   Wrench,
 } from "lucide-react";
+import { getOutboxScope } from "@/lib/agent-client";
+import { addToOutbox, newOutboxId } from "@/lib/event-stream";
 import type {
   HierarchyProject,
   HierarchySnapshot,
@@ -425,6 +427,23 @@ export function HierarchySidebar({
             if (!open) setShipTarget(null);
           }}
           {...shipTarget}
+          onAskAgentToResolve={async (message) => {
+            let advisor = false;
+            try {
+              advisor = localStorage.getItem(`omp-advisor-enabled:${shipTarget.sessionId}`) === "true";
+            } catch {
+              // Storage can be unavailable; match the normal session default.
+            }
+            await addToOutbox({
+              id: newOutboxId(),
+              sessionId: shipTarget.sessionId,
+              scope: await getOutboxScope(shipTarget.sessionId),
+              advisor,
+              mode: "prompt",
+              message,
+              createdAt: Date.now(),
+            });
+          }}
           onRemoved={() => {
             onSelectWorkspace(shipTarget.projectPath, shipTarget.host);
             onChanged();

@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { getAgentDir } from "../omp/paths";
 import { createGitEnvironment } from "../project-command-env";
 import { resolveGithubRepo } from "../github-repo";
@@ -81,11 +82,13 @@ function command(
   args: string[],
   input?: string,
   job?: ShipJob,
+  allowConflict = false,
+  env?: NodeJS.ProcessEnv,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(program, args, {
       cwd,
-      env: createGitEnvironment(),
+      env: { ...createGitEnvironment(), ...env },
       stdio: ["pipe", "pipe", "pipe"],
     });
     let stdout = "",
@@ -102,7 +105,7 @@ function command(
         job.logs = (job.logs + stdout + stderr).slice(-100_000);
         persist(job);
       }
-      if (code === 0) resolve(stdout.trim());
+      if (code === 0 || (allowConflict && code === 1)) resolve(stdout.trim());
       else
         reject(
           new Error(
@@ -151,7 +154,7 @@ export async function shipPreview(input: {
       "base_detached",
       "Default workspace is not on a branch",
     );
-  const [current, counts, workspaceDirty, baseDirty, repo, gh] =
+  const [current, counts, workspaceDirty, baseDirty, repo, gh, unmerged, gitDir] =
     await Promise.all([
       branch(input.path),
       git(input.path, [
@@ -164,8 +167,52 @@ export async function shipPreview(input: {
       dirty(base.path),
       resolveGithubRepo(input.path),
       ghState(input.path),
+      git(input.path, ["diff", "--name-only", "--diff-filter=U", "-z"]),
+      git(input.path, ["rev-parse", "--absolute-git-dir"]),
     ]);
   const [behind, ahead] = counts.split(/\s+/).map(Number);
+  const issues: string[] = [];
+  if (!current) issues.push("Workspace is not on a branch.");
+  if (unmerged) issues.push(`Unresolved conflicts: ${unmerged.split("\0").filter(Boolean).join(", ")}`);
+  const operations = [
+    ["rebase-merge", "rebase"],
+    ["rebase-apply", "rebase or am"],
+    ["MERGE_HEAD", "merge"],
+    ["CHERRY_PICK_HEAD", "cherry-pick"],
+    ["REVERT_HEAD", "revert"],
+  ];
+  for (const [file, operation] of operations) {
+    if (fs.existsSync(path.join(gitDir, file)))
+      issues.push(`A ${operation} is in progress; complete or abort it before shipping.`);
+  }
+  if (behind > 0 && !issues.length && (ahead > 0 || workspaceDirty)) {
+    let head = "HEAD";
+    let temporary: string | undefined;
+    try {
+      if (workspaceDirty) {
+        temporary = fs.mkdtempSync(path.join(os.tmpdir(), "keylime-ship-"));
+        const index = path.join(temporary, "index");
+        const source = await git(input.path, ["rev-parse", "--git-path", "index"]);
+        const sourceIndex = path.resolve(input.path, source);
+        if (fs.existsSync(sourceIndex)) fs.copyFileSync(sourceIndex, index);
+        const env = { GIT_INDEX_FILE: index };
+        if (!fs.existsSync(index))
+          await command(input.path, "git", ["read-tree", "HEAD"], undefined, undefined, false, env);
+        await command(input.path, "git", ["add", "--all"], undefined, undefined, false, env);
+        const tree = await command(input.path, "git", ["write-tree"], undefined, undefined, false, env);
+        head = await git(input.path, ["-c", "user.name=Keylime", "-c", "user.email=ship@invalid", "commit-tree", tree, "-p", "HEAD", "-m", "Ship preflight"]);
+      }
+      const result = await command(input.path, "git", [
+        "merge-tree", "--write-tree", "--name-only", "-z", `refs/heads/${baseBranch}`, head,
+      ], undefined, undefined, true);
+      const fields = result.split("\0");
+      const end = fields.indexOf("", 1);
+      const conflicts = fields.slice(1, end < 0 ? undefined : end).filter(Boolean);
+      if (conflicts.length) issues.push(`Potential conflicts with ${baseBranch}: ${conflicts.join(", ")}`);
+    } finally {
+      if (temporary) fs.rmSync(temporary, { recursive: true, force: true });
+    }
+  }
   return {
     branch: current,
     base: baseBranch,
@@ -174,6 +221,7 @@ export async function shipPreview(input: {
     behind,
     dirty: workspaceDirty,
     baseDirty,
+    issues,
     github: { repo, gh },
     pr: records()[input.path]?.pr ?? null,
   };

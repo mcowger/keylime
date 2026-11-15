@@ -6,15 +6,19 @@ Status: building. Contract: `lib/workspace-ship-types.ts`.
 
 A **Ship** button on a linked (non-default) workspace's chat opens one sheet:
 
-1. On open, the sheet requests `shipPreview` (host op) and `commit_plan` (runner command) in parallel.
+1. On open, the sheet requests `shipPreview` (host op) first. Only when preflight reports no blocking Git issues
+   does it request `commit_plan` (runner command), which can stage changes.
 2. The sheet shows the changed files, the editable commit message(s) (a split plan shows one per commit), the changelog
    files omp will touch, and "N behind <base>" with **Rebase first** (checked when behind).
 3. Path: **Land locally** (rebase, fast-forward local base, clean up), **Open PR** (rebase, push, create PR),
    **PR + auto-merge** (same, then `gh pr merge --auto`, squash by default). The PR title and body come from
    `generate_pr_description` and can be edited. **Clean up when done** is checked by default.
 4. Ship: `commit_apply` with the edited plan, then host op `startShip`, polled through `shipStatus` with per-step
-   progress. A rebase conflict aborts the rebase (`conflict`, with `conflictFiles`) and offers **Ask agent to
-   resolve**, which puts a prompt in the chat composer.
+   progress. Preflight reports unmerged files, in-progress Git operations and potential conflicts with the base,
+   including uncommitted changes, using a temporary index without changing the workspace or its index. This merge
+   preview cannot predict every conflict in a multi-commit rebase. A rebase conflict aborts the rebase (`conflict`,
+   with `conflictFiles`). Both cases offer **Ask agent to resolve**, which submits a prompt directly to the session
+   and closes the sheet only when submission succeeds.
 
 ## Generation runs in the session (runner commands)
 
