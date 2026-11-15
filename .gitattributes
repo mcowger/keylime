@@ -16,6 +16,9 @@
 *.yml   text eol=lf
 *.yaml  text eol=lf
 
+# Keep concurrent changelog additions during local merges and rebases.
+CHANGELOG.md merge=union
+
 # Generated / build manifests should never be reflowed
 *.lock text eol=lf
 
