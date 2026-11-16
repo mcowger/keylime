@@ -36017,7 +36017,7 @@
     },
     "/api/files/{path}": {
       "get": {
-        "description": "### Usage\n\nList, read, download, preview or inspect a workspace file.\n\n### Inputs\n\nThe path names daemon-machine path segments; type defaults to list, with optional root, hostId and sessionId. Downloads accept HTTP byte ranges.\n\n### Invariants\n\nSession ownership confines access; file authorization and root/symlink and secret restrictions apply on the host.\n\n### Effects\n\nReads current host data; streamed files open a host handle that is closed after streaming.\n\n### Recovery\n\nA changed or unavailable file can invalidate a repeated read or byte range; request a fresh snapshot.\n\n### Additional protocol details\n\nSession ownership controls the host and accessible roots. List is the default; read returns JSON for text and streamed bytes for media. Preview renders DOCX as sandboxed HTML. Downloads support HTTP Range and stream the file.",
+        "description": "### Usage\n\nList, read, download, preview or inspect a workspace file.\n\n### Inputs\n\nThe path names daemon-machine path segments; type defaults to list, with optional root, hostId and sessionId. Downloads accept HTTP byte ranges.\n\n### Invariants\n\nSession ownership confines access; host system temporary directories are authorized roots, subject to file authorization, symlink and secret restrictions.\n\n### Effects\n\nReads current host data; streamed files open a host handle that is closed after streaming.\n\n### Recovery\n\nA changed or unavailable file can invalidate a repeated read or byte range; request a fresh snapshot.\n\n### Additional protocol details\n\nSession ownership controls the host and accessible roots. List is the default; read returns JSON for text and streamed bytes for media. Preview renders DOCX as sandboxed HTML. Downloads support HTTP Range and stream the file.",
         "operationId": "workspaceFilesGet",
         "parameters": [
           {
@@ -36547,13 +36547,13 @@
         "x-client-semantics": {
           "Effects": "Reads current host data; streamed files open a host handle that is closed after streaming.",
           "Inputs": "The path names daemon-machine path segments; type defaults to list, with optional root, hostId and sessionId. Downloads accept HTTP byte ranges.",
-          "Invariants": "Session ownership confines access; file authorization and root/symlink and secret restrictions apply on the host.",
+          "Invariants": "Session ownership confines access; host system temporary directories are authorized roots, subject to file authorization, symlink and secret restrictions.",
           "Recovery": "A changed or unavailable file can invalidate a repeated read or byte range; request a fresh snapshot.",
           "Usage": "List, read, download, preview or inspect a workspace file."
         }
       },
       "post": {
-        "description": "### Usage\n\nInspect upload names or publish staged uploads into a directory.\n\n### Inputs\n\nThe path is a daemon-machine directory; type defaults to upload, while upload-check takes fileNames. Publish takes 1–1000 id/name pairs and a conflict strategy.\n\n### Invariants\n\nHost and session must agree; staging belongs to the requesting owner and target inspection does not reserve names.\n\n### Effects\n\nPublishing may partially succeed: uploaded, skipped and per-file errors are returned, with 207 for mixed results.\n\n### Recovery\n\nAfter an uncertain response inspect the directory and individual results before retrying; already published files may remain.\n\n### Additional protocol details\n\nupload-check inspects names; upload consumes staged upload IDs owned by the authenticated requester on the selected host. Mixed successes return 207.",
+        "description": "### Usage\n\nInspect upload names or publish staged uploads into a directory.\n\n### Inputs\n\nThe path is a daemon-machine directory; type defaults to upload, while upload-check takes fileNames. Publish takes 1–1000 id/name pairs and a conflict strategy.\n\n### Invariants\n\nHost and session must agree; staging belongs to the requesting owner and target inspection does not reserve names. Host system temporary directories are authorized roots; secret and symlink restrictions still apply.\n\n### Effects\n\nPublishing may partially succeed: uploaded, skipped and per-file errors are returned, with 207 for mixed results.\n\n### Recovery\n\nAfter an uncertain response inspect the directory and individual results before retrying; already published files may remain.\n\n### Additional protocol details\n\nupload-check inspects names; upload consumes staged upload IDs owned by the authenticated requester on the selected host. Mixed successes return 207.",
         "operationId": "workspaceFilesPost",
         "parameters": [
           {
@@ -37178,7 +37178,7 @@
         "x-client-semantics": {
           "Effects": "Publishing may partially succeed: uploaded, skipped and per-file errors are returned, with 207 for mixed results.",
           "Inputs": "The path is a daemon-machine directory; type defaults to upload, while upload-check takes fileNames. Publish takes 1–1000 id/name pairs and a conflict strategy.",
-          "Invariants": "Host and session must agree; staging belongs to the requesting owner and target inspection does not reserve names.",
+          "Invariants": "Host and session must agree; staging belongs to the requesting owner and target inspection does not reserve names. Host system temporary directories are authorized roots; secret and symlink restrictions still apply.",
           "Recovery": "After an uncertain response inspect the directory and individual results before retrying; already published files may remain.",
           "Usage": "Inspect upload names or publish staged uploads into a directory."
         }

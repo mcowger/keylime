@@ -75,6 +75,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ### Fixed
 - Toast titles use the application's standard font instead of the display serif.
+- Images referenced from system temporary directories can be displayed, and blocked local images report their path instead of showing a broken preview.
 - Hide the composer task button when all tasks are complete.
 - Select menus keep their portal inside the viewport to avoid focus-induced page shifts on iOS.
 - Markdown tables keep readable column widths on mobile and scroll horizontally when needed.
@@ -161,6 +162,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Hide the composer task button when all tasks are complete
 - Project settings and workspace configuration controls fit within narrow mobile dialogs
 - Toast titles use the application's standard font instead of the display serif
+- Images referenced from system temporary directories can be displayed, and blocked local images report their path instead of showing a broken preview
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

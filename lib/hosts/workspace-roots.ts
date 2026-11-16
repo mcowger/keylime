@@ -1,5 +1,5 @@
 import { realpathSync, readdirSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { getConfigAgentRoots, isFilePathAllowed } from "../file-access";
 import { authorizeFileAccess } from "../file-authorization";
@@ -18,6 +18,23 @@ import { readHierarchy } from "./project-hierarchy";
 
 const grants = new Set<string>();
 let cached: { roots: Set<string>; until: number } | null = null;
+
+function addTemporaryRoots(roots: Set<string>): void {
+  for (const root of [
+    tmpdir(),
+    "/tmp",
+    "/var/tmp",
+  ]) {
+    try {
+      const canonical = realpathSync(root);
+      if (canonical === "/") continue;
+      roots.add(canonical);
+      roots.add(resolve(root));
+    } catch {
+      /* An unavailable temporary directory grants nothing. */
+    }
+  }
+}
 
 export function invalidateWorkspaceRoots(): void {
   cached = null;
@@ -51,6 +68,7 @@ export async function getWorkspaceRoots(
         "Invalid native session workspace",
       );
     const roots = new Set([cwd, (await resolveProject(cwd)).projectRoot]);
+    addTemporaryRoots(roots);
     for (const root of getConfigAgentRoots()) roots.add(root);
     return roots;
   }
@@ -66,6 +84,7 @@ export async function getWorkspaceRoots(
   for (const project of readHierarchy().projects)
     for (const workspace of project.workspaces) roots.add(workspace.path);
   for (const grant of grants) roots.add(grant);
+  addTemporaryRoots(roots);
   try {
     for (const entry of readdirSync(homedir(), { withFileTypes: true })) {
       if (entry.isDirectory() && /^omp-cwd-\d{8}$/.test(entry.name))

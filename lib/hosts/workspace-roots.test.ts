@@ -3,6 +3,8 @@ import {
   mkdtempSync,
   mkdirSync,
   writeFileSync,
+  realpathSync,
+  existsSync,
   symlinkSync,
   rmSync,
 } from "node:fs";
@@ -54,8 +56,7 @@ test("selecting a symlinked workspace authorizes that spelling but not child sym
   mkdirSync(target);
   symlinkSync(target, alias, "dir");
   writeFileSync(join(target, "report.txt"), "workspace bytes");
-  writeFileSync(join(dir, "outside.txt"), "outside bytes");
-  symlinkSync(join(dir, "outside.txt"), join(target, "escape.txt"));
+  symlinkSync("/etc/hosts", join(target, "escape.txt"));
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = join(dir, "agent");
   t.after(() => {
@@ -84,4 +85,44 @@ test("selecting a symlinked workspace authorizes that spelling but not child sym
   );
   assert.ok(!escaped.ok);
   assert.equal(escaped.status, 403);
+});
+
+test("daemon temporary roots allow aliases but retain credential and symlink protections", async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "omp-workspace-temp-"));
+  const agent = join(dir, "agent");
+  mkdirSync(agent);
+  const image = join(dir, "screenshot.png");
+  const secret = join(agent, "agent.db");
+  const escape = join(dir, "escape");
+  writeFileSync(image, "image bytes");
+  writeFileSync(secret, "secret bytes");
+  symlinkSync("/etc/hosts", escape);
+  const previous = process.env.PI_CODING_AGENT_DIR;
+  process.env.PI_CODING_AGENT_DIR = agent;
+  t.after(() => {
+    if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = previous;
+    rmSync(dir, { recursive: true, force: true });
+  });
+  // Import after setting the fixture's installation paths for module initialization.
+  const { getWorkspaceRoots, invalidateWorkspaceRoots } = await import("./workspace-roots.ts");
+  const { authorizeFileAccess } = await import("../file-authorization.ts");
+  invalidateWorkspaceRoots();
+  for (const owner of [undefined, { sessionId: "00000000-0000-4000-8000-000000000000", cwd: process.cwd() }]) {
+    const roots = await getWorkspaceRoots(owner);
+    for (const root of [tmpdir(), "/tmp", "/var/tmp"]) {
+      if (existsSync(root)) {
+        assert.ok(roots.has(root));
+        assert.ok(roots.has(realpathSync(root)));
+      }
+    }
+    for (const path of [image, realpathSync(image)]) {
+      assert.equal((await authorizeFileAccess([path], null, false, roots)).ok, true);
+    }
+    for (const path of [secret, escape]) {
+      const decision = await authorizeFileAccess([path], null, false, roots);
+      assert.ok(!decision.ok);
+      assert.equal(decision.status, 403);
+    }
+  }
 });

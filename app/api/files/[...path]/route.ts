@@ -40,7 +40,7 @@ function parseFileRequestType(value: string): FileRequestType | null {
  * @apiContract workspaceFilesPost
  * @apiUsage Inspect upload names or publish staged uploads into a directory.
  * @apiInputs The path is a daemon-machine directory; type defaults to upload, while upload-check takes fileNames. Publish takes 1–1000 id/name pairs and a conflict strategy.
- * @apiInvariants Host and session must agree; staging belongs to the requesting owner and target inspection does not reserve names.
+ * @apiInvariants Host and session must agree; staging belongs to the requesting owner and target inspection does not reserve names. Host system temporary directories are authorized roots; secret and symlink restrictions still apply.
  * @apiEffects Publishing may partially succeed: uploaded, skipped and per-file errors are returned, with 207 for mixed results.
  * @apiRecovery After an uncertain response inspect the directory and individual results before retrying; already published files may remain.
  */
@@ -228,7 +228,7 @@ ${bodyHtml}
  * @apiContract workspaceFilesGet
  * @apiUsage List, read, download, preview or inspect a workspace file.
  * @apiInputs The path names daemon-machine path segments; type defaults to list, with optional root, hostId and sessionId. Downloads accept HTTP byte ranges.
- * @apiInvariants Session ownership confines access; file authorization and root/symlink and secret restrictions apply on the host.
+ * @apiInvariants Session ownership confines access; host system temporary directories are authorized roots, subject to file authorization, symlink and secret restrictions.
  * @apiEffects Reads current host data; streamed files open a host handle that is closed after streaming.
  * @apiRecovery A changed or unavailable file can invalidate a repeated read or byte range; request a fresh snapshot.
  */

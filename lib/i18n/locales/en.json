@@ -855,6 +855,8 @@
   "imagePreview.imageTitle": "Image",
   "imagePreview.open": "Open image preview",
   "imagePreview.openWithAlt": "Open image preview: {alt}",
+  "imagePreview.blocked": "Image blocked: {path}",
+  "imagePreview.unavailable": "Image unavailable: {path}",
   "imagePreview.actualSize": "Actual size (100%)",
   "imagePreview.fitToScreen": "Fit to screen",
   "imagePreview.viewerLabel": "Image preview",

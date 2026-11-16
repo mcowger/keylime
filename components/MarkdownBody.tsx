@@ -6,6 +6,8 @@ import {
   isValidElement,
   useContext,
   useMemo,
+  useEffect,
+  useState,
   type ComponentProps,
   type MouseEvent,
   type ReactElement,
@@ -20,6 +22,7 @@ import {
   resolveLocalFileHref,
 } from "@/lib/file-links";
 import { getFileApiUrl } from "@/lib/file-paths";
+import { useI18n } from "@/lib/i18n";
 import { WorkspaceFileContext } from "@/lib/workspace-file-context";
 import {
   AgentLinkContext,
@@ -42,6 +45,45 @@ const urlTransform: UrlTransform = (url, key, node) =>
   /^[A-Za-z]:(?:\/|%5C)/i.test(url)
     ? url
     : agentAwareUrlTransform(url, key, node);
+
+function LocalMarkdownImage({
+  src,
+  filePath,
+  alt,
+  ...imgProps
+}: ComponentProps<"img"> & { src: string; filePath: string }) {
+  const { t } = useI18n();
+  const [failure, setFailure] = useState<"unavailable" | "blocked" | null>(null);
+
+  useEffect(() => {
+    if (failure !== "unavailable") return;
+    const controller = new AbortController();
+    // Only inspect our own file API, never an external image URL. Same-origin
+    // credentials preserve password-protected sessions.
+    fetch(src, { credentials: "same-origin", signal: controller.signal })
+      .then(async (response) => {
+        if (response.status !== 403) return;
+        const body: unknown = await response.json();
+        if (
+          !controller.signal.aborted &&
+          typeof body === "object" &&
+          body !== null &&
+          "code" in body &&
+          body.code === "access_denied"
+        ) setFailure("blocked");
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [src, failure]);
+  if (failure) {
+    return (
+      <span role="status">
+        {t(failure === "blocked" ? "imagePreview.blocked" : "imagePreview.unavailable", { path: filePath })}
+      </span>
+    );
+  }
+  return <ClickableImage src={src} alt={alt ?? ""} {...imgProps} onError={() => setFailure("unavailable")} />;
+}
 
 /** Props accepted by `MarkdownBody`. */
 export interface MarkdownBodyProps {
@@ -116,7 +158,18 @@ export function useMarkdownBodyRendering({
             sourceSessionId ?? fileSource?.sessionId,
           )
         : src;
-      // Dynamic local paths are served directly by the file API.
+      if (filePath && typeof imageSrc === "string") {
+        return (
+          <LocalMarkdownImage
+            key={imageSrc}
+            src={imageSrc}
+            filePath={filePath}
+            alt={alt}
+            loading="lazy"
+            {...imgProps}
+          />
+        );
+      }
       return (
         <ClickableImage
           src={imageSrc}
