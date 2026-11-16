@@ -356,10 +356,9 @@ tar -xzf ompweb-linux-x64.tar.gz -C ~/.local/share   # unpacks ompweb-linux-x64/
   `curl` reaches it, allow your terminal (or `ompweb`) under System Settings →
   Privacy & Security → Local Network. A server reached over a VPN such as
   Tailscale, or a host started from an SSH session, is not affected.
-- **No service installers or in-app update.** To update, stop `ompweb` and
-  `ompweb host`, replace the directory with the new release, and start both again;
-  **Settings → System** links the release page when a new version is out.
-  Your sessions and settings live in `~/.omp`, not in that directory.
+- **Updating.** Stop `ompweb` and `ompweb host`, replace the directory with the
+  new release, and start both again. Your sessions and settings live in `~/.omp`,
+  not in that directory. The single binary has no service installers.
 - **As systemd user services**, write the two units yourself (adjust the paths):
 
 ```ini
@@ -529,31 +528,9 @@ HTTP(S). It dials out, so it can sit behind NAT.
    The host shows **online** in Settings → Hosts, the sidebar gets a group for it,
    and the new-session screen gets a host picker.
 
-**Settings → Hosts** also shows each machine's key lime daemon and omp versions,
-available updates and update actions, including **This machine**.
-Checks and installations run on the selected host, not on the web server. A host
-update whose link protocol is incompatible with the current web app stays visible
-but is blocked with a reason; update the web server first. An unverifiable target
-protocol is blocked too. omp is part of each key lime release and updates with it.
-Before updating a daemon, close its session processes: the updater refuses to
-interrupt sessions or subagents. **Settings → System** keeps the web server's
-own application update and service settings.
-Hosts need a daemon build that supports these update operations; older builds
-show an unsupported message and need one manual update first. If the daemon
-shares its installation with the web server, update the server first, then use
-the host's restart-only update. Unsupported service wrappers and detected restart
-scripts show a manual-update reason. Stop external restart loops before updating
-a foreground daemon.
-
-A daemon update is carried out by a separate updater process on the host. It
-stops the daemon, swaps in the new release and starts it again, and on a failure
-it restores the previous release. If that updater is itself killed after stopping
-the daemon (a reboot, an out-of-memory kill), nothing restarts the host, which
-stays offline. Recover on the host: in the folder containing the installation,
-`.ompweb-backup-<id>` is the previous release. If it is there, move the
-installation aside and rename the backup back to the installation's name; then
-start `ompweb host` (or its service) again. Settings → Hosts reports the update
-as interrupted.
+**Settings → Hosts** shows each machine's key lime daemon and omp versions,
+including **This machine**. Update the web server and host daemons manually,
+with the web server first. omp is part of each key lime release and updates with it.
 
 `https://` is required. Plain `http://` is accepted only for loopback addresses, or
 with `--allow-http` (for example on a tailnet):
@@ -751,7 +728,6 @@ inactivity or on sleep, SSH key passphrases and signing fail until you restart i
 | `OMP_WEB_PASSWORD_HASH`         | Optional scrypt hash of the web login password, from `ompweb hash-password`. Optional on every bind address, including `0.0.0.0`                                                                                                                                                                                                                                                  | _None (auth disabled)_                |
 | `OMP_WEB_TRUSTED_HEADER_SHA256` | SHA-256 hex digest of the secret a trusted reverse proxy sends in `X-Omp-Web-Auth` to skip the password for that request; see [Skipping the password on trusted networks](#skipping-the-password-on-trusted-networks)                                                                                                                                                             | _None (disabled)_                     |
 | `OMP_WEB_NO_OPEN`               | Set to `1` to prevent auto-opening browser                                                                                                                                                                                                                                                                                                                                        | `0`                                   |
-| `OMP_WEB_DISABLE_AUTOUPDATE`    | Set to `1` to disable update checks and in-app updates; restart after changing                                                                                                                                                                                                                                                                                                    | `0`                                   |
 | `OMP_WEB_NAME`                  | Name shown in browser tabs and installed-app names. `url`, `host` or `domain` (any case) uses the hostname the browser connected to, without port; localhost and IP addresses keep `key lime`. Any other value is used as-is. Restart after changing                                                                                                                               | `key lime`                             |
 | `OMP_WEB_OMP_BIN`               | Path to an `ompweb-omp` build to use instead of the downloaded one: a copy of the release's `ompweb-omp-<os>-<arch>` on a machine that cannot reach GitHub, or `runner/release/ompweb-omp-<os>-<arch>` from a source checkout. A stock `omp` does not work: it does not speak key lime's channel. The service installers write it into the service environment only when you set it | _the downloaded `ompweb-omp`_         |
 | `PI_CODING_AGENT_DIR`           | Custom omp agent directory                                                                                                                                                                                                                                                                                                                                                        | `~/.omp/agent`                        |

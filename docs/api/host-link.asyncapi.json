@@ -106,9 +106,6 @@
         "HostReply_cancelClone": {
           "$ref": "#/components/messages/HostReply_cancelClone"
         },
-        "HostReply_checkUpdates": {
-          "$ref": "#/components/messages/HostReply_checkUpdates"
-        },
         "HostReply_close": {
           "$ref": "#/components/messages/HostReply_close"
         },
@@ -280,9 +277,6 @@
         "HostReply_updateProject": {
           "$ref": "#/components/messages/HostReply_updateProject"
         },
-        "HostReply_updateSoftware": {
-          "$ref": "#/components/messages/HostReply_updateSoftware"
-        },
         "HostReply_uploadAbort": {
           "$ref": "#/components/messages/HostReply_uploadAbort"
         },
@@ -318,9 +312,6 @@
         },
         "HostRequest_cancelClone": {
           "$ref": "#/components/messages/HostRequest_cancelClone"
-        },
-        "HostRequest_checkUpdates": {
-          "$ref": "#/components/messages/HostRequest_checkUpdates"
         },
         "HostRequest_close": {
           "$ref": "#/components/messages/HostRequest_close"
@@ -492,9 +483,6 @@
         },
         "HostRequest_updateProject": {
           "$ref": "#/components/messages/HostRequest_updateProject"
-        },
-        "HostRequest_updateSoftware": {
-          "$ref": "#/components/messages/HostRequest_updateSoftware"
         },
         "HostRequest_uploadAbort": {
           "$ref": "#/components/messages/HostRequest_uploadAbort"
@@ -824,18 +812,6 @@
           "$ref": "#/components/schemas/HostReply_cancelClone"
         },
         "title": "HostReply_cancelClone"
-      },
-      "HostReply_checkUpdates": {
-        "contentType": "application/json",
-        "correlationId": {
-          "location": "$message.payload#/id"
-        },
-        "description": "Reply to checkUpdates; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Inspect daemon software update status.\nInputs: Supply supported protocol compatibility and optionally force a check.\nInvariants: This checks the daemon, not the web server.\nEffects: Reads software status; does not install an update.\nRecovery: Retry a failed status check after connectivity is restored.",
-        "name": "HostReply_checkUpdates",
-        "payload": {
-          "$ref": "#/components/schemas/HostReply_checkUpdates"
-        },
-        "title": "HostReply_checkUpdates"
       },
       "HostReply_close": {
         "contentType": "application/json",
@@ -1521,18 +1497,6 @@
         },
         "title": "HostReply_updateProject"
       },
-      "HostReply_updateSoftware": {
-        "contentType": "application/json",
-        "correlationId": {
-          "location": "$message.payload#/id"
-        },
-        "description": "Reply to updateSoftware; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Start a daemon software update.\nInputs: Supply ompweb target, version and supported protocol range.\nInvariants: Compatibility and quiescence are checked; omp updates with ompweb and is not a separate target. Acceptance is not completion.\nEffects: Starts an update with durable operation status.\nRecovery: Read operation status after reconnect before submitting another update.",
-        "name": "HostReply_updateSoftware",
-        "payload": {
-          "$ref": "#/components/schemas/HostReply_updateSoftware"
-        },
-        "title": "HostReply_updateSoftware"
-      },
       "HostReply_uploadAbort": {
         "contentType": "application/json",
         "correlationId": {
@@ -1676,18 +1640,6 @@
           "$ref": "#/components/schemas/HostRequest_cancelClone"
         },
         "title": "HostRequest_cancelClone"
-      },
-      "HostRequest_checkUpdates": {
-        "contentType": "application/json",
-        "correlationId": {
-          "location": "$message.payload#/id"
-        },
-        "description": "Usage: Inspect daemon software update status.\nInputs: Supply supported protocol compatibility and optionally force a check.\nInvariants: This checks the daemon, not the web server.\nEffects: Reads software status; does not install an update.\nRecovery: Retry a failed status check after connectivity is restored.",
-        "name": "HostRequest_checkUpdates",
-        "payload": {
-          "$ref": "#/components/schemas/HostRequest_checkUpdates"
-        },
-        "title": "HostRequest_checkUpdates"
       },
       "HostRequest_close": {
         "contentType": "application/json",
@@ -2372,18 +2324,6 @@
           "$ref": "#/components/schemas/HostRequest_updateProject"
         },
         "title": "HostRequest_updateProject"
-      },
-      "HostRequest_updateSoftware": {
-        "contentType": "application/json",
-        "correlationId": {
-          "location": "$message.payload#/id"
-        },
-        "description": "Usage: Start a daemon software update.\nInputs: Supply ompweb target, version and supported protocol range.\nInvariants: Compatibility and quiescence are checked; omp updates with ompweb and is not a separate target. Acceptance is not completion.\nEffects: Starts an update with durable operation status.\nRecovery: Read operation status after reconnect before submitting another update.",
-        "name": "HostRequest_updateSoftware",
-        "payload": {
-          "$ref": "#/components/schemas/HostRequest_updateSoftware"
-        },
-        "title": "HostRequest_updateSoftware"
       },
       "HostRequest_uploadAbort": {
         "contentType": "application/json",
@@ -42853,462 +42793,6 @@
         "description": "Reply to cancelClone; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Cancel an active clone.\nInputs: id identifies the host clone job.\nInvariants: Returned progress reports its resulting state; cancellation can race completion.\nEffects: Requests termination of the clone process and cleanup of its target.\nRecovery: Read progress and inspect the target before starting again.",
         "title": "HostReply_cancelClone"
       },
-      "HostReply_checkUpdates": {
-        "anyOf": [
-          {
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "ok": {
-                "const": true,
-                "type": "boolean"
-              },
-              "result": {
-                "description": "Software update status reported by the selected host daemon.",
-                "properties": {
-                  "omp": {
-                    "description": "Installed omp version; omp is not a new update target.",
-                    "properties": {
-                      "currentVersion": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ],
-                        "description": "Installed omp version, or null when unavailable."
-                      }
-                    },
-                    "required": ["currentVersion"],
-                    "type": "object"
-                  },
-                  "ompweb": {
-                    "allOf": [
-                      {
-                        "description": "Update availability and installation eligibility for host software.",
-                        "properties": {
-                          "availableVersion": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "description": "Available release version, or null when unknown."
-                          },
-                          "blockedReason": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "description": "Human-readable reason installation is blocked, or null."
-                          },
-                          "canUpdate": {
-                            "description": "Whether the daemon can safely install the available release.",
-                            "type": "boolean"
-                          },
-                          "currentVersion": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "description": "Installed version, or null when unavailable."
-                          },
-                          "updateAvailable": {
-                            "description": "Whether a newer release is available.",
-                            "type": "boolean"
-                          },
-                          "updateCommand": {
-                            "description": "Manual update command or release URL.",
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "currentVersion",
-                          "availableVersion",
-                          "updateAvailable",
-                          "canUpdate",
-                          "blockedReason",
-                          "updateCommand"
-                        ],
-                        "type": "object"
-                      },
-                      {
-                        "properties": {
-                          "installMethod": {
-                            "anyOf": [
-                              {
-                                "const": "bun",
-                                "type": "string"
-                              },
-                              {
-                                "const": "binary",
-                                "type": "string"
-                              }
-                            ],
-                            "description": "How the host daemon is installed."
-                          },
-                          "protocolVersion": {
-                            "anyOf": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "description": "Candidate release link protocol version, or null when unverified."
-                          }
-                        },
-                        "required": ["installMethod", "protocolVersion"],
-                        "type": "object"
-                      }
-                    ],
-                    "description": "Daemon update status and candidate compatibility details.",
-                    "type": "object"
-                  },
-                  "operation": {
-                    "anyOf": [
-                      {
-                        "description": "Status of a daemon software update operation.",
-                        "properties": {
-                          "error": {
-                            "description": "Failure detail when reported by the daemon.",
-                            "type": "string"
-                          },
-                          "id": {
-                            "description": "Identifier of the daemon update operation.",
-                            "type": "string"
-                          },
-                          "state": {
-                            "anyOf": [
-                              {
-                                "const": "running",
-                                "type": "string"
-                              },
-                              {
-                                "const": "succeeded",
-                                "type": "string"
-                              },
-                              {
-                                "const": "failed",
-                                "type": "string"
-                              }
-                            ],
-                            "description": "Current operation state."
-                          },
-                          "target": {
-                            "anyOf": [
-                              {
-                                "const": "ompweb",
-                                "description": "The daemon software target supported for new updates.",
-                                "type": "string"
-                              },
-                              {
-                                "const": "omp",
-                                "description": "A legacy omp update.",
-                                "type": "string"
-                              }
-                            ],
-                            "description": "Software targeted by this operation; omp is retained for legacy status."
-                          },
-                          "version": {
-                            "description": "Release version requested for installation.",
-                            "type": "string"
-                          }
-                        },
-                        "required": ["id", "target", "version", "state"],
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "Most recent daemon update operation, or null when none is reported."
-                  }
-                },
-                "required": ["ompweb", "omp", "operation"],
-                "type": "object"
-              },
-              "seq": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              },
-              "type": {
-                "const": "res",
-                "type": "string"
-              }
-            },
-            "required": ["type", "seq", "id", "ok", "result"],
-            "type": "object"
-          },
-          {
-            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
-            "properties": {
-              "blob": {
-                "properties": {
-                  "bytes": {
-                    "minimum": 0,
-                    "type": "integer"
-                  }
-                },
-                "required": ["bytes"],
-                "type": "object"
-              },
-              "id": {
-                "type": "string"
-              },
-              "ok": {
-                "const": true,
-                "type": "boolean"
-              },
-              "seq": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              },
-              "type": {
-                "const": "res",
-                "type": "string"
-              }
-            },
-            "required": ["type", "seq", "id", "ok", "blob"],
-            "type": "object",
-            "x-decoded-result": {
-              "description": "Software update status reported by the selected host daemon.",
-              "properties": {
-                "omp": {
-                  "description": "Installed omp version; omp is not a new update target.",
-                  "properties": {
-                    "currentVersion": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "Installed omp version, or null when unavailable."
-                    }
-                  },
-                  "required": ["currentVersion"],
-                  "type": "object"
-                },
-                "ompweb": {
-                  "allOf": [
-                    {
-                      "description": "Update availability and installation eligibility for host software.",
-                      "properties": {
-                        "availableVersion": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "description": "Available release version, or null when unknown."
-                        },
-                        "blockedReason": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "description": "Human-readable reason installation is blocked, or null."
-                        },
-                        "canUpdate": {
-                          "description": "Whether the daemon can safely install the available release.",
-                          "type": "boolean"
-                        },
-                        "currentVersion": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "description": "Installed version, or null when unavailable."
-                        },
-                        "updateAvailable": {
-                          "description": "Whether a newer release is available.",
-                          "type": "boolean"
-                        },
-                        "updateCommand": {
-                          "description": "Manual update command or release URL.",
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "currentVersion",
-                        "availableVersion",
-                        "updateAvailable",
-                        "canUpdate",
-                        "blockedReason",
-                        "updateCommand"
-                      ],
-                      "type": "object"
-                    },
-                    {
-                      "properties": {
-                        "installMethod": {
-                          "anyOf": [
-                            {
-                              "const": "bun",
-                              "type": "string"
-                            },
-                            {
-                              "const": "binary",
-                              "type": "string"
-                            }
-                          ],
-                          "description": "How the host daemon is installed."
-                        },
-                        "protocolVersion": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "description": "Candidate release link protocol version, or null when unverified."
-                        }
-                      },
-                      "required": ["installMethod", "protocolVersion"],
-                      "type": "object"
-                    }
-                  ],
-                  "description": "Daemon update status and candidate compatibility details.",
-                  "type": "object"
-                },
-                "operation": {
-                  "anyOf": [
-                    {
-                      "description": "Status of a daemon software update operation.",
-                      "properties": {
-                        "error": {
-                          "description": "Failure detail when reported by the daemon.",
-                          "type": "string"
-                        },
-                        "id": {
-                          "description": "Identifier of the daemon update operation.",
-                          "type": "string"
-                        },
-                        "state": {
-                          "anyOf": [
-                            {
-                              "const": "running",
-                              "type": "string"
-                            },
-                            {
-                              "const": "succeeded",
-                              "type": "string"
-                            },
-                            {
-                              "const": "failed",
-                              "type": "string"
-                            }
-                          ],
-                          "description": "Current operation state."
-                        },
-                        "target": {
-                          "anyOf": [
-                            {
-                              "const": "ompweb",
-                              "description": "The daemon software target supported for new updates.",
-                              "type": "string"
-                            },
-                            {
-                              "const": "omp",
-                              "description": "A legacy omp update.",
-                              "type": "string"
-                            }
-                          ],
-                          "description": "Software targeted by this operation; omp is retained for legacy status."
-                        },
-                        "version": {
-                          "description": "Release version requested for installation.",
-                          "type": "string"
-                        }
-                      },
-                      "required": ["id", "target", "version", "state"],
-                      "type": "object"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "description": "Most recent daemon update operation, or null when none is reported."
-                }
-              },
-              "required": ["ompweb", "omp", "operation"],
-              "type": "object"
-            }
-          },
-          {
-            "properties": {
-              "error": {
-                "properties": {
-                  "code": {
-                    "type": "string"
-                  },
-                  "message": {
-                    "type": "string"
-                  },
-                  "status": {
-                    "type": "number"
-                  }
-                },
-                "required": ["status", "code", "message"],
-                "type": "object"
-              },
-              "id": {
-                "type": "string"
-              },
-              "ok": {
-                "const": false,
-                "type": "boolean"
-              },
-              "seq": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              },
-              "type": {
-                "const": "res",
-                "type": "string"
-              }
-            },
-            "required": ["type", "seq", "id", "ok", "error"],
-            "type": "object"
-          }
-        ],
-        "description": "Reply to checkUpdates; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Inspect daemon software update status.\nInputs: Supply supported protocol compatibility and optionally force a check.\nInvariants: This checks the daemon, not the web server.\nEffects: Reads software status; does not install an update.\nRecovery: Retry a failed status check after connectivity is restored.",
-        "title": "HostReply_checkUpdates"
-      },
       "HostReply_close": {
         "anyOf": [
           {
@@ -69422,226 +68906,6 @@
         "description": "Reply to updateProject; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Apply project presentation updates.\nInputs: Supply updates with cwd and optional nullable fields.\nInvariants: Duplicate targets merge per field, with later defined values winning; hidden entries are untouched. Invalid new paths in a bulk update can be skipped, while an entirely invalid batch fails. newRoots identifies newly registered roots.\nEffects: Mutates registry entries in one save.\nRecovery: Read the registry after uncertain delivery before repeating.",
         "title": "HostReply_updateProject"
       },
-      "HostReply_updateSoftware": {
-        "anyOf": [
-          {
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "ok": {
-                "const": true,
-                "type": "boolean"
-              },
-              "result": {
-                "properties": {
-                  "accepted": {
-                    "const": true,
-                    "type": "boolean"
-                  },
-                  "operation": {
-                    "description": "Status of a daemon software update operation.",
-                    "properties": {
-                      "error": {
-                        "description": "Failure detail when reported by the daemon.",
-                        "type": "string"
-                      },
-                      "id": {
-                        "description": "Identifier of the daemon update operation.",
-                        "type": "string"
-                      },
-                      "state": {
-                        "anyOf": [
-                          {
-                            "const": "running",
-                            "type": "string"
-                          },
-                          {
-                            "const": "succeeded",
-                            "type": "string"
-                          },
-                          {
-                            "const": "failed",
-                            "type": "string"
-                          }
-                        ],
-                        "description": "Current operation state."
-                      },
-                      "target": {
-                        "anyOf": [
-                          {
-                            "const": "ompweb",
-                            "description": "The daemon software target supported for new updates.",
-                            "type": "string"
-                          },
-                          {
-                            "const": "omp",
-                            "description": "A legacy omp update.",
-                            "type": "string"
-                          }
-                        ],
-                        "description": "Software targeted by this operation; omp is retained for legacy status."
-                      },
-                      "version": {
-                        "description": "Release version requested for installation.",
-                        "type": "string"
-                      }
-                    },
-                    "required": ["id", "target", "version", "state"],
-                    "type": "object"
-                  }
-                },
-                "required": ["accepted", "operation"],
-                "type": "object"
-              },
-              "seq": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              },
-              "type": {
-                "const": "res",
-                "type": "string"
-              }
-            },
-            "required": ["type", "seq", "id", "ok", "result"],
-            "type": "object"
-          },
-          {
-            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
-            "properties": {
-              "blob": {
-                "properties": {
-                  "bytes": {
-                    "minimum": 0,
-                    "type": "integer"
-                  }
-                },
-                "required": ["bytes"],
-                "type": "object"
-              },
-              "id": {
-                "type": "string"
-              },
-              "ok": {
-                "const": true,
-                "type": "boolean"
-              },
-              "seq": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              },
-              "type": {
-                "const": "res",
-                "type": "string"
-              }
-            },
-            "required": ["type", "seq", "id", "ok", "blob"],
-            "type": "object",
-            "x-decoded-result": {
-              "properties": {
-                "accepted": {
-                  "const": true,
-                  "type": "boolean"
-                },
-                "operation": {
-                  "description": "Status of a daemon software update operation.",
-                  "properties": {
-                    "error": {
-                      "description": "Failure detail when reported by the daemon.",
-                      "type": "string"
-                    },
-                    "id": {
-                      "description": "Identifier of the daemon update operation.",
-                      "type": "string"
-                    },
-                    "state": {
-                      "anyOf": [
-                        {
-                          "const": "running",
-                          "type": "string"
-                        },
-                        {
-                          "const": "succeeded",
-                          "type": "string"
-                        },
-                        {
-                          "const": "failed",
-                          "type": "string"
-                        }
-                      ],
-                      "description": "Current operation state."
-                    },
-                    "target": {
-                      "anyOf": [
-                        {
-                          "const": "ompweb",
-                          "description": "The daemon software target supported for new updates.",
-                          "type": "string"
-                        },
-                        {
-                          "const": "omp",
-                          "description": "A legacy omp update.",
-                          "type": "string"
-                        }
-                      ],
-                      "description": "Software targeted by this operation; omp is retained for legacy status."
-                    },
-                    "version": {
-                      "description": "Release version requested for installation.",
-                      "type": "string"
-                    }
-                  },
-                  "required": ["id", "target", "version", "state"],
-                  "type": "object"
-                }
-              },
-              "required": ["accepted", "operation"],
-              "type": "object"
-            }
-          },
-          {
-            "properties": {
-              "error": {
-                "properties": {
-                  "code": {
-                    "type": "string"
-                  },
-                  "message": {
-                    "type": "string"
-                  },
-                  "status": {
-                    "type": "number"
-                  }
-                },
-                "required": ["status", "code", "message"],
-                "type": "object"
-              },
-              "id": {
-                "type": "string"
-              },
-              "ok": {
-                "const": false,
-                "type": "boolean"
-              },
-              "seq": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              },
-              "type": {
-                "const": "res",
-                "type": "string"
-              }
-            },
-            "required": ["type", "seq", "id", "ok", "error"],
-            "type": "object"
-          }
-        ],
-        "description": "Reply to updateSoftware; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Start a daemon software update.\nInputs: Supply ompweb target, version and supported protocol range.\nInvariants: Compatibility and quiescence are checked; omp updates with ompweb and is not a separate target. Acceptance is not completion.\nEffects: Starts an update with durable operation status.\nRecovery: Read operation status after reconnect before submitting another update.",
-        "title": "HostReply_updateSoftware"
-      },
       "HostReply_uploadAbort": {
         "anyOf": [
           {
@@ -71875,54 +71139,6 @@
         },
         "required": ["type", "seq", "id", "op", "args"],
         "title": "HostRequest_cancelClone",
-        "type": "object"
-      },
-      "HostRequest_checkUpdates": {
-        "description": "Usage: Inspect daemon software update status.\nInputs: Supply supported protocol compatibility and optionally force a check.\nInvariants: This checks the daemon, not the web server.\nEffects: Reads software status; does not install an update.\nRecovery: Retry a failed status check after connectivity is restored.",
-        "properties": {
-          "args": {
-            "properties": {
-              "compatibility": {
-                "description": "The web server's supported daemon protocol range.",
-                "properties": {
-                  "max": {
-                    "description": "Newest supported daemon link protocol version.",
-                    "type": "number"
-                  },
-                  "min": {
-                    "description": "Oldest supported daemon link protocol version.",
-                    "type": "number"
-                  }
-                },
-                "required": ["min", "max"],
-                "type": "object"
-              },
-              "force": {
-                "type": "boolean"
-              }
-            },
-            "required": ["compatibility"],
-            "type": "object"
-          },
-          "id": {
-            "type": "string"
-          },
-          "op": {
-            "const": "checkUpdates",
-            "type": "string"
-          },
-          "seq": {
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "type": {
-            "const": "req",
-            "type": "string"
-          }
-        },
-        "required": ["type", "seq", "id", "op", "args"],
-        "title": "HostRequest_checkUpdates",
         "type": "object"
       },
       "HostRequest_close": {
@@ -75036,58 +74252,6 @@
         "title": "HostRequest_updateProject",
         "type": "object"
       },
-      "HostRequest_updateSoftware": {
-        "description": "Usage: Start a daemon software update.\nInputs: Supply ompweb target, version and supported protocol range.\nInvariants: Compatibility and quiescence are checked; omp updates with ompweb and is not a separate target. Acceptance is not completion.\nEffects: Starts an update with durable operation status.\nRecovery: Read operation status after reconnect before submitting another update.",
-        "properties": {
-          "args": {
-            "properties": {
-              "compatibility": {
-                "description": "The web server's supported daemon protocol range.",
-                "properties": {
-                  "max": {
-                    "description": "Newest supported daemon link protocol version.",
-                    "type": "number"
-                  },
-                  "min": {
-                    "description": "Oldest supported daemon link protocol version.",
-                    "type": "number"
-                  }
-                },
-                "required": ["min", "max"],
-                "type": "object"
-              },
-              "target": {
-                "const": "ompweb",
-                "type": "string"
-              },
-              "version": {
-                "type": "string"
-              }
-            },
-            "required": ["target", "version", "compatibility"],
-            "type": "object"
-          },
-          "id": {
-            "type": "string"
-          },
-          "op": {
-            "const": "updateSoftware",
-            "type": "string"
-          },
-          "seq": {
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "type": {
-            "const": "req",
-            "type": "string"
-          }
-        },
-        "required": ["type", "seq", "id", "op", "args"],
-        "title": "HostRequest_updateSoftware",
-        "type": "object"
-      },
       "HostRequest_uploadAbort": {
         "description": "Usage: Cancel a staged upload.\nInputs: Supply its UUID.\nInvariants: Upload controls are ordered per upload; an earlier attach cannot undo cancellation.\nEffects: Aborts staged data owned by this link; void success omits res.result.\nRecovery: Reconcile upload state after a lost response before proceeding.",
         "properties": {
@@ -75560,7 +74724,7 @@
   "defaultContentType": "application/json",
   "id": "urn:keylime:host-link",
   "info": {
-    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 11, minimum 11; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 71 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 11, minimum 11; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 69 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
     "title": "Host daemon link",
     "version": "11"
   },
@@ -75656,29 +74820,6 @@
         ]
       },
       "summary": "cancelClone"
-    },
-    "operation_checkUpdates": {
-      "action": "send",
-      "channel": {
-        "$ref": "#/channels/link"
-      },
-      "description": "Usage: Inspect daemon software update status.\nInputs: Supply supported protocol compatibility and optionally force a check.\nInvariants: This checks the daemon, not the web server.\nEffects: Reads software status; does not install an update.\nRecovery: Retry a failed status check after connectivity is restored.",
-      "messages": [
-        {
-          "$ref": "#/channels/link/messages/HostRequest_checkUpdates"
-        }
-      ],
-      "reply": {
-        "channel": {
-          "$ref": "#/channels/link"
-        },
-        "messages": [
-          {
-            "$ref": "#/channels/link/messages/HostReply_checkUpdates"
-          }
-        ]
-      },
-      "summary": "checkUpdates"
     },
     "operation_close": {
       "action": "send",
@@ -76990,29 +76131,6 @@
         ]
       },
       "summary": "updateProject"
-    },
-    "operation_updateSoftware": {
-      "action": "send",
-      "channel": {
-        "$ref": "#/channels/link"
-      },
-      "description": "Usage: Start a daemon software update.\nInputs: Supply ompweb target, version and supported protocol range.\nInvariants: Compatibility and quiescence are checked; omp updates with ompweb and is not a separate target. Acceptance is not completion.\nEffects: Starts an update with durable operation status.\nRecovery: Read operation status after reconnect before submitting another update.",
-      "messages": [
-        {
-          "$ref": "#/channels/link/messages/HostRequest_updateSoftware"
-        }
-      ],
-      "reply": {
-        "channel": {
-          "$ref": "#/channels/link"
-        },
-        "messages": [
-          {
-            "$ref": "#/channels/link/messages/HostReply_updateSoftware"
-          }
-        ]
-      },
-      "summary": "updateSoftware"
     },
     "operation_uploadAbort": {
       "action": "send",

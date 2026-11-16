@@ -430,9 +430,6 @@ function install(
       PORT: port,
       OMP_WEB_HOSTNAME: hostname,
       OMP_WEB_NO_OPEN: process.env.OMP_WEB_NO_OPEN ?? "1",
-      ...(process.env.OMP_WEB_DISABLE_AUTOUPDATE
-        ? { OMP_WEB_DISABLE_AUTOUPDATE: process.env.OMP_WEB_DISABLE_AUTOUPDATE }
-        : {}),
       ...(process.env.OMP_WEB_NAME
         ? { OMP_WEB_NAME: process.env.OMP_WEB_NAME }
         : {}),

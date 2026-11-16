@@ -281,9 +281,6 @@ lib/
     cluster-config-server.ts main side: `currentClusterConfig` (the manifest cached per fingerprint, one build at a time, `omp plugin list` cached 120 s), `clusterConfigVersion`, `admitClusterMember`, `configErrorResponse`; used by the two `app/api/hosts/cluster-config/` routes and `hub.ts`
     daemon-cluster-config.ts daemon side: `createClusterConfig` (`ensure`/`apply`/`restore`/`state`/`holds`/`stop`): download, verify, apply whole or not at all, the member's backup (`own-config/`), plugins, leaving; relative imports
     host-bearer.ts     `hostFromBearer`: the host an `Authorization: Bearer <host token>` request names, or the 401/503 answer; used by `admitClusterMember`
-    update-types.ts    shared per-host software status and operation contract
-    updates.ts         daemon-side version checks, compatibility gate and durable update state
-    update-worker.ts   host-only install/restart helper; never starts or stops the web-server service
     workspace-ship.ts  daemon side of Ship (`docs/specs/2026-11-14-ship-workflow-design.md`): `shipPreview`, `startShip`/`shipStatus`/`shipFinish` jobs (`<agent dir>/omp-web/ship/jobs/`), the PR merge watcher (`prs.json`, `gh pr view` every 60 s, one automatic cleanup per merged PR); cleanup archives sessions inside `removeRegisteredWorktree`'s fence
   provider-accounts.ts distinct omp accounts per provider from `omp usage` reports (Models → provider detail)
   agent-client.ts      agent commands from the tab: POST /api/agent/[id], or the worker's browser link in the `ws` transport; records each command's `action` sample
@@ -360,7 +357,6 @@ components/
   ModelsConfig.tsx    modal for models/auth configuration
   McpConfig.tsx       project MCP server editor (Settings → MCP tab)
   HostsConfig.tsx     linked hosts: add (token shown once), rename, revoke, allowAgentStart (Settings → Hosts tab)
-  HostUpdates.tsx     per-host ompweb/OMP versions, update checks, blocked reasons and update actions
   LocalDaemonBanner.tsx  production-only hint with the install command while no local daemon has linked (90 s grace)
   host-status.ts      host name, status text and dot colour shared by Settings → Hosts and the sidebar
   PluginsConfig.tsx   modal for installed plugins
@@ -427,8 +423,7 @@ The table is static imports, not a runtime glob, so `bun build --compile` (`scri
 - `OMP_WEB_PACKAGE_DIR` (set by the launcher) is the root for `dist/`, `public/` and KaTeX; `process.cwd()` is the fallback for dev and tests. The compiled binary sets it to its own directory (unless set) before any server module loads, so every runtime file must come from that root: a module's `import.meta.url` in the binary is Bun's virtual `/$bunfs/`, which no other process can read. A new file the server or daemon reads at runtime also goes into `scripts/build-binary.ts`'s copy list.
 - The binary needs `process.env.NODE_ENV` defined as `"production"` at build time (`scripts/build-binary.ts`): a plain `bun build --compile` inlines `"development"`, and the server then never writes the daemon's link. `bun run smoke -- --binary` catches that (no session lists).
 - `Bun.serve` turns on `SO_REUSEPORT` when `development` is false, so a second omp-web would share the port instead of failing; `startServer` passes `reusePort: false`, and `startProduction` (`server/app.ts`) reports an `EADDRINUSE` in one line.
-- The web-server in-app update worker runs on Bun. The compiled web server updates by download (`lib/self-update.ts`). Host-daemon updates use their own helper in `lib/hosts/update-worker.ts`, including for binary hosts; never reuse the web-server worker to restart a host.
-- Both updaters run the new release's `ompweb fetch-omp` (its runner, from its own release) and then its `ompweb preflight` (`lib/hosts/preflight.ts`) in the live environment before they stop anything, and abort on failure: it starts the session omp the release resolves (the web worker sets `OMP_WEB_PACKAGE_DIR` to the scratch-installed candidate) and requires its hello on `CHANNEL_PROTO`. A candidate with a runner but no preflight command is refused; a compiled release is recognized by `PREFLIGHT_MARKER`, which only `preflight.ts` may embed. A failed or aborted web update writes `complete.json` so the armed launcher disarms.
+- In-app web-server and host updates are not supported. Local deployment preflights the candidate runner before activation; `ompweb fetch-omp` remains available for fetching a release's runner.
 - The daemon-owned watcher (`lib/hosts/workspace-watch.ts`) re-stats ~50 ms after every event to catch burst saves (Bun may drop native events within ~2 ms); main only routes its sequenced watch events.
 - `bun:sqlite` `.get()` returns `null` for no row (not `undefined`).
 - `bun:sqlite` `close()` keeps the database file open while prepared statements are alive; stores use `close(true)` to finalize them (`closeNotificationStore`, `closeUsageDatabase`).
@@ -1846,13 +1841,10 @@ btw` → localized "requires a newer omp" toast (`toastBtwError`); background
 - `/api/skills/install` shells through `bunx --bun skills add ... --agent universal`, which installs into the ecosystem-standard `.agents/skills` dirs omp reads; project installs run with the selected cwd.
 - `GET /api/plugins`, `POST /api/plugins`, `GET /api/skills`, `POST /api/skills/check` and `POST /api/skills/update` take no `cwd` for the user level (`loadUserSkillsWithInstallInfo`; omp runs in the agent directory, `ensureAgentDir`; the replica scan reads the user roots only, before names are deduplicated, so an agent directory below a project keeps its user skills). The GET routes have no project scope; a project-scope `POST /api/plugins` or `/api/skills/check` without a `cwd` answers 400 `cwd_required`, and `/api/skills/update` answers 400 `cwd_package_scope_required`. Settings uses this for a cluster session on another member, whose project is not on this machine.
 
-### Updates: web server versus host software
+### Software deployment
 
-- **Settings → System** owns the web server's settings and application update. `GET /api/app-update` and its prepare/commit flow remain web-server-only; a compiled web server still links to the release download page.
-- **Settings → Hosts** owns each machine's ompweb daemon, including **This machine**, and shows its omp version ("Updated with ompweb": each release ships its `ompweb-omp`, so there is no separate omp update and daemons refuse `target: "omp"`). `GET /api/hosts/[id]/updates` checks on that daemon; `POST {target, version}` starts its update. Offline and older daemons return explicit failures, never fall back to checking or updating the web server.
-- The hub supplies its supported protocol range to `checkUpdates`/`updateSoftware` host ops. Both the hub and the daemon reject an unknown or incompatible candidate protocol before installing ompweb. The update stays visible with a blocked reason.
-- A daemon update is refused while it owns session processes (subagents included); the daemon also refuses new spawns while an update is running. Check completion through the durable operation state after reconnect, not the POST's acceptance alone.
-- `/api/omp-update` keeps only `restart`, an explicit server-side maintenance API for existing callers. The settings UI and AppShell no longer use it as a global update control or send a server-wide session restart after a host update.
+- Update the web server and host daemons through manual deployment, not the application. Local deployment is described in `docs/local-deployment.md`.
+- `/api/omp-update` retains only `restart`, an explicit server-side maintenance API for existing callers.
 
 ### Auth and model config
 

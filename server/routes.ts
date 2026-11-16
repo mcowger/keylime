@@ -4,8 +4,6 @@ import * as agentIdBashOutput from "@/app/api/agent/[id]/bash-output/route";
 import * as agentId from "@/app/api/agent/[id]/route";
 import * as agentNew from "@/app/api/agent/new/route";
 import * as agents from "@/app/api/agents/route";
-import * as appUpdateNotes from "@/app/api/app-update/notes/route";
-import * as appUpdate from "@/app/api/app-update/route";
 import * as authAccountsProvider from "@/app/api/auth/accounts/[provider]/route";
 import * as authAllProviders from "@/app/api/auth/all-providers/route";
 import * as authApiKeyProvider from "@/app/api/auth/api-key/[provider]/route";
@@ -29,7 +27,6 @@ import * as hostsClusterConfigManifest from "@/app/api/hosts/cluster-config/mani
 import * as hostsLink from "@/app/api/hosts/link/route";
 import * as hosts from "@/app/api/hosts/route";
 import * as hostsIdCluster from "@/app/api/hosts/[id]/cluster/route";
-import * as hostsIdUpdates from "@/app/api/hosts/[id]/updates/route";
 import * as manifest from "@/app/api/manifest/route";
 import * as mcp from "@/app/api/mcp/route";
 import * as mediaHash from "@/app/api/media/[hash]/route";
@@ -114,8 +111,6 @@ export const ROUTE_MODULES: Record<string, RouteModule> = {
   "agent/new": agentNew,
   agents: agents,
   hierarchy,
-  "app-update/notes": appUpdateNotes,
-  "app-update": appUpdate,
   "auth/accounts/[provider]": authAccountsProvider,
   "auth/all-providers": authAllProviders,
   "auth/api-key/[provider]": authApiKeyProvider,
@@ -138,7 +133,6 @@ export const ROUTE_MODULES: Record<string, RouteModule> = {
   "hosts/link": hostsLink,
   hosts: hosts,
   "hosts/[id]/cluster": hostsIdCluster,
-  "hosts/[id]/updates": hostsIdUpdates,
   manifest: manifest,
   mcp: mcp,
   "media/[hash]": mediaHash,

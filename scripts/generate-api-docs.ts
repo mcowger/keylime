@@ -36,7 +36,6 @@ import * as workspace from "../lib/api-contracts/workspace-models";
 import * as configuration from "../lib/api-contracts/configuration-models";
 import * as host from "../lib/api-contracts/host-schemas";
 import * as hostControl from "../lib/api-contracts/host-control-models";
-import * as hostUpdates from "../lib/api-contracts/host-update-models";
 import * as session from "../lib/api-contracts/host-session-operations";
 import * as runner from "../lib/api-contracts/runner-messages";
 import * as runnerEvents from "../lib/api-contracts/runner-events";
@@ -540,7 +539,6 @@ function schemaDocument(): JsonObject {
     configuration,
     host,
     hostControl,
-    hostUpdates,
     session,
     runner,
     runnerEvents,

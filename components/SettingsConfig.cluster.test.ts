@@ -42,9 +42,6 @@ const settingsProps = {
   sessionId: MEMBER_SESSION,
   onModelsSaved: noop,
   onPluginsReloaded: noop,
-  appUpdate: null,
-  onRefreshAppUpdate: async () => null,
-  onRequestAppUpdate: noop,
   onSelectTab: noop,
   onClose: noop,
 } as const;

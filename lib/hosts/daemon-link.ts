@@ -3,7 +3,6 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { isRecord } from "../type-guards";
 import { isLoopbackHost } from "./host-login";
 import type { HostLink } from "./host-login";
-import { acknowledgeHostUpdateHealth } from "./updates";
 import {
   decodeBlobFrame,
   decodeDown,
@@ -543,7 +542,6 @@ function linkRuntime(owner: DaemonLink, deps: LinkDeps) {
           throw new LinkProtocolError("Invalid welcome protocol version");
         owner.version = message.v;
         log("linked to " + serverUrl);
-        acknowledgeHostUpdateHealth();
         unknownLog.reset();
         linked = socket;
         redialDelay = FIRST_RETRY_MS;

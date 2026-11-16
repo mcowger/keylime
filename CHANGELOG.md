@@ -42,6 +42,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Tool activity rows show available intent alongside their target
 
 ### Changed
+- Removed in-app key lime update checks and installation for the web server and host daemons. Update installations manually; runner downloads and local deployment remain available.
 - Ship visibly disables its action while the commit plan is being generated.
 - Sidebar host headings use consistent sizing and a host icon; the only connected host shows projects without a heading, while offline hosts remain grouped.
 - Explicit skill prompts start collapsed; select the header to show their full instructions.
@@ -61,6 +62,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Sidebar host headings use consistent sizing and a host icon; the only connected host shows projects without a heading, while offline hosts remain grouped
 - Development documentation now directs concurrent worktrees to use the printed random-port URL rather than a fixed port
 - Ship visibly disables its action while the commit plan is being generated
+- Removed in-app key lime update checks and installation for the web server and host daemons. Update installations manually; runner downloads and local deployment remain available
 
 ### Fixed
 - Select menus keep their portal inside the viewport to avoid focus-induced page shifts on iOS.

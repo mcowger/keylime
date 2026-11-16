@@ -146,7 +146,6 @@ function install(pkgArg?: string) {
   const port = process.env.PORT ?? "30177";
   const hostname = process.env.OMP_WEB_HOSTNAME ?? "127.0.0.1";
   const noOpen = process.env.OMP_WEB_NO_OPEN ?? "1";
-  const disableAutoUpdate = process.env.OMP_WEB_DISABLE_AUTOUPDATE;
   const installName = process.env.OMP_WEB_NAME;
   // Only a hash is stored in the plist: omp-web never forwards a plaintext
   // password, and `OMP_WEB_PASSWORD` set for this install is hashed here.
@@ -177,9 +176,6 @@ function install(pkgArg?: string) {
     PORT: port,
     OMP_WEB_HOSTNAME: hostname,
     OMP_WEB_NO_OPEN: noOpen,
-    ...(disableAutoUpdate
-      ? { OMP_WEB_DISABLE_AUTOUPDATE: disableAutoUpdate }
-      : {}),
     ...(installName ? { OMP_WEB_NAME: installName } : {}),
     ...(passwordHash ? { OMP_WEB_PASSWORD_HASH: passwordHash } : {}),
     ...(trustedHeaderDigest

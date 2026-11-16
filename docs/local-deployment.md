@@ -3,7 +3,7 @@
 This Mac uses Pitchfork's `global/ompweb` and `global/ompweb-host`, port 8080,
 existing password authentication, and `~/.omp/agent`. Both services use
 `~/.local/share/keylime/current/ompweb`. Mise's `keylime-local` tool points at
-that same stable directory. In-app updates are disabled for both services.
+that same stable directory.
 
 ## Deploy a new version
 

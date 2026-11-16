@@ -8,15 +8,10 @@ import {
   UploadAttachArgsSchema,
   UploadAttachResultSchema,
 } from "./host-control-models";
-import {
-  HostUpdateCompatibilitySchema,
-  HostUpdateInfoSchema,
-  HostUpdateOperationSchema,
-} from "./host-update-models";
 import { ConfigStateSchema } from "./host-schemas";
 
 const empty = Type.Object({});
-/** The twelve lifecycle/software/upload operations in addition to session and workspace operations. */
+/** Lifecycle and upload operations in addition to session and workspace operations. */
 export const hostControlOperations: readonly OperationContract[] = [
   {
     name: "open",
@@ -53,30 +48,6 @@ export const hostControlOperations: readonly OperationContract[] = [
     args: Type.Object({ path: Type.Optional(Type.String()) }),
     result: Type.Undefined({
       description: "No result property is sent on successful completion.",
-    }),
-  },
-  {
-    name: "checkUpdates",
-    description:
-      "Usage: Inspect daemon software update status.\nInputs: Supply supported protocol compatibility and optionally force a check.\nInvariants: This checks the daemon, not the web server.\nEffects: Reads software status; does not install an update.\nRecovery: Retry a failed status check after connectivity is restored.",
-    args: Type.Object({
-      compatibility: HostUpdateCompatibilitySchema,
-      force: Type.Optional(Type.Boolean()),
-    }),
-    result: HostUpdateInfoSchema,
-  },
-  {
-    name: "updateSoftware",
-    description:
-      "Usage: Start a daemon software update.\nInputs: Supply ompweb target, version and supported protocol range.\nInvariants: Compatibility and quiescence are checked; omp updates with ompweb and is not a separate target. Acceptance is not completion.\nEffects: Starts an update with durable operation status.\nRecovery: Read operation status after reconnect before submitting another update.",
-    args: Type.Object({
-      target: Type.Literal("ompweb"),
-      version: Type.String(),
-      compatibility: HostUpdateCompatibilitySchema,
-    }),
-    result: Type.Object({
-      accepted: Type.Literal(true),
-      operation: HostUpdateOperationSchema,
     }),
   },
   {

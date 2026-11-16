@@ -2859,28 +2859,6 @@ test("synchronous local drain closes spawn and upload admission until explicit r
         ],
         ["drained-abort", "uploadAbort", { id }],
         ["drained-read", "listSessions", {}],
-        [
-          "drained-check",
-          "checkUpdates",
-          {
-            compatibility: {
-              min: LINK_PROTOCOL_VERSION,
-              max: LINK_PROTOCOL_VERSION,
-            },
-          },
-        ],
-        [
-          "drained-update",
-          "updateSoftware",
-          {
-            target: "ompweb",
-            version: "99.0.0",
-            compatibility: {
-              min: LINK_PROTOCOL_VERSION,
-              max: LINK_PROTOCOL_VERSION,
-            },
-          },
-        ],
       ] as const) {
         const answer = await daemonOp(server, requestId, op, args);
         assert.equal(answer.ok, false, requestId);

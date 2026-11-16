@@ -16,7 +16,6 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { releaseRepo } from "../lib/release-repo";
 
 const { values } = parseArgs({
   args: Bun.argv.slice(2),
@@ -448,32 +447,6 @@ try {
         `GET /api/agent: ${JSON.stringify(state)}`,
       );
     });
-
-    if (binary) {
-      await step(
-        "the binary points updates at the release page and offers no in-app update",
-        async () => {
-          const update = (await (
-            await fetch(`${base}/api/app-update`)
-          ).json()) as {
-            installMethod?: string;
-            selfUpdateSupported?: boolean;
-            updateCommand?: string;
-          };
-          assert(
-            update.installMethod === "binary" &&
-              update.selfUpdateSupported === false,
-            JSON.stringify(update),
-          );
-          assert(
-            update.updateCommand?.startsWith(
-              `https://github.com/${releaseRepo()}/releases`,
-            ),
-            `updateCommand ${update.updateCommand}`,
-          );
-        },
-      );
-    }
 
     await step(
       "GET /api/events delivers an event and stays open for 12 s",

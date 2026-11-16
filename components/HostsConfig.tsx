@@ -25,7 +25,6 @@ import {
   isLocalRow,
   localInstallCommand,
 } from "./host-status";
-import { HostUpdates } from "./HostUpdates";
 import { CreationPipelineEditor } from "./CreationPipelineEditor";
 import { isLinkUp } from "@/lib/hosts/host";
 
@@ -807,7 +806,6 @@ function HostCard({
           </button>
         )}
       </div>
-      <HostUpdates host={host} />
     </li>
   );
 }

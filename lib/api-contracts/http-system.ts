@@ -11,10 +11,6 @@ import {
 import { EventStreamChannelSchema } from "./browser-link";
 import { ConfigStateSchema } from "./host-schemas";
 import {
-  HostUpdateInfoSchema,
-  HostUpdateOperationSchema,
-} from "./host-update-models";
-import {
   NotificationHistoryEntrySchema,
   NotificationPrefsSchema,
 } from "./notification-models";
@@ -93,31 +89,6 @@ const host = Type.Union([
 const poolResult = obj({ pools });
 const history = NotificationHistoryEntrySchema;
 const prefs = NotificationPrefsSchema;
-const updateStatus = obj({
-  attemptId: S,
-  state: literals("prepared", "running", "succeeded", "failed"),
-  stage: Type.Optional(
-    literals("preparing", "stopping", "installing", "restarting", "finalizing"),
-  ),
-  fromVersion: S,
-  targetVersion: S,
-  preparedAt: S,
-  startedAt: Type.Optional(S),
-  finishedAt: Type.Optional(S),
-  recovered: Type.Optional(B),
-  error: Type.Optional(S),
-  cleanupReady: Type.Optional(B),
-});
-const npmStatus = obj({
-  currentVersion: S,
-  availableVersion: ns,
-  updateAvailable: B,
-  installMethod: literals("bun", "binary"),
-  updateCommand: S,
-  updatesDisabled: Type.Optional(B),
-  selfUpdateSupported: B,
-  selfUpdateStatus: Type.Optional(updateStatus),
-});
 const subscription = obj({ endpoint: S, keys: obj({ p256dh: S, auth: S }) });
 const sttJob = obj({
   id: S,
@@ -409,73 +380,6 @@ add(
   "Remove host from cluster",
   obj({ pools, restoreError: Type.Optional(S) }),
   { parameters: [id] },
-);
-add(
-  "/api/hosts/[id]/updates",
-  "get",
-  "getHostsIdUpdates",
-  "Get host software updates",
-  HostUpdateInfoSchema,
-  { parameters: [id, queryParameter("force", S)] },
-);
-add(
-  "/api/hosts/[id]/updates",
-  "post",
-  "postHostsIdUpdates",
-  "Start host software update",
-  obj({ accepted: Type.Literal(true), operation: HostUpdateOperationSchema }),
-  {
-    parameters: [id],
-    body: obj({
-      target: Type.Literal("ompweb"),
-      version: Type.String({
-        maxLength: 100,
-        pattern: "^\\d+\\.\\d+\\.\\d+(?:-[A-Za-z0-9.-]+)?$",
-      }),
-    }),
-    status: 202,
-  },
-);
-add(
-  "/api/app-update",
-  "get",
-  "getAppUpdate",
-  "Check application updates",
-  npmStatus,
-  { parameters: [queryParameter("force", S)] },
-);
-add(
-  "/api/app-update",
-  "post",
-  "postAppUpdate",
-  "Manage application update",
-  Type.Union([
-    updateStatus,
-    Nil,
-    obj({ acknowledged: Type.Literal(true), attemptId: S }),
-  ]),
-  {
-    body: Type.Union([
-      obj({ action: literals("prepare", "status") }),
-      obj({ action: literals("commit", "acknowledge"), attemptId: S }),
-    ]),
-    responses: {
-      202: jsonResponse(
-        Type.Union([
-          obj({ attemptId: S, targetVersion: S }),
-          obj({ accepted: Type.Literal(true), attemptId: S }),
-        ]),
-      ),
-    },
-  },
-);
-add(
-  "/api/app-update/notes",
-  "get",
-  "getAppUpdateNotes",
-  "Get release notes",
-  obj({ version: S, body: S, htmlUrl: S }),
-  { responses: { 204: noContent } },
 );
 add(
   "/api/omp-update",

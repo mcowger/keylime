@@ -175,7 +175,6 @@ function controlFixture(
     XDG_STATE_HOME: join(scratch, "state"),
     XDG_CACHE_HOME: join(scratch, "cache"),
     OMP_WEB_OMP_BIN: omp,
-    OMP_WEB_DISABLE_AUTOUPDATE: "1",
   };
   mkdirSync(join(agentDir, "omp-web"), { recursive: true, mode: 0o700 });
   writeFileSync(

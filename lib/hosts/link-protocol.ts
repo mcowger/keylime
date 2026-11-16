@@ -168,8 +168,6 @@ export const HOST_OP_NAMES = [
   "editLease",
   "sessionFileExists",
   "invalidateSessionLists",
-  "checkUpdates",
-  "updateSoftware",
   "uploadStart",
   "uploadAbort",
   "uploadAttach",

@@ -168,8 +168,6 @@ interface Props {
   activityTargetRef?: (element: HTMLDivElement | null) => void;
   /** Opens the app settings (pinned sidebar footer row). */
   onOpenSettings?: () => void;
-  /** True when an omp/ompweb update is available — shows a badge on the gear. */
-  updateAvailable?: boolean;
   /** Opens the archived sessions browser. */
   onOpenArchive?: () => void;
   /** In-app back/forward over visited chat views (sidebar header buttons). */
@@ -242,7 +240,6 @@ export const SessionSidebar = memo(function SessionSidebar({
   onOpenSettings,
   onOpenArchive,
   navigation,
-  updateAvailable,
   settingsOpen = false,
   onClose,
   onSearchQueryChange,
@@ -2123,22 +2120,6 @@ export const SessionSidebar = memo(function SessionSidebar({
             }}
           >
             <Settings2 size={14} strokeWidth={2} aria-hidden="true" />
-            {updateAvailable && (
-              <span
-                aria-label={t("skillsConfig.updateAvailable")}
-                role="status"
-                style={{
-                  position: "absolute",
-                  top: -3,
-                  right: -4,
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background: "var(--accent)",
-                  border: "1px solid var(--bg-panel)",
-                }}
-              />
-            )}
           </span>
           <span
             style={{

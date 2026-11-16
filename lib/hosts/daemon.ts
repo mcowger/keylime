@@ -56,17 +56,6 @@ import { localHost, resolveSpawnCwdResult } from "./local-host";
 import { listenHostSocket, type HostSocket } from "./omp-socket";
 import { sessionOps } from "./session-ops";
 import packageJson from "../../package.json";
-import {
-  checkHostUpdates,
-  configureHostUpdateSafety,
-  getHostUpdateOperation,
-  HostUpdateError,
-  startHostUpdate,
-} from "./updates";
-import type {
-  HostUpdateCompatibility,
-  HostUpdateOperation,
-} from "./update-types";
 import { UploadRetention } from "./upload-retention";
 import { StagedUploads, UPLOAD_SWEEP_INTERVAL_MS } from "./uploads";
 import { isWorkspaceOp, WORKSPACE_OP_PARAMS } from "../workspace-types";
@@ -116,22 +105,6 @@ function sessionsPath(value: unknown): string {
   return target;
 }
 
-function updateCompatibility(value: unknown): HostUpdateCompatibility {
-  if (
-    !isRecord(value) ||
-    !Number.isSafeInteger(value.min) ||
-    !Number.isSafeInteger(value.max) ||
-    Number(value.min) < 1 ||
-    Number(value.max) < Number(value.min)
-  ) {
-    throw new HostOpError(
-      400,
-      "invalid_request",
-      "Invalid web-server protocol range",
-    );
-  }
-  return { min: Number(value.min), max: Number(value.max) };
-}
 
 /** Whether `command` names an executable: a path as given, else a name on PATH. */
 async function commandExists(command: string): Promise<boolean> {
@@ -194,11 +167,9 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     notifierId: string | null = null,
     ompVersion: string | null = null;
   let stopping: Promise<void> | undefined;
-  let updateStateWarningLogged = false;
   let reloadTimer: NodeJS.Timeout | undefined;
   let drained = process.env.OMP_WEB_HOST_DRAINED === "1";
-  let operationsInFlight = 0,
-    nativeUpdatesInFlight = 0;
+  let operationsInFlight = 0;
   const executable = realpathSync(process.execPath);
   const entrypoint =
     canonicalPath(process.argv[1] || process.execPath) ||
@@ -268,20 +239,6 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
           409,
           "host_drained",
           "This host is locally drained for maintenance",
-        );
-      let operation: HostUpdateOperation | null = null;
-      try {
-        operation = getHostUpdateOperation();
-      } catch (error) {
-        if (!updateStateWarningLogged)
-          log("could not read host update status: " + reason(error));
-        updateStateWarningLogged = true;
-      }
-      if (operation?.target === "ompweb" && operation.state === "running")
-        throw new HostOpError(
-          409,
-          "host_updating",
-          "This host is updating its daemon; new sessions must wait",
         );
       const resolved =
         launch.creationId === undefined
@@ -449,9 +406,6 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
           log("omps started from a TUI cannot attach: " + reason(error));
           return undefined;
         });
-  configureHostUpdateSafety(() =>
-    drained ? "This host is locally drained for maintenance." : busyReason(),
-  );
   const uploads = new StagedUploads((ack) => {
     const link = uploadAttempts.get(ack.id + ":" + ack.attempt);
     link?.queue({ type: "upload_ack", ...ack }, "up:" + ack.id);
@@ -511,15 +465,6 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         throw new HostOpError(503, "host_stopping", "This host is stopping");
       const busy = busyReason(command === "drain-idle");
       if (busy) throw new HostOpError(409, "host_busy", busy);
-      if (
-        nativeUpdatesInFlight > 0 ||
-        getHostUpdateOperation()?.state === "running"
-      )
-        throw new HostOpError(
-          409,
-          "host_busy",
-          "Wait for the native host update/check to finish.",
-        );
       drained = true;
       uploadRetention.stop();
       if (command === "drain-idle") channels.stopForMaintenance("idle");
@@ -802,9 +747,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         ? args.id
         : null;
     let opened: string | undefined;
-    const nativeUpdate = op === "checkUpdates" || op === "updateSoftware";
-    if (nativeUpdate) nativeUpdatesInFlight++;
-    else operationsInFlight++;
+    operationsInFlight++;
     try {
       const result = await runOp(link, op, args);
       if (op === "open" && isRecord(result) && typeof result.ch === "string")
@@ -832,21 +775,14 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       const failure =
         error instanceof HostOpError
           ? { status: error.status, code: error.code, message: error.message }
-          : error instanceof HostUpdateError
-            ? {
-                status: error.httpStatus,
-                code: error.code,
-                message: error.message,
-              }
-            : error instanceof ProjectPathError
-              ? { status: 400, code: error.code, message: error.message }
-              : { status: 500, code: "host_op_failed", message: reason(error) };
+          : error instanceof ProjectPathError
+            ? { status: 400, code: error.code, message: error.message }
+            : { status: 500, code: "host_op_failed", message: reason(error) };
       link.queue({ type: "res", id, ok: false, error: failure }, id, {
         session,
       });
     } finally {
-      if (nativeUpdate) nativeUpdatesInFlight--;
-      else operationsInFlight--;
+      operationsInFlight--;
     }
   }
   function requireUploadOwner(link: DaemonLink, id: unknown): void {
@@ -1015,25 +951,6 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         );
         sessionsChanged();
         return;
-      case "checkUpdates":
-        if (args.force !== undefined && typeof args.force !== "boolean")
-          throw new HostOpError(
-            400,
-            "invalid_request",
-            "force must be a boolean",
-          );
-        return checkHostUpdates(
-          updateCompatibility(args.compatibility),
-          args.force === true,
-        );
-      case "updateSoftware":
-        if (args.target !== "ompweb" || typeof args.version !== "string")
-          throw new HostOpError(400, "invalid_request", "Invalid host update");
-        return startHostUpdate(
-          args.target,
-          args.version,
-          updateCompatibility(args.compatibility),
-        );
       case "validateCwd": {
         if (typeof args.path !== "string")
           throw new HostOpError(

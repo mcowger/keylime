@@ -352,7 +352,6 @@ async function startDaemon(machine: Machine, token: string) {
     PI_CONFIG_DIR: ".omp",
     PI_CODING_AGENT_DIR: machine.agent,
     OMP_WEB_OMP_BIN: fakeOmp,
-    OMP_WEB_DISABLE_AUTOUPDATE: "1",
   };
   const url = `http://127.0.0.1:${server.port}`;
   const login = spawnSync(process.execPath, [hostBin, "login", "--url", url], {

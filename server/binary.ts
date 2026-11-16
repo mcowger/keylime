@@ -18,7 +18,6 @@ import {
   parseLaunchOptions,
 } from "../bin/omp-web-options";
 import { runHostCli } from "@/lib/hosts/host-cli";
-import { runHostUpdateWorker } from "../lib/hosts/update-worker";
 
 // Before any server module loads: app/api/manifest reads public/ from it when it loads, and the daemon names
 // lib/omp/session-edit-extension.mjs in it to omp.
@@ -29,14 +28,11 @@ const root = process.env.OMP_WEB_PACKAGE_DIR;
 const SEE_README = `https://github.com/${releaseRepo()}#single-binary shows how to run \`ompweb\` and \`ompweb host\` as services instead.`;
 
 const command = process.argv[2];
-if (command === "host-update-worker") {
-  process.exit(await runHostUpdateWorker(process.argv[3] || ""));
-}
 if (command === "host") process.exit(await runHostCli(process.argv.slice(3)));
-// The host updater finds this command in a release by PREFLIGHT_MARKER before it runs it: an older ompweb starts the web server instead.
+// Preflight verifies that the session runner starts and speaks the expected protocol.
 if (command === "preflight")
   process.exit(await (await import("../lib/hosts/preflight")).runPreflight());
-// Updaters run it on a candidate before its preflight: the release archive has no runner (lib/omp/runner-fetch.ts).
+// Fetch the runner for this release when it is not installed yet.
 if (command === "fetch-omp")
   process.exit(await (await import("../lib/omp/runner-fetch")).runFetchOmp());
 if (command === "hash-password" || command === "hash_password") {

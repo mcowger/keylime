@@ -58,7 +58,7 @@ import {
   Zap,
 } from "lucide-react";
 import { ThemeSwitcher } from "./ThemeSwitcher";
-import { translate, useI18n } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 import { formatApiError } from "@/lib/i18n/api-error";
 import { formatGenerationSpeed } from "@/lib/generation-speed";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -92,23 +92,6 @@ import { hostName } from "./host-status";
 import { clearDraft, getDraftRevision, getDraftSummary } from "@/lib/draft-store";
 import { useNotifications } from "@/hooks/useNotifications";
 import {
-  APP_UPDATE_COMPLETED_RELOAD_MS,
-  APP_UPDATE_POLL_MS,
-  APP_UPDATE_PREPARING_MIN_MS,
-  APP_UPDATE_STOPPING_POLL_MS,
-  APP_UPDATE_TIMEOUT_MS,
-  APP_UPDATE_VISIBLE_STAGE_MIN_MS,
-  AppUpdateTransportError,
-  COMPLETED_APP_UPDATE_KEY,
-  DISMISSED_APP_UPDATE_KEY,
-  fetchAppUpdateJson,
-  isExactLegacyTargetCompletion,
-  readDismissedVersion,
-  rememberDismissedVersion,
-  sanitizeAppUpdateError,
-  waitForAppUpdateDwell,
-} from "./AppShell-app-update";
-import {
   PanelLoadingFallback,
   RIGHT_PANEL_MIN_WIDTH,
   RIGHT_PANEL_WIDTH_STORAGE_KEY,
@@ -135,16 +118,6 @@ import type { ChatInputHandle } from "./ChatInput";
 import type { SessionStatsInfo, GenerationSpeedInfo } from "@/lib/pi-types";
 import type { SettingsTab } from "./SettingsTabs";
 import { SettingsConfig } from "./SettingsConfig";
-import {
-  AppUpdateDialog,
-  getAppUpdateStageIndex,
-  getNextAppUpdateStage,
-  getMonotonicAppUpdateStage,
-  type AppUpdateInfo,
-  type AppUpdatePhase,
-  type AppUpdateStage,
-} from "./AppUpdateDialog";
-import { UpdateToastBody } from "./UpdateToast";
 import { ArchiveBrowser } from "./ArchiveBrowser";
 import { publishSessionsChanged } from "@/lib/session-change-bus";
 // The settings shell is part of the app bundle so opening it does not fetch or compile a modal chunk. The right panel (viewer included) is a separate chunk, preloaded on the first pointerdown or keydown and mounted on first open.
@@ -647,84 +620,6 @@ export function AppShell({ appName }: { appName: string }) {
       // ignore storage quota / privacy-mode errors
     }
   }, [sidebarWidth, sidebarResizing]);
-  const [appUpdate, setAppUpdate] = useState<AppUpdateInfo | null>(null);
-  const [appUpdateDialogOpen, setAppUpdateDialogOpen] = useState(false);
-  const [appUpdatePhase, setAppUpdatePhase] = useState<AppUpdatePhase>("idle");
-  const [appUpdateError, setAppUpdateError] = useState<string | null>(null);
-  const appUpdateAttemptRef = useRef<string | null>(null);
-  const appUpdateStartInFlightRef = useRef(false);
-  const appUpdateCompletingRef = useRef(false);
-  const [appUpdateVisibleStage, setAppUpdateVisibleStage] = useState<
-    AppUpdateStage | undefined
-  >();
-  const appUpdateVisibleStageRef = useRef<AppUpdateStage | undefined>(
-    undefined,
-  );
-  const appUpdateVisibleStageStartedAtRef = useRef<number | null>(null);
-  const appUpdateCommittedAttemptRef = useRef<string | null>(null);
-  const appUpdateRecoveryCommitAttemptRef = useRef<string | null>(null);
-  const appUpdateStageFlowRef = useRef(0);
-  const appUpdateAcknowledgementsRef = useRef<Map<string, Promise<boolean>>>(
-    new Map(),
-  );
-  const advanceAppUpdateVisibleStage = useCallback((next: AppUpdateStage) => {
-    const visible = getMonotonicAppUpdateStage(
-      appUpdateVisibleStageRef.current,
-      next,
-    );
-    if (visible === appUpdateVisibleStageRef.current) return;
-    appUpdateVisibleStageRef.current = visible;
-    appUpdateVisibleStageStartedAtRef.current = Date.now();
-    setAppUpdateVisibleStage(visible);
-  }, []);
-  const resetAppUpdateVisibleStage = useCallback(() => {
-    appUpdateVisibleStageRef.current = undefined;
-    appUpdateStageFlowRef.current += 1;
-    appUpdateVisibleStageStartedAtRef.current = null;
-    appUpdateCommittedAttemptRef.current = null;
-    appUpdateRecoveryCommitAttemptRef.current = null;
-    setAppUpdateVisibleStage(undefined);
-    setAppUpdate((current) =>
-      current?.appUpdateDrain
-        ? { ...current, appUpdateDrain: undefined }
-        : current,
-    );
-  }, []);
-  const showAppUpdateStagesThrough = useCallback(
-    async (target: AppUpdateStage) => {
-      const stageFlow = appUpdateStageFlowRef.current;
-      const targetIndex = getAppUpdateStageIndex(target);
-      if (appUpdateVisibleStageRef.current === undefined) {
-        advanceAppUpdateVisibleStage(target);
-        return;
-      }
-      while (true) {
-        const current = appUpdateVisibleStageRef.current;
-        if (
-          current === undefined ||
-          getAppUpdateStageIndex(current) >= targetIndex
-        )
-          return;
-        await waitForAppUpdateDwell(
-          appUpdateVisibleStageStartedAtRef.current,
-          current === "preparing"
-            ? APP_UPDATE_PREPARING_MIN_MS
-            : APP_UPDATE_VISIBLE_STAGE_MIN_MS,
-        );
-        if (appUpdateStageFlowRef.current !== stageFlow) return;
-        const latest = appUpdateVisibleStageRef.current;
-        if (
-          latest === undefined ||
-          getAppUpdateStageIndex(latest) >= targetIndex
-        )
-          return;
-        const next = getNextAppUpdateStage(latest);
-        if (next === undefined) return;
-        advanceAppUpdateVisibleStage(next);
-      }
-    },
-    [advanceAppUpdateVisibleStage],
-  );
   // On mobile the sidebar is an overlay drawer; hide it by default so the chat
   // is visible on load. Runs once the breakpoint resolves after hydration.
   useEffect(() => {
@@ -750,398 +645,6 @@ export function AppShell({ appName }: { appName: string }) {
       active.blur();
     }
   }, [sidebarOpen, mobileSidebarReady]);
-  const refreshAppUpdate = useCallback(
-    async (force = false, autoOpen = false): Promise<AppUpdateInfo | null> => {
-      const data = await fetchAppUpdateJson<AppUpdateInfo>(
-        force ? "/api/app-update?force=1" : "/api/app-update",
-        { cache: "no-store" },
-      );
-      if (
-        autoOpen &&
-        (appUpdateStartInFlightRef.current ||
-          appUpdateAttemptRef.current !== null ||
-          appUpdateCompletingRef.current)
-      )
-        return null;
-
-      setAppUpdate(data);
-
-      if (
-        autoOpen &&
-        !data.selfUpdateStatus &&
-        data.updateAvailable &&
-        data.availableVersion
-      ) {
-        if (data.selfUpdateSupported === true) {
-          if (
-            readDismissedVersion(DISMISSED_APP_UPDATE_KEY) !==
-            data.availableVersion
-          ) {
-            setAppUpdatePhase("idle");
-            setAppUpdateError(null);
-            setAppUpdateDialogOpen(true);
-          }
-        } else {
-          const version = data.availableVersion;
-          if (readDismissedVersion(DISMISSED_APP_UPDATE_KEY) === version)
-            return data;
-          // The compiled binary updates by download: its target is the release page, and there is nothing to run here.
-          const binary = data.installMethod === "binary";
-          toast.info(
-            translate("appShell.appUpdateAvailable"),
-            <UpdateToastBody
-              currentVersion={data.currentVersion}
-              availableVersion={version}
-              target={data.updateCommand || "bun add -g @kahme247/ompweb"}
-              link={binary}
-              action={
-                binary
-                  ? undefined
-                  : {
-                      label: translate("settingsConfig.appUpdateAction"),
-                      onClick: () => {
-                        setSettingsTab("system");
-                        toast.close(`app-update-available:${version}`);
-                      },
-                    }
-              }
-            />,
-            {
-              id: `app-update-available:${version}`,
-              timeout: 0,
-              onClose: () =>
-                rememberDismissedVersion(DISMISSED_APP_UPDATE_KEY, version),
-            },
-          );
-        }
-      }
-      return data;
-    },
-    [],
-  );
-
-  const acknowledgeAppUpdate = useCallback(
-    (attemptId: string): Promise<boolean> => {
-      const existing = appUpdateAcknowledgementsRef.current.get(attemptId);
-      if (existing) return existing;
-      const request = (async () => {
-        try {
-          const response = await fetch("/api/app-update", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "acknowledge", attemptId }),
-          });
-          return response.ok;
-        } catch {
-          return false;
-        }
-      })();
-      appUpdateAcknowledgementsRef.current.set(attemptId, request);
-      void request.then((acknowledged) => {
-        if (
-          !acknowledged &&
-          appUpdateAcknowledgementsRef.current.get(attemptId) === request
-        ) {
-          appUpdateAcknowledgementsRef.current.delete(attemptId);
-        }
-      });
-      return request;
-    },
-    [],
-  );
-
-  const showAppUpdateFailure = useCallback((error: unknown) => {
-    appUpdateAttemptRef.current = null;
-    appUpdateStartInFlightRef.current = false;
-    appUpdateCommittedAttemptRef.current = null;
-    setAppUpdateError(sanitizeAppUpdateError(error) || null);
-    setAppUpdatePhase("failed");
-    appUpdateStageFlowRef.current += 1;
-    setAppUpdateDialogOpen(true);
-  }, []);
-
-  const submitAppUpdateCommit = useCallback(
-    (attemptId: string) => {
-      void fetchAppUpdateJson<{ error?: string }>(
-        "/api/app-update",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "commit", attemptId }),
-          keepalive: true,
-        },
-        202,
-      )
-        .then(() => {
-          if (appUpdateAttemptRef.current === attemptId) {
-            appUpdateCommittedAttemptRef.current = attemptId;
-          }
-        })
-        .catch((error) => {
-          if (error instanceof AppUpdateTransportError) {
-            if (appUpdateRecoveryCommitAttemptRef.current === attemptId) {
-              appUpdateRecoveryCommitAttemptRef.current = null;
-            }
-            return;
-          }
-          if (appUpdateAttemptRef.current !== attemptId) return;
-          showAppUpdateFailure(error);
-        });
-    },
-    [showAppUpdateFailure],
-  );
-
-  const recoverPreparedAppUpdate = useCallback(
-    (data: AppUpdateInfo, attemptId: string) => {
-      const status = data.selfUpdateStatus;
-      if (
-        status?.attemptId !== attemptId ||
-        status.state !== "prepared" ||
-        (status.stage !== "preparing" && status.stage !== "stopping")
-      )
-        return;
-      if (appUpdateRecoveryCommitAttemptRef.current === attemptId) return;
-      appUpdateRecoveryCommitAttemptRef.current = attemptId;
-      submitAppUpdateCommit(attemptId);
-    },
-    [submitAppUpdateCommit],
-  );
-
-  const completeAppUpdate = useCallback(
-    async (targetVersion: string) => {
-      if (appUpdateCompletingRef.current) return;
-      appUpdateCompletingRef.current = true;
-      appUpdateAttemptRef.current = null;
-      appUpdateCommittedAttemptRef.current = null;
-      appUpdateStartInFlightRef.current = false;
-      await showAppUpdateStagesThrough("finalizing");
-      await waitForAppUpdateDwell(
-        appUpdateVisibleStageStartedAtRef.current,
-        APP_UPDATE_VISIBLE_STAGE_MIN_MS,
-      );
-      setAppUpdateError(null);
-      setAppUpdatePhase("completed");
-      setAppUpdateDialogOpen(true);
-      try {
-        window.sessionStorage.setItem(
-          COMPLETED_APP_UPDATE_KEY,
-          JSON.stringify({ version: targetVersion }),
-        );
-      } catch {}
-      await new Promise<void>((resolve) =>
-        window.setTimeout(resolve, APP_UPDATE_COMPLETED_RELOAD_MS),
-      );
-      appUpdateRecoveryCommitAttemptRef.current = null;
-      window.location.reload();
-    },
-    [showAppUpdateStagesThrough],
-  );
-
-  const handleTerminalAppUpdate = useCallback(
-    async (
-      data: AppUpdateInfo,
-      attemptId: string,
-      targetVersion: string,
-    ): Promise<boolean> => {
-      const status = data.selfUpdateStatus;
-      if (status?.attemptId !== attemptId || status.cleanupReady !== true)
-        return false;
-      if (status.state === "failed") {
-        if (!(await acknowledgeAppUpdate(attemptId))) return false;
-        showAppUpdateFailure(status.error);
-        return true;
-      }
-      if (
-        status.state === "succeeded" &&
-        data.currentVersion === targetVersion
-      ) {
-        if (!(await acknowledgeAppUpdate(attemptId))) return false;
-        await completeAppUpdate(targetVersion);
-        return true;
-      }
-      return false;
-    },
-    [acknowledgeAppUpdate, completeAppUpdate, showAppUpdateFailure],
-  );
-
-  const monitorAppUpdate = useCallback(
-    async (attemptId: string, targetVersion: string) => {
-      if (appUpdateAttemptRef.current === attemptId) return;
-      appUpdateAttemptRef.current = attemptId;
-      const deadline = Date.now() + APP_UPDATE_TIMEOUT_MS;
-      while (
-        appUpdateAttemptRef.current === attemptId &&
-        Date.now() < deadline
-      ) {
-        await new Promise<void>((resolve) =>
-          window.setTimeout(
-            resolve,
-            appUpdateVisibleStageRef.current === "stopping"
-              ? APP_UPDATE_STOPPING_POLL_MS
-              : APP_UPDATE_POLL_MS,
-          ),
-        );
-        try {
-          const data = await refreshAppUpdate();
-          if (!data) continue;
-          const status = data.selfUpdateStatus;
-          if (status?.attemptId === attemptId && status.stage !== undefined) {
-            if (status.stage !== "preparing")
-              appUpdateCommittedAttemptRef.current = attemptId;
-            await showAppUpdateStagesThrough(status.stage);
-          }
-          recoverPreparedAppUpdate(data, attemptId);
-          if (await handleTerminalAppUpdate(data, attemptId, targetVersion))
-            return;
-          if (isExactLegacyTargetCompletion(data, targetVersion)) {
-            // Legacy targets do not expose the status/acknowledge contract. Exact
-            // version equality is the completion proof; updater artifacts expire
-            // through the backend's terminal-status TTL instead of UI cleanup.
-            await completeAppUpdate(targetVersion);
-            return;
-          }
-        } catch (error) {
-          if (error instanceof AppUpdateTransportError) {
-            if (appUpdateCommittedAttemptRef.current === attemptId) {
-              advanceAppUpdateVisibleStage("installing");
-            }
-            // Connection failures are expected after commit while the server is offline.
-            continue;
-          }
-          showAppUpdateFailure(error);
-          return;
-        }
-      }
-      if (appUpdateAttemptRef.current === attemptId) {
-        showAppUpdateFailure(t("appUpdateDialog.timeout"));
-      }
-    },
-    [
-      advanceAppUpdateVisibleStage,
-      completeAppUpdate,
-      handleTerminalAppUpdate,
-      recoverPreparedAppUpdate,
-      refreshAppUpdate,
-      showAppUpdateFailure,
-      showAppUpdateStagesThrough,
-      t,
-    ],
-  );
-
-  useEffect(() => {
-    try {
-      const raw = window.sessionStorage.getItem(COMPLETED_APP_UPDATE_KEY);
-      if (raw) {
-        const completed = JSON.parse(raw) as { version?: unknown };
-        window.sessionStorage.removeItem(COMPLETED_APP_UPDATE_KEY);
-        if (typeof completed.version === "string") {
-          toast.success(
-            t("appUpdateDialog.completed", { version: completed.version }),
-          );
-        }
-      }
-    } catch {}
-    void refreshAppUpdate(false, true)
-      .then(async (data) => {
-        const status = data?.selfUpdateStatus;
-        if (!data || !status) return;
-        const recoveredStage = status.stage ?? "stopping";
-        const initialStage =
-          recoveredStage === "preparing" ? "preparing" : "stopping";
-        if (initialStage === "stopping")
-          appUpdateCommittedAttemptRef.current = status.attemptId;
-        advanceAppUpdateVisibleStage(initialStage);
-        setAppUpdatePhase(
-          initialStage === "preparing" ? "preparing" : "restarting",
-        );
-        setAppUpdateDialogOpen(true);
-        await showAppUpdateStagesThrough(recoveredStage);
-        if (
-          await handleTerminalAppUpdate(
-            data,
-            status.attemptId,
-            status.targetVersion,
-          )
-        )
-          return;
-        void monitorAppUpdate(status.attemptId, status.targetVersion);
-        recoverPreparedAppUpdate(data, status.attemptId);
-      })
-      .catch(() => {});
-  }, [
-    advanceAppUpdateVisibleStage,
-    handleTerminalAppUpdate,
-    monitorAppUpdate,
-    recoverPreparedAppUpdate,
-    refreshAppUpdate,
-    showAppUpdateStagesThrough,
-    t,
-  ]);
-
-  const proceedWithAppUpdate = useCallback(async () => {
-    if (appUpdateStartInFlightRef.current) return;
-    appUpdateStartInFlightRef.current = true;
-    appUpdateCompletingRef.current = false;
-    resetAppUpdateVisibleStage();
-    advanceAppUpdateVisibleStage("preparing");
-    setAppUpdatePhase("preparing");
-    setAppUpdateError(null);
-    try {
-      const prepared = await fetchAppUpdateJson<{
-        attemptId?: string;
-        targetVersion?: string;
-      }>("/api/app-update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "prepare" }),
-      });
-      if (!prepared.attemptId || !prepared.targetVersion) {
-        throw new Error("Invalid update response");
-      }
-      submitAppUpdateCommit(prepared.attemptId);
-      void monitorAppUpdate(prepared.attemptId, prepared.targetVersion);
-      await showAppUpdateStagesThrough("stopping");
-      if (appUpdateAttemptRef.current !== prepared.attemptId) return;
-      setAppUpdatePhase("restarting");
-    } catch (error) {
-      showAppUpdateFailure(error);
-    }
-  }, [
-    advanceAppUpdateVisibleStage,
-    monitorAppUpdate,
-    resetAppUpdateVisibleStage,
-    showAppUpdateFailure,
-    showAppUpdateStagesThrough,
-    submitAppUpdateCommit,
-  ]);
-
-  const dismissAppUpdate = useCallback(() => {
-    if (appUpdatePhase === "idle" && appUpdate?.availableVersion) {
-      rememberDismissedVersion(
-        DISMISSED_APP_UPDATE_KEY,
-        appUpdate.availableVersion,
-      );
-      toast.info(t("appUpdateDialog.settingsLater"));
-    }
-    setAppUpdateDialogOpen(false);
-    setAppUpdatePhase("idle");
-    setAppUpdateError(null);
-    appUpdateAttemptRef.current = null;
-    resetAppUpdateVisibleStage();
-  }, [
-    appUpdate?.availableVersion,
-    appUpdatePhase,
-    resetAppUpdateVisibleStage,
-    t,
-  ]);
-
-  const requestAppUpdateFromSettings = useCallback(() => {
-    setSettingsTab(null);
-    resetAppUpdateVisibleStage();
-    setAppUpdateError(null);
-    setAppUpdatePhase("idle");
-    window.requestAnimationFrame(() => setAppUpdateDialogOpen(true));
-  }, [resetAppUpdateVisibleStage]);
   const chatInputRef = useRef<ChatInputHandle | null>(null);
   const topBarRef = useRef<HTMLDivElement>(null);
   const [workspaceSwitcherTarget, setWorkspaceSwitcherTarget] =
@@ -3380,7 +2883,6 @@ export function AppShell({ appName }: { appName: string }) {
       onOpenSettings={() => setSettingsTab((prev) => (prev ? null : "general"))}
       onOpenArchive={() => setArchiveBrowserOpen(true)}
       navigation={sidebarNavigation}
-      updateAvailable={Boolean(appUpdate?.updateAvailable)}
       onClose={isMobile ? () => setSidebarOpen(false) : undefined}
       onSearchQueryChange={handleSearchQueryChange}
       onOpenSearchMatch={setSearchMatchTarget}
@@ -3795,9 +3297,6 @@ export function AppShell({ appName }: { appName: string }) {
                 sessionId={selectedSession?.id ?? null}
                 onModelsSaved={() => setModelsRefreshKey((k) => k + 1)}
                 onPluginsReloaded={() => setSessionKey((k) => k + 1)}
-                appUpdate={appUpdate}
-                onRefreshAppUpdate={refreshAppUpdate}
-                onRequestAppUpdate={requestAppUpdateFromSettings}
                 onSelectTab={setSettingsTab}
                 onClose={() => setSettingsTab(null)}
               />
@@ -5006,15 +4505,6 @@ export function AppShell({ appName }: { appName: string }) {
           )}
         </div>
         <LocalDaemonBanner />
-        <AppUpdateDialog
-          open={appUpdateDialogOpen}
-          update={appUpdate}
-          phase={appUpdatePhase}
-          visibleStage={appUpdateVisibleStage}
-          error={appUpdateError}
-          onProceed={() => void proceedWithAppUpdate()}
-          onNotNow={dismissAppUpdate}
-        />
         {archiveBrowserOpen && (
           <ArchiveBrowser
             open={archiveBrowserOpen}

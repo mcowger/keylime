@@ -30,8 +30,6 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
-  Copy,
-  Download,
   RefreshCw,
   Search,
   X,
@@ -57,8 +55,6 @@ import {
   SETTINGS_CATEGORIES,
   getNormalizedActive,
 } from "./SettingsTabs";
-import { copyText } from "@/lib/clipboard";
-import type { AppUpdateInfo } from "./AppUpdateDialog";
 import { useFontSize, type FontSizePreference } from "@/hooks/useFontSize";
 import { useUiScale, type UiScalePreference } from "@/hooks/useUiScale";
 import { useChatWidth, setChatWidth } from "@/hooks/useChatWidth";
@@ -2017,9 +2013,6 @@ export function SettingsConfig({
   sessionId,
   onModelsSaved,
   onPluginsReloaded,
-  appUpdate,
-  onRefreshAppUpdate,
-  onRequestAppUpdate,
   onSelectTab,
   onClose,
 }: {
@@ -2051,9 +2044,6 @@ export function SettingsConfig({
   sessionId: string | null;
   onModelsSaved: () => void;
   onPluginsReloaded: () => void;
-  appUpdate: AppUpdateInfo | null;
-  onRefreshAppUpdate: (force?: boolean) => Promise<AppUpdateInfo | null>;
-  onRequestAppUpdate: () => void;
   onSelectTab: (tab: SettingsTab) => void;
   onClose: () => void;
 }) {
@@ -2111,22 +2101,6 @@ export function SettingsConfig({
       return true;
     }
   });
-  const [checkingAppUpdate, setCheckingAppUpdate] = useState(false);
-  const [appUpdateMessage, setAppUpdateMessage] = useState<string | null>(null);
-
-  const appUpdateIsAvailable = Boolean(appUpdate?.updateAvailable);
-  const appUpdatesDisabled = Boolean(appUpdate?.updatesDisabled);
-  const systemNeedsAttention = appUpdateIsAvailable;
-
-  const attentionTabs = useMemo<
-    Partial<Record<SettingsTab, boolean | string>>
-  >(() => {
-    const tabs: Partial<Record<SettingsTab, boolean | string>> = {};
-    if (systemNeedsAttention) {
-      tabs.system = t("settingsTabs.updateAvailable");
-    }
-    return tabs;
-  }, [systemNeedsAttention, t]);
 
   const [nativeSettings, setNativeSettings] = useState<NativeSettings | null>(
     null,
@@ -2256,24 +2230,6 @@ export function SettingsConfig({
       });
     },
     [nativeSettings, saveNativeSettings],
-  );
-
-  const checkForAppUpdate = useCallback(
-    async (force = false) => {
-      if (appUpdatesDisabled) return;
-      setCheckingAppUpdate(true);
-      setAppUpdateMessage(null);
-      try {
-        await onRefreshAppUpdate(force);
-      } catch (error) {
-        setAppUpdateMessage(
-          error instanceof Error ? error.message : String(error),
-        );
-      } finally {
-        setCheckingAppUpdate(false);
-      }
-    },
-    [appUpdatesDisabled, onRefreshAppUpdate],
   );
 
   const currentTab =
@@ -2584,7 +2540,6 @@ export function SettingsConfig({
               onSelect={handleSelectTab}
               workspaceReady={workspaceReady}
               layout={isMobile ? "horizontal" : "vertical"}
-              attentionTabs={attentionTabs}
             />
 
             <div className="settings-content" style={contentStyle}>
@@ -4421,244 +4376,6 @@ export function SettingsConfig({
                       <UploadRetentionSetting />
 
                       <AgentEnvSetting cluster={cluster} />
-
-                      {/* ompweb app update card */}
-                      <section
-                        style={{
-                          padding: 14,
-                          border: appUpdateIsAvailable
-                            ? "1px solid color-mix(in srgb, var(--accent) 45%, var(--border))"
-                            : "1px solid var(--border)",
-                          borderRadius: "var(--radius-card)",
-                          background: "var(--bg-panel)",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 10,
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: 12,
-                          }}
-                        >
-                          <div>
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 6,
-                              }}
-                            >
-                              <span style={{ fontSize: 13, fontWeight: 600 }}>
-                                {t("settingsConfig.appLabel")}
-                              </span>
-                              {appUpdateIsAvailable && (
-                                <span
-                                  role="status"
-                                  aria-label={t("settingsTabs.updateAvailable")}
-                                  title={t("settingsTabs.updateAvailable")}
-                                  style={{
-                                    width: 6,
-                                    height: 6,
-                                    borderRadius: "50%",
-                                    background: "var(--accent)",
-                                    flexShrink: 0,
-                                  }}
-                                />
-                              )}
-                            </div>
-                            <div
-                              style={{
-                                marginTop: 4,
-                                color: appUpdateIsAvailable
-                                  ? "var(--accent)"
-                                  : "var(--text-muted)",
-                                fontFamily: "var(--font-mono)",
-                                fontSize: 12,
-                              }}
-                            >
-                              {appUpdatesDisabled
-                                ? t("settingsConfig.updatesDisabled")
-                                : checkingAppUpdate
-                                  ? t("settingsConfig.checkingUpdates")
-                                  : appUpdate?.updateAvailable
-                                    ? t("appShell.updateVersion", {
-                                        current:
-                                          appUpdate.currentVersion ?? "?",
-                                        available:
-                                          appUpdate.availableVersion ?? "?",
-                                      })
-                                    : appUpdate?.currentVersion
-                                      ? t("settingsConfig.upToDate", {
-                                          version: appUpdate.currentVersion,
-                                        })
-                                      : t("settingsConfig.versionUnavailable")}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => void checkForAppUpdate(true)}
-                            disabled={checkingAppUpdate || appUpdatesDisabled}
-                            aria-label={t("settingsConfig.checkAppUpdates")}
-                            style={{
-                              padding: "6px 10px",
-                              border: "1px solid var(--border)",
-                              borderRadius: "var(--radius-control)",
-                              background: "transparent",
-                              color: "var(--text)",
-                              cursor:
-                                checkingAppUpdate || appUpdatesDisabled
-                                  ? "not-allowed"
-                                  : "pointer",
-                              fontSize: 12,
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 5,
-                            }}
-                          >
-                            <RefreshCw size={13} aria-hidden="true" />{" "}
-                            {t("settingsConfig.refresh")}
-                          </button>
-                        </div>
-                        {appUpdate?.updateAvailable && (
-                          <div
-                            style={{
-                              marginTop: 6,
-                              padding: "10px 12px",
-                              border: "1px solid var(--border)",
-                              borderRadius: "var(--radius-control)",
-                              background: "var(--bg)",
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: 8,
-                            }}
-                          >
-                            {appUpdate.selfUpdateSupported ? (
-                              <button
-                                type="button"
-                                onClick={onRequestAppUpdate}
-                                style={{
-                                  alignSelf: "flex-start",
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 6,
-                                  padding: "7px 12px",
-                                  border: "1px solid var(--accent-strong)",
-                                  borderRadius: "var(--radius-control)",
-                                  background: "var(--accent-strong)",
-                                  color: "var(--on-accent)",
-                                  cursor: "pointer",
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                }}
-                              >
-                                <Download size={13} aria-hidden="true" />
-                                {t("settingsConfig.appUpdateAction")}
-                              </button>
-                            ) : (
-                              <>
-                                <div
-                                  style={{
-                                    fontSize: 12,
-                                    color: "var(--text-muted)",
-                                  }}
-                                >
-                                  {t(
-                                    appUpdate.installMethod === "binary"
-                                      ? "settingsConfig.downloadAppUpdate"
-                                      : "settingsConfig.runAppUpdateCommand",
-                                  )}
-                                </div>
-                                {appUpdate.installMethod === "binary" ? (
-                                  <a
-                                    href={appUpdate.updateCommand}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    style={{
-                                      fontFamily: "var(--font-mono)",
-                                      fontSize: 12,
-                                      color: "var(--accent)",
-                                      wordBreak: "break-all",
-                                    }}
-                                  >
-                                    {appUpdate.updateCommand}
-                                  </a>
-                                ) : (
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: 8,
-                                    }}
-                                  >
-                                    <code
-                                      style={{
-                                        flex: 1,
-                                        fontFamily: "var(--font-mono)",
-                                        fontSize: 12,
-                                        color: "var(--accent)",
-                                        wordBreak: "break-all",
-                                      }}
-                                    >
-                                      {appUpdate.updateCommand ||
-                                        "bun add -g @kahme247/ompweb"}
-                                    </code>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        void copyText(
-                                          appUpdate.updateCommand ||
-                                            "bun add -g @kahme247/ompweb",
-                                        )
-                                          .then(() =>
-                                            toast.success(
-                                              t("appShell.commandCopied"),
-                                            ),
-                                          )
-                                          .catch(() =>
-                                            toast.error(
-                                              t("appShell.commandCopyFailed"),
-                                            ),
-                                          );
-                                      }}
-                                      style={{
-                                        display: "inline-flex",
-                                        alignItems: "center",
-                                        gap: 5,
-                                        padding: "4px 8px",
-                                        border: "1px solid var(--border)",
-                                        borderRadius: "var(--radius-control)",
-                                        background: "var(--bg-subtle)",
-                                        color: "var(--text)",
-                                        cursor: "pointer",
-                                        fontSize: 11,
-                                      }}
-                                    >
-                                      <Copy size={12} aria-hidden="true" />{" "}
-                                      {t("appShell.copyCommand")}
-                                    </button>
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        )}
-                        {appUpdateMessage && (
-                          <Alert
-                            variant={
-                              appUpdateMessage.toLowerCase().includes("fail") ||
-                              appUpdateMessage.toLowerCase().includes("error")
-                                ? "error"
-                                : "info"
-                            }
-                            description={appUpdateMessage}
-                            onDismiss={() => setAppUpdateMessage(null)}
-                          />
-                        )}
-                      </section>
                     </div>
                   )}
                 </>

@@ -8,13 +8,12 @@ import { spawnOmpTransport } from "../omp/rpc-process";
 import { CHANNEL_PROTO } from "./omp-socket";
 
 // `ompweb preflight`: start the session omp the way a host starts one for a new session (same resolver, same
-// spawn, plus --no-session in a scratch cwd) and wait for its channel hello. Updaters run it on a candidate
-// release before they switch to it. Deploy scripts grep its output for the literal success prefix below.
+// spawn, plus --no-session in a scratch cwd) and wait for its channel hello. Deploy scripts grep its output
+// for the literal success prefix below.
 // Loaded by Bun's native TypeScript runtime and the compiled binary: no `@/` imports.
 // shortcut: no credentials env, --resume/--tools or cluster config as the daemon adds; upgrade if those break a start.
 
-/** Only this module embeds it (the scratch cwd's prefix): the host updater finds the command in a compiled release
- * by it (update-worker.ts holds it base64-encoded). An older ompweb takes `preflight` for a positional instead. */
+/** Prefix for the temporary preflight working directory. */
 export const PREFLIGHT_MARKER = "ompweb-preflight-scratch-";
 
 export async function runPreflight(timeoutMs = 30_000): Promise<number> {

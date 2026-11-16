@@ -99,7 +99,7 @@ export const SETTINGS_CATEGORIES: TabItem[] = [
   {
     id: "hosts",
     label: "Hosts",
-    description: "Linked machines, host software versions, and updates",
+    description: "Linked machines and host configuration",
     Icon: Network,
   },
   {
@@ -117,7 +117,7 @@ export const SETTINGS_CATEGORIES: TabItem[] = [
   {
     id: "system",
     label: "System",
-    description: "Web server updates, agent settings, and service controls",
+    description: "Agent settings and service controls",
     Icon: RefreshCw,
   },
 ];
@@ -133,13 +133,11 @@ export function SettingsTabs({
   onSelect,
   workspaceReady = true,
   layout = "vertical",
-  attentionTabs,
 }: {
   active: SettingsTab;
   onSelect: (tab: SettingsTab) => void;
   workspaceReady?: boolean;
   layout?: "horizontal" | "vertical";
-  attentionTabs?: Partial<Record<SettingsTab, boolean | string>>;
 }) {
   const { t } = useI18n();
   const currentActive = getNormalizedActive(active);
@@ -185,12 +183,6 @@ export function SettingsTabs({
               trDesc !== descKey ? trDesc : description;
             const selected = id === currentActive;
             const disabled = Boolean(needsWorkspace && !workspaceReady);
-            const attention = attentionTabs?.[id];
-            const hasAttention = Boolean(attention);
-            const attentionLabel =
-              typeof attention === "string"
-                ? attention
-                : t("settingsTabs.attentionRequired");
             return (
               <button
                 key={id}
@@ -199,16 +191,7 @@ export function SettingsTabs({
                 id={`settings-tab-${id}`}
                 aria-selected={selected}
                 aria-controls={`settings-panel-${id}`}
-                aria-label={
-                  hasAttention
-                    ? `${displayLabel}: ${displayDescription} (${attentionLabel})`
-                    : undefined
-                }
-                title={
-                  hasAttention
-                    ? `${displayDescription} (${attentionLabel})`
-                    : displayDescription
-                }
+                title={displayDescription}
                 tabIndex={selected ? 0 : -1}
                 disabled={disabled}
                 onClick={() => onSelect(id)}
@@ -229,21 +212,6 @@ export function SettingsTabs({
                   }}
                 >
                   <Icon size={16} aria-hidden="true" />
-                  {hasAttention && (
-                    <span
-                      aria-hidden="true"
-                      style={{
-                        position: "absolute",
-                        top: -3,
-                        right: -4,
-                        width: 6,
-                        height: 6,
-                        borderRadius: "50%",
-                        background: "var(--accent)",
-                        border: "1px solid var(--bg-panel)",
-                      }}
-                    />
-                  )}
                 </span>
                 <div
                   style={{
@@ -310,12 +278,6 @@ export function SettingsTabs({
           const displayDescription = trDesc !== descKey ? trDesc : description;
           const selected = id === currentActive;
           const disabled = Boolean(needsWorkspace && !workspaceReady);
-          const attention = attentionTabs?.[id];
-          const hasAttention = Boolean(attention);
-          const attentionLabel =
-            typeof attention === "string"
-              ? attention
-              : t("settingsTabs.attentionRequired");
           return (
             <button
               key={id}
@@ -324,16 +286,8 @@ export function SettingsTabs({
               id={`settings-tab-${id}`}
               aria-selected={selected}
               aria-controls={`settings-panel-${id}`}
-              aria-label={
-                hasAttention
-                  ? `${displayLabel}: ${displayDescription} (${attentionLabel})`
-                  : `${displayLabel}: ${displayDescription}`
-              }
-              title={
-                hasAttention
-                  ? `${displayDescription} (${attentionLabel})`
-                  : displayDescription
-              }
+              aria-label={`${displayLabel}: ${displayDescription}`}
+              title={displayDescription}
               tabIndex={selected ? 0 : -1}
               disabled={disabled}
               onClick={() => onSelect(id)}
@@ -364,21 +318,6 @@ export function SettingsTabs({
                 }}
               >
                 <Icon size={13} aria-hidden="true" />
-                {hasAttention && (
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      position: "absolute",
-                      top: -3,
-                      right: -4,
-                      width: 6,
-                      height: 6,
-                      borderRadius: "50%",
-                      background: "var(--accent)",
-                      border: "1px solid var(--bg-panel)",
-                    }}
-                  />
-                )}
               </span>
               <span
                 style={{

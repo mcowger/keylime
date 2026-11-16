@@ -207,7 +207,7 @@ test("delayed discovery replaces only the untouched auto-created chat", async ()
 });
 test("delayed discovery preserves a draft edited after workspace entry", async () => {
   sessionStorage.clear();
-  const key = newChatDraftKey("/other");
+  const key = newChatDraftKey("/other", "local");
   clearDraft(key);
   window.history.replaceState(null, "", "/?cwd=%2Frepo");
   const view = render(React.createElement(AppShell, { appName: "Keylime" }));

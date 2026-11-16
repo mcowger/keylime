@@ -2,11 +2,7 @@ import { chmodSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import packageJson from "../../package.json";
 import { releaseRepo } from "../release-repo";
-import {
-  downloadHostUpdateFile,
-  fetchHostUpdateBytes,
-  HOST_RELEASE_MAX_MEMBER,
-} from "../hosts/update-worker";
+import { downloadReleaseFile, fetchReleaseBytes } from "./release-download";
 import {
   fetchedOmpBin,
   OMP_RUNNER_ASSET,
@@ -31,7 +27,7 @@ export async function fetchOmpRunner(
   const partial = `${target}.${process.pid}.${Date.now()}.partial`;
   try {
     const sums = (
-      await fetchHostUpdateBytes(
+      await fetchReleaseBytes(
         `${base}/${OMP_RUNNER_CHECKSUMS}`,
         64 * 1024,
         30_000,
@@ -44,11 +40,7 @@ export async function fetchOmpRunner(
     if (!expected || !/^[a-f0-9]{64}$/.test(expected))
       throw new Error(`${OMP_RUNNER_CHECKSUMS} lists no ${OMP_RUNNER_ASSET}`);
     mkdirSync(dirname(target), { recursive: true });
-    const digest = await downloadHostUpdateFile(
-      url,
-      partial,
-      HOST_RELEASE_MAX_MEMBER,
-    );
+    const digest = await downloadReleaseFile(url, partial, 512 * 1024 * 1024);
     if (digest !== `sha256:${expected}`)
       throw new Error(
         `its SHA-256 is not the one ${OMP_RUNNER_CHECKSUMS} lists`,
@@ -81,7 +73,7 @@ export function ensureOmpRunner(): Promise<string | null> {
   return ensuring;
 }
 
-/** `ompweb fetch-omp`: what updaters run on a candidate release before its preflight; exit 1 names what failed. */
+/** `ompweb fetch-omp`: fetch the runner if missing; exit 1 names what failed. */
 export async function runFetchOmp(): Promise<number> {
   try {
     const bin = await ensureOmpRunner();

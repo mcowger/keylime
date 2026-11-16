@@ -13,7 +13,3 @@ set -eu
 for target in bun-linux-x64-baseline bun-linux-arm64 bun-darwin-x64-baseline bun-darwin-arm64; do
 	bun scripts/build-binary.ts --target "$target" "$@"
 done
-# Every archive must pass the host updater's size limits and checks (lib/hosts/update-worker.ts).
-for archive in release/ompweb-*.tar.gz; do
-	bun scripts/check-host-release-archive.ts "$archive"
-done

@@ -263,7 +263,6 @@ test(
         OMP_WEB_PASSWORD: "test-password",
         OMP_WEB_NO_OPEN: "0",
         OMP_WEB_TRUSTED_HEADER_SHA256: "a".repeat(64),
-        OMP_WEB_DISABLE_AUTOUPDATE: "1",
         OMP_WEB_NAME: "My Box",
         PORT: "40123",
       };
@@ -313,7 +312,6 @@ test(
         PORT: "40123",
         OMP_WEB_HOSTNAME: "0.0.0.0",
         OMP_WEB_NO_OPEN: "0",
-        OMP_WEB_DISABLE_AUTOUPDATE: "1",
         OMP_WEB_NAME: "My Box",
         OMP_WEB_TRUSTED_HEADER_SHA256: "a".repeat(64),
       });
@@ -515,7 +513,6 @@ function runWithFakeSystemctl(
     HOME: home,
     PATH: binDir,
     OMP_WEB_SYSTEMD_BIN: fakeOmpweb,
-    OMP_WEB_DISABLE_AUTOUPDATE: "1",
   };
   for (const key of [
     "PI_CODING_AGENT_DIR",
