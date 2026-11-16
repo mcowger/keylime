@@ -1575,7 +1575,7 @@ test("browser requests use only the exact live session and never spawn one", asy
   const h = harness();
   assert.deepEqual(await h.table.browserCommand(SAVED), { tabs: [] });
   await assert.rejects(h.table.browserCommand(SAVED, "tab-1"), { code: "session_not_running" });
-  await assert.rejects(h.table.browserControl(SAVED, { id: "tab-1", action: { type: "reload" } }), { code: "session_not_running" });
+  await assert.rejects(h.table.browserControl(SAVED, { id: "tab-1", actions: [{ type: "reload" }] }), { code: "session_not_running" });
   assert.equal(h.children.length, 0);
 
   const opened = await h.table.open(h.a, { sessionId: SAVED, launch });
@@ -1595,7 +1595,7 @@ test("browser requests use only the exact live session and never spawn one", asy
   await assert.rejects(h.table.browserCommand(SAVED, "tab-1"), { code: "browser_request_busy" });
   child.emit({ t: "res", id: captureCommand.id, ok: true, data: { mimeType: "image/jpeg", data: "/9j/2Q==" } });
   assert.deepEqual(await capture, { mimeType: "image/jpeg", data: "/9j/2Q==" });
-  const controlArgs = { id: "tab-1", action: { type: "reload" as const } };
+  const controlArgs = { id: "tab-1", actions: [{ type: "reload" as const }] };
   const control = h.table.browserControl(SAVED, controlArgs);
   const controlCommand = own(child).at(-1)!;
   assert.equal(controlCommand.op, "browser_control");

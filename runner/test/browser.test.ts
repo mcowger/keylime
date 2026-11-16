@@ -131,8 +131,7 @@ it("dispatches each control action only to its exact session-owned target", asyn
       { type: "touch", event: "start", points: [{ id: 1, x: 10, y: 20 }], modifiers: 0 },
       { type: "touch", event: "end", points: [], modifiers: 0 },
     ];
-    for (const action of actions)
-      expect(await browserCommands.browser_control(ctx, { id: "control-target", action })).toEqual({});
+    expect(await browserCommands.browser_control(ctx, { id: "control-target", actions })).toEqual({});
     expect(calls).toEqual([
       { method: "Page.navigate", params: { url: "https://example.test/path" } },
       { method: "Page.getNavigationHistory", params: undefined },
@@ -150,10 +149,71 @@ it("dispatches each control action only to its exact session-owned target", asyn
       { method: "Input.dispatchTouchEvent", params: { type: "touchStart", touchPoints: [{ id: 1, x: 10, y: 20 }], modifiers: 0 } },
       { method: "Input.dispatchTouchEvent", params: { type: "touchEnd", touchPoints: [], modifiers: 0 } },
     ]);
-    expect(detached).toBe(actions.length);
+    expect(detached).toBe(1);
   } finally {
     tabs.delete(name);
   }
+});
+
+it("dispatches a typing batch in order over one CDP session", async () => {
+  const tabs = getTabsMapForTest();
+  const name = "keylime-test-typing-batch";
+  const calls: { method: string; params: unknown }[] = [];
+  let attachments = 0;
+  const ctx = { session: { getEvalKernelOwnerId: () => "owner" } as unknown as AgentSession, send() {} } satisfies CommandContext;
+  try {
+    tabs.set(name, {
+      name, targetId: name, ownerSessionId: "owner", backend: "worker", state: "alive",
+      kindTag: "headless", info: { title: "", url: "https://example.test" },
+      browser: { browser: { targets: () => [{ _targetId: name, async createCDPSession() {
+        attachments++;
+        return { async send(method: string, params: unknown) { calls.push({ method, params }); }, async detach() {} };
+      } }] } },
+    } as unknown as TabSession);
+    await browserCommands.browser_control(ctx, { id: name, actions: [
+      { type: "key", event: "down", key: "a", code: "KeyA", windowsVirtualKeyCode: 65, modifiers: 0, repeat: false },
+      { type: "text", text: "a" },
+      { type: "key", event: "up", key: "a", code: "KeyA", windowsVirtualKeyCode: 65, modifiers: 0, repeat: false },
+    ] });
+    expect(attachments).toBe(1);
+    expect(calls).toEqual([
+      { method: "Input.dispatchKeyEvent", params: { type: "rawKeyDown", key: "a", code: "KeyA", windowsVirtualKeyCode: 65, modifiers: 0, autoRepeat: false } },
+      { method: "Input.insertText", params: { text: "a" } },
+      { method: "Input.dispatchKeyEvent", params: { type: "keyUp", key: "a", code: "KeyA", windowsVirtualKeyCode: 65, modifiers: 0, autoRepeat: false } },
+    ]);
+  } finally { tabs.delete(name); }
+});
+
+it("stops a batch when ownership changes or an action fails", async () => {
+  const tabs = getTabsMapForTest();
+  const name = "keylime-test-batch-interruption";
+  const calls: string[] = [];
+  let failure = false;
+  let detached = 0;
+  const tab = {
+    name, targetId: name, ownerSessionId: "owner", backend: "worker", state: "alive",
+    kindTag: "headless", info: { title: "", url: "https://example.test" },
+    browser: { browser: { targets: () => [{ _targetId: name, async createCDPSession() {
+      return { async send(method: string) {
+        calls.push(method);
+        if (failure) throw new Error("dispatch failed");
+        tab.ownerSessionId = "other";
+      }, async detach() { detached++; } };
+    } }] } },
+  } as unknown as TabSession;
+  const ctx = { session: { getEvalKernelOwnerId: () => "owner" } as unknown as AgentSession, send() {} } satisfies CommandContext;
+  const args = { id: name, actions: [{ type: "reload" }, { type: "text", text: "suffix" }] };
+  try {
+    tabs.set(name, tab);
+    await expect(browserCommands.browser_control(ctx, args)).rejects.toThrow("Browser tab not found");
+    expect(calls).toEqual(["Page.reload"]);
+    tab.ownerSessionId = "owner";
+    failure = true;
+    calls.length = 0;
+    await expect(browserCommands.browser_control(ctx, args)).rejects.toThrow("dispatch failed");
+    expect(calls).toEqual(["Page.reload"]);
+    expect(detached).toBe(2);
+  } finally { tabs.delete(name); }
 });
 
 it("rejects malformed or unauthorized control actions without dispatching input", async () => {
@@ -178,11 +238,12 @@ it("rejects malformed or unauthorized control actions without dispatching input"
       { type: "unknown" },
     ];
     for (const action of invalid)
-      await expect(browserCommands.browser_control(ctx, { id: "guard-target", action })).rejects.toThrow();
-    await expect(browserCommands.browser_control(ctx, { id: "wrong-target", action: { type: "reload" } })).rejects.toThrow("Browser tab not found");
+      await expect(browserCommands.browser_control(ctx, { id: "guard-target", actions: [{ type: "reload" }, action] })).rejects.toThrow();
+    await expect(browserCommands.browser_control(ctx, { id: "guard-target", actions: [] })).rejects.toThrow();
+    await expect(browserCommands.browser_control(ctx, { id: "wrong-target", actions: [{ type: "reload" }] })).rejects.toThrow("Browser tab not found");
     const tab = tabs.get(name)!;
     tab.ownerSessionId = "other";
-    await expect(browserCommands.browser_control(ctx, { id: "guard-target", action: { type: "reload" } })).rejects.toThrow("Browser tab not found");
+    await expect(browserCommands.browser_control(ctx, { id: "guard-target", actions: [{ type: "reload" }] })).rejects.toThrow("Browser tab not found");
     expect(attachments).toBe(0);
   } finally {
     tabs.delete(name);
@@ -203,7 +264,7 @@ it("does not dispatch control after ownership changes during attachment", async 
   const ctx = { session: { getEvalKernelOwnerId: () => "owner" } as unknown as AgentSession, send() {} } satisfies CommandContext;
   try {
     tabs.set(name, tab);
-    const control = browserCommands.browser_control(ctx, { id: "changing-control", action: { type: "reload" } });
+    const control = browserCommands.browser_control(ctx, { id: "changing-control", actions: [{ type: "reload" }] });
     tab.ownerSessionId = "other";
     attached.resolve({ send: async () => { dispatched = true; }, detach: async () => { detached = true; } });
     await expect(control).rejects.toThrow("Browser tab not found");
@@ -234,7 +295,7 @@ it("does not navigate history when ownership changes while reading it", async ()
   const ctx = { session: { getEvalKernelOwnerId: () => "owner" } as unknown as AgentSession, send() {} } satisfies CommandContext;
   try {
     tabs.set(name, tab);
-    const control = browserCommands.browser_control(ctx, { id: "history-control", action: { type: "back" } });
+    const control = browserCommands.browser_control(ctx, { id: "history-control", actions: [{ type: "back" }] });
     await started.promise;
     tab.ownerSessionId = "other";
     history.resolve({ currentIndex: 1, entries: [{ id: 1 }, { id: 2 }] });
@@ -259,7 +320,7 @@ it("times out a stalled attachment and detaches it if it arrives late", async ()
       kindTag: "headless", info: { title: "", url: "https://example.test" },
       browser: { browser: { targets: () => [{ _targetId: "timeout-control", createCDPSession: () => attached.promise }] } },
     } as unknown as TabSession);
-    await expect(browserCommands.browser_control(ctx, { id: "timeout-control", action: { type: "reload" } })).rejects.toThrow("Browser control timed out");
+    await expect(browserCommands.browser_control(ctx, { id: "timeout-control", actions: [{ type: "reload" }] })).rejects.toThrow("Browser control timed out");
     attached.resolve({ send: async () => { dispatched = true; }, detach: async () => { detached = true; } });
     await Promise.resolve();
     expect(dispatched).toBe(false);

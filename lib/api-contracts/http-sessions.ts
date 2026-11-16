@@ -225,7 +225,7 @@ export const sessionHttpOperations: readonly HttpOperation[] = [
     responses: responses(Type.Union([BrowserVideoStartResultSchema, BrowserVideoNextResultSchema, BrowserVideoStopResultSchema])),
   }),
   op(`${sid}/browser/control`, "post", "controlSessionBrowserTab", "Control a session browser tab", {
-    description: "Applies one navigation or input action to a session-owned tab. A failed request may have applied the action; do not automatically retry.",
+    description: "Applies 1–64 navigation or input actions in array order to a session-owned tab; request bodies are capped at 1 MiB. The whole batch is validated before dispatch. A failed request may have applied a prefix; never automatically retry it or the remaining actions.",
     parameters: [id],
     requestBody: jsonBody(BrowserControlArgsSchema),
     responses: responses(BrowserControlResultSchema),

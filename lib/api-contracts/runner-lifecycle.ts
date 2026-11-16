@@ -284,12 +284,14 @@ export const BrowserControlActionSchema = Type.Union([
   }, browserActionObject),
 ], { description: "A single browser navigation or input action. Coordinates are visual viewport CSS pixels; touch points are the contacts remaining after the event." });
 export type BrowserControlAction = Static<typeof BrowserControlActionSchema>;
+/** Bounds one ordered input dispatch without growing the per-command work indefinitely. */
+export const BROWSER_CONTROL_BATCH_MAX = 64;
 export const BrowserControlArgsSchema = Type.Object({
   id: Type.String({ minLength: 1, maxLength: 1024 }),
-  action: BrowserControlActionSchema,
-}, { additionalProperties: false, description: "An action addressed to one exact session-owned Chromium target." });
+  actions: Type.Array(BrowserControlActionSchema, { minItems: 1, maxItems: BROWSER_CONTROL_BATCH_MAX, description: "Actions applied sequentially in array order after whole-batch validation. Ownership is rechecked before each action. Failure may leave an applied prefix; never retry the batch automatically." }),
+}, { additionalProperties: false, description: "A bounded ordered batch addressed to one exact session-owned Chromium target. HTTP request bodies are limited to 1 MiB. No atomicity or exclusive control against other viewers or the agent is promised." });
 export type BrowserControlArgs = Static<typeof BrowserControlArgsSchema>;
-export const BrowserControlResultSchema = Type.Object({}, { additionalProperties: false, description: "The browser accepted the action; this does not guarantee navigation or page effects completed." });
+export const BrowserControlResultSchema = Type.Object({}, { additionalProperties: false, description: "Every action in the batch was accepted in order; navigation and page effects may still be pending. Failure may leave an applied prefix." });
 export type BrowserControlResult = Static<typeof BrowserControlResultSchema>;
 
 /** Logical runner commands before command/response framing. */
@@ -331,11 +333,11 @@ Effects: Releases video resources.
 Recovery: Streams expire when the viewer disconnects.`, BrowserVideoStreamArgsSchema, BrowserVideoStopResultSchema),
   command(
     "browser_control",
-    `Usage: Send one navigation or input action to a session-owned Chromium tab.
-Inputs: Provide the exact target id and one browser control action; navigation accepts HTTP or HTTPS URLs.
-Invariants: Ownership and exact target identity are checked; input coordinates use the captured visual viewport in CSS pixels. No exclusive control or agent lock is established.
-Effects: May navigate the page or deliver mouse, wheel, keyboard, text, or touch input.
-Recovery: A timeout or disconnect leaves delivery uncertain; do not replay an action automatically.`,
+    `Usage: Send a bounded ordered batch of navigation or input actions to a session-owned Chromium tab.
+Inputs: Provide the exact target id and 1–64 browser control actions in delivery order; navigation accepts HTTP or HTTPS URLs.
+Invariants: The entire batch is validated before dispatch. Ownership and exact target identity are rechecked before each action; coordinates use the captured visual viewport in CSS pixels. No exclusive control or agent lock is established.
+Effects: Sequentially delivers navigation, mouse, wheel, keyboard, text, or touch input through one CDP session. A failure stops the batch and may leave an applied prefix.
+Recovery: A timeout or disconnect leaves partial delivery uncertain; never replay the batch or its remaining actions automatically.`,
     BrowserControlArgsSchema,
     BrowserControlResultSchema,
   ),

@@ -68,7 +68,7 @@ test("offline host refuses discovery and capture without sending commands", asyn
   offline = true;
   expect((await list(request(), context())).status).toBe(503);
   expect((await frame(request("/frame?tabId=tab-1"), context())).status).toBe(503);
-  expect((await control(new Request("http://localhost/control", { method: "POST", body: JSON.stringify({ id: "tab-1", action: { type: "reload" } }) }), context())).status).toBe(503);
+  expect((await control(new Request("http://localhost/control", { method: "POST", body: JSON.stringify({ id: "tab-1", actions: [{ type: "reload" }] }) }), context())).status).toBe(503);
   expect(calls).toEqual([["resolve", sessionId], ["resolve", sessionId], ["resolve", sessionId]]);
 });
 
@@ -92,11 +92,14 @@ test("invalid session and tab identifiers and malformed frame data are refused",
   expect((await frame(request("/frame?tabId=tab-1"), context())).status).toBe(502);
 });
 
-test("control validates its payload and routes one action to the owning host", async () => {
-  const payload = { id: "tab-1", action: { type: "reload" } };
+test("control validates an entire batch and routes it in order to the owning host", async () => {
+  const payload = { id: "tab-1", actions: [{ type: "key", event: "down", key: "a", code: "KeyA", windowsVirtualKeyCode: 65, modifiers: 0, repeat: false }, { type: "text", text: "a" }] };
   const send = (body: string, id = sessionId) => control(new Request("http://localhost/control", { method: "POST", body }), context(id));
   expect((await send("{" )).status).toBe(400);
-  expect((await send(JSON.stringify({ id: "tab-1", action: { type: "unknown" } }))).status).toBe(400);
+  expect((await send(JSON.stringify({ id: "tab-1", actions: [{ type: "reload" }, { type: "unknown" }] }))).status).toBe(400);
+  expect((await send(JSON.stringify({ id: "tab-1", actions: [] }))).status).toBe(400);
+  expect((await send(JSON.stringify({ id: "tab-1", actions: Array(65).fill({ type: "reload" }) }))).status).toBe(400);
+  expect((await send(JSON.stringify({ id: "tab-1", actions: [{ type: "text", text: "x".repeat(1024 * 1024) }] }))).status).toBe(413);
   expect((await send(JSON.stringify(payload), "invalid")).status).toBe(400);
   expect(calls).toEqual([]);
   const response = await send(JSON.stringify(payload));

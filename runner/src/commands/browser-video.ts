@@ -17,7 +17,7 @@ const packetSchema = Type.Object({
   timestampUs: Type.Integer({ minimum: 0 }), type: Type.Union([Type.Literal("key"), Type.Literal("delta")]),
   width: Type.Number(), height: Type.Number(), dataBase64: Type.String({ minLength: 4 }),
 });
-type Lease = { id: string; source: Stream; packets: Packet[]; bytes: number; needsKey: boolean; lastRead: number };
+type Lease = { id: string; source: Stream; packets: Packet[]; bytes: number; needsKey: boolean; lastRead: number; wake?: () => void };
 type Stream = {
   id: string; tabId: string; owner: string; tab: WorkerTabSession;
   current: () => boolean; browserCdp: Cdp; helper: Cdp; helperId: string;
@@ -43,7 +43,7 @@ function close(stream: Stream): void {
   if (stream.closed) return;
   stream.closed = true;
   sources.delete(stream.tab);
-  for (const lease of stream.leases) streams.delete(lease.id);
+  for (const lease of stream.leases) { streams.delete(lease.id); lease.wake?.(); }
   stream.leases.clear();
   void (async () => {
     try { await Promise.race([evaluate(stream.helper, "stopCapture()"), Bun.sleep(1000)]); } catch {}
@@ -98,6 +98,7 @@ function closeLease(lease: Lease): void {
   streams.delete(lease.id);
   lease.source.leases.delete(lease);
   lease.packets = [];
+  lease.wake?.();
   if (!lease.source.leases.size) close(lease.source);
 }
 
@@ -180,6 +181,7 @@ async function startVideoInner(tab: WorkerTabSession, tabId: string, owner: stri
         lease.packets.push({ type: raw.type, timestamp: raw.timestampUs, capturedAt: Math.round(epochOffset + raw.timestampUs / 1000), width, height, data });
         state.forwarded++;
         lease.bytes += data.length;
+        lease.wake?.();
       }
       if (requestKey) void evaluate(helper, 'requestKeyFrame("medium")').catch(() => {});
     });
@@ -225,7 +227,12 @@ export async function nextVideo(id: string, tabId: string, owner: string) {
     close(stream);
     throw new CommandError("Browser video stopped", "unavailable");
   }
-  if (!lease.packets.length) await Bun.sleep(100);
+  if (!lease.packets.length) {
+    const { promise, resolve } = Promise.withResolvers<void>();
+    lease.wake = resolve;
+    const timer = setTimeout(resolve, 100);
+    try { await promise; } finally { clearTimeout(timer); lease.wake = undefined; }
+  }
   getStream(id, tabId, owner);
   const packets = lease.packets;
   if (!packets.length) stream.emptyReads++;

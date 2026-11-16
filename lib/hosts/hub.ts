@@ -2642,7 +2642,7 @@ export async function hostBrowserVideo(hostId: string, sessionId: string, comman
   return value;
 }
 
-/** Send one action to the owning host without retrying an uncertain result. */
+/** Send an ordered batch to the owning host without retrying uncertain partial delivery. */
 export async function hostBrowserControl(hostId: string, sessionId: string, control: BrowserControlArgs): Promise<BrowserControlResult> {
   const value = await request(hostId, "browserControl", { sessionId, control });
   if (!Value.Check(BrowserControlResultSchema, value))

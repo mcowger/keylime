@@ -41,7 +41,7 @@ export const hostControlOperations: readonly OperationContract[] = [
   })),
   {
     name: "browserControl",
-    description: "Usage: Control a session-owned browser tab.\nInputs: Supply the session ID and a target ID and action from the browser control contract.\nInvariants: The runner rechecks target ownership; no runner or browser is started and no CDP endpoint is exposed.\nEffects: Applies one navigation or input action.\nRecovery: An error may leave the action applied; do not automatically retry.",
+    description: "Usage: Control a session-owned browser tab with a bounded ordered batch.\nInputs: Supply the session ID, target ID and 1–64 actions from the browser control contract.\nInvariants: Whole-batch validation precedes dispatch; the runner rechecks ownership before each action; no runner or browser is started and no CDP endpoint is exposed.\nEffects: Applies actions sequentially through one CDP session; failure stops the batch and may leave an applied prefix.\nRecovery: Delivery of a prefix may be uncertain; never automatically retry the batch or remaining actions.",
     args: Type.Object({ sessionId: Type.String(), control: BrowserControlArgsSchema }),
     result: BrowserControlResultSchema,
   },

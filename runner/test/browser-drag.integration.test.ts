@@ -22,11 +22,11 @@ it.skipIf(process.env.KEYLIME_TEST_BROWSER !== "1")("dragging selects text in a 
       browser: { browser: launched.browser },
     } as unknown as TabSession);
     const ctx = { session: { getEvalKernelOwnerId: () => "owner" } as unknown as AgentSession, send() {} } satisfies CommandContext;
-    for (const action of [
+    await browserCommands.browser_control(ctx, { id, actions: [
       { type: "pointer", event: "down", x: 30, y: 35, button: "left", buttons: 1, clickCount: 1, modifiers: 0 },
       { type: "pointer", event: "move", x: 180, y: 35, button: "none", buttons: 1, clickCount: 0, modifiers: 0 },
       { type: "pointer", event: "up", x: 180, y: 35, button: "left", buttons: 0, clickCount: 1, modifiers: 0 },
-    ]) await browserCommands.browser_control(ctx, { id, action });
+    ] });
     const selection = await page.$eval("#text", (element) => {
       const input = element as HTMLInputElement;
       return { start: input.selectionStart, end: input.selectionEnd };

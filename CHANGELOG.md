@@ -15,6 +15,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Encoded browser video delivers keyframes for static pages and newly attached viewers.
 - Browser video logs capture, encoder, delivery and viewer diagnostics without recording page contents or video data.
 - Fixed blank browser video caused by Chromium changing large capture timestamps during encoding. Encoder correlation now preserves capture timestamps separately.
+- Browser control coalesces queued pointer and touch motion so clicks and typing do not wait behind obsolete movement. Video pulls return as soon as encoded frames arrive.
+- Browser input uses bounded ordered batches, keeping sustained canvas typing responsive without dropping key, text or release events. Failed batches are never replayed.
 - Untitled chats show a temporary topic label extracted from the first prompt until a generated or manually chosen title is available.
 - Seeded development sessions include completed and in-progress tasks for testing composer indicators.
 - Mobile composer controls use square icon actions, reduced padding, and compact running activity indicators.
@@ -78,6 +80,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Fixed blank browser video caused by Chromium changing large capture timestamps during encoding. Encoder correlation now preserves capture timestamps separately
 - Host daemons own interactive PTY sessions and `keylime attach <session-id>` joins a running session from a local terminal with a serialized screen snapshot, shared resize, and kept-alive shells after detach
 - Attached terminals suppress device and color queries so replies from the physical terminal cannot leak into the agent session
+- Browser control coalesces queued pointer and touch motion so clicks and typing do not wait behind obsolete movement. Video pulls return as soon as encoded frames arrive
+- Browser input uses bounded ordered batches, keeping sustained canvas typing responsive without dropping key, text or release events. Failed batches are never replayed
 
 ### Changed
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.

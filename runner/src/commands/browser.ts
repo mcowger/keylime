@@ -171,14 +171,16 @@ export const browserCommands: CommandTable = {
   async browser_control(ctx, args) {
     if (!Value.Check(BrowserControlArgsSchema, args))
       throw new CommandError("Invalid browser control action", "invalid_argument");
-    const { id, action } = args;
-    if (action.type === "navigate") {
-      let url: URL;
-      try { url = new URL(action.url); } catch {
-        throw new CommandError("Invalid browser navigation URL", "invalid_argument");
+    const { id, actions } = args;
+    for (const action of actions) {
+      if (action.type === "navigate") {
+        let url: URL;
+        try { url = new URL(action.url); } catch {
+          throw new CommandError("Invalid browser navigation URL", "invalid_argument");
+        }
+        if (url.protocol !== "http:" && url.protocol !== "https:")
+          throw new CommandError("Invalid browser navigation URL", "invalid_argument");
       }
-      if (url.protocol !== "http:" && url.protocol !== "https:")
-        throw new CommandError("Invalid browser navigation URL", "invalid_argument");
     }
     const tab = ownedTab(ctx, id);
     if (!tab) throw new CommandError("Browser tab not found", "not_found");
@@ -200,8 +202,9 @@ export const browserCommands: CommandTable = {
       if (ownedTab(ctx, id) !== tab) throw new CommandError("Browser tab not found", "not_found");
     };
     try {
-      assertOwned();
-      switch (action.type) {
+      for (const action of actions) {
+        assertOwned();
+        switch (action.type) {
         case "navigate": {
           const result = await withinDeadline(cdp.send("Page.navigate", { url: action.url }));
           if (result.errorText) throw new Error("Browser navigation failed");
@@ -254,6 +257,7 @@ export const browserCommands: CommandTable = {
             touchPoints: action.points, modifiers: action.modifiers,
           }));
           break;
+      }
       }
       assertOwned();
       return {};

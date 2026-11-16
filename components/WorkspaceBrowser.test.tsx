@@ -144,7 +144,7 @@ test("unsupported video codec releases the stream before trying snapshots", asyn
 test("takeover validates navigation and discards queued actions on release", async (t) => {
   const originalFetch = globalThis.fetch;
   const pending = Promise.withResolvers<Response>();
-  const actions: Array<{ id: string; action: { type: string; url?: string } }> = [];
+  const actions: Array<{ id: string; actions: Array<{ type: string; url?: string }> }> = [];
   globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
     if (String(input).endsWith("/video")) return pendingVideo(init?.signal);
     actions.push(JSON.parse(String(init?.body)));
@@ -161,8 +161,9 @@ test("takeover validates navigation and discards queued actions on release", asy
   assert.ok(view.getByRole("alert"));
   fireEvent.change(address, { target: { value: "https://example.org/path" } });
   fireEvent.click(view.getByRole("button", { name: "Go" }));
+  await waitFor(() => assert.equal(actions.length, 1));
   fireEvent.click(view.getByRole("button", { name: "Back" }));
-  assert.deepEqual(actions, [{ id: "one", action: { type: "navigate", url: "https://example.org/path" } }]);
+  assert.deepEqual(actions, [{ id: "one", actions: [{ type: "navigate", url: "https://example.org/path" }] }]);
   fireEvent.change(view.getByLabelText("Page"), { target: { value: "two" } });
   assert.ok(view.getByRole("button", { name: "Take control" }));
   fireEvent.click(view.getByRole("button", { name: "Take control" }));
@@ -170,7 +171,7 @@ test("takeover validates navigation and discards queued actions on release", asy
   assert.equal(actions.length, 1);
   await act(async () => pending.resolve(Response.json({})));
   await waitFor(() => assert.equal(actions.length, 2));
-  assert.deepEqual(actions[1], { id: "two", action: { type: "reload" } });
+  assert.deepEqual(actions[1], { id: "two", actions: [{ type: "reload" }] });
   fireEvent(window, new Event("offline"));
   assert.ok(view.getByRole("button", { name: "Take control" }));
 });
@@ -180,7 +181,7 @@ test("takeover sends keyboard and composition input in order without clipboard t
   const actions: Array<{ type: string; event?: string; key?: string; text?: string }> = [];
   globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
     if (String(input).endsWith("/video")) return pendingVideo(init?.signal);
-    actions.push(JSON.parse(String(init?.body)).action);
+    actions.push(...JSON.parse(String(init?.body)).actions);
     return Promise.resolve(Response.json({}));
   }) as typeof fetch;
   t.after(() => { cleanup(); globalThis.fetch = originalFetch; });
@@ -202,6 +203,123 @@ test("takeover sends keyboard and composition input in order without clipboard t
   ]);
 });
 
+test("sustained canvas typing batches ordered actions while responses are deferred", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ id: string; actions: Array<{ type: string; event?: string; key?: string; text?: string }> }> = [];
+  const pending: Array<{ resolve: (value: Response) => void }> = [];
+  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).endsWith("/video")) return pendingVideo(init?.signal);
+    requests.push(JSON.parse(String(init?.body)));
+    const response = Promise.withResolvers<Response>();
+    pending.push(response);
+    return response.promise;
+  }) as typeof fetch;
+  t.after(() => { cleanup(); globalThis.fetch = originalFetch; });
+  const view = render(<WorkspaceBrowser sessionId="session" pages={[{ id: "one", title: "One", url: "https://example.com" }]} active />);
+  fireEvent.click(view.getByRole("button", { name: "Take control" }));
+  const canvas = view.getByLabelText("Live browser page");
+  const typeCharacter = (key: string) => {
+    fireEvent.keyDown(canvas, { key, code: `Key${key.toUpperCase()}`, keyCode: key.toUpperCase().charCodeAt(0) });
+    fireEvent.keyUp(canvas, { key, code: `Key${key.toUpperCase()}`, keyCode: key.toUpperCase().charCodeAt(0) });
+  };
+  typeCharacter("a");
+  await waitFor(() => assert.equal(requests.length, 1));
+  assert.deepEqual(requests[0].actions.map((action) => [action.type, action.event, action.text]), [["key", "down", undefined], ["text", undefined, "a"], ["key", "up", undefined]]);
+  const typed = Array.from({ length: 120 }, (_, index) => String.fromCharCode(97 + index % 26));
+  for (const key of typed) typeCharacter(key);
+  assert.equal(requests.length, 1);
+  for (let index = 0; index < 6; index++) {
+    await act(async () => pending[index].resolve(Response.json({})));
+    await waitFor(() => assert.equal(requests.length, index + 2));
+  }
+  assert.equal(requests.length, 7);
+  assert.ok(requests.every((request) => request.id === "one" && request.actions.length <= 64));
+  assert.deepEqual(requests.flatMap((request) => request.actions).map((action) => [action.type, action.event, action.key, action.text]), ["a", ...typed].flatMap((key) => [
+    ["key", "down", key, undefined], ["text", undefined, undefined, key], ["key", "up", key, undefined],
+  ]));
+  await act(async () => pending[6].resolve(Response.json({})));
+  assert.equal(requests.length, 7);
+});
+
+test("control batches respect serialized size limits and isolate navigation", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const first = Promise.withResolvers<Response>();
+  const requests: Array<{ body: string; actions: Array<{ type: string; text?: string }> }> = [];
+  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).endsWith("/video")) return pendingVideo(init?.signal);
+    const body = String(init?.body);
+    requests.push({ body, actions: JSON.parse(body).actions });
+    return requests.length === 1 ? first.promise : Promise.resolve(Response.json({}));
+  }) as typeof fetch;
+  t.after(() => { cleanup(); globalThis.fetch = originalFetch; });
+  const view = render(<WorkspaceBrowser sessionId="session" pages={[{ id: "one", title: "One", url: "https://example.com" }]} active />);
+  fireEvent.click(view.getByRole("button", { name: "Take control" }));
+  fireEvent.click(view.getByRole("button", { name: "Back" }));
+  await waitFor(() => assert.equal(requests.length, 1));
+  const keyboard = view.getByRole("textbox", { name: "Browser keyboard" });
+  const text = "界".repeat(60_000);
+  const escaped = "\\".repeat(65_536);
+  for (const value of [text, text, text, escaped]) fireEvent.input(keyboard, { target: { value } });
+  fireEvent.click(view.getByRole("button", { name: "Forward" }));
+  fireEvent.input(keyboard, { target: { value: "after" } });
+  await act(async () => first.resolve(Response.json({})));
+  await waitFor(() => assert.equal(requests.length, 6));
+  assert.deepEqual(requests.map((request) => request.actions.map((action) => action.type)), [["back"], ["text", "text"], ["text"], ["text"], ["forward"], ["text"]]);
+  assert.deepEqual(requests.flatMap((request) => request.actions.filter((action) => action.type === "text").map((action) => action.text)), [text, text, text, escaped, "after"]);
+  assert.ok(requests.every((request) => new TextEncoder().encode(request.body).length < 1024 * 1024));
+  assert.ok(requests.filter((request) => request.actions.length > 1).every((request) => request.body.length <= 128 * 1024));
+});
+
+test("a partially failed batch drops later queued input without retry", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const pending = Promise.withResolvers<Response>();
+  const requests: Array<{ actions: Array<{ type: string; event?: string; text?: string }> }> = [];
+  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).endsWith("/video")) return pendingVideo(init?.signal);
+    requests.push(JSON.parse(String(init?.body)));
+    return requests.length === 1 ? pending.promise : Promise.resolve(Response.json({}));
+  }) as typeof fetch;
+  t.after(() => { cleanup(); globalThis.fetch = originalFetch; });
+  const view = render(<WorkspaceBrowser sessionId="session" pages={[{ id: "one", title: "One", url: "https://example.com" }]} active />);
+  fireEvent.click(view.getByRole("button", { name: "Take control" }));
+  const canvas = view.getByLabelText("Live browser page");
+  fireEvent.keyDown(canvas, { key: "a", code: "KeyA", keyCode: 65 });
+  fireEvent.keyUp(canvas, { key: "a", code: "KeyA", keyCode: 65 });
+  await waitFor(() => assert.equal(requests.length, 1));
+  assert.equal(requests[0].actions.length, 3);
+  fireEvent.keyDown(canvas, { key: "b", code: "KeyB", keyCode: 66 });
+  fireEvent.keyUp(canvas, { key: "b", code: "KeyB", keyCode: 66 });
+  await act(async () => pending.resolve(new Response(null, { status: 500 })));
+  assert.equal(requests.length, 1);
+  assert.ok(view.getByRole("alert"));
+  fireEvent.keyDown(canvas, { key: "c", code: "KeyC", keyCode: 67 });
+  await waitFor(() => assert.equal(requests.length, 2));
+  assert.deepEqual(requests[1].actions.map((action) => [action.type, action.text]), [["key", undefined], ["text", "c"]]);
+});
+
+test("oversized input is rejected without sending or losing its error to an earlier response", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const pending = Promise.withResolvers<Response>();
+  const requests: Array<{ actions: Array<{ type: string }> }> = [];
+  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).endsWith("/video")) return pendingVideo(init?.signal);
+    requests.push(JSON.parse(String(init?.body)));
+    return pending.promise;
+  }) as typeof fetch;
+  t.after(() => { cleanup(); globalThis.fetch = originalFetch; });
+  const view = render(<WorkspaceBrowser sessionId="session" pages={[{ id: "one", title: "One", url: "https://example.com" }]} active />);
+  fireEvent.click(view.getByRole("button", { name: "Take control" }));
+  fireEvent.click(view.getByRole("button", { name: "Back" }));
+  await waitFor(() => assert.equal(requests.length, 1));
+  const keyboard = view.getByRole("textbox", { name: "Browser keyboard" });
+  fireEvent.input(keyboard, { target: { value: "queued" } });
+  fireEvent.input(keyboard, { target: { value: "\\".repeat(205_000) } });
+  assert.ok(view.getByRole("alert"));
+  await act(async () => pending.resolve(Response.json({})));
+  assert.equal(requests.length, 1);
+  assert.ok(view.getByRole("alert"));
+});
+
 test("pointer input requires a fresh frame and scales wheel coordinates to the viewport", async (t) => {
   const originalFetch = globalThis.fetch;
   let pulls = 0;
@@ -214,7 +332,7 @@ test("pointer input requires a fresh frame and scales wheel coordinates to the v
       if (++pulls === 1) return Promise.resolve(batch(packet(2)));
       return pendingVideo(init?.signal);
     }
-    actions.push(JSON.parse(String(init?.body)).action);
+    actions.push(...JSON.parse(String(init?.body)).actions);
     return Promise.resolve(Response.json({}));
   }) as typeof fetch;
   t.after(() => { cleanup(); globalThis.fetch = originalFetch; });
@@ -247,6 +365,124 @@ test("pointer input requires a fresh frame and scales wheel coordinates to the v
   fireEvent(window, new Event("offline"));
   fireEvent.wheel(image, { clientX: 330, clientY: 200, deltaY: 25 });
   assert.equal(actions.length, 6);
+});
+
+test("slow control requests coalesce pending moves without delaying a click behind every move", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const originalInfo = console.info;
+  const pending = Promise.withResolvers<Response>();
+  const actions: Array<Record<string, unknown>> = [];
+  const diagnostics: unknown[] = [];
+  let pulls = 0;
+  console.info = (message, data) => { if (message === "[browser-input viewer]") diagnostics.push(data); };
+  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).endsWith("/video")) {
+      const command = JSON.parse(String(init?.body));
+      if (command.op === "start") return Promise.resolve(startResult());
+      if (command.op === "stop") return Promise.resolve(Response.json({}));
+      if (++pulls === 1) return Promise.resolve(batch(packet(415)));
+      return pendingVideo(init?.signal);
+    }
+    const wasEmpty = actions.length === 0;
+    actions.push(...JSON.parse(String(init?.body)).actions);
+    return wasEmpty ? pending.promise : Promise.resolve(Response.json({}));
+  }) as typeof fetch;
+  t.after(() => { cleanup(); globalThis.fetch = originalFetch; console.info = originalInfo; });
+  const view = render(<WorkspaceBrowser sessionId="private-session" pages={[{ id: "private-page", title: "One", url: "https://example.com/private" }]} active />);
+  fireEvent.click(view.getByRole("button", { name: "Take control" }));
+  await waitFor(() => assert.ok(painted.includes(415)));
+  const image = view.getByLabelText("Live browser page");
+  image.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 1280, bottom: 720, width: 1280, height: 720, toJSON() {} });
+  image.setPointerCapture = () => {};
+  image.hasPointerCapture = () => true;
+  const pointer = (type: string, x: number, options: { pointerType?: string; pointerId?: number; buttons?: number; altKey?: boolean } = {}) => {
+    const event = new window.MouseEvent(type, { bubbles: true, clientX: x, clientY: 10, button: 0, buttons: options.buttons ?? 0, altKey: options.altKey });
+    Object.defineProperties(event, { pointerId: { value: options.pointerId ?? 1 }, pointerType: { value: options.pointerType ?? "mouse" } });
+    fireEvent(image, event);
+  };
+  pointer("pointermove", 1);
+  await waitFor(() => assert.equal(actions.length, 1));
+  for (let x = 2; x <= 101; x++) pointer("pointermove", x);
+  pointer("pointerdown", 102, { buttons: 1 });
+  pointer("pointerup", 102);
+  pointer("pointermove", 103);
+  pointer("pointermove", 104, { altKey: true });
+  pointer("pointermove", 105, { altKey: true, buttons: 1 });
+  pointer("pointermove", 106, { altKey: true, buttons: 1, pointerId: 2 });
+  fireEvent.keyDown(image, { key: "Enter", code: "Enter", keyCode: 13 });
+  pointer("pointermove", 107, { altKey: true, buttons: 1, pointerId: 2 });
+  fireEvent.wheel(image, { clientX: 10, clientY: 10, deltaY: 5 });
+  fireEvent.wheel(image, { clientX: 10, clientY: 10, deltaY: 7 });
+  fireEvent.click(view.getByRole("button", { name: "Back" }));
+  pointer("pointermove", 108);
+  assert.equal(actions.length, 1);
+  await act(async () => pending.resolve(Response.json({})));
+  await waitFor(() => assert.equal(actions.length, 14));
+  assert.deepEqual(actions.map((action) => [action.type, action.event, action.x]), [
+    ["pointer", "move", 1], ["pointer", "move", 101], ["pointer", "down", 102], ["pointer", "up", 102],
+    ["pointer", "move", 103], ["pointer", "move", 104], ["pointer", "move", 105], ["pointer", "move", 106],
+    ["key", "down", undefined], ["pointer", "move", 107], ["wheel", undefined, 10], ["wheel", undefined, 10],
+    ["back", undefined, undefined], ["pointer", "move", 108],
+  ]);
+  assert.equal(actions[10].deltaY, 5);
+  assert.equal(actions[11].deltaY, 7);
+  assert.equal(diagnostics.length, 1);
+  const report = diagnostics[0];
+  assert.ok(report && typeof report === "object" && "coalesced" in report);
+  assert.ok("sentActions" in report && "sentBatches" in report);
+  assert.equal(report.sentActions, 1);
+  assert.equal(report.sentBatches, 1);
+  assert.equal(report.coalesced, 99);
+  assert.doesNotMatch(JSON.stringify(diagnostics), /private|example|pointer|Enter/);
+});
+
+test("touch moves coalesce only within the same contact and modifier boundaries", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const pending = Promise.withResolvers<Response>();
+  const actions: Array<Record<string, unknown>> = [];
+  let pulls = 0;
+  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).endsWith("/video")) {
+      const command = JSON.parse(String(init?.body));
+      if (command.op === "start") return Promise.resolve(startResult());
+      if (command.op === "stop") return Promise.resolve(Response.json({}));
+      if (++pulls === 1) return Promise.resolve(batch(packet(416)));
+      return pendingVideo(init?.signal);
+    }
+    const wasEmpty = actions.length === 0;
+    actions.push(...JSON.parse(String(init?.body)).actions);
+    return wasEmpty ? pending.promise : Promise.resolve(Response.json({}));
+  }) as typeof fetch;
+  t.after(() => { cleanup(); globalThis.fetch = originalFetch; });
+  const view = render(<WorkspaceBrowser sessionId="session" pages={[{ id: "one", title: "One", url: "https://example.com" }]} active />);
+  fireEvent.click(view.getByRole("button", { name: "Take control" }));
+  await waitFor(() => assert.ok(painted.includes(416)));
+  const image = view.getByLabelText("Live browser page");
+  image.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 1280, bottom: 720, width: 1280, height: 720, toJSON() {} });
+  image.setPointerCapture = () => {};
+  image.hasPointerCapture = () => true;
+  const touch = (type: string, id: number, x: number, altKey = false) => {
+    const event = new window.MouseEvent(type, { bubbles: true, clientX: x, clientY: 10, altKey });
+    Object.defineProperties(event, { pointerId: { value: id }, pointerType: { value: "touch" } });
+    fireEvent(image, event);
+  };
+  touch("pointerdown", 1, 10);
+  await waitFor(() => assert.equal(actions.length, 1));
+  touch("pointermove", 1, 11);
+  touch("pointermove", 1, 12);
+  touch("pointermove", 1, 13, true);
+  touch("pointerdown", 2, 20, true);
+  touch("pointermove", 1, 14, true);
+  touch("pointermove", 2, 21, true);
+  touch("pointerup", 2, 21, true);
+  touch("pointermove", 1, 15, true);
+  touch("pointerup", 1, 15, true);
+  await act(async () => pending.resolve(Response.json({})));
+  await waitFor(() => assert.equal(actions.length, 8));
+  assert.deepEqual(actions.map((action) => action.event), ["start", "move", "move", "start", "move", "end", "move", "end"]);
+  assert.deepEqual(actions[1].points, [{ id: 1, x: 12, y: 10 }]);
+  assert.deepEqual(actions[4].points, [{ id: 1, x: 14, y: 10 }, { id: 2, x: 21, y: 10 }]);
+  assert.deepEqual(actions[5].points, [{ id: 1, x: 14, y: 10 }]);
 });
 
 test("navigation discards old decoder output and resumes with a fresh stream", async (t) => {
@@ -297,6 +533,7 @@ test("a failed control action is not retried and does not release control", asyn
   const view = render(<WorkspaceBrowser sessionId="session" pages={[{ id: "one", title: "One", url: "https://example.com" }]} active />);
   fireEvent.click(view.getByRole("button", { name: "Take control" }));
   fireEvent.click(view.getByRole("button", { name: "Back" }));
+  await waitFor(() => assert.equal(calls, 1));
   fireEvent.click(view.getByRole("button", { name: "Forward" }));
   await act(async () => pending.resolve(new Response(null, { status: 500 })));
   assert.equal(calls, 1);

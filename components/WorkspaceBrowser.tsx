@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type WheelEvent } from "react";
 import { ArrowLeft, ArrowRight, RotateCw } from "lucide-react";
-import { BrowserVideoStartResultSchema, BrowserVideoNextResultSchema, type BrowserControlAction, type BrowserListResult } from "@/lib/api-contracts/runner-lifecycle";
+import { BROWSER_CONTROL_BATCH_MAX, BrowserVideoStartResultSchema, BrowserVideoNextResultSchema, type BrowserControlAction, type BrowserListResult } from "@/lib/api-contracts/runner-lifecycle";
 import { Value } from "@sinclair/typebox/value";
 import { useI18n } from "@/lib/i18n";
 
@@ -73,6 +73,24 @@ export function useWorkspaceBrowsers(sessionIds: string[], enabled: boolean) {
 
 type Frame = { width: number; height: number; ageAtReceipt: number; receivedAt: number; pageId: string };
 
+type QueuedControl = { action: BrowserControlAction; serialized: string; sessionId: string; pageId: string; generation: number; enqueuedAt: number; pointerSource?: string };
+
+const CONTROL_BATCH_CHAR_BUDGET = 128 * 1024;
+const CONTROL_ACTION_CHAR_LIMIT = 400 * 1024;
+const CONTROL_BODY_BYTE_LIMIT = 1024 * 1024;
+const NAVIGATION_TYPES: readonly string[] = ["navigate", "back", "forward", "reload"];
+
+function canReplaceMotion(previous: QueuedControl, action: BrowserControlAction, pointerSource?: string) {
+  const old = previous.action;
+  if (old.type === "pointer" && action.type === "pointer" && old.event === "move" && action.event === "move") {
+    return pointerSource !== undefined && previous.pointerSource === pointerSource && old.buttons === action.buttons && old.button === action.button && old.modifiers === action.modifiers;
+  }
+  if (old.type === "touch" && action.type === "touch" && old.event === "move" && action.event === "move") {
+    return old.modifiers === action.modifiers && old.points.length === action.points.length && old.points.every((point) => action.points.some((next) => next.id === point.id));
+  }
+  return false;
+}
+
 function modifiers(event: { altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) {
   return (event.altKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.metaKey ? 4 : 0) | (event.shiftKey ? 8 : 0);
 }
@@ -115,33 +133,70 @@ export function WorkspaceBrowser({ sessionId, pages, active }: {
   const composing = useRef(false);
   const clipboardKeys = useRef(new Set<string>());
   const compositionText = useRef("");
-  const dispatch = useRef({ generation: 0, enabled: false, busy: false, queue: [] as Array<{ action: BrowserControlAction; sessionId: string; pageId: string; generation: number }> });
+  const dispatch = useRef({ generation: 0, enabled: false, busy: false, errorVersion: 0, queue: [] as QueuedControl[], stats: { accepted: 0, sentActions: 0, sentBatches: 0, coalesced: 0, discarded: 0, failures: 0, maxQueueDepth: 0, totalQueueWaitMs: 0, maxQueueWaitMs: 0, totalRoundtripMs: 0, maxRoundtripMs: 0 }, lastReport: 0 });
 
   const release = () => {
     dispatch.current.generation++;
     navigating.current = false;
     dispatch.current.enabled = false;
+    dispatch.current.stats.discarded += dispatch.current.queue.length;
     dispatch.current.queue = [];
     touches.current.clear();
     clipboardKeys.current.clear();
     setControlling(false);
   };
 
-  const send = (action: BrowserControlAction) => {
+  const send = (action: BrowserControlAction, pointerSource?: string) => {
     const state = dispatch.current;
     if (!state.enabled || !active || !pageId || document.hidden || !navigator.onLine) return;
-    state.queue.push({ action, sessionId, pageId, generation: state.generation });
+    const serialized = JSON.stringify(action);
+    const prefix = `{"id":${JSON.stringify(pageId)},"actions":[`;
+    if (serialized.length >= CONTROL_ACTION_CHAR_LIMIT || (prefix.length + serialized.length + 2 > CONTROL_BATCH_CHAR_BUDGET && new TextEncoder().encode(`${prefix}${serialized}]}`).length >= CONTROL_BODY_BYTE_LIMIT)) {
+      state.stats.discarded += state.queue.length + 1;
+      state.errorVersion++;
+      state.queue = [];
+      setControlError(true);
+      return;
+    }
+    const last = state.queue[state.queue.length - 1];
+    state.stats.accepted++;
+    if (last && last.generation === state.generation && last.sessionId === sessionId && last.pageId === pageId && canReplaceMotion(last, action, pointerSource)) {
+      last.action = action;
+      last.serialized = serialized;
+      state.stats.coalesced++;
+    } else {
+      state.queue.push({ action, serialized, sessionId, pageId, generation: state.generation, enqueuedAt: performance.now(), pointerSource });
+      state.stats.maxQueueDepth = Math.max(state.stats.maxQueueDepth, state.queue.length);
+    }
     if (state.busy) return;
     state.busy = true;
     const drain = async () => {
       while (state.enabled && state.queue.length) {
         const next = state.queue.shift()!;
-        const navigation = ["navigate", "back", "forward", "reload"].includes(next.action.type);
+        const navigation = NAVIGATION_TYPES.includes(next.action.type);
+        const batch = [next];
+        const prefix = `{"id":${JSON.stringify(next.pageId)},"actions":[`;
+        let size = prefix.length + next.serialized.length + 2;
+        while (!navigation && batch.length < BROWSER_CONTROL_BATCH_MAX && state.queue.length) {
+          const candidate = state.queue[0];
+          if (candidate.generation !== next.generation || candidate.sessionId !== next.sessionId || candidate.pageId !== next.pageId || NAVIGATION_TYPES.includes(candidate.action.type) || size + 1 + candidate.serialized.length > CONTROL_BATCH_CHAR_BUDGET) break;
+          batch.push(state.queue.shift()!);
+          size += 1 + candidate.serialized.length;
+        }
+        const startedAt = performance.now();
+        const errorVersion = state.errorVersion;
+        state.stats.sentActions += batch.length;
+        state.stats.sentBatches++;
+        for (const item of batch) {
+          const queueWait = startedAt - item.enqueuedAt;
+          state.stats.totalQueueWaitMs += queueWait;
+          state.stats.maxQueueWaitMs = Math.max(state.stats.maxQueueWaitMs, queueWait);
+        }
         if (navigation) { navigating.current = true; frameGeneration.current++; frameRef.current = null; setVideoVersion((version) => version + 1); }
         try {
           const response = await fetch(`${browserUrl(next.sessionId)}/control`, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: next.pageId, action: next.action }),
+            body: `${prefix}${batch.map((item) => item.serialized).join(",")}]}`,
           });
           if (navigation && state.generation === next.generation) { navigating.current = false; frameGeneration.current++; frameRef.current = null; setVideoVersion((version) => version + 1); }
           if (!response.ok) {
@@ -151,19 +206,31 @@ export function WorkspaceBrowser({ sessionId, pages, active }: {
             }
             throw new Error("Browser control failed");
           }
-          if (state.generation === next.generation) setControlError(false);
+          if (state.generation === next.generation && state.errorVersion === errorVersion) setControlError(false);
         } catch {
+          state.stats.failures++;
           if (navigation && state.generation === next.generation) { navigating.current = false; frameGeneration.current++; frameRef.current = null; setVideoVersion((version) => version + 1); }
           if (state.generation === next.generation) {
+            state.stats.discarded += state.queue.length;
             // The failed operation may have executed. Never replay it or later queued input.
             state.queue = [];
             setControlError(true);
+          }
+        } finally {
+          const roundtrip = performance.now() - startedAt;
+          state.stats.totalRoundtripMs += roundtrip;
+          state.stats.maxRoundtripMs = Math.max(state.stats.maxRoundtripMs, roundtrip);
+          const now = Date.now();
+          if (!state.lastReport || now - state.lastReport >= 30_000) {
+            state.lastReport = now;
+            // Counts and timings only: never include actions, coordinates, IDs, URLs, or errors.
+            console.info("[browser-input viewer]", { ...state.stats, queued: state.queue.length });
           }
         }
       }
       state.busy = false;
     };
-    void drain();
+    queueMicrotask(() => void drain());
   };
 
   useEffect(() => {
@@ -418,7 +485,7 @@ export function WorkspaceBrowser({ sessionId, pages, active }: {
       event.currentTarget.focus();
     }
     const button = kind === "move" ? "none" : event.button === 1 ? "middle" : event.button === 2 ? "right" : "left";
-    send({ type: "pointer", event: kind, ...point, button, buttons: event.buttons, clickCount: kind === "move" ? 0 : Math.max(1, event.detail), modifiers: modifiers(event) });
+    send({ type: "pointer", event: kind, ...point, button, buttons: event.buttons, clickCount: kind === "move" ? 0 : Math.max(1, event.detail), modifiers: modifiers(event) }, `${event.pointerType}:${event.pointerId}`);
   };
   const keyboard = (event: KeyboardEvent<HTMLElement>, kind: "down" | "up") => {
     const shortcutKey = event.code || event.key.toLowerCase();
@@ -454,8 +521,8 @@ export function WorkspaceBrowser({ sessionId, pages, active }: {
           try {
             const url = new URL(address);
             if (!/^https?:\/\//i.test(address.trim()) || (url.protocol !== "http:" && url.protocol !== "https:")) throw new Error("Invalid URL");
-            send({ type: "navigate", url: url.href });
             setControlError(false);
+            send({ type: "navigate", url: url.href });
           } catch { setControlError(true); }
         }}>
             <input aria-label={t("workspaceBrowser.address")} title={address} value={address} onChange={(event) => setAddress(event.target.value)} readOnly={!controlling} style={{ ...toolbarField, flex: "1 1 auto", width: 0, minWidth: 0, padding: "0 10px", color: controlling ? "var(--text)" : "var(--text-muted)" }} />

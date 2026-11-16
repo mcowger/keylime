@@ -3,22 +3,25 @@ import { BrowserControlArgsSchema } from "@/lib/api-contracts/runner-lifecycle";
 import { apiErrorResponse, hostOfflineResponse, resolveSessionHostOr404 } from "@/lib/api-utils";
 import { hostBrowserControl } from "@/lib/hosts/hub";
 import { isValidSessionId } from "@/lib/session-file-references-core";
+import { parseJsonWithinLimit, RequestBodyTooLargeError } from "@/lib/bounded-form-data";
 
 /**
  * @apiContract controlSessionBrowserTab
- * @apiUsage Send one navigation or input action to a session-owned browser tab.
- * @apiInputs id identifies the session; the body identifies a discovered tab and a typed action.
- * @apiInvariants The host and runner recheck ownership without starting a runner or exposing CDP.
- * @apiEffects Applies one browser action; other viewers and the agent remain able to interact.
- * @apiRecovery An error may mean the action was applied; do not automatically retry it.
+ * @apiUsage Send an ordered batch of navigation or input actions to a session-owned browser tab.
+ * @apiInputs id identifies the session; the body supplies the exact tab and 1–64 actions in order, within 1 MiB of UTF-8 JSON.
+ * @apiInvariants The whole batch is validated before effects; the runner rechecks ownership before each action without starting a runner or exposing CDP.
+ * @apiEffects Applies actions sequentially; other viewers and the agent remain able to interact. Failure stops the batch and may leave an applied prefix.
+ * @apiRecovery Never automatically retry a failed batch or its remaining actions: partial delivery may be uncertain.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!isValidSessionId(id)) return Response.json({ error: "Invalid browser request", code: "invalid_request" }, { status: 400 });
   let body: unknown;
   try {
-    body = await req.json();
-  } catch {
+    body = await parseJsonWithinLimit<unknown>(req, 1024 * 1024);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError)
+      return Response.json({ error: "Browser input batch exceeds 1 MiB", code: "request_too_large" }, { status: 413 });
     return Response.json({ error: "Invalid browser request", code: "invalid_request" }, { status: 400 });
   }
   if (!Value.Check(BrowserControlArgsSchema, body))
