@@ -3815,7 +3815,7 @@ export function AppShell({ appName }: { appName: string }) {
                     minHeight: "var(--shell-topbar-height)",
                     background: "var(--bg-panel)",
                     padding: isMobile
-                      ? "env(safe-area-inset-top, 0px) max(4px, env(safe-area-inset-right, 0px)) 0 max(4px, env(safe-area-inset-left, 0px))"
+                      ? "var(--shell-topbar-inset) max(4px, env(safe-area-inset-right, 0px)) 0 max(4px, env(safe-area-inset-left, 0px))"
                       : "0 8px",
                     gap: "0 8px",
                     minWidth: 0,

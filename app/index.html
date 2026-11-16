@@ -24,6 +24,16 @@
     />
     <link rel="icon" href="../public/favicon.ico" sizes="any" />
     <meta name="theme-color" content="#000000" />
+    <script>
+      // iOS freezes the OS token; some standalone UAs omit Version entirely.
+      if (navigator.standalone === true) {
+        var version = /Version\/(\d+)/.exec(navigator.userAgent);
+        var os = /OS (\d+)_/.exec(navigator.userAgent);
+        if (version ? Number(version[1]) >= 27 : !os || Number(os[1]) >= 18) {
+          document.documentElement.setAttribute("data-ios-status-blur", "");
+        }
+      }
+    </script>
     <!-- Bun's CSS bundler does not recognize ::highlight; browsers parse these rules directly. -->
     <style>
       ::highlight(omp-search) {

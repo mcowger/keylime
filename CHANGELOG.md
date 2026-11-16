@@ -58,6 +58,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ### Fixed
 - Select menus no longer lock the page and shift it on iOS.
+- Kept the mobile toolbar below the iOS 27 standalone status-bar blur.
 - Client builds no longer warn about search highlight selectors.
 - Development, builds and local deployments no longer generate or validate API documentation; releases ship the checked-in documents.
 - API generation validates AsyncAPI documents without materializing unused parsed models, avoiding excessive deployment build time and memory. Generation now logs each validation stage.
@@ -127,6 +128,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Client builds no longer warn about search highlight selectors
 - Select menus no longer lock the page and shift it on iOS
 - Opening a workspace without a browser-local chat now selects its most recent registered chat instead of starting a new one
+- Kept the mobile toolbar below the iOS 27 standalone status-bar blur
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
