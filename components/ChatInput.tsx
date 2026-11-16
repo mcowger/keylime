@@ -91,6 +91,7 @@ import {
   draftImagesToAttachedImages,
   imageToDraftImage,
   revokeImagePreview,
+  sameDraftFile,
   textFileToDraftFile,
 } from "./ChatInput-draft-attachments";
 import {
@@ -138,11 +139,6 @@ import {
   QueuedActionButton,
 } from "./ChatInput-banners";
 import { CHAT_COLUMN_MAX_WIDTH } from "@/lib/chat-layout";
-import {
-  composeMessageWithTextAttachments,
-  MAX_ATTACHED_TEXT_FILES,
-  selectTextAttachments,
-} from "@/lib/chat-attachments";
 import {
   attachedImageBytes,
   MAX_ATTACHED_IMAGES,
@@ -802,15 +798,16 @@ export const ChatInput = memo(
     }, []);
     const attachedImagesRef = useRef(attachedImages);
     const attachedTextFilesRef = useRef(attachedTextFiles);
-    // Bumped whenever the user clears/sends the composer: in-flight FileReader
-    // and file.text() reads must not re-append their results afterwards.
+    // Bumped whenever the user clears/sends the composer: in-flight image reads
+    // must not re-append their results afterwards.
     const attachmentRevisionRef = useRef(0);
     const attachmentIdentityRevisionRef = useRef(0);
     const pendingImageCountRef = useRef(0);
-    const pendingTextFileCountRef = useRef(0);
-    const pendingTextFileBytesRef = useRef(0);
     const pendingImageBytesRef = useRef(0);
     const attachedUploadsRef = useRef(attachedUploads);
+    // Legacy inline draft files remain recoverable until their replacement upload finishes.
+    const legacyUploadsRef = useRef(new Map<File, AttachedTextFile>());
+    const migrationDraftKeyRef = useRef(draftKey);
     /** Uploads in flight, by id: a chip's removal aborts its handle. */
     const uploadHandlesRef = useRef(new Map<string, UploadHandle>());
     const uploadHostIdRef = useRef(uploadHostId);
@@ -834,7 +831,13 @@ export const ChatInput = memo(
       };
       // Establish intent from every live chip before unfinished upload payloads are omitted.
       if (requiresPromptMode(draft)) draft.promptOnly = true;
-      draft.uploads = attachedUploadsToDraftUploads(uploads);
+      draft.uploads = attachedUploadsToDraftUploads(
+        uploads.filter((upload) => {
+          const original =
+            upload.file && legacyUploadsRef.current.get(upload.file);
+          return !original || !attachedTextFilesRef.current.includes(original);
+        }),
+      );
       return draft;
     }, []);
 
@@ -1142,81 +1145,6 @@ export const ChatInput = memo(
       [attachAsFiles, fitsInline, markInputEdited, t],
     );
 
-    /** Text is inlined while it fits the text budget; past it, when it turns out binary, and always for a PDF (omp reads
-     *  it as a document; its decoded bytes are not text), it goes As file. */
-    const processTextFiles = useCallback(
-      async (files: File[]) => {
-        // In-flight batches reserve their bytes too, so two overlapping drops
-        // cannot each fit under the aggregate budget on their own.
-        const { accepted: textFiles } = selectTextAttachments(
-          files.filter(
-            (file) =>
-              file.type !== "application/pdf" && !/\.pdf$/i.test(file.name),
-          ),
-          {
-            usedBytes:
-              attachedTextFilesRef.current.reduce(
-                (total, file) => total + file.size,
-                0,
-              ) + pendingTextFileBytesRef.current,
-            usedSlots:
-              attachedTextFilesRef.current.length +
-              pendingTextFileCountRef.current,
-          },
-        );
-        attachAsFiles(files.filter((file) => !textFiles.includes(file)));
-        if (!textFiles.length) return;
-        markInputEdited();
-        const revision = attachmentRevisionRef.current;
-        const identityRevision = attachmentIdentityRevisionRef.current;
-        pendingTextFileCountRef.current += textFiles.length;
-        pendingTextFileBytesRef.current += textFiles.reduce(
-          (total, file) => total + file.size,
-          0,
-        );
-        try {
-          const readFiles = await Promise.all(
-            textFiles.map(async (file): Promise<AttachedTextFile> => ({
-              name: file.name,
-              mimeType: file.type,
-              content: await file.text(),
-              size: file.size,
-            })),
-          );
-          // The composer was cleared/sent while the reads were in flight —
-          // drop the batch instead of re-appending stale attachments.
-          if (attachmentRevisionRef.current !== revision) return;
-          // Binary content cannot be inlined into the prompt: NUL bytes, or
-          // U+FFFD replacement characters left by mis-decoded binary (e.g.
-          // UTF-16 text read as UTF-8).
-          const binary = readFiles.map(
-            (file) =>
-              file.content.includes("\u0000") ||
-              file.content.includes("\uFFFD"),
-          );
-          const newFiles = readFiles.filter((_, index) => !binary[index]);
-          attachAsFiles(textFiles.filter((_, index) => binary[index]));
-          setAttachedTextFiles((prev) => [
-            ...prev,
-            ...(identityRevision !== attachmentIdentityRevisionRef.current
-              ? newFiles
-              : newFiles.slice(
-                  0,
-                  Math.max(0, MAX_ATTACHED_TEXT_FILES - prev.length),
-                )),
-          ]);
-        } catch {
-          setAttachError(t("chatInput.attachmentTextReadFailed"));
-        } finally {
-          pendingTextFileCountRef.current -= textFiles.length;
-          pendingTextFileBytesRef.current -= textFiles.reduce(
-            (total, file) => total + file.size,
-            0,
-          );
-        }
-      },
-      [attachAsFiles, markInputEdited, t],
-    );
 
     const processFiles = useCallback(
       (files: File[]) => {
@@ -1227,9 +1155,9 @@ export const ChatInput = memo(
           (file) => !file.type.startsWith("image/"),
         );
         void processImageFiles(imageFiles);
-        void processTextFiles(otherFiles);
+        attachAsFiles(otherFiles);
       },
-      [processImageFiles, processTextFiles],
+      [attachAsFiles, processImageFiles],
     );
 
     const processFilesRef = useRef(processFiles);
@@ -1315,9 +1243,18 @@ export const ChatInput = memo(
         markInputEdited();
         const handle = uploadHandlesRef.current.get(id);
         uploadHandlesRef.current.delete(id);
-        const hostId = attachedUploadsRef.current.find(
-          (upload) => upload.id === id,
-        )?.hostId;
+        const upload = attachedUploadsRef.current.find((item) => item.id === id);
+        const hostId = upload?.hostId;
+        const original = upload?.file && legacyUploadsRef.current.get(upload.file);
+        if (original && upload?.file) {
+          legacyUploadsRef.current.delete(upload.file);
+          setAttachedTextFiles((current) => {
+            const next = [...current];
+            const index = next.indexOf(original);
+            if (index !== -1) next.splice(index, 1);
+            return next;
+          });
+        }
         if (handle) handle.abort();
         else if (hostId) discardUpload(id, hostId);
         setAttachedUploads((prev) => {
@@ -1566,7 +1503,18 @@ export const ChatInput = memo(
             remaining.splice(index, 1);
             return false;
           });
-          return [...draftFilesToAttachedFiles(draft?.files), ...added];
+          const next = [...draftFilesToAttachedFiles(draft?.files), ...added];
+          const unmatched = [...next];
+          for (const [upload, original] of legacyUploadsRef.current) {
+            const index = unmatched.findIndex((file) =>
+              sameDraftFile(file, original),
+            );
+            if (index !== -1) {
+              legacyUploadsRef.current.set(upload, unmatched[index]);
+              unmatched.splice(index, 1);
+            }
+          }
+          return next;
         });
         // The same composer's uploads stay; the transferred draft's finished ones join them once.
         setAttachedUploads((current) => [
@@ -1591,6 +1539,7 @@ export const ChatInput = memo(
       if (previousDraftKey) {
         setDraft(previousDraftKey, captureDraft());
       }
+      legacyUploadsRef.current.clear();
 
       const draft = draftKey ? getDraft(draftKey) : null;
       draftKeyRef.current = draftKey;
@@ -1614,6 +1563,48 @@ export const ChatInput = memo(
         return draftUploadsToAttachedUploads(draft?.uploads);
       });
     }, [draftKey, draftIdentityMove, setPromptOnly, captureDraft]);
+
+    // Convert old in-memory inline drafts on hydration. Keep the original until the host confirms the upload, so
+    // navigation, failures, and pending draft recovery cannot lose it.
+    useEffect(() => {
+      if (migrationDraftKeyRef.current !== draftKey) {
+        migrationDraftKeyRef.current = draftKey;
+        return;
+      }
+      const remaining = [...attachedTextFiles];
+      const completed: AttachedTextFile[] = [];
+      for (const [file, original] of legacyUploadsRef.current) {
+        const upload = attachedUploads.find((item) => item.file === file);
+        if (!upload) {
+          legacyUploadsRef.current.delete(file);
+          continue;
+        }
+        const index = remaining.indexOf(original);
+        if (index < 0) {
+          legacyUploadsRef.current.delete(file);
+          continue;
+        }
+        const [matched] = remaining.splice(index, 1);
+        legacyUploadsRef.current.set(file, matched);
+        if (upload.status === "done") completed.push(matched);
+      }
+      if (completed.length) {
+        setAttachedTextFiles((current) => {
+          const next = [...current];
+          for (const original of completed) {
+            const index = next.indexOf(original);
+            if (index !== -1) next.splice(index, 1);
+          }
+          return next;
+        });
+      }
+      for (const original of remaining) {
+        const file = new File([original.content], original.name, {
+          type: original.mimeType,
+        });
+        if (attachAsFiles([file])) legacyUploadsRef.current.set(file, original);
+      }
+    }, [attachedTextFiles, attachedUploads, attachAsFiles, draftKey]);
 
     useLayoutEffect(
       () =>
@@ -1712,7 +1703,7 @@ export const ChatInput = memo(
         setAttachError(t("chatInput.uploadsFailedBlock", { count: failed }));
       else if (uploading)
         setAttachError(t("chatInput.uploadsWaiting", { count: uploading }));
-      return failed + uploading > 0;
+      return failed + uploading > 0 || attachedTextFilesRef.current.length > 0;
     }, [t]);
 
     /** Run a client builtin. True once handled; the composer is cleared only on
@@ -1789,8 +1780,6 @@ export const ChatInput = memo(
         if (sendSideQuestion(msg, overrideText)) return;
         if (isStreaming && !shellCommand) return;
         if (rejectsPendingUploads()) return;
-        const files = attachedTextFilesRef.current;
-        const composedMessage = composeMessageWithTextAttachments(msg, files);
         if (
           !attachedImagesRef.current.length &&
           !attachedTextFilesRef.current.length &&
@@ -1807,7 +1796,7 @@ export const ChatInput = memo(
           if (await runBuiltinCommand(msg, overrideText)) return;
         }
         if (submissionBlockedRef.current) return;
-        if (rejectsOversizedPrompt(composedMessage, attachedImagesRef.current))
+        if (rejectsOversizedPrompt(msg, attachedImagesRef.current))
           return;
         const key = draftKeyRef.current;
         const images = attachedImagesRef.current.length
@@ -1816,23 +1805,22 @@ export const ChatInput = memo(
         const recovery = {
           text: msg,
           images: images?.map(imageToDraftImage),
-          files: files.length ? files.map(textFileToDraftFile) : undefined,
           ...(promptOnlyRef.current ? { promptOnly: true } : {}),
           ...uploadRecovery(attachedUploadsRef.current),
         };
         const stored =
           outbox && !shellCommand ? clearOnceStored(raw) : undefined;
-        // Preserve explicit prompt intent after inline files or native queue recovery lose their original structure.
+        // Preserve explicit prompt intent after native queue recovery loses its original structure.
         const sendTail: [
           uploads?: string[],
           proofs?: Record<string, string>,
           options?: PromptSendOptions,
         ] = uploadArgs(attachedUploadsRef.current);
-        if (files.length || promptOnlyRef.current)
+        if (promptOnlyRef.current)
           sendTail[2] = { promptOnly: true };
         let pending: Promise<PromptSubmissionResult>;
         try {
-          pending = onSend(composedMessage, images, ...sendTail);
+          pending = onSend(msg, images, ...sendTail);
         } catch (error) {
           stored?.release();
           throw error;
@@ -2549,7 +2537,6 @@ export const ChatInput = memo(
               holdingRef.current = false;
             });
         };
-        const files = attachedTextFilesRef.current;
         onAudioUnlock?.();
         if (msg.startsWith("/")) {
           const commandName = msg.slice(1).split(/\s+/)[0];
@@ -2565,10 +2552,7 @@ export const ChatInput = memo(
           // own ACP handlers can run them.
           const expansion = expandWebSlashCommand(msg);
           if (expansion.kind === "expand") {
-            const prompt = composeMessageWithTextAttachments(
-              expansion.prompt,
-              files,
-            );
+            const prompt = expansion.prompt;
             if (rejectsOversizedPrompt(prompt, attachedImagesRef.current))
               return;
             hold(prompt);
@@ -2585,10 +2569,8 @@ export const ChatInput = memo(
             return;
           }
         }
-        const composedMessage = composeMessageWithTextAttachments(msg, files);
-        if (rejectsOversizedPrompt(composedMessage, attachedImagesRef.current))
-          return;
-        hold(composedMessage);
+        if (rejectsOversizedPrompt(msg, attachedImagesRef.current)) return;
+        hold(msg);
       },
       [
         value,
@@ -2619,7 +2601,9 @@ export const ChatInput = memo(
     const failedUploadCount = attachedUploads.filter(
       (upload) => upload.status === "error",
     ).length;
-    const uploadsBlockSend = uploadingCount + failedUploadCount > 0;
+    const uploadsBlockSend =
+      uploadingCount + failedUploadCount > 0 || attachedTextFiles.length > 0;
+    const migratingFiles = new Set(legacyUploadsRef.current.values());
     const imageUploads = attachedUploads.filter(
       (upload) => upload.previewUrl !== null,
     );
@@ -3640,7 +3624,7 @@ export const ChatInput = memo(
                 flexWrap: "wrap",
               }}
             >
-              {attachedTextFiles.map((file, i) => (
+              {attachedTextFiles.map((file, i) => !migratingFiles.has(file) && (
                 <div
                   key={i}
                   style={{

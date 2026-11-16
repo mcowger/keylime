@@ -7,6 +7,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ## [Unreleased]
 
 ### Added
+- Non-image attachments are uploaded as files instead of being inserted into the model's prompt, regardless of type or size.
 - New local chats offer global skills in slash completion before a session or workspace starts.
 - Seeded development sessions include an agent chat exchange for checking incoming and outgoing Markdown.
 - Live chats with Chromium/CDP pages show a Browser workspace tab. Capture runs only while visible; optional shared control enables navigation and input without pausing the agent.

@@ -169,7 +169,7 @@ function renderComposer(
   return ref;
 }
 
-/** Small, but with NUL bytes: never inlined as text, so it goes As file. */
+/** A small binary attachment. */
 function binaryFile(name: string) {
   return new File([new Uint8Array([0x50, 0x4b, 3, 4, 0, 0, 0, 0])], name, {
     type: "application/zip",
@@ -799,44 +799,35 @@ test(`only ${MAX_UPLOADS_PER_MESSAGE} files attach to one message`, async () => 
   );
 });
 
-test("a PDF goes As file even when its bytes decode as text; a JSON file stays inline", async () => {
-  const ref = renderComposer("uploads-pdf", []);
-  const pdf = new File(["%PDF-1.4 plain ascii body"], "doc.pdf", {
-    type: "application/pdf",
-  });
-  const json = new File(['{"a":1}'], "data.json", { type: "application/json" });
+test("small non-image attachments upload their original bytes regardless of MIME", async () => {
+  const sent: SendArgs[] = [];
+  const ref = renderComposer("uploads-text-and-har", sent);
+  const files = [
+    new File(["small text contents"], "notes.txt", { type: "text/plain" }),
+    new File(['{"log":{"entries":[]}}'], "network.har", { type: "application/json" }),
+    new File(['{"log":{"entries":[]}}'], "empty-mime.har"),
+    new File(["plain ascii body"], "report.pdf", { type: "application/pdf" }),
+  ];
   await act(async () => {
-    ref.current!.addFiles([pdf, json]);
+    ref.current!.addFiles(files);
   });
-  await opened("doc.pdf");
+  const uploads = await Promise.all(files.map((file) => opened(file.name)));
+  for (const [index, upload] of uploads.entries()) {
+    const request = await putOf(upload.id);
+    assert.equal(await (request.body as Blob).text(), await files[index].text());
+    assert.equal(upload.size, files[index].size);
+  }
+  const textbox = screen.getByRole("textbox") as HTMLTextAreaElement;
+  fireEvent.change(textbox, { target: { value: "inspect these" } });
   await waitFor(() =>
-    assert.ok(screen.getByText("data.json"), "the JSON chip"),
+    assert.equal((screen.getByRole("button", { name: SEND }) as HTMLButtonElement).disabled, false),
   );
-  assert.deepEqual(
-    requests
-      .filter((each) => each.method === "POST")
-      .map((each) => (JSON.parse(each.body as string) as UploadOpen).name),
-    ["doc.pdf"],
-  );
-});
-
-test("a PDF filename with no MIME type goes As file instead of inline text", async () => {
-  const ref = renderComposer("uploads-pdf-empty-mime", []);
-  const pdf = new File(["%PDF-1.4 plain ascii body"], "report.PDF");
-  const json = new File(['{"a":1}'], "data.json", { type: "application/json" });
   await act(async () => {
-    ref.current!.addFiles([pdf, json]);
+    screen.getByRole("button", { name: SEND }).click();
   });
-  await opened(pdf.name);
-  await waitFor(() =>
-    assert.ok(screen.getByText("data.json"), "the JSON chip"),
-  );
-  assert.deepEqual(
-    requests
-      .filter((each) => each.method === "POST")
-      .map((each) => (JSON.parse(each.body as string) as UploadOpen).name),
-    [pdf.name],
-  );
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0][0], "inspect these", "file contents are not inserted into the prompt");
+  assert.deepEqual(sent[0][2], uploads.map((upload) => upload.id));
 });
 
 test("a file over 2 GiB is refused, its sibling attaches", async () => {

@@ -1,5 +1,4 @@
 import type { ChatDraftFile, ChatDraftImage } from "@/lib/draft-store";
-import type { AttachedTextFileData } from "@/lib/chat-attachments";
 import { isBase64ImageWithinLimits } from "@/lib/image-attachments";
 
 export interface AttachedImage {
@@ -10,7 +9,7 @@ export interface AttachedImage {
   file?: File;
 }
 
-export type AttachedTextFile = AttachedTextFileData;
+export type AttachedTextFile = ChatDraftFile;
 
 export function imageToDraftImage(image: AttachedImage): ChatDraftImage {
   return { data: image.data, mimeType: image.mimeType };
@@ -60,6 +59,12 @@ export function draftFilesToAttachedFiles(
       Number.isFinite(file.size) &&
       file.size >= 0,
   );
+}
+
+/** Match occurrences after a draft identity move recreates the attachment objects. */
+export function sameDraftFile(a: AttachedTextFile, b: AttachedTextFile): boolean {
+  return a.name === b.name && a.mimeType === b.mimeType &&
+    a.content === b.content && a.size === b.size;
 }
 
 export function revokeImagePreview(image: AttachedImage): void {

@@ -1907,10 +1907,10 @@ btw` → localized "requires a newer omp" toast (`toastBtwError`); background
 
 ### Composer file uploads (`docs/specs/2026-11-02-file-uploads-design.md`)
 
-- Images and text files go inline while they fit the inline budgets
-  (`lib/image-attachments.ts`, `lib/chat-attachments.ts`); every other file,
-  an image switched to **As file**, and anything over a budget is uploaded
-  (2 GiB per file, 20 per message, `lib/upload-limits.ts`, browser-safe).
+- Non-image files are uploaded regardless of MIME type or size. Images go inline
+  while they fit the image budget (`lib/image-attachments.ts`); an image
+  switched to **As file** or over that budget is uploaded. Upload limits are
+  2 GiB per file and 20 per message (`lib/upload-limits.ts`, browser-safe).
   The composer re-checks the inline budget per chip on every render, so an
   image's decoded size comes from `attachedImageBytes` (scanned once per
   image object), never a fresh base64 scan.

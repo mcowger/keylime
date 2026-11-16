@@ -13,7 +13,7 @@ import type { RenderResult } from "@testing-library/react";
 
 type ChatInputProps = ComponentProps<typeof import("./ChatInput").ChatInput>;
 type Image = NonNullable<Parameters<ChatInputProps["onSend"]>[1]>[number];
-type RecordedCall = { name: string; message: string; images?: Image[] };
+type RecordedCall = { name: string; message: string; images?: Image[]; uploads?: string[] };
 const { cleanup, fireEvent, render, screen, waitFor } =
   await import("@testing-library/react/pure.js");
 const { default: userEvent } = await import("@testing-library/user-event");
@@ -23,6 +23,7 @@ const { clearDraft, getDraft, recoverDraft, setDraft } =
   await import("@/lib/draft-store");
 
 const KEY = "queue-attachments";
+const NOTES_UPLOAD = "00000000-0000-4000-8000-000000000001";
 // 1x1 transparent PNG.
 const PNG =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
@@ -64,6 +65,29 @@ function override(target: object, key: PropertyKey, replacement: unknown) {
   });
 }
 
+function installComposerUploads(held = false) {
+  const previousFetch = globalThis.fetch;
+  const gate = Promise.withResolvers<void>();
+  const opened = Promise.withResolvers<{ id: string; name: string; size: number }>();
+  if (!held) gate.resolve();
+  override(globalThis, "fetch", async (url: RequestInfo | URL, init: RequestInit = {}) => {
+    const method = init.method ?? "GET";
+    if (String(url) === "/api/uploads" && method === "POST") {
+      opened.resolve(JSON.parse(init.body as string));
+      return Response.json({ received: 0 });
+    }
+    if (String(url).startsWith("/api/uploads/") && method === "PUT") {
+      await gate.promise;
+      const offset = Number(new URL(String(url), "https://keylime.test").searchParams.get("offset"));
+      return Response.json({ received: offset + (init.body as Blob).size, done: true });
+    }
+    if (String(url).startsWith("/api/uploads/") && method === "DELETE")
+      return Response.json({});
+    return previousFetch(url, init);
+  });
+  return { opened: opened.promise, release: gate.resolve };
+}
+
 beforeEach(() => {
   override(window, "matchMedia", () => ({
     matches: false,
@@ -89,7 +113,7 @@ afterEach(() => {
   }
 });
 
-/** A composer with an image and a text file attached through the picker path. */
+/** A composer with an inline image and a completed file upload. */
 async function renderWithAttachments({
   queued = true,
   queueCallbacks = true,
@@ -99,11 +123,10 @@ async function renderWithAttachments({
   queueCallbacks?: boolean;
 } & Partial<ChatInputProps> = {}) {
   const calls: RecordedCall[] = [];
-  // Images follow the message in every callback; `onSend` carries options after them when text files are attached.
   // The callback resolves false when omp refused the message.
   const record =
-    (name: string) => async (message: string, images?: Image[]) => {
-      calls.push({ name, message, images });
+    (name: string) => async (message: string, images?: Image[], uploads?: string[]) => {
+      calls.push({ name, message, images, uploads });
       return await queued;
     };
   const ref = React.createRef<ChatInputHandle>();
@@ -111,8 +134,8 @@ async function renderWithAttachments({
     ref,
     draftKey: KEY,
     isStreaming: true,
-    onSend: async (message: string, images?: Image[]) => ({
-      status: (await record("onSend")(message, images))
+    onSend: async (message: string, images?: Image[], uploads?: string[]) => ({
+      status: (await record("onSend")(message, images, uploads))
         ? ("accepted" as const)
         : ("rejected" as const),
     }),
@@ -123,17 +146,22 @@ async function renderWithAttachments({
     onFollowUp: queueCallbacks ? record("onFollowUp") : undefined,
     ...props,
   };
+  setDraft(KEY, {
+    value: "",
+    images: [],
+    files: [],
+    uploads: [{ id: NOTES_UPLOAD, name: "notes.txt", size: 5, hostId: "local" }],
+  });
   const view = render(React.createElement(ChatInput, inputProps));
   await act(async () => {
     ref.current!.addFiles([
       new File([Buffer.from(PNG, "base64")], "dot.png", { type: "image/png" }),
-      new File(["hello"], "notes.txt", { type: "text/plain" }),
     ]);
   });
   await waitFor(() => {
     const draft = getDraft(KEY);
     assert.equal(draft?.images.length, 1, "the image is attached");
-    assert.equal(draft?.files.length, 1);
+    assert.equal(draft?.uploads?.length, 1);
   });
   return {
     calls,
@@ -152,20 +180,59 @@ async function renderRunningWithAttachments(
 }
 
 function assertQueuedWithAttachments(
-  call: Pick<RecordedCall, "message" | "images">,
+  call: Pick<RecordedCall, "message" | "images" | "uploads">,
   text: string,
 ) {
   assert.ok(call.message.startsWith(text), "typed text leads the message");
-  assert.match(
-    call.message,
-    /Attached file: notes\.txt\n```[^\n]*\nhello\n```/,
-    "text file is folded in",
-  );
+  assert.doesNotMatch(call.message, /Attached file: notes\.txt/);
+  if (call.uploads) assert.deepEqual(call.uploads, [NOTES_UPLOAD]);
   assert.deepEqual(
     call.images?.map((image) => [image.data, image.mimeType]),
     [[PNG, "image/png"]],
   );
 }
+
+test("a queued text attachment waits for upload and sends its id without inlining", async () => {
+  const gate = Promise.withResolvers<void>();
+  let id = "";
+  override(globalThis, "fetch", async (url: RequestInfo | URL, init: RequestInit = {}) => {
+    const method = init.method ?? "GET";
+    if (String(url) === "/api/uploads" && method === "POST") {
+      const open = JSON.parse(init.body as string) as { id: string; name: string; size: number };
+      assert.equal(open.name, "queued.txt");
+      assert.equal(open.size, 12);
+      id = open.id;
+      return Response.json({ received: 0 });
+    }
+    if (String(url).startsWith("/api/uploads/") && method === "PUT") {
+      assert.equal(await (init.body as Blob).text(), "file content");
+      await gate.promise;
+      return Response.json({ received: 12, done: true });
+    }
+    return Response.json({});
+  });
+  const ref = React.createRef<ChatInputHandle>();
+  const calls: Parameters<NonNullable<ChatInputProps["onFollowUp"]>>[] = [];
+  render(React.createElement(ChatInput, {
+    ref, draftKey: KEY, isStreaming: true, onAbort() {},
+    onSend: async () => ({ status: "accepted" as const }),
+    onFollowUp: async (...args) => { calls.push(args); return true; },
+  }));
+  await act(async () => {
+    ref.current!.addFiles([new File(["file content"], "queued.txt", { type: "text/plain" })]);
+  });
+  await waitFor(() => assert.notEqual(id, ""));
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "inspect" } });
+  fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+  assert.equal(calls.length, 0);
+  await act(async () => { gate.resolve(); });
+  await waitFor(() => assert.equal(getDraft(KEY)?.uploads?.[0]?.id, id));
+  fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+  await waitFor(() => assert.equal(calls.length, 1));
+  assert.equal(calls[0][0], "inspect");
+  assert.deepEqual(calls[0][2], [id]);
+  await waitFor(() => assert.equal(getDraft(KEY), null));
+});
 
 test("Enter during a run queues a follow-up with the attached image and text file, then clears them", async () => {
   const user = userEvent.setup();
@@ -204,7 +271,7 @@ test("attachments alone turn Stop into Queue, which queues them as a follow-up",
   fireEvent.click(screen.getByRole("button", { name: /queue/i }));
   await waitFor(() => assert.equal(calls.length, 1));
   assert.equal(calls[0].name, "onFollowUp");
-  assertQueuedWithAttachments(calls[0], "Attached file:");
+  assertQueuedWithAttachments(calls[0], "");
 });
 
 test("a stored Steer preference turns the primary button into Steer, which steers like Enter", async () => {
@@ -278,7 +345,7 @@ test("a queued message stays in the composer until the outbox has it, and stays 
     [{ data: PNG, mimeType: "image/png" }],
     "a refusal leaves text and attachments in place",
   );
-  assert.equal(getDraft(KEY)?.files.length, 1);
+  assert.equal(getDraft(KEY)?.uploads?.length, 1);
 });
 
 test("a queued message is not cleared once stored if the composer changed meanwhile", async () => {
@@ -333,7 +400,7 @@ test("an outbox commit after unmount cannot clear a remounted composer's new tex
   );
   assert.equal(getDraft(KEY)?.value, "new draft after remount");
   assert.equal(getDraft(KEY)?.images.length, 1);
-  assert.equal(getDraft(KEY)?.files.length, 1);
+  assert.equal(getDraft(KEY)?.uploads?.length, 1);
 });
 
 // A text-only outbox Send whose IndexedDB commit is still pending; `store()` completes it.
@@ -581,7 +648,7 @@ test("precommit typing after an identity handoff never recreates the old key or 
     assert.ok(getDraft(key), `unrelated draft ${key} remains`);
 });
 
-for (const image of [false, true]) {
+for (const image of [true]) {
   test(`a newly admitted ${image ? "image" : "text file"} read survives the older send's ACK before the read completes`, async (t) => {
     const { ref, store } = await sendTextPendingStore("same text");
     let release!: (value: string | ArrayBuffer) => void;
@@ -626,6 +693,20 @@ for (const image of [false, true]) {
     );
   });
 }
+
+test("a newly admitted upload survives an older send's ACK before upload completion", async (t) => {
+  const upload = installComposerUploads(true);
+  t.after(() => upload.release());
+  const { ref, store } = await sendTextPendingStore("same text");
+  act(() => {
+    ref.current!.addFiles([new File(["new file"], "new.txt", { type: "text/plain" })]);
+  });
+  const opened = await upload.opened;
+  await store();
+  await act(async () => { upload.release(); });
+  await waitFor(() => assert.equal(getDraft(KEY)?.uploads?.[0]?.id, opened.id));
+  assert.equal((screen.getByRole("textbox") as HTMLTextAreaElement).value, "same text");
+});
 
 for (const variant of ["unchanged", "newer", "handoff-newer", "merged"]) {
   test(`an earlier mount's commit after synchronous move handoff but before React retarget ${variant === "unchanged" ? "consumes the moved draft" : `preserves the ${variant} draft`}`, async (t) => {
@@ -811,129 +892,38 @@ for (const stored of [true, false]) {
   });
 }
 
-for (const { label, fill, oversized } of [
-  { label: "sendable composed request", fill: "x", oversized: false },
-  { label: "oversized composed request", fill: '"', oversized: true },
-]) {
-  test(`merged text drafts past picker count and byte budgets survive persistence and remount (${label})`, async () => {
-    const {
-      MAX_ATTACHED_TEXT_FILES,
-      MAX_TOTAL_ATTACHED_TEXT_BYTES,
-      selectTextAttachments,
-    } = await import("@/lib/chat-attachments");
-    const count = Math.floor(MAX_ATTACHED_TEXT_FILES / 2) + 1;
-    const fileBytes = Math.floor(
-      (MAX_TOTAL_ATTACHED_TEXT_BYTES * 0.75) / count,
-    );
-    const makeFiles = (origin: string) =>
-      Array.from({ length: count }, (_, index) => {
-        const name = `${origin}-${index}.txt`;
-        const content = `${name}\n${fill.repeat(fileBytes - name.length - 1)}`;
-        return {
-          name,
-          mimeType: "text/plain",
-          content,
-          size: Buffer.byteLength(content),
-        };
-      });
-    const sourceFiles = makeFiles("source");
-    const targetFiles = makeFiles("target");
-    for (const files of [sourceFiles, targetFiles]) {
-      assert.deepEqual(
-        selectTextAttachments(files, { usedBytes: 0, usedSlots: 0 }).accepted,
-        files,
-        "each pre-relocation draft fits the unchanged picker limits",
-      );
-    }
-    // Seed the source + existing-target merge supplied by Edit relocation;
-    // exercise the real composer hydration and persistence, not the hook here.
-    const files = [...sourceFiles, ...targetFiles];
-    assert.ok(files.length > MAX_ATTACHED_TEXT_FILES);
-    assert.ok(
-      files.reduce((total, file) => total + file.size, 0) >
-        MAX_TOTAL_ATTACHED_TEXT_BYTES,
-    );
-    const images = [
-      { data: PNG, mimeType: "image/png" },
-      { data: PNG, mimeType: "image/png" },
-    ];
-    const initialValue = "recovered edit\n\npre-existing target";
-    setDraft(KEY, { value: initialValue, images, files });
-    const calls: { message: string; images?: Image[] }[] = [];
-    const mount = () =>
-      render(
-        React.createElement(ChatInput, {
-          draftKey: KEY,
-          isStreaming: false,
-          onAbort() {},
-          onSend: async (message, sentImages) => {
-            calls.push({ message, images: sentImages });
-            return { status: "accepted" };
-          },
-        }),
-      );
-    const assertRecovered = (value: string) => {
-      assert.deepEqual(
-        getDraft(KEY),
-        { value, images, files },
-        "every file retains its exact contents in the persisted draft",
-      );
-      assert.equal(
-        (screen.getByRole("textbox") as HTMLTextAreaElement).value,
-        value,
-      );
-      for (const file of files)
-        assert.equal(screen.getByTitle(file.name).textContent, file.name);
-      assert.equal(document.querySelectorAll("img").length, images.length);
-    };
-    let view = mount();
-    assertRecovered(initialValue);
-    const newerValue = `${initialValue}\nnewer typing`;
-    fireEvent.change(screen.getByRole("textbox"), {
-      target: { value: newerValue },
-    });
-    assertRecovered(newerValue);
-    view.unmount();
-    view = mount();
-    assertRecovered(newerValue);
-
-    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
-    if (oversized) {
-      // JSON escaping makes these individually picker-valid files exceed the
-      // outgoing request budget. The guard must reject without clearing them.
-      assert.match(
-        (await screen.findByRole("alert")).textContent ?? "",
-        /too large to send/i,
-      );
-      assert.deepEqual(calls, []);
-      assertRecovered(newerValue);
-      view.unmount();
-      mount();
-      assertRecovered(newerValue);
-    } else {
-      await waitFor(() => assert.equal(calls.length, 1));
-      const expectedMessage = [
-        newerValue,
-        ...files.map(
-          (file) =>
-            `Attached file: ${file.name}\n\`\`\`text\n${file.content}\n\`\`\``,
-        ),
-      ].join("\n\n");
-      assert.equal(
-        calls[0].message,
-        expectedMessage,
-        "sending includes every source and target file, despite the picker caps",
-      );
-      assert.deepEqual(
-        calls[0].images!.map(({ data, mimeType }) => ({ data, mimeType })),
-        images,
-      );
-      await waitFor(() => assert.equal(getDraft(KEY), null));
-    }
+test("a restored inline draft stays recoverable during upload and sends only its upload id", async (t) => {
+  const upload = installComposerUploads(true);
+  t.after(() => upload.release());
+  const file = { name: "saved.txt", mimeType: "text/plain", content: "saved contents", size: 14 };
+  setDraft(KEY, { value: "keep this draft", images: [], files: [file] });
+  const calls: Parameters<ChatInputProps["onSend"]>[] = [];
+  render(React.createElement(ChatInput, {
+    draftKey: KEY, isStreaming: false, onAbort() {},
+    onSend: async (...args) => { calls.push(args); return { status: "accepted" }; },
+  }));
+  const opened = await upload.opened;
+  assert.deepEqual(getDraft(KEY)?.files, [file]);
+  fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+  assert.equal(calls.length, 0);
+  await act(async () => { upload.release(); });
+  await waitFor(() => {
+    assert.deepEqual(getDraft(KEY)?.files, []);
+    assert.equal(getDraft(KEY)?.uploads?.[0]?.id, opened.id);
   });
-}
+  cleanup();
+  render(React.createElement(ChatInput, {
+    draftKey: KEY, isStreaming: false, onAbort() {},
+    onSend: async (...args) => { calls.push(args); return { status: "accepted" }; },
+  }));
+  fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+  await waitFor(() => assert.equal(calls.length, 1));
+  assert.equal(calls[0][0], "keep this draft");
+  assert.deepEqual(calls[0][2], [opened.id]);
+});
 
 test("malformed recovered text files are filtered without discarding valid neighboring files", () => {
+  const upload = installComposerUploads(true);
   const valid = {
     name: "valid.txt",
     mimeType: "text/plain",
@@ -961,7 +951,8 @@ test("malformed recovered text files are filtered without discarding valid neigh
     }),
   );
   assert.deepEqual(getDraft(KEY)?.files, [valid]);
-  assert.equal(screen.getByTitle(valid.name).textContent, valid.name);
+  assert.match(screen.getByTitle(valid.name).textContent ?? "", /^valid\.txt/);
+  upload.release();
 });
 
 test("recovered images past the attachment cap all stay in the composer", async () => {
@@ -1203,7 +1194,7 @@ for (const isStreaming of [false, true]) {
         "the draft remains until storage accepts it",
       );
       assert.equal(getDraft(KEY)?.images.length, 1);
-      assert.equal(getDraft(KEY)?.files.length, 1);
+      assert.equal(getDraft(KEY)?.uploads?.length, 1);
       if (edit !== "unchanged") {
         fireEvent.change(textbox, { target: { value: "" } });
         fireEvent.change(textbox, {
@@ -1409,7 +1400,7 @@ test("a refused ordinary send restores text, file contents and images ahead of n
       refuse = () => resolve(false);
     }),
   });
-  const originalFiles = getDraft(KEY)!.files;
+  const originalFiles = getDraft(KEY)!.uploads;
   await user.type(screen.getByRole("textbox"), "original question");
   await user.click(screen.getByRole("button", { name: /^send$/i }));
   await waitFor(() => assert.equal(calls.length, 1));
@@ -1423,7 +1414,7 @@ test("a refused ordinary send restores text, file contents and images ahead of n
     ]),
   );
   assert.equal(getDraft(KEY)!.value, "original question\n\ntyped meanwhile");
-  assert.deepEqual(getDraft(KEY)!.files, originalFiles);
+  assert.deepEqual(getDraft(KEY)!.uploads, originalFiles);
   assert.equal(
     (screen.getByRole("textbox") as HTMLTextAreaElement).value,
     getDraft(KEY)!.value,
@@ -1443,7 +1434,7 @@ test("a refused ordinary send recovers only into its originating session draft",
       refuse = () => resolve(false);
     }),
   });
-  const originalFiles = getDraft(KEY)!.files;
+  const originalFiles = getDraft(KEY)!.uploads;
   await user.type(screen.getByRole("textbox"), "original session");
   await user.click(screen.getByRole("button", { name: /^send$/i }));
   await waitFor(() => assert.equal(calls.length, 1));
@@ -1458,7 +1449,7 @@ test("a refused ordinary send recovers only into its originating session draft",
     ]),
   );
   assert.equal(getDraft(KEY)!.value, "original session");
-  assert.deepEqual(getDraft(KEY)!.files, originalFiles);
+  assert.deepEqual(getDraft(KEY)!.uploads, originalFiles);
   assert.equal(
     (screen.getByRole("textbox") as HTMLTextAreaElement).value,
     "other conversation",
@@ -1483,7 +1474,7 @@ test("a refused first send follows its promoted conversation rather than the old
       return deferred.promise;
     },
   });
-  const originalFiles = getDraft(KEY)!.files;
+  const originalFiles = getDraft(KEY)!.uploads;
   const user = userEvent.setup();
   await user.type(screen.getByRole("textbox"), "first question");
   await user.click(screen.getByRole("button", { name: /^send$/i }));
@@ -1498,7 +1489,7 @@ test("a refused first send follows its promoted conversation rather than the old
   assert.deepEqual(getDraft(promotedKey)!.images, [
     { data: PNG, mimeType: "image/png" },
   ]);
-  assert.deepEqual(getDraft(promotedKey)!.files, originalFiles);
+  assert.deepEqual(getDraft(promotedKey)!.uploads, originalFiles);
   assert.equal(
     (screen.getByRole("textbox") as HTMLTextAreaElement).value,
     "first question",
@@ -1541,6 +1532,7 @@ test("a superseded send result cannot restore a prompt that was already processe
 
 for (const hops of [1, 2]) {
   test(`a held successful queue Edit recovers once into its confirmed owner after ${hops} move(s)`, async (t) => {
+    const upload = installComposerUploads();
     const targetKeys = Array.from(
       { length: hops },
       (_, index) => `${KEY}:queue-edit-target-${index}`,
@@ -1552,7 +1544,7 @@ for (const hops of [1, 2]) {
     const deferred = Promise.withResolvers<typeof removedImages>();
     const releaseResponse = () => deferred.resolve(removedImages);
     const response = deferred.promise;
-    const sent: { message: string; images?: Image[] }[] = [];
+    const sent: { message: string; images?: Image[]; uploads?: string[] }[] = [];
     const { ref, rerender } = await renderWithAttachments({
       queuedMessages: { followUp: [...nativeQueue], steering: [] },
       onRemoveQueuedMessage: (text, queue) => {
@@ -1564,8 +1556,8 @@ for (const hops of [1, 2]) {
         );
         return response;
       },
-      onSend: async (message, images) => {
-        sent.push({ message, images });
+      onSend: async (message, images, uploads) => {
+        sent.push({ message, images, uploads });
         return { status: "accepted" };
       },
     });
@@ -1616,6 +1608,8 @@ for (const hops of [1, 2]) {
       ]);
     });
     await waitFor(() => assert.equal(getDraft(currentKey)?.images.length, 2));
+    const uploaded = await upload.opened;
+    await waitFor(() => assert.ok(getDraft(currentKey)?.uploads?.some((item) => item.id === uploaded.id)));
     const beforeResponse = getDraft(currentKey);
     assert.ok(beforeResponse);
     const expected = {
@@ -1655,8 +1649,9 @@ for (const hops of [1, 2]) {
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
     await waitFor(() => assert.equal(sent.length, 1));
     assert.ok(sent[0].message.startsWith(expected.value));
-    assert.match(sent[0].message, /Attached file: notes\.txt/);
-    assert.match(sent[0].message, /Attached file: newer\.txt/);
+    assert.doesNotMatch(sent[0].message, /Attached file: notes\.txt/);
+    assert.doesNotMatch(sent[0].message, /Attached file: newer\.txt/);
+    assert.deepEqual(sent[0].uploads, [NOTES_UPLOAD, uploaded.id]);
     assert.deepEqual(
       sent[0].images!.map(({ data, mimeType }) => ({ data, mimeType })),
       expected.images,
@@ -1709,15 +1704,8 @@ for (const hops of [1, 2]) {
                 ...sourceDraft.images,
                 { data: PNG, mimeType: "image/png" },
               ],
-              files: [
-                ...sourceDraft.files,
-                {
-                  name: "older.txt",
-                  content: "older file",
-                  mimeType: "text/plain",
-                  size: 10,
-                },
-              ],
+              files: sourceDraft.files,
+              uploads: sourceDraft.uploads,
             }
           : sourceDraft;
       const finalMove = index === targetKeys.length - 1;
@@ -1789,8 +1777,7 @@ for (const hops of [1, 2]) {
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
     await waitFor(() => assert.equal(sent.length, 1));
     assert.ok(sent[0].message.startsWith(expected.value));
-    assert.match(sent[0].message, /Attached file: notes\.txt/);
-    assert.match(sent[0].message, /Attached file: older\.txt/);
+    assert.doesNotMatch(sent[0].message, /Attached file: (notes|older)\.txt/);
     assert.deepEqual(
       sent[0].images!.map(({ data, mimeType }) => ({ data, mimeType })),
       expected.images,
@@ -1909,11 +1896,12 @@ for (const [responseBeforeCommit, movedBeforeNavigation] of [
   });
 }
 
-test("held text and image reads finish exactly once in the confirmed Edit target, persist and send there", async (t) => {
+test("a held upload and image read finish exactly once in the confirmed Edit target, persist and send there", async (t) => {
   const targetKey = `${KEY}:held-reads-target`;
   t.after(() => clearDraft(targetKey));
+  const upload = installComposerUploads(true);
+  t.after(() => upload.release());
   const { MAX_ATTACHED_IMAGES } = await import("@/lib/image-attachments");
-  const { MAX_ATTACHED_TEXT_FILES } = await import("@/lib/chat-attachments");
   const user = userEvent.setup();
   const { calls, ref, rerender } = await renderWithAttachments({
     isStreaming: false,
@@ -1921,16 +1909,10 @@ test("held text and image reads finish exactly once in the confirmed Edit target
   });
   await user.type(screen.getByRole("textbox"), "source draft");
   const textbox = screen.getByRole("textbox") as HTMLTextAreaElement;
-  let releaseText!: (value: string) => void;
   let releaseImage!: (value: ArrayBuffer) => void;
   const text = new File(["late text"], "late.txt", { type: "text/plain" });
   const image = new File([Buffer.from(PNG, "base64")], "late.png", {
     type: "image/png",
-  });
-  override(text, "text", () => {
-    const deferred = Promise.withResolvers<string>();
-    releaseText = deferred.resolve;
-    return deferred.promise;
   });
   override(image, "arrayBuffer", () => {
     const deferred = Promise.withResolvers<ArrayBuffer>();
@@ -1938,13 +1920,12 @@ test("held text and image reads finish exactly once in the confirmed Edit target
     return deferred.promise;
   });
   t.after(() => {
-    releaseText?.("late text");
     releaseImage?.(Uint8Array.from(Buffer.from(PNG, "base64")).buffer);
   });
   act(() => {
     ref.current!.addFiles([text, image]);
   });
-  assert.equal(typeof releaseText, "function", "the actual text read is held");
+  const uploaded = await upload.opened;
   assert.equal(
     typeof releaseImage,
     "function",
@@ -1955,18 +1936,10 @@ test("held text and image reads finish exactly once in the confirmed Edit target
   assert.ok(sourceDraft);
   // Merging an existing target fills the picker slots while the already
   // admitted reads are held. Their reservations must survive that merge.
-  const targetFiles = Array.from(
-    { length: MAX_ATTACHED_TEXT_FILES - 1 },
-    (_, index) => ({
-      name: `target-${index}.txt`,
-      mimeType: "text/plain",
-      content: "target",
-      size: 6,
-    }),
-  );
   const movedDraft = {
     value: "source draft\n\ntarget draft",
-    files: [...sourceDraft.files, ...targetFiles],
+    files: sourceDraft.files,
+    uploads: sourceDraft.uploads,
     images: Array.from({ length: MAX_ATTACHED_IMAGES }, () => ({
       data: PNG,
       mimeType: "image/png",
@@ -1974,12 +1947,12 @@ test("held text and image reads finish exactly once in the confirmed Edit target
   };
   clearDraft(KEY);
   setDraft(targetKey, movedDraft);
-  const sent: { message: string; images?: Image[] }[] = [];
+  const sent: { message: string; images?: Image[]; uploads?: string[] }[] = [];
   const movedProps: Partial<ChatInputProps> & Pick<ChatInputProps, "onSend"> = {
     draftKey: targetKey,
     draftIdentityMove: { from: KEY, to: targetKey },
-    onSend: async (message, images) => {
-      sent.push({ message, images });
+    onSend: async (message, images, uploads) => {
+      sent.push({ message, images, uploads });
       return { status: "accepted" };
     },
   };
@@ -1990,21 +1963,15 @@ test("held text and image reads finish exactly once in the confirmed Edit target
     "the composer stays mounted",
   );
   assert.equal(textbox.value, movedDraft.value);
-  assert.equal(
-    getDraft(targetKey)!.files.length,
-    MAX_ATTACHED_TEXT_FILES,
-    "neither held read was released before migration",
-  );
+  assert.equal(getDraft(targetKey)!.files.length, 0);
   assert.equal(getDraft(targetKey)!.images.length, MAX_ATTACHED_IMAGES);
   await act(async () => {
-    releaseText("late text");
+    upload.release();
     releaseImage(Uint8Array.from(Buffer.from(PNG, "base64")).buffer);
   });
   await waitFor(() => {
-    assert.deepEqual(
-      getDraft(targetKey)?.files.map((file) => file.name),
-      ["notes.txt", ...targetFiles.map((file) => file.name), "late.txt"],
-    );
+    assert.equal(getDraft(targetKey)?.files.length, 0);
+    assert.ok(getDraft(targetKey)?.uploads?.some((item) => item.id === uploaded.id));
     assert.equal(getDraft(targetKey)?.images.length, MAX_ATTACHED_IMAGES + 1);
   });
   assert.equal(
@@ -2076,18 +2043,8 @@ test("held text and image reads finish exactly once in the confirmed Edit target
     "the source session's send handler is never invoked",
   );
   assert.match(sent[0].message, /^source draft\n\ntarget draft/);
-  for (const file of persisted.files) {
-    const section = `Attached file: ${file.name}\n\`\`\`text\n${file.content}\n\`\`\``;
-    assert.equal(
-      sent[0].message.split(`Attached file: ${file.name}\n`).length - 1,
-      1,
-      `${file.name} is included exactly once`,
-    );
-    assert.ok(
-      sent[0].message.includes(section),
-      `${file.name} retains its exact content`,
-    );
-  }
+  assert.doesNotMatch(sent[0].message, /Attached file: late\.txt/);
+  assert.deepEqual(sent[0].uploads, [NOTES_UPLOAD, uploaded.id]);
   assert.deepEqual(
     sent[0].images!.map(({ data, mimeType }) => ({ data, mimeType })),
     sendable.images,
@@ -2096,12 +2053,13 @@ test("held text and image reads finish exactly once in the confirmed Edit target
 });
 
 for (const includeRecovery of [false, true]) {
-  test(`same-batch reads and claimed transcript survive Edit exactly once${includeRecovery ? " with source recovery already transferred" : ""}`, async (t) => {
+  test(`same-batch upload, image read and claimed transcript survive Edit exactly once${includeRecovery ? " with source recovery already transferred" : ""}`, async (t) => {
     const targetKey = `${KEY}:same-batch-${includeRecovery}`;
     t.after(() => clearDraft(targetKey));
     const { MAX_ATTACHED_IMAGES } = await import("@/lib/image-attachments");
-    const { MAX_ATTACHED_TEXT_FILES } = await import("@/lib/chat-attachments");
     const dictation = installPendingDictation({ holdClaim: true });
+    const upload = installComposerUploads(true);
+    t.after(() => upload.release());
     t.after(() => dictation.releaseClaim());
     const user = userEvent.setup();
     const { calls, ref, rerender } = await renderWithAttachments({
@@ -2118,7 +2076,6 @@ for (const includeRecovery of [false, true]) {
     });
     rerender({ submissionBlocked: true });
 
-    let releaseText!: (value: string) => void;
     let releaseImage!: (value: ArrayBuffer) => void;
     const text = new File(["boundary text"], "boundary.txt", {
       type: "text/plain",
@@ -2126,36 +2083,21 @@ for (const includeRecovery of [false, true]) {
     const image = new File([Buffer.from(PNG, "base64")], "boundary.png", {
       type: "image/png",
     });
-    override(text, "text", () => {
-      const deferred = Promise.withResolvers<string>();
-      releaseText = deferred.resolve;
-      return deferred.promise;
-    });
     override(image, "arrayBuffer", () => {
       const deferred = Promise.withResolvers<ArrayBuffer>();
       releaseImage = deferred.resolve;
       return deferred.promise;
     });
     t.after(() => {
-      releaseText?.("boundary text");
       releaseImage?.(Uint8Array.from(Buffer.from(PNG, "base64")).buffer);
     });
     act(() => {
       ref.current!.addFiles([text, image]);
     });
-    assert.equal(typeof releaseText, "function");
+    const uploaded = await upload.opened;
     assert.equal(typeof releaseImage, "function");
 
-    const targetFiles = Array.from(
-      { length: MAX_ATTACHED_TEXT_FILES - 1 },
-      (_, index) => ({
-        name: `older-${index}.txt`,
-        mimeType: "text/plain",
-        content: `older ${index}`,
-        size: 7,
-      }),
-    );
-    const sent: { message: string; images?: Image[] }[] = [];
+    const sent: { message: string; images?: Image[]; uploads?: string[] }[] = [];
     let sourceDraft!: ChatDraft;
     let transferred!: ChatDraft;
     let movedProps!: Partial<ChatInputProps> & Pick<ChatInputProps, "onSend">;
@@ -2178,9 +2120,10 @@ for (const includeRecovery of [false, true]) {
             () => ({ data: PNG, mimeType: "image/png" }),
           ),
         ],
-        files: [...sourceDraft.files, ...targetFiles],
+        files: sourceDraft.files,
+        uploads: sourceDraft.uploads,
       };
-      releaseText("boundary text");
+      upload.release();
       releaseImage(Uint8Array.from(Buffer.from(PNG, "base64")).buffer);
       dictation.releaseClaim();
       // Let the real reader/claim promise chains queue their state updates,
@@ -2196,29 +2139,20 @@ for (const includeRecovery of [false, true]) {
       movedProps = {
         draftKey: targetKey,
         draftIdentityMove: { from: KEY, to: targetKey, sourceDraft },
-        onSend: async (message, images) => {
-          sent.push({ message, images });
+        onSend: async (message, images, uploads) => {
+          sent.push({ message, images, uploads });
           return { status: "accepted" };
         },
       };
       rerender({ ...movedProps, submissionBlocked: true });
     });
-    // Bun appends ";charset=utf-8" to a text File's type, so the type is pinned by its prefix.
-    const mimeType = getDraft(targetKey)?.files.at(-1)?.mimeType ?? "";
-    assert.ok(mimeType.startsWith("text/plain"), mimeType);
     const expected = {
       value: `${sourceDraft.value} transcribed words\n\nolder target draft`,
       images: [...transferred.images, { data: PNG, mimeType: "image/png" }],
-      files: [
-        ...transferred.files,
-        {
-          name: "boundary.txt",
-          mimeType,
-          content: "boundary text",
-          size: text.size,
-        },
-      ],
+      files: transferred.files,
+      uploads: [...(transferred.uploads ?? []), { id: uploaded.id, name: uploaded.name, size: uploaded.size, hostId: "local" }],
     };
+    await waitFor(() => assert.deepEqual(getDraft(targetKey), expected));
     assert.equal(
       (screen.getByRole("textbox") as HTMLTextAreaElement).value,
       expected.value,
@@ -2285,15 +2219,9 @@ for (const includeRecovery of [false, true]) {
     await user.click(screen.getByRole("button", { name: /^send$/i }));
     await waitFor(() => assert.equal(sent.length, 1));
     assert.ok(sent[0].message.startsWith(expected.value));
+    assert.doesNotMatch(sent[0].message, /Attached file: boundary\.txt/);
+    assert.deepEqual(sent[0].uploads, [NOTES_UPLOAD, uploaded.id]);
     assert.equal(sent[0].message.split("transcribed words").length - 1, 1);
-    for (const file of expected.files) {
-      const section = `Attached file: ${file.name}\n\`\`\`text\n${file.content}\n\`\`\``;
-      assert.equal(
-        sent[0].message.split(`Attached file: ${file.name}\n`).length - 1,
-        1,
-      );
-      assert.ok(sent[0].message.includes(section));
-    }
     assert.deepEqual(
       sent[0].images!.map(({ data, mimeType }) => ({ data, mimeType })),
       expected.images.slice(1),
@@ -2517,6 +2445,7 @@ test("a second Enter must not invoke a pending slash builtin twice; success clea
 });
 
 test("a completed slash builtin must not erase an attachment added while its callback was pending", async (t) => {
+  const upload = installComposerUploads();
   override(window.HTMLElement.prototype, "scrollIntoView", () => {});
   const { promise: pending, resolve: finish } =
     Promise.withResolvers<BuiltinSlashCommandResult>();
@@ -2552,12 +2481,10 @@ test("a completed slash builtin must not erase an attachment added while its cal
       new File(["added while pending"], "pending.txt", { type: "text/plain" }),
     ]);
   });
-  await waitFor(() =>
-    assert.equal(getDraft(KEY)?.files[0]?.name, "pending.txt"),
-  );
+  const uploaded = await upload.opened;
+  await waitFor(() => assert.equal(getDraft(KEY)?.uploads?.[0]?.id, uploaded.id));
   const changedDraft = getDraft(KEY);
   assert.ok(changedDraft);
-  assert.equal(changedDraft.files[0].content, "added while pending");
   await act(async () => {
     finish({ handled: true });
   });
@@ -2574,6 +2501,7 @@ test("a completed slash builtin must not erase an attachment added while its cal
 });
 
 test("a rejected attachment prompt retains its files rather than becoming a shell command on retry", async () => {
+  const upload = installComposerUploads();
   const file = {
     name: "notes.txt",
     mimeType: "text/plain",
@@ -2594,14 +2522,11 @@ test("a rejected attachment prompt retains its files rather than becoming a shel
       },
     }),
   );
+  const opened = await upload.opened;
+  await waitFor(() => assert.equal(getDraft(KEY)?.uploads?.[0]?.id, opened.id));
   fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
   await waitFor(() =>
-    assert.deepEqual(getDraft(KEY), {
-      value: "!!explain this",
-      images: [],
-      files: [file],
-      promptOnly: true,
-    }),
+    assert.equal(getDraft(KEY)?.uploads?.[0]?.id, opened.id),
   );
   assert.equal(
     document.querySelector(".chat-input-shell")!.hasAttribute("data-shell"),
@@ -2609,9 +2534,7 @@ test("a rejected attachment prompt retains its files rather than becoming a shel
   );
   fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
   await waitFor(() => assert.equal(submissions.length, 2));
-  assert.equal(
-    submissions[1][0],
-    "!!explain this\n\nAttached file: notes.txt\n```text\necho attachment-content\n```",
-  );
+  assert.equal(submissions[1][0], "!!explain this");
+  assert.deepEqual(submissions[1][2], [opened.id]);
   assert.deepEqual(submissions[1][4], { promptOnly: true });
 });
