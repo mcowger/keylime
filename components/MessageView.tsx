@@ -358,8 +358,6 @@ interface Props {
   hideThinking?: boolean;
   /** Source `content` index of each block when `message` carries a subset of an entry's blocks, so deferred thinking loads the right block. */
   sourceBlockIndices?: number[];
-  /** omp-reported output throughput (get_state.tokensPerSecond), live while streaming. */
-  liveTokensPerSecond?: number | null;
 }
 
 function formatTime(ts: number | undefined, locale: Locale): string | null {
@@ -431,9 +429,7 @@ export function areMessageViewPropsEqual(prev: Props, next: Props): boolean {
     Object.is(prev.expandThinkingByDefault, next.expandThinkingByDefault) &&
     Object.is(prev.latestThinkingBlockIndex, next.latestThinkingBlockIndex) &&
     Object.is(prev.hideThinking, next.hideThinking) &&
-    prev.sourceBlockIndices?.join() === next.sourceBlockIndices?.join() &&
-    (!prev.isStreaming ||
-      Object.is(prev.liveTokensPerSecond, next.liveTokensPerSecond))
+    prev.sourceBlockIndices?.join() === next.sourceBlockIndices?.join()
   );
 }
 
@@ -461,7 +457,6 @@ export const MessageView = memo(function MessageView({
   latestThinkingBlockIndex,
   hideThinking = false,
   sourceBlockIndices,
-  liveTokensPerSecond,
 }: Props) {
   if (message.role === "user") {
     return (
@@ -503,7 +498,6 @@ export const MessageView = memo(function MessageView({
         latestThinkingBlockIndex={latestThinkingBlockIndex}
         hideThinking={hideThinking}
         sourceBlockIndices={sourceBlockIndices}
-        liveTokensPerSecond={liveTokensPerSecond}
       />
     );
   }
@@ -1230,7 +1224,6 @@ function AssistantMessageView({
   latestThinkingBlockIndex,
   hideThinking,
   sourceBlockIndices,
-  liveTokensPerSecond,
 }: {
   message: AssistantMessage;
   isStreaming?: boolean;
@@ -1253,7 +1246,6 @@ function AssistantMessageView({
   latestThinkingBlockIndex?: number | null;
   hideThinking: boolean;
   sourceBlockIndices?: number[];
-  liveTokensPerSecond?: number | null;
 }) {
   const { t, locale } = useI18n();
   const {
@@ -1412,89 +1404,6 @@ function AssistantMessageView({
               message.model}
           </span>
         )}
-        {isStreaming &&
-          (() => {
-            let chars = 0;
-            for (const b of blocks) {
-              if (b.type === "text")
-                chars += (b as TextContent).text?.length ?? 0;
-              else if (b.type === "thinking")
-                chars += (b as ThinkingContent).thinking?.length ?? 0;
-            }
-            const est = Math.round(chars / 4);
-            return (
-              <>
-                {est > 0 && (
-                  <span
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 4,
-                      color: "var(--text)",
-                    }}
-                    title={t("messageView.estimatedTokens")}
-                  >
-                    <span
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 2,
-                        fontSize: 11,
-                        fontWeight: 400,
-                      }}
-                    >
-                      <svg
-                        width="10"
-                        height="10"
-                        viewBox="0 0 10 10"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <line x1="5" y1="1.5" x2="5" y2="8.5" />
-                        <polyline points="2 6 5 8.5 8 6" />
-                      </svg>
-                      {est}
-                    </span>
-                    {liveTokensPerSecond != null &&
-                      (() => {
-                        // Speed tiers use the semantic status tokens as TEXT color
-                        // (theme-adaptive, AA-verified) over a subtle tint — the
-                        // old hardcoded palette failed AA for white-on-fill.
-                        const tier =
-                          liveTokensPerSecond >= 50
-                            ? "success"
-                            : liveTokensPerSecond >= 30
-                              ? "renamed"
-                              : liveTokensPerSecond >= 15
-                                ? "warning"
-                                : "error";
-                        const tone = `var(--status-${tier})`;
-                        return (
-                          <span
-                            style={{
-                              marginLeft: 6,
-                              padding: "1px 6px",
-                              borderRadius: 4,
-                              background: `color-mix(in srgb, ${tone} 14%, var(--bg-panel))`,
-                              color: tone,
-                              fontSize: 11,
-                              fontWeight: 400,
-                            }}
-                          >
-                            {t("messageView.tokensPerSecond", {
-                              tps: liveTokensPerSecond.toFixed(1),
-                            })}
-                          </span>
-                        );
-                      })()}
-                  </span>
-                )}
-              </>
-            );
-          })()}
       </div>
 
       <div

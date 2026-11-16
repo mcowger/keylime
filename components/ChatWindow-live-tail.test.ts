@@ -21,7 +21,6 @@ function renderTail(isStreaming: boolean) {
     React.createElement(ChatLiveTail, {
       streamingMessage: reply,
       isStreaming,
-      liveTokensPerSecond: isStreaming ? 42 : undefined,
       pendingToolHeaders: [],
       deferredBash: [],
       pendingBash: null,
@@ -36,13 +35,13 @@ function renderTail(isStreaming: boolean) {
   );
 }
 
-test("a reply omp is still generating renders as live: speed shown, finished-reply actions hidden", () => {
+test("a reply omp is still generating renders as live without response statistics", () => {
   const { container } = renderTail(true);
   assert.ok(
     container.querySelector('[data-live="true"]'),
     "the live reply is marked live",
   );
-  assert.match(container.textContent ?? "", /42\.0 t\/s/);
+  assert.doesNotMatch(container.textContent ?? "", /t\/s|↓/);
   assert.equal(container.querySelector(".message-assistant-footer"), null);
 });
 

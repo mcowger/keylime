@@ -14,7 +14,6 @@ export interface ChatLiveTailProps {
   streamingMessage: Partial<AgentMessage> | null;
   /** True while omp is still generating `streamingMessage`; false for a finished reply held until its saved row appears. */
   isStreaming: boolean;
-  liveTokensPerSecond?: number | null;
   /** Running tools no message renders yet, shown as status rows while tool calls are collapsed. */
   pendingToolHeaders: { id: string; name: string }[];
   /** `!command` results omp holds back until a later prompt records them. */
@@ -36,7 +35,6 @@ export interface ChatLiveTailProps {
 export function ChatLiveTail({
   streamingMessage,
   isStreaming,
-  liveTokensPerSecond,
   pendingToolHeaders,
   deferredBash,
   pendingBash,
@@ -68,7 +66,6 @@ export function ChatLiveTail({
           expandThinkingByDefault={expandThinkingByDefault}
           latestThinkingBlockIndex={latestThinkingBlockIndex}
           hideThinking={hideThinking}
-          liveTokensPerSecond={liveTokensPerSecond}
         />
       )}
 

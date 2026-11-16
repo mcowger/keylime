@@ -96,6 +96,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen
 - Removed the full-history and system-prompt dropdowns from the chat toolbar
+- The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
 - Shipping a workspace returns to its project even if the workspace disappears from the sidebar before Ship finishes.

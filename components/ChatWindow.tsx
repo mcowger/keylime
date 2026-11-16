@@ -2034,11 +2034,6 @@ export function ChatWindow({
                           <ChatLiveTail
                             streamingMessage={streamState.streamingMessage}
                             isStreaming={streamState.isStreaming}
-                            liveTokensPerSecond={
-                              streamState.isStreaming
-                                ? tokensPerSecond
-                                : undefined
-                            }
                             pendingToolHeaders={pendingToolHeaders}
                             deferredBash={deferredBash}
                             pendingBash={pendingBash}
