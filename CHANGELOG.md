@@ -74,6 +74,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Operational notices, task chat and compaction use expandable transcript rows; advisor responses render as conversation text
 
 ### Fixed
+- Toast titles use the application's standard font instead of the display serif.
 - Hide the composer task button when all tasks are complete.
 - Select menus keep their portal inside the viewport to avoid focus-induced page shifts on iOS.
 - Markdown tables keep readable column widths on mobile and scroll horizontally when needed.
@@ -159,6 +160,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Disable Ship when the workspace has no changes or commits to ship
 - Hide the composer task button when all tasks are complete
 - Project settings and workspace configuration controls fit within narrow mobile dialogs
+- Toast titles use the application's standard font instead of the display serif
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
