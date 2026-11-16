@@ -18,8 +18,10 @@ const projects = ["/repo", "/repo/worktrees/B", "/other"].map((path) => ({
   name: path,
 }));
 const empty = () => null;
+let updateWorkspaceOptions: NonNullable<React.ComponentProps<typeof SessionSidebar>["onWorkspaceOptionsChange"]>;
 mock.module("./SessionSidebar", () => ({
   SessionSidebar: (props: React.ComponentProps<typeof SessionSidebar>) => {
+    updateWorkspaceOptions = props.onWorkspaceOptionsChange!;
     React.useEffect(() => {
       props.onWorkspaceOptionsChange!([...projects, { path: "/repo/worktrees/B", hostId: "remote", name: "Remote B" }], null, "/repo", "local");
     }, []);
@@ -237,6 +239,21 @@ test("Ship survives workspace navigation and background completion preserves the
   await waitFor(() => assert.equal((view.getByLabelText("Ship draft") as HTMLInputElement).value, "keep this"));
   cleanup();
 });
+test("Ship leaves the removed workspace after its hierarchy entry disappears", async () => {
+  sessionStorage.clear();
+  shipDialogs.clear();
+  window.history.replaceState(null, "", "/?cwd=%2Frepo");
+  const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+  await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
+  fireEvent.click(view.getByRole("button", { name: "Ship B" }));
+  await waitFor(() => assert.equal(shipDialogs.get("local:/repo/worktrees/B")?.visible, true));
+  act(() => updateWorkspaceOptions([projects[0]!, projects[2]!], null, "/repo", "local"));
+  act(() => shipDialogs.get("local:/repo/worktrees/B")!.onRemoved!());
+  await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
+  assert.equal(window.location.search, "");
+  cleanup();
+});
+
 test("Ship flows on different hosts remain independent and completion in Settings does not navigate", async () => {
   sessionStorage.clear();
   shipDialogs.clear();

@@ -97,6 +97,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Removed runtime version numbers from the chat welcome screen
 
 ### Fixed
+- Shipping a workspace returns to its project even if the workspace disappears from the sidebar before Ship finishes.
 - Open workspace chats refresh generated titles without a page reload, including chats opened on another tab.
 - Prompt-first workspace creation continues with a safe fallback name and branch when model naming fails.
 - The advisor review notice aligns with the composer on desktop.
@@ -201,6 +202,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Hide the composer task indicator when all remaining tasks are deleted
 - Closing Ship during work no longer cancels runner commands or an already-started host job; it only stops progress tracking and discards browser state
 - Generated titles survived delayed new-chat hydration, preventing stale names from overwriting refreshed titles
+- Ship leaves the removed workspace when its hierarchy entry disappears, returning to the parent project instead of staying on the deleted workspace
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

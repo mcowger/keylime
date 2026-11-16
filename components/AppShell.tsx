@@ -2680,8 +2680,8 @@ export function AppShell({ appName }: { appName: string }) {
     ? hostProjectKey(workspaceHostId, terminalWorkspace.path)
     : null;
   const shipVisible = shipFlows.some((flow) => hostProjectKey(flow.host, flow.path) === visibleShipKey);
-  const shipSelectionRef = useRef({ visibleShipKey, projects: workspaceOptions.projects });
-  shipSelectionRef.current = { visibleShipKey, projects: workspaceOptions.projects };
+  const shipSelectionRef = useRef({ visibleShipKey, projects: workspaceOptions.projects, explorerCwd, workspaceHostId, settingsTab });
+  shipSelectionRef.current = { visibleShipKey, projects: workspaceOptions.projects, explorerCwd, workspaceHostId, settingsTab };
   useEffect(() => {
     if (shipVisible && rightPanelIsModal) closeRightPanel();
   }, [shipVisible, rightPanelIsModal, closeRightPanel]);
@@ -4485,7 +4485,10 @@ export function AppShell({ appName }: { appName: string }) {
                   const selection = shipSelectionRef.current;
                   updateChatTabs((tabs) => tabs.filter((tab) => !tabInWorkspace(tab, target.path, target.host, selection.projects)));
                   setRefreshKey((value) => value + 1);
-                  if (selection.visibleShipKey === key) {
+                  const selectedPath = comparableProjectPath(selection.explorerCwd ?? "");
+                  const removedPath = comparableProjectPath(target.path);
+                  if (!selection.settingsTab && selection.workspaceHostId === target.host &&
+                    (selection.visibleShipKey === key || selectedPath === removedPath || selectedPath.startsWith(removedPath === "/" ? "/" : `${removedPath}/`))) {
                     activateChat(null);
                     setActiveCwd(target.projectPath);
                     setActiveHostId(remoteHostId(target.host));
