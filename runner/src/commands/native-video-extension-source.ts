@@ -9,6 +9,12 @@ export const NATIVE_VIDEO_EXTENSION_SOURCE = `
 let capture = null;
 const encoders = new Map();
 const pendingEncoders = new Map();
+// Diagnostics contain only fixed labels and numeric/boolean metadata, never media or page data.
+const diagnostic = (stage, event, details = {}) => {
+  if ("quality" in details && !["low", "medium", "high"].includes(details.quality)) details.quality = "custom";
+  nativeVideoPacket(JSON.stringify({ type: "diagnostic", stage, event, ...details }));
+};
+const numericSetting = (value) => typeof value === "number" && Number.isFinite(value) ? value : null;
 const bytes64 = (bytes) => {
   // Native byte conversion avoids constructing/copying a large binary string.
   // Retain the bounded legacy path for browsers without the newer byte API.
@@ -26,6 +32,7 @@ async function stopCapture() {
   pendingEncoders.clear();
   if (!previous) return;
   previous.stopped = true;
+  clearInterval(previous.diagnosticsTimer);
   previous.latestFrame?.close();
   previous.latestFrame = null;
   for (const encoder of encoders.values()) {
@@ -77,6 +84,12 @@ async function startCapture(targetId, width, height, generation) {
       },
     });
     const track = stream.getVideoTracks()[0];
+    const settings = track.getSettings();
+    diagnostic("capture", "started", {
+      width, height, generation,
+      trackWidth: numericSetting(settings.width), trackHeight: numericSetting(settings.height),
+      trackFrameRate: numericSetting(settings.frameRate),
+    });
     const reader = new MediaStreamTrackProcessor({ track, maxBufferSize: 1 }).readable.getReader();
     const current = {
       stream,
@@ -87,14 +100,31 @@ async function startCapture(targetId, width, height, generation) {
       minimumTimestampUs: -Infinity,
       stopped: false,
       latestFrame: null,
+      frames: 0,
+      staleFrames: 0,
+      diagnosticsTimer: null,
       loop: null,
     };
     capture = current;
+    current.diagnosticsTimer = setInterval(() => {
+      if (capture !== current || current.stopped) return;
+      diagnostic("capture", "progress", { frames: current.frames, staleFrames: current.staleFrames, encoders: encoders.size });
+      for (const state of encoders.values()) {
+        diagnostic("encoder", "progress", {
+          quality: state.quality, framesEncoded: state.framesEncoded, outputs: state.outputs,
+          packets: state.packets, inactive: state.inactive, backpressure: state.backpressure,
+          rateLimited: state.rateLimited, staleOutputs: state.staleOutputs,
+          outputBackpressure: state.outputBackpressure, awaitingKey: state.awaitingKey,
+          pending: state.pending.size, queue: state.encoder.encodeQueueSize, failed: state.failed,
+        });
+      }
+    }, 10000);
     current.loop = (async () => {
       try {
         while (capture === current && !current.stopped) {
           const { value: frame, done } = await reader.read();
           if (done) {
+            diagnostic("capture", "ended");
             if (capture === current && !current.stopped)
               nativeVideoPacket(JSON.stringify({ error: "Native video capture stopped" }));
             break;
@@ -102,11 +132,14 @@ async function startCapture(targetId, width, height, generation) {
           let encodingFrame = null;
           try {
             if (capture !== current || current.stopped) break;
-            if (frame.timestamp < current.minimumTimestampUs) continue;
+            current.frames++;
+            if (current.frames === 1) diagnostic("capture", "first-frame", { width: frame.displayWidth, height: frame.displayHeight });
+            if (frame.timestamp < current.minimumTimestampUs) { current.staleFrames++; continue; }
             encodingFrame = frameForViewport(frame, width, height);
             current.latestFrame?.close();
             current.latestFrame = frame.clone();
             if (!encodingFrame) {
+              diagnostic("capture", "dimensions-error", { width: frame.displayWidth, height: frame.displayHeight });
               // Only native YUV even-alignment is correctable. Keep unexpected
               // source geometry terminal without changing viewport or density.
               nativeVideoPacket(
@@ -118,8 +151,10 @@ async function startCapture(targetId, width, height, generation) {
               break;
             }
             for (const state of encoders.values()) {
-              if (state.failed || performance.now() - state.lastRequestedAt > 2000) continue;
+              if (state.failed) continue;
+              if (performance.now() - state.lastRequestedAt > 2000) { state.inactive++; continue; }
               if (state.pending.size >= 2 || state.encoder.encodeQueueSize >= 2) {
+                state.backpressure++;
                 // This source frame was never encoded, so skipping it does not
                 // lose a codec dependency. Keep already queued output usable.
                 // The output callback below still forces recovery if it must
@@ -134,8 +169,10 @@ async function startCapture(targetId, width, height, generation) {
               if (
                 !state.forceKey &&
                 frame.timestamp - state.lastEncodedTimestampUs < minimumIntervalUs - 1
-              )
+              ) {
+                state.rateLimited++;
                 continue;
+              }
               state.lastEncodedTimestampUs = frame.timestamp;
               state.frameGenerations.set(frame.timestamp, current.generation);
               // encodeQueueSize drops when the codec dequeues a frame, not when it
@@ -149,10 +186,12 @@ async function startCapture(targetId, width, height, generation) {
                 state.forceKey || frame.timestamp - state.lastKeyTimestamp >= 1000000;
               try {
                 state.encoder.encode(encodingFrame, { keyFrame });
+                state.framesEncoded++;
               } catch {
                 // A synchronous codec rejection belongs to this cohort, just
                 // like its asynchronous error callback. Healthy peers keep the track.
                 state.failed = true;
+                diagnostic("encoder", "encode-error", { quality: state.quality });
                 try {
                   state.encoder.close();
                 } catch {}
@@ -168,6 +207,7 @@ async function startCapture(targetId, width, height, generation) {
               if (keyFrame) void state.encoder.flush().catch((error) => {
                 if (error?.name !== "AbortError" && capture === current && encoders.get(state.quality) === state && !state.failed) {
                   state.failed = true;
+                  diagnostic("encoder", "flush-error", { quality: state.quality });
                   nativeVideoPacket(JSON.stringify({ error: "Native video encoder stopped", streamId: state.streamId }));
                 }
               });
@@ -180,12 +220,14 @@ async function startCapture(targetId, width, height, generation) {
           }
         }
       } catch {
+        diagnostic("capture", "read-error");
         if (capture === current)
           nativeVideoPacket(JSON.stringify({ error: "Native video capture stopped" }));
       }
     })();
-    return { width, height, settings: track.getSettings() };
+    return { width, height, settings };
   } catch (error) {
+    diagnostic("capture", "start-error");
     if (stream) for (const track of stream.getTracks()) track.stop();
     throw error;
   }
@@ -263,14 +305,19 @@ async function addEncoder(quality, streamId, bitrate, fps) {
         configuration,
         frameGenerations: new Map(),
         failed: false,
+        framesEncoded: 0, outputs: 0, packets: 0, inactive: 0, backpressure: 0,
+        rateLimited: 0, staleOutputs: 0, outputBackpressure: 0, awaitingKey: 0,
         encoder: null,
       };
       state.encoder = new VideoEncoder({
         output: (chunk, metadata) => {
           if (!capture || encoders.get(quality) !== state || state.failed) return;
+          state.outputs++;
+          if (state.outputs === 1) diagnostic("encoder", "first-output", { quality, key: chunk.type === "key", bytes: chunk.byteLength });
           const generation = state.frameGenerations.get(chunk.timestamp);
           state.frameGenerations.delete(chunk.timestamp);
           if (chunk.byteLength > 2097152) {
+            diagnostic("encoder", "packet-size-error", { quality, bytes: chunk.byteLength });
             state.failed = true;
             try {
               state.encoder.close();
@@ -281,16 +328,19 @@ async function addEncoder(quality, streamId, bitrate, fps) {
             return;
           }
           if (generation !== capture.generation || state.pending.size >= 2) {
+            if (generation !== capture.generation) state.staleOutputs++;
+            else state.outputBackpressure++;
             state.forceKey = true;
             state.needsKey = true;
             return;
           }
-          if (state.needsKey && chunk.type !== "key") return;
+          if (state.needsKey && chunk.type !== "key") { state.awaitingKey++; return; }
           if (chunk.type === "key") state.needsKey = false;
           const bytes = new Uint8Array(chunk.byteLength);
           chunk.copyTo(bytes);
           const sequence = ++state.sequence;
           state.pending.add(sequence);
+          state.packets++;
           const description = metadata.decoderConfig && metadata.decoderConfig.description;
           nativeVideoPacket(
             JSON.stringify({
@@ -308,6 +358,7 @@ async function addEncoder(quality, streamId, bitrate, fps) {
           );
         },
         error: () => {
+          diagnostic("encoder", "codec-error", { quality });
           state.failed = true;
           nativeVideoPacket(JSON.stringify({ error: "Native video encoder stopped", streamId }));
         },
@@ -316,8 +367,10 @@ async function addEncoder(quality, streamId, bitrate, fps) {
       assertAllocation();
       pendingEncoders.delete(quality);
       encoders.set(quality, state);
+      diagnostic("encoder", "started", { quality, codec: state.codec, width: source.width, height: source.height, bitrate, fps });
       return { codec: state.codec };
     } catch (error) {
+      diagnostic("encoder", "start-error", { quality });
       try {
         state?.encoder?.close();
       } catch {}
@@ -362,15 +415,20 @@ function requestKeyFrame(quality) {
         try {
           state.frameGenerations.set(frame.timestamp, capture.generation);
           state.encoder.encode(adjusted, { keyFrame: true });
+          state.framesEncoded++;
           void state.encoder.flush().catch((error) => {
             if (error?.name !== "AbortError" && encoders.get(quality) === state && !state.failed) {
               state.failed = true;
+              diagnostic("encoder", "flush-error", { quality });
               nativeVideoPacket(JSON.stringify({ error: "Native video encoder stopped", streamId: state.streamId }));
             }
           });
           state.lastEncodedTimestampUs = frame.timestamp;
           state.lastKeyTimestamp = frame.timestamp;
           state.forceKey = false;
+        } catch (error) {
+          diagnostic("encoder", "encode-error", { quality });
+          throw error;
         } finally {
           if (adjusted !== frame) adjusted.close();
         }

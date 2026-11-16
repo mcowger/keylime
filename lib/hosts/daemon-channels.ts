@@ -808,7 +808,15 @@ export class ChannelTable {
       spawned.transport.onLine((line) => this.stdout(channel, line));
       // The last 500 bytes omp writes before startup settles, for the daemon's own log if it exits meanwhile; never sent on.
       let startupStderr: Buffer | null = Buffer.alloc(0);
+      let videoDiagnosticBuffer = "";
       spawned.transport.onStderr((chunk) => {
+        videoDiagnosticBuffer += Buffer.from(chunk).toString("utf8");
+        const diagnosticLines = videoDiagnosticBuffer.split("\n");
+        videoDiagnosticBuffer = diagnosticLines.pop()!.slice(-8192);
+        for (const line of diagnosticLines) {
+          if (line.startsWith("[browser-video] ") && line.length <= 8192)
+            this.deps.log(`channel ${ch}: ${line}`);
+        }
         if (startupStderr)
           startupStderr = Buffer.concat([
             startupStderr,

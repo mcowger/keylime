@@ -13,6 +13,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Live chats with Chromium/CDP pages show a Browser workspace tab. Capture runs only while visible; optional shared control enables navigation and input without pausing the agent.
 - The Browser workspace tab streams encoded Chromium video when available, with snapshot mode for unsupported or already-running browsers.
 - Encoded browser video delivers keyframes for static pages and newly attached viewers.
+- Browser video logs capture, encoder, delivery and viewer diagnostics without recording page contents or video data.
 - Untitled chats show a temporary topic label extracted from the first prompt until a generated or manually chosen title is available.
 - Seeded development sessions include completed and in-progress tasks for testing composer indicators.
 - Mobile composer controls use square icon actions, reduced padding, and compact running activity indicators.
@@ -72,6 +73,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Live Chromium/CDP pages in the Browser tab can be taken over for shared control: address-bar navigation, back/forward/reload, pointer, drag, wheel, keyboard and text input without pausing the agent
 - The Browser workspace tab streams encoded Chromium video when available, with snapshot mode for unsupported or already-running browsers
 - Encoded browser video delivers keyframes for static pages and newly attached viewers
+- Browser video logs capture, encoder, delivery and viewer diagnostics without recording page contents or video data
 
 ### Changed
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.

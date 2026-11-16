@@ -5,7 +5,9 @@ import { NATIVE_VIDEO_EXTENSION_SOURCE } from "../src/commands/native-video-exte
 test.each([true, false])("static capture supplies keyframes when frame precedes encoder: %s", async (frameBeforeEncoder) => {
   let controller!: ReadableStreamDefaultController<Frame>;
   const readable = new ReadableStream<Frame>({ start(c) { controller = c; } });
-  const packets: { type: string }[] = [];
+  const packets: Record<string, unknown>[] = [];
+  let reportProgress!: () => void;
+  let timerCleared = false;
   const consumed = Promise.withResolvers<void>();
   class Frame {
     timestamp = 1000000;
@@ -32,10 +34,14 @@ test.each([true, false])("static capture supplies keyframes when frame precedes 
     navigator: { mediaDevices: { getUserMedia: async () => ({ getVideoTracks: () => [{ getSettings: () => ({}) }], getTracks: () => [{ stop() {} }] }) } },
     MediaStreamTrackProcessor: class { readable = readable; },
     VideoEncoder: Encoder, VideoFrame: Frame, Uint8Array, performance, btoa,
+    setInterval: (callback: () => void) => { reportProgress = callback; return 1; },
+    clearInterval: () => { timerCleared = true; },
     nativeVideoPacket: (packet: string) => packets.push(JSON.parse(packet)),
   });
   runInContext(NATIVE_VIDEO_EXTENSION_SOURCE, ctx);
   await runInContext('startCapture("target", 640, 480, 1)', ctx);
+  reportProgress();
+  expect(packets).toContainEqual(expect.objectContaining({ type: "diagnostic", stage: "capture", event: "progress", frames: 0 }));
   if (frameBeforeEncoder) {
     controller.enqueue(new Frame());
     await consumed.promise;
@@ -46,8 +52,18 @@ test.each([true, false])("static capture supplies keyframes when frame precedes 
     controller.enqueue(new Frame());
     await consumed.promise;
   }
-  expect(packets.map((packet) => packet.type)).toEqual(["key"]);
+  expect(packets.filter((packet) => packet.type === "key")).toHaveLength(1);
   runInContext('acknowledge("stream", 1); requestKeyFrame("medium")', ctx);
-  expect(packets.map((packet) => packet.type)).toEqual(["key", "key"]);
+  expect(packets.filter((packet) => packet.type === "key")).toHaveLength(2);
+  reportProgress();
+  expect(packets).toContainEqual(expect.objectContaining({ type: "diagnostic", stage: "capture", event: "first-frame", width: 640, height: 480 }));
+  expect(packets).toContainEqual(expect.objectContaining({ type: "diagnostic", stage: "encoder", event: "first-output", key: true, bytes: 3 }));
+  expect(packets).toContainEqual(expect.objectContaining({ type: "diagnostic", stage: "encoder", event: "progress", outputs: 2, packets: 2 }));
+  for (const packet of packets.filter((entry) => entry.type === "diagnostic")) {
+    expect(packet).not.toHaveProperty("dataBase64");
+    expect(packet).not.toHaveProperty("descriptionBase64");
+    expect(packet).not.toHaveProperty("streamId");
+  }
   await runInContext('stopCapture()', ctx);
+  expect(timerCleared).toBe(true);
 });

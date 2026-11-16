@@ -197,6 +197,23 @@ export function WorkspaceBrowser({ sessionId, pages, active }: {
     let streamId: string | undefined;
     let decoder: VideoDecoder | undefined;
     const endpoint = `${browserUrl(sessionId)}/video`;
+    // Aggregate only counts and fixed stage names; never log tab IDs, URLs, packets, or errors.
+    const stats = { starts: 0, polls: 0, empty: 0, packets: 0, decoded: 0, rendered: 0, failures: 0, snapshots: 0, snapshotFailures: 0, status: "starting", httpStatus: 0 };
+    let lastReport = 0;
+    const report = () => {
+      const now = Date.now();
+      if (lastReport && now - lastReport < 30_000) return;
+      lastReport = now;
+      console.info("[browser-video viewer]", { ...stats });
+    };
+    report();
+    let lastFailureReport = 0;
+    const reportFailure = () => {
+      const now = Date.now();
+      if (lastFailureReport && now - lastFailureReport < 30_000) return;
+      lastFailureReport = now;
+      console.warn("[browser-video viewer failure]", { ...stats });
+    };
     const stopStream = () => {
       generation++;
       clearTimeout(timer);
@@ -235,7 +252,11 @@ export function WorkspaceBrowser({ sessionId, pages, active }: {
             if (signal.aborted || current !== generation || frameVersion !== frameGeneration.current || navigating.current || !canvas) return;
             canvas.width = bitmap.width;
             canvas.height = bitmap.height;
-            canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
+            const context = canvas.getContext("2d");
+            context?.drawImage(bitmap, 0, 0);
+            if (context) stats.snapshots++;
+            stats.status = context ? "snapshot-rendered" : "canvas-unavailable";
+            report();
             const receivedAt = performance.now();
             const captured = { width, height, ageAtReceipt: receivedAt - requestedAt, receivedAt, pageId };
             frameRef.current = captured;
@@ -243,6 +264,7 @@ export function WorkspaceBrowser({ sessionId, pages, active }: {
             setFrameError(false);
           } finally { bitmap.close(); }
         } catch {
+          if (!signal.aborted && current === generation) { stats.snapshotFailures++; stats.status = "snapshot-failed"; reportFailure(); }
           if (!signal.aborted && current === generation) { frameRef.current = null; setFrameError(true); }
         }
         if (!signal.aborted && current === generation) timer = setTimeout(() => void poll(), 1000);
@@ -252,11 +274,14 @@ export function WorkspaceBrowser({ sessionId, pages, active }: {
     const start = async () => {
       if (stopped || document.hidden || !navigator.onLine) return;
       const current = ++generation;
+      stats.starts++;
+      let stage = "decoder-unavailable";
       controller = new AbortController();
       const signal = controller.signal;
       const request = async (body: unknown) => {
         const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal, cache: "no-store" });
         if (!response.ok) {
+          stats.httpStatus = response.status;
           if (await isDisconnected(response) && !signal.aborted) release();
           throw new Error("Video request failed");
         }
@@ -265,7 +290,9 @@ export function WorkspaceBrowser({ sessionId, pages, active }: {
       let videoReady = false;
       try {
         if (typeof VideoDecoder === "undefined") throw new Error("Video decoding unavailable");
+        stage = "start-request";
         const opened = await request({ op: "start", input: { id: pageId } });
+        stage = "start-result";
         if (!Value.Check(BrowserVideoStartResultSchema, opened)) throw new Error("Invalid video stream");
         if (current !== generation) return;
         streamId = opened.streamId;
@@ -273,6 +300,7 @@ export function WorkspaceBrowser({ sessionId, pages, active }: {
         const metadata = new Map<number, { width: number; height: number; ageAtReceipt: number; receivedAt: number; generation: number }>();
         decoder = new VideoDecoder({
           output: (videoFrame) => {
+            stats.decoded++;
             try {
               const canvas = imageRef.current;
               if (current !== generation || !canvas) return;
@@ -281,27 +309,43 @@ export function WorkspaceBrowser({ sessionId, pages, active }: {
               if (!source || source.generation !== frameGeneration.current || navigating.current) return;
               canvas.width = videoFrame.displayWidth;
               canvas.height = videoFrame.displayHeight;
-              canvas.getContext("2d")?.drawImage(videoFrame, 0, 0);
+              const context = canvas.getContext("2d");
+              context?.drawImage(videoFrame, 0, 0);
+              if (context) stats.rendered++;
+              stats.status = context ? "rendered" : "canvas-unavailable";
+              report();
               const captured = { width: source.width, height: source.height, ageAtReceipt: source.ageAtReceipt, receivedAt: source.receivedAt, pageId };
               frameRef.current = captured;
               setFrame(captured);
               setFrameError(false);
             } finally { videoFrame.close(); }
           },
-          error: () => { failed = true; },
+          error: () => { failed = true; stats.status = "decoder-error"; },
         });
+        stage = "codec-support";
         const support = await VideoDecoder.isConfigSupported({ codec: opened.codec, optimizeForLatency: true });
         if (!support.supported || current !== generation) throw new Error("Video codec unavailable");
         decoder.configure({ codec: opened.codec, optimizeForLatency: true });
         videoReady = true;
+        stats.status = "stream-ready";
+        report();
         setSnapshotFallback(false);
         while (!signal.aborted && current === generation) {
           const requestedAt = performance.now();
+          stage = "next-request";
           const next = await request({ op: "next", input: { id: pageId, streamId: opened.streamId } });
           const receivedAt = performance.now();
+          stage = "next-result";
           if (!Value.Check(BrowserVideoNextResultSchema, next) || next.packets.reduce((n, packet) => n + packet.data.length, 0) > 512 * 1024) throw new Error("Invalid video packets");
+          stats.polls++;
+          stats.packets += next.packets.length;
+          if (!next.packets.length) stats.empty++;
+          stats.status = next.packets.length ? "packets-received" : "empty";
+          report();
+          stage = "decoder";
           if (failed || decoder.state === "closed" || decoder.decodeQueueSize > 8 || metadata.size > 32) throw new Error("Video decoder failed");
           for (const packet of next.packets) {
+            stage = "packet-decode";
             if (packet.capturedAt > next.serverTime) throw new Error("Invalid video timestamp");
             metadata.set(packet.timestamp, { width: packet.width, height: packet.height, ageAtReceipt: next.serverTime - packet.capturedAt + receivedAt - requestedAt, receivedAt, generation: frameGeneration.current });
             const binary = atob(packet.data);
@@ -316,6 +360,10 @@ export function WorkspaceBrowser({ sessionId, pages, active }: {
         }
       } catch {
         if (!signal.aborted && current === generation) {
+          stats.failures++;
+          stats.status = stage;
+          report();
+          reportFailure();
           stopStream();
           if (!videoReady) startSnapshots();
           else {

@@ -23,10 +23,14 @@ type Stream = {
   current: () => boolean; browserCdp: Cdp; helper: Cdp; helperId: string;
   width: number; height: number; codec: string; leases: Set<Lease>;
   failure: boolean; closed: boolean;
+  diagnosticAt: number; received: number; forwarded: number; rejected: number; emptyReads: number;
 };
 const streams = new Map<string, Lease>();
 const sources = new Map<WorkerTabSession, Stream>();
 const pending = new Map<WorkerTabSession, Promise<Stream>>();
+function videoLog(event: string, fields: Record<string, unknown>): void {
+  console.error(`[browser-video] ${JSON.stringify({ event, ...fields })}`);
+}
 
 async function evaluate(cdp: Cdp, expression: string): Promise<unknown> {
   const result = await cdp.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
@@ -82,11 +86,13 @@ export async function startVideo(tab: WorkerTabSession, tabId: string, owner: st
   const lease: Lease = { id: randomUUID(), source, packets: [], bytes: 0, needsKey: true, lastRead: Date.now() };
   source.leases.add(lease);
   streams.set(lease.id, lease);
+  videoLog("lease-start", { source: source.id, stream: lease.id, tab: tabId, codec: source.codec, width: source.width, height: source.height });
   void evaluate(source.helper, 'requestKeyFrame("medium")').catch(() => {});
   return { streamId: lease.id, codec: source.codec, width: source.width, height: source.height };
 }
 
 function closeLease(lease: Lease): void {
+  videoLog("lease-stop", { source: lease.source.id, stream: lease.id });
   streams.delete(lease.id);
   lease.source.leases.delete(lease);
   lease.packets = [];
@@ -131,16 +137,25 @@ async function startVideoInner(tab: WorkerTabSession, tabId: string, owner: stri
     await helper.send("Runtime.enable");
     await helper.send("Runtime.addBinding", { name: "nativeVideoPacket" });
     const id = randomUUID();
-    stream = { id, tabId, owner, tab, current, browserCdp, helper, helperId, width, height, codec: "", leases: new Set(), failure: false, closed: false };
+    stream = { id, tabId, owner, tab, current, browserCdp, helper, helperId, width, height, codec: "", leases: new Set(), failure: false, closed: false, diagnosticAt: Date.now(), received: 0, forwarded: 0, rejected: 0, emptyReads: 0 };
     const state = stream;
     helper.on("Runtime.bindingCalled", (event: { name: string; payload: string }) => {
       if (event.name !== "nativeVideoPacket" || event.payload.length > 3_000_000 || state.closed) return;
       let raw: unknown;
       try { raw = JSON.parse(event.payload); } catch { return; }
-      if (raw && typeof raw === "object" && "error" in raw) { state.failure = true; return; }
-      if (!Value.Check(packetSchema, raw) || raw.streamId !== id) return;
+      if (raw && typeof raw === "object" && "type" in raw && raw.type === "diagnostic") {
+        const safe = Object.fromEntries(Object.entries(raw).filter(([key, value]) => key !== "type" && (
+          typeof value === "number" && Number.isFinite(value) || typeof value === "boolean" ||
+          (key === "stage" || key === "event") && typeof value === "string" && /^[a-zA-Z0-9_-]{1,64}$/.test(value)
+        )));
+        videoLog("helper", { source: id, ...safe });
+        return;
+      }
+      state.received++;
+      if (raw && typeof raw === "object" && "error" in raw) { state.failure = true; videoLog("helper-error", { source: id }); return; }
+      if (!Value.Check(packetSchema, raw) || raw.streamId !== id) { state.rejected++; return; }
       void evaluate(helper, `acknowledge(${JSON.stringify(id)},${raw.sequence})`).catch(() => {});
-      if (!state.current() || raw.captureGeneration !== 1 || raw.width !== width || raw.height !== height) return;
+      if (!state.current() || raw.captureGeneration !== 1 || raw.width !== width || raw.height !== height) { state.rejected++; return; }
       const data = raw.dataBase64;
       let requestKey = false;
       for (const lease of state.leases) {
@@ -151,6 +166,7 @@ async function startVideoInner(tab: WorkerTabSession, tabId: string, owner: stri
         if (lease.needsKey && raw.type !== "key") continue;
         if (raw.type === "key") lease.needsKey = false;
         lease.packets.push({ type: raw.type, timestamp: raw.timestampUs, capturedAt: Math.round(epochOffset + raw.timestampUs / 1000), width, height, data });
+        state.forwarded++;
         lease.bytes += data.length;
       }
       if (requestKey) void evaluate(helper, 'requestKeyFrame("medium")').catch(() => {});
@@ -163,7 +179,8 @@ async function startVideoInner(tab: WorkerTabSession, tabId: string, owner: stri
     stream.codec = encoder.codec;
     sources.set(tab, stream);
     return stream;
-  } catch {
+  } catch (error) {
+    videoLog("start-failed", { tab: tabId, reason: error instanceof Error ? error.name : "unknown" });
     if (stream) close(stream);
     else {
       if (helperId) void browserCdp.send("Target.closeTarget", { targetId: helperId }).catch(() => {});
@@ -199,6 +216,11 @@ export async function nextVideo(id: string, tabId: string, owner: string) {
   if (!lease.packets.length) await Bun.sleep(100);
   getStream(id, tabId, owner);
   const packets = lease.packets;
+  if (!packets.length) stream.emptyReads++;
+  if (Date.now() - stream.diagnosticAt >= 5000) {
+    videoLog("progress", { source: stream.id, stream: lease.id, received: stream.received, forwarded: stream.forwarded, rejected: stream.rejected, emptyReads: stream.emptyReads, leases: stream.leases.size });
+    stream.diagnosticAt = Date.now();
+  }
   lease.packets = []; lease.bytes = 0;
   return { width: stream.width, height: stream.height, packets, serverTime: Date.now() };
 }
