@@ -2334,11 +2334,30 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
 
   const loadSlashCommands = useCallback(async () => {
-    const sid = sessionIdRef.current ?? (await ensureNewSession());
+    const sid = sessionIdRef.current;
     if (!sid) {
-      setSlashCommands([]);
-      knownSlashCommandNamesRef.current = [];
-      return [] as SlashCommandInfo[];
+      // A prompt-first workspace does not exist yet. Do not start a session
+      // just to populate the palette, or use this server's skills for a remote host.
+      if (newSessionPoolId || (newSessionHostId && newSessionHostId !== "local")) return [];
+      setSlashCommandsLoading(true);
+      try {
+        const response = await fetch("/api/skills");
+        if (!response.ok) throw new Error(`Skills request failed: ${response.status}`);
+        const data: unknown = await response.json();
+        const skills = isRecord(data) && Array.isArray(data.skills) ? data.skills : [];
+        const commands: SlashCommandInfo[] = skills.flatMap((skill) =>
+          isRecord(skill) && typeof skill.name === "string" && skill.name
+            ? [{ name: `skill:${skill.name}`, description: typeof skill.description === "string" ? skill.description : "", source: "skill" as const }]
+            : [],
+        );
+        if (!sessionIdRef.current) setSlashCommands(commands);
+        return commands;
+      } catch (e) {
+        console.error("Failed to load global skills:", e);
+        return [];
+      } finally {
+        setSlashCommandsLoading(false);
+      }
     }
     setSlashCommandsLoading(true);
     try {
@@ -2367,7 +2386,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     } finally {
       setSlashCommandsLoading(false);
     }
-  }, [ensureNewSession]);
+  }, [newSessionHostId, newSessionPoolId]);
 
   // File notifications cover terminal-owned sessions and native message_end
   // arriving before persistence. An attached SSE stream does not replace this

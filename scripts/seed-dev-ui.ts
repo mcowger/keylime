@@ -14,6 +14,10 @@ if (
 )
   throw new Error("UI fixtures require the isolated dev launcher");
 
+const skillDir = path.join(process.env.HOME!, ".agents", "skills", "atlas-review");
+mkdirSync(skillDir, { recursive: true });
+writeFileSync(path.join(skillDir, "SKILL.md"), "---\nname: atlas-review\ndescription: Review Atlas changes\n---\n\nReview the workspace changes.\n");
+
 const projectsDir = path.join(root, "projects");
 mkdirSync(projectsDir, { recursive: true });
 const projects = realpathSync(projectsDir);

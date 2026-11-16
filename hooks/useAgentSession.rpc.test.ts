@@ -12146,6 +12146,55 @@ test("a fresh chat whose host drops after the spawn adopts the kept session, so 
   );
 });
 
+test("new session slash commands load global skills without creating a workspace or session", async () => {
+  resetWorld();
+  let workspacePreparations = 0;
+  world.holds.push({
+    match: (method, url) => method === "GET" && url === "/api/skills",
+    produce: async () => ({ value: { skills: [{ name: "review", description: "Review changes" }] } }),
+  });
+  const w = await mountSession(null, undefined, {
+    newSessionCwd: "/project",
+    prepareNewWorkspace: async () => {
+      workspacePreparations++;
+      throw new Error("workspace must not be created");
+    },
+  });
+  await act(async () => { await w.latest.loadSlashCommands(); });
+  assert.deepEqual(w.latest.slashCommands, [{ name: "skill:review", description: "Review changes", source: "skill" }]);
+  assert.equal(workspacePreparations, 0);
+  assert.equal(callsTo("POST", "/api/agent/new").length, 0);
+  assert.equal(w.latest.sessionIdRef.current, null);
+  w.unmount();
+});
+
+test("late global skills cannot replace a newly created session's command roster", async (t) => {
+  resetWorld();
+  const gate = Promise.withResolvers<void>();
+  t.after(() => gate.resolve());
+  world.holds.push({
+    match: (method, url) => method === "GET" && url === "/api/skills",
+    produce: async () => {
+      await gate.promise;
+      return { value: { skills: [{ name: "global", description: "Global" }] } };
+    },
+  }, {
+    match: (method, url) => method === "POST" && url === "/api/agent/new",
+    produce: async () => ({ value: { success: true, sessionId: "new-roster", hostId: "local", cwd: "/project", data: {} } }),
+  });
+  const w = await mountSession(null, undefined, { newSessionCwd: "/project" });
+  let loading!: Promise<unknown>;
+  await act(async () => { loading = w.latest.loadSlashCommands(); await sleep(0); });
+  await act(async () => { await w.latest.resolveUploadHost(); });
+  await act(async () => {
+    w.latest.handleAgentEventRef.current?.({ type: "available_commands_update", commands: [{ name: "project", description: "Project", source: "skill" }] } as AgentEvent);
+  });
+  assert.deepEqual(w.latest.slashCommands, [{ name: "project", description: "Project", source: "skill" }]);
+  await act(async () => { gate.resolve(); await loading; });
+  assert.deepEqual(w.latest.slashCommands, [{ name: "project", description: "Project", source: "skill" }]);
+  w.unmount();
+});
+
 test("a lost pooled creation response retries the original identity and frozen initialization, then adopts its owner", async () => {
   resetWorld();
   const creationId = "e740daaa-78c7-46ae-9985-409064653f01";
@@ -12191,7 +12240,7 @@ test("a lost pooled creation response retries the original identity and frozen i
     onSessionCreated: (session) => promoted.push(session),
   });
   await act(async () => {
-    await w.latest.loadSlashCommands().catch(() => []);
+    await w.latest.resolveUploadHost().catch(() => undefined);
   });
   await act(async () => {
     await w.latest.handleModelChange("anthropic", "changed-after-loss");
@@ -12200,7 +12249,7 @@ test("a lost pooled creation response retries the original identity and frozen i
     w.latest.handleAdvisorChange(true);
   });
   await act(async () => {
-    await w.latest.loadSlashCommands();
+    await w.latest.resolveUploadHost();
   });
   let sending!: Promise<PromptSubmissionResult>;
   await act(async () => {
@@ -12419,7 +12468,7 @@ test("choosing a different logical project starts a distinct creation intent wit
       newSessionProjectId: projectId,
     });
     await act(async () => {
-      await w.latest.loadSlashCommands().catch(() => []);
+      await w.latest.resolveUploadHost().catch(() => undefined);
     });
     w.unmount();
   }
@@ -12462,7 +12511,7 @@ test("reopening a pending pooled composer reuses its frozen creation body instea
     await first.latest.handleModelChange("anthropic", "original-model");
   });
   await act(async () => {
-    await first.latest.loadSlashCommands().catch(() => []);
+    await first.latest.resolveUploadHost().catch(() => undefined);
   });
   first.unmount();
   world.holds.push({
@@ -12482,7 +12531,7 @@ test("reopening a pending pooled composer reuses its frozen creation body instea
     newSessionInitialization: initialization,
   });
   await act(async () => {
-    await reopened.latest.loadSlashCommands();
+    await reopened.latest.resolveUploadHost();
   });
   const requests = callsTo("POST", "/api/agent/new").map(({ body }) => body);
   assert.deepEqual(
@@ -12664,10 +12713,12 @@ test("nonprompt pooled placement failures are visible once", async () => {
           });
       }),
   });
+  const chatInputRef = React.createRef<ChatInputHandle>();
   const view = ownRoot(
     render(
       React.createElement(ChatWindow, {
         session: null,
+        chatInputRef,
         newSessionCwd: null,
         newSessionPoolId: "workers",
         newSessionProjectId: "app",
@@ -12678,7 +12729,7 @@ test("nonprompt pooled placement failures are visible once", async () => {
   );
   await settle();
   await act(async () => {
-    fireEvent.change(view.getByRole("textbox"), { target: { value: "/" } });
+    chatInputRef.current!.addFiles([new File([new Uint8Array([80, 75, 0, 0])], "placement.zip", { type: "application/zip" })]);
     await sleep(30);
   });
   await act(async () => {

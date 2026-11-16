@@ -15,7 +15,7 @@ export function isDormantSkillCommand(
   command: SlashCommandPaletteItem,
   dormantNames: Set<string>,
 ): boolean {
-  return command.source === "skill" && dormantNames.has(command.name);
+  return command.source === "skill" && dormantNames.has(command.name.replace(/^skill:/i, ""));
 }
 
 export const BUILTIN_SLASH_COMMAND_DEFS: {
