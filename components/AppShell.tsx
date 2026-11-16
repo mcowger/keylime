@@ -1,6 +1,7 @@
 "use client";
 
 import { browserUUID } from "@/lib/browser-uuid";
+import { temporarySessionTitle } from "@/lib/session-title";
 import {
   useState,
   useCallback,
@@ -3182,7 +3183,7 @@ export function AppShell({ appName }: { appName: string }) {
                   sessionId: tab.session?.id,
                   title:
                     tab.session?.name ||
-                    tab.session?.firstMessage ||
+                    (tab.session?.messageCount ? temporarySessionTitle(tab.session.firstMessage) : null) ||
                     (tabs.filter((item) => !item.session).length > 1
                       ? `New chat ${tabs.slice(0, index + 1).filter((item) => !item.session).length}`
                       : "New chat"),
@@ -3571,7 +3572,7 @@ export function AppShell({ appName }: { appName: string }) {
                         "";
                       const sessionTitle =
                         selectedSession?.name ||
-                        selectedSession?.firstMessage ||
+                        (selectedSession?.messageCount ? temporarySessionTitle(selectedSession.firstMessage) : null) ||
                         t("appShell.newSession");
                       const hasMessages = Boolean(
                         selectedSession &&

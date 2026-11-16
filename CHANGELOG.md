@@ -7,6 +7,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ## [Unreleased]
 
 ### Added
+- Untitled chats show a temporary topic label extracted from the first prompt until a generated or manually chosen title is available.
 - Seeded development sessions include completed and in-progress tasks for testing composer indicators.
 - Mobile composer controls use square icon actions, reduced padding, and compact running activity indicators.
 - Tool activity rows show available intent alongside their target.
@@ -45,6 +46,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Seeded development sessions include completed and in-progress tasks for testing composer indicators
 - Project settings can upload, select, and clear sidebar icons, including discovered icons from the repository
 - Project icon discovery now finds conventional icon filenames in nested directories, with bounded scanning that skips hidden, ignored, and generated paths
+- Untitled chats show a temporary topic label extracted from the first prompt until a generated or manually chosen title is available
 
 ### Changed
 - Operational notices, task chat and compaction use expandable transcript rows; advisor responses render as conversation text.

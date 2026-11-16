@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type { SessionInfo } from "@/lib/types";
 import { useI18n } from "@/lib/i18n";
+import { temporarySessionTitle } from "@/lib/session-title";
 import { ALL_THEMES, useTheme } from "@/hooks/useTheme";
 import { useModalDialog } from "@/hooks/useModalDialog";
 type Props = {
@@ -205,7 +206,7 @@ export const CommandPalette = memo(function CommandPalette({
             {sessions.map((session) => (
               <Command.Item
                 key={session.id}
-                value={`${session.name ?? session.id} ${session.cwd}`}
+                value={`${session.name || (session.messageCount ? temporarySessionTitle(session.firstMessage) : null) || session.id} ${session.cwd}`}
                 onSelect={() => choose(() => onSelectSession(session))}
                 style={{
                   display: "flex",
@@ -226,7 +227,7 @@ export const CommandPalette = memo(function CommandPalette({
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {session.name || session.id}
+                  {session.name || (session.messageCount ? temporarySessionTitle(session.firstMessage) : null) || session.id}
                 </span>
                 <span style={{ color: "var(--text-dim)", fontSize: 11 }}>
                   {relativeTime(session.modified, locale)}

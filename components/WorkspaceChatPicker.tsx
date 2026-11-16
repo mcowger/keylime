@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { HierarchySnapshot } from "@/lib/project-hierarchy-types";
 import { LOCAL_HOST_ID } from "@/lib/project-ordering";
 import type { SessionInfo } from "@/lib/types";
+import { temporarySessionTitle } from "@/lib/session-title";
 
 export function WorkspaceChatPicker({
   hostId,
@@ -133,7 +134,7 @@ export function WorkspaceChatPicker({
             key={session.id}
             onClick={() => onSelect(session)}
           >
-            {session.name || session.firstMessage || "Untitled chat"}
+            {session.name || (session.messageCount ? temporarySessionTitle(session.firstMessage) : null) || "Untitled chat"}
           </button>
         ))
       )}

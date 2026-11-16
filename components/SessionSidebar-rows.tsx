@@ -17,6 +17,7 @@ import type {
   SessionInfo,
 } from "@/lib/types";
 import { formatExitedSessionNotice, useI18n } from "@/lib/i18n";
+import { temporarySessionTitle } from "@/lib/session-title";
 import {
   ChevronDown,
   ChevronRight,
@@ -1249,7 +1250,7 @@ const SessionItem = memo(function SessionItem({
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const title =
     session.name ||
-    session.firstMessage.slice(0, 50) ||
+    (session.messageCount ? temporarySessionTitle(session.firstMessage) : null) ||
     session.id.slice(0, 12);
   // A session's composer draft is keyed by its id (ChatWindow's `draftKey`).
   const hasUnsentDraft = useSyncExternalStore(

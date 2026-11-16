@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { deriveSessionTitleFromFirstMessage, sanitizeSessionTitle } =
-  await import("./session-title");
+import { deriveSessionTitleFromFirstMessage, sanitizeSessionTitle, temporarySessionTitle } from "./session-title";
+
+test("temporary titles extract distinct topic words without copying the prompt", () => {
+  assert.equal(temporarySessionTitle("Please fix the login bug and fix authentication"), "fix · login · bug · authentication");
+  assert.equal(temporarySessionTitle("修复 SSE 重连问题"), "修复 · SSE · 重连问题");
+  assert.equal(temporarySessionTitle("the and please"), null);
+  assert.equal(temporarySessionTitle("(no messages)"), null);
+  assert.equal(temporarySessionTitle("x".repeat(40)), "x".repeat(24));
+});
 
 test("sanitizes titles to a single clean line", () => {
   assert.equal(
