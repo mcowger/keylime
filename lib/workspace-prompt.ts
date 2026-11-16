@@ -3,7 +3,7 @@ import { authGatewayRequest } from "./omp/auth-gateway";
 import { isRecord } from "./type-guards";
 import { sanitizeWorkspaceBranch } from "./workspace-branch";
 
-/** Derive a workspace name from the first prompt; failures must not create a workspace. */
+/** Derive a workspace name from the first prompt; callers handle naming failures. */
 export async function workspacePromptNames(
   prompt: string,
   signal: AbortSignal,

@@ -577,7 +577,7 @@ export const workspaceHttpOperations: readonly HttpOperation[] = [
             WorkspaceDeleteResultSchema,
           ]),
         ),
-        502: error("Workspace name generation failed."),
+        499: error("Request cancelled before workspace creation starts."),
       },
     },
   ),

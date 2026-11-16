@@ -92942,7 +92942,7 @@
         }
       },
       "post": {
-        "description": "### Usage\n\nPrepare, create, configure or delete a registered workspace.\n\n### Inputs\n\nSend action, action-specific input and optional hostId; prepare requires projectPath and nonblank prompt.\n\n### Invariants\n\nPrepare requires a registered Git project and default base ref; deletion uses the host’s confirmation preconditions.\n\n### Effects\n\nPrepare and create start creation; settings can change configuration; delete removes a registered worktree and invalidates session lists.\n\n### Recovery\n\nAfter an uncertain result inspect job status and worktree state before retrying; deletion is not assumed rolled back.",
+        "description": "### Usage\n\nPrepare, create, configure or delete a registered workspace.\n\n### Inputs\n\nSend action, action-specific input and optional hostId; prepare requires projectPath and nonblank prompt.\n\n### Invariants\n\nPrepare requires a registered Git project and default base ref; if naming fails it uses a generic name and random branch. An aborted request does not start creation.\n\n### Effects\n\nPrepare and create start creation; settings can change configuration; delete removes a registered worktree and invalidates session lists.\n\n### Recovery\n\nAfter an uncertain result inspect job status and worktree state before retrying; deletion is not assumed rolled back.",
         "operationId": "workspaceWorktreesPost",
         "requestBody": {
           "content": {
@@ -93815,6 +93815,44 @@
             },
             "description": "Conflict: the workspace host does not match its session, the upload target exists, or another operation owns the resource."
           },
+          "499": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request cancelled before workspace creation starts."
+          },
           "500": {
             "content": {
               "application/json": {
@@ -93852,44 +93890,6 @@
               }
             },
             "description": "The operation failed."
-          },
-          "502": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "delivery": {
-                      "anyOf": [
-                        {
-                          "const": "refused",
-                          "type": "string"
-                        },
-                        {
-                          "const": "unknown",
-                          "type": "string"
-                        }
-                      ],
-                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "hostOffline": {
-                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
-                      "type": "boolean"
-                    }
-                  },
-                  "required": ["error"],
-                  "title": "ApiError",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Workspace name generation failed."
           },
           "503": {
             "content": {
@@ -93943,7 +93943,7 @@
         "x-client-semantics": {
           "Effects": "Prepare and create start creation; settings can change configuration; delete removes a registered worktree and invalidates session lists.",
           "Inputs": "Send action, action-specific input and optional hostId; prepare requires projectPath and nonblank prompt.",
-          "Invariants": "Prepare requires a registered Git project and default base ref; deletion uses the host’s confirmation preconditions.",
+          "Invariants": "Prepare requires a registered Git project and default base ref; if naming fails it uses a generic name and random branch. An aborted request does not start creation.",
           "Recovery": "After an uncertain result inspect job status and worktree state before retrying; deletion is not assumed rolled back.",
           "Usage": "Prepare, create, configure or delete a registered workspace."
         }

@@ -94,6 +94,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Removed runtime version numbers from the chat welcome screen
 
 ### Fixed
+- Prompt-first workspace creation continues with a safe fallback name and branch when model naming fails.
 - The advisor review notice aligns with the composer on desktop.
 - New chats opened from a workspace's tab bar use that workspace without showing project and workspace selectors.
 - New Session opens the project picker when no workspace is selected, then opens a chat in the selected project.

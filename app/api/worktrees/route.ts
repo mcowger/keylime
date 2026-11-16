@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import {
   apiErrorResponse,
   opErrorResponse,
@@ -57,7 +58,7 @@ export async function GET(request: Request) {
  * @apiContract workspaceWorktreesPost
  * @apiUsage Prepare, create, configure or delete a registered workspace.
  * @apiInputs Send action, action-specific input and optional hostId; prepare requires projectPath and nonblank prompt.
- * @apiInvariants Prepare requires a registered Git project and default base ref; deletion uses the host’s confirmation preconditions.
+ * @apiInvariants Prepare requires a registered Git project and default base ref; if naming fails it uses a generic name and random branch. An aborted request does not start creation.
  * @apiEffects Prepare and create start creation; settings can change configuration; delete removes a registered worktree and invalidates session lists.
  * @apiRecovery After an uncertain result inspect job status and worktree state before retrying; deletion is not assumed rolled back.
  */
@@ -135,14 +136,16 @@ export async function POST(request: Request) {
         try {
           names = await workspacePromptNames(prompt, request.signal);
         } catch {
-          return Response.json(
-            {
-              error: "Could not generate a workspace name",
-              code: "workspace_naming_failed",
-            },
-            { status: 502 },
-          );
+          names = {
+            name: "Workspace",
+            branch: `workspace-${randomBytes(4).toString("hex")}`,
+          };
         }
+        if (request.signal.aborted)
+          return Response.json(
+            { error: "Request cancelled", code: "request_cancelled" },
+            { status: 499 },
+          );
         const created = await resolved.host.workspaceOps.createWorkspace({
           projectPath,
           ...names,
