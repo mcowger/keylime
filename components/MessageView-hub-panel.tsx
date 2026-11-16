@@ -100,7 +100,7 @@ export function HubResultPanel({
         </div>
         {send.message ? (
           <MarkdownBody
-            className="markdown-hub-message"
+            className="markdown-custom-message markdown-hub-message"
             cwd={cwd}
             onOpenFile={onOpenFile}
             sourceSessionId={sourceSessionId}

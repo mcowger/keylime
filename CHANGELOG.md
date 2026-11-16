@@ -7,6 +7,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ## [Unreleased]
 
 ### Added
+- Seeded development sessions include an agent chat exchange for checking incoming and outgoing Markdown.
 - Untitled chats show a temporary topic label extracted from the first prompt until a generated or manually chosen title is available.
 - Seeded development sessions include completed and in-progress tasks for testing composer indicators.
 - Mobile composer controls use square icon actions, reduced padding, and compact running activity indicators.
@@ -60,6 +61,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Async results wrap long lines while preserving their output, and custom activity rows use compact copy and JSON controls alongside job status details
 - Ship opens as a per-workspace overlay instead of a global dialog, allowing sidebar workspace switching while the commit plan, PR description or Ship job runs. Returning to a workspace restores its Ship progress and edits. Each workspace and host has its own Ship flow
 - Ship dialog changed its close button to Close while work or a job is active, and Cancel otherwise
+- Seeded development sessions include an agent chat exchange for checking incoming and outgoing Markdown
 
 ### Changed
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.
@@ -99,6 +101,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- Agent chat Markdown uses the same compact text and heading styles as tool output.
 - Shipping a workspace returns to its project even if the workspace disappears from the sidebar before Ship finishes.
 - Open workspace chats refresh generated titles without a page reload, including chats opened on another tab.
 - Prompt-first workspace creation continues with a safe fallback name and branch when model naming fails.
@@ -207,6 +210,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Ship leaves the removed workspace when its hierarchy entry disappears, returning to the parent project instead of staying on the deleted workspace
 - The mobile sidebar toggle keeps the same menu icon whether the sidebar is open or closed
 - Project display names no longer reset while the field is being edited; saves are debounced
+- Agent chat Markdown uses the same compact text and styles as tool output
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

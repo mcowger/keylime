@@ -1384,23 +1384,31 @@ code {
 }
 
 .markdown-custom-message {
-  line-height: 1.32;
+  padding: 7px 8px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.4;
 }
-.markdown-custom-message p {
-  margin: 0;
+.markdown-hub-message {
+  padding: 0;
 }
-.markdown-custom-message h1,
-.markdown-custom-message h2,
-.markdown-custom-message h3,
-.markdown-custom-message h4,
-.markdown-custom-message h5,
-.markdown-custom-message h6 {
-  margin: 4px 0 2px;
-  line-height: 1.18;
-}
+.markdown-custom-message p,
 .markdown-custom-message ul,
 .markdown-custom-message ol {
-  margin: 2px 0 3px;
+  margin: 0 0 0.6em;
+}
+.markdown-custom-message > :is(p, ul, ol):last-child {
+  margin-bottom: 0;
+}
+.markdown-custom-message :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0 0 0.6em;
+  color: var(--text);
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 650;
+  line-height: inherit;
+  letter-spacing: normal;
 }
 .markdown-custom-message li {
   margin: 0;
