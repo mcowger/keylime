@@ -57,6 +57,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Sidebar host headings use consistent sizing and a host icon; the only connected host shows projects without a heading, while offline hosts remain grouped
 
 ### Fixed
+- Markdown tables keep readable column widths on mobile and scroll horizontally when needed.
 - Select menus no longer lock the page and shift it on iOS.
 - Kept the mobile toolbar below the iOS 27 standalone status-bar blur.
 - Development host hot reload now stops the previous daemon before starting its replacement, avoiding duplicate-daemon errors that shut down the dev server.
@@ -135,6 +136,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Development host hot reload stops the previous daemon before starting its replacement, preventing duplicate-daemon shutdowns
 - Runner warm-up failures avoid warnings during seeded UI browsing and give Keylime-specific build or fetch guidance
 - Expanded regression coverage for host reload, missing runners, diagnostics, and test fixtures
+- Markdown tables keep readable column widths on mobile and scroll horizontally when needed
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

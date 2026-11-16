@@ -1371,6 +1371,9 @@ code {
 }
 .markdown-body th,
 .markdown-body td {
+  min-width: 120px;
+  word-break: normal;
+  overflow-wrap: normal;
   border: 0;
   border-bottom: 1px solid var(--border);
   padding: 6px 10px;
