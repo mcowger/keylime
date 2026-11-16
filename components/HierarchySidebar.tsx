@@ -4,14 +4,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   Bot,
+  ChevronRight,
   FolderCog,
   FolderInput,
   Loader2,
   MoreHorizontal,
   Plus,
+  Server,
   Trash2,
   Wrench,
 } from "lucide-react";
+import { isLinkUp, type HostStatus } from "@/lib/hosts/host";
 import { getOutboxScope } from "@/lib/agent-client";
 import { addToOutbox, newOutboxId } from "@/lib/event-stream";
 import type {
@@ -28,7 +31,7 @@ import { ConfirmDialog } from "./ui/field";
 import { ProjectSettings } from "./ProjectsConfig";
 import { toast } from "./ui/toast";
 
-type Host = { id: string; label: string };
+type Host = { id: string; label: string; status?: HostStatus };
 type Props = {
   hosts: Host[];
   sessions: SessionInfo[];
@@ -89,6 +92,8 @@ export function HierarchySidebar({
   collapsedHosts,
   onToggleHost,
 }: Props) {
+  const connectedHosts = hosts.filter((host) => host.status && isLinkUp(host.status));
+  const ungroupedHostId = connectedHosts.length === 1 ? connectedHosts[0].id : hosts.length === 1 ? hosts[0].id : null;
   const sidebarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const dismissMenus = (event: PointerEvent) => {
@@ -516,37 +521,40 @@ export function HierarchySidebar({
       )}
       {hosts.map((host) => (
         <section key={host.id} style={{ marginBottom: 8 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "6px 4px",
-              color: "var(--text-muted)",
-            }}
-          >
-            <button
-              style={{
-                ...rowButton,
-                color: "var(--text-muted)",
-                fontWeight: 600,
-              }}
-              type="button"
-              aria-expanded={!collapsedHosts.has(host.id)}
-              onClick={() => onToggleHost(host.id)}
-            >
-              {collapsedHosts.has(host.id) ? "▸" : "▾"}{" "}
-              {host.label || "This machine"}
-            </button>
-            <button
-              style={button}
-              type="button"
-              onClick={() => onAddProject(host.id)}
-            >
-              Add project
-            </button>
-          </div>
-          {!collapsedHosts.has(host.id) &&
+          {host.id !== ungroupedHostId && (
+            <div style={{ display: "flex", alignItems: "center", gap: 2, padding: "4px 0 2px" }}>
+              <button
+                type="button"
+                className="ui-focus-ring"
+                aria-expanded={!collapsedHosts.has(host.id)}
+                onClick={() => onToggleHost(host.id)}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "3px 4px",
+                  border: 0,
+                  borderRadius: 6,
+                  background: "none",
+                  color: "var(--text-muted)",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  textAlign: "left",
+                  cursor: "pointer",
+                }}
+              >
+                <ChevronRight size={12} aria-hidden="true" style={{ flexShrink: 0, transform: collapsedHosts.has(host.id) ? undefined : "rotate(90deg)" }} />
+                <Server size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{host.label || "This machine"}</span>
+              </button>
+              <button style={{ ...button, padding: "3px 6px" }} type="button" aria-label={`Add project on ${host.label || "This machine"}`} title="Add project" onClick={() => onAddProject(host.id)}>
+                <Plus size={14} />
+              </button>
+            </div>
+          )}
+          {(host.id === ungroupedHostId || !collapsedHosts.has(host.id)) &&
             (snapshots[host.id]?.projects ?? []).map((project) => {
               const projectMatch =
                 !!query &&

@@ -91,7 +91,7 @@ function renderSidebar(
   );
 }
 
-test("registered hierarchy workspaces can be selected and hosts collapsed", async () => {
+test("registered hierarchy workspaces can be selected without a single-host heading", async () => {
   const hosts: (string | null)[] = [];
   const restore = setup((url) => {
     hosts.push(url.searchParams.get("host"));
@@ -106,10 +106,30 @@ test("registered hierarchy workspaces can be selected and hosts collapsed", asyn
     await waitFor(() =>
       assert.equal(workspace.getAttribute("aria-pressed"), "true"),
     );
-    fireEvent.click(screen.getByRole("button", { name: /This machine/ }));
-    assert.equal(screen.queryByRole("button", { name: "Workspace" }), null);
-    fireEvent.click(screen.getByRole("button", { name: /This machine/ }));
-    assert.ok(screen.getByRole("button", { name: "Workspace" }));
+    assert.equal(screen.queryByRole("button", { name: /This machine/ }), null);
+  } finally {
+    restore();
+  }
+});
+
+test("one connected host is ungrouped while offline host projects remain visible", async () => {
+  const restore = setup((url) => {
+    const offline = url.searchParams.get("host") === "remote";
+    return Response.json(offline ? { projects: [{ ...snapshot.projects[0], id: "remote-project", name: "Offline project", workspaces: [{ ...snapshot.projects[0].workspaces[0], id: "remote-workspace", name: "Offline workspace" }] }] } : snapshot);
+  });
+  try {
+    render(React.createElement(HierarchySidebar, {
+      hosts: [{ id: "local", label: "Local", status: "omp-missing" }, { id: "remote", label: "Remote", status: "offline" }],
+      sessions: [], selectedSessionId: null, selectedCwd: null, selectedHostId: "local",
+      onSelectWorkspace() {}, onWorkspaceRemoved() {}, onNewWorkspace() {}, onProjects() {}, onSnapshots() {},
+      searchQuery: "", matchedSessionIds: null, runningOnly: false,
+      runningSessionIds: new Set<string>(), awaitingInputIds: new Set<string>(), unreadSessionIds: new Set<string>(), exitedSessionIds: [],
+      collapsedHosts: new Set(["local"]), onToggleHost() {}, onSelectSession() {}, onAddProject() {}, onChanged() {},
+    }));
+    assert.ok(await screen.findByRole("button", { name: "Workspace" }));
+    assert.ok(await screen.findByRole("button", { name: "Offline workspace" }));
+    assert.equal(screen.queryByRole("button", { name: "Local" }), null);
+    assert.ok(screen.getByRole("button", { name: "Remote" }));
   } finally {
     restore();
   }

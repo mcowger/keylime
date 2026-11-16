@@ -6,9 +6,6 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ## [Unreleased]
 
-- Replaced the inherited ompweb logo and icons with the key lime logo.
-- Updated the product name to key lime across the interface and documentation.
-
 ### Added
 - `bun run deploy:local:fast:follow` streams the fast deployment log and waits for its detached worker to finish.
 - Added canonical TypeBox contracts and TypeBox Codegen bootstrapping across all HTTP handlers, host operations, browser commands, runner commands and events. OpenAPI, AsyncAPI and reusable JSON Schema are generated from source metadata with exhaustive registry and artifact drift checks; runtime validation is unchanged.
@@ -42,6 +39,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Ship can detect an existing open pull request and enable auto-merge on it without creating a duplicate
 
 ### Changed
+- Sidebar host headings use consistent sizing and a host icon; the only connected host shows projects without a heading, while offline hosts remain grouped.
 - Explicit skill prompts start collapsed; select the header to show their full instructions.
 - Reloading without a session link leaves projects unselected instead of activating the newest project.
 - Open workspace chats appear across clients connected to the same web server rather than only in the client that opened them.
@@ -56,6 +54,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Project names and workspace creation settings save automatically without separate save buttons
 - Paseo setup command parsing and ordering now distinguish multiline command lists from shell scripts; blocking command selections are revalidated when recipes change
 - Explicit skill prompts start collapsed; select the header to show their full instructions
+- Sidebar host headings use consistent sizing and a host icon; the only connected host shows projects without a heading, while offline hosts remain grouped
 
 ### Fixed
 - Client builds no longer warn about search highlight selectors.
