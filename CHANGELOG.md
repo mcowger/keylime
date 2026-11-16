@@ -12,7 +12,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Mobile composer controls use square icon actions, reduced padding, and compact running activity indicators.
 - Tool activity rows show available intent alongside their target.
 - Tool activity identifies messages to agents and calls to `xd://` devices by their destination instead of showing them as file writes.
-- Advisor messages use a distinct, theme-aware card with compact copy and JSON controls.
+- Advisor messages use a distinct, theme-aware card with a separate accent and compact copy and JSON controls.
 - `bun run deploy:local:fast:follow` streams the fast deployment log and waits for its detached worker to finish.
 - Added canonical TypeBox contracts and TypeBox Codegen bootstrapping across all HTTP handlers, host operations, browser commands, runner commands and events. OpenAPI, AsyncAPI and reusable JSON Schema are generated from source metadata with exhaustive registry and artifact drift checks; runtime validation is unchanged.
 - Generated API docs now include source-authored usage, input rules, invariants, side effects and recovery guidance. Route JSDoc is extracted into OpenAPI; generation rejects missing semantic sections or undocumented canonical schemas.

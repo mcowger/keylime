@@ -4006,16 +4006,22 @@ html[data-touch-targets="accessible"] .chat-scroll-bottom {
 }
 
 .advisor-message {
+  --advisor-accent: var(--text-muted);
   margin: 8px 0;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--advisor-accent);
   border-radius: var(--radius-card);
   background: var(--bg-subtle);
 }
+@supports (color: oklch(from red l c h)) {
+  .advisor-message {
+    --advisor-accent: oklch(from var(--accent) l c calc(h + 120));
+  }
+}
 .advisor-message-label {
   margin-bottom: 6px;
-  color: var(--accent);
+  color: var(--advisor-accent);
   font-size: 11px;
   font-weight: 600;
 }
