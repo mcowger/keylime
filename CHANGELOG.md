@@ -57,6 +57,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Sidebar host headings use consistent sizing and a host icon; the only connected host shows projects without a heading, while offline hosts remain grouped
 
 ### Fixed
+- Select menus no longer lock the page and shift it on iOS.
 - Client builds no longer warn about search highlight selectors.
 - Development, builds and local deployments no longer generate or validate API documentation; releases ship the checked-in documents.
 - API generation validates AsyncAPI documents without materializing unused parsed models, avoiding excessive deployment build time and memory. Generation now logs each validation stage.
@@ -124,6 +125,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Opening a workspace selects its first chat open on another browser and shows shared chats in the workspace tab bar
 - Background job completion notices show structured job summaries with status and duration; their original JSON remains available
 - Client builds no longer warn about search highlight selectors
+- Select menus no longer lock the page and shift it on iOS
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

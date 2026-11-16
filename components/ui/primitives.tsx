@@ -57,6 +57,7 @@ export const ThemedSelect = forwardRef<HTMLButtonElement, ThemedSelectProps>(
         disabled={disabled}
         required={required}
         name={name}
+        modal={false}
         onValueChange={(next) => {
           if (next !== null) onChange(next);
         }}
