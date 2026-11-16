@@ -58,7 +58,7 @@ export async function GET(request: Request) {
  * @apiContract workspaceWorktreesPost
  * @apiUsage Prepare, create, configure or delete a registered workspace.
  * @apiInputs Send action, action-specific input and optional hostId; prepare requires projectPath and nonblank prompt.
- * @apiInvariants Prepare requires a registered Git project and default base ref; if naming fails it uses a generic name and random branch. An aborted request does not start creation.
+ * @apiInvariants Prepare requires a registered Git project and default base ref; if naming fails or exceeds 10 seconds it uses a generic name and random branch. Cancellation before creation prevents it from starting.
  * @apiEffects Prepare and create start creation; settings can change configuration; delete removes a registered worktree and invalidates session lists.
  * @apiRecovery After an uncertain result inspect job status and worktree state before retrying; deletion is not assumed rolled back.
  */
@@ -133,13 +133,27 @@ export async function POST(request: Request) {
           );
         }
         let names: { name: string; branch: string };
+        const namingSignal = AbortSignal.any([
+          request.signal,
+          AbortSignal.timeout(10_000),
+        ]);
+        const { promise: aborted, reject: rejectAbort } =
+          Promise.withResolvers<never>();
+        const onAbort = () => rejectAbort(namingSignal.reason);
+        if (namingSignal.aborted) onAbort();
+        else namingSignal.addEventListener("abort", onAbort, { once: true });
         try {
-          names = await workspacePromptNames(prompt, request.signal);
+          names = await Promise.race([
+            workspacePromptNames(prompt, namingSignal),
+            aborted,
+          ]);
         } catch {
           names = {
             name: "Workspace",
             branch: `workspace-${randomBytes(4).toString("hex")}`,
           };
+        } finally {
+          namingSignal.removeEventListener("abort", onAbort);
         }
         if (request.signal.aborted)
           return Response.json(

@@ -92942,7 +92942,7 @@
         }
       },
       "post": {
-        "description": "### Usage\n\nPrepare, create, configure or delete a registered workspace.\n\n### Inputs\n\nSend action, action-specific input and optional hostId; prepare requires projectPath and nonblank prompt.\n\n### Invariants\n\nPrepare requires a registered Git project and default base ref; if naming fails it uses a generic name and random branch. An aborted request does not start creation.\n\n### Effects\n\nPrepare and create start creation; settings can change configuration; delete removes a registered worktree and invalidates session lists.\n\n### Recovery\n\nAfter an uncertain result inspect job status and worktree state before retrying; deletion is not assumed rolled back.",
+        "description": "### Usage\n\nPrepare, create, configure or delete a registered workspace.\n\n### Inputs\n\nSend action, action-specific input and optional hostId; prepare requires projectPath and nonblank prompt.\n\n### Invariants\n\nPrepare requires a registered Git project and default base ref; if naming fails or exceeds 10 seconds it uses a generic name and random branch. Cancellation before creation prevents it from starting.\n\n### Effects\n\nPrepare and create start creation; settings can change configuration; delete removes a registered worktree and invalidates session lists.\n\n### Recovery\n\nAfter an uncertain result inspect job status and worktree state before retrying; deletion is not assumed rolled back.",
         "operationId": "workspaceWorktreesPost",
         "requestBody": {
           "content": {
@@ -93943,7 +93943,7 @@
         "x-client-semantics": {
           "Effects": "Prepare and create start creation; settings can change configuration; delete removes a registered worktree and invalidates session lists.",
           "Inputs": "Send action, action-specific input and optional hostId; prepare requires projectPath and nonblank prompt.",
-          "Invariants": "Prepare requires a registered Git project and default base ref; if naming fails it uses a generic name and random branch. An aborted request does not start creation.",
+          "Invariants": "Prepare requires a registered Git project and default base ref; if naming fails or exceeds 10 seconds it uses a generic name and random branch. Cancellation before creation prevents it from starting.",
           "Recovery": "After an uncertain result inspect job status and worktree state before retrying; deletion is not assumed rolled back.",
           "Usage": "Prepare, create, configure or delete a registered workspace."
         }
