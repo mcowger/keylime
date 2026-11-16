@@ -49,7 +49,7 @@ import { ChatLiveTail } from "./ChatWindow-live-tail";
 import { HeldMessageView, MessageView } from "./MessageView";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ExtensionDialog } from "./ExtensionDialog";
-import { ShipDialog } from "./ShipDialog";
+import type { ShipTarget } from "./ShipDialog";
 import { useShipAvailability } from "@/hooks/useShipAvailability";
 import { SubagentTranscriptDialog } from "./SubagentTranscriptDialog";
 import { ChatMinimap, useMessageRefs } from "./ChatMinimap";
@@ -98,12 +98,8 @@ import { getFileName } from "@/lib/file-paths";
 interface Props {
   session: SessionInfo | null;
   shipButtonContainer?: HTMLDivElement | null;
-  shipWorkspace?: {
-    host: string;
-    projectPath: string;
-    path: string;
-    onRemoved: () => void;
-  };
+  shipWorkspace?: ShipTarget;
+  onShip?: (target: ShipTarget) => void;
   newSessionCwd: string | null;
   newSessionDraftKey?: string;
   prepareNewWorkspace?: (
@@ -544,6 +540,7 @@ export function ChatWindow({
   session,
   shipButtonContainer,
   shipWorkspace,
+  onShip,
   newSessionCwd,
   newSessionDraftKey,
   prepareNewWorkspace,
@@ -586,8 +583,7 @@ export function ChatWindow({
   onSearchTargetHandled,
 }: Props) {
   const { t, tn } = useI18n();
-  const [shipOpen, setShipOpen] = useState(false);
-  const nothingToShip = useShipAvailability(shipWorkspace?.host, shipWorkspace?.projectPath, shipWorkspace?.path, !!session && !shipOpen);
+  const nothingToShip = useShipAvailability(shipWorkspace?.host, shipWorkspace?.projectPath, shipWorkspace?.path, !!session);
   const chatWidth = useChatWidth();
   const fileSource = useMemo<WorkspaceFileSource>(
     () => ({
@@ -1657,28 +1653,12 @@ export function ChatWindow({
                             ? "Wait for the session to finish"
                             : nothingToShip ? "Nothing to ship" : "Ship workspace"
                         }
-                        onClick={() => setShipOpen(true)}
+                        onClick={() => onShip?.(shipWorkspace)}
                       >
                         <Ship size={16} aria-hidden="true" />
                       </button>,
                       shipButtonContainer,
                     )}
-                  <ShipDialog
-                    open={shipOpen}
-                    onOpenChange={setShipOpen}
-                    host={shipWorkspace.host}
-                    projectPath={shipWorkspace.projectPath}
-                    path={shipWorkspace.path}
-                    sessionId={session.id}
-                    onAskAgentToResolve={async (message) => {
-                      const result = await handleSend(message);
-                      if (result.status !== "accepted")
-                        throw new Error(
-                          "Could not submit the resolve request.",
-                        );
-                    }}
-                    onRemoved={shipWorkspace.onRemoved}
-                  />
                 </>
               )}
               {isDragOver && (

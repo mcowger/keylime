@@ -69,6 +69,12 @@ Teardown must not change the linked workspace's HEAD or branch identity, or the 
 
 Changing configuration source affects subsequent operations only and never reruns setup automatically. Returning to Manual also disables Paseo teardown for subsequent removals.
 
+## Shipping a workspace
+
+Ship opens over the workspace content, not the whole application. Use the sidebar to switch workspaces while the commit plan, PR description or Ship job runs. Returning to that workspace restores the same edits and progress, even if you open a different chat there. Each workspace and host has its own Ship flow, using the session that opened it.
+
+Background cleanup removes the shipped workspace's chat tabs and refreshes the hierarchy without switching you away from another workspace. Ship preparation and form state survive in-app navigation only, not a full-page reload. Closing Ship discards its browser state and stops progress tracking; it does not cancel runner commands or an already-started host job.
+
 ## Interactive terminals
 
 Open terminals from a workspace. Each terminal has its own application tab and shell, starting in that workspace's directory on its owning host. Local and linked hosts use the same daemon-backed terminal path. Terminals share workspace files with its sessions and other terminals.

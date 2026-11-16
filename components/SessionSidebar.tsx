@@ -104,6 +104,7 @@ import {
   SidebarPortalMenu,
 } from "./SessionSidebar-chrome";
 import { HierarchySidebar } from "./HierarchySidebar";
+import type { ShipTarget } from "./ShipDialog";
 
 /** Deadline for one /api/sessions fetch. A wedged-but-listening server never
  * answers; without this the initial spinner would pend forever. */
@@ -137,6 +138,7 @@ interface Props {
   refreshKey?: number;
   onSessionDeleted?: (sessionId: string) => void;
   onWorkspaceRemoved?: (path: string, host: string) => void;
+  onShip?: (target: ShipTarget) => void;
   selectedCwd?: string | null;
   /** Host `selectedCwd` lives on (this machine when absent). */
   selectedHostId?: string | null;
@@ -227,6 +229,7 @@ export const SessionSidebar = memo(function SessionSidebar({
   refreshKey,
   onSessionDeleted,
   onWorkspaceRemoved,
+  onShip,
   selectedCwd: selectedCwdProp,
   selectedHostId: selectedHostIdProp,
   onCwdChange,
@@ -2048,6 +2051,7 @@ export const SessionSidebar = memo(function SessionSidebar({
           selectedSessionId={selectedSessionId}
           selectedCwd={selectedCwd}
           selectedHostId={selectedHostId}
+          onShip={onShip}
           onSelectWorkspace={(path, host, latestSession) => {
             pendingWorkspaceDiscovery.current = loading ? { path, host } : null;
             lastNotifiedCwdRef.current = hostProjectKey(host, path);

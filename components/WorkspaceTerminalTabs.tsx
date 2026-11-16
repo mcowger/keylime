@@ -23,6 +23,7 @@ export function WorkspaceTerminalTabs({
   activeId,
   onSelect,
   enabled,
+  contentInert = false,
   chatTabs,
   openSessionIds,
   activeChatId,
@@ -43,6 +44,7 @@ export function WorkspaceTerminalTabs({
   activeId: string | null;
   onSelect: (id: string | null) => void;
   enabled: boolean;
+  contentInert?: boolean;
   chatTabs: { id: string; title: string; sessionId?: string }[];
   openSessionIds: string[];
   activeChatId: string | null;
@@ -430,12 +432,14 @@ export function WorkspaceTerminalTabs({
           {error}
         </div>
       )}
+      <div inert={contentInert ? true : undefined} style={{ display: "contents" }}>
       {entries.map((entry) => (
         <WorkspaceTerminal
           key={`${entry.hostId}:${entry.terminal.id}`}
           terminal={entry.terminal}
           hostId={entry.hostId}
           active={
+            !contentInert &&
             enabled &&
             entry.hostId === hostId &&
             entry.terminal.cwd === cwd &&
@@ -443,6 +447,7 @@ export function WorkspaceTerminalTabs({
           }
         />
       ))}
+      </div>
     </>
   );
 }

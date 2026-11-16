@@ -6,6 +6,7 @@ import type { SessionSidebar } from "./SessionSidebar";
 import type { ChatWindow } from "./ChatWindow";
 import type { WorkspaceTerminalTabs } from "./WorkspaceTerminalTabs";
 import type { EventStreamChannel } from "@/lib/event-stream";
+import type { ShipDialog } from "./ShipDialog";
 import { setDraft, clearDraft } from "@/lib/draft-store";
 import { newChatDraftKey } from "@/lib/project-ordering";
 const { render, fireEvent, waitFor, cleanup, act } =
@@ -20,18 +21,18 @@ const empty = () => null;
 mock.module("./SessionSidebar", () => ({
   SessionSidebar: (props: React.ComponentProps<typeof SessionSidebar>) => {
     React.useEffect(() => {
-      props.onWorkspaceOptionsChange!(projects, null, "/repo", "local");
+      props.onWorkspaceOptionsChange!([...projects, { path: "/repo/worktrees/B", hostId: "remote", name: "Remote B" }], null, "/repo", "local");
     }, []);
     React.useEffect(() => {
       if (props.selectedCwd)
         props.onCwdChange!(
           props.selectedCwd,
           props.selectedCwd,
-          "local",
+          props.selectedHostId ?? "local",
           undefined,
           true,
         );
-    }, [props.selectedCwd]);
+    }, [props.selectedCwd, props.selectedHostId]);
     return React.createElement(
       "nav",
       null,
@@ -79,6 +80,16 @@ mock.module("./SessionSidebar", () => ({
       }, "Open workspace with saved chat"),
       React.createElement("button", { onClick: () => props.onCwdChange!("/other", "/other", "local", undefined, false, undefined, "pending") }, "Pending workspace"),
       React.createElement("button", { onClick: () => props.onCwdChange!("/other", "/other", "local", undefined, false, { id: "late", cwd: "/other", path: "/late", created: "2026-11-14", modified: "2026-11-14", messageCount: 1, firstMessage: "hello" }, "resolved") }, "Resolve workspace"),
+      React.createElement("button", { onClick: () => {
+        props.onCwdChange!("/repo/worktrees/B", "/repo", "local");
+        props.onShip!({ host: "local", projectPath: "/repo", path: "/repo/worktrees/B", sessionId: "initiator" });
+      } }, "Ship B"),
+      React.createElement("button", { onClick: () => props.onShip!({ host: "local", projectPath: "/repo", path: "/repo/worktrees/B", sessionId: "other-session" }) }, "Reopen B"),
+      React.createElement("button", { onClick: () => {
+        props.onCwdChange!("/repo/worktrees/B", "/repo", "remote");
+        props.onShip!({ host: "remote", projectPath: "/repo", path: "/repo/worktrees/B", sessionId: "remote-initiator" });
+      } }, "Ship remote B"),
+      React.createElement("button", { onClick: () => props.onOpenSettings!() }, "Open settings"),
     );
   },
 }));
@@ -113,6 +124,16 @@ mock.module("./ChatWindow", () => ({
         "Create session",
       ),
     );
+  },
+}));
+const shipDialogs = new Map<string, React.ComponentProps<typeof ShipDialog>>();
+mock.module("./ShipDialog", () => ({
+  ShipDialog: (props: React.ComponentProps<typeof ShipDialog>) => {
+    shipDialogs.set(`${props.host}:${props.path}`, props);
+    const [draft, setDraft] = React.useState("");
+    return React.createElement("div", { hidden: !props.visible, "data-testid": `ship:${props.path}` },
+      React.createElement("input", { "aria-label": "Ship draft", value: draft, onChange: (event: React.ChangeEvent<HTMLInputElement>) => setDraft(event.target.value) }),
+      React.createElement("span", null, props.sessionId));
   },
 }));
 for (const [path, name] of [
@@ -183,6 +204,55 @@ globalThis.fetch = (async (url: Parameters<typeof fetch>[0]) =>
   )) as typeof fetch;
 const { AppShell } = await import("./AppShell.tsx");
 
+test("Ship survives workspace navigation and background completion preserves the current terminal", async () => {
+  sessionStorage.clear();
+  shipDialogs.clear();
+  window.history.replaceState(null, "", "/?cwd=%2Frepo");
+  const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+  await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
+  fireEvent.click(view.getByRole("button", { name: "Ship B" }));
+  await waitFor(() => assert.equal(tabProps.cwd, "/repo/worktrees/B"));
+  fireEvent.change(view.getByLabelText("Ship draft"), { target: { value: "keep this" } });
+  fireEvent.click(view.getByRole("button", { name: "Reopen B" }));
+  assert.equal(shipDialogs.get("local:/repo/worktrees/B")?.sessionId, "initiator");
+  fireEvent.click(view.getByRole("button", { name: "/other" }));
+  await waitFor(() => assert.equal(tabProps.cwd, "/other"));
+  act(() => tabProps.onSelect("terminal-other"));
+  const route = window.location.href;
+  act(() => shipDialogs.get("local:/repo/worktrees/B")!.onRemoved!());
+  assert.equal(window.location.href, route);
+  assert.equal(tabProps.cwd, "/other");
+  assert.equal(tabProps.activeId, "terminal-other");
+  fireEvent.click(view.getByRole("button", { name: "/repo/worktrees/B" }));
+  await waitFor(() => assert.equal((view.getByLabelText("Ship draft") as HTMLInputElement).value, "keep this"));
+  cleanup();
+});
+test("Ship flows on different hosts remain independent and completion in Settings does not navigate", async () => {
+  sessionStorage.clear();
+  shipDialogs.clear();
+  window.history.replaceState(null, "", "/?cwd=%2Frepo");
+  const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+  await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
+  fireEvent.click(view.getByRole("button", { name: "Ship B" }));
+  await waitFor(() => assert.equal(shipDialogs.get("local:/repo/worktrees/B")?.visible, true));
+  fireEvent.change(view.getByRole("textbox", { name: "Ship draft" }), { target: { value: "local draft" } });
+  fireEvent.click(view.getByRole("button", { name: "Ship remote B" }));
+  await waitFor(() => assert.equal(shipDialogs.get("remote:/repo/worktrees/B")?.visible, true));
+  fireEvent.change(view.getByRole("textbox", { name: "Ship draft" }), { target: { value: "remote draft" } });
+  assert.equal(shipDialogs.get("local:/repo/worktrees/B")?.visible, false);
+  fireEvent.click(view.getByRole("button", { name: "/repo/worktrees/B" }));
+  await waitFor(() => assert.equal((view.getByRole("textbox", { name: "Ship draft" }) as HTMLInputElement).value, "local draft"));
+  fireEvent.click(view.getByRole("button", { name: "Ship remote B" }));
+  await waitFor(() => assert.equal((view.getByRole("textbox", { name: "Ship draft" }) as HTMLInputElement).value, "remote draft"));
+  fireEvent.click(view.getByRole("button", { name: "Open settings" }));
+  await waitFor(() => assert.equal(shipDialogs.get("remote:/repo/worktrees/B")?.visible, false));
+  const route = window.location.href;
+  act(() => shipDialogs.get("remote:/repo/worktrees/B")!.onRemoved!());
+  assert.equal(window.location.href, route);
+  assert.equal(tabProps.hostId, "remote");
+  assert.equal(tabProps.cwd, "/repo/worktrees/B");
+  cleanup();
+});
 test("workspace entry opens its registered saved chat on a new browser", async () => {
   sessionStorage.clear();
   window.history.replaceState(null, "", "/?cwd=%2Frepo");

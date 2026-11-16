@@ -15,8 +15,6 @@ import {
   Wrench,
 } from "lucide-react";
 import { isLinkUp, type HostStatus } from "@/lib/hosts/host";
-import { getOutboxScope } from "@/lib/agent-client";
-import { addToOutbox, newOutboxId } from "@/lib/event-stream";
 import type {
   HierarchyProject,
   HierarchySnapshot,
@@ -26,7 +24,7 @@ import type { ManagedProject, SessionInfo } from "@/lib/types";
 import type { WorkspaceDeleteResult } from "@/lib/workspace-creation-types";
 import { WorktreesPanel } from "./WorktreesPanel";
 import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
-import { ShipDialog } from "./ShipDialog";
+import type { ShipTarget } from "./ShipDialog";
 import { useShipAvailability } from "@/hooks/useShipAvailability";
 import { ConfirmDialog } from "./ui/field";
 import { ProjectSettings } from "./ProjectsConfig";
@@ -63,6 +61,7 @@ type Props = {
   refreshKey?: number;
   onSelectWorkspace: (path: string, host: string, latestSession?: SessionInfo) => void;
   onWorkspaceRemoved: (path: string, host: string) => void;
+  onShip?: (target: ShipTarget) => void;
   onProjects: (projects: ManagedProject[]) => void;
   onSnapshots: (snapshots: Record<string, HierarchySnapshot>) => void;
   searchQuery: string;
@@ -109,6 +108,7 @@ export function HierarchySidebar({
   refreshKey,
   onSelectWorkspace,
   onWorkspaceRemoved,
+  onShip,
   onSelectSession,
   onAddProject,
   onNewWorkspace,
@@ -159,12 +159,6 @@ export function HierarchySidebar({
   } | null>(null);
   const [projectSettingsPending, setProjectSettingsPending] = useState(false);
   const [openWorkspaceMenu, setOpenWorkspaceMenu] = useState<string | null>(null);
-  const [shipTarget, setShipTarget] = useState<{
-    host: string;
-    projectPath: string;
-    path: string;
-    sessionId: string;
-  } | null>(null);
   const [finishTarget, setFinishTarget] = useState<{
     host: string;
     projectPath: string;
@@ -494,39 +488,6 @@ export function HierarchySidebar({
   } as const;
   return (
     <div ref={sidebarRef} style={{ fontSize: 12, color: "var(--text)" }}>
-      {shipTarget && (
-        <ShipDialog
-          open
-          onOpenChange={(open) => {
-            if (!open) setShipTarget(null);
-          }}
-          {...shipTarget}
-          onAskAgentToResolve={async (message) => {
-            let advisor = false;
-            try {
-              advisor =
-                localStorage.getItem(
-                  `omp-advisor-enabled:${shipTarget.sessionId}`,
-                ) === "true";
-            } catch {
-              // Storage can be unavailable; match the normal session default.
-            }
-            await addToOutbox({
-              id: newOutboxId(),
-              sessionId: shipTarget.sessionId,
-              scope: await getOutboxScope(shipTarget.sessionId),
-              advisor,
-              mode: "prompt",
-              message,
-              createdAt: Date.now(),
-            });
-          }}
-          onRemoved={() => {
-            onSelectWorkspace(shipTarget.projectPath, shipTarget.host);
-            onChanged();
-          }}
-        />
-      )}
       <ConfirmDialog
         open={finishTarget !== null}
         onOpenChange={(open) => {
@@ -939,7 +900,10 @@ export function HierarchySidebar({
                                     open={openWorkspaceMenu === `${host.id}:${workspace.path}`}
                                     disabled={workspace.unavailable || !latestSession || runningSessionIds.has(latestSession.id)}
                                     onClick={() => {
-                                      if (latestSession) setShipTarget({ host: host.id, projectPath: project.path, path: workspace.path, sessionId: latestSession.id });
+                                      if (latestSession) {
+                                        onSelectWorkspace(workspace.path, host.id, latestSession);
+                                        onShip?.({ host: host.id, projectPath: project.path, path: workspace.path, sessionId: latestSession.id });
+                                      }
                                     }}
                                   />
                                 )}

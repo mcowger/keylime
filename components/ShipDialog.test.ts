@@ -532,3 +532,96 @@ test("agent resolution submission cannot be sent twice while pending", async () 
     globalThis.fetch = originalFetch;
   }
 });
+
+test("hidden preparation completes once and preserves edits on reveal", async () => {
+  const originalFetch = globalThis.fetch;
+  const { promise: pendingPlan, resolve: finishPlan } = Promise.withResolvers<Response>();
+  const commands: string[] = [];
+  globalThis.fetch = Object.assign(
+    async (url: Parameters<typeof fetch>[0], init: RequestInit = {}) => {
+      if (String(url).startsWith("/api/ship?"))
+        return Response.json({
+          branch: "work", base: "main", ahead: 0, behind: 0, dirty: true,
+          baseDirty: true, issues: [], github: { repo: "owner/repo", gh: "ok" },
+        });
+      assert.match(String(url), /session/);
+      const command = JSON.parse(String(init.body)) as Command;
+      commands.push(command.type);
+      if (command.type === "commit_plan") return pendingPlan;
+      if (command.type === "generate_pr_description")
+        return Response.json({ success: true, data: { title: "Title", body: "Body" } });
+      throw new Error(`Unexpected command ${command.type}`);
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+  const props = {
+    open: true, onOpenChange() {}, host: "local", projectPath: "/repo",
+    path: "/work", sessionId: "session", onAskAgentToResolve: async () => {},
+  };
+  try {
+    const view = render(React.createElement(ShipDialog, props));
+    await waitFor(() => assert.deepEqual(commands, ["commit_plan"]));
+    view.rerender(React.createElement(ShipDialog, { ...props, visible: false }));
+    assert.equal(view.queryByRole("dialog"), null);
+    finishPlan(Response.json({ success: true, data: { plan: {
+      kind: "single", commits: [{ message: "Original", files: ["file.ts"] }],
+      changelog: [], warnings: [], usedFallback: false,
+    } } }));
+    await waitFor(() => assert.deepEqual(commands, ["commit_plan", "generate_pr_description"]));
+    view.rerender(React.createElement(ShipDialog, props));
+    const message = await view.findByLabelText("Commit 1 message");
+    const description = await view.findByLabelText("PR description");
+    fireEvent.change(message, { target: { value: "Edited commit" } });
+    fireEvent.change(description, { target: { value: "Edited description" } });
+    view.rerender(React.createElement(ShipDialog, { ...props, visible: false }));
+    view.rerender(React.createElement(ShipDialog, props));
+    assert.equal((view.getByLabelText("Commit 1 message") as HTMLTextAreaElement).value, "Edited commit");
+    assert.equal((view.getByLabelText("PR description") as HTMLTextAreaElement).value, "Edited description");
+    assert.deepEqual(commands, ["commit_plan", "generate_pr_description"]);
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("ship job polling continues while hidden and restores progress", async () => {
+  const originalFetch = globalThis.fetch;
+  let polls = 0;
+  globalThis.fetch = Object.assign(
+    async (url: Parameters<typeof fetch>[0], init: RequestInit = {}) => {
+      const path = String(url);
+      if (path.startsWith("/api/ship?"))
+        return Response.json({ branch: "work", base: "main", ahead: 1, behind: 0,
+          dirty: false, baseDirty: false, issues: [], github: { repo: null, gh: "missing" } });
+      if (path.startsWith("/api/agent/"))
+        return Response.json({ success: true, data: { plan: null } });
+      if (path === "/api/ship")
+        return Response.json({ id: "job", status: "running", steps: [{ name: "push", status: "running" }] });
+      if (path.startsWith("/api/ship/job?")) {
+        polls++;
+        return Response.json({ id: "job", status: "conflict", steps: [{ name: "push", status: "done" }], conflictFiles: ["file.ts"] });
+      }
+      throw new Error(`Unexpected request ${path} ${init.method}`);
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+  const props = {
+    open: true, onOpenChange() {}, host: "local", projectPath: "/repo",
+    path: "/work", sessionId: "session", onAskAgentToResolve: async () => {},
+  };
+  try {
+    const view = render(React.createElement(ShipDialog, props));
+    await waitFor(() => assert.equal((view.getByRole("button", { name: "Ship" }) as HTMLButtonElement).disabled, false));
+    fireEvent.click(view.getByRole("button", { name: "Ship" }));
+    await view.findByText(/push/);
+    view.rerender(React.createElement(ShipDialog, { ...props, visible: false }));
+    assert.equal(view.queryByRole("dialog"), null);
+    await waitFor(() => assert.equal(polls, 1), { timeout: 3000 });
+    view.rerender(React.createElement(ShipDialog, props));
+    await view.findByText(/file\.ts/);
+    assert.ok(view.getByRole("button", { name: "Ask agent to resolve" }));
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
+});

@@ -58,6 +58,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Advisor findings show their severity and use the same limited Markdown rendering as thinking blocks
 - Late LSP diagnostics show severity, source and location as separate findings, with wrapped multiline messages and a compact copy control. The timeline row remains collapsible
 - Async results wrap long lines while preserving their output, and custom activity rows use compact copy and JSON controls alongside job status details
+- Ship opens as a per-workspace overlay instead of a global dialog, allowing sidebar workspace switching while the commit plan, PR description or Ship job runs. Returning to a workspace restores its Ship progress and edits. Each workspace and host has its own Ship flow
+- Ship dialog changed its close button to Close while work or a job is active, and Cancel otherwise
 
 ### Changed
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.
@@ -89,6 +91,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts
 - The Ship workspace action uses an icon with an accessible label
 - The composer task button uses a checklist icon instead of a plain checkmark
+- The Ship workspace dialog moved from a global modal to a per-workspace overlay so the sidebar stays usable during Ship operations
 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen
@@ -195,6 +198,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The advisor review notice aligns with the composer on desktop
 - The empty-chat composer follows the configured chat width instead of a fixed 760px column
 - Hide the composer task indicator when all remaining tasks are deleted
+- Closing Ship during work no longer cancels runner commands or an already-started host job; it only stops progress tracking and discards browser state
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

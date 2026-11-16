@@ -11,12 +11,12 @@ import type {
   ShipMode,
   ShipPreview,
 } from "@/lib/workspace-ship-types";
-import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
 import { Alert, Check, Field, Select, TextInput } from "./ui/field";
 import { toast } from "./ui/toast";
 
 interface Props {
   open: boolean;
+  visible?: boolean;
   onOpenChange: (open: boolean) => void;
   host: string;
   projectPath: string;
@@ -25,6 +25,8 @@ interface Props {
   onAskAgentToResolve: (message: string) => Promise<void>;
   onRemoved?: () => void;
 }
+
+export type ShipTarget = Pick<Props, "host" | "projectPath" | "path" | "sessionId">;
 
 async function json<T>(url: string, init: RequestInit): Promise<T> {
   const response = await fetch(url, init);
@@ -68,6 +70,7 @@ const secondaryButtonStyle: CSSProperties = {
 
 export function ShipDialog({
   open,
+  visible = true,
   onOpenChange,
   host,
   projectPath,
@@ -277,18 +280,45 @@ export function ShipDialog({
     (mode === "local" && !!preview?.baseDirty) ||
     (mode !== "local" &&
       (!!githubReason || (!pr && !(mode === "pr-auto" && existingPr))));
+  if (!open || !visible) return null;
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        zIndex: 10,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 12,
+        background: "var(--overlay-backdrop)",
+        backdropFilter: "blur(2px)",
+      }}
+    >
+      <section
+        role="dialog"
+        aria-label="Ship workspace"
+        onKeyDown={(event) => {
+          if (event.key === "Escape") onOpenChange(false);
+        }}
         style={{
+          boxSizing: "border-box",
           width: 640,
-          maxWidth: "95vw",
-          maxHeight: "90vh",
+          maxWidth: "100%",
+          maxHeight: "100%",
+          minHeight: 0,
           padding: 22,
           overflowY: "auto",
+          background: "var(--bg)",
+          color: "var(--text)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-modal)",
+          boxShadow: "var(--shadow-modal)",
         }}
       >
-        <DialogTitle>Ship workspace</DialogTitle>
+        <h2 className="display-heading" style={{ fontSize: 20, margin: "0 0 12px" }}>
+          Ship workspace
+        </h2>
         {error && (
           <Alert
             variant="error"
@@ -653,7 +683,7 @@ export function ShipDialog({
             style={secondaryButtonStyle}
             onClick={() => onOpenChange(false)}
           >
-            Cancel
+            {working || job ? "Close" : "Cancel"}
           </button>
           {!job && (
             <button
@@ -677,7 +707,7 @@ export function ShipDialog({
             </button>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </section>
+    </div>
   );
 }

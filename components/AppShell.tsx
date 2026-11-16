@@ -35,6 +35,7 @@ import {
 import { ConfirmDialog } from "./ui/field";
 import { ThemedSelect } from "./ui/primitives";
 import { ChatWindow } from "./ChatWindow";
+import { ShipDialog, type ShipTarget } from "./ShipDialog";
 import { type Tab } from "./TabBar";
 import { WorkspaceTerminalTabs } from "./WorkspaceTerminalTabs";
 import { type FileExplorerHandle } from "./FileExplorer";
@@ -113,8 +114,8 @@ import type {
 } from "@/lib/types";
 import type { HierarchySnapshot } from "@/lib/project-hierarchy-types";
 import { runHostTool } from "@/hooks/useAgentSession-stream";
-import { sendAgentCommand } from "@/lib/agent-client";
-import { openEventStream, type EventStream } from "@/lib/event-stream";
+import { getOutboxScope, sendAgentCommand } from "@/lib/agent-client";
+import { addToOutbox, newOutboxId, openEventStream, type EventStream } from "@/lib/event-stream";
 import type { ChatInputHandle } from "./ChatInput";
 import type { SessionStatsInfo, GenerationSpeedInfo } from "@/lib/pi-types";
 import type { SettingsTab } from "./SettingsTabs";
@@ -229,6 +230,12 @@ export function AppShell({ appName }: { appName: string }) {
     null,
   );
   const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
+  const [shipFlows, setShipFlows] = useState<ShipTarget[]>([]);
+  const openShip = useCallback((target: ShipTarget) => {
+    setShipFlows((flows) => flows.some((flow) =>
+      hostProjectKey(flow.host, flow.path) === hostProjectKey(target.host, target.path)
+    ) ? flows : [...flows, target]);
+  }, []);
   // The transient identity belongs to one intentional new chat, not one request attempt.
   const [newSessionCwd, setNewSessionCwd] = useState<string | null>(null);
   // Host of newSessionCwd; undefined is this machine. Every host-aware state
@@ -2663,6 +2670,15 @@ export function AppShell({ appName }: { appName: string }) {
       return path === root || path.startsWith(root === "/" ? "/" : `${root}/`);
     })
     .sort((a, b) => b.path.length - a.path.length)[0];
+  const visibleShipKey = !settingsTab && terminalWorkspace
+    ? hostProjectKey(workspaceHostId, terminalWorkspace.path)
+    : null;
+  const shipVisible = shipFlows.some((flow) => hostProjectKey(flow.host, flow.path) === visibleShipKey);
+  const shipSelectionRef = useRef({ visibleShipKey, projects: workspaceOptions.projects });
+  shipSelectionRef.current = { visibleShipKey, projects: workspaceOptions.projects };
+  useEffect(() => {
+    if (shipVisible && rightPanelIsModal) closeRightPanel();
+  }, [shipVisible, rightPanelIsModal, closeRightPanel]);
   const newSessionGroupKey = newSessionHostKey;
   const hostProjects = workspaceOptions.projects.filter(
     (project) => (project.hostId ?? LOCAL_HOST_ID) === newSessionGroupKey,
@@ -2847,6 +2863,7 @@ export function AppShell({ appName }: { appName: string }) {
       onSelectSession={handleSelectSession}
       onNewSession={handleNewSession}
       onNewWorkspace={handleNewWorkspace}
+      onShip={openShip}
       initialSessionId={null}
       skipInitialProjectSelection={initialNavigation.requestedCwd !== null}
       onInitialRestoreDone={handleInitialRestoreDone}
@@ -3128,6 +3145,7 @@ export function AppShell({ appName }: { appName: string }) {
             }}
           >
             <WorkspaceTerminalTabs
+              contentInert={shipVisible}
               hostId={workspaceHostId}
               cwd={terminalWorkspace?.path ?? null}
               activeId={activeTerminalId}
@@ -3273,6 +3291,8 @@ export function AppShell({ appName }: { appName: string }) {
                 )
               }
             />
+            <div style={{ flex: 1, minHeight: 0, minWidth: 0, position: "relative", display: "flex", flexDirection: "column" }}>
+            <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
             {settingsTab ? (
               <SettingsConfig
                 activeTab={settingsTab}
@@ -3940,6 +3960,7 @@ export function AppShell({ appName }: { appName: string }) {
 
                 {/* Chat content */}
                 <div
+                  inert={shipVisible ? true : undefined}
                   style={{
                     flex: 1,
                     overflow: "hidden",
@@ -3979,26 +4000,10 @@ export function AppShell({ appName }: { appName: string }) {
                           host,
                           projectPath: workspace.projectPath,
                           path: workspace.path,
-                          onRemoved: () => {
-                            updateChatTabs((tabs) =>
-                              tabs.filter(
-                                (tab) =>
-                                  !tabInWorkspace(
-                                    tab,
-                                    workspace.path,
-                                    host,
-                                    workspaceOptions.projects,
-                                  ),
-                              ),
-                            );
-                            activateChat(null);
-                            setActiveCwd(workspace.projectPath!);
-                            setActiveHostId(remoteHostId(host));
-                            router.replace("/");
-                            setRefreshKey((key) => key + 1);
-                          },
+                          sessionId: selectedSession.id,
                         };
                       })()}
+                      onShip={openShip}
                       activityContainer={activityContainer}
                       sidebarActivityContainer={
                         isMobile ? null : sidebarActivityContainer
@@ -4449,6 +4454,42 @@ export function AppShell({ appName }: { appName: string }) {
                 </div>
               </>
             )}
+            </div>
+            <div style={{ position: "absolute", inset: "var(--shell-topbar-height) 0 0", pointerEvents: shipVisible ? "auto" : "none" }}>
+            {shipFlows.map((target) => {
+              const key = hostProjectKey(target.host, target.path);
+              return <ShipDialog
+                key={key}
+                open
+                visible={key === visibleShipKey}
+                onOpenChange={(open) => {
+                  if (!open) setShipFlows((flows) => flows.filter((flow) => hostProjectKey(flow.host, flow.path) !== key));
+                }}
+                {...target}
+                onAskAgentToResolve={async (message) => {
+                  let advisor = false;
+                  try {
+                    advisor = localStorage.getItem(`omp-advisor-enabled:${target.sessionId}`) === "true";
+                  } catch {
+                    // Storage can be unavailable; match the normal session default.
+                  }
+                  await addToOutbox({ id: newOutboxId(), sessionId: target.sessionId, scope: await getOutboxScope(target.sessionId), advisor, mode: "prompt", message, createdAt: Date.now() });
+                }}
+                onRemoved={() => {
+                  const selection = shipSelectionRef.current;
+                  updateChatTabs((tabs) => tabs.filter((tab) => !tabInWorkspace(tab, target.path, target.host, selection.projects)));
+                  setRefreshKey((value) => value + 1);
+                  if (selection.visibleShipKey === key) {
+                    activateChat(null);
+                    setActiveCwd(target.projectPath);
+                    setActiveHostId(remoteHostId(target.host));
+                    router.replace("/");
+                  }
+                }}
+              />;
+            })}
+            </div>
+            </div>
           </main>
           {rightPanelIsModal && (
             <div
@@ -4458,6 +4499,7 @@ export function AppShell({ appName }: { appName: string }) {
             />
           )}
           {!settingsTab && rightPanelHasOpened && (
+            <div inert={shipVisible ? true : undefined} style={{ display: "contents" }}>
             <RightPanel
               onActivityContainerChange={setActivityContainer}
               fileTabs={fileTabs}
@@ -4510,6 +4552,7 @@ export function AppShell({ appName }: { appName: string }) {
               onRightPanelResizeStart={handleRightPanelResizeStart}
               onRightPanelResizeKey={handleRightPanelResizeKey}
             />
+            </div>
           )}
         </div>
         <LocalDaemonBanner />
