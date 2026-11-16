@@ -155,6 +155,7 @@ type ChatTab = {
   creation: { id?: string; initialization?: string };
   workspaceProject?: string;
   workspaceJob?: WorkspaceCreationJob;
+  workspaceFixed?: boolean;
 };
 
 function tabInWorkspace(
@@ -1526,6 +1527,7 @@ export function AppShell({ appName }: { appName: string }) {
       _project?: ManagedProject,
       initialization?: string,
       keepSidebarOpen = false,
+      workspaceFixed = false,
     ) => {
       setActiveTerminalId(null);
       sessionLookupVersion.current += 1;
@@ -1542,6 +1544,7 @@ export function AppShell({ appName }: { appName: string }) {
         hostId: remoteHostId(hostId),
         session: null,
         creation: { id: creationId || browserUUID(), initialization },
+        workspaceFixed,
       };
       if (!existing) updateChatTabs((tabs) => [...tabs, tab]);
       activateChat(tab);
@@ -3263,6 +3266,10 @@ export function AppShell({ appName }: { appName: string }) {
                   browserUUID(),
                   terminalWorkspace?.path ?? null,
                   workspaceHostId,
+                  undefined,
+                  undefined,
+                  false,
+                  true,
                 )
               }
             />
@@ -4028,7 +4035,7 @@ export function AppShell({ appName }: { appName: string }) {
                                 pendingWorkspace,
                             )?.projectName ?? projectLabel(pendingWorkspace)}
                           </div>
-                        ) : (
+                        ) : !chatTabs.find((tab) => tab.id === activeChatId)?.workspaceFixed && (
                           effectiveNewSessionCwd && (
                             <div className="new-session-workspace">
                               {creationTargets.length > 1 && (
