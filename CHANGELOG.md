@@ -78,6 +78,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Operational notices, task chat and compaction use expandable transcript rows; advisor responses render as conversation text
 
 ### Fixed
+- Assistant timestamps appear after the active turn settles instead of moving between tool rows.
 - Toast titles use the application's standard font instead of the display serif.
 - Images referenced from system temporary directories can be displayed, and blocked local images report their path instead of showing a broken preview.
 - Hide the composer task button when all tasks are complete.
@@ -167,6 +168,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Project settings and workspace configuration controls fit within narrow mobile dialogs
 - Toast titles use the application's standard font instead of the display serif
 - Images referenced from system temporary directories can be displayed, and blocked local images report their path instead of showing a broken preview
+- Assistant timestamps appear after the active turn settles instead of moving between tool rows
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

@@ -357,7 +357,7 @@ interface CommittedTranscriptProps {
  * change `streamingMessage`, rendered separately) do not re-run the O(history)
  * grouping/splitting work at display-frame cadence.
  */
-const CommittedTranscript = memo(function CommittedTranscript({
+export const CommittedTranscript = memo(function CommittedTranscript({
   messages,
   entryIds,
   conversationMeta,
@@ -409,18 +409,21 @@ const CommittedTranscript = memo(function CommittedTranscript({
     let showTimestamp = false;
     if (msg.role === "assistant") {
       showTimestamp = true;
+      let followedByUser = false;
       for (let j = idx + 1; j < messages.length; j++) {
         const r = messages[j].role;
-        if (r === "user") break;
+        if (r === "user") {
+          followedByUser = true;
+          break;
+        }
         if (r === "assistant") {
           showTimestamp = false;
           break;
         }
       }
-      // Hide on the currently-streaming tail (the streaming bubble owns the live timestamp)
-      if (showTimestamp && isStreaming && idx === messages.length - 1) {
+      // A running turn can append more assistant/tool rows; show its timestamp only once settled.
+      if ((sessionBusy || externalRunActive || isStreaming) && !followedByUser)
         showTimestamp = false;
-      }
     }
     if (options.showTimestamp !== undefined)
       showTimestamp = options.showTimestamp;
