@@ -17,6 +17,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable } from "node:stream";
+import { captureExpectedConsole } from "../../tests/expected-console.ts";
 import type { AgentEvent } from "../rpc-manager.ts";
 import type { LinkSocket, LinkSocketData } from "./hub.ts";
 
@@ -563,7 +564,16 @@ test("the host refuses session paths outside its sessions directory", async () =
 /** The new session the streaming test starts; it stays live, idle, on the daemon. */
 let countSessionId: string;
 
-test("a remote session streams a reply with no frame lost or duplicated across link breaks", async () => {
+test("a remote session streams a reply with no frame lost or duplicated across link breaks", async (t) => {
+  let sessionId: string | undefined;
+  captureExpectedConsole(
+    t,
+    "warn",
+    (message) =>
+      sessionId !== undefined &&
+      message ===
+        `[omp-web] could not title session ${sessionId}: Laptop is offline`,
+  );
   const remote = host();
   const { session, realSessionId } = await startRpcSession(
     "",
@@ -575,6 +585,7 @@ test("a remote session streams a reply with no frame lost or duplicated across l
     undefined,
     remote,
   );
+  sessionId = realSessionId;
   countSessionId = realSessionId;
   assert.equal(session.host, remote);
   const texts: number[] = [];

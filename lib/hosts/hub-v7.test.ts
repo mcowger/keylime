@@ -11,6 +11,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { mock } from "bun:test";
 import type { TestContext } from "node:test";
+import { captureExpectedConsole } from "../../tests/expected-console.ts";
 import type { DownMessage } from "./link-protocol.ts";
 import type { Host } from "./host.ts";
 import type { LinkDriver as Driver } from "./link-driver.test-helper.ts";
@@ -597,6 +598,13 @@ test("a cluster member gets the master's configuration version on the open launc
 });
 
 test("an invalid master configuration refuses a member's start with 409 cluster_config_invalid and sends nothing", async (t) => {
+  captureExpectedConsole(
+    t,
+    "warn",
+    (message) =>
+      message ===
+      "[omp-web] cluster members cannot get this machine's configuration (invalid_settings: config.yml is not a map of settings)",
+  );
   const link = await sharingLink(t, "Config invalid", { share: false });
   seedCluster(t, link.id);
   master = async () => {
@@ -643,6 +651,16 @@ test("a pure join on a member is neither refused nor given a version", async (t)
 });
 
 test("a master configuration the members cannot get is in the hosts snapshot, its code and message only, until it works again", async (t) => {
+  captureExpectedConsole(
+    t,
+    "warn",
+    (message) =>
+      typeof message === "string" &&
+      (message ===
+        "[omp-web] cluster members cannot get this machine's configuration (unknown: TypeError)" ||
+        message ===
+          "[omp-web] cluster members cannot get this machine's configuration (file_too_large: rules/big.md is 6000000 bytes, over the 5242880 byte limit)"),
+  );
   const failure = new ClusterConfigError(
     "file_too_large",
     "rules/big.md is 6000000 bytes, over the 5242880 byte limit",
@@ -1154,6 +1172,13 @@ test("v7 hello eagerly joins background runs and resync restores the daemon snap
 
 test("v7 failed adoption and unidentifiable hello children close only membership", async (t) => {
   const id = sessionId();
+  captureExpectedConsole(
+    t,
+    "warn",
+    (message) =>
+      message ===
+      `[omp-web] left the shared omp child of session ${id} on Shared ${id} running: this server could not adopt it (get_state failed)`,
+  );
   const { messages, closes, ch } = await sharedLink(t, id, {
     listed: true,
     fail: "get_state",

@@ -476,9 +476,11 @@ test("new workspace chat proceeds while post setup is running or has failed", as
     );
     fireEvent.click(view.getByRole("button", { name: "New workspace" }));
     await waitFor(() => assert.equal(typeof prepareWorkspace, "function"));
-    assert.deepEqual(await prepareWorkspace("first prompt"), {
-      cwd: "/repo/worktrees/feature",
-      name: "Feature",
+    await act(async () => {
+      assert.deepEqual(await prepareWorkspace("first prompt"), {
+        cwd: "/repo/worktrees/feature",
+        name: "Feature",
+      });
     });
     cleanup();
     status = "failed";
@@ -488,9 +490,11 @@ test("new workspace chat proceeds while post setup is running or has failed", as
     );
     fireEvent.click(second.getByRole("button", { name: "New workspace" }));
     await waitFor(() => assert.equal(typeof prepareWorkspace, "function"));
-    assert.deepEqual(await prepareWorkspace("first prompt"), {
-      cwd: "/repo/worktrees/feature",
-      name: "Feature",
+    await act(async () => {
+      assert.deepEqual(await prepareWorkspace("first prompt"), {
+        cwd: "/repo/worktrees/feature",
+        name: "Feature",
+      });
     });
   } finally {
     cleanup();
@@ -504,6 +508,8 @@ test("new workspace chat waits for blocking setup and rejects its failure", asyn
   window.history.replaceState(null, "", "/?cwd=%2Frepo");
   let fail = false;
   const { promise: gate, resolve: release } = Promise.withResolvers<void>();
+  const { promise: statusRequested, resolve: requested } =
+    Promise.withResolvers<void>();
   const job = (stage: string, status = "running") => ({
     id: "job",
     input: { name: "Feature" },
@@ -520,6 +526,7 @@ test("new workspace chat waits for blocking setup and rejects its failure", asyn
     if (String(url) === "/api/worktrees" && options?.method === "POST")
       return Response.json(job("postBlocking", fail ? "failed" : "running"));
     if (String(url).includes("action=status")) {
+      requested();
       await gate;
       return Response.json(job("postNonBlocking"));
     }
@@ -536,16 +543,21 @@ test("new workspace chat waits for blocking setup and rejects its failure", asyn
     fireEvent.click(view.getByRole("button", { name: "New workspace" }));
     await waitFor(() => assert.equal(typeof prepareWorkspace, "function"));
     let settled = false;
-    const pending = prepareWorkspace("prompt").then((value) => {
-      settled = true;
-      return value;
+    let pending = Promise.resolve<unknown>(undefined);
+    await act(async () => {
+      pending = prepareWorkspace("prompt").then((value) => {
+        settled = true;
+        return value;
+      });
     });
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    await act(async () => statusRequested);
     assert.equal(settled, false);
-    release();
-    assert.deepEqual(await pending, {
-      cwd: "/repo/worktrees/feature",
-      name: "Feature",
+    await act(async () => {
+      release();
+      assert.deepEqual(await pending, {
+        cwd: "/repo/worktrees/feature",
+        name: "Feature",
+      });
     });
     cleanup();
     fail = true;
@@ -562,7 +574,9 @@ test("new workspace chat waits for blocking setup and rejects its failure", asyn
     );
     fireEvent.click(second.getByRole("button", { name: "New workspace" }));
     await waitFor(() => assert.equal(typeof prepareWorkspace, "function"));
-    await assert.rejects(prepareWorkspace("prompt"), /blocking failed/);
+    await act(async () => {
+      await assert.rejects(prepareWorkspace("prompt"), /blocking failed/);
+    });
   } finally {
     cleanup();
     globalThis.fetch = originalFetch;

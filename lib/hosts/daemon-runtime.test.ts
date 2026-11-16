@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { captureExpectedConsole } from "../../tests/expected-console.ts";
 import {
   encodeBlobFrame,
   encodeLine,
@@ -226,6 +227,14 @@ function hub(
 }
 
 test("configuration reload, source ops/uploads and peer-only deletion preserve other links and one process", async (t) => {
+  captureExpectedConsole(
+    t,
+    "error",
+    (message) =>
+      typeof message === "string" &&
+      message.startsWith("[ompweb host] could not reload host.json: ") &&
+      message.endsWith("/host.json is not valid host link configuration"),
+  );
   const a = hub(t),
     b = hub(t),
     c = hub(t);
@@ -928,6 +937,13 @@ test("an open with a version the member lacks applies it before omp starts; host
 });
 
 test("a failing apply starts no process and answers cluster_config_failed", async (t) => {
+  captureExpectedConsole(
+    t,
+    "error",
+    (message) =>
+      message ===
+      "[ompweb host] cluster-config: applying failed: the master answered 500 for the manifest",
+  );
   const config = masterConfig("master rules two\n");
   config.fail = true;
   const a = hub(t, true, { version: LINK_PROTOCOL_VERSION, config }),
@@ -1191,6 +1207,15 @@ test("one cluster per host: another server is refused naming the holding one, wh
 });
 
 test("a master that stops answering fails the apply within the time limit, and the daemon stops at once during a stalled request", async (t) => {
+  captureExpectedConsole(
+    t,
+    "error",
+    (message) =>
+      message ===
+        "[ompweb host] cluster-config: applying failed: the master did not send the manifest within 0.3 s" ||
+      message ===
+        "[ompweb host] cluster-config: applying failed: the host daemon is stopping",
+  );
   const { clusterConfigTimings } = await import("./daemon-cluster-config.ts");
   const config = masterConfig("master rules seven\n"),
     version = config.build.manifest.version;

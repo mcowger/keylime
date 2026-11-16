@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync, renameSync, statSync } from "fs";
 import { join } from "path";
 import { getDiagnosticsDir } from "@/lib/omp/paths";
+import { resolveOmpBin, sourceCheckoutOmpBin } from "@/lib/omp/omp-cli";
 
 export async function register(): Promise<void> {
   // Modules add SIGINT/SIGTERM cleanup listeners (lib/rpc-manager.ts), and any
@@ -40,14 +41,14 @@ export async function register(): Promise<void> {
     }
   })();
 
-  // Warm the shared utility omp process so the first models/auth request does
-  // not pay the multi-second cold spawn (measured 1.2-4s on a real install).
-  // Fire-and-forget: register() must not block boot, and a missing omp binary
-  // is reported per-request by the routes — log once here and move on.
+  // Warm the shared utility runner when installed so the first models/auth
+  // request avoids its cold spawn. Seeded browsing does not need a runner;
+  // requests that require one report its absence themselves.
   // The shared process registers its own SIGINT/SIGTERM/exit disposal hook on
   // first use (lib/omp/rpc-utility.ts), as the session registry does.
   void (async () => {
     try {
+      if (!process.env.OMP_WEB_OMP_BIN && !resolveOmpBin()) return;
       const { runUtilityCommand } = await import("@/lib/omp/rpc-utility");
       await runUtilityCommand({ type: "get_state" });
       const { getOmpVersion } = await import("@/lib/omp/omp-cli");
@@ -56,12 +57,12 @@ export async function register(): Promise<void> {
         `[omp-web] omp utility ready (${version ?? "version unknown"})`,
       );
     } catch (error) {
-      const { resolveOmpBin } = await import("@/lib/omp/omp-cli");
-      const bin = resolveOmpBin();
       const detail = error instanceof Error ? error.message : String(error);
-      const hint = bin
-        ? `resolved ${bin}; repair with: omp update (or: bun install -g @oh-my-pi/pi-coding-agent@latest)`
-        : "omp binary not found; install oh-my-pi or set OMP_WEB_OMP_BIN";
+      const hint = process.env.OMP_WEB_OMP_BIN
+        ? "check OMP_WEB_OMP_BIN; it must point to a working Keylime ompweb-omp runner, not stock omp"
+        : sourceCheckoutOmpBin()
+          ? "build the checkout runner with: bun runner/scripts/build-binary.ts"
+          : "fetch this release's runner with: ompweb fetch-omp";
       console.warn(
         `[omp-web] omp utility warm-up failed (routes will retry on demand): ${detail} — ${hint}`,
       );

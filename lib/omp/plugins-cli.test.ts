@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import test, { after } from "node:test";
 
 const scratch = mkdtempSync(join(tmpdir(), "omp-web-plugins-cli-test-"));
@@ -279,9 +279,25 @@ test("an aborted signal ends a running omp", async (t) => {
   }
 });
 
-test("a missing omp rejects", async () => {
-  await assert.rejects(
-    runOmpCli(["plugin", "list", "--json"], 5_000),
-    /ompweb-omp\) not found\. Reinstall ompweb/,
+test("a missing Keylime runner rejects without invoking stock omp on PATH", async (t) => {
+  const directory = join(scratch, "stock-omp");
+  const invoked = join(directory, "invoked");
+  mkdirSync(directory);
+  writeFileSync(
+    join(directory, "omp"),
+    `#!${process.execPath}\nawait Bun.write(${JSON.stringify(invoked)}, "invoked");\nconsole.log('{"npm":[],"marketplace":[]}');\n`,
+    { mode: 0o755 },
+  );
+  const previousPath = process.env.PATH;
+  process.env.PATH = directory + delimiter + (previousPath ?? "");
+  t.after(() => {
+    if (previousPath === undefined) delete process.env.PATH;
+    else process.env.PATH = previousPath;
+  });
+  await assert.rejects(runOmpCli(["plugin", "list", "--json"], 5_000), Error);
+  assert.equal(
+    existsSync(invoked),
+    false,
+    "stock omp must never be a fallback",
   );
 });

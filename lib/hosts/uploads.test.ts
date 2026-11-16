@@ -20,6 +20,7 @@ import { Writable } from "node:stream";
 import test, { after } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 import { mockBuiltin } from "../../tests/mock-builtin.ts";
+import { captureExpectedConsole } from "../../tests/expected-console.ts";
 import type { UploadAck } from "./uploads";
 import type * as UploadModule from "./uploads.ts";
 import type { sweepSentUploads as SweepSentUploads } from "./upload-retention.ts";
@@ -104,9 +105,19 @@ test("sweep aborts an open upload idle past STAGED_MAX_AGE_MS, keeps a fresh ope
   );
 });
 
-test("a sweep that cannot delete an idle upload's files resolves, still cleans the rest, and lets new uploads start", async () => {
+test("a sweep that cannot delete an idle upload's files resolves, still cleans the rest, and lets new uploads start", async (t) => {
   const { dir, staged, part } = staging();
   const stuck = randomUUID();
+  captureExpectedConsole(
+    t,
+    "error",
+    (message) =>
+      typeof message === "string" &&
+      message.startsWith(
+        `[ompweb host] could not delete staged upload ${stuck}:`,
+      ) &&
+      message.includes("EISDIR"),
+  );
   await staged.start({
     id: stuck,
     attempt: randomUUID(),

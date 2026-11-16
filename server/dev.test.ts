@@ -146,9 +146,35 @@ test(
           OMP_WEB_DISABLE_AUTOUPDATE: "1",
         },
         stdout: "pipe",
-        stderr: "inherit",
+        stderr: "pipe",
       },
     );
+    const stderr = (async () => {
+      const reader = parent.stderr.getReader();
+      const decoder = new TextDecoder();
+      let pending = "";
+      const forward = (line: string) => {
+        if (
+          !line.startsWith(
+            "[omp-web] omp utility warm-up failed (routes will retry on demand):",
+          ) ||
+          !line.includes("check OMP_WEB_OMP_BIN")
+        )
+          process.stderr.write(line);
+      };
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        pending += decoder.decode(value, { stream: true });
+        let end: number;
+        while ((end = pending.indexOf("\n")) !== -1) {
+          forward(pending.slice(0, end + 1));
+          pending = pending.slice(end + 1);
+        }
+      }
+      pending += decoder.decode();
+      if (pending) forward(pending);
+    })();
     t.after(async () => {
       try {
         process.kill(-parent.pid, "SIGKILL");
@@ -156,6 +182,7 @@ test(
         if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
       }
       await parent.exited;
+      await stderr;
       rmSync(home, { recursive: true, force: true });
     });
     const reader = parent.stdout.getReader();

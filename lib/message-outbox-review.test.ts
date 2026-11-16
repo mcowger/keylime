@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test, { after, afterEach, beforeEach } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Database } from "bun:sqlite";
+import { captureExpectedConsole } from "../tests/expected-console.ts";
 import type { Host, SpawnRequest } from "./hosts/host.ts";
 import type { RpcTransport } from "./omp/rpc-transport.ts";
 import type { SessionOps } from "./hosts/session-ops.ts";
@@ -1227,7 +1228,13 @@ test("a message sent while a settlement's read is in flight joins that read and 
   assert.equal(transports.length, 1);
 });
 
-test("a failed settle read leaves the unsent message held for a retry", async () => {
+test("a failed settle read leaves the unsent message held for a retry", async (t) => {
+  captureExpectedConsole(
+    t,
+    "warn",
+    (message) =>
+      message === "[omp-web] outbox: settle read failed: state unavailable",
+  );
   const sid = "settle-read-failed";
   const { session, transport } = await ambiguousSession(sid);
   transport.settled = true;
@@ -2700,7 +2707,15 @@ test(
 test(
   "starting the peer observer after a startup failure resyncs already-subscribed chats",
   { timeout: 10_000 },
-  async () => {
+  async (t) => {
+    captureExpectedConsole(
+      t,
+      "warn",
+      (message) =>
+        typeof message === "string" &&
+        message.startsWith("[omp-web] outbox startup failed: ") &&
+        message.includes("readonly database"),
+    );
     const sid = uuid(40);
     await add(sid, "peer-during-startup");
     await until(

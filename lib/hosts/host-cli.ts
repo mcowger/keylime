@@ -44,7 +44,7 @@ function readTokenLine(): Promise<string> {
   return promise;
 }
 
-async function main(argv: string[]): Promise<number> {
+async function main(argv: string[], signal?: AbortSignal): Promise<number> {
   if (argv[0] === "login" || argv[0] === "logout") {
     const add = argv[0] === "login" && argv.includes("--add");
     const args = add ? argv.filter((arg) => arg !== "--add") : argv;
@@ -100,6 +100,7 @@ async function main(argv: string[]): Promise<number> {
       import("./omp-socket"),
       import("../omp/runner-fetch"),
     ]);
+  if (signal?.aborted) return 0;
   // Sessions need the runner; until it is here they fail with OMP_NOT_FOUND and the next start retries.
   void ensureOmpRunner().catch((error: unknown) =>
     console.error(
@@ -112,6 +113,7 @@ async function main(argv: string[]): Promise<number> {
     return daemon.control(command);
   });
   try {
+    if (signal?.aborted) return 0;
     daemon = runHostDaemon({
       allowHttp: argv.includes("--allow-http"),
       hostSocket: hostSocketPath(),
@@ -119,13 +121,17 @@ async function main(argv: string[]): Promise<number> {
     // Worker cutover starts fail-closed; ordinary hosts have no maintenance environment.
     if (process.env.OMP_WEB_HOST_DRAINED === "1") daemon.control("drain");
     const stop = () => void daemon!.stop();
-    for (const signal of ["SIGINT", "SIGTERM"] as const)
-      process.once(signal, stop);
+    if (signal) signal.addEventListener("abort", stop, { once: true });
+    else
+      for (const name of ["SIGINT", "SIGTERM"] as const)
+        process.once(name, stop);
     try {
       return await daemon.done;
     } finally {
-      for (const signal of ["SIGINT", "SIGTERM"] as const)
-        process.removeListener(signal, stop);
+      if (signal) signal.removeEventListener("abort", stop);
+      else
+        for (const name of ["SIGINT", "SIGTERM"] as const)
+          process.removeListener(name, stop);
     }
   } finally {
     await daemon?.stop();
@@ -133,9 +139,12 @@ async function main(argv: string[]): Promise<number> {
   }
 }
 
-/** `ompweb host <argv>`: the exit code; errors are printed, never thrown. */
-export function runHostCli(argv: string[]): Promise<number> {
-  return main(argv).catch((error: unknown) => {
+/** `ompweb host <argv>`: errors are printed and return 1. A supplied signal owns shutdown instead of process listeners. */
+export function runHostCli(
+  argv: string[],
+  signal?: AbortSignal,
+): Promise<number> {
+  return main(argv, signal).catch((error: unknown) => {
     console.error(
       `ompweb host: ${error instanceof Error ? error.message : String(error)}`,
     );

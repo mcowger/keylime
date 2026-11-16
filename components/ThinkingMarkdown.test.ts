@@ -61,6 +61,7 @@ test("wait output retains spacing between thinking blocks but not after the last
   );
   const dom = new JSDOM(
     `<style>${css}</style><div class="tool-call-output-markdown">${render("First\n\nSecond")}</div>`,
+    { url: "https://omp.test/" },
   );
   const paragraphs = dom.window.document.querySelectorAll(
     ".thinking-markdown > p",

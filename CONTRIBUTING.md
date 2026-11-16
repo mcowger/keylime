@@ -14,9 +14,10 @@ bun runner/scripts/use-omp-build.ts && (cd runner && bun install --frozen-lockfi
 bun run dev   # seeded development server; prints its URL
 ```
 
-For live sessions, build the runner for this machine with `bun runner/scripts/build-binary.ts`: key lime finds
-`runner/release/ompweb-omp-<os>-<arch>` by itself (`OMP_WEB_OMP_BIN` overrides it). A stock `omp` does not
-speak key lime's channel.
+Seeded UI browsing does not need a runner. For live sessions and model/auth
+features, build it with `bun runner/scripts/build-binary.ts`: key lime finds
+`runner/release/ompweb-omp-<os>-<arch>` by itself (`OMP_WEB_OMP_BIN` overrides it).
+A stock `omp` does not speak key lime's channel.
 
 Worktrees created with the repository's Paseo setup copy ignored `runner/vendor/` packages from the source checkout before setup. If those packages are missing or do not match the worktree's pin, run `bun runner/scripts/use-omp-build.ts` and then install the runner dependencies. The runner binary is not built during worktree setup; `bun run smoke` builds it before running the smoke checks.
 
@@ -38,6 +39,11 @@ sessions, and stored logins aren't copied. Inherited `OMP_*`, `OMPWEB_*`, `PI_*`
 and XDG settings are cleared, and subprocesses don't load `.env` files. Other
 environment variables, including provider API keys, remain available. The runner
 uses this checkout's normal discovery; build it as described above for live sessions.
+
+Host source changes replace the daemon inside the existing Bun process: the old
+daemon stops and releases its control endpoint before the new implementation
+starts. Reloads stop live agents and workspace terminals; they do not preserve
+in-flight work. The web server stays running while the host reconnects.
 
 Each run creates two sample projects, including a Git worktree with an untracked
 file, three saved conversations, and sample web settings in the temporary home.

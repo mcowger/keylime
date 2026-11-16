@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
+import { captureExpectedConsole } from "../tests/expected-console.ts";
 import type { AgentSessionWrapper as SessionWrapper } from "./rpc-manager.ts";
 import type { HostStatus } from "./hosts/host.ts";
 
@@ -1582,7 +1583,16 @@ test("a queued native template requires one new queue occurrence rather than a s
 test(
   "a dispatcher error before the claim retries on its own, without another add or host hello",
   { timeout: 15_000 },
-  async () => {
+  async (t) => {
+    captureExpectedConsole(
+      t,
+      "warn",
+      (message) =>
+        typeof message === "string" &&
+        message.startsWith(
+          "[omp-web] outbox delivery failed: JSON Parse error",
+        ),
+    );
     hostStatus = "online";
     const sid = "pre-claim-error";
     const w = wrapper(sid, { running: true });

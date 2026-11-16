@@ -13,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { captureExpectedConsole } from "../tests/expected-console";
 
 // Some tests narrow PATH, so use the current Bun executable by absolute path.
 const NODE = process.execPath;
@@ -461,7 +462,15 @@ test("main ompweb bin forwards the systemd subcommand", () => {
   assert.equal(result.stdout.trim(), require("../package.json").version);
 });
 
-test("runCli handles help and unknown commands without systemd", async () => {
+test("runCli handles help and unknown commands without systemd", async (t) => {
+  captureExpectedConsole(t, "log", (message) =>
+    String(message).startsWith("Usage: ompweb-systemd"),
+  );
+  captureExpectedConsole(
+    t,
+    "error",
+    (message) => message === "Unknown command: bogus-command",
+  );
   assert.deepEqual((await runCli(["--help"])).exitCode, 0);
   assert.deepEqual((await runCli(["bogus-command"])).exitCode, 2);
 });

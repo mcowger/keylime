@@ -9,6 +9,9 @@ const dom = new JSDOM(
     pretendToBeVisual: true,
   },
 );
+// jsdom has no canvas renderer. Model an unavailable context without its
+// not-implemented diagnostic; rendering-specific tests install their own fixture.
+dom.window.HTMLCanvasElement.prototype.getContext = () => null;
 const globals = {
   window: dom.window,
   document: dom.window.document,

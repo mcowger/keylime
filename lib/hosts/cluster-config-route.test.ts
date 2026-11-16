@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after, beforeEach } from "node:test";
 import { mock } from "bun:test";
+import { captureExpectedConsole } from "../../tests/expected-console.ts";
 import type { ManifestFile, PluginEntry } from "./cluster-config.ts";
 
 const scratch = realpathSync(
@@ -179,7 +180,17 @@ beforeEach(() => {
 });
 
 // These two run first: the plugin list is module state, and "none ever read" only holds before the first success.
-test("with no plugin list ever read, a failing omp is 409 unreadable and concurrent requests run it once", async () => {
+test("with no plugin list ever read, a failing omp is 409 unreadable and concurrent requests run it once", async (t) => {
+  captureExpectedConsole(
+    t,
+    "log",
+    (message) =>
+      typeof message === "string" &&
+      (message === "[omp-web] cluster-config the plugin list cannot be read" ||
+        /^\[omp-web\] cluster-config [\w-]+ unreadable the plugin list cannot be read \(omp plugin list failed\)$/.test(
+          message,
+        )),
+  );
   const token = clusterMember();
   writeFileSync(pluginsFile, "FAIL");
   writeFileSync(countFile, "");
@@ -193,7 +204,14 @@ test("with no plugin list ever read, a failing omp is 409 unreadable and concurr
   assert.equal(realFs.readFileSync(countFile, "utf8").length, 1);
 });
 
-test("a failure after a success keeps serving the last good plugin list", async () => {
+test("a failure after a success keeps serving the last good plugin list", async (t) => {
+  captureExpectedConsole(
+    t,
+    "log",
+    (message) =>
+      message ===
+      "[omp-web] cluster-config the plugin list cannot be read; serving the last one read",
+  );
   const token = clusterMember();
   writeFileSync(countFile, "");
   writeFileSync(
@@ -327,7 +345,16 @@ test("a hash that is not in the manifest, or not a hash, is 404", async () => {
     assert.equal((await getFile(token, hash)).status, 404, hash);
 });
 
-test("a master file over the limit is 409 file_too_large on the manifest", async () => {
+test("a master file over the limit is 409 file_too_large on the manifest", async (t) => {
+  captureExpectedConsole(
+    t,
+    "log",
+    (message) =>
+      typeof message === "string" &&
+      /^\[omp-web\] cluster-config [\w-]+ file_too_large AGENTS\.md is 5242881 bytes, over the 5242880 byte limit$/.test(
+        message,
+      ),
+  );
   const token = clusterMember();
   writeFileSync(join(agentDir, "AGENTS.md"), Buffer.alloc(5_242_881));
   const response = await getManifest(token);
@@ -475,7 +502,16 @@ test("a host revoked or removed from the cluster while the configuration is buil
   }
 });
 
-test("a mirrored directory that cannot be read is 409 unreadable, also when the last build had none", async () => {
+test("a mirrored directory that cannot be read is 409 unreadable, also when the last build had none", async (t) => {
+  captureExpectedConsole(
+    t,
+    "log",
+    (message) =>
+      typeof message === "string" &&
+      /^\[omp-web\] cluster-config [\w-]+ unreadable skills cannot be read \(EACCES\)$/.test(
+        message,
+      ),
+  );
   const token = clusterMember();
   rmSync(join(agentDir, "skills"), { recursive: true, force: true });
   assert.equal((await getManifest(token)).status, 200);

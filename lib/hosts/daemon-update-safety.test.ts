@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after, type TestContext } from "node:test";
+import { captureExpectedConsole } from "../../tests/expected-console.ts";
 
 const scratch = realpathSync(
   mkdtempSync(join(tmpdir(), "ompweb-daemon-update-safety-")),
@@ -249,6 +250,15 @@ test("a daemon welcome writes the real updater health acknowledgement", async (t
 });
 
 test("a malformed update status does not prevent ordinary host sessions from starting", async (t) => {
+  captureExpectedConsole(
+    t,
+    "error",
+    (message) =>
+      typeof message === "string" &&
+      message.startsWith(
+        "[ompweb host] could not read host update status: JSON Parse error",
+      ),
+  );
   await start(t);
   writeFileSync(join(root, "status.json"), "{broken", { mode: 0o600 });
   assert.equal((await spawn("normal")).ok, true);

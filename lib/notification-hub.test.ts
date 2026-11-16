@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import test from "node:test";
 import type { TestContext } from "node:test";
+import { captureExpectedConsole } from "../tests/expected-console.ts";
 import type {
   NotificationEvent,
   NotificationPrefs,
@@ -417,6 +418,13 @@ test("pushes are written in English with urgency by type", async (t) => {
 
 for (const status of [404, 410]) {
   test(`a push service ${status} removes the subscription but keeps the device prefs`, async (t) => {
+    captureExpectedConsole(
+      t,
+      "warn",
+      (message, detail) =>
+        message === "[notifications] push failed:" &&
+        detail === `push service answered ${status}`,
+    );
     isolatedStore(t);
     webpush.sendNotification = async () => {
       throw new webpush.WebPushError(

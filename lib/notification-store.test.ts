@@ -16,6 +16,7 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { promisify } from "node:util";
 import type { TestContext } from "node:test";
+import { captureExpectedConsole } from "../tests/expected-console.ts";
 import type {
   NotificationPrefs,
   NotificationType,
@@ -346,6 +347,11 @@ test("a leftover notifications.json does not overwrite an existing store", (t) =
 test("a corrupt notifications.json stays in place and the store starts empty", (t) => {
   const { dir } = isolated(t);
   const file = writeLegacy(dir, "{not json");
+  captureExpectedConsole(
+    t,
+    "warn",
+    (message) => message === `[notifications] ignoring unreadable ${file}`,
+  );
   assert.deepEqual(store.listDevices(), []);
   assert.ok(existsSync(file));
 });

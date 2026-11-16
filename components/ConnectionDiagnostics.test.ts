@@ -327,6 +327,6 @@ test("with storage refusing writes, the choice still holds for this page load", 
     assert.ok(await screen.findByRole("tab", { name: "Connection" }));
   } finally {
     proto.setItem = setItem;
-    setConnectionDiagnosticsEnabled(false);
+    act(() => setConnectionDiagnosticsEnabled(false));
   }
 });

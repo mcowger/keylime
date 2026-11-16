@@ -18,6 +18,7 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { gzipSync } from "node:zlib";
+import { captureExpectedConsole } from "../../tests/expected-console.ts";
 import {
   nodeBinary,
   releaseArchive,
@@ -245,7 +246,14 @@ function stubReleaseFetch(archive: Buffer, asset: { digest?: string }) {
   };
 }
 
-test("Bun install pins the candidate, swaps the whole release and the new daemon acknowledges for real", async () => {
+test("Bun install pins the candidate, swaps the whole release and the new daemon acknowledges for real", async (t) => {
+  captureExpectedConsole(
+    t,
+    "warn",
+    (message) =>
+      message ===
+      "ompweb 2.0.0 has no preflight command; its omp was not checked",
+  );
   const f = await fixture("npm-success");
   writeFileSync(join(f.attempt, "runtime"), "a copied runtime");
   assert.equal(
@@ -273,7 +281,14 @@ test("Bun install pins the candidate, swaps the whole release and the new daemon
   );
 });
 
-test("bun install pins the candidate and keeps its private dependencies inside the swapped release", async () => {
+test("bun install pins the candidate and keeps its private dependencies inside the swapped release", async (t) => {
+  captureExpectedConsole(
+    t,
+    "warn",
+    (message) =>
+      message ===
+      "ompweb 2.0.0 has no preflight command; its omp was not checked",
+  );
   const f = await fixture("bun-success", { method: "bun" });
   mkdirSync(join(f.work, "candidate-modules", "private-dep"), {
     recursive: true,
@@ -294,7 +309,14 @@ test("bun install pins the candidate and keeps its private dependencies inside t
   );
 });
 
-test("a candidate that dies at launch restores the old release, relaunches it and leaves a durable failure", async () => {
+test("a candidate that dies at launch restores the old release, relaunches it and leaves a durable failure", async (t) => {
+  captureExpectedConsole(
+    t,
+    "warn",
+    (message) =>
+      message ===
+      "ompweb 2.0.0 has no preflight command; its omp was not checked",
+  );
   const f = await fixture("rollback", { candidate: "exit" });
   assert.equal(await worker.runHostUpdateWorker(f.descriptorPath), 1);
   assert.equal(versionOf(f.install), "1.0.0");
@@ -308,7 +330,14 @@ test("a candidate that dies at launch restores the old release, relaunches it an
   assert.equal(versionOf(f.failed), "2.0.0");
 });
 
-test("a daemon acknowledging another version is rejected and rolled back, not accepted for its id and pid", async () => {
+test("a daemon acknowledging another version is rejected and rolled back, not accepted for its id and pid", async (t) => {
+  captureExpectedConsole(
+    t,
+    "warn",
+    (message) =>
+      message ===
+      "ompweb 2.0.0 has no preflight command; its omp was not checked",
+  );
   const f = await fixture("wrong-version", { candidate: "wrong-version" });
   assert.equal(await worker.runHostUpdateWorker(f.descriptorPath), 1);
   assert.match(status().operation.error, /acknowledged version 0\.0\.1/);
@@ -316,7 +345,14 @@ test("a daemon acknowledging another version is rejected and rolled back, not ac
   assert.equal(read(join(f.attempt, "health.json")).version, "1.0.0");
 });
 
-test("an acknowledgement from a live process other than the launched daemon is ignored: the dead candidate is rolled back", async () => {
+test("an acknowledgement from a live process other than the launched daemon is ignored: the dead candidate is rolled back", async (t) => {
+  captureExpectedConsole(
+    t,
+    "warn",
+    (message) =>
+      message ===
+      "ompweb 2.0.0 has no preflight command; its omp was not checked",
+  );
   const f = await fixture("forged-ack", { candidate: "forged-ack" });
   assert.equal(
     await worker.runHostUpdateWorker(f.descriptorPath),
@@ -694,7 +730,14 @@ test("an installation already used by another process is refused without stoppin
   assert.equal(alive(f.daemon.pid), true);
 });
 
-test("a process that starts using the installation while the candidate stages is caught before the daemon stops", async () => {
+test("a process that starts using the installation while the candidate stages is caught before the daemon stops", async (t) => {
+  captureExpectedConsole(
+    t,
+    "warn",
+    (message) =>
+      message ===
+      "ompweb 2.0.0 has no preflight command; its omp was not checked",
+  );
   const f = await fixture("shared-after-stage", { webDuringInstall: true });
   try {
     assert.equal(await worker.runHostUpdateWorker(f.descriptorPath), 1);
@@ -709,7 +752,14 @@ test("a process that starts using the installation while the candidate stages is
   }
 });
 
-test("a shared Bun installation already holding the candidate restarts only the host", async () => {
+test("a shared Bun installation already holding the candidate restarts only the host", async (t) => {
+  captureExpectedConsole(
+    t,
+    "warn",
+    (message) =>
+      message ===
+      "ompweb 2.0.0 has no preflight command; its omp was not checked",
+  );
   const f = await fixture("restart-only", { restartOnly: true });
   const web = await idleWebOn(f.install);
   rmSync(f.work + "/manager.cjs", { force: true });
@@ -724,7 +774,14 @@ test("a shared Bun installation already holding the candidate restarts only the 
   assert.equal(read(join(f.attempt, "health.json")).version, "2.0.0");
 });
 
-test("a shared binary installation already holding the candidate restarts only the host", async () => {
+test("a shared binary installation already holding the candidate restarts only the host", async (t) => {
+  captureExpectedConsole(
+    t,
+    "warn",
+    (message) =>
+      message ===
+      "ompweb 2.0.0 has no preflight command; its omp was not checked",
+  );
   const f = await fixture("restart-only-binary", {
     binary: true,
     restartOnly: true,
@@ -748,7 +805,14 @@ test("a shared binary installation already holding the candidate restarts only t
   }
 });
 
-test("restart-only of a binary installation from before the preflight command restarts it unchecked", async () => {
+test("restart-only of a binary installation from before the preflight command restarts it unchecked", async (t) => {
+  captureExpectedConsole(
+    t,
+    "warn",
+    (message) =>
+      message ===
+      "ompweb 2.0.0 has no preflight command; its omp was not checked",
+  );
   const f = await fixture("restart-only-no-preflight", {
     binary: true,
     restartOnly: true,
@@ -792,7 +856,14 @@ test("restart-only binary refuses an executable that reports another version", a
   assert.equal(alive(f.daemon.pid), true);
 });
 
-test("restart-only launch failure is durable and does not claim the old runtime can be restored", async () => {
+test("restart-only launch failure is durable and does not claim the old runtime can be restored", async (t) => {
+  captureExpectedConsole(
+    t,
+    "warn",
+    (message) =>
+      message ===
+      "ompweb 2.0.0 has no preflight command; its omp was not checked",
+  );
   const f = await fixture("restart-failure", { restartOnly: true });
   writeRelease(f.install, "2.0.0", "exit");
   assert.equal(await worker.runHostUpdateWorker(f.descriptorPath), 1);
@@ -820,7 +891,14 @@ test("a recycled daemon pid is never signalled: the recorded process identity mu
   assert.equal(versionOf(f.install), "1.0.0");
 });
 
-test("a daemon that already exited is not an error: the update proceeds without signalling anything", async () => {
+test("a daemon that already exited is not an error: the update proceeds without signalling anything", async (t) => {
+  captureExpectedConsole(
+    t,
+    "warn",
+    (message) =>
+      message ===
+      "ompweb 2.0.0 has no preflight command; its omp was not checked",
+  );
   const f = await fixture("dead-original");
   f.daemon.kill("SIGKILL");
   while (alive(f.daemon.pid)) await wait(50);

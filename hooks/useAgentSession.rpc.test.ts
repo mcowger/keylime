@@ -2,6 +2,7 @@ import "../tests/setup-dom.ts";
 import assert from "node:assert/strict";
 import test, { afterEach, beforeEach } from "node:test";
 import type { TestContext } from "node:test";
+import { captureExpectedConsole } from "../tests/expected-console";
 import React from "react";
 import { existsSync, readFileSync } from "node:fs";
 import { mock } from "bun:test";
@@ -730,6 +731,17 @@ async function settle(ms = 120) {
   await act(async () => {
     await sleep(ms);
   });
+}
+
+function captureFailure(t: TestContext, prefix: string, message: string) {
+  return captureExpectedConsole(
+    t,
+    "error",
+    (label, error) =>
+      label === prefix &&
+      error instanceof Error &&
+      error.message.includes(message),
+  );
 }
 
 function sessionInfo(sid: string) {
@@ -5372,6 +5384,11 @@ test("an idle session's held-message stream adopts no run", async () => {
 });
 
 test("a chat promoted from a new chat attaches a run reported after its first send failed", async (t) => {
+  captureFailure(
+    t,
+    "Failed to send message:",
+    "Timed out connecting to the agent event stream",
+  );
   resetWorld();
   const sid = "promoted-later";
   primeSession(sid, [userMsg("u0", "q")]);
@@ -7238,7 +7255,8 @@ test("a hidden fresh chat reports its created session only through the backgroun
   );
 });
 
-test("fresh chat rejection recovers to its originating tab draft key", async () => {
+test("fresh chat rejection recovers to its originating tab draft key", async (t) => {
+  captureFailure(t, "Failed to send message:", "creation refused");
   resetWorld();
   for (const key of ["new:tab:first", "new:tab:second"]) {
     world.holds.push({
@@ -8964,6 +8982,14 @@ for (const phase of ["HTTP response", "target reload"]) {
 }
 
 test("a moved conversation whose reload fails preserves attachments without prefilling and reports failure", async (t) => {
+  captureExpectedConsole(
+    t,
+    "warn",
+    (label, error) =>
+      label === "Background loadSession failed:" &&
+      error instanceof Error &&
+      error.message === "HTTP 503",
+  );
   resetWorld();
   const { getDraft, setDraft, clearDraft } = await import("@/lib/draft-store");
   const sid = "edit-move-load-failed",
@@ -10580,7 +10606,12 @@ for (const enabled of [false, true]) {
   });
 }
 
-test("a refused set_slow_mode leaves the toggle as it was and shows omp's error", async () => {
+test("a refused set_slow_mode leaves the toggle as it was and shows omp's error", async (t) => {
+  captureFailure(
+    t,
+    "Failed to change Slow mode:",
+    "Slow mode is unavailable for the current model.",
+  );
   const refusal = "Slow mode is unavailable for the current model.";
   const w = await mountSlowToggle(false, {
     status: 400,
@@ -11060,7 +11091,12 @@ test("a held file snapshot cannot roll back a newer RPC model choice", async () 
   assert.equal(w.latest.thinkingLevel, "high");
 });
 
-test("a model switch shows at once and rolls back with a notice when it fails (#277)", async () => {
+test("a model switch shows at once and rolls back with a notice when it fails (#277)", async (t) => {
+  captureFailure(
+    t,
+    "Failed to set model:",
+    "Could not restore model test/old-model",
+  );
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   Object.assign(world.sessions.get("s1"), {
@@ -11112,7 +11148,8 @@ test("a model switch shows at once and rolls back with a notice when it fails (#
   );
 });
 
-test("an earlier model pick that fails does not undo a newer pick", async () => {
+test("an earlier model pick that fails does not undo a newer pick", async (t) => {
+  captureFailure(t, "Failed to set model:", "set_model failed");
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   Object.assign(world.sessions.get("s1"), {
@@ -11164,7 +11201,8 @@ test("an earlier model pick that fails does not undo a newer pick", async () => 
   );
 });
 
-test("a refused pick after a successful one shows the model omp now runs", async () => {
+test("a refused pick after a successful one shows the model omp now runs", async (t) => {
+  captureFailure(t, "Failed to set model:", "refused");
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   Object.assign(world.sessions.get("s1"), {
@@ -11292,7 +11330,8 @@ test("a delayed pick response preserves a newer runtime model when refresh fails
   assert.equal(w.latest.displayModel?.modelId, "runtime");
 });
 
-test("a failed pick cannot invalidate a newer cycle refresh", async () => {
+test("a failed pick cannot invalidate a newer cycle refresh", async (t) => {
+  captureFailure(t, "Failed to set model:", "refused");
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   const w = await mountSession("s1");
@@ -11781,7 +11820,12 @@ test("a fresh chat's /btw question attaches one event stream instead of an obser
   assert.equal(world.esInstances.length, 1);
 });
 
-test("a first prompt rejected after promotion identifies the real-session recovery draft", async () => {
+test("a first prompt rejected after promotion identifies the real-session recovery draft", async (t) => {
+  captureFailure(
+    t,
+    "Failed to send message:",
+    translate("errors.session_busy"),
+  );
   resetWorld();
   const sid = "promoted-rejected-send";
   world.holds.push({
@@ -11937,7 +11981,12 @@ test("a send to an offline host is accepted and held without a toast or recovere
   assert.deepEqual(callsTo("POST", "/api/agent/"), []);
 });
 
-test("a rejected saved profile is shown on a fresh chat and leaves the draft recoverable", async () => {
+test("a rejected saved profile is shown on a fresh chat and leaves the draft recoverable", async (t) => {
+  captureFailure(
+    t,
+    "Failed to send message:",
+    translate("errors.stored_invalid_profile"),
+  );
   resetWorld();
   world.holds.push({
     match: (method, url) => method === "POST" && url === "/api/agent/new",
@@ -11973,7 +12022,8 @@ test("a rejected saved profile is shown on a fresh chat and leaves the draft rec
   );
 });
 
-test("a fresh chat on a remote host creates its session there and toasts when that host is offline", async () => {
+test("a fresh chat on a remote host creates its session there and toasts when that host is offline", async (t) => {
+  captureFailure(t, "Failed to send message:", "Build box is offline");
   resetWorld();
   toastCalls.length = 0;
   world.holds.push({
@@ -12012,7 +12062,8 @@ test("a fresh chat on a remote host creates its session there and toasts when th
   assert.equal(w.latest.notices.length, 0);
 });
 
-test("a fresh chat whose host drops after the spawn adopts the kept session, so a retry starts no second one", async () => {
+test("a fresh chat whose host drops after the spawn adopts the kept session, so a retry starts no second one", async (t) => {
+  captureFailure(t, "Failed to send message:", "Build box is offline");
   resetWorld();
   toastCalls.length = 0;
   world.holds.push({
@@ -12181,7 +12232,12 @@ test("a lost pooled creation response retries the original identity and frozen i
   );
 });
 
-test("pooled creation uncertainty with a known id adopts the owner without resending the initial command", async () => {
+test("pooled creation uncertainty with a known id adopts the owner without resending the initial command", async (t) => {
+  captureFailure(
+    t,
+    "Failed to send message:",
+    "The initialization answer was lost",
+  );
   resetWorld();
   const owner = {
     sessionId: "uncertain-owner",
@@ -12254,7 +12310,8 @@ test("pooled creation uncertainty with a known id adopts the owner without resen
   );
 });
 
-test("a pooled session whose owner is offline never creates on another target", async () => {
+test("a pooled session whose owner is offline never creates on another target", async (t) => {
+  captureFailure(t, "Failed to send message:", "Owner is offline");
   resetWorld();
   world.holds.push({
     match: (method, url) => method === "POST" && url === "/api/agent/new",
@@ -13182,7 +13239,8 @@ test("workspace file search stays in its source session rather than a same-path 
   view.unmount();
 });
 
-test("a fresh local chat sends no host id and keeps the pre-hosts draft key", async () => {
+test("a fresh local chat sends no host id and keeps the pre-hosts draft key", async (t) => {
+  captureFailure(t, "Failed to send message:", "stop here");
   resetWorld();
   world.holds.push({
     match: (method, url) => method === "POST" && url === "/api/agent/new",
@@ -13291,11 +13349,11 @@ const SOCKET_LOST = {
 async function inWebSocketMode(run: () => Promise<void>) {
   const { openEventStream } = await import("@/lib/event-stream");
   openEventStream({ kind: "running" }).close(); // the tab's transport exists before the hook mounts
-  workerPort!.onmessage!({ data: { transport: "ws" } });
+  await act(() => workerPort!.onmessage!({ data: { transport: "ws" } }));
   try {
     await run();
   } finally {
-    workerPort!.onmessage!({ data: { transport: "sse" } });
+    await act(() => workerPort!.onmessage!({ data: { transport: "sse" } }));
     world.socketAnswer = null;
   }
 }
@@ -13324,7 +13382,12 @@ test("a prompt is stored in the outbox even when the session socket cannot answe
   });
 });
 
-test("a `!` command whose session socket dropped before the answer toasts that it may have run and stays out of the composer", async () => {
+test("a `!` command whose session socket dropped before the answer toasts that it may have run and stays out of the composer", async (t) => {
+  captureFailure(
+    t,
+    "Failed to execute shell command:",
+    translate("errors.transport_lost"),
+  );
   await inWebSocketMode(async () => {
     resetWorld();
     toastCalls.length = 0;
@@ -13361,7 +13424,8 @@ test("a `!` command whose session socket dropped before the answer toasts that i
   });
 });
 
-test("a `!` command the route refused is offered back to the composer with an error notice", async () => {
+test("a `!` command the route refused is offered back to the composer with an error notice", async (t) => {
+  captureFailure(t, "Failed to execute shell command:", "Shell is busy");
   await inWebSocketMode(async () => {
     resetWorld();
     toastCalls.length = 0;
@@ -13657,7 +13721,12 @@ test("an existing-session send never waits for a pre-prompt get_state reply", as
   });
 });
 
-test("an interrupt-and-reply whose abort_and_prompt reply was lost is reported as taken and the text is not offered again", async () => {
+test("an interrupt-and-reply whose abort_and_prompt reply was lost is reported as taken and the text is not offered again", async (t) => {
+  captureFailure(
+    t,
+    "Failed to interrupt and reply:",
+    translate("errors.transport_lost"),
+  );
   await inWebSocketMode(async () => {
     resetWorld();
     toastCalls.length = 0;
@@ -13745,7 +13814,7 @@ test("the hosts channel decides the offline banner; a frame only speaks before i
     null,
     "a frame cannot override the channel's online status",
   );
-  withChannel.unmount();
+  await act(() => withChannel.unmount());
 
   resetWorld();
   primeSession("remote-banner", [userMsg("u0", "q")]);
@@ -13758,7 +13827,7 @@ test("the hosts channel decides the offline banner; a frame only speaks before i
     beforeSnapshot.queryByText(bannerText),
     "without a channel snapshot the frame shows the banner",
   );
-  beforeSnapshot.unmount();
+  await act(() => beforeSnapshot.unmount());
 
   resetWorld();
   primeSession("remote-banner", [userMsg("u0", "q")]);
@@ -14198,7 +14267,15 @@ for (const loss of ["unresolved", "child gone"]) {
   });
 }
 
-test("a native history rewind drops a correlated echo the delayed catch-up was still bridging", async () => {
+test("a native history rewind drops a correlated echo the delayed catch-up was still bridging", async (t) => {
+  captureExpectedConsole(
+    t,
+    "warn",
+    (label, error) =>
+      label === "Background loadSession failed:" &&
+      error instanceof Error &&
+      error.message === "HTTP 503",
+  );
   resetWorld();
   const sid = "outbox-rewound-echo";
   primeSession(sid, [userMsg("u0", "first"), assistantMsg("a0", "answer")]);
@@ -14255,7 +14332,15 @@ test("a native history rewind drops a correlated echo the delayed catch-up was s
   );
 });
 
-test("a failed history reload keeps the correlated echo until a readable history replaces it", async () => {
+test("a failed history reload keeps the correlated echo until a readable history replaces it", async (t) => {
+  captureExpectedConsole(
+    t,
+    "warn",
+    (label, error) =>
+      label === "Background loadSession failed:" &&
+      error instanceof Error &&
+      error.message === "HTTP 503",
+  );
   resetWorld();
   const sid = "outbox-rewind-reload-fails";
   primeSession(sid, [userMsg("u0", "first"), assistantMsg("a0", "answer")]);
@@ -14314,7 +14399,15 @@ test("a failed history reload keeps the correlated echo until a readable history
   );
 });
 
-test("a rewind prunes only the echoes received before it began, not a continuation's echo received while its history was unreadable", async () => {
+test("a rewind prunes only the echoes received before it began, not a continuation's echo received while its history was unreadable", async (t) => {
+  captureExpectedConsole(
+    t,
+    "warn",
+    (label, error) =>
+      label === "Background loadSession failed:" &&
+      error instanceof Error &&
+      error.message === "HTTP 503",
+  );
   resetWorld();
   const sid = "outbox-rewind-new-echo";
   primeSession(sid, [userMsg("u0", "first"), assistantMsg("a0", "answer")]);
