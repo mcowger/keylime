@@ -81,6 +81,9 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Project settings use tabbed sections and consistent controls on desktop and mobile
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts
 
+### Removed
+- Removed runtime version numbers from the chat welcome screen
+
 ### Fixed
 - Assistant timestamps appear after the active turn settles instead of moving between tool rows.
 - Toast titles use the application's standard font instead of the display serif.

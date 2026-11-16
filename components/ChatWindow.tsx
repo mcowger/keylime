@@ -256,56 +256,6 @@ function assistantSpeech(
   return null;
 }
 
-// Retain the last successful value across welcome-screen remounts, not reloads.
-let lastKnownOmpVersion: string | undefined;
-
-export function OmpRuntimeVersion() {
-  const { t } = useI18n();
-  const [version, setVersion] = useState<string | null | undefined>(
-    lastKnownOmpVersion,
-  );
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/omp-version")
-      .then((res) => {
-        if (!res.ok)
-          throw new Error(`Version lookup failed: HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((data: { version: string | null } | null) => {
-        if (cancelled) return;
-        // omp reports "omp/17.1.3"; show just the number next to the label.
-        const nextVersion =
-          typeof data?.version === "string"
-            ? data.version.trim().replace(/^omp\//, "")
-            : "";
-        lastKnownOmpVersion = nextVersion || undefined;
-        setVersion(nextVersion || null);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setVersion(lastKnownOmpVersion ?? null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return (
-    <span
-      aria-busy={version === undefined}
-      style={{ fontSize: 11, color: "var(--text-muted)" }}
-    >
-      omp{" "}
-      <span style={{ color: "var(--text)" }}>
-        {version === undefined
-          ? t("appShell.loading")
-          : version
-            ? `v${version}`
-            : t("chatWindow.versionNotFound")}
-      </span>
-    </span>
-  );
-}
 
 interface CommittedTranscriptProps {
   messages: AgentMessage[];
@@ -1893,27 +1843,6 @@ export function ChatWindow({
                           >
                             key lime
                           </span>
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "flex-end",
-                            gap: 2,
-                            flexShrink: 0,
-                          }}
-                        >
-                          <span
-                            style={{ fontSize: 11, color: "var(--text-muted)" }}
-                          >
-                            web{" "}
-                            <span style={{ color: "var(--text)" }}>
-                              v
-                              {process.env.OMP_WEB_PUBLIC_APP_VERSION ??
-                                "0.0.0"}
-                            </span>
-                          </span>
-                          <OmpRuntimeVersion />
                         </div>
                       </div>
                       {newSessionWorkspace}
