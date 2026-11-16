@@ -38363,6 +38363,21 @@
                 "schema": {
                   "description": "Registered hierarchy snapshot; optional discovery candidates are not registered until imported.",
                   "properties": {
+                    "iconCandidates": {
+                      "items": {
+                        "properties": {
+                          "icon": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "icon"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
                     "projects": {
                       "items": {
                         "description": "Registered host project and its workspaces, including display and ordering metadata.",
@@ -38371,6 +38386,10 @@
                             "type": "string"
                           },
                           "alias": {
+                            "type": "string"
+                          },
+                          "icon": {
+                            "description": "Project icon as a base64 image data URL, including SVG; render as an image rather than inline markup.",
                             "type": "string"
                           },
                           "id": {
@@ -39028,7 +39047,7 @@
         }
       },
       "post": {
-        "description": "### Usage\n\nApply a hierarchy action on a host.\n\n### Inputs\n\nSend host and an input object with an action and its action-specific fields.\n\n### Invariants\n\nRegistration and discovery are distinct; the host validates action preconditions.\n\n### Effects\n\nActions can change project or workspace registration and presentation.\n\n### Recovery\n\nAfter an uncertain mutation, fetch the hierarchy before deciding whether to repeat it.",
+        "description": "### Usage\n\nApply a hierarchy action on a host.\n\n### Inputs\n\nSend host and an input object with an action and its action-specific fields; JSON is limited to 384 KiB.\n\n### Invariants\n\nRegistration and discovery are distinct; the host validates action preconditions.\n\n### Effects\n\nActions can change project or workspace registration and presentation.\n\n### Recovery\n\nAfter an uncertain mutation, fetch the hierarchy before deciding whether to repeat it.",
         "operationId": "workspaceHierarchyPost",
         "parameters": [],
         "requestBody": {
@@ -39058,6 +39077,14 @@
                           },
                           {
                             "const": "updateProject",
+                            "type": "string"
+                          },
+                          {
+                            "const": "setProjectIcon",
+                            "type": "string"
+                          },
+                          {
+                            "const": "listProjectIcons",
                             "type": "string"
                           },
                           {
@@ -39105,6 +39132,17 @@
                       },
                       "from": {
                         "type": "string"
+                      },
+                      "icon": {
+                        "anyOf": [
+                          {
+                            "description": "Base64 image data URL, including SVG, up to 256 KiB decoded; null clears the project icon.",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "launchConfig": {
                         "anyOf": [
@@ -39200,6 +39238,21 @@
                 "schema": {
                   "description": "Registered hierarchy snapshot; optional discovery candidates are not registered until imported.",
                   "properties": {
+                    "iconCandidates": {
+                      "items": {
+                        "properties": {
+                          "icon": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "icon"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
                     "projects": {
                       "items": {
                         "description": "Registered host project and its workspaces, including display and ordering metadata.",
@@ -39208,6 +39261,10 @@
                             "type": "string"
                           },
                           "alias": {
+                            "type": "string"
+                          },
+                          "icon": {
+                            "description": "Project icon as a base64 image data URL, including SVG; render as an image rather than inline markup.",
                             "type": "string"
                           },
                           "id": {
@@ -39858,7 +39915,7 @@
         "summary": "Change project hierarchy",
         "x-client-semantics": {
           "Effects": "Actions can change project or workspace registration and presentation.",
-          "Inputs": "Send host and an input object with an action and its action-specific fields.",
+          "Inputs": "Send host and an input object with an action and its action-specific fields; JSON is limited to 384 KiB.",
           "Invariants": "Registration and discovery are distinct; the host validates action preconditions.",
           "Recovery": "After an uncertain mutation, fetch the hierarchy before deciding whether to repeat it.",
           "Usage": "Apply a hierarchy action on a host."
@@ -60865,6 +60922,10 @@
                               "type": "string"
                             },
                             "alias": {
+                              "type": "string"
+                            },
+                            "icon": {
+                              "description": "Project icon as a base64 image data URL, including SVG; render as an image rather than inline markup.",
                               "type": "string"
                             },
                             "id": {

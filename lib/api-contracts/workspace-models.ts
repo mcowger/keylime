@@ -563,6 +563,7 @@ export const HierarchyProjectSchema = Type.Object(
     kind: literals("git", "directory"),
     addedAt: Type.String(),
     launchConfig: Type.Optional(ProjectLaunchConfigSchema),
+    icon: Type.Optional(Type.String({ description: "Project icon as a base64 image data URL, including SVG; render as an image rather than inline markup." })),
     alias: Type.Optional(Type.String()),
     sortOrder: Type.Optional(Type.Number()),
     pinOrder: Type.Optional(Type.Number()),
@@ -577,6 +578,9 @@ export const HierarchySnapshotSchema = Type.Object(
   {
     selectedProjectId: Type.Optional(Type.String()),
     projects: Type.Array(HierarchyProjectSchema),
+    iconCandidates: Type.Optional(
+      Type.Array(Type.Object({ path: Type.String(), icon: Type.String() })),
+    ),
     workspaceCandidates: Type.Optional(
       Type.Array(
         Type.Object({
@@ -610,6 +614,8 @@ export const HierarchyRequestSchema = Type.Object(
       "registerProject",
       "unregisterProject",
       "updateProject",
+      "setProjectIcon",
+      "listProjectIcons",
       "discoverWorkspaces",
       "importWorkspaces",
       "discoverSessions",
@@ -627,6 +633,7 @@ export const HierarchyRequestSchema = Type.Object(
     cwd: Type.Optional(Type.String()),
     from: Type.Optional(Type.String()),
     to: Type.Optional(Type.String()),
+    icon: Type.Optional(nullable(Type.String({ description: "Base64 image data URL, including SVG, up to 256 KiB decoded; null clears the project icon." }))),
     alias: Type.Optional(nullable(Type.String())),
     sortOrder: Type.Optional(nullable(Type.Number())),
     pinOrder: Type.Optional(nullable(Type.Number())),

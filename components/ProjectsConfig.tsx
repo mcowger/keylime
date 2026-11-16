@@ -270,6 +270,11 @@ export function ProjectSettings({
           </button>
         </div>
       )}
+      <ProjectIconSettings
+        hostId={hostId}
+        project={project}
+        onUpdated={onUpdated}
+      />
       <CreationPipelineEditor
         key={`${hostId}:${project.path}`}
         hostId={hostId}
@@ -277,5 +282,130 @@ export function ProjectSettings({
         gitProject={project.kind === "git"}
       />
     </section>
+  );
+}
+
+function ProjectIconSettings({
+  hostId,
+  project,
+  onUpdated,
+}: {
+  hostId: string;
+  project: HierarchyProject;
+  onUpdated: (snapshot: HierarchySnapshot) => void;
+}) {
+  const [candidates, setCandidates] = useState<NonNullable<HierarchySnapshot["iconCandidates"]> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const mounted = useRef(true);
+  const controller = useRef<AbortController | null>(null);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      controller.current?.abort();
+    };
+  }, []);
+
+  async function request(input: object): Promise<HierarchySnapshot> {
+    const current = new AbortController();
+    controller.current = current;
+    const response = await fetch("/api/hierarchy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ host: hostId, input }),
+      signal: current.signal,
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
+    return data;
+  }
+
+  async function saveIcon(icon: string | null) {
+    setBusy(true);
+    setError("");
+    try {
+      const snapshot = await request({ action: "setProjectIcon", projectId: project.id, icon });
+      if (mounted.current) onUpdated(snapshot);
+    } catch (e) {
+      if (mounted.current) setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (mounted.current) setBusy(false);
+    }
+  }
+
+  async function uploadIcon(file: File) {
+    setBusy(true);
+    setError("");
+    try {
+      if (!file.type.startsWith("image/")) throw new Error("Choose an image file.");
+      const url = URL.createObjectURL(file);
+      try {
+        const image = new Image();
+        image.src = url;
+        await image.decode();
+        const size = Math.min(image.naturalWidth, image.naturalHeight);
+        if (!size) throw new Error("The image is empty.");
+        const canvas = document.createElement("canvas");
+        canvas.width = 192;
+        canvas.height = 192;
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("Could not process the image.");
+        context.drawImage(image, (image.naturalWidth - size) / 2, (image.naturalHeight - size) / 2, size, size, 0, 0, 192, 192);
+        if (mounted.current) await saveIcon(canvas.toDataURL("image/png"));
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    } catch (e) {
+      if (mounted.current) setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (mounted.current) setBusy(false);
+    }
+  }
+
+  async function findIcons() {
+    setBusy(true);
+    setError("");
+    try {
+      const snapshot = await request({ action: "listProjectIcons", projectId: project.id });
+      if (mounted.current) setCandidates(snapshot.iconCandidates ?? []);
+    } catch (e) {
+      if (mounted.current) setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (mounted.current) setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      <strong>Project icon</strong>
+      {project.icon && (
+        <img src={project.icon} alt="Current project icon" width={48} height={48} style={{ objectFit: "cover", borderRadius: 6 }} />
+      )}
+      <label>
+        Upload image (center-cropped to a square){" "}
+        <input type="file" accept="image/*" disabled={busy} onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) void uploadIcon(file);
+        }} />
+      </label>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button type="button" disabled={busy} onClick={() => void findIcons()}>Find repository icons</button>
+        {project.icon && <button type="button" disabled={busy} onClick={() => void saveIcon(null)}>Remove icon</button>}
+      </div>
+      {busy && <div role="status">Working...</div>}
+      {error && <div role="alert">{error}</div>}
+      {candidates && (candidates.length ? (
+        <div style={{ display: "grid", gap: 8 }}>
+          {candidates.map((candidate) => (
+            <button key={candidate.path} type="button" disabled={busy} onClick={() => void saveIcon(candidate.icon)} style={{ display: "flex", alignItems: "center", gap: 8, textAlign: "left", overflowWrap: "anywhere" }}>
+              <img src={candidate.icon} alt="" width={40} height={40} style={{ objectFit: "contain", flexShrink: 0 }} />
+              <span>{candidate.path}</span>
+            </button>
+          ))}
+        </div>
+      ) : <div>No repository icons found.</div>)}
+    </div>
   );
 }

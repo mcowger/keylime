@@ -31690,6 +31690,42 @@
             {
               "properties": {
                 "action": {
+                  "const": "listProjectIcons",
+                  "type": "string"
+                },
+                "projectId": {
+                  "type": "string"
+                }
+              },
+              "required": ["action", "projectId"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "setProjectIcon",
+                  "type": "string"
+                },
+                "icon": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "projectId": {
+                  "type": "string"
+                }
+              },
+              "required": ["action", "projectId", "icon"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "action": {
                   "const": "updateProject",
                   "type": "string"
                 },
@@ -31874,6 +31910,21 @@
             "value": {
               "description": "Registered hierarchy snapshot; optional discovery candidates are not registered until imported.",
               "properties": {
+                "iconCandidates": {
+                  "items": {
+                    "properties": {
+                      "icon": {
+                        "type": "string"
+                      },
+                      "path": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["path", "icon"],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
                 "projects": {
                   "items": {
                     "description": "Registered host project and its workspaces, including display and ordering metadata.",
@@ -31882,6 +31933,10 @@
                         "type": "string"
                       },
                       "alias": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "description": "Project icon as a base64 image data URL, including SVG; render as an image rather than inline markup.",
                         "type": "string"
                       },
                       "id": {
@@ -182280,6 +182335,10 @@
         "alias": {
           "type": "string"
         },
+        "icon": {
+          "description": "Project icon as a base64 image data URL, including SVG; render as an image rather than inline markup.",
+          "type": "string"
+        },
         "id": {
           "type": "string"
         },
@@ -182551,6 +182610,14 @@
               "type": "string"
             },
             {
+              "const": "setProjectIcon",
+              "type": "string"
+            },
+            {
+              "const": "listProjectIcons",
+              "type": "string"
+            },
+            {
               "const": "discoverWorkspaces",
               "type": "string"
             },
@@ -182595,6 +182662,17 @@
         },
         "from": {
           "type": "string"
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "description": "Base64 image data URL, including SVG, up to 256 KiB decoded; null clears the project icon.",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "launchConfig": {
           "anyOf": [
@@ -182678,6 +182756,21 @@
     "workspace_HierarchySnapshot": {
       "description": "Registered hierarchy snapshot; optional discovery candidates are not registered until imported.",
       "properties": {
+        "iconCandidates": {
+          "items": {
+            "properties": {
+              "icon": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": ["path", "icon"],
+            "type": "object"
+          },
+          "type": "array"
+        },
         "projects": {
           "items": {
             "description": "Registered host project and its workspaces, including display and ordering metadata.",
@@ -182686,6 +182779,10 @@
                 "type": "string"
               },
               "alias": {
+                "type": "string"
+              },
+              "icon": {
+                "description": "Project icon as a base64 image data URL, including SVG; render as an image rather than inline markup.",
                 "type": "string"
               },
               "id": {

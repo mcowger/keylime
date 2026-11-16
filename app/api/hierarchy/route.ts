@@ -32,14 +32,14 @@ export async function GET(request: Request) {
 /**
  * @apiContract workspaceHierarchyPost
  * @apiUsage Apply a hierarchy action on a host.
- * @apiInputs Send host and an input object with an action and its action-specific fields.
+ * @apiInputs Send host and an input object with an action and its action-specific fields; JSON is limited to 384 KiB.
  * @apiInvariants Registration and discovery are distinct; the host validates action preconditions.
  * @apiEffects Actions can change project or workspace registration and presentation.
  * @apiRecovery After an uncertain mutation, fetch the hierarchy before deciding whether to repeat it.
  */
 export async function POST(request: Request) {
   try {
-    const body: unknown = await parseJsonWithinLimit(request, 64 * 1024);
+    const body: unknown = await parseJsonWithinLimit(request, 384 * 1024);
     if (
       !isRecord(body) ||
       !isRecord(body.input) ||

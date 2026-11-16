@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import {
+  closeSync,
+  constants,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readdirSync,
+  readSync,
   mkdirSync,
   readFileSync,
   realpathSync,
@@ -55,6 +62,75 @@ function within(root: string, child: string): boolean {
       relative !== ".." &&
       !path.isAbsolute(relative))
   );
+}
+const MAX_ICON_BYTES = 256 * 1024;
+const MAX_ICON_CANDIDATES = 24;
+
+function iconMime(data: Buffer): string | undefined {
+  if (data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
+  if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return "image/jpeg";
+  if (data.length >= 6 && (data.subarray(0, 6).toString("ascii") === "GIF87a" || data.subarray(0, 6).toString("ascii") === "GIF89a")) return "image/gif";
+  if (data.length >= 12 && data.subarray(0, 4).toString("ascii") === "RIFF" && data.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
+  if (data.length >= 4 && data[0] === 0 && data[1] === 0 && data[2] === 1 && data[3] === 0) return "image/x-icon";
+  try {
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(data);
+    if (/<svg(?:\s|\/?>)/i.test(text)) return "image/svg+xml";
+  } catch {
+    // Non-UTF-8 data is not an SVG image.
+  }
+  return undefined;
+}
+
+function validatedIcon(value: unknown): string {
+  if (typeof value !== "string" || value.length > Math.ceil(MAX_ICON_BYTES / 3) * 4 + 64)
+    throw new Error("Invalid or oversized project icon");
+  const match = /^data:(image\/(?:png|jpeg|gif|webp|x-icon|svg\+xml));base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
+  if (!match) throw new Error("Invalid project icon data URL");
+  const data = Buffer.from(match[2], "base64");
+  if (data.length > MAX_ICON_BYTES || data.toString("base64") !== match[2] || iconMime(data) !== match[1])
+    throw new Error("Invalid or oversized project icon");
+  return value;
+}
+
+function projectIcons(project: HierarchyProject): NonNullable<HierarchySnapshot["iconCandidates"]> {
+  const root = realpathSync(project.path);
+  const candidates: NonNullable<HierarchySnapshot["iconCandidates"]> = [];
+  let examined = 0;
+  function scan(dir: string, depth: number): void {
+    if (depth > 3 || examined >= 2000 || candidates.length >= MAX_ICON_CANDIDATES) return;
+    let entries: string[];
+    try { entries = readdirSync(dir).sort(); } catch { return; }
+    for (const name of entries) {
+      if (++examined > 2000 || candidates.length >= MAX_ICON_CANDIDATES) return;
+      if (name.startsWith(".") || name === "node_modules" || name === "vendor") continue;
+      const candidate = path.join(dir, name);
+      try {
+        const info = lstatSync(candidate);
+        if (info.isSymbolicLink()) continue;
+        if (info.isDirectory()) { scan(candidate, depth + 1); continue; }
+        if (!info.isFile() || !/^(?:favicon|icon|logo|apple-touch-icon)(?:[-_.].*)?\.(?:png|jpe?g|gif|webp|ico|svg)$/i.test(name)) continue;
+        const resolved = realpathSync(candidate);
+        if (!within(root, resolved)) continue;
+        const fd = openSync(resolved, constants.O_RDONLY | constants.O_NOFOLLOW);
+        try {
+          const stat = fstatSync(fd);
+          if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_ICON_BYTES) continue;
+          const data = Buffer.alloc(stat.size);
+          let offset = 0;
+          while (offset < data.length) {
+            const count = readSync(fd, data, offset, data.length - offset, offset);
+            if (!count) break;
+            offset += count;
+          }
+          if (offset !== data.length) continue;
+          const mime = iconMime(data);
+          if (mime) candidates.push({ path: path.relative(root, resolved), icon: `data:${mime};base64,${data.toString("base64")}` });
+        } finally { closeSync(fd); }
+      } catch { /* Files can disappear or be inaccessible during discovery. */ }
+    }
+  }
+  scan(root, 0);
+  return candidates;
 }
 function git(cwd: string, ...args: string[]): string {
   return execFileSync("git", ["-C", cwd, ...args], {
@@ -344,6 +420,17 @@ export async function hierarchyOperation(
         ] as const)
           if (input[key] === null) delete project[key];
         save(snapshot);
+        break;
+      }
+      case "setProjectIcon": {
+        const project = projectById(snapshot, input.projectId);
+        if (input.icon === null) delete project.icon;
+        else project.icon = validatedIcon(input.icon);
+        save(snapshot);
+        break;
+      }
+      case "listProjectIcons": {
+        snapshot.iconCandidates = projectIcons(projectById(snapshot, input.projectId));
         break;
       }
       case "discoverWorkspaces": {

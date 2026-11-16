@@ -46357,6 +46357,21 @@
                       "value": {
                         "description": "Registered hierarchy snapshot; optional discovery candidates are not registered until imported.",
                         "properties": {
+                          "iconCandidates": {
+                            "items": {
+                              "properties": {
+                                "icon": {
+                                  "type": "string"
+                                },
+                                "path": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["path", "icon"],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
                           "projects": {
                             "items": {
                               "description": "Registered host project and its workspaces, including display and ordering metadata.",
@@ -46365,6 +46380,10 @@
                                   "type": "string"
                                 },
                                 "alias": {
+                                  "type": "string"
+                                },
+                                "icon": {
+                                  "description": "Project icon as a base64 image data URL, including SVG; render as an image rather than inline markup.",
                                   "type": "string"
                                 },
                                 "id": {
@@ -46817,6 +46836,21 @@
                     "value": {
                       "description": "Registered hierarchy snapshot; optional discovery candidates are not registered until imported.",
                       "properties": {
+                        "iconCandidates": {
+                          "items": {
+                            "properties": {
+                              "icon": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["path", "icon"],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
                         "projects": {
                           "items": {
                             "description": "Registered host project and its workspaces, including display and ordering metadata.",
@@ -46825,6 +46859,10 @@
                                 "type": "string"
                               },
                               "alias": {
+                                "type": "string"
+                              },
+                              "icon": {
+                                "description": "Project icon as a base64 image data URL, including SVG; render as an image rather than inline markup.",
                                 "type": "string"
                               },
                               "id": {
@@ -71869,6 +71907,42 @@
                       }
                     },
                     "required": ["action", "projectId"],
+                    "type": "object"
+                  },
+                  {
+                    "properties": {
+                      "action": {
+                        "const": "listProjectIcons",
+                        "type": "string"
+                      },
+                      "projectId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["action", "projectId"],
+                    "type": "object"
+                  },
+                  {
+                    "properties": {
+                      "action": {
+                        "const": "setProjectIcon",
+                        "type": "string"
+                      },
+                      "icon": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "projectId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["action", "projectId", "icon"],
                     "type": "object"
                   },
                   {

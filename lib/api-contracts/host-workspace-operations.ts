@@ -59,6 +59,8 @@ const hierarchyArgs = Type.Union([
   ...["unregisterProject", "discoverWorkspaces"].map((action) =>
     obj({ action: Type.Literal(action), projectId: str }),
   ),
+  obj({ action: Type.Literal("listProjectIcons"), projectId: str }),
+  obj({ action: Type.Literal("setProjectIcon"), projectId: str, icon: nullableString }),
   obj({
     action: Type.Literal("updateProject"),
     projectId: str,

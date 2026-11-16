@@ -459,6 +459,14 @@
 /* Warm-paper palette (light). All text/background pairs verified WCAG AA
    (≥4.5:1 for small text) — measured values noted per token. */
 :root {
+  /* White initials contrast at least 6.3:1 with every project icon color. */
+  --project-icon-text: #fff;
+  --project-icon-0: #8b2635;
+  --project-icon-1: #905000;
+  --project-icon-2: #286047;
+  --project-icon-3: #205b85;
+  --project-icon-4: #574b94;
+  --project-icon-5: #8a376e;
   --bg: #FAF9F6;
   --bg-panel: #F2F0EA;
   --bg-hover: #EAE7DF;

@@ -32,6 +32,27 @@ import { ConfirmDialog } from "./ui/field";
 import { ProjectSettings } from "./ProjectsConfig";
 import { toast } from "./ui/toast";
 
+function ProjectIcon({ project }: { project: HierarchyProject }) {
+  const name = project.alias || project.name;
+  let hash = 2166136261;
+  for (const character of name) hash = Math.imul(hash ^ character.codePointAt(0)!, 16777619);
+  const style: CSSProperties = {
+    width: 26,
+    height: 26,
+    flex: "0 0 26px",
+    marginRight: 8,
+    borderRadius: "50%",
+    objectFit: "cover",
+  };
+  return project.icon ? (
+    <img src={project.icon} alt="" style={style} />
+  ) : (
+    <span aria-hidden="true" style={{ ...style, display: "grid", placeItems: "center", background: `var(--project-icon-${(hash >>> 0) % 6})`, color: "var(--project-icon-text)", fontSize: 13 }}>
+      {Array.from(name.trim())[0]?.toLocaleUpperCase() ?? "?"}
+    </span>
+  );
+}
+
 type Host = { id: string; label: string; status?: HostStatus };
 type Props = {
   hosts: Host[];
@@ -608,6 +629,7 @@ export function HierarchySidebar({
                       fontWeight: 600,
                     }}
                   >
+                    <ProjectIcon project={project} />
                     <span
                       title={project.path}
                       style={{

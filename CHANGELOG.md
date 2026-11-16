@@ -43,6 +43,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Tool activity rows show available intent alongside their target
 - Eval activity rows display a Python or JavaScript icon before the tool intent
 - Seeded development sessions include completed and in-progress tasks for testing composer indicators
+- Project settings can upload, select, and clear sidebar icons, including discovered icons from the repository
 
 ### Changed
 - Operational notices, task chat and compaction use expandable transcript rows; advisor responses render as conversation text.
