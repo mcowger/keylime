@@ -82,13 +82,14 @@ import { comparableProjectPath } from "@/lib/comparable-path";
 import {
   hostProjectKey,
   LOCAL_HOST_ID,
+  newChatDraftKey,
   remoteHostId,
 } from "@/lib/project-ordering";
 import { isClusterTarget } from "@/lib/hosts/cluster";
 import { useHostRows } from "@/hooks/useHostRows";
 import { LocalDaemonBanner } from "./LocalDaemonBanner";
 import { hostName } from "./host-status";
-import { clearDraft } from "@/lib/draft-store";
+import { clearDraft, getDraftRevision, getDraftSummary } from "@/lib/draft-store";
 import { useNotifications } from "@/hooks/useNotifications";
 import {
   APP_UPDATE_COMPLETED_RELOAD_MS,
@@ -349,6 +350,7 @@ export function AppShell({ appName }: { appName: string }) {
   const activeChatIdRef = useRef<string | null>(null);
   const visitedWorkspaces = useRef(new Set<string>());
   const pendingSharedWorkspace = useRef<{ cwd: string; hostId: string; tabId: string } | null>(null);
+  const pendingWorkspaceDraft = useRef<{ cwd: string; hostId: string; tabId: string; revision: number } | null>(null);
   const updateChatTabs = useCallback(
     (update: (tabs: ChatTab[]) => ChatTab[]) => {
       const next = update(chatTabsRef.current);
@@ -1820,7 +1822,23 @@ export function AppShell({ appName }: { appName: string }) {
       hostId: string,
       _project?: ManagedProject,
       synchronized = false,
+      latestSession?: SessionInfo,
+      discovery?: "pending" | "resolved",
     ) => {
+      if (discovery === "resolved") {
+        const pending = pendingWorkspaceDraft.current;
+        pendingWorkspaceDraft.current = null;
+        if (!pending || pending.cwd !== cwd || pending.hostId !== hostId || activeChatIdRef.current !== pending.tabId || !latestSession || activeTerminalId || chatTabsRef.current.find((item) => item.id === pending.tabId)?.session) return;
+        const key = newChatDraftKey(pending.cwd, remoteHostId(hostId));
+        const draft = getDraftSummary(key);
+        if (getDraftRevision(key) !== pending.revision || draft.text || draft.hasAttachments) return;
+        const tab: ChatTab = { id: browserUUID(), cwd: latestSession.cwd, hostId: remoteHostId(latestSession.hostId), session: latestSession, creation: {} };
+        updateChatTabs((tabs) => [...tabs.filter((item) => item.id !== pending.tabId), tab]);
+        activateChat(tab);
+        router.replace(`?session=${encodeURIComponent(latestSession.id)}`);
+        return;
+      }
+      if (!synchronized && !(discovery === "pending" && pendingWorkspaceDraft.current?.cwd === cwd && pendingWorkspaceDraft.current.hostId === hostId)) pendingWorkspaceDraft.current = null;
       setActiveTerminalId(null);
       setActiveCwd(cwd);
       setActiveHostId(remoteHostId(hostId));
@@ -1866,12 +1884,14 @@ export function AppShell({ appName }: { appName: string }) {
           }
         : preferredId === ""
           ? undefined
-          : (candidates.find((tab) => tab.id === preferredId) ?? candidates[0]);
+          : (candidates.find((tab) => tab.id === preferredId) ?? candidates[0] ?? (latestSession && !hiddenSharedIds.has(latestSession.id) ? {
+              id: browserUUID(), cwd: latestSession.cwd, hostId: remoteHostId(latestSession.hostId), session: latestSession, creation: {},
+            } : undefined));
       if (existing) {
         if (!shared && !sharedDiscoveryComplete.current) {
           pendingSharedWorkspace.current = { cwd, hostId, tabId: existing.id };
         }
-        if (shared && !candidates.includes(existing)) updateChatTabs((tabs) => [...tabs, existing]);
+        if (!candidates.includes(existing)) updateChatTabs((tabs) => [...tabs, existing]);
         activateChat(existing);
       } else if (!alreadyVisited && preferredId !== "") {
         const tab: ChatTab = {
@@ -1881,6 +1901,12 @@ export function AppShell({ appName }: { appName: string }) {
           session: null,
           creation: { id: browserUUID() },
         };
+        if (discovery === "pending") {
+          const key = newChatDraftKey(cwd, remoteHostId(hostId));
+          const draft = getDraftSummary(key);
+          if (!draft.text && !draft.hasAttachments)
+            pendingWorkspaceDraft.current = { cwd, hostId, tabId: tab.id, revision: getDraftRevision(key) };
+        }
         updateChatTabs((tabs) => [...tabs, tab]);
         if (!sharedDiscoveryComplete.current) pendingSharedWorkspace.current = { cwd, hostId, tabId: tab.id };
         activateChat(tab);
@@ -1900,6 +1926,7 @@ export function AppShell({ appName }: { appName: string }) {
     },
     [
       router,
+      activeTerminalId,
       activateChat,
       updateChatTabs,
       sharedSessions,

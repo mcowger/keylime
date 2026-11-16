@@ -6,6 +6,8 @@ import type { SessionSidebar } from "./SessionSidebar";
 import type { ChatWindow } from "./ChatWindow";
 import type { WorkspaceTerminalTabs } from "./WorkspaceTerminalTabs";
 import type { EventStreamChannel } from "@/lib/event-stream";
+import { setDraft, clearDraft } from "@/lib/draft-store";
+import { newChatDraftKey } from "@/lib/project-ordering";
 const { render, fireEvent, waitFor, cleanup, act } =
   await import("@testing-library/react/pure.js");
 
@@ -69,6 +71,14 @@ mock.module("./SessionSidebar", () => ({
         },
         "Open saved nested chat",
       ),
+      React.createElement("button", {
+        onClick: () => props.onCwdChange!("/other", "/other", "local", undefined, false, {
+          id: "remote-saved", cwd: "/other", path: "/saved.jsonl", created: "2026-11-14",
+          modified: "2026-11-14", messageCount: 1, firstMessage: "hello", name: "Existing",
+        }),
+      }, "Open workspace with saved chat"),
+      React.createElement("button", { onClick: () => props.onCwdChange!("/other", "/other", "local", undefined, false, undefined, "pending") }, "Pending workspace"),
+      React.createElement("button", { onClick: () => props.onCwdChange!("/other", "/other", "local", undefined, false, { id: "late", cwd: "/other", path: "/late", created: "2026-11-14", modified: "2026-11-14", messageCount: 1, firstMessage: "hello" }, "resolved") }, "Resolve workspace"),
     );
   },
 }));
@@ -173,6 +183,44 @@ globalThis.fetch = (async (url: Parameters<typeof fetch>[0]) =>
   )) as typeof fetch;
 const { AppShell } = await import("./AppShell.tsx");
 
+test("workspace entry opens its registered saved chat on a new browser", async () => {
+  sessionStorage.clear();
+  window.history.replaceState(null, "", "/?cwd=%2Frepo");
+  const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+  await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
+  fireEvent.click(view.getByRole("button", { name: "Open workspace with saved chat" }));
+  await waitFor(() => assert.ok(tabProps.chatTabs.some((tab) => tab.sessionId === "remote-saved")));
+  assert.equal(window.location.search, "?session=remote-saved");
+  cleanup();
+});
+test("delayed discovery replaces only the untouched auto-created chat", async () => {
+  sessionStorage.clear();
+  window.history.replaceState(null, "", "/?cwd=%2Frepo");
+  const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+  await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
+  fireEvent.click(view.getByRole("button", { name: "Pending workspace" }));
+  await waitFor(() => assert.equal(tabProps.cwd, "/other"));
+  fireEvent.click(view.getByRole("button", { name: "Resolve workspace" }));
+  await waitFor(() => assert.equal(window.location.search, "?session=late"));
+  assert.ok(tabProps.chatTabs.some((tab) => tab.sessionId === "late"));
+  cleanup();
+});
+test("delayed discovery preserves a draft edited after workspace entry", async () => {
+  sessionStorage.clear();
+  const key = newChatDraftKey("/other");
+  clearDraft(key);
+  window.history.replaceState(null, "", "/?cwd=%2Frepo");
+  const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+  await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
+  fireEvent.click(view.getByRole("button", { name: "Pending workspace" }));
+  await waitFor(() => assert.equal(tabProps.cwd, "/other"));
+  setDraft(key, { value: "my draft", images: [], files: [] });
+  fireEvent.click(view.getByRole("button", { name: "Resolve workspace" }));
+  assert.equal(window.location.search, "");
+  assert.ok(!tabProps.chatTabs.some((tab) => tab.sessionId === "late"));
+  clearDraft(key);
+  cleanup();
+});
 test("restored and nested workspaces switch on the first click", async () => {
   window.history.replaceState(null, "", "/?cwd=%2Frepo");
   const view = render(React.createElement(AppShell, { appName: "Keylime" }));

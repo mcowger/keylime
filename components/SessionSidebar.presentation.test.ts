@@ -111,6 +111,23 @@ test("registered hierarchy workspaces can be selected without a single-host head
     restore();
   }
 });
+test("workspace click reconciles after its registered sessions load", async () => {
+  const { promise: sessions, resolve: resolveSessions } = Promise.withResolvers<Response>();
+  const restore = setup(() => Response.json({ projects: [{ ...snapshot.projects[0], workspaces: [{ ...snapshot.projects[0].workspaces[0], sessionIds: ["saved"] }] }] }));
+  const fetchBase = globalThis.fetch;
+  globalThis.fetch = Object.assign((input: RequestInfo | URL, init?: RequestInit) =>
+    new URL(String(input), "http://localhost").pathname === "/api/sessions" ? sessions : fetchBase(input, init),
+    { preconnect: fetchBase.preconnect });
+  const changes: unknown[][] = [];
+  try {
+    renderSidebar({ onCwdChange: (...args) => changes.push(args) });
+    fireEvent.click(await screen.findByRole("button", { name: "Workspace" }));
+    assert.ok(changes.some((args) => args[6] === "pending"));
+    resolveSessions(Response.json({ sessions: [{ id: "saved", cwd: "/workspace", path: "/saved", created: "2026-01-01", modified: "2026-01-02", messageCount: 1, firstMessage: "hello" }] }));
+    await waitFor(() => assert.equal(changes.at(-1)?.[6], "resolved"));
+    assert.equal((changes.at(-1)?.[5] as SessionInfo).id, "saved");
+  } finally { restore(); }
+});
 
 test("one connected host is ungrouped while offline host projects remain visible", async () => {
   const restore = setup((url) => {

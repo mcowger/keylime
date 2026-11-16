@@ -39,7 +39,7 @@ type Props = {
   selectedCwd: string | null;
   selectedHostId: string;
   refreshKey?: number;
-  onSelectWorkspace: (path: string, host: string) => void;
+  onSelectWorkspace: (path: string, host: string, latestSession?: SessionInfo) => void;
   onWorkspaceRemoved: (path: string, host: string) => void;
   onProjects: (projects: ManagedProject[]) => void;
   onSnapshots: (snapshots: Record<string, HierarchySnapshot>) => void;
@@ -765,7 +765,7 @@ export function HierarchySidebar({
                               selectedCwd === workspace.path
                             }
                             onClick={() =>
-                              onSelectWorkspace(workspace.path, host.id)
+                              onSelectWorkspace(workspace.path, host.id, latestSession)
                             }
                           >
                             {workspace.name}

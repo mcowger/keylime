@@ -126,6 +126,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Background job completion notices show structured job summaries with status and duration; their original JSON remains available
 - Client builds no longer warn about search highlight selectors
 - Select menus no longer lock the page and shift it on iOS
+- Opening a workspace without a browser-local chat now selects its most recent registered chat instead of starting a new one
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

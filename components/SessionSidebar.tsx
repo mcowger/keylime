@@ -147,6 +147,8 @@ interface Props {
     hostId: string,
     project?: ManagedProject,
     synchronized?: boolean,
+    latestSession?: SessionInfo,
+    discovery?: "pending" | "resolved",
   ) => void;
   onWorkspaceOptionsChange?: (
     projects: ManagedProject[],
@@ -761,6 +763,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 
   // Notify parent only when the effective cwd actually changes (not when
   // projectRootFor identity changes due to session/worktree refreshes).
+  const pendingWorkspaceDiscovery = useRef<{ path: string; host: string } | null>(null);
   const lastNotifiedCwdRef = useRef<string | null>(null);
   const synchronizedCwdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -779,6 +782,19 @@ export const SessionSidebar = memo(function SessionSidebar({
       synchronized,
     );
   }, [selectedCwd, selectedHostId, onCwdChange, projectRootFor]);
+
+  useEffect(() => {
+    const pending = pendingWorkspaceDiscovery.current;
+    if (!pending || loading || error) return;
+    pendingWorkspaceDiscovery.current = null;
+    const workspace = hierarchySnapshots[pending.host]?.projects
+      .flatMap((project) => project.workspaces)
+      .find((item) => item.path === pending.path);
+    const latest = allSessions
+      .filter((session) => workspace?.sessionIds.includes(session.id) && hostOf(session) === pending.host)
+      .sort((a, b) => (b.lastMessageAt ?? b.modified).localeCompare(a.lastMessageAt ?? a.modified))[0];
+    onCwdChange?.(pending.path, projectRootFor(pending.path, pending.host), pending.host, undefined, false, latest, "resolved");
+  }, [loading, error, allSessions, hierarchySnapshots, onCwdChange, projectRootFor]);
 
   // Sync the worktree switcher to the selected session's cwd. Sessions of all
   // worktrees in a project share one list, so clicking a session from another
@@ -2019,9 +2035,10 @@ export const SessionSidebar = memo(function SessionSidebar({
           selectedSessionId={selectedSessionId}
           selectedCwd={selectedCwd}
           selectedHostId={selectedHostId}
-          onSelectWorkspace={(path, host) => {
-            if (selectedCwd === path && selectedHostId === host)
-              onCwdChange?.(path, projectRootFor(path, host), host);
+          onSelectWorkspace={(path, host, latestSession) => {
+            pendingWorkspaceDiscovery.current = loading ? { path, host } : null;
+            lastNotifiedCwdRef.current = hostProjectKey(host, path);
+            onCwdChange?.(path, projectRootFor(path, host), host, undefined, false, latestSession, loading ? "pending" : undefined);
             setSelectedCwd(path);
             setSelectedHostId(host);
             onClose?.();
