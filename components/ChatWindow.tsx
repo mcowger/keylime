@@ -1806,7 +1806,10 @@ export function ChatWindow({
                     className="flex flex-1 flex-col items-center justify-center overflow-y-auto py-8"
                     style={{ minHeight: 0, paddingInline: CHAT_COLUMN_PADDING }}
                   >
-                    <div className="w-full" style={{ maxWidth: 760 }}>
+                    <div
+                      className="w-full"
+                      style={{ maxWidth: `min(760px, ${CHAT_COLUMN_MAX_WIDTH})` }}
+                    >
                       <div
                         className="mb-3 empty-chat-brand"
                         style={{
@@ -1855,9 +1858,15 @@ export function ChatWindow({
                         align="right"
                       />
                       <ComposerPanels btw={btwPanel} />
-                      {/* ChatInput insets itself by CHAT_COLUMN_PADDING; cancel this column's
-                padding so the composer matches its in-session width. */}
-                      <div style={{ margin: `0 -${CHAT_COLUMN_PADDING}px` }}>
+                      {/* The column already resolves the width preference; the composer fills it. */}
+                      <div
+                        style={
+                          {
+                            margin: `0 -${CHAT_COLUMN_PADDING}px`,
+                            "--chat-column-width": "100%",
+                          } as CSSProperties
+                        }
+                      >
                         {chatInputElement}
                       </div>
                     </div>
