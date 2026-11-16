@@ -53,11 +53,19 @@ const sessions = [
     cwd: repo,
     id: "11111111-1111-4111-8111-111111111111",
     title: "Plan the Atlas project",
+    tasks: [
+      { content: "Plan the project", status: "completed" },
+      { content: "Review the plan", status: "completed" },
+    ],
   },
   {
     cwd: worktree,
     id: "22222222-2222-4222-8222-222222222222",
     title: "Improve search",
+    tasks: [
+      { content: "Inspect search", status: "completed" },
+      { content: "Improve search results", status: "in_progress" },
+    ],
   },
   {
     cwd: notes,
@@ -105,6 +113,16 @@ for (const session of sessions) {
       },
     },
   ];
+  if ("tasks" in session && session.tasks) {
+    entries.push({
+      type: "custom",
+      id: "00000003",
+      parentId: "00000002",
+      timestamp,
+      customType: "user_todo_edit",
+      data: { phases: [{ name: "Tasks", tasks: session.tasks }] },
+    } as (typeof entries)[number]);
+  }
   writeFileSync(
     path.join(dir, `2026-01-01_${session.id}.jsonl`),
     entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n",

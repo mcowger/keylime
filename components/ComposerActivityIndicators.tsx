@@ -46,6 +46,7 @@ export function ComposerActivityIndicators({
 
   const tasks = todoPhases.flatMap((phase) => phase.tasks);
   const done = tasks.filter((task) => task.status === "completed").length;
+  const hasIncompleteTasks = tasks.length > done;
   const activeAgents = subagents.filter(
     (subagent) =>
       subagent.status === "started" && subagent.source !== "history",
@@ -100,11 +101,15 @@ export function ComposerActivityIndicators({
       setOpenPanel(panel);
     };
 
-  if (todoPhases.length === 0 && activeAgents.length === 0) return null;
+  useEffect(() => {
+    if (!hasIncompleteTasks) setOpenPanel((panel) => panel === "todos" ? null : panel);
+  }, [hasIncompleteTasks]);
+
+  if (!hasIncompleteTasks && activeAgents.length === 0) return null;
 
   return (
     <span ref={rootRef} className="composer-activity-indicators" style={{ display: "inline-flex", gap: 6 }}>
-      {todoPhases.length > 0 && (
+      {hasIncompleteTasks && (
         <button
           ref={todoTriggerRef}
           type="button"
@@ -136,7 +141,7 @@ export function ComposerActivityIndicators({
           <span>{activeAgents.length}</span>
         </button>
       )}
-      {openPanel && (
+      {openPanel && (openPanel !== "todos" || hasIncompleteTasks) && (
         <div
           role="dialog"
           aria-label={openPanel === "todos" ? todoLabel : agentLabel}

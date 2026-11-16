@@ -7,6 +7,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ## [Unreleased]
 
 ### Added
+- Seeded development sessions include completed and in-progress tasks for testing composer indicators.
 - Mobile composer controls use square icon actions, reduced padding, and compact running activity indicators.
 - Tool activity rows show available intent alongside their target.
 - `bun run deploy:local:fast:follow` streams the fast deployment log and waits for its detached worker to finish.
@@ -41,6 +42,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Ship can detect an existing open pull request and enable auto-merge on it without creating a duplicate
 - Tool activity rows show available intent alongside their target
 - Eval activity rows display a Python or JavaScript icon before the tool intent
+- Seeded development sessions include completed and in-progress tasks for testing composer indicators
 
 ### Changed
 - Removed in-app key lime update checks and installation for the web server and host daemons. Update installations manually; runner downloads and local deployment remain available.
@@ -66,6 +68,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Removed in-app key lime update checks and installation for the web server and host daemons. Update installations manually; runner downloads and local deployment remain available
 
 ### Fixed
+- Hide the composer task button when all tasks are complete.
 - Select menus keep their portal inside the viewport to avoid focus-induced page shifts on iOS.
 - Markdown tables keep readable column widths on mobile and scroll horizontally when needed.
 - Select menus no longer lock the page and shift it on iOS.
@@ -148,6 +151,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Expanded regression coverage for host reload, missing runners, diagnostics, and test fixtures
 - Markdown tables keep readable column widths on mobile and scroll horizontally when needed
 - Disable Ship when the workspace has no changes or commits to ship
+- Hide the composer task button when all tasks are complete
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
