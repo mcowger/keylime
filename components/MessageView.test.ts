@@ -1189,7 +1189,7 @@ test("skill prompts start collapsed and can be expanded and collapsed", () => {
   assert.doesNotMatch(view.container.textContent!, /Full skill instructions/);
 });
 
-test("async-result notices start collapsed to their first line and expand to the exact line layout", () => {
+test("async-result notices preserve lines and wrap when expanded", () => {
   const view = render(
     React.createElement(MessageView, {
       message: {
@@ -1212,7 +1212,8 @@ test("async-result notices start collapsed to their first line and expand to the
     pre.textContent,
     "Background job bg_1 has completed. Resume your work using the result below.\n/root/repo\n---\nWall time: 0.16 seconds",
   );
-  assert.match(pre.getAttribute("style")!, /white-space: pre;/);
+  assert.ok(pre.classList.contains("activity-result-text"));
+  assert.ok(view.getByRole("button", { name: /copy/i }).classList.contains("message-copy-action"));
   assert.doesNotMatch(view.container.innerHTML, /system-notice|<h2/);
 });
 
@@ -1275,7 +1276,7 @@ test("cancelled async jobs render the aborted status instead of a running indica
   assert.equal(view.container.querySelector(".live-status-dot"), null);
 });
 
-test("late LSP diagnostic notices expand to their exact line layout", () => {
+test("late LSP diagnostics show structured findings and retain multiline text", () => {
   const view = render(
     React.createElement(MessageView, {
       message: {
@@ -1292,10 +1293,10 @@ test("late LSP diagnostic notices expand to their exact line layout", () => {
   assert.ok(view.getByRole("button", { expanded: false }).querySelector(".activity-row-indicator svg.lucide-circle-alert"));
   assert.doesNotMatch(view.container.textContent!, /Organize imports/);
   fireEvent.click(view.getByRole("button", { expanded: false }));
-  assert.equal(
-    view.container.querySelector("pre")!.textContent,
-    "Late LSP diagnostics arrived after the edit returned:\n/repo/a.py — 0 error(s), 1 warning(s)\n/repo/a.py:8:1 [warning] [Ruff] Import block is un-sorted or un-formatted\n\nhelp: Organize imports (I001)",
-  );
+  assert.match(view.container.querySelector(".late-diagnostic-heading")!.textContent!, /warning.*Ruff.*\/repo\/a\.py:8:1/);
+  assert.match(view.container.querySelector(".late-diagnostic-text:last-child")!.textContent!, /Late LSP diagnostics/);
+  assert.match(view.container.textContent!, /Import block is un-sorted or un-formatted\n\nhelp: Organize imports \(I001\)/);
+  assert.ok(view.getByRole("button", { name: /copy/i }));
   assert.doesNotMatch(view.container.innerHTML, /system-notice/);
 });
 

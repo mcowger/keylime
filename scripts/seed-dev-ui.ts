@@ -132,6 +132,22 @@ for (const session of sessions) {
           message: { role: "custom", customType: "advisor", display: true, content: session.advisor, details: { notes: [{ note: session.advisor, severity: "concern" }] }, timestamp: 1767225602000 },
         }]
       : []),
+    ...("advisor" in session && session.advisor
+      ? [{
+          type: "message",
+          id: "00000005",
+          parentId: "00000004",
+          timestamp,
+          message: { role: "custom", customType: "lsp-late-diagnostic", display: true, content: `<system-notice>\nLate LSP diagnostics arrived after the edit returned:\n${repo}/src/index.ts — 1 error(s), 1 warning(s)\n${repo}/src/index.ts:12:8 [error] [ts] Type 'string' is not assignable to type 'number'.\n  The expected type comes from the return value.\n${repo}/src/index.ts:15:3 [warning] [eslint] Unused variable 'result'.\n</system-notice>`, timestamp: 1767225603000 },
+        }]
+      : []),
+    ...("advisor" in session && session.advisor
+      ? [
+          { type: "message", id: "00000006", parentId: "00000005", timestamp, message: { role: "custom", customType: "async-result", display: true, content: `<system-notice>\nBackground job bg_1 completed.\n${repo}/src/index.ts\nA long result with preserved line breaks and a path that wraps on narrow screens.\n  Indented output remains intact.\n</system-notice>`, details: { jobs: [{ jobId: "bg_1", type: "task", status: "completed", label: "Search review", durationMs: 194633 }] }, timestamp: 1767225604000 } },
+          { type: "message", id: "00000007", parentId: "00000006", timestamp, message: { role: "custom", customType: "developer", display: true, content: '<system-reminder reason="rule_violation" rule="example">\nReview **error handling** before continuing.\n</system-reminder>', details: { rule: "example" }, timestamp: 1767225605000 } },
+          { type: "message", id: "00000008", parentId: "00000007", timestamp, message: { role: "custom", customType: "job-result", display: true, content: "Search review finished.", details: { jobs: [{ jobId: "bg_2", type: "task", status: "failed", label: "Index check", durationMs: 211815 }] }, timestamp: 1767225606000 } },
+        ]
+      : []),
   ];
   writeFileSync(
     path.join(dir, `2026-01-01_${session.id}.jsonl`),

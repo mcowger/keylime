@@ -2622,6 +2622,28 @@ function friendlyHiddenLabel(
 }
 
 
+function LateDiagnostics({ body }: { body: string }) {
+  const lines = body.split("\n");
+  const diagnostic = /^(.*?):(\d+):(\d+)\s+\[(error|warning|info|hint)\](?:\s+\[([^\]]+)\])?\s*(.*)$/i;
+  const blocks: { heading?: string; severity?: string; source?: string; text: string[] }[] = [];
+  for (const line of lines) {
+    const match = diagnostic.exec(line);
+    if (match) {
+      blocks.push({ heading: `${match[1]}:${match[2]}:${match[3]}`, severity: match[4].toLowerCase(), source: match[5], text: [match[6]] });
+    } else if (blocks.length) {
+      blocks[blocks.length - 1].text.push(line);
+    } else {
+      blocks.push({ text: [line] });
+    }
+  }
+  return <div className="late-diagnostics">{blocks.map((block, i) =>
+    <div className="late-diagnostic" key={i}>
+      {block.heading && <div className="late-diagnostic-heading"><span className={`late-diagnostic-severity late-diagnostic-severity-${block.severity}`}>{block.severity}</span>{block.source && <span>{block.source}</span>}<span className="late-diagnostic-path">{block.heading}</span></div>}
+      <div className="late-diagnostic-text">{block.text.join("\n")}</div>
+    </div>
+  )}</div>;
+}
+
 function CustomActivityRow({ message, cwd, onOpenFile, sessionId, defaultCollapsed }: {
   message: CustomMessage;
   cwd?: string;
@@ -2637,7 +2659,7 @@ function CustomActivityRow({ message, cwd, onOpenFile, sessionId, defaultCollaps
   const isIrc = IRC_CUSTOM_TYPES.has(message.customType);
   const isHidden = message.display === false;
   const isDeveloper = message.customType === "developer";
-  const isPlainText = isAsync || message.customType === "lsp-late-diagnostic";
+  const isDiagnostic = message.customType === "lsp-late-diagnostic";
   const wrapper = isDeveloper ? parseLeadingWrapper(text) : null;
   const envelope = isIrc ? parseIrcEnvelope(text) : null;
   const body = envelope ? envelope.body : isAsync || isDeveloper || message.customType === "lsp-late-diagnostic" || isHidden ? stripHiddenWrappers(text) : text;
@@ -2672,10 +2694,12 @@ function CustomActivityRow({ message, cwd, onOpenFile, sessionId, defaultCollaps
           {time && <div style={{ color: "var(--text-dim)", fontSize: 10 }}>{time}</div>}
           {wrapper && <div style={{ color: "var(--text-dim)", fontSize: 11, overflowWrap: "anywhere" }}>{wrapperTitle(wrapper)}</div>}
           {images.map((image, i) => { const src = imageSource(image); return src ? <ClickableImage key={i} src={src} alt="" style={{ maxWidth: 240, maxHeight: 240 }} /> : null; })}
-          {isPlainText ? <pre style={{ margin: 0, overflow: "auto", whiteSpace: "pre", fontFamily: "var(--font-mono)" }}>{body}</pre> : <MarkdownBody className="markdown-custom-message" cwd={cwd} onOpenFile={onOpenFile} sourceSessionId={sessionId}>{body}</MarkdownBody>}
-          {(text || message.details !== undefined) && <button onClick={() => copy(body || safeJson(message.details))}>{copied ? t("messageView.copied") : t("messageView.copy")}</button>}
+          {isDiagnostic ? <LateDiagnostics body={body} /> : isAsync ? <pre className="activity-result-text">{body}</pre> : <MarkdownBody className="markdown-custom-message" cwd={cwd} onOpenFile={onOpenFile} sourceSessionId={sessionId}>{body}</MarkdownBody>}
           {hasJobs && <HubResultPanel input={{ op: "jobs" }} result={{ role: "toolResult", toolCallId: "", toolName: "hub", content: [], details: { op: "jobs", jobs } }} />}
-          {message.details !== undefined && <details><summary>JSON</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{safeJson(message.details)}</pre></details>}
+          <div className="advisor-message-actions">
+            {(text || message.details !== undefined) && <button className="message-copy-action" aria-label={copied ? t("messageView.copied") : t("messageView.copy")} title={copied ? t("messageView.copied") : t("messageView.copy")} onClick={() => copy(body || safeJson(message.details))}>{copied ? <Check size={14} /> : <Copy size={14} />}</button>}
+            {message.details !== undefined && <details className="advisor-message-details"><summary>JSON</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{safeJson(message.details)}</pre></details>}
+          </div>
         </div>}
       </Collapsible>
     </div>
