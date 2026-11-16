@@ -59,7 +59,7 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
   const command = JSON.parse(line);
   record({ type: "stdin", command });
   if (command.t === "ui_response") {
-    // ompweb names the dialog by its wire id as a string.
+    // keylime names the dialog by its wire id as a string.
     record({ type: "answer", id: String(command.id) });
     return end();
   }

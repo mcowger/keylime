@@ -12,7 +12,7 @@ afterEach(cleanup);
 const noop = () => {};
 const settle = () =>
   act(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
-const MEMBER_CWD = "/srv/h1/ompweb-cluster/app";
+const MEMBER_CWD = "/srv/h1/keylime-cluster/app";
 const MEMBER_SESSION = "member-session-1";
 const NOTICE = "Cluster configuration: changes here apply to every member.";
 const REMOTE = "Not available on remote hosts yet";

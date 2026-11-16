@@ -1,4 +1,4 @@
-/* Keep Tailwind's content scan inside the omp-web package. */
+/* Keep Tailwind's content scan inside the keylime package. */
 @import "tailwindcss" source(none);
 @import "@xterm/xterm/css/xterm.css";
 @import "../components/WorkspaceSwitcher.css";

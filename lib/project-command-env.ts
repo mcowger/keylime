@@ -1,15 +1,15 @@
 /**
- * Remove variables owned by the omp-web host before starting any child
+ * Remove variables owned by the keylime host before starting any child
  * process. Two groups are stripped:
  *
  *  - Host runtime variables (PORT, NODE_ENV): these describe the
- *    omp-web server, not the selected project, and can make project commands
+ *    keylime server, not the selected project, and can make project commands
  *    behave as if they were running inside the web app.
- *  - omp-web's own secrets. Every `omp` session inherits this environment, so
+ *  - keylime's own secrets. Every `omp` session inherits this environment, so
  *    an agent that runs `env` would otherwise print the web password hash into
  *    its transcript and off to the model provider (issue #239). Only the
- *    *secret* names are removed, not every `OMP_WEB_*`: the update and restart
- *    plumbing (OMP_WEB_PACKAGE_DIR, OMP_WEB_LAUNCHER_PID, ...) is read from the
+ *    *secret* names are removed, not every `KEYLIME_*`: the update and restart
+ *    plumbing (KEYLIME_PACKAGE_DIR, KEYLIME_LAUNCHER_PID, ...) is read from the
  *    environment by this same server, and the launcher's non-secret settings
  *    must keep reaching it.
  */
@@ -18,31 +18,31 @@
 const HOST_RUNTIME_NAMES: readonly string[] = ["PORT", "NODE_ENV"];
 
 /**
- * omp-web secrets. `OMP_WEB_PASSWORD` is the legacy plaintext (still listed so
+ * keylime secrets. `KEYLIME_PASSWORD` is the legacy plaintext (still listed so
  * a dev server started from an old .env cannot leak it), and
- * `OMP_WEB_TRUSTED_HEADER_SECRET` is the pre-digest name of the trusted-proxy
+ * `KEYLIME_TRUSTED_HEADER_SECRET` is the pre-digest name of the trusted-proxy
  * secret, which an old service env file may still carry; the others are the
  * values that grant access to this server.
  */
-export const OMP_WEB_SECRET_ENV_VARS: readonly string[] = [
-  "OMP_WEB_PASSWORD",
-  "OMP_WEB_PASSWORD_HASH",
-  "OMP_WEB_TRUSTED_HEADER_SECRET",
-  "OMP_WEB_TRUSTED_HEADER_SHA256",
+export const KEYLIME_SECRET_ENV_VARS: readonly string[] = [
+  "KEYLIME_PASSWORD",
+  "KEYLIME_PASSWORD_HASH",
+  "KEYLIME_TRUSTED_HEADER_SECRET",
+  "KEYLIME_TRUSTED_HEADER_SHA256",
   // Server-side STT credential (read only by lib/stt.ts): no child ever
   // needs it, and an agent running `env` would otherwise print it into its
   // transcript and off to the model provider, as with the password hash.
-  "OMP_WEB_STT_KEY",
+  "KEYLIME_STT_KEY",
 ];
 
-/** True when the variable belongs to the omp-web host rather than the child. */
+/** True when the variable belongs to the keylime host rather than the child. */
 export function isHostRuntimeVariable(name: string): boolean {
   return HOST_RUNTIME_NAMES.includes(name);
 }
 
-/** True when the variable is one of omp-web's secrets. */
-export function isOmpWebSecretVariable(name: string): boolean {
-  return OMP_WEB_SECRET_ENV_VARS.includes(name);
+/** True when the variable is one of keylime's secrets. */
+export function isKeylimeSecretVariable(name: string): boolean {
+  return KEYLIME_SECRET_ENV_VARS.includes(name);
 }
 
 export function sanitizeProjectCommandEnvironment(
@@ -50,7 +50,7 @@ export function sanitizeProjectCommandEnvironment(
 ): NodeJS.ProcessEnv {
   const environment = { ...baseEnvironment };
   for (const name of Object.keys(environment)) {
-    if (isHostRuntimeVariable(name) || isOmpWebSecretVariable(name)) {
+    if (isHostRuntimeVariable(name) || isKeylimeSecretVariable(name)) {
       delete environment[name];
     }
   }

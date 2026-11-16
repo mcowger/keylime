@@ -389,7 +389,7 @@ test("host creation defaults work without projects and base ref follows remote H
     );
     const settingsFile = path.join(
       process.env.PI_CODING_AGENT_DIR,
-      "omp-web",
+      "keylime",
       "workspace-creation",
       "settings.json",
     );

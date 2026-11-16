@@ -47,7 +47,7 @@ test("the tab wakes the worker with a stored client id and follows the worker's 
   );
   openEventStream({ kind: "running" });
 
-  const clientId = localStorage.getItem("omp-web:transport-client-id");
+  const clientId = localStorage.getItem("keylime:transport-client-id");
   assert.ok(clientId);
   assert.match(clientId, /^[a-z0-9]{8,}$/);
   assert.deepEqual(posted[0], {

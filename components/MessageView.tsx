@@ -957,7 +957,7 @@ const heldActionStyle = {
   whiteSpace: "nowrap",
 } as const;
 
-/** A message omp-web holds until omp has it (docs/specs/2026-11-04-message-outbox-design.md O1): dimmed, after the
+/** A message keylime holds until omp has it (docs/specs/2026-11-04-message-outbox-design.md O1): dimmed, after the
  * live turn, naming the leg it waits on. Retry failed messages; uncertain delivery needs confirmation. */
 export function HeldMessageView({
   held,

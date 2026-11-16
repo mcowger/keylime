@@ -33,7 +33,7 @@ type FrameData = {
 type SinkWrite = { name: string; at: number; data: FrameData };
 
 // Hello reads the browserTransport setting; keep that read off the real agent dir.
-const isolatedAgentDir = fs.mkdtempSync(path.join(os.tmpdir(), "omp-web-hub-"));
+const isolatedAgentDir = fs.mkdtempSync(path.join(os.tmpdir(), "keylime-hub-"));
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 process.env.PI_CODING_AGENT_DIR = isolatedAgentDir;
 after(() => {
@@ -826,7 +826,7 @@ test(
   { timeout: 10000 },
   async (t) => {
     const base = fs.mkdtempSync(
-      path.join(os.tmpdir(), "omp-web-event-stream-"),
+      path.join(os.homedir(), ".keylime-event-stream-"),
     );
     const previousRoots = globalThis.__piAllowedRootsCache;
     let reader: Reader | undefined;
@@ -939,7 +939,7 @@ test(
 
 test("file channel re-checks the file after a watch event, so a save whose event was dropped still reports", async (t) => {
   const allowed = fs.mkdtempSync(
-    path.join(os.tmpdir(), "omp-web-event-stream-"),
+    path.join(os.tmpdir(), "keylime-event-stream-"),
   );
   const previousRoots = globalThis.__piAllowedRootsCache;
   let reader: Reader | undefined;
@@ -996,7 +996,7 @@ test("file channel re-checks the file after a watch event, so a save whose event
 
 test("file channel watches a session's own local:// artifact through its host's daemon and nobody else's", async (t) => {
   const base = fs.realpathSync(
-    fs.mkdtempSync(path.join(os.tmpdir(), "omp-web-event-stream-local-")),
+    fs.mkdtempSync(path.join(os.homedir(), ".keylime-event-stream-local-")),
   );
   const previousRoots = globalThis.__piAllowedRootsCache;
   const releases: (() => void)[] = [];
@@ -1183,7 +1183,7 @@ test("file channel watches a session's own local:// artifact through its host's 
 
 test("file channel never reports the stat of a path that was swapped for a link out of its authorized file", async (t) => {
   const base = fs.realpathSync(
-    fs.mkdtempSync(path.join(os.tmpdir(), "omp-web-event-stream-swap-")),
+    fs.mkdtempSync(path.join(os.homedir(), ".keylime-event-stream-swap-")),
   );
   const previousRoots = globalThis.__piAllowedRootsCache;
   let reader: Reader | undefined;
@@ -1290,7 +1290,7 @@ test("file channel never reports the stat of a path that was swapped for a link 
 
 test("hosts subscription sends the host list on subscribe and after every change, then releases its listener", async () => {
   const agentDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "omp-web-hosts-channel-"),
+    path.join(os.tmpdir(), "keylime-hosts-channel-"),
   );
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = agentDir;

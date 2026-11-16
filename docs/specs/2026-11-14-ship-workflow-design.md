@@ -61,11 +61,11 @@ Main gives these three commands a long timeout; a timeout never recycles the chi
 Local: rebase → commit check → fastForward → archiveSessions → removeWorkspace.
 PR: rebase → push → createPr → autoMerge (pr-auto). Finish (merged PR): pullBase → archiveSessions → removeWorkspace.
 
-Jobs persist under `<agent dir>/omp-web/ship/jobs/`; a daemon restart marks running jobs `interrupted`.
+Jobs persist under `<agent dir>/keylime/ship/jobs/`; a daemon restart marks running jobs `interrupted`.
 
 ## Merge watcher
 
-The daemon records each PR it opened or adopted (`<agent dir>/omp-web/ship/prs.json`, by workspace path) and checks open ones
+The daemon records each PR it opened or adopted (`<agent dir>/keylime/ship/prs.json`, by workspace path) and checks open ones
 with `gh pr view` every 60 s. `HierarchyWorkspace.ship` carries the PR and any running job, so the sidebar pill
 (`PR #N · checks`, `Merged · Clean up`) follows the hierarchy refresh. When a PR merges and `cleanup` is set, the
 daemon runs `shipFinish` itself; otherwise the pill's **Clean up** does.

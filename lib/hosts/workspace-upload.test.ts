@@ -17,7 +17,7 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join, relative } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import test, { after } from "node:test";
@@ -29,7 +29,7 @@ import type * as RetentionModule from "./upload-retention.ts";
 import { mockBuiltin } from "../../tests/mock-builtin.ts";
 
 const scratch = realpathSync(
-  mkdtempSync(join(tmpdir(), "omp-workspace-publication-")),
+  mkdtempSync(join(homedir(), ".omp-workspace-publication-")),
 );
 const previousAgent = process.env.PI_CODING_AGENT_DIR;
 process.env.PI_CODING_AGENT_DIR = join(scratch, "agent");

@@ -1,5 +1,5 @@
 // `local://` URLs as omp's own local-protocol.ts reads them (`extractRelativePath` + `validateRelativePath`, omp
-// 18.3.1+ and the installed 18.15): the file an agent wrote with `local://x` is the one ompweb opens, and nothing omp
+// 18.3.1+ and the installed 18.15): the file an agent wrote with `local://x` is the one keylime opens, and nothing omp
 // refuses is accepted here. A NUL byte and an empty path are refused; POSIX backslashes are literal filename characters.
 // Pure (no I/O, no `@/` imports): the open_file host tool in the browser and the server share it.
 

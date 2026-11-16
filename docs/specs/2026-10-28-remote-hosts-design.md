@@ -1,8 +1,8 @@
-# Remote hosts: run omp sessions on other machines from one omp-web
+# Remote hosts: run omp sessions on other machines from one keylime
 
 ## Goal
 
-One omp-web drives omp sessions on several machines. Examples: work that must
+One keylime drives omp sessions on several machines. Examples: work that must
 run on a MacBook (its hardware, its files), or load spread over machines
 without agents using SSH between them. An agent in one session can also start a
 session on another machine.
@@ -11,7 +11,7 @@ Each machine keeps its own omp install, agent directory (`~/.omp/agent`),
 sessions and credentials, except that a host with credential sharing turned on
 uses the web server's provider logins
 (`docs/specs/2026-11-10-shared-credentials-design.md`). Nothing else is shared
-between machines; omp-web only routes.
+between machines; keylime only routes.
 
 ## Delivery
 
@@ -47,21 +47,21 @@ are this machine's own, mirrored to each member by its daemon
 ## Architecture
 
 ```
-Browser ─▶ main omp-web ──┬─ LocalHost ── spawn omp --mode rpc-ui (stdio)
+Browser ─▶ main keylime ──┬─ LocalHost ── spawn omp --mode rpc-ui (stdio)
                           │
-                          └─ RemoteHost ◀── link (WebSocket) ── ompweb host (daemon)
+                          └─ RemoteHost ◀── link (WebSocket) ── keylime host (daemon)
                                                                └─ spawn omp --mode rpc-ui
 ```
 
-### Daemon: `ompweb host`
+### Daemon: `keylime host`
 
-A subcommand of the existing `@kahme247/ompweb` package (`bin/omp-web.js`), so
-it runs omp-web's own `lib/` server code on the remote machine.
+A subcommand of the existing `@kahme247/ompweb` package (`bin/keylime.js`), so
+it runs keylime's own `lib/` server code on the remote machine.
 
-- `ompweb host login --url <url>` reads the host token from stdin and saves
-  `<agent dir>/omp-web/host.json` (mode 0600). The token is never an argv
+- `keylime host login --url <url>` reads the host token from stdin and saves
+  `<agent dir>/keylime/host.json` (mode 0600). The token is never an argv
   value, which `ps` would expose.
-- `ompweb host` dials the saved URL and keeps the link up, reconnecting with
+- `keylime host` dials the saved URL and keeps the link up, reconnecting with
   exponential backoff (1 s doubling to 60 s, with jitter).
 - `https://` is required. `http://` is accepted only for loopback addresses or
   with `--allow-http` (for example on a tailnet).
@@ -71,12 +71,12 @@ it runs omp-web's own `lib/` server code on the remote machine.
   There is no generic exec or file-read op. It loads that code with `jiti`,
   already a runtime dependency used by `bin/` to load `lib/*.ts`.
 - omp children outlive a dropped link; their output is buffered (see Link).
-- Auto-resume stays with the main omp-web, which already knows which sessions
+- Auto-resume stays with the main keylime, which already knows which sessions
   are mid-run. Its interrupted-session list records each session's `hostId`;
   remote entries are resumed once their host links again (see Rules →
   Reattach).
 
-### Host hub (main omp-web)
+### Host hub (main keylime)
 
 `lib/hosts/hub.ts` accepts daemon links on `/api/hosts/link` and keeps a
 `globalThis` registry `hostId → link`, the same pattern as `lib/rpc-manager.ts`
@@ -84,7 +84,7 @@ it runs omp-web's own `lib/` server code on the remote machine.
 
 ### `Host` interface
 
-`lib/hosts/host.ts` defines the one seam between omp-web and a machine:
+`lib/hosts/host.ts` defines the one seam between keylime and a machine:
 
 - `spawnRpc(request) → { transport, cwd, fellBack, launchAdvisor }`: the host
   computes the spawn cwd fallback, project launch config, environment
@@ -109,28 +109,28 @@ the process runs.
 
 ### Host registry
 
-`<agent dir>/omp-web/hosts.json`, mode 0600, written atomically (temp file +
+`<agent dir>/keylime/hosts.json`, mode 0600, written atomically (temp file +
 rename, like `lib/project-registry.ts`). Each record: `id`, `label`,
 `tokenHash` (`sha256` hex), `createdAt`, `lastSeenAt`,
 `allowAgentStart` (bool, default `false`). The built-in `local` host is not
 stored.
 
 Settings → Hosts lists hosts with status, omp version and last seen; adds a
-host (shows the token once, with the `ompweb host login` command to run);
+host (shows the token once, with the `keylime host login` command to run);
 renames; revokes; toggles `allowAgentStart`.
 
 #### Per-host software updates
 
-Every row, including **This machine**, shows the daemon's ompweb version and
+Every row, including **This machine**, shows the daemon's keylime version and
 the OMP runtime version, checks for available updates and exposes update actions.
 **System & Updates** is renamed **System** and keeps the web server's controls.
 Host checks and installations use `checkUpdates` and `updateSoftware` host ops;
 `GET /api/hosts/[id]/updates?force=1` refreshes the check, and a POST with
-`{target: "ompweb" | "omp", version}` requests installation of that exact candidate.
+`{target: "keylime" | "omp", version}` requests installation of that exact candidate.
 No browser-supplied command, installation path, URL or protocol range is accepted.
 
 The hub supplies its supported link-protocol range. Both the hub and daemon
-block an ompweb candidate outside that range, or whose protocol cannot be
+block an keylime candidate outside that range, or whose protocol cannot be
 verified, before installation. Availability and the blocking reason remain
 visible; the user updates the web server first. OMP does not change the link
 protocol and is never blocked for this reason.
@@ -160,7 +160,7 @@ from an interactive shell.
 
 Only the detached helper restarts the daemon after stopping it. A helper killed
 between the stop and a healthy acknowledgement leaves the host offline and the
-installation either the old release or the candidate (with `.ompweb-backup-<id>`
+installation either the old release or the candidate (with `.keylime-backup-<id>`
 beside it); recovery is manual, as the README describes. Automatic recovery
 would need a supervisor that outlives the helper on every platform; there is
 none on unmanaged macOS hosts, so none was added.
@@ -320,8 +320,8 @@ that upload's file.
   compatibility"). A hello whose `v` is outside that range (checked on the raw
   JSON before decoding) gets close 4426 with reason `{"serverVersion":11}`; the
   daemon exits 1, telling which side to
-  update ("update ompweb on this host", or "this host's ompweb is newer than
-  the server's: update ompweb on the server" when `serverVersion` is below its
+  update ("update keylime on this host", or "this host's keylime is newer than
+  the server's: update keylime on the server" when `serverVersion` is below its
   own); Settings → Hosts shows "needs upgrade (host vN, server vM)" unless the
   host has a healthy socket.
 - **Identity.** The host is the record whose `tokenHash` matches. Nothing the
@@ -421,22 +421,22 @@ the `spawn` op are gone).
 - **v4 (the WebSocket link) dropped v3** before any release; from the next
   version on, main keeps N-1. A v3 daemon POSTs its hello to
   `/api/hosts/link`; main answers that POST 426 with both versions (and never
-  links it), so the old daemon logs "update ompweb on this host" and exits 1.
+  links it), so the old daemon logs "update keylime on this host" and exits 1.
   A v4 daemon dialing an older server gets an upgrade refusal and keeps
   redialing (backoff up to 60 s) with a hint, so it links once the server is
   updated. Update the server first, then its hosts.
 - **v5 (pieces) keeps v4.** A v5 server links a v4 daemon as before (`welcome
 {v: 4}`, whole lines, its one-frame results joined like pieces). A v5 daemon
   dialing a v4 server gets close 4426 with `{"serverVersion":4}`, logs "this
-  host's ompweb is newer than the server's: update ompweb on the server" and
+  host's keylime is newer than the server's: update keylime on the server" and
   exits 1; update the server first.
 - **v6 (uploads) keeps v4 and v5.** A v6 server links v4 and v5 daemons as
   before and sends them no upload frames: an upload to such a host gets 426
   (`host_upgrade_required` on a remote host; `host_restart_required` on this
   machine, whose daemon an in-place upgrade leaves running because v4/v5 is
   inside `[MIN, LINK]`). A v6 daemon dialing a v5 server gets close 4426 with
-  `{"serverVersion":5}`, logs "this host's ompweb is newer than the server's:
-  update ompweb on the server" and exits 1; update the server first.
+  `{"serverVersion":5}`, logs "this host's keylime is newer than the server's:
+  update keylime on the server" and exits 1; update the server first.
 - **v11 (omp runner) drops v4–v10.** The meaning of a channel line changed
   (runner `{t}` frames instead of omp RPC frames), so no older peer can share
   a channel; both sides refuse one with 426 / close 4426 instead of hanging.
@@ -499,7 +499,7 @@ A timeout (or a link lost after the op was sent) does not stop the daemon: the o
   transport (`host.spawnRpc`); everything above `RpcProcess` is unchanged.
 - **Images.** On a local miss, `/api/media/<hash>` asks each online remote
   host for `readMedia {hash}`, accepts the first answer whose sha256 equals
-  the hash, and stores it in the main omp-web's media directory, so later
+  the hash, and stores it in the main keylime's media directory, so later
   requests are local. No host id rides in image URLs.
 - **Host status.** A new `hosts` event-stream channel publishes host status
   changes (sidebar dots, Settings → Hosts). Each wrapper on a host also emits
@@ -526,7 +526,7 @@ A timeout (or a link lost after the op was sent) does not stop the daemon: the o
 
 ## Security
 
-**Trust model.** The main omp-web can start omp, with full tool access, on
+**Trust model.** The main keylime can start omp, with full tool access, on
 every linked host. Control of the main server or of a host token is a shell on
 that machine. That is inherent to the feature and the same exposure the main
 machine already has. The rules below limit anything beyond it.
@@ -559,7 +559,7 @@ machine already has. The rules below limit anything beyond it.
 
 ## Agent-initiated sessions
 
-omp-web already answers three agent tools itself (`list_sessions`,
+keylime already answers three agent tools itself (`list_sessions`,
 `new_session`, `send_to_session` in `lib/agent-tools.ts`, gated by the
 `agentToolsEnabled` web setting). They are extended, not duplicated:
 
@@ -568,8 +568,8 @@ omp-web already answers three agent tools itself (`list_sessions`,
 - `list_sessions` covers every host and names each session's host.
 - `send_to_session` reaches a session on any host.
 
-The calls arrive over a session omp-web already owns, so they need no new
-credential and cannot be reached from outside omp-web. Each call carries the
+The calls arrive over a session keylime already owns, so they need no new
+credential and cannot be reached from outside keylime. Each call carries the
 calling session's host (`sourceHostId`).
 
 **Guard:** creating a session on a remote host whose `allowAgentStart` is
@@ -613,7 +613,7 @@ asks ("Send a message from a session on <host> to session <id> on
   - buffer overflow → `resync` → reconcile
   - remote path scoping and blob-hash validation
   - `new_session` remote confirm gate, with `allowAgentStart` on and off
-- **Integration:** a real `ompweb host` process with its own `HOME` (a second
+- **Integration:** a real `keylime host` process with its own `HOME` (a second
   "machine") linked to the dev server on loopback. Start a session, stream a
   reply, cut the link, reconnect, check reattach and that no frame is lost or
   duplicated.
@@ -626,6 +626,6 @@ asks ("Send a message from a session on <host> to session <id> on
 - `AGENTS.md`: a "Remote hosts" section (Host interface, link protocol rules,
   one-link-per-host, transport-down vs exited), and new files in the file map.
 - `DESIGN.md`: the `Host` seam in the porting contract.
-- `README.md`: how to link a machine (`ompweb host login`, `ompweb host`,
+- `README.md`: how to link a machine (`keylime host login`, `keylime host`,
   running it as a service).
 - `CHANGELOG.md` entry.

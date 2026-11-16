@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@kahme247/ompweb-omp",
+      "name": "@mcowger/keylime-omp",
       "dependencies": {
         "@oh-my-pi/pi-coding-agent": "file:./vendor/oh-my-pi-pi-coding-agent-18.20.0.tgz",
         "@oh-my-pi/pi-natives": "file:./vendor/oh-my-pi-pi-natives-18.20.0-int.202611131515.g11d9dc7.tgz",

@@ -1,22 +1,22 @@
-# ompweb ships the omp integration build — design
+# keylime ships the omp integration build — design
 
-Date: 2026-11-12, final 2026-11-13. ompweb side: PR #473 (`feat/omp-runner`).
-Supersedes: `andrebrait/integration-ci` `docs/specs/2026-11-11-omp-auto-integration-design.md` (the round moves into the fork) and its §3 (omp-web's **Custom** omp update source, never built). §3b (ompweb pre-release channel) and §3c (GitHub token) are unaffected.
-Depends on: PR #473's runner (`runner/`, `ompweb-omp`); can1357/oh-my-pi#19075 (`runSessionHost`) and the fork owner's `feat/configurable-update-source` (`ef93b0ad`, `PI_UPDATE_REPO`), both carried in the integration build.
+Date: 2026-11-12, final 2026-11-13. keylime side: PR #473 (`feat/omp-runner`).
+Supersedes: `andrebrait/integration-ci` `docs/specs/2026-11-11-omp-auto-integration-design.md` (the round moves into the fork) and its §3 (keylime's **Custom** omp update source, never built). §3b (keylime pre-release channel) and §3c (GitHub token) are unaffected.
+Depends on: PR #473's runner (`runner/`, `keylime-omp`); can1357/oh-my-pi#19075 (`runSessionHost`) and the fork owner's `feat/configurable-update-source` (`ef93b0ad`, `PI_UPDATE_REPO`), both carried in the integration build.
 
 ## Why
 
-Before this design, ompweb's own omp build (`ompweb-omp`, `runner/`) compiled against npm `@oh-my-pi/pi-coding-agent@18.19.0` plus a Bun patch that back-ported `runSessionHost`, and the omp deployed on the build host came from integration-ci's hourly integration of upstream releases plus the carried PRs, released on `ompweb-dev/oh-my-pi`. This design moves that round into the fork itself, makes fork binaries update from fork releases, and makes `ompweb-omp` compile against the fork's own packages.
+Before this design, keylime's own omp build (`keylime-omp`, `runner/`) compiled against npm `@oh-my-pi/pi-coding-agent@18.19.0` plus a Bun patch that back-ported `runSessionHost`, and the omp deployed on the build host came from integration-ci's hourly integration of upstream releases plus the carried PRs, released on `ompweb-dev/oh-my-pi`. This design moves that round into the fork itself, makes fork binaries update from fork releases, and makes `keylime-omp` compile against the fork's own packages.
 
-Current state: `runner/omp-build.json` pins the fork release `v18.20.0-int.202611130808.gfd57e86`, the runner installs only that release's packages, and the Bun patch and `runner/patches/` are gone. Every ompweb (pre)release re-pins to the newest `integration-release` build (W2). Progress per task is in `docs/plans/2026-11-12-omp-build-in-ompweb.md`.
+Current state: `runner/omp-build.json` pins the fork release `v18.20.0-int.202611130808.gfd57e86`, the runner installs only that release's packages, and the Bun patch and `runner/patches/` are gone. Every keylime (pre)release re-pins to the newest `integration-release` build (W2). Progress per task is in `docs/plans/2026-11-12-omp-build-in-ompweb.md`.
 
 ## Three places
 
 | Where                            | Owns after cut-over                                                                                                                                                                                                                         | Secrets                                                                                                                                                                       |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ompweb-dev/oh-my-pi` (the fork) | the omp round on branch `fork-ci` (workflows, config, fixups, repair prompt, helper scripts); releases `v<upstream>-int.<stamp>.g<sha7>` with binaries and an npm package zip; `integration-release`; `apple-sdk` mirror; escalation issues | Environment `omp-round` (only `fork-ci`): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OMP_FORK_TOKEN` (fallback only, F3). Everything else uses the workflow's own `GITHUB_TOKEN` |
-| `ompweb-dev/ompweb`              | `runner/` pinned to one fork release's packages; every (pre)release re-pins to the newest `integration-release` build; the omp row follows ompweb                                                                                           | none                                                                                                                                                                          |
-| `andrebrait/integration-ci`      | the `integration` script (single copy); graphify, superpowers and ompweb builds; its omp workflows, scripts, config, fixups, releases and omp secrets are deleted after cut-over                                                            | omp secrets removed                                                                                                                                                           |
+| `ompweb-dev/ompweb`              | `runner/` pinned to one fork release's packages; every (pre)release re-pins to the newest `integration-release` build; the omp row follows keylime                                                                                           | none                                                                                                                                                                          |
+| `andrebrait/integration-ci`      | the `integration` script (single copy); graphify, superpowers and keylime builds; its omp workflows, scripts, config, fixups, releases and omp secrets are deleted after cut-over                                                            | omp secrets removed                                                                                                                                                           |
 
 ## Fork
 
@@ -100,7 +100,7 @@ Push with `GITHUB_TOKEN` first, then retry once with `OMP_FORK_TOKEN` (fine-grai
 3. `bun scripts/ci-release-publish.ts --native-leaf <tag>` for each of the four leaf targets — `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64` — from the `.node` files already in `packages/natives/native`. ~10 s each; no extra native builds.
 4. Zip all 16 tarballs as `omp-packages-<version>.zip` with an `index.json` (`{ "<npm name>": "<file>.tgz" }`). Artifact `omp-packages`.
 
-`omp-auto.yml` `release` (no fork code) uploads the zip beside the binaries and `SHA256SUMS.txt`. Pruning keeps the newest 10 new-format `-int.` releases plus the one ompweb `main` pins (`runner/omp-build.json` on `ompweb-dev/ompweb` `main`, public). Releases older than F6 have no zip; ompweb cannot pin them.
+`omp-auto.yml` `release` (no fork code) uploads the zip beside the binaries and `SHA256SUMS.txt`. Pruning keeps the newest 10 new-format `-int.` releases plus the one keylime `main` pins (`runner/omp-build.json` on `ompweb-dev/ompweb` `main`, public). Releases older than F6 have no zip; keylime cannot pin them.
 
 ### F7. Escalation and Apple SDK in the fork
 
@@ -115,7 +115,7 @@ The script stays only in integration-ci. Changes there (also used by the round t
 - `CI_CONFIG_REF` (default `origin/main`): the ref `ci_build` fetches and diffs the config and `.github` against before dispatching (today hard-coded `origin main`).
 - Tests in `integration.test.sh` for both.
 
-Host wiring (the build host): a worktree of `fork-ci`. `~/.config/integration` becomes a directory: per-file symlinks into `integration-ci/config` for graphify, superpowers, ompweb, the pin scripts, `fixups/root--git--ompweb` and the `.retired-*` dirs; `root--git--oh-my-pi.sh` and `fixups/root--git--oh-my-pi` link into the `fork-ci` worktree. `ci_build` resolves the config's repository through `readlink -f`, so it diffs that worktree against `origin/fork-ci`.
+Host wiring (the build host): a worktree of `fork-ci`. `~/.config/integration` becomes a directory: per-file symlinks into `integration-ci/config` for graphify, superpowers, keylime, the pin scripts, `fixups/root--git--keylime` and the `.retired-*` dirs; `root--git--oh-my-pi.sh` and `fixups/root--git--oh-my-pi` link into the `fork-ci` worktree. `ci_build` resolves the config's repository through `readlink -f`, so it diffs that worktree against `origin/fork-ci`.
 
 `integration build` for oh-my-pi dispatches `omp.yml` on the fork; the reuse lookup reads `project: oh-my-pi` from `fork-ci`'s `omp.yml` and finds zips in the fork's rolling `oh-my-pi` release. `DEPLOY_CMD` is unchanged. Deploying an auto round, in the local oh-my-pi checkout: `git fetch origin && git branch -f integration origin/integration-release && integration build && integration deploy`. The first such deploy after F9 is the bootstrap install on the build host.
 
@@ -159,7 +159,7 @@ rel="v$version-int.$stamp.g${SHA:0:7}"
 
 `release` also checks `$version` equals the round's upstream tag without `v`, and refuses a tag not matching `^v[0-9]+\.[0-9]+\.[0-9]+-int\.[0-9]{12}\.g[0-9a-f]{7}$`. Smoke asserts `bin/omp --version` == `omp/${rel#v}`.
 
-**Natives version (addition beyond the note).** Only `packages/utils/package.json` feeds `VERSION`, and with the note's step alone the natives keep `18.20.0`, which is correct for loading. But the natives loader keys its extracted-addon cache by the natives package's own version (`loader-state.js`: `versionedDir = path.join(nativesDir, packageVersion)`, `packageVersion` from `packages/natives/package.json`), so upstream omp, fork omp and `ompweb-omp` on one machine would share `~/.omp/natives/18.20.0/`, checked only by version and size. To separate them, the same stamp is appended to `packages/natives/package.json` with the identical `jq` line (`… packages/natives/package.json > "$RUNNER_TEMP/natives.json"`, then `mv`) in **every** job that builds or embeds natives — `natives` (before `bazel-natives.ts`, which stamps that version into each addon after linking, so bazel's caches are unaffected), `binaries` and `pack` — so the addon stamp, the leaf packages and the embedded manifest agree. Doing it in only some of those jobs makes the loader reject the addon. This needs one `binaries` run to confirm (plan Task 5).
+**Natives version (addition beyond the note).** Only `packages/utils/package.json` feeds `VERSION`, and with the note's step alone the natives keep `18.20.0`, which is correct for loading. But the natives loader keys its extracted-addon cache by the natives package's own version (`loader-state.js`: `versionedDir = path.join(nativesDir, packageVersion)`, `packageVersion` from `packages/natives/package.json`), so upstream omp, fork omp and `keylime-omp` on one machine would share `~/.omp/natives/18.20.0/`, checked only by version and size. To separate them, the same stamp is appended to `packages/natives/package.json` with the identical `jq` line (`… packages/natives/package.json > "$RUNNER_TEMP/natives.json"`, then `mv`) in **every** job that builds or embeds natives — `natives` (before `bazel-natives.ts`, which stamps that version into each addon after linking, so bazel's caches are unaffected), `binaries` and `pack` — so the addon stamp, the leaf packages and the embedded manifest agree. Doing it in only some of those jobs makes the loader reject the addon. This needs one `binaries` run to confirm (plan Task 5).
 
 - **Idempotence.** An sha that already has a new-format release (tag ending `.g<sha7>`) is not released again.
 - **Smoke.** `bin/omp --version` must print `omp/$VERSION`; the linux-x64 binary must contain `ompweb-dev/oh-my-pi` (fails the build if the update-source PR dropped out).
@@ -168,7 +168,7 @@ rel="v$version-int.$stamp.g${SHA:0:7}"
 - **Bootstrap.** Existing fork binaries report the plain base version and update from Stencil: `omp update` or `update.auto` would move them to upstream's binary on upstream's next release. The first stamped build is installed by hand; on the build host the deploy (F8) does that. After that, updates come from fork releases.
 - **Still upstream:** npm/bun installs (npm), Homebrew `can1357/tap/omp`, mise `github:can1357/oh-my-pi`. Unauthenticated GitHub API: 60 requests per hour per IP.
 
-## ompweb
+## keylime
 
 ### W1. `runner/` against the fork's packages (LibSpike option A)
 
@@ -179,8 +179,8 @@ rel="v$version-int.$stamp.g${SHA:0:7}"
 - `runner/scripts/use-omp-build.ts`:
   - no argument: download the pinned release's zip, unzip into `runner/vendor/` (fetch only; then `bun install --frozen-lockfile`);
   - `<tag>`: re-pin — fetch that release's zip, rewrite `omp-build.json`, the `file:` dependencies and overrides from its `index.json`, run `bun install` (lockfile updated).
-    Pin bumps are manual ompweb PRs (decided).
-- Every runner install calls the fetch first: `verify-pr.yml`, `omp-runner.yml`, `scripts/build-release-binaries.sh`, and integration-ci's `ompweb.yml` and `config/root--git--ompweb.sh` `BUILD_CMD` (guarded by `[ -f runner/scripts/use-omp-build.ts ]` for older commits).
+    Pin bumps are manual keylime PRs (decided).
+- Every runner install calls the fetch first: `verify-pr.yml`, `omp-runner.yml`, `scripts/build-release-binaries.sh`, and integration-ci's `keylime.yml` and `config/root--git--keylime.sh` `BUILD_CMD` (guarded by `[ -f runner/scripts/use-omp-build.ts ]` for older commits).
 - `runner/scripts/build-binary.ts` is unchanged: same `node_modules` layout; `bun install --os='*' --cpu='*'` installs every leaf from `vendor/`. Measured on linux-x64: install 1 s, build 88 s, binary 245 MB, `--version` and `--smoke-test` and headless `hello` work, extracted addon byte-identical to the fork's build. Cross-target builds with fork leaves were not run by the spike.
 
 ### W2. Every (pre)release uses the newest `integration-release` build
@@ -191,22 +191,22 @@ rel="v$version-int.$stamp.g${SHA:0:7}"
 2. `npx bun runner/scripts/use-omp-build.ts "$tag"`, then `(cd runner && npx bun x tsc -p .)`.
 3. Notes gain `omp: ompweb-dev/oh-my-pi <tag>`.
 
-`integration-release` moves only after its release exists. If the build has no package zip or the runner fails `tsc` against it, the (pre)release **fails** (decided); a human fixes the runner or the round. The re-pin is not committed back. Added time: about 1 minute plus the runner builds already there. ompweb gains no secrets, environments or triggers.
+`integration-release` moves only after its release exists. If the build has no package zip or the runner fails `tsc` against it, the (pre)release **fails** (decided); a human fixes the runner or the round. The re-pin is not committed back. Added time: about 1 minute plus the runner builds already there. keylime gains no secrets, environments or triggers.
 
-### W3. The omp row follows ompweb
+### W3. The omp row follows keylime
 
-Before W3 the omp row ran `omp update` through `resolveOmpBin()`, i.e. `ompweb-omp update`, which on a compiled binary replaces it with upstream's `omp` [INFERENCE from upstream `update-cli.ts` `replaceBinaryForUpdate`; not run]. `ompweb-omp`'s own build sets no `PI_UPDATE_REPO`.
+Before W3 the omp row ran `omp update` through `resolveOmpBin()`, i.e. `keylime-omp update`, which on a compiled binary replaces it with upstream's `omp` [INFERENCE from upstream `update-cli.ts` `replaceBinaryForUpdate`; not run]. `keylime-omp`'s own build sets no `PI_UPDATE_REPO`.
 
 - `lib/omp/updates.ts`: `runOmpUpdate`, `checkOmpUpdate`, the cached check and `parseOmpUpdateStatus` deleted.
 - `lib/self-update.ts`: `Kind` is `"app"` only.
 - `app/api/omp-update/route.ts`: only `restart` remains.
-- `lib/hosts/update-types.ts`/`updates.ts`/`daemon.ts`: `HostUpdateTarget` is `"ompweb"`; `HostUpdateInfo.omp` is `{ currentVersion }`; `startHostUpdate("omp")` is `invalid_target`.
-- `components/HostUpdates.tsx` and the Settings omp card: version plus "Updated with ompweb", no button; English copy.
+- `lib/hosts/update-types.ts`/`updates.ts`/`daemon.ts`: `HostUpdateTarget` is `"keylime"`; `HostUpdateInfo.omp` is `{ currentVersion }`; `startHostUpdate("omp")` is `invalid_target`.
+- `components/HostUpdates.tsx` and the Settings omp card: version plus "Updated with keylime", no button; English copy.
 - Versions: `HOST_VERSION_PATTERN` and `lib/version-compare.ts` already accept `X.Y.Z-int.<stamp>.g<sha7>`; no validator of the old `-int.<sha7>` form exists. Tests: the omp row shows `18.20.0-int.202611130355.gd2c2eff`; `HOST_VERSION_PATTERN` and `ompSharesCredentials("omp/18.20.0-int.202611130355.gd2c2eff")` accept it.
 
 ## integration-ci cleanup
 
-After one green scheduled round in the fork and one green ompweb pre-release on it: delete `.github/workflows/omp-auto.yml`, `omp.yml`; `.github/actions/omp-agent`, `omp-round`; `scripts/{collect-round,commit-fixups,publish-round,push-rebased}.sh`; `prompts/omp-repair.md`; `config/root--git--oh-my-pi.sh`; `config/fixups/root--git--oh-my-pi/`; the `oh-my-pi` and `apple-sdk` releases; README's oh-my-pi section; the secrets `OMP_FORK_TOKEN`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` if no remaining workflow references them. `docs/specs/2026-11-11-omp-auto-integration-design.md` gets "superseded by the fork's `fork-ci` branch; see ompweb-dev/ompweb `docs/specs/2026-11-12-omp-build-in-ompweb-design.md`". Kept: `integration` (F8), `changelog-merge`, `integration.test.sh`, `publish.yml`, `ompweb.yml` (with W1's fetch line), `graphify.yml`, `superpowers.yml`, the `omp-auto` label and old issues.
+After one green scheduled round in the fork and one green keylime pre-release on it: delete `.github/workflows/omp-auto.yml`, `omp.yml`; `.github/actions/omp-agent`, `omp-round`; `scripts/{collect-round,commit-fixups,publish-round,push-rebased}.sh`; `prompts/omp-repair.md`; `config/root--git--oh-my-pi.sh`; `config/fixups/root--git--oh-my-pi/`; the `oh-my-pi` and `apple-sdk` releases; README's oh-my-pi section; the secrets `OMP_FORK_TOKEN`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` if no remaining workflow references them. `docs/specs/2026-11-11-omp-auto-integration-design.md` gets "superseded by the fork's `fork-ci` branch; see ompweb-dev/ompweb `docs/specs/2026-11-12-omp-build-in-ompweb-design.md`". Kept: `integration` (F8), `changelog-merge`, `integration.test.sh`, `publish.yml`, `keylime.yml` (with W1's fetch line), `graphify.yml`, `superpowers.yml`, the `omp-auto` label and old issues.
 
 ## Rollout and rollback
 
@@ -215,18 +215,18 @@ After one green scheduled round in the fork and one green ompweb pre-release on 
 3. Disable integration-ci's `omp-auto.yml`.
 4. Delete the fork's old-format releases and tags. Dispatch the fork's `omp-auto.yml` with `force=true`: a promoted release `v<base>-int.<stamp>.g<sha7>` carrying #19075 and the update-source PR, neither #18646 nor #18668, with `omp-packages-<version>.zip`; its binaries print that version.
 5. Host rewiring (F8); `integration build && integration deploy` for the build host's omp (bootstrap). Other machines on older fork binaries get the same release installed by hand once.
-6. ompweb W1, W2 and W3 (shipped together in PR #473) with integration-ci's fetch line for `ompweb.yml`/config.
+6. keylime W1, W2 and W3 (shipped together in PR #473) with integration-ci's fetch line for `keylime.yml`/config.
 7. Add the `schedule` to `fork-ci`'s `omp-auto.yml`.
 8. integration-ci cleanup.
 
-Rollback before step 8: default branch back to `main`, re-enable integration-ci's `omp-auto.yml`, restore the `~/.config/integration` symlink, copy new `fork-ci` fixups back to integration-ci. Fork releases stay valid. Reverting PR #473 reverts the ompweb side.
+Rollback before step 8: default branch back to `main`, re-enable integration-ci's `omp-auto.yml`, restore the `~/.config/integration` symlink, copy new `fork-ci` fixups back to integration-ci. Fork releases stay valid. Reverting PR #473 reverts the keylime side.
 
 ## Risks
 
 - Cross-target `bun install --os/--cpu` with fork leaves and cross-target runner builds were not exercised by the spike (only linux-x64); PR #473's `omp-runner.yml` runs were the first test.
 - Which writes `GITHUB_TOKEN` is refused is inferred; the PAT retry covers it, and its log shows whether it ever fires.
 - A new upstream workflow can run once on the push that adds it before F2 disables it (no secrets).
-- Every (pre)release follows `integration-release`, so an hourly round can fail the next ompweb (pre)release until the runner is adapted.
+- Every (pre)release follows `integration-release`, so an hourly round can fail the next keylime (pre)release until the runner is adapted.
 - #19075 and the update-source PR can change in review; the runner breaks at `tsc`, and the smoke check catches a dropped update source.
 - Until the first stamped binary is installed by hand, older fork binaries with `update.auto` can be replaced by upstream's binary.
 - Dropping #18668/#18646 can invalidate later resolution patches.
@@ -240,13 +240,13 @@ None.
 
 ## Decisions recorded (2026-11-13)
 
-- The round lives in `ompweb-dev/oh-my-pi` on default branch `fork-ci`; releases, `apple-sdk` and escalation issues on the fork; integration-ci keeps only the script and its other builds; ompweb has no secrets and builds no omp.
+- The round lives in `ompweb-dev/oh-my-pi` on default branch `fork-ci`; releases, `apple-sdk` and escalation issues on the fork; integration-ci keeps only the script and its other builds; keylime has no secrets and builds no omp.
 - `fork-ci` as default branch is fine; sync the mirror with `integration` or `gh repo sync ompweb-dev/oh-my-pi -b main`.
 - All upstream workflows are disabled in the fork (F2). No inactivity keep-alive.
 - Tokens: `GITHUB_TOKEN` first, PAT retry only on a `workflows`-permission refusal; no token spike.
 - The round also runs when any carried PR's head changes (F5).
 - #14148, #14458, #14608 stay; #18646 dropped; #18668 is RPC-only, in `SKIP_PRS` (F4).
 - Fork versions `<upstream>-int.<YYYYMMDDHHMM>.g<sha7>`, stamp = integration commit's committer time in UTC, computed once; tags `v` + that version; binaries compiled with `PI_UPDATE_REPO=ompweb-dev/oh-my-pi`; old-format tags deleted, never reused (F9).
-- ompweb's runner uses the fork's own npm tarballs (LibSpike option A) from one `omp-packages-<version>.zip` per promoted release, `file:` deps plus overrides for every package and leaf, sha512-pinned in `bun.lock` (W1).
+- keylime's runner uses the fork's own npm tarballs (LibSpike option A) from one `omp-packages-<version>.zip` per promoted release, `file:` deps plus overrides for every package and leaf, sha512-pinned in `bun.lock` (W1).
 - Pin bumps are manual; every (pre)release re-pins to the newest `integration-release` build and fails if it cannot (W1, W2).
-- The omp row is read-only, "Updated with ompweb" (W3).
+- The omp row is read-only, "Updated with keylime" (W3).

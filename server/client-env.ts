@@ -103,9 +103,9 @@ export function clientEnv(root: string, worker: string) {
     .digest("hex")
     .slice(0, 12);
   return {
-    OMP_WEB_PUBLIC_APP_VERSION: version,
-    OMP_WEB_PUBLIC_COMMIT_HASH: commitHash,
-    OMP_WEB_PUBLIC_COMMIT_DATE: commitDate,
-    OMP_WEB_PUBLIC_EVENT_STREAM_WORKER_VERSION: eventStreamWorkerVersion,
+    KEYLIME_PUBLIC_APP_VERSION: version,
+    KEYLIME_PUBLIC_COMMIT_HASH: commitHash,
+    KEYLIME_PUBLIC_COMMIT_DATE: commitDate,
+    KEYLIME_PUBLIC_EVENT_STREAM_WORKER_VERSION: eventStreamWorkerVersion,
   };
 }

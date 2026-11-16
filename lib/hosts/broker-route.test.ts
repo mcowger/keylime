@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test, { after, beforeEach } from "node:test";
 import { mock } from "bun:test";
 
-const agentDir = mkdtempSync(join(tmpdir(), "omp-web-broker-route-test-"));
+const agentDir = mkdtempSync(join(tmpdir(), "keylime-broker-route-test-"));
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 process.env.PI_CODING_AGENT_DIR = agentDir;
 const originalLog = console.log;
@@ -37,8 +37,8 @@ const { createHost, revokeHost, rotateLocalHostToken, updateHost } =
   await import("./registry.ts");
 const { savePools } = await import("./pools.ts");
 
-const hostsFile = join(agentDir, "omp-web", "hosts.json");
-const poolsFile = join(agentDir, "omp-web", "pools.json");
+const hostsFile = join(agentDir, "keylime", "hosts.json");
+const poolsFile = join(agentDir, "keylime", "pools.json");
 
 /** The route's answer to `method path`, and how often it switched Bun's idle timeout off. */
 async function send(
@@ -200,7 +200,7 @@ test("an unreadable pools.json is 503, logged with its reason, and nothing is fo
     error: "The host pool configuration cannot be read",
   });
   assert.deepEqual(logs, [
-    `[omp-web] broker ${host.id} GET /v1/healthz 503 pools_unreadable`,
+    `[keylime] broker ${host.id} GET /v1/healthz 503 pools_unreadable`,
   ]);
   assert.equal(calls.length, 0);
 });
@@ -220,7 +220,7 @@ test("the path and query go to the broker for the host the token names", async (
   assert.equal(init.body, undefined);
   assert.ok(init.signal instanceof AbortSignal);
   assert.ok(
-    logs.includes(`[omp-web] broker ${host.id} GET /v1/snapshot 200`),
+    logs.includes(`[keylime] broker ${host.id} GET /v1/snapshot 200`),
     `log lines: ${logs.join(" | ")}`,
   );
   assert.ok(
@@ -406,11 +406,11 @@ test("a 403 and a 404 are logged like a forwarded request, a 404 or 403 path onl
   await send("GET", "v1/evil\ninjected", { token });
   await send("GET", "v1/healthz", { token: "not-a-host-token" });
   assert.deepEqual(logs, [
-    `[omp-web] broker ${off.id} GET /v1/healthz 403`,
-    `[omp-web] broker ${off.id} GET - 403`,
-    `[omp-web] broker ${host.id} POST /v1/credential 404`,
-    `[omp-web] broker ${host.id} GET - 404`,
-    `[omp-web] broker ${host.id} GET - 404`,
+    `[keylime] broker ${off.id} GET /v1/healthz 403`,
+    `[keylime] broker ${off.id} GET - 403`,
+    `[keylime] broker ${host.id} POST /v1/credential 404`,
+    `[keylime] broker ${host.id} GET - 404`,
+    `[keylime] broker ${host.id} GET - 404`,
   ]);
   for (const secret of [offToken, token, "not-a-host-token", "BODY-SECRET"])
     assert.ok(!logs.join("\n").includes(secret));
@@ -456,7 +456,7 @@ test("a failed forward logs the class of its reason, never the error's text or t
     });
     assert.equal(response.status, status, reason);
     assert.deepEqual(logs, [
-      `[omp-web] broker ${host.id} POST /v1/usage/observed ${status} ${reason}`,
+      `[keylime] broker ${host.id} POST /v1/usage/observed ${status} ${reason}`,
     ]);
   }
 
@@ -471,7 +471,7 @@ test("a failed forward logs the class of its reason, never the error's text or t
   });
   assert.equal(response.status, 502);
   assert.deepEqual(logs, [
-    `[omp-web] broker ${host.id} GET /v1/snapshot/stream 502 aborted`,
+    `[keylime] broker ${host.id} GET /v1/snapshot/stream 502 aborted`,
   ]);
 });
 
@@ -542,7 +542,7 @@ test("a host switched off while its body is still arriving gets 403 and nothing 
   });
   assert.equal(calls.length, 0);
   assert.deepEqual(logs, [
-    `[omp-web] broker ${host.id} POST /v1/credential/1/disable 403`,
+    `[keylime] broker ${host.id} POST /v1/credential/1/disable 403`,
   ]);
 });
 

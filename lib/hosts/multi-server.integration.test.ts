@@ -143,7 +143,7 @@ test(
   "two real web servers share one host process and one live conversation",
   { timeout: 90_000 },
   async (t) => {
-    const scratch = mkdtempSync(join(tmpdir(), "ompweb-multi-server-"));
+    const scratch = mkdtempSync(join(tmpdir(), "keylime-multi-server-"));
     const agentDir = join(scratch, "home", ".omp", "agent");
     const project = join(scratch, "project");
     const site = join(scratch, "site");
@@ -174,19 +174,19 @@ test(
       HOME: join(scratch, "home"),
       PI_CODING_AGENT_DIR: agentDir,
       NODE_ENV: "production",
-      OMP_WEB_OMP_BIN: fake,
+      KEYLIME_OMP_BIN: fake,
       OMP_MULTI_SESSION_ID: ID,
       OMP_MULTI_SESSION_FILE: sessionFile,
       OMP_MULTI_LOG: ompLog,
       OMP_MULTI_RELEASE_FILE: join(scratch, "release-stream"),
-      OMP_WEB_DISCONNECT_DESTROY_MS: "1000",
+      KEYLIME_DISCONNECT_DESTROY_MS: "1000",
     };
     for (const key of [
-      "OMP_WEB_PASSWORD",
-      "OMP_WEB_PASSWORD_HASH",
-      "OMP_WEB_TRUSTED_HEADER_SECRET",
-      "OMP_WEB_TRUSTED_HEADER_SHA256",
-      "OMP_WEB_PACKAGE_DIR",
+      "KEYLIME_PASSWORD",
+      "KEYLIME_PASSWORD_HASH",
+      "KEYLIME_TRUSTED_HEADER_SECRET",
+      "KEYLIME_TRUSTED_HEADER_SHA256",
+      "KEYLIME_PACKAGE_DIR",
     ])
       delete env[key];
     const children: ChildProcess[] = [];
@@ -223,7 +223,7 @@ test(
     });
     const server = async () => {
       const state = launch([join(fixture, "multi-server-app.ts")], {
-        OMP_WEB_PACKAGE_DIR: site,
+        KEYLIME_PACKAGE_DIR: site,
       });
       const port = await until(
         () => /MULTI_SERVER_PORT=(\d+)/.exec(state.output)?.[1],
@@ -234,7 +234,7 @@ test(
     };
     const a = await server();
     const b = await server();
-    const daemon = launch([join(root, "bin", "omp-web-host.ts")]);
+    const daemon = launch([join(root, "bin", "keylime-host.ts")]);
     await until(
       async () => {
         const [ah, bh] = await Promise.all([

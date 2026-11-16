@@ -6,7 +6,7 @@ import test, { after, beforeEach } from "node:test";
 import type { NotificationHistoryEntry } from "./notification-events";
 
 // Real /api/notifications/history against a throwaway agent dir.
-const agentDir = mkdtempSync(join(tmpdir(), "omp-web-history-route-"));
+const agentDir = mkdtempSync(join(tmpdir(), "keylime-history-route-"));
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 process.env.PI_CODING_AGENT_DIR = agentDir;
 after(() => {

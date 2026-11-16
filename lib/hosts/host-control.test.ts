@@ -36,15 +36,15 @@ async function until(check: () => boolean, label: string) {
 }
 
 async function fixture(t: test.TestContext) {
-  const scratch = mkdtempSync(join(tmpdir(), "ompweb-host-control-"));
+  const scratch = mkdtempSync(join(tmpdir(), "keylime-host-control-"));
   const agent = join(scratch, "agent");
   const path = hostControlPath(agent);
   const saved = {
     agent: process.env.PI_CODING_AGENT_DIR,
-    omp: process.env.OMP_WEB_OMP_BIN,
+    omp: process.env.KEYLIME_OMP_BIN,
   };
   process.env.PI_CODING_AGENT_DIR = agent;
-  process.env.OMP_WEB_OMP_BIN = join(scratch, "missing-omp");
+  process.env.KEYLIME_OMP_BIN = join(scratch, "missing-omp");
   // No session or credentials are needed: this real daemon simply redials an unused local port.
   const daemon = runHostDaemon({
     url: "http://127.0.0.1:9",
@@ -55,7 +55,7 @@ async function fixture(t: test.TestContext) {
     await daemon.stop();
     for (const [key, value] of [
       ["PI_CODING_AGENT_DIR", saved.agent],
-      ["OMP_WEB_OMP_BIN", saved.omp],
+      ["KEYLIME_OMP_BIN", saved.omp],
     ] as const) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;

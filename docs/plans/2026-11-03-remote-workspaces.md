@@ -6,7 +6,7 @@
 
 **Architecture:** Every affected route resolves a Host and delegates filesystem/Git work to its daemon, including local. Add typed workspace operations beside session operations; reuse the existing uploader, path policy and browser event channel. Carry host identity on resources and pending actions, not just the selected chat.
 
-**Tech Stack:** TypeScript, React, Bun HTTP server, Node `ompweb host` daemon through jiti, existing sequenced WebSocket links, `bun test --parallel` running existing `node:test` suites. No new dependency.
+**Tech Stack:** TypeScript, React, Bun HTTP server, Node `keylime host` daemon through jiti, existing sequenced WebSocket links, `bun test --parallel` running existing `node:test` suites. No new dependency.
 
 **Spec:** `docs/specs/2026-11-03-remote-workspaces-design.md` (approved, including the shared-uploader correction). Upload transport reference: `docs/specs/2026-11-02-file-uploads-design.md`.
 

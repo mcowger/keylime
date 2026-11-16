@@ -404,7 +404,7 @@ function move(view: HookView, from: string, to: string) {
 
 function associations() {
   return Object.keys(sessionStorage).filter((key) =>
-    key.startsWith("omp-web:stt-moved-job:"),
+    key.startsWith("keylime:stt-moved-job:"),
   );
 }
 
@@ -744,7 +744,7 @@ test("claim transport retries keep one claim token, and a foreign owner still wa
   const job = await upload(original.view, "followup");
   move(original.view, "A", "B");
   original.view.unmount();
-  sessionStorage.setItem("omp-web:stt-owner-token", "different-tab-owner");
+  sessionStorage.setItem("keylime:stt-owner-token", "different-tab-owner");
   complete(job);
   const restored = mount("B");
   await flush();
@@ -1030,7 +1030,7 @@ for (const detached of [false, true]) {
       storagePrototype,
       "setItem",
       function (this: Storage, key: string, value: string) {
-        if (key.startsWith("omp-web:stt-moved-job:"))
+        if (key.startsWith("keylime:stt-moved-job:"))
           throw new DOMException(
             "Storage denied or full",
             "QuotaExceededError",
@@ -1087,7 +1087,7 @@ test("an in-memory unresolved Discard still closes the late upload when recovery
     storagePrototype,
     "setItem",
     function (this: Storage, key: string, value: string) {
-      if (key.startsWith("omp-web:stt-moved-job:"))
+      if (key.startsWith("keylime:stt-moved-job:"))
         throw new DOMException("Storage unavailable", "SecurityError");
       return setItem.call(this, key, value);
     },

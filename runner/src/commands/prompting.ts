@@ -389,7 +389,7 @@ async function runBuiltin(ctx: CommandContext, state: Prompting, text: string) {
         backgrounded = true;
         void task()
           .catch((error: unknown) =>
-            logger.warn("ompweb: background slash command failed", {
+            logger.warn("keylime: background slash command failed", {
               error: String(error),
             }),
           )

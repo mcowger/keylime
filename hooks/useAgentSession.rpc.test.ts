@@ -916,7 +916,7 @@ function serveManagedWorkspace() {
       label: "Mac",
       status: "online",
       ompVersion: "18.4.4",
-      ompwebVersion: "0.6.0",
+      keylimeVersion: "0.6.0",
       platform: "darwin",
       lastSeenAt: null,
       hostVersion: 2,
@@ -929,7 +929,7 @@ function serveManagedWorkspace() {
       label: `Worker ${index + 1}`,
       status: "online",
       ompVersion: "18.4.4",
-      ompwebVersion: "0.6.0",
+      keylimeVersion: "0.6.0",
       platform: "linux",
       lastSeenAt: "2026-11-10T00:00:00.000Z",
       allowAgentStart: true,
@@ -1337,7 +1337,7 @@ for (const [preference, mode] of [
       state: { isStreaming: true, isPromptRunning: true },
     });
     world.outboxHold = true;
-    localStorage.setItem("omp-web:submit-during-run", preference);
+    localStorage.setItem("keylime:submit-during-run", preference);
     setDraft(sid, {
       value: "with my file",
       images: [],
@@ -1393,7 +1393,7 @@ test("a `!` message with an inline text attachment is held as a prompt, never ru
   primeSession(sid, [userMsg("u0", "before")]);
   world.outboxHold = true;
   setDraft(sid, {
-    value: "!touch /tmp/ompweb-never-run",
+    value: "!touch /tmp/keylime-never-run",
     images: [],
     files: [
       {
@@ -1424,7 +1424,7 @@ test("a `!` message with an inline text attachment is held as a prompt, never ru
   assert.equal(world.outbox[0].mode, "prompt");
   assert.equal(
     world.outbox[0].message,
-    "!touch /tmp/ompweb-never-run\n\nAttached file: notes.txt\n```text\nrm -rf /\n```",
+    "!touch /tmp/keylime-never-run\n\nAttached file: notes.txt\n```text\nrm -rf /\n```",
   );
   assert.deepEqual(
     world.calls.filter((call) => call.body?.type === "bash"),
@@ -7679,7 +7679,7 @@ function primeEditableHistory(
           }
           entries.push({
             type: "custom",
-            customType: "omp-web-history-navigation",
+            customType: "keylime-history-navigation",
             id: `edit-marker-${native.edits.length}`,
             parentId: target.parentId,
             timestamp: header.timestamp,
@@ -12939,7 +12939,7 @@ test("a selected remote session can browse its owner files without reading a sam
   window.history.replaceState(null, "", "/");
   t.after(() => window.history.replaceState(null, "", "/"));
   const view = ownRoot(
-    render(React.createElement(AppShell, { appName: "ompweb" }), {
+    render(React.createElement(AppShell, { appName: "keylime" }), {
       wrapper: TestRoot,
     }),
   );
@@ -12979,7 +12979,7 @@ test("equal-path file tabs retain their originating session when the selected ow
   window.history.replaceState(null, "", "/");
   t.after(() => window.history.replaceState(null, "", "/"));
   const view = ownRoot(
-    render(React.createElement(AppShell, { appName: "ompweb" }), {
+    render(React.createElement(AppShell, { appName: "keylime" }), {
       wrapper: TestRoot,
     }),
   );
@@ -13055,7 +13055,7 @@ test("a retained foreign-source tab cannot mention its path into the selected wo
   window.history.replaceState(null, "", "/");
   t.after(() => window.history.replaceState(null, "", "/"));
   const view = ownRoot(
-    render(React.createElement(AppShell, { appName: "ompweb" }), {
+    render(React.createElement(AppShell, { appName: "keylime" }), {
       wrapper: TestRoot,
     }),
   );
@@ -13376,7 +13376,7 @@ test("a slash command held during a run dispatches as a prompt with its streamin
 // What the worker answers when the session socket dropped after sending a command (spec D5).
 const SOCKET_LOST = {
   error:
-    "The connection to omp-web dropped before the answer arrived; the command may have run.",
+    "The connection to keylime dropped before the answer arrived; the command may have run.",
   code: "transport_lost",
 };
 

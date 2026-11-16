@@ -1486,7 +1486,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       return;
     }
     setActiveGoal(
-      parseActiveGoal(sessionStorage.getItem(`omp-web:goal:${sid}`)),
+      parseActiveGoal(sessionStorage.getItem(`keylime:goal:${sid}`)),
     );
   }, [session?.id]);
 
@@ -2792,7 +2792,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       serverOutboxRef.current.seen,
     ).catch((error) =>
       console.warn(
-        `[omp-web] browser outbox reconciliation failed: ${error instanceof Error ? error.message : String(error)}`,
+        `[keylime] browser outbox reconciliation failed: ${error instanceof Error ? error.message : String(error)}`,
       ),
     );
     // Held messages open the session channel even without a wrapper: subscribe to follow them.
@@ -2821,7 +2821,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
               serverOutboxRef.current.seen,
             ).catch((error) =>
               console.warn(
-                `[omp-web] browser outbox reconciliation failed: ${error instanceof Error ? error.message : String(error)}`,
+                `[keylime] browser outbox reconciliation failed: ${error instanceof Error ? error.message : String(error)}`,
               ),
             );
           return;
@@ -2850,7 +2850,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   );
 
   // ---------------------------------------------------------------------
-  // Host-tool bridge: omp-web registers tools the AGENT can call. The server
+  // Host-tool bridge: keylime registers tools the AGENT can call. The server
   // emits host_tool_call frames; this UI executes them and answers with
   // host_tool_result (lib/rpc-manager routes registered tools to listeners).
   // The built-in `ask` tool already covers user questions via the extension
@@ -3082,7 +3082,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
             await respondHostUri(sid, id, {
               isError: true,
               error:
-                "Clipboard read was denied. Click into the omp-web window and try again.",
+                "Clipboard read was denied. Click into the keylime window and try again.",
             });
           }
           return;
@@ -3749,8 +3749,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     };
   }, [agentRunning, isCompacting, catchUp, reconcileAgentState, reconcileBtw]);
 
-  // A session can be mid-run without omp-web owning the process (someone is
-  // driving it from a terminal, or from another omp-web window). Nothing
+  // A session can be mid-run without keylime owning the process (someone is
+  // driving it from a terminal, or from another keylime window). Nothing
   // streams in that case, so derive activity from the transcript tail and poll
   // the sync endpoint for the duration — otherwise the current turn sits folded
   // and frozen while the agent works (#136).
@@ -4041,7 +4041,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
                 serverOutboxRef.current.seen,
               ).catch((error) =>
                 console.warn(
-                  `[omp-web] browser outbox reconciliation failed: ${error instanceof Error ? error.message : String(error)}`,
+                  `[keylime] browser outbox reconciliation failed: ${error instanceof Error ? error.message : String(error)}`,
                 ),
               );
             // Retire only confirmations the server has listed or settled; an older empty snapshot can overtake an ACK.
@@ -5105,7 +5105,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   };
 
   /** Holds a message in the outbox (docs/specs/2026-11-04-message-outbox-design.md): true once this browser has
-   * stored it, after which omp-web delivers it whatever this tab does next. It shows as a held bubble until omp has it. */
+   * stored it, after which keylime delivers it whatever this tab does next. It shows as a held bubble until omp has it. */
   const holdMessage = useCallback(
     async (
       sid: string,
@@ -6735,7 +6735,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
               const activeSessionId = sessionIdRef.current;
               if (activeSessionId)
                 sessionStorage.setItem(
-                  `omp-web:goal:${activeSessionId}`,
+                  `keylime:goal:${activeSessionId}`,
                   JSON.stringify(goal),
                 );
             }

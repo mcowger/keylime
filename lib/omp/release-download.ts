@@ -15,7 +15,7 @@ async function readRelease(
     const response = await fetch(url, {
       signal: controller.signal,
       cache: "no-store",
-      headers: { "User-Agent": "ompweb-runner-fetch" },
+      headers: { "User-Agent": "keylime-runner-fetch" },
     });
     if (!response.ok || !response.body)
       throw new Error(`Release request failed (${response.status})`);

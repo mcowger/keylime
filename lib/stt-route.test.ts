@@ -48,8 +48,8 @@ const { MAX_STT_AUDIO_BYTES } = await import("./stt.ts");
 
 test("stt route returns 501 when neither an endpoint nor a model is configured", async () => {
   const originalEnv = { ...process.env };
-  delete process.env.OMP_WEB_STT_ENDPOINT;
-  delete process.env.OMP_WEB_STT_MODEL;
+  delete process.env.KEYLIME_STT_ENDPOINT;
+  delete process.env.KEYLIME_STT_MODEL;
 
   try {
     const formData = new FormData();
@@ -86,8 +86,8 @@ test("stt job forwards audio to configured endpoint and resolves to its text", a
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = (server.address() as AddressInfo).port;
 
-  process.env.OMP_WEB_STT_ENDPOINT = `http://127.0.0.1:${port}/v1/audio/transcriptions`;
-  process.env.OMP_WEB_STT_KEY = "test-secret-key";
+  process.env.KEYLIME_STT_ENDPOINT = `http://127.0.0.1:${port}/v1/audio/transcriptions`;
+  process.env.KEYLIME_STT_KEY = "test-secret-key";
 
   try {
     const formData = new FormData();
@@ -123,8 +123,8 @@ test("stt job normalizes upstream { error: { message } } to { error: string }", 
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = (server.address() as AddressInfo).port;
 
-  process.env.OMP_WEB_STT_ENDPOINT = `http://127.0.0.1:${port}/v1/audio/transcriptions`;
-  process.env.OMP_WEB_STT_KEY = "bad-key";
+  process.env.KEYLIME_STT_ENDPOINT = `http://127.0.0.1:${port}/v1/audio/transcriptions`;
+  process.env.KEYLIME_STT_KEY = "bad-key";
 
   try {
     const formData = new FormData();
@@ -161,8 +161,8 @@ test("stt route strips newlines and carriage returns from env vars", async () =>
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = (server.address() as AddressInfo).port;
 
-  process.env.OMP_WEB_STT_ENDPOINT = `  http://127.0.0.1:${port}/v1/audio/transcriptions\n\n  `;
-  process.env.OMP_WEB_STT_KEY = "  secret-key-123\r\n\\n  ";
+  process.env.KEYLIME_STT_ENDPOINT = `  http://127.0.0.1:${port}/v1/audio/transcriptions\n\n  `;
+  process.env.KEYLIME_STT_KEY = "  secret-key-123\r\n\\n  ";
 
   try {
     const formData = new FormData();
@@ -187,8 +187,8 @@ test("stt route strips newlines and carriage returns from env vars", async () =>
 });
 
 test("stt route rejects request with missing or empty audio file with 400", async () => {
-  const originalEndpoint = process.env.OMP_WEB_STT_ENDPOINT;
-  process.env.OMP_WEB_STT_ENDPOINT =
+  const originalEndpoint = process.env.KEYLIME_STT_ENDPOINT;
+  process.env.KEYLIME_STT_ENDPOINT =
     "http://127.0.0.1:9999/v1/audio/transcriptions";
 
   try {
@@ -216,14 +216,14 @@ test("stt route rejects request with missing or empty audio file with 400", asyn
     assert.equal(bodyZero.code, "missing_audio_file");
   } finally {
     if (originalEndpoint !== undefined)
-      process.env.OMP_WEB_STT_ENDPOINT = originalEndpoint;
-    else delete process.env.OMP_WEB_STT_ENDPOINT;
+      process.env.KEYLIME_STT_ENDPOINT = originalEndpoint;
+    else delete process.env.KEYLIME_STT_ENDPOINT;
   }
 });
 
 test("stt route rejects oversized audio with 413", async () => {
-  const originalEndpoint = process.env.OMP_WEB_STT_ENDPOINT;
-  process.env.OMP_WEB_STT_ENDPOINT =
+  const originalEndpoint = process.env.KEYLIME_STT_ENDPOINT;
+  process.env.KEYLIME_STT_ENDPOINT =
     "http://127.0.0.1:9999/v1/audio/transcriptions";
 
   try {
@@ -264,8 +264,8 @@ test("stt route rejects oversized audio with 413", async () => {
     assert.equal(bodyStream.code, "audio_too_large");
   } finally {
     if (originalEndpoint !== undefined)
-      process.env.OMP_WEB_STT_ENDPOINT = originalEndpoint;
-    else delete process.env.OMP_WEB_STT_ENDPOINT;
+      process.env.KEYLIME_STT_ENDPOINT = originalEndpoint;
+    else delete process.env.KEYLIME_STT_ENDPOINT;
   }
 });
 
@@ -279,7 +279,7 @@ test("stt job outlives a slow upstream and unknown job ids are 404", async () =>
     };
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  process.env.OMP_WEB_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
+  process.env.KEYLIME_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
 
   try {
     const formData = new FormData();
@@ -324,7 +324,7 @@ test("stt POST refuses new jobs with 429 while four are already pending", async 
     received++;
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  process.env.OMP_WEB_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
+  process.env.KEYLIME_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
   const post = () => {
     const formData = new FormData();
     formData.append(
@@ -377,7 +377,7 @@ test("a scoped job keeps its audio for any browser: list, play, retry, claim onc
     });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  process.env.OMP_WEB_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
+  process.env.KEYLIME_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
 
   try {
     const formData = new FormData();
@@ -483,7 +483,7 @@ test("discarding a pending job aborts its upstream request and keeps it gone", a
     release = () => res.end(JSON.stringify({ text: "too late" }));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  process.env.OMP_WEB_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
+  process.env.KEYLIME_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
 
   try {
     const formData = new FormData();
@@ -536,7 +536,7 @@ test("an empty transcript settles as a retryable error that keeps the audio", as
     req.on("end", () => res.end(JSON.stringify({ text: "  " })));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  process.env.OMP_WEB_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
+  process.env.KEYLIME_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
   const { GET: AUDIO } = await import("../app/api/stt/[jobId]/audio/route.ts");
 
   try {
@@ -574,7 +574,7 @@ test("the recording browser has first claim on its transcript", async () => {
     req.on("end", () => res.end(JSON.stringify({ text: "mine" })));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  process.env.OMP_WEB_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
+  process.env.KEYLIME_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
 
   try {
     const formData = new FormData();
@@ -616,7 +616,7 @@ test("a job keeps the send choice made at upload and returns it with the claim",
     req.on("end", () => res.end(JSON.stringify({ text: "send me" })));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  process.env.OMP_WEB_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
+  process.env.KEYLIME_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
   const upload = (after: string) => {
     const formData = new FormData();
     formData.append(
@@ -663,7 +663,7 @@ test("duplicated tabs share an owner but only one composer gets the transcript; 
     req.on("end", () => res.end(JSON.stringify({ text: "once" })));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  process.env.OMP_WEB_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
+  process.env.KEYLIME_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
   const upload = async () => {
     const formData = new FormData();
     formData.append(
@@ -716,7 +716,7 @@ test("an upload/discard loop cannot grow the job store, and live jobs survive th
     req.on("end", () => res.end(JSON.stringify({ text: "kept" })));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  process.env.OMP_WEB_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
+  process.env.KEYLIME_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
   const upload = async () => {
     const formData = new FormData();
     formData.append(
@@ -762,7 +762,7 @@ test("a scope lists its jobs newest first", async () => {
   const originalEnv = { ...process.env };
   const server = createServer(() => {}); // never answers: both jobs stay pending
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  process.env.OMP_WEB_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
+  process.env.KEYLIME_STT_ENDPOINT = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/audio/transcriptions`;
   const { GET: LIST } = await import("../app/api/stt/route.ts");
   const upload = async () => {
     const formData = new FormData();

@@ -1,14 +1,14 @@
 // The launcher, installers and server share one password hash implementation.
-import * as passwordHash from "../bin/omp-web-password-hash";
+import * as passwordHash from "../bin/keylime-password-hash";
 export type {
   PasswordHashOptions,
   ParsedPasswordHash,
-} from "../bin/omp-web-password-hash";
+} from "../bin/keylime-password-hash";
 
 /**
- * Self-describing scrypt password hash. omp-web only ever stores and compares
+ * Self-describing scrypt password hash. keylime only ever stores and compares
  * a hash of the web sign-in password (issue #239): the plaintext used to live
- * in `OMP_WEB_PASSWORD`, which every `omp` child process inherited, so an
+ * in `KEYLIME_PASSWORD`, which every `omp` child process inherited, so an
  * agent that ran `env` could print it into a session file and off to a model
  * provider.
  *
@@ -34,7 +34,7 @@ export const PASSWORD_HASH_P: number = passwordHash.DEFAULT_P;
 /** Lowest cost accepted when verifying anything, including a stored hash. */
 export const PASSWORD_HASH_MIN_LOG_N: number = passwordHash.MIN_LOG_N;
 
-/** Hash a password for `OMP_WEB_PASSWORD_HASH`. */
+/** Hash a password for `KEYLIME_PASSWORD_HASH`. */
 export const hashPassword = passwordHash.hashPassword;
 /**
  * Parse a stored hash without verifying anything. Returns null when the text

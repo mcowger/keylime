@@ -15,7 +15,7 @@ const { loadWebServerSettings, saveWebServerSettings } =
   await import("./web-settings.ts");
 
 function withAgentDir<T>(run: (dir: string) => T): T {
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-web-settings-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-web-settings-"));
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = dir;
   try {
@@ -23,7 +23,7 @@ function withAgentDir<T>(run: (dir: string) => T): T {
   } finally {
     if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = previous;
-    globalThis.__ompWebSettingsCache = undefined;
+    globalThis.__keylimeSettingsCache = undefined;
     rmSync(dir, { recursive: true, force: true });
   }
 }
@@ -44,18 +44,18 @@ test("agentEnv round-trips through the settings file", () => {
   withAgentDir((dir) => {
     saveWebServerSettings({ agentEnv: { OBSIDIAN_API_KEY: "secret" } });
     const written = JSON.parse(
-      readFileSync(join(dir, "omp-web-settings.json"), "utf8"),
+      readFileSync(join(dir, "keylime-settings.json"), "utf8"),
     );
     assert.deepEqual(written.agentEnv, { OBSIDIAN_API_KEY: "secret" });
 
     // Re-read from disk (the cache is keyed by path, so a fresh dir proves the read path).
-    const fresh = mkdtempSync(join(tmpdir(), "omp-web-web-settings-"));
+    const fresh = mkdtempSync(join(tmpdir(), "keylime-web-settings-"));
     writeFileSync(
-      join(fresh, "omp-web-settings.json"),
+      join(fresh, "keylime-settings.json"),
       JSON.stringify(written),
       "utf8",
     );
-    globalThis.__ompWebSettingsCache = undefined;
+    globalThis.__keylimeSettingsCache = undefined;
     process.env.PI_CODING_AGENT_DIR = fresh;
     try {
       assert.deepEqual(loadWebServerSettings(), {
@@ -73,7 +73,7 @@ test("agentEnv round-trips through the settings file", () => {
 
 test("the settings file, which holds agentEnv, is readable by its user only, even where it was wider before", () => {
   withAgentDir((dir) => {
-    const file = join(dir, "omp-web-settings.json");
+    const file = join(dir, "keylime-settings.json");
     writeFileSync(file, "{}\n");
     chmodSync(file, 0o644);
     saveWebServerSettings({ agentEnv: { OBSIDIAN_API_KEY: "secret" } });
@@ -97,7 +97,7 @@ test("a patch leaves the other keys untouched", () => {
 
 test("corrupt files fall back to defaults instead of throwing", () => {
   withAgentDir((dir) => {
-    writeFileSync(join(dir, "omp-web-settings.json"), "{ not json", "utf8");
+    writeFileSync(join(dir, "keylime-settings.json"), "{ not json", "utf8");
     assert.deepEqual(loadWebServerSettings(), {
       autoResumeSessions: false,
       agentToolsEnabled: false,
@@ -115,7 +115,7 @@ test("agentToolsEnabled round-trips, and a non-boolean value falls back to false
   });
   withAgentDir((dir) => {
     writeFileSync(
-      join(dir, "omp-web-settings.json"),
+      join(dir, "keylime-settings.json"),
       JSON.stringify({ agentToolsEnabled: "yes" }),
       "utf8",
     );
@@ -126,7 +126,7 @@ test("agentToolsEnabled round-trips, and a non-boolean value falls back to false
 test("a missing browserTransport reads as ws, sse and ws round-trip, and unknown values (the experiment's ws-* included) read as ws with the pool numbers dropped", () => {
   withAgentDir((dir) => {
     writeFileSync(
-      join(dir, "omp-web-settings.json"),
+      join(dir, "keylime-settings.json"),
       JSON.stringify({ autoResumeSessions: true }),
       "utf8",
     );
@@ -148,7 +148,7 @@ test("a missing browserTransport reads as ws, sse and ws round-trip, and unknown
   ]) {
     withAgentDir((dir) => {
       writeFileSync(
-        join(dir, "omp-web-settings.json"),
+        join(dir, "keylime-settings.json"),
         JSON.stringify({
           browserTransport: value,
           browserTransportPerSocket: 8,
@@ -174,7 +174,7 @@ test("a missing browserTransport reads as ws, sse and ws round-trip, and unknown
 test("only string-valued agentEnv entries are kept", () => {
   withAgentDir((dir) => {
     writeFileSync(
-      join(dir, "omp-web-settings.json"),
+      join(dir, "keylime-settings.json"),
       JSON.stringify({
         autoResumeSessions: "yes",
         agentEnv: { GOOD: "1", BAD: 2, WORSE: null, NESTED: { a: 1 } },
@@ -195,7 +195,7 @@ test("uploadRetentionDays defaults to 30, null and 1..3650 round-trip, and anyth
   withAgentDir((dir) => {
     for (const days of [null, 1, 7, 90, 3650]) {
       saveWebServerSettings({ uploadRetentionDays: days });
-      globalThis.__ompWebSettingsCache = undefined;
+      globalThis.__keylimeSettingsCache = undefined;
       assert.equal(
         loadWebServerSettings().uploadRetentionDays,
         days,
@@ -204,11 +204,11 @@ test("uploadRetentionDays defaults to 30, null and 1..3650 round-trip, and anyth
     }
     for (const stored of [0, -5, 3651, 1.5, "7", true, {}, [7], undefined]) {
       writeFileSync(
-        join(dir, "omp-web-settings.json"),
+        join(dir, "keylime-settings.json"),
         JSON.stringify({ uploadRetentionDays: stored }),
         "utf8",
       );
-      globalThis.__ompWebSettingsCache = undefined;
+      globalThis.__keylimeSettingsCache = undefined;
       assert.equal(
         loadWebServerSettings().uploadRetentionDays,
         30,
@@ -221,7 +221,7 @@ test("uploadRetentionDays defaults to 30, null and 1..3650 round-trip, and anyth
 test("a non-object agentEnv is dropped", () => {
   withAgentDir((dir) => {
     writeFileSync(
-      join(dir, "omp-web-settings.json"),
+      join(dir, "keylime-settings.json"),
       JSON.stringify({ agentEnv: "A=1" }),
       "utf8",
     );

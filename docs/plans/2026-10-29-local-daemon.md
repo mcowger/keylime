@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** omp runs survive web-server restarts: this machine is reached only through a local `ompweb host` daemon, and a restarted web server adopts the omp children it finds running.
+**Goal:** omp runs survive web-server restarts: this machine is reached only through a local `keylime host` daemon, and a restarted web server adopts the omp children it finds running.
 
 **Architecture:** Builds on PR #339 (`feat/remote-hosts`). The hub stops killing unknown channels on `hello` and adopts them into `AgentSessionWrapper`s rebuilt from omp's state. The daemon replays still-open blocking requests it saw on each channel. "This machine" becomes a linked host `local` over loopback, bootstrapped by the web server; main no longer spawns omp or reads session files itself.
 
@@ -19,7 +19,7 @@
 - Adoption re-sync uses the existing `GET_STATE_TIMEOUT_MS`; a timeout kills the child and resumes it once.
 - The local host id is the literal `"local"`; label "This machine"; it cannot be renamed or revoked.
 - Loopback links (`127.0.0.1`, `::1`, `localhost`) use `http://` without `--allow-http`.
-- Copy: "start the ompweb-host service"; "This machine needs the ompweb-host service. Install it with: <command>".
+- Copy: "start the keylime-host service"; "This machine needs the keylime-host service. Install it with: <command>".
 - Client code never uses `AbortSignal.timeout/any` or `Promise.withResolvers`; every new UI string exists in all `lib/i18n/locales/*.json`.
 - Line numbers below are hints; locate code by symbol.
 
@@ -106,7 +106,7 @@
 
 **Files:**
 
-- Modify: `lib/hosts/registry.ts` (reserved `local` record), `lib/hosts/hub.ts` (`getHost("local")` → the linked host), `lib/hosts/daemon.ts` (re-read `host.json` on 401; loopback http), `bin/omp-web-host.js`, `instrumentation.node.ts` (bootstrap at start), `app/api/hosts/route.ts` (local row from the registry, not synthesized)
+- Modify: `lib/hosts/registry.ts` (reserved `local` record), `lib/hosts/hub.ts` (`getHost("local")` → the linked host), `lib/hosts/daemon.ts` (re-read `host.json` on 401; loopback http), `bin/keylime-host.js`, `instrumentation.node.ts` (bootstrap at start), `app/api/hosts/route.ts` (local row from the registry, not synthesized)
 - Create: `lib/hosts/local-bootstrap.ts`
 - Test: `lib/hosts/local-bootstrap.test.mjs`, `lib/hosts/daemon.test.mjs`, `lib/hosts/hosts-route.test.mjs`
 
@@ -120,7 +120,7 @@
   };
   // registry: the "local" record exists exactly once; createHost never returns id "local"; updateHost/revokeHost("local") throw
   ```
-  At startup the web server calls `ensureLocalHostLink({ url: "http://127.0.0.1:<its port>" })` — skipped when `NODE_ENV` is `development` — : creates or keeps the `local` record, writes `<agent dir>/omp-web/host.json` (0600, temp + rename) when its url/token differ. The port is the one the server actually listens on (read how `bin/omp-web.js` passes it to `next start`). The daemon, on 401, re-reads `host.json` once and redials with the new token; it exits only when the file still holds the rejected token. `http://` is accepted for loopback hosts without `--allow-http`.
+  At startup the web server calls `ensureLocalHostLink({ url: "http://127.0.0.1:<its port>" })` — skipped when `NODE_ENV` is `development` — : creates or keeps the `local` record, writes `<agent dir>/keylime/host.json` (0600, temp + rename) when its url/token differ. The port is the one the server actually listens on (read how `bin/keylime.js` passes it to `next start`). The daemon, on 401, re-reads `host.json` once and redials with the new token; it exits only when the file still holds the rejected token. `http://` is accepted for loopback hosts without `--allow-http`.
 - [ ] **Step 1: Failing tests** — bootstrap writes `host.json` with the server's loopback url and a token `hostForToken` accepts; a second call with the same url does not rewrite; registry refuses to revoke/rename `local`; daemon given a stale token gets 401, re-reads the rewritten file and links; daemon with an unchanged stale file exits 1; `http://127.0.0.1` links without `--allow-http`.
 - [ ] **Step 2: Run** → FAIL.
 - [ ] **Step 3: Implement.**
@@ -154,7 +154,7 @@
 **Interfaces:**
 
 - Consumes: `hosts` channel status for `local`.
-- Produces: when `local` is offline, Settings → Hosts shows "start the ompweb-host service"; when it has never linked since this web server started and 10 s have passed, AppShell shows a one-time dismissible banner "This machine needs the ompweb-host service. Install it with: <command>", where the command is the platform's helper from Task 7 (`ompweb systemd install` / `ompweb launchd install`).
+- Produces: when `local` is offline, Settings → Hosts shows "start the keylime-host service"; when it has never linked since this web server started and 10 s have passed, AppShell shows a one-time dismissible banner "This machine needs the keylime-host service. Install it with: <command>", where the command is the platform's helper from Task 7 (`keylime systemd install` / `keylime launchd install`).
 - [ ] **Step 1: Failing tests** — local row renders no Rename/Revoke; offline local row shows the hint; banner appears once after 10 s offline, not again after dismissal (localStorage key), not when local links.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → PASS; lint.
 - [ ] **Step 5: Commit** `feat(hosts): tell users to install the local daemon`.
@@ -163,24 +163,24 @@
 
 **Files:**
 
-- Modify: `bin/omp-web-systemd.js`, `bin/omp-web-launchd.js`
-- Test: `bin/omp-web-systemd.test.mjs`, a launchd plist test
+- Modify: `bin/keylime-systemd.js`, `bin/keylime-launchd.js`
+- Test: `bin/keylime-systemd.test.mjs`, a launchd plist test
 
 **Interfaces:**
 
-- Produces: `install` writes and enables two units — the existing web unit and `ompweb-host` running `<ompweb bin> host` with `Restart=always` (systemd) / `KeepAlive` (launchd); `uninstall` removes both; `status` reports both.
+- Produces: `install` writes and enables two units — the existing web unit and `keylime-host` running `<keylime bin> host` with `Restart=always` (systemd) / `KeepAlive` (launchd); `uninstall` removes both; `status` reports both.
 - [ ] **Step 1: Failing tests** — generated systemd units: two files, the host unit's `ExecStart` ends with ` host`; launchd: two plists with `KeepAlive`.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(service): install the ompweb-host daemon next to the web service`.
+- [ ] **Step 5: Commit** `feat(service): install the keylime-host daemon next to the web service`.
 
 ### Task 8: This machine's deploy and docs
 
 **Files:**
 
-- Modify (outside the repo, not under git): `/opt/omp-deployment/bin/ompweb-deploy`; create the `ompweb-host` systemd unit for this VM
+- Modify (outside the repo, not under git): `/opt/omp-deployment/bin/keylime-deploy`; create the `keylime-host` systemd unit for this VM
 - Modify: `AGENTS.md`, `README.md`, `DESIGN.md`, `CHANGELOG.md`
 
-- [ ] **Step 1:** Back up `/opt/omp-deployment/bin/ompweb-deploy`, then add: `ompweb-host` unit pointing at the same release; restart it only when the running daemon's link version (`GET /api/hosts`, local row `hostVersion`) is outside the new release's `[MIN_LINK_PROTOCOL_VERSION, LINK_PROTOCOL_VERSION]` range; rollback restores both units' release.
+- [ ] **Step 1:** Back up `/opt/omp-deployment/bin/keylime-deploy`, then add: `keylime-host` unit pointing at the same release; restart it only when the running daemon's link version (`GET /api/hosts`, local row `hostVersion`) is outside the new release's `[MIN_LINK_PROTOCOL_VERSION, LINK_PROTOCOL_VERSION]` range; rollback restores both units' release.
 - [ ] **Step 2:** Docs per the spec's Documentation section.
 - [ ] **Step 3: Deploy smoke (needs the user's go-ahead to deploy):** start a long run on this machine, deploy a web-only change, confirm the run continues with the same omp pid and no resume prompt.
 - [ ] **Step 4: Commit** `docs(hosts): document the local daemon`.

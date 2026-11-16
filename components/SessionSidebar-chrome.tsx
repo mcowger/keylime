@@ -16,7 +16,7 @@ import { Popover } from "@base-ui/react/popover";
 import { useI18n } from "@/lib/i18n";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { AlertTriangle, Check } from "lucide-react";
-import OmpWebLogo from "./OmpWebLogo";
+import KeylimeLogo from "./KeylimeLogo";
 /**
  * Path label that ellipsizes on the LEFT, keeping the (most relevant) trailing
  * segments visible: "…orkspace/pi-web". Shows as much of the path as fits
@@ -381,19 +381,19 @@ function useScramble(
 
   return display;
 }
-function OmpWebTitle() {
+function KeylimeTitle() {
   const [showVersion, setShowVersion] = useState(false);
   const [scrambling, setScrambling] = useState(false);
   const revertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrambleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reducedMotion = usePrefersReducedMotion();
-  const commitHash = process.env.OMP_WEB_PUBLIC_COMMIT_HASH;
-  const commitDate = process.env.OMP_WEB_PUBLIC_COMMIT_DATE;
+  const commitHash = process.env.KEYLIME_PUBLIC_COMMIT_HASH;
+  const commitDate = process.env.KEYLIME_PUBLIC_COMMIT_DATE;
   const hasCommitDetails = Boolean(commitHash && commitDate);
   const VersionTrigger = hasCommitDetails ? Popover.Trigger : "button";
 
   const target = showVersion
-    ? `v${process.env.OMP_WEB_PUBLIC_APP_VERSION ?? "0.0.0"}`
+    ? `v${process.env.KEYLIME_PUBLIC_APP_VERSION ?? "0.0.0"}`
     : "key lime";
   const display = useScramble(target, scrambling, reducedMotion);
 
@@ -454,7 +454,7 @@ function OmpWebTitle() {
         }}
         title={showVersion ? "Show key lime name" : "Show key lime version"}
       >
-        <OmpWebLogo size={20} />
+        <KeylimeLogo size={20} />
         {!scrambling && !showVersion ? (
           <span>
             <span style={{ color: "var(--accent)" }}>key</span>{" "}
@@ -638,7 +638,7 @@ function UnreadSessionIndicator({ size = 14 }: { size?: number }) {
   );
 }
 export {
-  OmpWebTitle,
+  KeylimeTitle,
   PathLabel,
   ExitedSessionIndicator,
   RunningSessionIndicator,

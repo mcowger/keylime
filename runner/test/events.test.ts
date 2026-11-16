@@ -20,9 +20,9 @@ type Event = { type: string } & Record<string, unknown>;
 
 async function bridged(responses: { content: string[] }[] = []) {
   // No host listens here: the session's own channel stays closed and only this bridge reports.
-  process.env.OMPWEB_HOST_SOCKET = path.join(
+  process.env.KEYLIME_HOST_SOCKET = path.join(
     os.tmpdir(),
-    `ompweb-events-test-${process.pid}.sock`,
+    `keylime-events-test-${process.pid}.sock`,
   );
   test = await createTestSession({ responses });
   const session = test.session;

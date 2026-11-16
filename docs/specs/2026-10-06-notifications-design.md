@@ -4,7 +4,7 @@ Status: approved design, 2026-10-06; updated to match the implementation.
 
 ## Goal
 
-omp-web notifies the user about session events on desktop browsers and on the
+keylime notifies the user about session events on desktop browsers and on the
 installed PWA (Android, and iOS 16.4+ when added to the Home Screen). A
 Notifications tab in Settings lets each device choose which events notify and
 how. Tapping a notification opens the session that produced it. No
@@ -15,7 +15,7 @@ notification is shown for a session the user is currently viewing.
 | Type          | Trigger frame (rpc-ui)                                                                                                                                                                                                            | Body                                                   |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
 | `completed`   | `session_settled`, unless the last `prompt_result` of that stretch had `status` `error` or `aborted`                                                                                                                              | "Task finished."                                       |
-| `input`       | `extension_ui_request` with `method` `select`, `confirm`, `input`, `editor`, `ask` or `open_url` that omp-web does not auto-answer                                                                                                | "Waiting for your answer: <title or first question>"   |
+| `input`       | `extension_ui_request` with `method` `select`, `confirm`, `input`, `editor`, `ask` or `open_url` that keylime does not auto-answer                                                                                                | "Waiting for your answer: <title or first question>"   |
 | `error`       | `prompt_result` with `agentInvoked: true` and `status: "error"`, an asynchronous prompt failure (`response` with `success: false`), or omp child exit while a run or its background work is in progress; one notification per run | "Run failed: <error.message>"                          |
 | `modelSwitch` | `retry_fallback_applied {from, to, reason?}`, or `notice` with `source` `prewalk` or `plan-yolo`                                                                                                                                  | "Switched <from> → <to>: <reason>", or the notice text |
 
@@ -120,12 +120,12 @@ push: iOS Safari revokes push permission for pushes that show nothing.
 
 - Dependency: `web-push`.
 - The VAPID key pair, generated on first use, and up to 50 devices
-  `{deviceId, prefs, subscription?, updatedAt}` live in omp-web's SQLite
+  `{deviceId, prefs, subscription?, updatedAt}` live in keylime's SQLite
   notification store (see
   `2026-10-12-persistent-notifications-design.md`, which replaced the original
   `notifications.json`). A push endpoint belongs to one device; saving it
   removes it from any other. Over the cap, devices that are neither enabled nor
-  subscribed are dropped first. omp-web instances sharing the agent directory
+  subscribed are dropped first. keylime instances sharing the agent directory
   see each other's devices and keys.
 - VAPID subject: `https://github.com/ompweb-dev/ompweb` (Apple rejects subjects it
   cannot resolve, such as `mailto:…@localhost`).
@@ -177,7 +177,7 @@ A `SettingsTabs` category `notifications` (icon `Bell`). Contents:
   browser; unsupported.
 - **Toggles**, one per type: Task finished (on), Waiting for input (on), Run
   failed (on), Model switched automatically (off).
-- **When I'm using omp-web in another tab**: "Show an in-app toast" (default)
+- **When I'm using keylime in another tab**: "Show an in-app toast" (default)
   or "Always send a system notification".
 - **Send test notification**: a real push for subscribed devices, else a
   local notification from the page.

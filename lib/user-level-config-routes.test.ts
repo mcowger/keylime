@@ -17,7 +17,7 @@ import test, { after } from "node:test";
 import { mock } from "bun:test";
 
 const scratch = realpathSync(
-  mkdtempSync(join(os.tmpdir(), "omp-web-user-level-")),
+  mkdtempSync(join(os.tmpdir(), "keylime-user-level-")),
 );
 const agentDir = join(scratch, "agent");
 mkdirSync(agentDir);
@@ -75,10 +75,10 @@ esac
   { mode: 0o755 },
 );
 
-// Nothing of the real home is read: omp-web's own lookups (skill locks, MCP files) go under the scratch home. Bun's
+// Nothing of the real home is read: keylime's own lookups (skill locks, MCP files) go under the scratch home. Bun's
 // os.homedir() ignores a HOME set at run time, so it is replaced too.
 const ENV_KEYS = [
-  "OMP_WEB_OMP_BIN",
+  "KEYLIME_OMP_BIN",
   "PI_CODING_AGENT_DIR",
   "PI_CONFIG_DIR",
   "HOME",
@@ -93,7 +93,7 @@ const saved = Object.fromEntries(
 for (const key of ENV_KEYS) delete process.env[key];
 const home = join(scratch, "home");
 mkdirSync(home);
-process.env.OMP_WEB_OMP_BIN = bin;
+process.env.KEYLIME_OMP_BIN = bin;
 process.env.PI_CODING_AGENT_DIR = agentDir;
 process.env.HOME = home;
 const scratchOs = { ...os, homedir: () => home };

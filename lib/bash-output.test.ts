@@ -10,7 +10,7 @@ async function loadSubject() {
 
 test("accepts only pi bash logs directly inside the configured temp directory", async () => {
   const { resolveBashOutputPath } = await loadSubject();
-  const tempRoot = join(tmpdir(), "omp-web-output-tests");
+  const tempRoot = join(tmpdir(), "keylime-output-tests");
   const expected = resolve(tempRoot, "pi-bash-ab12.log");
 
   assert.equal(
@@ -36,7 +36,7 @@ test("accepts only pi bash logs directly inside the configured temp directory", 
 
 test("reads small output and rejects oversized inline output before buffering it", async () => {
   const { readUtf8FileWithinLimit } = await loadSubject();
-  const dir = await mkdtemp(join(tmpdir(), "omp-web-bash-output-"));
+  const dir = await mkdtemp(join(tmpdir(), "keylime-bash-output-"));
   const filePath = join(dir, "pi-bash-ab12.log");
   try {
     await writeFile(filePath, "shell output", "utf8");
@@ -57,7 +57,7 @@ test("reads small output and rejects oversized inline output before buffering it
 
 test("rejects symbolic links when opening bash output", async (t) => {
   const { readUtf8FileWithinLimit } = await loadSubject();
-  const dir = await mkdtemp(join(tmpdir(), "omp-web-bash-output-link-"));
+  const dir = await mkdtemp(join(tmpdir(), "keylime-bash-output-link-"));
   const targetPath = join(dir, "target.log");
   const linkPath = join(dir, "pi-bash-link.log");
   try {

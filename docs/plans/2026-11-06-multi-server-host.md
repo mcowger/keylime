@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** one `ompweb host` daemon links several web servers at once; all of them show and drive the same sessions, and the daemon owns each omp process's lifecycle.
+**Goal:** one `keylime host` daemon links several web servers at once; all of them show and drive the same sessions, and the daemon owns each omp process's lifecycle.
 
 **Architecture:** the daemon's per-socket state moves into a `DaemonLink` (one per `host.json` entry); channels, ops and uploads stay shared. Output fans out to the links that joined a channel; replies go back by recorded command id. Lifecycle (interest, stops, resume, startup settings) and shared requests (dialogs, web tool callbacks, notifier) move into daemon-side modules. The hub speaks link v7 to new daemons and keeps today's code path for v4–v6.
 
@@ -14,7 +14,7 @@
 
 - `LINK_PROTOCOL_VERSION = 7`, `MIN_LINK_PROTOCOL_VERSION = 4` (literal one-line exports: the deploy script `sed`s them).
 - Daemon-loaded files (`lib/hosts/daemon*.ts`, `link-protocol.ts`, `local-host.ts`, `session-ops.ts`, every new `lib/hosts/*` module the daemon imports, and their `lib/` imports): relative imports only, no `Bun` global.
-- Abandoned stop: 2 min (`OMP_WEB_DISCONNECT_DESTROY_MS`, `0` disables). Idle stop: 10 min. Link interest grace after a drop: 2 min (`DISCONNECT_GRACE_MS`). Kill escalates to force after 5 s.
+- Abandoned stop: 2 min (`KEYLIME_DISCONNECT_DESTROY_MS`, `0` disables). Idle stop: 10 min. Link interest grace after a drop: 2 min (`DISCONNECT_GRACE_MS`). Kill escalates to force after 5 s.
 - Per-link, per-channel output buffer cap: 32 MB (today's channel cap), overflow → `resync {ch}` on that link only.
 - Redial backoff ceiling: 30 s; 3 s only for the primary loopback link.
 - Daemon command ids: prefix `d:`. Link ids: `l1`, `l2`, … never reused within a daemon run.
@@ -84,7 +84,7 @@ See the spec's final section: correlate using existing RPC ids; never repeat an 
   - Configuration writers use one read-modify-write lock (`host.json.lock`, created with `wx`, asynchronous retry every 50 ms up to 5 s, removed in `finally`). Store the owner pid, recover a lock only after proving its owner exited, and leave unreadable configuration untouched. Never busy-wait or block the Node event loop.
   - `loginHost` retains replacement semantics; migrate its callers to the same asynchronous, locked writer so it cannot overwrite a concurrent add.
 - `ensureLocalHostLink` becomes asynchronous and calls `addHostLink` for its own URL instead of `loginHost`; preserve token validation and the protection against overwriting a remote primary. Update every caller to await it.
-- `ompweb host login --add --url <url>` adds a link, still reading its token from stdin. Add `ompweb host logout --url <url>` to call `removeHostLink`; no token on argv.
+- `keylime host login --add --url <url>` adds a link, still reading its token from stdin. Add `keylime host logout --url <url>` to call `removeHostLink`; no token on argv.
 
 - [ ] **Step 1:** Tests: legacy file → one link; two concurrent writer child processes → both entries retained with the primary unchanged; explicit empty list → no links; remove a secondary → primary preserved; unknown keys preserved; malformed config → failure without replacement; dead-owner lock → recover; live-owner lock → bounded timeout. Extend bootstrap tests to assert staging never overwrites production's primary.
 - [ ] **Step 2:** Run `bun test --parallel lib/hosts/host-login.test.mjs lib/hosts/local-bootstrap.test.mjs`; expect FAIL.
@@ -263,7 +263,7 @@ See the spec's final section: correlate using existing RPC ids; never repeat an 
 
 - Modify: `AGENTS.md` ("Remote hosts", "Local daemon", "RPC session lifecycle", "Auto-resume after a restart", "Link protocol versions"), `CHANGELOG.md`, `docs/specs/2026-10-28-remote-hosts-design.md` (version list).
 
-- [ ] **Step 1:** Describe: one daemon, several links from `host.json`; the daemon owns stops and resume for v7; reply routing by command id; notifier; v6 isolation and the 409; `ompweb host login --add`.
+- [ ] **Step 1:** Describe: one daemon, several links from `host.json`; the daemon owns stops and resume for v7; reply routing by command id; notifier; v6 isolation and the 409; `keylime host login --add`.
 - [ ] **Step 2:** Commit `docs(hosts): several servers on one daemon`.
 
 **Whole-branch gate before publication or deployment:** run `npm test`, `npm run typecheck`, `npm run lint`, `npm run build` and `npm run smoke -- --second-server` on the integrated head. Exercise both rendered browser views against the throwaway two-server setup: send from each view, observe matching messages/tool results, answer one dialog and verify both close, reconnect one view without disturbing the other. Then request one condensed `reviewer` round covering contract, hostile correctness, test honesty and unnecessary complexity. Resolve findings, run affected proof once more, publish the implementation PR and register pr-watcher. CI/bot reviews follow repository policy. No production cutover occurs until the release is verified and the user approves its timing.
@@ -274,5 +274,5 @@ See the spec's final section: correlate using existing RPC ids; never repeat an 
 to the deployment environment, not this repository.
 
 - [ ] **Step 1:** Verify the installed daemon and both web servers support shared-host v7. Upgrade the first legacy daemon only in an agreed quiescent window.
-- [ ] **Step 2:** Register the additional server through bootstrap or `ompweb host login --add --url <url>` (token from stdin), keeping the primary connected. Remove it with `ompweb host logout --url <url>`, without restarting the primary or daemon.
+- [ ] **Step 2:** Register the additional server through bootstrap or `keylime host login --add --url <url>` (token from stdin), keeping the primary connected. Remove it with `keylime host logout --url <url>`, without restarting the primary or daemon.
 - [ ] **Step 3:** In the deployment environment, confirm both views drive one session, then stop/rejoin one server while the other remains usable. Keep environment-specific scripts and service policy outside this upstream repository.

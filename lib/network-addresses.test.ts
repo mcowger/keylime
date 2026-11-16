@@ -156,12 +156,12 @@ test("formatAddressBanner generates readable output with status indicators", () 
     isTTY: false,
   });
 
-  assert.ok(banner.includes("ompweb"));
+  assert.ok(banner.includes("keylime"));
   assert.ok(banner.includes("v0.3.5"));
   assert.ok(banner.includes("is ready"));
   assert.ok(banner.includes("Local:"));
   assert.ok(banner.includes("http://localhost:59002"));
   assert.ok(banner.includes("Network:"));
   assert.ok(banner.includes("http://192.168.31.23:59002"));
-  assert.ok(banner.includes("OMP_WEB_PASSWORD_HASH"));
+  assert.ok(banner.includes("KEYLIME_PASSWORD_HASH"));
 });

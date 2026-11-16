@@ -61,7 +61,7 @@ import type {
 } from "./api-contracts/domain";
 // Types mirrored from oh-my-pi coding-agent session-entries (v3 format).
 
-// omp-web cannot import the Bun-only @oh-my-pi packages, so the on-disk
+// keylime cannot import the Bun-only @oh-my-pi packages, so the on-disk
 // shapes are re-declared here. Legacy pi v1/v2 fields are kept optional.
 
 export type SessionTitleSource = Static<typeof SessionTitleSourceSchema>;
@@ -138,7 +138,7 @@ export type UiDialogValue = Static<typeof UiDialogValueSchema>;
 
 /**
  * A dialog the runner opened: `method` is omp's `ExtensionUIContext` method, `args` its positional
- * arguments. omp-web's own confirms carry string ids. `expiresAt` (epoch ms) is set when it times out.
+ * arguments. keylime's own confirms carry string ids. `expiresAt` (epoch ms) is set when it times out.
  */
 export type UiDialogRequest = Static<typeof UiDialogRequestSchema>;
 

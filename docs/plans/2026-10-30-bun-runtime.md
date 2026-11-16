@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** omp-web runs on one `Bun.serve` process (API, static files, SPA) built by Bun's bundler, with Next.js removed and no user-visible change.
+**Goal:** keylime runs on one `Bun.serve` process (API, static files, SPA) built by Bun's bundler, with Next.js removed and no user-visible change.
 
 **Architecture:** The launcher starts the Bun server, which routes `app/api/**/route.ts` through a hand-written table into `Bun.serve`, runs `proxy.ts` as its gate, and serves `dist/`. The host daemon and service helpers run separately.
 
@@ -12,13 +12,13 @@
 
 ## Global Constraints
 
-- Work only in `/root/git/.ompweb_worktrees/bun-runtime` on `feat/bun-runtime`. One commit per task, using the message given in that task.
+- Work only in `/root/git/.keylime_worktrees/bun-runtime` on `feat/bun-runtime`. One commit per task, using the message given in that task.
 - Bun is pinned through mise.
 - npm only: `npm install`/`npm ci` and `package-lock.json`. Never run `bun install` or `bun add`, and never commit a `bun.lock`.
 - `node_modules` in this worktree is a symlink to another worktree's (`../local-daemon/node_modules`). Task 1 replaces it with a real `npm ci` (`rm node_modules` removes only the link). Never install through the symlink.
-- Ports: verification uses port 0 or 30300–30399. Never use 30177–30195. Never start, stop or restart a systemd/launchd service. Never touch the real `~/.omp`: servers started for checks get `HOME`, `PI_CODING_AGENT_DIR` (temp dirs) and `OMP_WEB_OMP_BIN=/nonexistent/omp`.
+- Ports: verification uses port 0 or 30300–30399. Never use 30177–30195. Never start, stop or restart a systemd/launchd service. Never touch the real `~/.omp`: servers started for checks get `HOME`, `PI_CODING_AGENT_DIR` (temp dirs) and `KEYLIME_OMP_BIN=/nonexistent/omp`.
 - **Bun built-ins first (user rule):** whenever a dependency or Node-specific pattern is a problem or a cost under Bun, first check Bun's built-in alternatives (`Bun.*` APIs, `bun:*` modules, Bun.serve/bundler/test features) and use one if it fits. Only after that, assess whether keeping the Node dependency is viable. Do not churn working code just to use a Bun API. The decisions already made are in "Bun built-ins check" below; a new case gets a row there in the same commit.
-- Server runtime code resolves files from `const root = process.env.OMP_WEB_PACKAGE_DIR ?? process.cwd()`, never from `import.meta.dir`/`__dirname` (spec R11). Build scripts and tests may use `import.meta.dir`.
+- Server runtime code resolves files from `const root = process.env.KEYLIME_PACKAGE_DIR ?? process.cwd()`, never from `import.meta.dir`/`__dirname` (spec R11). Build scripts and tests may use `import.meta.dir`.
 - Client code never uses `AbortSignal.timeout/any` or `Promise.withResolvers`. Every new UI string exists in all `lib/i18n/locales/*.json` (this plan adds none).
 - No feature or behavior change: spec invariants 1–10 are the contract. No new `eslint-disable` comments.
 - From Task 2 on, every task ends with `npm run typecheck && npm run lint && npm test` green.
@@ -44,14 +44,14 @@
 | `.cookies`                                             | 2                    | `app/api/web-auth/session/route.ts` (response), `proxy.ts` (request)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | 5                              |
 | Other `next*` imports                                  | 10 files             | type `next` (`app/layout.tsx`, `app/api/manifest/route.ts`, `next.config.ts`); `next/constants`, `next/dist/.../path-match` (`lib/security-headers.test.mjs`); `next/experimental/testing/server.js` (`lib/web-auth.test.mjs`); `next/dynamic` (`AppShell`, `CommandPaletteMount`, `SettingsConfig`: 9 call sites); `next/navigation` (`AppShell`); `next/font/google`, `next/script` (`layout.tsx`); `next/headers` (`layout.tsx`, `page.tsx`)                                                                                                                                                                                                                  | 3–5                            |
 | Route files / `export const dynamic` / `runtime`       | 70 / 38 / 2          | `runtime`: `sessions/[id]/export`, `sessions/archive`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | 5                              |
-| `.next` / `next` CLI in code and config                | —                    | `bin/omp-web.js` (`nextDir`, `resolveNextBin`, `nextArgs`, `main` check); `bin/omp-web-security.test.mjs:22-26`; `package.json` (`files`: 8 `.next` entries + `next.config.ts`; scripts: 5 `next` commands); `tsconfig.json` (plugin + 3 `.next` includes + `next-env.d.ts`); `.gitignore` (`/.next/`, `/.next-dev*.log` ×2, `next-env.d.ts`); `nix/package.nix` (fonts patch, fileset); comments in `lib/directory-browser.ts:62`, `lib/rpc-manager.test.mjs:1524`. **Keep:** the `".next"` entries in the ignore lists of `app/api/file-index/route.ts:21` and `app/api/files/[...path]/route.ts:28`, and `lib/worktree.ts:109` (they are about user projects) | 5, 7, 8                        |
+| `.next` / `next` CLI in code and config                | —                    | `bin/keylime.js` (`nextDir`, `resolveNextBin`, `nextArgs`, `main` check); `bin/keylime-security.test.mjs:22-26`; `package.json` (`files`: 8 `.next` entries + `next.config.ts`; scripts: 5 `next` commands); `tsconfig.json` (plugin + 3 `.next` includes + `next-env.d.ts`); `.gitignore` (`/.next/`, `/.next-dev*.log` ×2, `next-env.d.ts`); `nix/package.nix` (fonts patch, fileset); comments in `lib/directory-browser.ts:62`, `lib/rpc-manager.test.mjs:1524`. **Keep:** the `".next"` entries in the ignore lists of `app/api/file-index/route.ts:21` and `app/api/files/[...path]/route.ts:28`, and `lib/worktree.ts:109` (they are about user projects) | 5, 7, 8                        |
 | `--experimental-strip-types` / `syncBuiltinESMExports` | 3 / 3                | `package.json`, `lib/draft-store.test.mjs`, `lib/github-repo.test.mjs` / `lib/rpc-manager.test.mjs`, `lib/session-reader.test.mjs`, `lib/session-routes.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | 2                              |
 | Tests importing `app/api` modules                      | 16                   | 14 through jiti; `lib/api-contract.test.mjs` reads source text                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | 2–3                            |
-| `process.execPath` in tests                            | 11 files             | `bin/{node-version-gate,omp-web-hash-password,omp-web-security,omp-web-systemd}.test.mjs`, `lib/{draft-store,instrumentation-crash-policy,notification-store,rpc-manager,session-resume,skills-service,stt-omp-gateway}.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                                | 2                              |
+| `process.execPath` in tests                            | 11 files             | `bin/{node-version-gate,keylime-hash-password,keylime-security,keylime-systemd}.test.mjs`, `lib/{draft-store,instrumentation-crash-policy,notification-store,rpc-manager,session-resume,skills-service,stt-omp-gateway}.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                                | 2                              |
 | DOM tests (`tests/setup-dom.mjs` importers)            | 30                   | 29 import Testing Library statically                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | 2                              |
 | `node:sqlite`                                          | 4 files              | `lib/notification-store.ts`, `lib/usage-db.ts`, `lib/usage-db.test.mjs`, `lib/notification-hub.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | 6                              |
 | `sharp` / `undici`                                     | 3 / 4 files          | `lib/media-cache.ts`, `lib/media-route.test.mjs`, `package.json` (+ comment in `app/api/media/[hash]/route.ts:8`) / `lib/http-dispatcher.ts`, `next.config.ts`, `package.json` (+ comment in `lib/stt-jobs.ts:47`)                                                                                                                                                                                                                                                                                                                                                                                                                                               | 6                              |
-| `accessSync(...) === undefined`                        | 1                    | `bin/omp-web-systemd.js` `isExecutableFile`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | 1                              |
+| `accessSync(...) === undefined`                        | 1                    | `bin/keylime-systemd.js` `isExecutableFile`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | 1                              |
 | `NEXT_PUBLIC_*`                                        | 3 vars, 3 sites      | `components/ChatWindow.tsx`, `components/SessionSidebar-chrome.tsx`, `lib/event-stream.ts`. The generic `NEXT_PUBLIC_FOO` env-stripping tests stay                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | 4                              |
 | `@next/next/no-img-element` disables                   | 5                    | grep                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | 5                              |
 | `"use client"`                                         | 85 files             | harmless directive; **kept** (removal is churn)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | —                              |
@@ -88,7 +88,7 @@
 | Single-binary release (Node + npm install of the package)                                                                                                                                                                                                                                                                  | `Bun.build` `compile` (cross-compiles all five targets from Linux; `autoloadDotenv`/`autoloadBunfig` off), `Bun.isStandaloneExecutable`                                                           | `scripts/build-binary.ts` compiles `server/binary.ts` with the `NODE_ENV` define `--production` sets; the static files ship beside it. `Bun.isStandaloneExecutable` turns the in-app update off (the update worker needs Node and an npm install) and points the UI at the release page                                                                                                                                                                                                                       |
 | Release archives (`tar -czf`, `zip`)                                                                                                                                                                                                                                                                                       | `Bun.Archive` (tar/tar.gz only): every entry is written 0644, so the binary loses its execute bit; no zip                                                                                         | System `tar` and `zip`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Third-party license notices for the release (a license-checker npm package)                                                                                                                                                                                                                                                | `Bun.build` `metafile` lists every bundled input, so the bundled npm packages, for the server compile and the client build                                                                        | `scripts/licenses.ts` copies those packages' license files into the release's `licenses/`; Bun's own license is vendored per version (`scripts/bun-LICENSE-<version>.md`)                                                                                                                                                                                                                                                                                                                                     |
-| Files a compiled module hands another process (`lib/omp/session-edit-extension.mjs`, which omp loads)                                                                                                                                                                                                                      | `import.meta.url` in a compiled binary is the virtual `/$bunfs/…`; `with { type: "file" }` embeds into the same virtual filesystem, which omp cannot read                                         | The file ships in the static root; `lib/hosts/local-host.ts` falls back to `OMP_WEB_PACKAGE_DIR` when the file beside the module does not exist                                                                                                                                                                                                                                                                                                                                                               |
+| Files a compiled module hands another process (`lib/omp/session-edit-extension.mjs`, which omp loads)                                                                                                                                                                                                                      | `import.meta.url` in a compiled binary is the virtual `/$bunfs/…`; `with { type: "file" }` embeds into the same virtual filesystem, which omp cannot read                                         | The file ships in the static root; `lib/hosts/local-host.ts` falls back to `KEYLIME_PACKAGE_DIR` when the file beside the module does not exist                                                                                                                                                                                                                                                                                                                                                               |
 
 **Bun.SQL (async) vs bun:sqlite for the notification store — assessment.** `lib/notification-hub.ts` calls the store synchronously on hot paths:
 
@@ -148,7 +148,7 @@ The two notification routes are async, but every query is a microsecond-scale lo
 - [ ] **Step 5: Implement** `bin/bun-runtime.js` (version compare: split on `.`, numeric).
 - [ ] **Step 6: Run** → PASS.
 - [ ] **Step 7: Probes** (throwaway files in `/tmp/bunplan-t1`, not committed). Add one row per probe to the spec's "Verified assumptions" table (command → deciding output):
-  1. Packed global install: `npm pack --ignore-scripts` (skips `prepack`, which still runs `next build`), then `npm install -g --prefix /tmp/bunplan-t1/prefix ./kahme247-ompweb-0.6.0.tgz`. `node -e` calling `resolveBunBinary(<prefix>/lib/node_modules/@kahme247/ompweb)` → a path whose `--version` is `1.4.4`. Repeat with `npm install -g --ignore-scripts` → the `@oven/bun-linux-x64` path.
+  1. Packed global install: `npm pack --ignore-scripts` (skips `prepack`, which still runs `next build`), then `npm install -g --prefix /tmp/bunplan-t1/prefix ./kahme247-keylime-0.6.0.tgz`. `node -e` calling `resolveBunBinary(<prefix>/lib/node_modules/@kahme247/ompweb)` → a path whose `--version` is `1.4.4`. Repeat with `npm install -g --ignore-scripts` → the `@oven/bun-linux-x64` path.
   2. NO_PROXY: one `bun -e` script with a `Bun.serve({ port: 0 })` answering `ok`. `HTTP_PROXY=http://127.0.0.1:9 NO_PROXY=127.0.0.1` → fetch to it gives 200 `ok`. Without `NO_PROXY` → `ECONNREFUSED`.
   3. Launcher IPC: a Node script spawns `<resolved bun> child.ts` with `stdio: ["inherit","inherit","inherit","ipc"]`, and messages go both ways (planner pre-check: works).
   4. Store compatibility: under **Node**, create real stores with the current code: `node -e 'const j=require("jiti")(__filename,{alias:{"@/":process.cwd()+"/"}}); …'` with `PI_CODING_AGENT_DIR=/tmp/bunplan-t1/agent`. That runs `getVapidKeys(...)`, `saveDevice(...)` and `recordHistory(...)` from `lib/notification-store.ts`, plus `getUsageDatabase()` from `lib/usage-db.ts`. Then, with `bun -e` and `bun:sqlite`:
@@ -165,7 +165,7 @@ The two notification routes are async, but every query is a microsecond-scale lo
 
 **Files:**
 
-- Modify: `package.json` (`test`), `tests/setup-dom.mjs`, the jiti test files, the strip-types and `syncBuiltinESMExports` files, the `process.execPath` tests as needed, the DOM test files, and `bin/omp-web-systemd.js` (`isExecutableFile`)
+- Modify: `package.json` (`test`), `tests/setup-dom.mjs`, the jiti test files, the strip-types and `syncBuiltinESMExports` files, the `process.execPath` tests as needed, the DOM test files, and `bin/keylime-systemd.js` (`isExecutableFile`)
 
 **Interfaces:**
 
@@ -187,7 +187,7 @@ The two notification routes are async, but every query is a microsecond-scale lo
 - [ ] **Step 6: Runtime assumptions in tests.**
   - Tests that run a `bin/*.js` script (production runs them on Node) spawn `"node"`, not `process.execPath`.
   - Tests that run a TS module in a child spawn `process.execPath` (Bun) without `--experimental-strip-types`.
-  - Fix `isExecutableFile` in `bin/omp-web-systemd.js` using `fs.accessSync(candidate, fs.constants.X_OK); return fs.statSync(candidate).isFile();` inside the existing try/catch, matching `bin/omp-web-launchd.js`.
+  - Fix `isExecutableFile` in `bin/keylime-systemd.js` using `fs.accessSync(candidate, fs.constants.X_OK); return fs.statSync(candidate).isFile();` inside the existing try/catch, matching `bin/keylime-launchd.js`.
 - [ ] **Step 7: Verify.**
   - `npm test` → 0 fail, pass + skip ≥ baseline pass + skip, and no test file deleted or skipped wholesale.
   - `rg -l "createJiti|from \"jiti\"" --glob '*.test.*'` → no output.
@@ -239,7 +239,7 @@ The two notification routes are async, but every query is a microsecond-scale lo
 - Produces:
   ```ts
   // server/client-env.ts — build and dev use the same values
-  export function clientEnv(root: string): { OMP_WEB_PUBLIC_APP_VERSION: string; OMP_WEB_PUBLIC_EVENT_STREAM_WORKER_VERSION: string };
+  export function clientEnv(root: string): { KEYLIME_PUBLIC_APP_VERSION: string; KEYLIME_PUBLIC_EVENT_STREAM_WORKER_VERSION: string };
   // version from package.json; worker = sha256(public/event-stream-worker.js) hex, first 12 chars (moved from next.config.ts)
   // lib/navigation.ts
   export function useSearchParams(): URLSearchParams;
@@ -262,8 +262,8 @@ The two notification routes are async, but every query is a microsecond-scale lo
   - In `app/globals.css`, next to the existing `@font-face` blocks, paste the matching blocks from each package's `wght.css` (keep their `font-family` name and `unicode-range`; `url("./fonts/<file>")`; `font-display: swap`). Add `:root { --font-geist: "<Geist family>"; --font-jb-mono: …; --font-noto-mono: …; --font-source-serif: … }`.
   - Remove the four `next/font/google` calls and their class names from `app/layout.tsx`. Next keeps rendering until Task 5, now from these faces.
 - [ ] **Step 5: Client env rename.**
-  - `process.env.NEXT_PUBLIC_APP_VERSION` and `NEXT_PUBLIC_OMP_WEB_VERSION` → `process.env.OMP_WEB_PUBLIC_APP_VERSION`.
-  - `NEXT_PUBLIC_EVENT_STREAM_WORKER_VERSION` → `OMP_WEB_PUBLIC_EVENT_STREAM_WORKER_VERSION`.
+  - `process.env.NEXT_PUBLIC_APP_VERSION` and `NEXT_PUBLIC_KEYLIME_VERSION` → `process.env.KEYLIME_PUBLIC_APP_VERSION`.
+  - `NEXT_PUBLIC_EVENT_STREAM_WORKER_VERSION` → `KEYLIME_PUBLIC_EVENT_STREAM_WORKER_VERSION`.
   - `next.config.ts` `env` renames its three keys to the two new names (same values, its own hash code) until Task 5 deletes it.
 - [ ] **Step 6: KaTeX out of the entry chunk.** In `loadMathMarkdownPlugins` (`lib/markdown.ts`), replace `await import("katex/dist/katex.min.css")` with: when `typeof document !== "undefined"` and there is no `link[data-katex]`, append `<link rel="stylesheet" href="/katex/katex.min.css" data-katex>` to `document.head`. Task 5 serves `/katex/`; until then math is unstyled under Next.
 - [ ] **Step 7: Shell.**
@@ -308,7 +308,7 @@ The two notification routes are async, but every query is a microsecond-scale lo
   - `bunfig.toml`.
 - Modify:
   - gate and routes: `proxy.ts`, `lib/web-auth.test.mjs`, `app/api/web-auth/session/route.ts`, the 38 + 2 route files with `dynamic`/`runtime` exports;
-  - launcher: `bin/omp-web.js`, `bin/omp-web-security.test.mjs`;
+  - launcher: `bin/keylime.js`, `bin/keylime-security.test.mjs`;
   - config: `package.json`, `package-lock.json`, `tsconfig.json`, `eslint.config.mjs`, `.gitignore`;
   - the 5 `@next/next/no-img-element` comment sites; comments in `lib/directory-browser.ts:62` and `lib/rpc-manager.test.mjs:1524`.
 - Delete: `next.config.ts`, `instrumentation.ts`, `postcss.config.mjs`, `app/layout.tsx`, `app/page.tsx`, `app/login/page.tsx`, `app/error.tsx`, `app/global-error.tsx`, `lib/security-headers.test.mjs`. Move: `app/icon.svg` → `public/icon.svg`.
@@ -397,8 +397,8 @@ The two notification routes are async, but every query is a microsecond-scale lo
     - a redirect response passes without throwing;
     - gzip happens for a 2 KB JSON body and is skipped for `text/event-stream`, status 206, a 500-byte body, and requests without `accept-encoding`;
     - `serveFile` returns 404/null for the four traversal inputs in Review Focus 3, `immutable` for `/assets/*` and `no-cache` for `/sw.js`;
-    - with `OMP_WEB_NAME=<script>`, `renderIndex` puts `&lt;script&gt;` in `<title>`, and the manifest link sits before `</head>`.
-  - `server/app.test.ts`: `startServer({ port: 0, dev: false, root })` where `root` is a temp dir holding a fixture `dist/index.html` plus `public` and `node_modules` linked to the repo's. Env: `PI_CODING_AGENT_DIR`/`HOME` temp and `OMP_WEB_OMP_BIN=/nonexistent/omp`:
+    - with `KEYLIME_NAME=<script>`, `renderIndex` puts `&lt;script&gt;` in `<title>`, and the manifest link sits before `</head>`.
+  - `server/app.test.ts`: `startServer({ port: 0, dev: false, root })` where `root` is a temp dir holding a fixture `dist/index.html` plus `public` and `node_modules` linked to the repo's. Env: `PI_CODING_AGENT_DIR`/`HOME` temp and `KEYLIME_OMP_BIN=/nonexistent/omp`:
     - `GET /api/hosts` → 200 JSON;
     - `POST /api/hosts` with `Origin: https://evil.example` → 403;
     - `GET /api/nope` → 404; `GET /api/sessions/%E0%A4%A/state` → 400;
@@ -413,20 +413,20 @@ The two notification routes are async, but every query is a microsecond-scale lo
 - [ ] **Step 2: Run** `bun test server lib/web-auth.test.mjs` → FAIL.
 - [ ] **Step 3: Implement** `server/routes.ts` (write the table once from `bun spike/gen-routes.ts` output, then keep it by hand), `server/http.ts` and `server/app.ts`. Then:
   - `proxy.ts`: `Response.json` / `new Response`; `NextResponse.redirect(u)` → a 307 with a relative `Location` (`/login?next=…`, `/`), because Bun's `request.url` is always `http://` and an absolute one would leave https behind a TLS proxy; `NextResponse.next()` → `null`; `request.cookies.get(n)?.value` → `new Bun.CookieMap(request.headers.get("cookie") ?? "").get(n)`; `request.nextUrl` → `new URL(request.url)`; `UNGATED` check first; delete `export const config`. Rewrite its comment: the link exclusion stays for bearer auth, and the 10 MB note goes.
-  - `app/api/web-auth/session/route.ts`: `Response.json({ ok: true }, { headers: { "set-cookie": new Bun.Cookie(OMP_WEB_SESSION_COOKIE, createWebSession(), { httpOnly: true, secure, sameSite: "lax", maxAge: OMP_WEB_SESSION_MAX_AGE_SECONDS, path: "/" }).serialize() } })`.
+  - `app/api/web-auth/session/route.ts`: `Response.json({ ok: true }, { headers: { "set-cookie": new Bun.Cookie(KEYLIME_SESSION_COOKIE, createWebSession(), { httpOnly: true, secure, sameSite: "lax", maxAge: KEYLIME_SESSION_MAX_AGE_SECONDS, path: "/" }).serialize() } })`.
   - Delete `export const dynamic …` (38) and `export const runtime …` (2).
   - `instrumentation.node.ts`: keep the `aborted`/`ECONNRESET` journaling branch (its test stays) but reword its comment, which blames Next's `proxy.ts` body cloning. Remove "Next" from the other comments there.
 - [ ] **Step 4: Entries.**
-  - **`server/main.ts`:** `process.env.NODE_ENV = "production"` (as `next start` forced it). Then `await import("./app")`, `startServer({ ...parseListenArgs(Bun.argv.slice(2), 30177), dev: false, root })`, `await register()` (dynamic import of `../instrumentation.node`), and print `[omp-web] Ready on http://<host>:<port>`. The launcher waits for `Ready`.
-  - **`server/dev.ts`:** a static `import html from "../app/index.html"`. When an `OMP_WEB_PUBLIC_*` value from `clientEnv(root)` is missing from its environment, it re-runs itself once with them set (`[serve.static] env` reads only the startup environment). Then `process.env.NODE_ENV = "development"`, dynamic import of `./app`, and `startServer({ …parseListenArgs(argv, 30178), dev: true, root, html })`, which mounts `html` at `/__omp_dev_index`; `/`, `/login` and the SPA fallback fetch it from there, so dev pages pass the gate and `renderIndex` as in prod. Their CSP adds `blob:` to `script-src` (Bun's HMR updates are blob: scripts; without it every edit is a full reload). Guard `globalThis.__ompWebRegistered ??= register()` so `bun --hot` re-evaluation registers once, then print the Ready line.
-  - **`bunfig.toml`:** `[serve.static]` with `plugins = ["bun-plugin-tailwind"]` and `env = "OMP_WEB_PUBLIC_*"`.
-- [ ] **Step 5: Launcher** (`bin/omp-web.js`).
+  - **`server/main.ts`:** `process.env.NODE_ENV = "production"` (as `next start` forced it). Then `await import("./app")`, `startServer({ ...parseListenArgs(Bun.argv.slice(2), 30177), dev: false, root })`, `await register()` (dynamic import of `../instrumentation.node`), and print `[keylime] Ready on http://<host>:<port>`. The launcher waits for `Ready`.
+  - **`server/dev.ts`:** a static `import html from "../app/index.html"`. When an `KEYLIME_PUBLIC_*` value from `clientEnv(root)` is missing from its environment, it re-runs itself once with them set (`[serve.static] env` reads only the startup environment). Then `process.env.NODE_ENV = "development"`, dynamic import of `./app`, and `startServer({ …parseListenArgs(argv, 30178), dev: true, root, html })`, which mounts `html` at `/__omp_dev_index`; `/`, `/login` and the SPA fallback fetch it from there, so dev pages pass the gate and `renderIndex` as in prod. Their CSP adds `blob:` to `script-src` (Bun's HMR updates are blob: scripts; without it every edit is a full reload). Guard `globalThis.__keylimeRegistered ??= register()` so `bun --hot` re-evaluation registers once, then print the Ready line.
+  - **`bunfig.toml`:** `[serve.static]` with `plugins = ["bun-plugin-tailwind"]` and `env = "KEYLIME_PUBLIC_*"`.
+- [ ] **Step 5: Launcher** (`bin/keylime.js`).
   - Delete `nextDir`, `resolveNextBin`, `nextBin` and `nextArgs`. Add `serverCommand()` → `[resolveBunBinary(pkgDir), path.join(pkgDir, "server", "main.ts"), "-p", String(port), "-H", String(hostname)]`, called at each spawn so a restart after an update resolves again.
   - `spawnServer` runs `spawn(cmd[0], cmd.slice(1), …)`. `waitForRestartRequest` passes `serverCommand()` to `acknowledgeAndStartRestart`.
   - In `runRestartGate`, `spawnChild(message.args[0], message.args.slice(1), …)`, and validation requires a non-empty `message.args`.
   - `main()` checks `dist/index.html` and `server/main.ts`, keeping the "Build artifacts not found" message. A resolver error prints its message and exits 1.
   - Update `module.exports` (drop `resolveNextBin`).
-  - `bin/omp-web-security.test.mjs`: the fake package gets `dist/index.html` and a `server/main.ts` stub that writes `process.env` to the dump file. Spawn `"node"`; the resolver finds Bun on the test's PATH.
+  - `bin/keylime-security.test.mjs`: the fake package gets `dist/index.html` and a `server/main.ts` stub that writes `process.env` to the dump file. Spawn `"node"`; the resolver finds Bun on the test's PATH.
 - [ ] **Step 6: Package and config.**
   - scripts:
     - `dev`: `bun --hot server/dev.ts -H 127.0.0.1 -p 30178`; `dev:lan`: the same with `-H 0.0.0.0`;
@@ -446,16 +446,16 @@ The two notification routes are async, but every query is a microsecond-scale lo
   - `/katex/katex.min.css` → 200;
   - no `x-middleware-*` or `x-powered-by`.
 
-  With `OMP_WEB_PASSWORD_HASH` from `printf 'pw\n' | node bin/omp-web.js hash-password`, check:
+  With `KEYLIME_PASSWORD_HASH` from `printf 'pw\n' | node bin/keylime.js hash-password`, check:
   - `/?session=x` → 307 `/login?next=%2F%3Fsession%3Dx`;
-  - the right password → `set-cookie: omp_web_session=…; HttpOnly; SameSite=Lax`.
+  - the right password → `set-cookie: keylime_session=…; HttpOnly; SameSite=Lax`.
 
   In a headless browser (the harness `browser` tool): the sidebar renders, a fixture session opens via `?session=`, fonts load from `/assets/*.woff2`, a math reply renders styled, and the Settings tabs load.
 
 - [ ] **Step 9: Dev and launcher check.**
-  - `bun --hot server/dev.ts -p 30312`: the page renders. A route file edit changes its response without a restart, and the `[omp-web] starting` line prints once. A component edit hot-swaps it.
-  - `node bin/omp-web.js -p 30313 --no-open`: the banner prints and `/api/hosts` → 200. Ctrl-C leaves no `server/main.ts` process (`pgrep -f server/main.ts` empty).
-- [ ] **Step 10: Commit** `feat(server): serve omp-web from Bun instead of Next`.
+  - `bun --hot server/dev.ts -p 30312`: the page renders. A route file edit changes its response without a restart, and the `[keylime] starting` line prints once. A component edit hot-swaps it.
+  - `node bin/keylime.js -p 30313 --no-open`: the banner prints and `/api/hosts` → 200. Ctrl-C leaves no `server/main.ts` process (`pgrep -f server/main.ts` empty).
+- [ ] **Step 10: Commit** `feat(server): serve keylime from Bun instead of Next`.
 
 ### Task 6: Bun built-ins replace node:sqlite, sharp and undici
 
@@ -500,19 +500,19 @@ The two notification routes are async, but every query is a microsecond-scale lo
 
 **Files:**
 
-- Modify: `bin/omp-web.js` (`serverEnvironment`), `lib/self-update.ts`, `lib/self-update.test.mjs`
+- Modify: `bin/keylime.js` (`serverEnvironment`), `lib/self-update.ts`, `lib/self-update.test.mjs`
 
 **Interfaces:**
 
 - Consumes: the `bin/bun-runtime.js` CLI (Task 1).
-- Produces: env `OMP_WEB_NODE_BIN` (set by the launcher to `process.execPath`). It is internal like `OMP_WEB_LAUNCHER_PID`.
+- Produces: env `KEYLIME_NODE_BIN` (set by the launcher to `process.execPath`). It is internal like `KEYLIME_LAUNCHER_PID`.
 
 - [ ] **Step 1: Failing tests.**
-  - `lib/self-update.test.mjs`: with `OMP_WEB_NODE_BIN=/opt/node/bin/node`, the spawned worker command (direct, or after `systemd-run … --scope …`) is `/opt/node/bin/node` and not `process.execPath`. Without it, the command falls back to `process.execPath`.
+  - `lib/self-update.test.mjs`: with `KEYLIME_NODE_BIN=/opt/node/bin/node`, the spawned worker command (direct, or after `systemd-run … --scope …`) is `/opt/node/bin/node` and not `process.execPath`. Without it, the command falls back to `process.execPath`.
 - [ ] **Step 2: Run** → FAIL.
 - [ ] **Step 3: Implement.**
-  - `serverEnvironment()` adds `OMP_WEB_NODE_BIN: process.execPath`.
-  - `lib/self-update.ts` uses `const runtime = process.env.OMP_WEB_NODE_BIN || process.execPath` for `command` and inside `commandArgs`.
+  - `serverEnvironment()` adds `KEYLIME_NODE_BIN: process.execPath`.
+  - `lib/self-update.ts` uses `const runtime = process.env.KEYLIME_NODE_BIN || process.execPath` for `command` and inside `commandArgs`.
 - [ ] **Step 4: Verify.**
   - `npm test` → pass.
   - `rg -n '\.next[/"]|next\\dist|next dev' scripts lib bin` → only `lib/worktree.ts` and `lib/worktree.test.mjs` (comments about user projects).
@@ -536,8 +536,8 @@ The two notification routes are async, but every query is a microsecond-scale lo
   - `prepack` stays `npm run build`.
 - [ ] **Step 2: `scripts/smoke.ts`.**
   1. Take a free port (listen on 0, read it, close).
-  2. Create temp `HOME`/`PI_CODING_AGENT_DIR` and set `OMP_WEB_OMP_BIN=<temp>/missing-omp`.
-  3. Spawn `node <dir>/bin/omp-web.js -p <port> -H 127.0.0.1 --no-open` and wait ≤ 60 s for `Ready` on stdout.
+  2. Create temp `HOME`/`PI_CODING_AGENT_DIR` and set `KEYLIME_OMP_BIN=<temp>/missing-omp`.
+  3. Spawn `node <dir>/bin/keylime.js -p <port> -H 127.0.0.1 --no-open` and wait ≤ 60 s for `Ready` on stdout.
   4. `GET /` → 200 `text/html` containing `id="root"` and `no-cache`.
   5. The first `/assets/*.js` named in it → 200 with `immutable`, plus `content-encoding: gzip` when requested with `accept-encoding: gzip`.
   6. `GET /api/hosts` → 200 JSON.
@@ -545,10 +545,10 @@ The two notification routes are async, but every query is a microsecond-scale lo
   8. Stop the launcher (`SIGTERM`), then wait until a TCP connect to the port fails (≤ 15 s).
   9. Remove the temp dirs.
 - [ ] **Step 3: Run** `npm run build && npm run smoke` → all `ok`. Then the packed install:
-  - `npm pack --ignore-scripts && npm install -g --prefix /tmp/bunplan-t8 ./kahme247-ompweb-*.tgz`;
+  - `npm pack --ignore-scripts && npm install -g --prefix /tmp/bunplan-t8 ./kahme247-keylime-*.tgz`;
   - `npm run smoke -- --package "$(npm root -g --prefix /tmp/bunplan-t8)/@kahme247/ompweb"` → all `ok`.
 - [ ] **Step 4: CI.**
-  - `verify-pr.yml` steps: after "Verify production build", add "Smoke test" (`npm run smoke`) and "Packed install smoke test" with `shell: bash` (the Step 3 commands with `$RUNNER_TEMP/ompweb-prefix`) on ubuntu.
+  - `verify-pr.yml` steps: after "Verify production build", add "Smoke test" (`npm run smoke`) and "Packed install smoke test" with `shell: bash` (the Step 3 commands with `$RUNNER_TEMP/keylime-prefix`) on ubuntu.
   - `publish.yml`: add `npm run smoke` after `npm run build`.
 - [ ] **Step 6: Verify** `npm run typecheck && npm run lint && npm test && npm run build && npm run smoke` → pass.
 - [ ] **Step 7: Commit** `ci: smoke-test the Bun server and the packed install`.
@@ -564,7 +564,7 @@ The two notification routes are async, but every query is a microsecond-scale lo
   - **Architecture diagram:** Browser → Bun server (`server/app.ts`) → host daemon → omp.
   - **File Map:** `server/*`, `app/index.html`, `app/client.tsx`, `app/boot.ts`, `scripts/build-client.ts`, `scripts/smoke.ts`, `bin/bun-runtime.js`, `dist/`, `bunfig.toml`.
   - **New section "Adding an API route":** create `app/api/<path>/route.ts`, add one import and one entry to `server/routes.ts` (key = directory under `app/api`), and let `server/routes.test.ts` enforce it.
-  - **Traps:** the per-request `server.timeout(request, 0)` after the gate (never for public paths) and Bun's 128 MiB default `maxRequestBodySize`; Bun's router matches the raw path while `request.url` is normalized; redirects carry a relative `Location`; `Response.redirect()` headers are immutable (`finalizeResponse` copies); `globalThis` state survives `bun --hot` and the `register()` guard; `bun:sqlite` `.get()` returns `null`; `Bun.Image` applies EXIF orientation; DOM tests import Testing Library dynamically after `tests/setup-dom.mjs`; static roots come from `OMP_WEB_PACKAGE_DIR`.
+  - **Traps:** the per-request `server.timeout(request, 0)` after the gate (never for public paths) and Bun's 128 MiB default `maxRequestBodySize`; Bun's router matches the raw path while `request.url` is normalized; redirects carry a relative `Location`; `Response.redirect()` headers are immutable (`finalizeResponse` copies); `globalThis` state survives `bun --hot` and the `register()` guard; `bun:sqlite` `.get()` returns `null`; `Bun.Image` applies EXIF orientation; DOM tests import Testing Library dynamically after `tests/setup-dom.mjs`; static roots come from `KEYLIME_PACKAGE_DIR`.
   - **Update the Next mentions:**
     - "Proxy exclusion" keeps the bearer reason and drops the 10 MB buffering;
     - Remote hosts says "No WebSocket yet" without `next start`;
@@ -572,7 +572,7 @@ The two notification routes are async, but every query is a microsecond-scale lo
     - Tool-result images says `Bun.Image`.
   - **Delete** the `# This is NOT the Next.js you know` block (end of file).
 - [ ] **Step 2: README**: update requirements and dev/build/start commands. **CONTRIBUTING:** the same commands, the removed `.next` paragraph, and `bun test` notes. **DESIGN.md:** replace the 2 Next references.
-- [ ] **Step 3: `CHANGELOG.md` `[Unreleased]` → "Fixes & Improvements":** "**ompweb now runs on Bun instead of Next.js.** The npm package brings its own Bun, so installs and updates work as before, with no change to URLs, ports, settings or the password gate. Host link uploads are no longer cut at 10 MB." Name `OMP_WEB_DEV_ORIGIN` as removed (dev-only).
+- [ ] **Step 3: `CHANGELOG.md` `[Unreleased]` → "Fixes & Improvements":** "**keylime now runs on Bun instead of Next.js.** The npm package brings its own Bun, so installs and updates work as before, with no change to URLs, ports, settings or the password gate. Host link uploads are no longer cut at 10 MB." Name `KEYLIME_DEV_ORIGIN` as removed (dev-only).
 - [ ] **Step 4: Verify** `rg -n "next build|next dev|next start|\.next/|Next\.js" AGENTS.md README*.md CONTRIBUTING.md DESIGN.md` → only the CHANGELOG-style "instead of Next.js" history lines, if any.
 - [ ] **Step 5: Commit** `docs: document the Bun runtime`.
 

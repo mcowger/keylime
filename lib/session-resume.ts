@@ -23,7 +23,7 @@ import { loadWebServerSettings } from "./web-settings";
 
 /** How long a session whose omp process died stays recorded. A stop signal
  *  reaches every process in the service at once, so a child can die just
- *  before omp-web's own shutdown handler runs; a crash while omp-web keeps
+ *  before keylime's own shutdown handler runs; a crash while keylime keeps
  *  running is dropped after this window instead of resumed on the next start. */
 export const EXIT_GRACE_MS = 2_000;
 
@@ -60,12 +60,12 @@ function tracker(): TrackerState {
   return globalThis.__ompResumeTracker;
 }
 
-// Each omp-web instance keeps its own list, named by pid, so two instances
+// Each keylime instance keeps its own list, named by pid, so two instances
 // sharing an agent dir never overwrite or resume each other's running sessions.
 // The unsuffixed name is the list written before per-instance lists existed.
-const LIST_NAME = /^omp-web-interrupted-sessions(?:-(\d+))?\.json$/;
+const LIST_NAME = /^keylime-interrupted-sessions(?:-(\d+))?\.json$/;
 
-/** True when the list at `path`, written by `pid`, belongs to a running omp-web. */
+/** True when the list at `path`, written by `pid`, belongs to a running keylime. */
 // ponytail: pid liveness only; same-boot pid reuse (or an unreaped zombie
 // writer) leaves that list unresumed, and hosts sharing an agent dir are not detected.
 function ownedByLiveInstance(path: string, pid: number): boolean {
@@ -138,7 +138,7 @@ function readLeftover(): InterruptibleSession[] {
 function interruptedPath(): string {
   return resolve(
     getAgentDir(),
-    `omp-web-interrupted-sessions-${process.pid}.json`,
+    `keylime-interrupted-sessions-${process.pid}.json`,
   );
 }
 
@@ -155,7 +155,7 @@ function writeInterrupted(sessions: InterruptibleSession[]): void {
     renameSync(temp, path);
   } catch (error) {
     console.warn(
-      `[omp-web] could not record running sessions for resume: ${error instanceof Error ? error.message : String(error)}`,
+      `[keylime] could not record running sessions for resume: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
@@ -163,7 +163,7 @@ function writeInterrupted(sessions: InterruptibleSession[]): void {
 /**
  * Keep the on-disk list of running sessions current. A session leaves the list
  * when its run ends normally (its process is still alive), or EXIT_GRACE_MS
- * after its process died unless omp-web is shutting down by then.
+ * after its process died unless keylime is shutting down by then.
  */
 export function recordRunningSessions(
   running: InterruptibleSession[],

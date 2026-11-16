@@ -11,7 +11,7 @@ import { UiDialogValueSchema } from "./domain";
 export const runnerLinkContract: SocketContract = {
   id: "runner-channel",
   title: "Host to runner channel",
-  path: "ompweb-runner",
+  path: "keylime-runner",
   protocol: "stdio",
   security: "localProcess",
   version: 1,

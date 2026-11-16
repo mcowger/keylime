@@ -11,7 +11,7 @@ const SESSION_ID = "11111111-2222-4333-8444-555555555555";
 
 /** Throwaway agent dir holding one fixture session (as in session-reader.test.ts). */
 function withAgentDir(run: () => Promise<void>) {
-  const agentDir = mkdtempSync(join(tmpdir(), "omp-web-session-ops-"));
+  const agentDir = mkdtempSync(join(tmpdir(), "keylime-session-ops-"));
   const projectDir = join(agentDir, "sessions", "-project");
   mkdirSync(projectDir, { recursive: true });
   const lines = [

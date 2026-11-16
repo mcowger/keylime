@@ -1,5 +1,5 @@
 /**
- * ompweb's outbox correlation (`clientMessageId`) on the pinned, unpatched omp.
+ * keylime's outbox correlation (`clientMessageId`) on the pinned, unpatched omp.
  *
  * omp's own support is an unmerged branch (`fix/client-message-correlation`) that patches AgentSession and
  * SessionManager. This reproduces its wire contract from public API only:
@@ -35,7 +35,7 @@ type AgentMessage = AgentSession["messages"][number];
 export const CLIENT_MESSAGE_ENTRY_CUSTOM_TYPE = "client-message-entry";
 export const CLIENT_MESSAGE_RESOLUTION_CUSTOM_TYPE =
   "client-message-resolution";
-/** The branch's v1 frame budget: native messages past it are omitted whole, and ompweb falls back to history. */
+/** The branch's v1 frame budget: native messages past it are omitted whole, and keylime falls back to history. */
 const STATUS_MAX_BYTES = 1024 * 1024;
 
 export interface QueuedClientMessageIds {
@@ -237,7 +237,7 @@ class Correlation {
         await this.#session.sessionManager.ensureOnDisk();
       })
       .catch((error: unknown) =>
-        logger.warn("ompweb: client message journal write failed", {
+        logger.warn("keylime: client message journal write failed", {
           error: String(error),
         }),
       );

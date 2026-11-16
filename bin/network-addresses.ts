@@ -234,7 +234,7 @@ export function formatAddressBanner({
 
   const lines = [];
   lines.push("");
-  lines.push(`  ${bold("ompweb")} ${dim(`v${version}`)} ${green("is ready")}`);
+  lines.push(`  ${bold("keylime")} ${dim(`v${version}`)} ${green("is ready")}`);
   lines.push("");
 
   const maxLabelLen = Math.max(
@@ -254,7 +254,7 @@ export function formatAddressBanner({
   if (passwordEnabled) {
     lines.push("");
     lines.push(
-      `  ${dim("🔒 Password protection enabled (OMP_WEB_PASSWORD_HASH)")}`,
+      `  ${dim("🔒 Password protection enabled (KEYLIME_PASSWORD_HASH)")}`,
     );
   }
 

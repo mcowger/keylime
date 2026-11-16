@@ -6,7 +6,7 @@ import { type RpcTransport, spawnLocalRpcTransport } from "./rpc-transport";
 import { LINK_LIMITS } from "../hosts/link-protocol";
 
 /**
- * Process + protocol layer for ompweb's omp (`ompweb-omp --headless`), which speaks the channel of
+ * Process + protocol layer for keylime's omp (`keylime-omp --headless`), which speaks the channel of
  * runner/src/channel.ts as NDJSON over stdio. Frames pass through as `{type: t, ...rest}`, except:
  *
  *   hello                          → readiness (`waitReady` resolves `{type:"ready", ...hello}`)
@@ -73,7 +73,7 @@ export interface RpcProcessOptions {
     signal: NodeJS.Signals | null;
     stderrTail: string;
   }) => void;
-  /** Byte transport to run over. Omitted → spawn ompweb's omp (see spawnLocalRpcTransport). */
+  /** Byte transport to run over. Omitted → spawn keylime's omp (see spawnLocalRpcTransport). */
   transport?: RpcTransport;
   /** The daemon already saw this child's hello, or it outlived its server: ready at once,
    * and frames are held until `release` (after `replay`). */
@@ -87,12 +87,12 @@ export interface RpcProcessOptions {
 
 const STDERR_TAIL_LIMIT = 8 * 1024;
 /**
- * Largest line omp-web writes to omp's stdin. Command bodies are already capped at 8 MiB by the
+ * Largest line keylime writes to omp's stdin. Command bodies are already capped at 8 MiB by the
  * agent routes (`MAX_AGENT_COMMAND_REQUEST_BYTES`); this bound only turns a pathological command
  * into a clear error instead of an unbounded pipe write.
  */
 const MAX_INBOUND_LINE_BYTES = 32 * 1024 * 1024;
-/** Frames whose numeric `id` names the cmd they belong to; ompweb correlates them with `onReply`'s string id. */
+/** Frames whose numeric `id` names the cmd they belong to; keylime correlates them with `onReply`'s string id. */
 const COMMAND_ID_FRAMES = new Set([
   "prompt_result",
   "prompt_error",
@@ -121,7 +121,7 @@ const requestId = (frame: RpcFrame) =>
     ? String(frame.id)
     : null;
 
-/** Spawns ompweb's omp headless with the sanitized child environment. */
+/** Spawns keylime's omp headless with the sanitized child environment. */
 export function spawnOmpTransport(options: RpcProcessOptions): RpcTransport {
   const resolveBin = options.dependencies?.resolveOmpBin ?? resolveOmpBin;
   const bin = resolveBin();
@@ -134,7 +134,7 @@ export function spawnOmpTransport(options: RpcProcessOptions): RpcTransport {
     options.cwd,
     ...(options.extraArgs ?? []),
   ];
-  // omp-web ignores named profiles (OMP_PROFILE/PI_PROFILE): strip them so the
+  // keylime ignores named profiles (OMP_PROFILE/PI_PROFILE): strip them so the
   // child resolves the same default agent dir. An explicit options.env entry
   // still wins (used to force the default profile for isolated test runs).
   const env = sanitizeProjectCommandEnvironment({

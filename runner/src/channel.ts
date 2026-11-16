@@ -1,5 +1,5 @@
 /**
- * The channel between one omp process and the local `ompweb host`: NDJSON lines over either
+ * The channel between one omp process and the local `keylime host`: NDJSON lines over either
  * transport, with the same frames on both:
  *   - the host's Unix socket, for an omp the user started in a terminal (`HostChannel.connect`);
  *     only this user's processes reach it, and the channel redials when the host restarts;
@@ -93,12 +93,12 @@ interface PendingDialog {
   lost(): void;
 }
 
-/** `$XDG_RUNTIME_DIR/ompweb/host.sock`, or the per-user temp dir where there is no runtime dir (macOS). */
+/** `$XDG_RUNTIME_DIR/keylime/host.sock`, or the per-user temp dir where there is no runtime dir (macOS). */
 export function hostSocketPath(): string {
-  if (process.env.OMPWEB_HOST_SOCKET) return process.env.OMPWEB_HOST_SOCKET;
+  if (process.env.KEYLIME_HOST_SOCKET) return process.env.KEYLIME_HOST_SOCKET;
   return path.join(
     process.env.XDG_RUNTIME_DIR || os.tmpdir(),
-    "ompweb",
+    "keylime",
     "host.sock",
   );
 }
@@ -145,7 +145,7 @@ function wireArgs(method: DialogMethod, args: unknown[]): unknown[] {
 export class HostChannel {
   readonly #session: AgentSession;
   readonly #subagentEventBus: EventBus | undefined;
-  /** Read once, so a channel never follows a later change of `OMPWEB_HOST_SOCKET`. */
+  /** Read once, so a channel never follows a later change of `KEYLIME_HOST_SOCKET`. */
   readonly #socketPath = hostSocketPath();
   /** The host refused this omp: no more dials. */
   #refused = false;
@@ -251,7 +251,7 @@ export class HostChannel {
       if (!this.#warnedUnsafeDir) {
         this.#warnedUnsafeDir = true;
         logger.warn(
-          "ompweb channel: socket directory is not private to this user; not connecting",
+          "keylime channel: socket directory is not private to this user; not connecting",
           { socketPath },
         );
       }
@@ -338,7 +338,7 @@ export class HostChannel {
     for (const unwatch of this.#unwatch.splice(0)) unwatch();
     for (const pending of [...this.#pendingUi.values()]) pending.lost();
     closeToolsForHost(this.#session).catch((err) =>
-      logger.warn("ompweb channel: closing host tools failed", {
+      logger.warn("keylime channel: closing host tools failed", {
         error: String(err),
       }),
     );
@@ -363,13 +363,13 @@ export class HostChannel {
     try {
       message = JSON.parse(line);
     } catch (err) {
-      logger.warn("ompweb channel: unparsable host line", {
+      logger.warn("keylime channel: unparsable host line", {
         error: String(err),
       });
       return;
     }
     if (!isHostMessage(message)) {
-      logger.warn("ompweb channel: host line without a frame type");
+      logger.warn("keylime channel: host line without a frame type");
       return;
     }
     this.#receive(message);
@@ -383,7 +383,7 @@ export class HostChannel {
     if (message.t === "refused") {
       if (!this.#refused)
         logger.warn(
-          "ompweb channel: the host refused this omp; not redialling",
+          "keylime channel: the host refused this omp; not redialling",
           { reason: message.reason },
         );
       this.#refused = true;
@@ -412,7 +412,7 @@ export class HostChannel {
       try {
         handler?.({ session, send }, message);
       } catch (err) {
-        logger.warn("ompweb channel: bad host frame", {
+        logger.warn("keylime channel: bad host frame", {
           t: message.t,
           error: String(err),
         });

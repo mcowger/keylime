@@ -8,7 +8,7 @@ import type {
 } from "../api-contracts/host-schemas";
 import { CREATION_ID_RE } from "./creation-identity";
 export { CREATION_ID_RE } from "./creation-identity";
-// Wire format between the main omp-web server and the `ompweb host` daemon.
+// Wire format between the main keylime server and the `keylime host` daemon.
 // Pure: no I/O and no Next or `@/` imports, so both sides share it. The browser link (lib/browser-link.ts and the
 // worker it talks to, lib/event-stream-worker.ts) reuses its transport pieces: LINK_LIMITS' piece, window and liveness
 // values, LinkSender, PartJoiner, SeqWindow, Outbox, queuedLine and withSeq.
@@ -653,9 +653,9 @@ export function decodeUp(line: string): UpMessage | UnknownMessage {
         type: "hello",
         v: int(o, "v"),
         ompVersion: nullable(o, "ompVersion", str),
-        ...(o.ompwebVersion === undefined
+        ...(o.keylimeVersion === undefined
           ? {}
-          : { ompwebVersion: str(o, "ompwebVersion") }),
+          : { keylimeVersion: str(o, "keylimeVersion") }),
         ...(o.workspaceOps === undefined
           ? {}
           : {

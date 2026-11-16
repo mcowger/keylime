@@ -6,7 +6,7 @@ import {
 } from "@/lib/omp/rpc-utility";
 
 // omp exposes no "all known providers" query over RPC, and API keys live in
-// its SQLite credential store which omp-web must not touch. What we CAN see is
+// its SQLite credential store which keylime must not touch. What we CAN see is
 // which providers currently resolve models (env keys, stored keys, models.yml)
 // via get_available_models — so this endpoint lists configured providers only.
 // Unconfigured API-key providers cannot be set up from the web UI (see the

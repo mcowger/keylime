@@ -48,7 +48,7 @@ const f = JSON.parse(process.env.FIXTURE);
 
 test("unlistable profile metadata refuses unknown aliases until it becomes readable", (t) => {
   const root = fs.realpathSync(
-    fs.mkdtempSync(path.join(os.tmpdir(), "omp-web-profile-env-")),
+    fs.mkdtempSync(path.join(os.tmpdir(), "keylime-profile-env-")),
   );
   const home = path.join(root, "home");
   const config = path.join(home, ".omp");
@@ -212,7 +212,7 @@ const f = JSON.parse(process.env.FIXTURE);
 
 test("an agent.db symlink into an untraversable directory fails closed instead of leaking a hardlink alias", (t) => {
   const root = fs.realpathSync(
-    fs.mkdtempSync(path.join(os.tmpdir(), "omp-web-locked-vault-")),
+    fs.mkdtempSync(path.join(os.tmpdir(), "keylime-locked-vault-")),
   );
   const home = path.join(root, "home");
   const config = path.join(home, ".omp");

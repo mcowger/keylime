@@ -98,7 +98,7 @@ import {
   hostsCameOnline,
 } from "./SessionSidebar-helpers";
 import {
-  OmpWebTitle,
+  KeylimeTitle,
   SIDEBAR_BUTTON_TRANSITION,
   SidebarIconButton,
   SidebarPortalMenu,
@@ -200,7 +200,7 @@ const projectRequestTarget = (project: ManagedProject) => ({
   hostId: remoteHostId(project.hostId),
 });
 const THIS_MACHINE = { id: LOCAL_HOST_ID, label: "" };
-const COLLAPSED_HOSTS_STORAGE_KEY = "omp-web:collapsed-hosts";
+const COLLAPSED_HOSTS_STORAGE_KEY = "keylime:collapsed-hosts";
 
 function loadCollapsedHosts(): Set<string> {
   try {
@@ -1604,7 +1604,7 @@ export const SessionSidebar = memo(function SessionSidebar({
                 <X size={16} strokeWidth={1.8} aria-hidden="true" />
               </button>
             )}
-            <OmpWebTitle />
+            <KeylimeTitle />
           </div>
           <div style={{ display: "flex", gap: 2 }}>
             {navigation && (

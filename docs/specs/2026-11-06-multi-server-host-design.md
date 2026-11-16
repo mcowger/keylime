@@ -7,7 +7,7 @@ Builds on: `docs/specs/2026-10-28-remote-hosts-design.md` ("Protocol versions an
 
 A change to the web app can only be tried on real sessions by deploying it over production. A second web server on the same agent dir either sees no sessions (the daemon links one server at a time) or, when it takes the daemon over, takes this machine away from production: production shows the host offline, anything that talks to production for this machine fails (pr-watcher deliveries, agent tools), and the taking server's idle timers stop sessions a production tab is showing.
 
-Goal: one `ompweb host` daemon per machine serves two or more web servers at the same time. Both show the same sessions, live and in step, and either can drive any of them. Testing a web change then means starting a second web server, not moving or copying sessions.
+Goal: one `keylime host` daemon per machine serves two or more web servers at the same time. Both show the same sessions, live and in step, and either can drive any of them. Testing a web change then means starting a second web server, not moving or copying sessions.
 
 Not a goal: two daemons on one agent dir, or two daemons sharing one omp process. There stays exactly one daemon per machine and one omp process per session.
 
@@ -15,8 +15,8 @@ Not a goal: two daemons on one agent dir, or two daemons sharing one omp process
 
 ### M1. Links
 
-- `<agent dir>/omp-web/host.json` keeps `{url, token}` (what a v6 daemon reads) and gains `links: [{url, token}, …]`. The top-level pair is the primary link; a missing `links` means `[{url, token}]`.
-- A web server writes only its own entry, keyed by URL (`ensureLocalHostLink`); it never rewrites another server's entry, and it writes the top-level pair only when the file has none. `ompweb host login --add <url>` adds an entry on a remote host; `login` alone keeps today's meaning (replace the primary).
+- `<agent dir>/keylime/host.json` keeps `{url, token}` (what a v6 daemon reads) and gains `links: [{url, token}, …]`. The top-level pair is the primary link; a missing `links` means `[{url, token}]`.
+- A web server writes only its own entry, keyed by URL (`ensureLocalHostLink`); it never rewrites another server's entry, and it writes the top-level pair only when the file has none. `keylime host login --add <url>` adds an entry on a remote host; `login` alone keeps today's meaning (replace the primary).
 - The daemon keeps one link per entry: its own socket, uplink and downlink sequence windows, outbox, `LinkSender`, unacked window, ping and protocol version. The per-socket state that is closure-local in `runHostDaemon` today moves into a `Link` object; ops, channels and uploads are shared.
 - The daemon re-reads `host.json` when it changes (file watch, plus the existing re-read after a link loss) and opens or closes links to match. A link whose server is down redials with backoff up to 30 s; loopback keeps its 3 s ceiling only for the primary.
 - A 4409 (replaced) or revoke (1000, 401) ends that link only. The daemon exits only when its last link is revoked.
@@ -67,7 +67,7 @@ The daemon decides when a process stops; the two web-server timers in `lib/rpc-m
 - **Startup.** The daemon waits up to `LINK_LIMITS.channelReadyMs` (120 s, the legacy wrapper's allowance) for `ready`, and the hub's `open` deadline adds the op timeout to it.
 - **Run state.** The daemon reads it from the process's output: a run starts at `agent_start` and ends at a terminal `agent_end`; background work ends at `session_settled`. A command is in flight from its stdin line until its `response`.
 - **Stops**, each logged with its reason:
-  - abandoned: no link has interest, no run, no background work and no command in flight, for 2 min (`OMP_WEB_DISCONNECT_DESTROY_MS` keeps its meaning and its `0`);
+  - abandoned: no link has interest, no run, no background work and no command in flight, for 2 min (`KEYLIME_DISCONNECT_DESTROY_MS` keeps its meaning and its `0`);
   - idle: no run, background work, command, startup, blocking request or command preparation for 10 min, whatever the tab interest;
   - asked: a server's explicit `kill {ch}` (delete, reload, omp update). Failure to attach/reconcile a server closes that server's membership, never the shared process.
 - A stop is a kill escalating to force after 5 s, as today, and every joined link gets the channel's `exit`.
@@ -76,8 +76,8 @@ The daemon decides when a process stops; the two web-server timers in `lib/rpc-m
 ### M7. Resume after a daemon restart
 
 - A web server restart needs no resume: the processes keep running under the daemon and the server rejoins them (M2). Only a daemon restart or crash ends them.
-- The daemon keeps `<agent dir>/omp-web/host-running.json` (0600, atomic write): the sessions with a run or background work in flight, each with its `launch`. It writes it when a run starts or settles (at most once per second) and freezes it when the daemon stops, so processes ending during a stop count as interrupted.
-- On start, when `autoResumeSessions` is on (read from `<agent dir>/omp-web-settings.json`, as the server reads it), the daemon takes the file (rename, as `lib/session-resume.ts` claims its list today), spawns each listed session once with its `launch` and sends `RESUME_PROMPT` itself, under its own command id prefix `d:` (replies go to no link). Servers that link see the resumed run like any other. One sender, however many servers link.
+- The daemon keeps `<agent dir>/keylime/host-running.json` (0600, atomic write): the sessions with a run or background work in flight, each with its `launch`. It writes it when a run starts or settles (at most once per second) and freezes it when the daemon stops, so processes ending during a stop count as interrupted.
+- On start, when `autoResumeSessions` is on (read from `<agent dir>/keylime-settings.json`, as the server reads it), the daemon takes the file (rename, as `lib/session-resume.ts` claims its list today), spawns each listed session once with its `launch` and sends `RESUME_PROMPT` itself, under its own command id prefix `d:` (replies go to no link). Servers that link see the resumed run like any other. One sender, however many servers link.
 - The claimed file stays until every resume has settled (`retireClaim`): resumed sessions go back into the running manifest, and any whose resume failed stay in this daemon's claim, which a later start takes once this daemon's pid answers ESRCH. A crash mid-recovery therefore loses nothing. An entry whose session file is gone is skipped, not fatal. A session with an unreconciled `session-persistence` move is left out of the file until `get_state` names its new id and file.
 - `lib/session-resume.ts`'s per-pid lists and `resumeOnHostLink` remain only for v6 hosts and are deleted with v6 support.
 
@@ -101,12 +101,12 @@ The daemon decides when a process stops; the two web-server timers in `lib/rpc-m
 - `LINK_PROTOCOL_VERSION` 7, `MIN_LINK_PROTOCOL_VERSION` stays 4. v7 adds `hello.link`, the ops `open` and `close`, and the messages `interest`, `host_tools`, `notifier`, `channels_changed` and `sessions_changed`.
 - A v6 link to a v7 daemon behaves exactly as today: `spawn`, its own timers and startup settings, kills of unadopted channels. It sees only the channels it spawned, and no other link joins them. Its replies go to it alone. A session never gets two processes: a v6 `spawn` for a session a v7 link's channel runs, or a v7 `open` for one a v6 channel runs, is refused with 409 `session_running_elsewhere`.
 - A v7 server keeps linking v4–v6 daemons with today's behaviour (one link, server-side lifecycle).
-- Shared files of the agent dir stay shared: `omp-web-settings.json`, `projects.json`, `hosts.json`, the notification store. A staging server's settings change applies to production too; that is accepted.
+- Shared files of the agent dir stay shared: `keylime-settings.json`, `projects.json`, `hosts.json`, the notification store. A staging server's settings change applies to production too; that is accepted.
 
 ## Rollout
 
 1. Release the v7 server and daemon together. Deploy the web server first (it links today's v6 daemon unchanged), then schedule the initial daemon restart with the user while the host has no active or unsettled sessions: a v6 daemon has no `host-running.json` to recover. Subsequent v7 daemon restarts use M7's tested recovery. Remote hosts update from Settings → Hosts under the same initial-upgrade precondition.
-2. Start an additional compatible web server; local bootstrap adds its own link, while remote hosts use `ompweb host login --add --url <url>` with the token on stdin. Stopping or unregistering that server must not restart the primary or the daemon. Deployment-specific automation lives outside this repository.
+2. Start an additional compatible web server; local bootstrap adds its own link, while remote hosts use `keylime host login --add --url <url>` with the token on stdin. Stopping or unregistering that server must not restart the primary or the daemon. Deployment-specific automation lives outside this repository.
 3. Existing clients of the primary continue using its URL: the primary no longer loses the host when the additional web server connects.
 
 ## Testing

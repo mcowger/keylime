@@ -15,9 +15,9 @@ function fakeWindow({
   submitDuringRun?: string;
 }) {
   const entries: [string, string][] = [];
-  if (stored !== undefined) entries.push(["omp-web:word-completion", stored]);
+  if (stored !== undefined) entries.push(["keylime:word-completion", stored]);
   if (submitDuringRun !== undefined)
-    entries.push(["omp-web:submit-during-run", submitDuringRun]);
+    entries.push(["keylime:submit-during-run", submitDuringRun]);
   const store = new Map(entries);
   Object.defineProperty(globalThis, "window", {
     configurable: true,

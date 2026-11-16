@@ -57,7 +57,7 @@ export function hostControlPath(agentDir = getAgentDir()): string {
   // os.tmpdir() can itself exceed Darwin's sockaddr_un limit.
   return join(
     realpathSync("/tmp"),
-    `ompweb-host-${process.getuid!()}-${hash}`,
+    `keylime-host-${process.getuid!()}-${hash}`,
     "control.sock",
   );
 }

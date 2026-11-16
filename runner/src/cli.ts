@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * ompweb's omp: upstream omp's CLI with the root launch command replaced (see `launch.ts`).
+ * keylime's omp: upstream omp's CLI with the root launch command replaced (see `launch.ts`).
  *
  * Upstream's `cli.ts` only acts as the process entry when it is `Bun.main` or the build defines
  * `PI_COMPILED`. From source, this module stands in: it declares itself the worker host (workers and

@@ -16,7 +16,7 @@ interface CatalogCache {
 }
 
 declare global {
-  var __ompWebModelsDevCatalogCache: CatalogCache | undefined;
+  var __keylimeModelsDevCatalogCache: CatalogCache | undefined;
 }
 
 async function fetchCatalog(): Promise<ModelCatalogEntry[]> {
@@ -34,9 +34,9 @@ async function fetchCatalog(): Promise<ModelCatalogEntry[]> {
 }
 
 async function loadCatalog(): Promise<ModelCatalogEntry[]> {
-  let cache = globalThis.__ompWebModelsDevCatalogCache;
+  let cache = globalThis.__keylimeModelsDevCatalogCache;
   if (!cache) {
-    cache = globalThis.__ompWebModelsDevCatalogCache = {
+    cache = globalThis.__keylimeModelsDevCatalogCache = {
       entries: [],
       expiresAt: 0,
     };

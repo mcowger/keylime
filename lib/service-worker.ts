@@ -5,7 +5,7 @@ import { isRecord } from "./type-guards";
 const worker = self as unknown as ServiceWorkerGlobalScope;
 type SyncEvent = ExtendableEvent & { tag: string };
 
-// omp-web service worker: shows notifications and opens their session on click, and sends the message outbox a closed
+// keylime service worker: shows notifications and opens their session on click, and sends the message outbox a closed
 // tab left (Background Sync). It does not cache anything; the app stays online-only.
 
 worker.addEventListener("install", () => worker.skipWaiting());
@@ -129,7 +129,7 @@ function markOutboxFailed(db: IDBDatabase, id: string, error: string) {
   });
 }
 
-// Adapted from ompweb 13d8eb21095f: closed-page delivery must retire only proven retry lineage, while retaining upload proofs in the outgoing request.
+// Adapted from keylime 13d8eb21095f: closed-page delivery must retire only proven retry lineage, while retaining upload proofs in the outgoing request.
 /** Remove the accepted local add and its same-session, exact-intent retry lineage atomically. */
 function deleteOutboxEntry(
   db: IDBDatabase,
@@ -335,7 +335,7 @@ function acceptedOutboxEntry(
 }
 
 async function flushOutbox() {
-  const open = indexedDB.open("omp-web-outbox", 1);
+  const open = indexedDB.open("keylime-outbox", 1);
   open.onupgradeneeded = () =>
     open.result.createObjectStore("entries", { keyPath: "id" });
   const db = await done(open);

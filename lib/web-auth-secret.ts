@@ -30,7 +30,7 @@ export interface WebAuthSecret {
 
 /** Absolute path of the secret file; `PI_CODING_AGENT_DIR` moves it with the rest of the agent state. */
 export function webAuthSecretPath(): string {
-  return resolve(getAgentDir(), "omp-web", "web-auth-secret.json");
+  return resolve(getAgentDir(), "keylime", "web-auth-secret.json");
 }
 
 let cached: { path: string; mtimeMs: number; secret: WebAuthSecret } | null =
@@ -125,7 +125,7 @@ export function deriveSessionSigningKey(
   secret = resolveWebAuthSecret(),
 ): string {
   return createHmac("sha256", Buffer.from(secret.key, "base64url"))
-    .update(`omp-web-session-v1\0${secret.salt}\0${passwordHash}`, "utf8")
+    .update(`keylime-session-v1\0${secret.salt}\0${passwordHash}`, "utf8")
     .digest("base64url");
 }
 

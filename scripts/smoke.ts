@@ -1,9 +1,9 @@
-// `bun run smoke [--package <dir> | --binary <path>]`: starts ompweb (`bun <dir>/bin/omp-web.ts`, or the compiled
-// binary) on a free port with a throwaway HOME, then `ompweb host` from the same install, and checks the shipped
+// `bun run smoke [--package <dir> | --binary <path>]`: starts keylime (`bun <dir>/bin/keylime.ts`, or the compiled
+// binary) on a free port with a throwaway HOME, then `keylime host` from the same install, and checks the shipped
 // bundle, the SPA, a hashed asset, the API, a session listed through the daemon, a live session started through the
 // omp runner (no model call) and the SSE stream, then stops both.
 // <dir>: the repo root (after `bun run build` and `bun runner/scripts/build-binary.ts`) or a packed install;
-// <path>: release/ompweb-<os>-<arch>/ompweb, whose directory holds the static files and the runner (ompweb-omp) unless
+// <path>: release/keylime-<os>-<arch>/keylime, whose directory holds the static files and the runner (keylime-omp) unless
 // built --no-runner. Prints one `ok <step>` / `FAIL <step>: <detail>` line per step.
 import assert from "node:assert/strict";
 import {
@@ -30,9 +30,9 @@ const binary = values.binary && path.resolve(values.binary);
 const dir = binary
   ? path.dirname(binary)
   : path.resolve(values.package ?? path.join(import.meta.dir, ".."));
-const ompweb = binary
+const keylime = binary
   ? [binary]
-  : [process.execPath, path.join(dir, "bin", "omp-web.ts")];
+  : [process.execPath, path.join(dir, "bin", "keylime.ts")];
 
 let failed = false;
 async function step(name: string, run: () => unknown): Promise<boolean> {
@@ -103,7 +103,7 @@ const { port } = probe;
 probe.stop(true);
 const base = `http://127.0.0.1:${port}`;
 
-const temp = mkdtempSync(path.join(os.tmpdir(), "ompweb-smoke-"));
+const temp = mkdtempSync(path.join(os.tmpdir(), "keylime-smoke-"));
 const home = path.join(temp, "home");
 const agentDir = path.join(home, ".omp", "agent");
 mkdirSync(agentDir, { recursive: true });
@@ -145,18 +145,18 @@ const env: Record<string, string | undefined> = {
   HOME: home,
   PI_CODING_AGENT_DIR: agentDir,
   // A smoke launched from an installed agent inherits its package root; test this install instead.
-  OMP_WEB_PACKAGE_DIR: dir,
+  KEYLIME_PACKAGE_DIR: dir,
 };
-// OMP_WEB_OMP_BIN: an agent shell points it at its own omp; test this install's runner instead.
+// KEYLIME_OMP_BIN: an agent shell points it at its own omp; test this install's runner instead.
 for (const name of [
-  "OMP_WEB_PASSWORD",
-  "OMP_WEB_PASSWORD_HASH",
-  "OMP_WEB_OMP_BIN",
+  "KEYLIME_PASSWORD",
+  "KEYLIME_PASSWORD_HASH",
+  "KEYLIME_OMP_BIN",
 ])
   delete env[name];
 // --omp <path>: a packed install, or a --no-runner binary, fetches its runner from its release, which a build under
 // test has not published yet (lib/omp/runner-fetch.ts).
-if (values.omp) env.OMP_WEB_OMP_BIN = path.resolve(values.omp);
+if (values.omp) env.KEYLIME_OMP_BIN = path.resolve(values.omp);
 
 let log = "";
 let launcher: Bun.Subprocess<"ignore", "pipe", "pipe"> | undefined;
@@ -169,7 +169,7 @@ try {
     `launcher prints Ready on port ${port}`,
     async () => {
       const child = Bun.spawn(
-        [...ompweb, "-p", String(port), "-H", "127.0.0.1", "--no-open"],
+        [...keylime, "-p", String(port), "-H", "127.0.0.1", "--no-open"],
         {
           env,
           stdin: "ignore",
@@ -241,8 +241,8 @@ try {
       await response.json();
     });
 
-    await step("`ompweb host` links this machine", async () => {
-      const child = Bun.spawn([...ompweb, "host"], {
+    await step("`keylime host` links this machine", async () => {
+      const child = Bun.spawn([...keylime, "host"], {
         env,
         stdin: "ignore",
         stdout: "pipe",
@@ -264,11 +264,11 @@ try {
           break;
         assert(
           child.exitCode === null,
-          `ompweb host exited with ${child.exitCode}`,
+          `keylime host exited with ${child.exitCode}`,
         );
         assert(
           Date.now() < deadline,
-          "this machine is not linked 60 s after `ompweb host` started",
+          "this machine is not linked 60 s after `keylime host` started",
         );
         await Bun.sleep(200);
       }
@@ -362,7 +362,7 @@ try {
           const secondBase = `http://127.0.0.1:${secondPort}`;
           const child = Bun.spawn(
             [
-              ...ompweb,
+              ...keylime,
               "-p",
               String(secondPort),
               "-H",
@@ -416,7 +416,7 @@ try {
             await Bun.sleep(200);
           }
           const saved = JSON.parse(
-            readFileSync(path.join(agentDir, "omp-web", "host.json"), "utf8"),
+            readFileSync(path.join(agentDir, "keylime", "host.json"), "utf8"),
           ) as { url: string };
           assert.equal(
             saved.url,
@@ -503,7 +503,7 @@ try {
   }
   if (daemon) {
     const child = daemon;
-    await step("`ompweb host` stops", async () => {
+    await step("`keylime host` stops", async () => {
       stop(child);
       const outcome = await Promise.race([
         child.exited,
@@ -511,7 +511,7 @@ try {
       ]);
       assert(
         outcome !== "running",
-        "ompweb host still runs 15 s after the stop",
+        "keylime host still runs 15 s after the stop",
       );
     });
   }
@@ -539,5 +539,5 @@ try {
   );
 }
 
-if (failed && log) console.log(`--- ompweb output ---\n${log}`);
+if (failed && log) console.log(`--- keylime output ---\n${log}`);
 process.exit(failed ? 1 : 0);

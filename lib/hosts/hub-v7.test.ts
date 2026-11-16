@@ -459,7 +459,7 @@ async function assertNothingSent(link: Driver) {
 
 test("an unreadable registry refuses a start with 503 and sends nothing", async (t) => {
   const link = await sharingLink(t, "Registry gone", { share: true });
-  const file = join(dir, "omp-web", "hosts.json");
+  const file = join(dir, "keylime", "hosts.json");
   const host = hub.getHost(link.id)!; // a held RemoteHost, as rpc-manager's reload respawn keeps one
   const saved = readFileSync(file);
   t.after(() => writeFileSync(file, saved));
@@ -480,7 +480,7 @@ test("an unreadable registry refuses a start with 503 and sends nothing", async 
 
 test("a linked host with no registry record refuses a start with 409 and sends nothing", async (t) => {
   const link = await sharingLink(t, "Record gone", { share: true });
-  const file = join(dir, "omp-web", "hosts.json");
+  const file = join(dir, "keylime", "hosts.json");
   const host = hub.getHost(link.id)!; // held, as rpc-manager's reload respawn keeps one; getHost itself needs the record
   const saved = readFileSync(file);
   t.after(() => writeFileSync(file, saved));
@@ -500,8 +500,8 @@ test("a linked host with no registry record refuses a start with 409 and sends n
 });
 
 // A cluster member always runs on the master's logins; the first pool is the cluster.
-const poolsFile = join(dir, "omp-web", "pools.json");
-const hostsFile = join(dir, "omp-web", "hosts.json");
+const poolsFile = join(dir, "keylime", "pools.json");
+const hostsFile = join(dir, "keylime", "hosts.json");
 function seedCluster(t: TestContext, ...hostIds: string[]) {
   savePools([
     {
@@ -603,7 +603,7 @@ test("an invalid master configuration refuses a member's start with 409 cluster_
     "warn",
     (message) =>
       message ===
-      "[omp-web] cluster members cannot get this machine's configuration (invalid_settings: config.yml is not a map of settings)",
+      "[keylime] cluster members cannot get this machine's configuration (invalid_settings: config.yml is not a map of settings)",
   );
   const link = await sharingLink(t, "Config invalid", { share: false });
   seedCluster(t, link.id);
@@ -657,9 +657,9 @@ test("a master configuration the members cannot get is in the hosts snapshot, it
     (message) =>
       typeof message === "string" &&
       (message ===
-        "[omp-web] cluster members cannot get this machine's configuration (unknown: TypeError)" ||
+        "[keylime] cluster members cannot get this machine's configuration (unknown: TypeError)" ||
         message ===
-          "[omp-web] cluster members cannot get this machine's configuration (file_too_large: rules/big.md is 6000000 bytes, over the 5242880 byte limit)"),
+          "[keylime] cluster members cannot get this machine's configuration (file_too_large: rules/big.md is 6000000 bytes, over the 5242880 byte limit)"),
   );
   const failure = new ClusterConfigError(
     "file_too_large",
@@ -1177,7 +1177,7 @@ test("v7 failed adoption and unidentifiable hello children close only membership
     "warn",
     (message) =>
       message ===
-      `[omp-web] left the shared omp child of session ${id} on Shared ${id} running: this server could not adopt it (get_state failed)`,
+      `[keylime] left the shared omp child of session ${id} on Shared ${id} running: this server could not adopt it (get_state failed)`,
   );
   const { messages, closes, ch } = await sharedLink(t, id, {
     listed: true,
@@ -1411,7 +1411,7 @@ test("resume manifests retain legacy hosts but exclude v7 hosts", async (t) => {
   recordRunningSessions([shared, legacy], () => true);
   const manifest = join(
     dir,
-    `omp-web-interrupted-sessions-${process.pid}.json`,
+    `keylime-interrupted-sessions-${process.pid}.json`,
   );
   assert.equal(existsSync(manifest), true);
   assert.deepEqual(JSON.parse(readFileSync(manifest, "utf8")).sessions, [

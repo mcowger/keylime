@@ -8,7 +8,7 @@ import {
   writeFileSync,
   rmSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
@@ -50,7 +50,7 @@ export interface WorkspaceHarness {
 
 export async function workspaceHarness(): Promise<WorkspaceHarness> {
   const root = realpathSync.native(
-    mkdtempSync(join(tmpdir(), "omp-workspace-it-")),
+    mkdtempSync(join(homedir(), ".omp-workspace-it-")),
   );
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = join(root, "main-agent");
@@ -128,16 +128,16 @@ export async function workspaceHarness(): Promise<WorkspaceHarness> {
     const home = join(root, `daemon-${children.length}`);
     const agentDir = agentDirectory ?? join(home, ".omp", "agent");
     const project = join(home, "project");
-    mkdirSync(join(agentDir, "omp-web"), { recursive: true });
+    mkdirSync(join(agentDir, "keylime"), { recursive: true });
     mkdirSync(project, { recursive: true });
     writeFileSync(
-      join(agentDir, "omp-web", "host.json"),
+      join(agentDir, "keylime", "host.json"),
       JSON.stringify({ url, token: record.token }),
       { mode: 0o600 },
     );
     const child = spawn(
       process.execPath,
-      [fileURLToPath(new URL("../../bin/omp-web-host.ts", import.meta.url))],
+      [fileURLToPath(new URL("../../bin/keylime-host.ts", import.meta.url))],
       {
         cwd: home,
         env: {
@@ -147,7 +147,7 @@ export async function workspaceHarness(): Promise<WorkspaceHarness> {
           HOME: home,
           PI_CONFIG_DIR: join(home, ".omp"),
           PI_CODING_AGENT_DIR: agentDir,
-          OMP_WEB_OMP_BIN: join(home, "no-omp"),
+          KEYLIME_OMP_BIN: join(home, "no-omp"),
         },
         stdio: ["ignore", "pipe", "pipe"],
       },

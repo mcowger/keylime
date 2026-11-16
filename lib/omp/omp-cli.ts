@@ -6,7 +6,7 @@ import { createChildProcessEnvironment } from "../project-command-env";
 import { getAgentDir } from "./paths";
 
 /**
- * Locating and probing ompweb's own omp build (`ompweb-omp`, built from runner/). omp-web never
+ * Locating and probing keylime's own omp build (`keylime-omp`, built from runner/). keylime never
  * embeds the (Bun-only) @oh-my-pi SDK — every live-agent capability goes through that binary, so
  * its absence is a first-class, user-visible state.
  */
@@ -21,9 +21,9 @@ let cachedVersion: {
 let versionMiss: { fingerprint: string | null; retryAt: number } | null = null;
 let versionProbe: Promise<string | null> | null = null;
 
-const BIN_NAME = "ompweb-omp";
+const BIN_NAME = "keylime-omp";
 /** This platform's runner: `runner/release/<name>` in a source checkout and the asset of that name on each release. */
-export const OMP_RUNNER_ASSET = `ompweb-omp-${process.platform}-${process.arch}`;
+export const OMP_RUNNER_ASSET = `keylime-omp-${process.platform}-${process.arch}`;
 // Retry missing binaries and failed version probes after a short backoff so
 // a later install or repair is picked up without a web server restart.
 const MISS_TTL_MS = 30_000;
@@ -31,23 +31,23 @@ const MISS_TTL_MS = 30_000;
 const VERSION_TTL_MS = 5 * 60_000;
 
 /** Where this install keeps the runner it fetches from its own release (lib/omp/runner-fetch.ts): beside a compiled
- * ompweb, else in a per-version cache under the agent dir (an npm install's package dir may not be writable). */
+ * keylime, else in a per-version cache under the agent dir (an npm install's package dir may not be writable). */
 export function fetchedOmpBin(): string {
   return typeof Bun !== "undefined" && Bun.isStandaloneExecutable
     ? join(dirname(process.execPath), BIN_NAME)
-    : join(getAgentDir(), "omp-web", "omp", packageJson.version, BIN_NAME);
+    : join(getAgentDir(), "keylime", "omp", packageJson.version, BIN_NAME);
 }
 
 /** A source checkout builds its runner (`bun runner/scripts/build-binary.ts`) instead of fetching one. */
 export function sourceCheckoutOmpBin(): string | null {
-  const packageDir = process.env.OMP_WEB_PACKAGE_DIR ?? process.cwd();
+  const packageDir = process.env.KEYLIME_PACKAGE_DIR ?? process.cwd();
   return existsSync(join(packageDir, "runner", "package.json"))
     ? join(packageDir, "runner", "release", OMP_RUNNER_ASSET)
     : null;
 }
 
 function probeOmpBin(): string | null {
-  const override = process.env.OMP_WEB_OMP_BIN;
+  const override = process.env.KEYLIME_OMP_BIN;
   if (override) return existsSync(override) ? override : null;
   const path = sourceCheckoutOmpBin() ?? fetchedOmpBin();
   return existsSync(path) ? path : null;
@@ -55,9 +55,9 @@ function probeOmpBin(): string | null {
 
 /** What every caller that needs omp reports when resolveOmpBin finds none. */
 export const OMP_NOT_FOUND =
-  "key lime's omp binary (ompweb-omp) not found. Reinstall key lime or set OMP_WEB_OMP_BIN.";
+  "key lime's omp binary (keylime-omp) not found. Reinstall key lime or set KEYLIME_OMP_BIN.";
 
-/** Resolve ompweb's omp binary: OMP_WEB_OMP_BIN override, else the source checkout's build or the fetched runner
+/** Resolve keylime's omp binary: KEYLIME_OMP_BIN override, else the source checkout's build or the fetched runner
  * (see probeOmpBin). Returns null when none exists. A hit is cached while the file exists; a miss is re-probed after
  * MISS_TTL_MS, or at once with `fresh` (after a fetch). */
 export function resolveOmpBin(fresh = false): string | null {
@@ -126,7 +126,7 @@ async function probeOmpVersion(): Promise<string | null> {
   try {
     const output = await new Promise<string>((resolve, reject) => {
       // Without an explicit env this probe would inherit the server's full
-      // environment, including omp-web's own secrets, into the child.
+      // environment, including keylime's own secrets, into the child.
       execFile(
         bin,
         ["--version"],

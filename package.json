@@ -1,23 +1,23 @@
 {
-  "name": "@kahme247/ompweb",
+  "name": "@mcowger/keylime",
   "version": "0.7.0",
   "description": "Web UI for the oh-my-pi (omp) coding agent",
-  "homepage": "https://github.com/ompweb-dev/ompweb#readme",
+  "homepage": "https://github.com/mcowger/keylime#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ompweb-dev/ompweb.git"
+    "url": "git+https://github.com/mcowger/keylime.git"
   },
   "bugs": {
-    "url": "https://github.com/ompweb-dev/ompweb/issues"
+    "url": "https://github.com/mcowger/keylime/issues"
   },
   "license": "MIT",
   "engines": {
     "bun": ">=1.4.4"
   },
   "bin": {
-    "ompweb": "bin/omp-web.ts",
-    "ompweb-launchd": "bin/omp-web-launchd.ts",
-    "ompweb-systemd": "bin/omp-web-systemd.ts"
+    "keylime": "bin/keylime.ts",
+    "keylime-launchd": "bin/keylime-launchd.ts",
+    "keylime-systemd": "bin/keylime-systemd.ts"
   },
   "files": [
     "bin",
@@ -52,11 +52,11 @@
     "api:bootstrap": "bun scripts/bootstrap-api-schema.ts",
     "format": "bun fmt",
     "format:check": "bun fmt --check",
-    "systemd:install": "bun bin/omp-web-systemd.ts install",
-    "systemd:uninstall": "bun bin/omp-web-systemd.ts uninstall",
-    "systemd:start": "bun bin/omp-web-systemd.ts start",
-    "systemd:stop": "bun bin/omp-web-systemd.ts stop",
-    "systemd:status": "bun bin/omp-web-systemd.ts status",
+    "systemd:install": "bun bin/keylime-systemd.ts install",
+    "systemd:uninstall": "bun bin/keylime-systemd.ts uninstall",
+    "systemd:start": "bun bin/keylime-systemd.ts start",
+    "systemd:stop": "bun bin/keylime-systemd.ts stop",
+    "systemd:status": "bun bin/keylime-systemd.ts status",
     "prepack": "bun run build",
     "smoke": "bun runner/scripts/build-binary.ts && bun scripts/smoke.ts",
     "release:check": "bun run format:check && bun run typecheck && bun run test && bun run build && bun run smoke"

@@ -7,8 +7,8 @@ import {
   isValidWebSession,
   isWebPasswordEnabled,
   webPasswordConfigurationProblem,
-  OMP_WEB_SESSION_COOKIE,
-  OMP_WEB_TRUSTED_HEADER,
+  KEYLIME_SESSION_COOKIE,
+  KEYLIME_TRUSTED_HEADER,
 } from "@/lib/web-auth";
 
 // The sign-in screen still needs its JavaScript, CSS and fonts (/assets/, and
@@ -63,7 +63,7 @@ export function proxy(request: Request): Response | "public" | "authenticated" {
   const passwordProblem = webPasswordConfigurationProblem();
   if (passwordProblem) {
     return new Response(
-      `omp-web password configuration error\n\n${passwordProblem}\n`,
+      `keylime password configuration error\n\n${passwordProblem}\n`,
       {
         status: 503,
         headers: {
@@ -78,10 +78,10 @@ export function proxy(request: Request): Response | "public" | "authenticated" {
   }
 
   const hasSession =
-    isTrustedProxyRequest(request.headers.get(OMP_WEB_TRUSTED_HEADER)) ||
+    isTrustedProxyRequest(request.headers.get(KEYLIME_TRUSTED_HEADER)) ||
     isValidWebSession(
       new Bun.CookieMap(request.headers.get("cookie") ?? "").get(
-        OMP_WEB_SESSION_COOKIE,
+        KEYLIME_SESSION_COOKIE,
       ) ?? undefined,
     );
   if (pathname === "/login") {

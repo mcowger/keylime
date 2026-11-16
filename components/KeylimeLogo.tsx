@@ -1,4 +1,4 @@
-export default function OmpWebLogo({
+export default function KeylimeLogo({
   size = 20,
   label = "key lime logo",
 }: {

@@ -171,7 +171,7 @@ const clusterError = (code: ClusterError["code"]) => (error: unknown) =>
 test("the cluster's names are fixed", () => {
   assert.deepEqual(
     [CLUSTER_ID, CLUSTER_LABEL, CLUSTER_PROJECTS_DIR],
-    ["cluster", "Cluster", "ompweb-cluster"],
+    ["cluster", "Cluster", "keylime-cluster"],
   );
 });
 
@@ -223,7 +223,7 @@ test("joining with no pool creates the cluster with the member", () => {
       members: [
         {
           hostId: "local",
-          projectsRoot: "/home/me/ompweb-cluster",
+          projectsRoot: "/home/me/keylime-cluster",
           provisioned: true,
           draining: false,
         },

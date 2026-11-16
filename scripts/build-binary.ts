@@ -1,8 +1,8 @@
 // `bun run build:binary [--target bun-<os>-<arch>]` (after the client build and the runner build,
-// `bun runner/scripts/build-binary.ts <os>-<arch>`): compiles server/binary.ts into release/ompweb-<os>-<arch>/ompweb
-// next to the files it serves, the omp runner it spawns (ompweb-omp; not with --no-runner,
-// where ompweb fetches it from its release, lib/omp/runner-fetch.ts) and the licenses of what it redistributes, then
-// archives that directory as release/ompweb-<os>-<arch>.tar.gz. Default target: this machine.
+// `bun runner/scripts/build-binary.ts <os>-<arch>`): compiles server/binary.ts into release/keylime-<os>-<arch>/keylime
+// next to the files it serves, the omp runner it spawns (keylime-omp; not with --no-runner,
+// where keylime fetches it from its release, lib/omp/runner-fetch.ts) and the licenses of what it redistributes, then
+// archives that directory as release/keylime-<os>-<arch>.tar.gz. Default target: this machine.
 import { cpSync, existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -26,7 +26,7 @@ if (!/^bun-(linux|darwin)-(x64|arm64)(-baseline)?$/.test(target)) {
   process.exit(1);
 }
 // A -baseline target (x64 without AVX2, what releases ship) keeps the plain name, which the README and the update notice use.
-const name = `ompweb-${target.replace(/^bun-/, "").replace(/-baseline$/, "")}`;
+const name = `keylime-${target.replace(/^bun-/, "").replace(/-baseline$/, "")}`;
 const release = path.join(root, "release");
 const out = path.join(release, name);
 rmSync(out, { recursive: true, force: true });
@@ -47,10 +47,10 @@ if (!existsSync(bunLicense)) {
 
 const result = await Bun.build({
   entrypoints: [path.join(root, "server", "binary.ts")],
-  // A .env or bunfig.toml in the directory ompweb is started from belongs to the user's project, not to ompweb.
+  // A .env or bunfig.toml in the directory keylime is started from belongs to the user's project, not to keylime.
   compile: {
     target,
-    outfile: path.join(out, "ompweb"),
+    outfile: path.join(out, "keylime"),
     autoloadDotenv: false,
     autoloadBunfig: false,
   },
@@ -66,18 +66,18 @@ if (!result.success) process.exit(1);
 
 // The static root (server/binary.ts): the client, the public files, the KaTeX CSS and fonts (where the server
 // resolves the katex package), and the licenses of what ships. Beside the binary, unless --no-runner: the omp runner
-// it spawns (`ompweb-omp`, lib/omp/omp-cli.ts), built first by runner/scripts/build-binary.ts.
+// it spawns (`keylime-omp`, lib/omp/omp-cli.ts), built first by runner/scripts/build-binary.ts.
 const copy = (from: string, to: string) =>
   cpSync(from, path.join(out, to), { recursive: true });
 for (const file of ["dist", "public", "docs/api", "LICENSE"])
   copy(path.join(root, file), file);
 if (!values["no-runner"]) {
-  const runnerTarget = name.slice("ompweb-".length);
+  const runnerTarget = name.slice("keylime-".length);
   const runner = path.join(
     root,
     "runner",
     "release",
-    `ompweb-omp-${runnerTarget}`,
+    `keylime-omp-${runnerTarget}`,
   );
   if (!existsSync(runner)) {
     console.error(
@@ -85,7 +85,7 @@ if (!values["no-runner"]) {
     );
     process.exit(1);
   }
-  copy(runner, "ompweb-omp");
+  copy(runner, "keylime-omp");
 }
 for (const file of new Bun.Glob("app/fonts/*-{OFL.txt,LICENSE.*}").scanSync(
   root,

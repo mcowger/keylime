@@ -29,7 +29,7 @@ test("keeps differently cased upload names distinct", async () => {
 
 test("finds conflicts and prevents replacing directories", async (t) => {
   const { inspectUploadTargets } = await loadSubject();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "omp-web-upload-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "keylime-upload-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
 
   fs.writeFileSync(path.join(root, "file.txt"), "old");
@@ -46,7 +46,7 @@ test("finds conflicts and prevents replacing directories", async (t) => {
 
 test("prevents replacing symbolic links", async (t) => {
   const { inspectUploadTargets } = await loadSubject();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "omp-web-upload-link-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "keylime-upload-link-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
 
   fs.writeFileSync(path.join(root, "file.txt"), "old");

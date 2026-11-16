@@ -1,5 +1,5 @@
 // Retention of sent uploads, the daemon's side (docs/specs/2026-11-02-file-uploads-design.md, U6): main sends the
-// `uploadRetentionDays` setting (op `setUploadRetention`), the daemon keeps it in `<agent dir>/omp-web/upload-retention.json`
+// `uploadRetentionDays` setting (op `setUploadRetention`), the daemon keeps it in `<agent dir>/keylime/upload-retention.json`
 // and deletes files older than that from every session's `local://uploads/`, at start and every 24 h.
 // Loaded by the daemon through Bun's native TypeScript runtime: no `@/` imports.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -40,7 +40,7 @@ async function subdirs(dir: string): Promise<string[]> {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT")
       console.error(
-        `[ompweb host] upload retention: cannot read ${dir}: ${(error as Error).message}`,
+        `[keylime host] upload retention: cannot read ${dir}: ${(error as Error).message}`,
       );
     return [];
   }
@@ -67,7 +67,7 @@ async function sweepDir(
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT")
       console.error(
-        `[ompweb host] upload retention: cannot read ${dir}: ${(error as Error).message}`,
+        `[keylime host] upload retention: cannot read ${dir}: ${(error as Error).message}`,
       );
     return true;
   }
@@ -146,7 +146,7 @@ export class UploadRetention {
   constructor(
     private readonly file: string = join(
       getAgentDir(),
-      "omp-web",
+      "keylime",
       "upload-retention.json",
     ),
     private readonly roots: RetentionRoots = defaultRoots(),

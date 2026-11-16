@@ -26,11 +26,11 @@ const {
 
 /** Point the omp agent dir at a throwaway location for the duration of `fn`. */
 async function withAgentDir(fn: (file: string) => Promise<void>) {
-  const agentDir = mkdtempSync(join(tmpdir(), "omp-web-hosts-test-"));
+  const agentDir = mkdtempSync(join(tmpdir(), "keylime-hosts-test-"));
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = agentDir;
   try {
-    return await fn(join(agentDir, "omp-web", "hosts.json"));
+    return await fn(join(agentDir, "keylime", "hosts.json"));
   } finally {
     if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = previous;

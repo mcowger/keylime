@@ -19,7 +19,7 @@ function clearAllowedRootsCache() {
 /** A temp dir registered as a browsable root, cleaned up with the test. */
 function workspaceRoot(t: TestContext) {
   const dir = fs.realpathSync(
-    fs.mkdtempSync(path.join(os.tmpdir(), "omp-web-file-access-")),
+    fs.mkdtempSync(path.join(os.tmpdir(), "keylime-file-access-")),
   );
   t.after(async () => {
     (await import("./message-outbox.ts")).closeOutboxStore();
@@ -30,7 +30,7 @@ function workspaceRoot(t: TestContext) {
 
 test("rejects an existing path that escapes an allowed root through a symlink", async (t) => {
   const { isExistingPathWithinRoots, isPathWithinRoots } = await loadSubject();
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), "omp-web-file-access-"));
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "keylime-file-access-"));
   t.after(() => fs.rmSync(base, { recursive: true, force: true }));
   const allowed = path.join(base, "allowed");
   const outside = path.join(base, "outside");
@@ -98,7 +98,7 @@ test("only resolves against the first root that actually has the file", async (t
 test("denies a relative request path that traverses out of its root", async (t) => {
   const { isFilePathAllowed, resolveRequestedFilePath } = await loadSubject();
   const base = fs.realpathSync(
-    fs.mkdtempSync(path.join(os.tmpdir(), "omp-web-file-access-")),
+    fs.mkdtempSync(path.join(os.tmpdir(), "keylime-file-access-")),
   );
   t.after(() => fs.rmSync(base, { recursive: true, force: true }));
   const workspace = path.join(base, "workspace");
@@ -160,7 +160,7 @@ test("allows omp's config and agent roots alongside workspaces", async (t) => {
   // An empty sessions dir keeps listAllSessions() out of the developer's real
   // session store; getSessionsDir() is re-read on every call.
   const isolated = fs.mkdtempSync(
-    path.join(os.tmpdir(), "omp-web-file-access-"),
+    path.join(os.tmpdir(), "keylime-file-access-"),
   );
   t.after(() => {
     if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
@@ -205,7 +205,7 @@ test("this machine's session roots come from its daemon's session list", async (
     await import("./hosts/link-driver.test-helper.ts");
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   const isolated = fs.mkdtempSync(
-    path.join(os.tmpdir(), "omp-web-file-access-"),
+    path.join(os.tmpdir(), "keylime-file-access-"),
   );
   t.after(() => {
     closeHostLink("local");
@@ -241,7 +241,7 @@ test("serves a bare workspace path through GET instead of 403-ing it", async (t)
   const { GET } = await import("../app/api/files/[...path]/route.ts");
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   const isolated = fs.mkdtempSync(
-    path.join(os.tmpdir(), "omp-web-file-access-"),
+    path.join(os.tmpdir(), "keylime-file-access-"),
   );
   t.after(() => {
     if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
@@ -286,7 +286,10 @@ test("serves a bare workspace path through GET instead of 403-ing it", async (t)
   assert.equal((await get(["..", "package.json"])).status, 403);
   assert.equal((await get(["..", "..", "etc", "hosts"])).status, 403);
   // An absolute path that no root authorizes is untouched by the fan-out.
-  const stranger = workspaceRoot(t);
+  const stranger = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.homedir(), ".keylime-file-stranger-")),
+  );
+  t.after(() => fs.rmSync(stranger, { recursive: true, force: true }));
   fs.writeFileSync(path.join(stranger, "package.json"), "{}\n");
   assert.equal(
     (await get([stranger.replace(/\\/g, "/"), "package.json"])).status,
@@ -301,7 +304,7 @@ test("keeps POST uploads on the absolute-only path", async (t) => {
   const { POST } = await import("../app/api/files/[...path]/route.ts");
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   const isolated = fs.mkdtempSync(
-    path.join(os.tmpdir(), "omp-web-file-access-"),
+    path.join(os.tmpdir(), "keylime-file-access-"),
   );
   t.after(() => {
     if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
@@ -343,7 +346,7 @@ test("only omp's own credential files are denied, not files of the same name els
   const { getConfigRoot } = await import("./omp/paths.ts");
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   const agentDir = fs.realpathSync(
-    fs.mkdtempSync(path.join(os.tmpdir(), "omp-web-file-access-")),
+    fs.mkdtempSync(path.join(os.tmpdir(), "keylime-file-access-")),
   );
   t.after(() => {
     if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
@@ -428,7 +431,7 @@ test("a symlinked agent dir does not let its credential files through under thei
   const { authorizeFileAccess } = await import("./file-authorization.ts");
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   const base = fs.realpathSync(
-    fs.mkdtempSync(path.join(os.tmpdir(), "omp-web-file-access-")),
+    fs.mkdtempSync(path.join(os.tmpdir(), "keylime-file-access-")),
   );
   t.after(() => {
     if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
@@ -484,7 +487,7 @@ test("a symlinked agent dir does not let its credential files through under thei
 test("individual credential symlinks protect their real targets without blocking uploaded copies", async (t) => {
   const { authorizeFileAccess } = await import("./file-authorization.ts");
   const base = fs.realpathSync(
-    fs.mkdtempSync(path.join(os.tmpdir(), "omp-web-file-access-")),
+    fs.mkdtempSync(path.join(os.tmpdir(), "keylime-file-access-")),
   );
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   const agent = path.join(base, "agent");
@@ -592,7 +595,7 @@ test("individual credential symlinks protect their real targets without blocking
 test("credential checks follow native symlink parent traversal instead of a lexical decoy", async (t) => {
   const { authorizeFileAccess } = await import("./file-authorization.ts");
   const base = fs.realpathSync(
-    fs.mkdtempSync(path.join(os.tmpdir(), "omp-web-file-access-")),
+    fs.mkdtempSync(path.join(os.tmpdir(), "keylime-file-access-")),
   );
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   const agent = path.join(base, "agent");
@@ -1313,7 +1316,7 @@ test("lists every entry, shows link targets, and keeps the tree inside the explo
   const { GET } = await import("../app/api/files/[...path]/route.ts");
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   const isolated = fs.mkdtempSync(
-    path.join(os.tmpdir(), "omp-web-file-access-"),
+    path.join(os.tmpdir(), "keylime-file-access-"),
   );
   t.after(() => {
     if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
@@ -1430,7 +1433,7 @@ test("lists every entry, shows link targets, and keeps the tree inside the explo
   }
   // A relative root is refused even where it would resolve: against the server's cwd, above a listed dir.
   const underCwd = fs.mkdtempSync(
-    path.join(process.cwd(), ".omp-web-root-test-"),
+    path.join(process.cwd(), ".keylime-root-test-"),
   );
   t.after(() => fs.rmSync(underCwd, { recursive: true, force: true }));
   allowFileRoot(underCwd);

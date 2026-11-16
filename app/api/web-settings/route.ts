@@ -16,7 +16,7 @@ import {
 import { isRecord } from "@/lib/type-guards";
 import { isUploadRetentionDays } from "@/lib/upload-limits";
 
-/** GET/PUT /api/web-settings - omp-web's own server-side settings. */
+/** GET/PUT /api/web-settings - keylime's own server-side settings. */
 /**
  * @apiContract getWebSettings
  * @apiUsage Read persisted server-side web settings, not per-browser preferences.

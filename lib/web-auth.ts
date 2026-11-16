@@ -7,23 +7,23 @@ import {
 import { deriveSessionSigningKey } from "./web-auth-secret";
 import { isPasswordHash, verifyPassword } from "./web-password-hash";
 
-export const OMP_WEB_SESSION_COOKIE = "omp_web_session";
-export const OMP_WEB_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+export const KEYLIME_SESSION_COOKIE = "keylime_session";
+export const KEYLIME_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 // Set by a trusted reverse proxy (see README) to vouch for a request in place of a session.
-export const OMP_WEB_TRUSTED_HEADER = "x-omp-web-auth";
+export const KEYLIME_TRUSTED_HEADER = "x-keylime-auth";
 
 /**
  * Password protection for the web UI (issue #239). Only a hash is accepted:
- * `OMP_WEB_PASSWORD_HASH` holds the output of `ompweb hash-password`, and the
+ * `KEYLIME_PASSWORD_HASH` holds the output of `keylime hash-password`, and the
  * plaintext is never read from the environment, so it cannot leak into the
- * `omp` child processes omp-web spawns or into anything an agent prints.
+ * `omp` child processes keylime spawns or into anything an agent prints.
  */
-export const WEB_PASSWORD_HASH_VAR = "OMP_WEB_PASSWORD_HASH";
+export const WEB_PASSWORD_HASH_VAR = "KEYLIME_PASSWORD_HASH";
 /** Legacy plaintext variable. Still *detected*, only to refuse to start. */
-export const WEB_PASSWORD_VAR = "OMP_WEB_PASSWORD";
+export const WEB_PASSWORD_VAR = "KEYLIME_PASSWORD";
 
 function hash(value: string): Buffer {
-  return createHmac("sha256", "omp-web-compare-v1")
+  return createHmac("sha256", "keylime-compare-v1")
     .update(value, "utf8")
     .digest();
 }
@@ -43,11 +43,11 @@ export function isWebPasswordEnabled(
   return isPasswordHash(configuredHash(env));
 }
 
-// The proxy sends the secret itself; omp-web holds only its SHA-256 hex digest.
+// The proxy sends the secret itself; keylime holds only its SHA-256 hex digest.
 // The secret is random, so a fast hash suffices.
 export function isTrustedProxyRequest(
   value: string | null | undefined,
-  digest = process.env.OMP_WEB_TRUSTED_HEADER_SHA256,
+  digest = process.env.KEYLIME_TRUSTED_HEADER_SHA256,
 ): boolean {
   if (!value || !digest || !/^[0-9a-f]{64}$/i.test(digest)) return false;
   return timingSafeEqual(
@@ -60,11 +60,11 @@ export function isTrustedProxyRequest(
  * only for the same one. */
 export function requestOwner(request: Request): string {
   const cookie = new Bun.CookieMap(request.headers.get("cookie") ?? "").get(
-    OMP_WEB_SESSION_COOKIE,
+    KEYLIME_SESSION_COOKIE,
   );
   if (cookie)
     return `session:${createHash("sha256").update(cookie).digest("base64url")}`;
-  return isTrustedProxyRequest(request.headers.get(OMP_WEB_TRUSTED_HEADER))
+  return isTrustedProxyRequest(request.headers.get(KEYLIME_TRUSTED_HEADER))
     ? "trusted"
     : "open";
 }
@@ -90,17 +90,17 @@ export function webPasswordConfigurationProblem(
   const legacy = env[WEB_PASSWORD_VAR];
   const hasLegacy = typeof legacy === "string" && legacy.length > 0;
   if (raw && hasLegacy) {
-    return `Both ${WEB_PASSWORD_HASH_VAR} and the plaintext ${WEB_PASSWORD_VAR} are set. Remove ${WEB_PASSWORD_VAR}: omp-web no longer reads a plaintext password.`;
+    return `Both ${WEB_PASSWORD_HASH_VAR} and the plaintext ${WEB_PASSWORD_VAR} are set. Remove ${WEB_PASSWORD_VAR}: keylime no longer reads a plaintext password.`;
   }
   if (!raw) {
     if (!hasLegacy) return null;
     return [
-      `Plaintext passwords are no longer accepted: omp-web refuses to start with ${WEB_PASSWORD_VAR} set.`,
+      `Plaintext passwords are no longer accepted: keylime refuses to start with ${WEB_PASSWORD_VAR} set.`,
       "",
       "Create a hash and use that instead:",
       "",
-      "  ompweb hash-password",
-      `  OMP_WEB_PASSWORD_HASH='scrypt$...' ompweb`,
+      "  keylime hash-password",
+      `  KEYLIME_PASSWORD_HASH='scrypt$...' keylime`,
       "",
       `See the README for the service installers, which hash the password for you.`,
     ].join("\n");
@@ -111,7 +111,7 @@ export function webPasswordConfigurationProblem(
       "",
       "Generate one with:",
       "",
-      "  ompweb hash-password",
+      "  keylime hash-password",
       "",
       `The value must look like scrypt$<ln>$<r>$<p>$<salt>$<digest> (unquoted, single line).`,
     ].join("\n");
@@ -139,7 +139,7 @@ export function createWebSession(
   now = Date.now(),
   env: NodeJS.ProcessEnv = process.env,
 ): string {
-  const expiresAt = now + OMP_WEB_SESSION_MAX_AGE_SECONDS * 1000;
+  const expiresAt = now + KEYLIME_SESSION_MAX_AGE_SECONDS * 1000;
   const payload = `v1.${expiresAt}.${randomBytes(16).toString("base64url")}`;
   const signature = createHmac("sha256", signingKey(env))
     .update(payload, "utf8")

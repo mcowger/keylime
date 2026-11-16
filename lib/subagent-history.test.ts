@@ -14,7 +14,7 @@ const {
 } = await import("./subagent-history.ts");
 
 function makeSessionFixture() {
-  const dir = mkdtempSync(join(tmpdir(), "ompweb-subagent-history-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-subagent-history-"));
   const sessionFile = join(dir, "2026-08-01T00-00-00_abc123.jsonl");
   const lines = [
     JSON.stringify({
@@ -190,7 +190,7 @@ test("extracts subagent roster from task toolResults with settled results winnin
 });
 
 test("keeps async-only spawns (empty results) as started entries", () => {
-  const dir = mkdtempSync(join(tmpdir(), "ompweb-subagent-history-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-subagent-history-"));
   const sessionFile = join(dir, "sess.jsonl");
   try {
     const lines = [
@@ -229,7 +229,7 @@ test("keeps async-only spawns (empty results) as started entries", () => {
 });
 
 test("recovers model and effort from the subagent transcript when the task result lacks them", () => {
-  const dir = mkdtempSync(join(tmpdir(), "ompweb-subagent-history-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-subagent-history-"));
   const sessionFile = join(dir, "sess.jsonl");
   try {
     writeFileSync(
@@ -406,7 +406,7 @@ test("page without a trailing newline still advances (no infinite paging)", () =
 });
 
 test("missing transcript file yields an empty page", () => {
-  const dir = mkdtempSync(join(tmpdir(), "ompweb-subagent-history-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-subagent-history-"));
   try {
     const page = readSubagentTranscriptPage(join(dir, "missing.jsonl"), 0);
     assert.equal(page.messages.length, 0);
@@ -417,7 +417,7 @@ test("missing transcript file yields an empty page", () => {
 });
 
 test("completion reads keep complete trailing multibyte characters", () => {
-  const dir = mkdtempSync(join(tmpdir(), "ompweb-subagent-completion-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-subagent-completion-"));
   const sessionFile = join(dir, "sess.jsonl");
   const artifactsDir = siblingDirForSession(sessionFile);
   mkdirSync(artifactsDir, { recursive: true });
@@ -463,7 +463,7 @@ test("completion reads keep complete trailing multibyte characters", () => {
 });
 
 test("completion caps materialized bytes without splitting a codepoint", () => {
-  const dir = mkdtempSync(join(tmpdir(), "ompweb-subagent-completion-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-subagent-completion-"));
   const sessionFile = join(dir, "sess.jsonl");
   const artifactsDir = siblingDirForSession(sessionFile);
   mkdirSync(artifactsDir, { recursive: true });
@@ -535,7 +535,7 @@ function taskCallLine(id: string, callIds: string[], timestamp: string) {
 }
 
 test("separate task calls keep their agents apart instead of interleaving", () => {
-  const dir = mkdtempSync(join(tmpdir(), "ompweb-subagent-order-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-subagent-order-"));
   const sessionFile = join(dir, "2026-08-02T00-00-00_order.jsonl");
   try {
     writeFileSync(
@@ -577,7 +577,7 @@ test("separate task calls keep their agents apart instead of interleaving", () =
 });
 
 test("parallel calls follow the order the assistant issued them, not the order they finished", () => {
-  const dir = mkdtempSync(join(tmpdir(), "ompweb-subagent-order-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-subagent-order-"));
   const sessionFile = join(dir, "2026-08-02T00-00-00_parallel.jsonl");
   try {
     writeFileSync(
@@ -620,7 +620,7 @@ test("parallel calls follow the order the assistant issued them, not the order t
 });
 
 test("an agent seen only in results keeps its own call's place", () => {
-  const dir = mkdtempSync(join(tmpdir(), "ompweb-subagent-order-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-subagent-order-"));
   const sessionFile = join(dir, "2026-08-02T00-00-00_results.jsonl");
   try {
     writeFileSync(

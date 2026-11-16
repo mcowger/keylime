@@ -494,7 +494,7 @@ test("deferred history sends tool-result images as media URLs and keeps user ima
     // Inline bytes omp never externalized are kept for the media route.
     assert.equal(
       readFileSync(
-        join(process.env.PI_CODING_AGENT_DIR, "omp-web", "media", abcd),
+        join(process.env.PI_CODING_AGENT_DIR, "keylime", "media", abcd),
         "utf8",
       ),
       "ABCD",
@@ -596,7 +596,7 @@ test("returns null for malformed or unbounded session headers", () => {
 function withAgentDir<T>(
   run: (projectDir: string) => T | Promise<T>,
 ): Promise<T> {
-  const agentDir = mkdtempSync(join(tmpdir(), "omp-web-agent-"));
+  const agentDir = mkdtempSync(join(tmpdir(), "keylime-agent-"));
   const projectDir = join(agentDir, "sessions", "-project");
   mkdirSync(projectDir, { recursive: true });
   const previous = process.env.PI_CODING_AGENT_DIR;
@@ -627,7 +627,7 @@ function writeSessionFile(
 // session id (TUI /fork, `omp --fork`, /tan). Both must link to the parent.
 test("links forked children whose parentSession is a bare session id", async () => {
   await withAgentDir(async (dir) => {
-    const cwd = join(tmpdir(), "omp-web-missing-project");
+    const cwd = join(tmpdir(), "keylime-missing-project");
     const parentPath = writeSessionFile(
       dir,
       "2026-01-01_parent.jsonl",
@@ -683,7 +683,7 @@ test("links forked children whose parentSession is a bare session id", async () 
 // non-message write (a rename, an auto-name) must not move.
 test("lists each session's last message time from the tail, not the file mtime", async () => {
   await withAgentDir(async (dir) => {
-    const cwd = join(tmpdir(), "omp-web-missing-project");
+    const cwd = join(tmpdir(), "keylime-missing-project");
     writeSessionFile(
       dir,
       "2026-01-01_a.jsonl",
@@ -735,7 +735,7 @@ test("lists the first user message even when injected context precedes it beyond
       "2026-01-01_injected.jsonl",
       {
         id: "injected",
-        cwd: join(tmpdir(), "omp-web-missing-project"),
+        cwd: join(tmpdir(), "keylime-missing-project"),
         timestamp: "2026-01-01T00:00:00.000Z",
       },
       [
@@ -750,7 +750,7 @@ test("lists the first user message even when injected context precedes it beyond
       "2026-01-02_torn.jsonl",
       {
         id: "torn",
-        cwd: join(tmpdir(), "omp-web-missing-project"),
+        cwd: join(tmpdir(), "keylime-missing-project"),
         timestamp: "2026-01-02T00:00:00.000Z",
       },
       [injected],
@@ -764,7 +764,7 @@ test("lists the first user message even when injected context precedes it beyond
       "2026-01-03_huge.jsonl",
       {
         id: "huge",
-        cwd: join(tmpdir(), "omp-web-missing-project"),
+        cwd: join(tmpdir(), "keylime-missing-project"),
         timestamp: "2026-01-03T00:00:00.000Z",
       },
       [injected, userEntry("u1", null, "x".repeat(300_000))],
@@ -775,7 +775,7 @@ test("lists the first user message even when injected context precedes it beyond
       "2026-01-04_deep.jsonl",
       {
         id: "deep",
-        cwd: join(tmpdir(), "omp-web-missing-project"),
+        cwd: join(tmpdir(), "keylime-missing-project"),
         timestamp: "2026-01-04T00:00:00.000Z",
       },
       [...Array(15).fill(injected), userEntry("u1", null, "deep prompt")],
@@ -797,7 +797,7 @@ test("stops resolving a session path once the file is deleted", async () => {
       "2026-01-01_doomed.jsonl",
       {
         id: "doomed",
-        cwd: join(tmpdir(), "omp-web-missing-project"),
+        cwd: join(tmpdir(), "keylime-missing-project"),
         timestamp: "2026-01-01T00:00:00.000Z",
       },
       [userEntry("u1", null, "hello")],
@@ -813,7 +813,7 @@ test("stops resolving a session path once the file is deleted", async () => {
 });
 
 test("loads sessions larger than the line-reader chunk without corrupting text", () => {
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-large-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-large-"));
   const filePath = join(dir, "large.jsonl");
   // Multi-byte content and >1 MiB of it, so lines and characters both straddle
   // the reader's chunk boundaries.
@@ -890,7 +890,7 @@ test("invalidateSessionListCache clears the session-file walk cache", async () =
       "2026-01-01_first.jsonl",
       {
         id: "first",
-        cwd: join(tmpdir(), "omp-web-missing-project"),
+        cwd: join(tmpdir(), "keylime-missing-project"),
         timestamp: "2026-01-01T00:00:00.000Z",
       },
       [userEntry("u1", null, "first")],
@@ -909,7 +909,7 @@ test("invalidateSessionListCache clears the session-file walk cache", async () =
       "2026-01-02_second.jsonl",
       {
         id: "second",
-        cwd: join(tmpdir(), "omp-web-missing-project"),
+        cwd: join(tmpdir(), "keylime-missing-project"),
         timestamp: "2026-01-02T00:00:00.000Z",
       },
       [userEntry("u1", null, "second")],
@@ -932,7 +932,7 @@ test("invalidateSessionCaches(path) drops only that file's parse caches", async 
       "2026-01-01_a.jsonl",
       {
         id: "a",
-        cwd: join(tmpdir(), "omp-web-missing-project"),
+        cwd: join(tmpdir(), "keylime-missing-project"),
         timestamp: "2026-01-01T00:00:00.000Z",
       },
       [userEntry("u1", null, "a")],
@@ -942,7 +942,7 @@ test("invalidateSessionCaches(path) drops only that file's parse caches", async 
       "2026-01-01_b.jsonl",
       {
         id: "b",
-        cwd: join(tmpdir(), "omp-web-missing-project"),
+        cwd: join(tmpdir(), "keylime-missing-project"),
         timestamp: "2026-01-01T00:00:00.000Z",
       },
       [userEntry("u1", null, "b")],
@@ -994,7 +994,7 @@ test("targeted invalidation catches same-size + same-mtime content changes", asy
       "2026-01-01_t.jsonl",
       {
         id: "t",
-        cwd: join(tmpdir(), "omp-web-missing-project"),
+        cwd: join(tmpdir(), "keylime-missing-project"),
         timestamp: "2026-01-01T00:00:00.000Z",
       },
       [userEntry("u1", null, "version-one")],
@@ -1030,7 +1030,7 @@ test("targeted invalidation catches same-size + same-mtime content changes", asy
         type: "session",
         version: 3,
         id: "t",
-        cwd: join(tmpdir(), "omp-web-missing-project"),
+        cwd: join(tmpdir(), "keylime-missing-project"),
         timestamp: "2026-01-01T00:00:00.000Z",
       }) +
       "\n" +
@@ -1319,7 +1319,7 @@ test("single files larger than the cache budget are not cached, so they cannot s
       "2026-01-01_small.jsonl",
       {
         id: "small",
-        cwd: join(tmpdir(), "omp-web-missing-project"),
+        cwd: join(tmpdir(), "keylime-missing-project"),
         timestamp: "2026-01-01T00:00:00.000Z",
       },
       [userEntry("u1", null, "small")],
@@ -1376,7 +1376,7 @@ test("getSessionEntriesForDisplay resolves blobs on copies without contaminating
       "2026-01-01_blob.jsonl",
       {
         id: "blob",
-        cwd: join(tmpdir(), "omp-web-missing-project"),
+        cwd: join(tmpdir(), "keylime-missing-project"),
         timestamp: "2026-01-01T00:00:00.000Z",
       },
       [
@@ -1456,7 +1456,7 @@ test("invalidation during an in-flight scan does not repopulate the list cache",
       "2026-01-01_gen.jsonl",
       {
         id: "gen",
-        cwd: join(tmpdir(), "omp-web-missing-project"),
+        cwd: join(tmpdir(), "keylime-missing-project"),
         timestamp: "2026-01-01T00:00:00.000Z",
       },
       [userEntry("u1", null, "gen")],
@@ -1517,7 +1517,7 @@ test("invalidation during an in-flight scan does not repopulate the list cache",
 // memo lets the sidebar pick up the new title.
 test("same-size + same-mtime title-slot rewrite is caught by targeted scan invalidation", async () => {
   await withAgentDir(async (dir) => {
-    const cwd = join(tmpdir(), "omp-web-missing-project");
+    const cwd = join(tmpdir(), "keylime-missing-project");
     const titleSlot = serializeTitleSlot({
       title: "title-original",
       updatedAt: "2026-01-01T00:00:00.000Z",
@@ -1586,7 +1586,7 @@ test(
   { timeout: 15000 },
   async (t) => {
     await withAgentDir(async (dir) => {
-      const cwd = join(tmpdir(), "omp-web-missing-project");
+      const cwd = join(tmpdir(), "keylime-missing-project");
       const fileA = writeSessionFile(
         dir,
         "2026-01-01_wa.jsonl",
@@ -1715,7 +1715,7 @@ test(
         "2026-01-01_native.jsonl",
         {
           id: "watch-native",
-          cwd: join(tmpdir(), "omp-web-missing-project"),
+          cwd: join(tmpdir(), "keylime-missing-project"),
           timestamp: "2026-01-01T00:00:00.000Z",
         },
         [userEntry("u1", null, "a")],
@@ -1784,7 +1784,7 @@ const DISPLAY_LOAD_CEILING = 1024 * 1024 * 1024; // MAX_SESSION_LOAD_BYTES
 // (size, mtime) cache key again — the stale entry must be dropped when the
 // 413 gate fires, not left to linger until LRU eviction.
 test("oversize cache entry is dropped when a cached file outgrows the load ceiling", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-oversize-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-oversize-"));
   try {
     const filePath = join(dir, "grown.jsonl");
     writeFileSync(
@@ -1846,7 +1846,7 @@ test("oversize cache entry is dropped when a cached file outgrows the load ceili
 // callers resolve to the identical entry array (separate parses would produce
 // distinct arrays), and the in-flight bookkeeping clears after settling.
 test("concurrent display reads share one in-flight parse", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-dedup-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-dedup-"));
   try {
     const filePath = join(dir, "shared.jsonl");
     writeFileSync(
@@ -1901,7 +1901,7 @@ test("concurrent display reads share one in-flight parse", async () => {
 // Distinct files must not collide in the dedup map, and a rejection (here:
 // the 413 gate) must not poison a later read after the file shrank back.
 test("dedup is per-file and rejections are not memoized", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-dedup2-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-dedup2-"));
   try {
     const fileA = join(dir, "a.jsonl");
     const fileB = join(dir, "b.jsonl");
@@ -3209,7 +3209,7 @@ test("history never advances a cursor through offsets invalidated during a real 
 });
 
 test("streamed line ranges count physical UTF-8 bytes across chunks, CRLF and malformed bytes", () => {
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-line-ranges-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-line-ranges-"));
   try {
     const first = Buffer.from("a".repeat(1024 * 1024 - 1) + "界\r\n");
     const invalid = Buffer.from([0xff, 0x0d, 0x0a]);

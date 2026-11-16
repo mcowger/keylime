@@ -82,7 +82,7 @@ async function withAgentDir(
   run: (projectDir: string) => Promise<void>,
   daemonOps: Parameters<typeof linkLocalDaemon>[0] | null = {},
 ) {
-  const agentDir = mkdtempSync(join(tmpdir(), "omp-web-session-routes-"));
+  const agentDir = mkdtempSync(join(tmpdir(), "keylime-session-routes-"));
   const projectDir = join(agentDir, "sessions", "-project");
   mkdirSync(projectDir, { recursive: true });
   const previous = process.env.PI_CODING_AGENT_DIR;
@@ -173,7 +173,7 @@ test("session route returns 413 session_file_too_large when a valid-header file 
       "2026-01-01_giant.jsonl",
       {
         id: "0a000000-0000-4000-8000-000000000001",
-        cwd: join(tmpdir(), "omp-web-missing-project"),
+        cwd: join(tmpdir(), "keylime-missing-project"),
         timestamp: "2026-01-01T00:00:00.000Z",
       },
       [
@@ -212,7 +212,7 @@ test("context route returns 413 session_file_too_large when a valid-header file 
       "2026-01-01_giant.jsonl",
       {
         id: "0a000000-0000-4000-8000-000000000002",
-        cwd: join(tmpdir(), "omp-web-missing-project"),
+        cwd: join(tmpdir(), "keylime-missing-project"),
         timestamp: "2026-01-01T00:00:00.000Z",
       },
       [
@@ -277,7 +277,7 @@ test("session and context routes still serve a normal-size file with 200", async
       "2026-01-01_small.jsonl",
       {
         id: "0a000000-0000-4000-8000-000000000004",
-        cwd: join(tmpdir(), "omp-web-missing-project"),
+        cwd: join(tmpdir(), "keylime-missing-project"),
         timestamp: "2026-01-01T00:00:00.000Z",
       },
       [
@@ -371,7 +371,7 @@ test("session and context routes map a missing session to 404, not 413", async (
 
 test("DELETE /api/sessions/[id] re-parents children to the grandparent and stops resolving the deleted id", async () => {
   await withAgentDir(async (dir) => {
-    const cwd = join(tmpdir(), "omp-web-missing-project");
+    const cwd = join(tmpdir(), "keylime-missing-project");
     const gpPath = writeSessionFile(
       dir,
       "2026-01-01_gp.jsonl",
@@ -463,7 +463,7 @@ test("DELETE /api/sessions/[id] re-parents children to the grandparent and stops
     const body = await res.json();
     assert.equal(body.ok, true);
     assert.equal(
-      existsSync(join(dir, "..", "..", "omp-web", "outbox.db")),
+      existsSync(join(dir, "..", "..", "keylime", "outbox.db")),
       false,
       "deleting a session without outbox data must not create the outbox store",
     );
@@ -501,7 +501,7 @@ test("session deletion clears only unpinned retry roots and failed deletion reta
     const canonicalId = "0a000000-0000-4000-8000-000000000083";
     writeSessionFile(dir, "2026-01-05_retry-cleanup.jsonl", {
       id,
-      cwd: join(tmpdir(), "omp-web-missing-project"),
+      cwd: join(tmpdir(), "keylime-missing-project"),
       timestamp: "2026-01-05T00:00:00.000Z",
     });
     await listAllSessions();
@@ -606,7 +606,7 @@ test("session deletion clears only unpinned retry roots and failed deletion reta
 
 test("POST /api/sessions/import writes a fresh-id copy discoverable for explicit registration", async () => {
   await withAgentDir(async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "omp-web-import-ws-"));
+    const workspace = mkdtempSync(join(tmpdir(), "keylime-import-ws-"));
     try {
       allowFileRoot(workspace);
       const workspaceId = await registerProject(workspace);
@@ -1214,7 +1214,7 @@ function restoreClaims(idleMs?: number) {
   const db = new Database(
     join(
       process.env.PI_CODING_AGENT_DIR,
-      "omp-web",
+      "keylime",
       "archive-restore-locks.sqlite",
     ),
   );
@@ -1906,7 +1906,7 @@ test("a held claim written without the daemon process that took it is never take
       }
       // The row as a build that recorded no process leaves it.
       const db = new Database(
-        join(dir, "..", "..", "omp-web", "archive-restore-locks.sqlite"),
+        join(dir, "..", "..", "keylime", "archive-restore-locks.sqlite"),
       );
       try {
         db.prepare("UPDATE restore_claims SET instance = NULL").run();
@@ -2179,7 +2179,7 @@ test("a live session resolves to its own host before any list has it", async (t)
 
 test("POST /api/sessions/import rejects unauthorized workspaces and malformed files", async () => {
   await withAgentDir(async () => {
-    const unauthorized = mkdtempSync(join(tmpdir(), "omp-web-import-denied-"));
+    const unauthorized = mkdtempSync(join(tmpdir(), "keylime-import-denied-"));
     try {
       const goodEntries = [
         JSON.stringify({

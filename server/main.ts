@@ -1,4 +1,4 @@
-// Production entry: `bin/omp-web.ts` spawns `bun server/main.ts -p <port> -H <host>` and waits for the Ready line.
+// Production entry: `bin/keylime.ts` spawns `bun server/main.ts -p <port> -H <host>` and waits for the Ready line.
 // Set before the dynamic import below, since modules read NODE_ENV when they load (`next start` forced production too).
 Object.assign(process.env, { NODE_ENV: "production" });
 

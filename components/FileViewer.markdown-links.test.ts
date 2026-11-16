@@ -70,7 +70,7 @@ async function renderPreview(filePath: string, opened: string[]) {
   return view;
 }
 
-test("preview links never navigate omp-web away, and unservable images show their alt text", async () => {
+test("preview links never navigate keylime away, and unservable images show their alt text", async () => {
   const opened: string[] = [];
   const { container, getByText } = await renderPreview(
     "/var/tmp/out/docs/guide.md",

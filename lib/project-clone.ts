@@ -26,7 +26,7 @@ export async function withProjectReservation<T>(
   try {
     path = join(
       await realpath(dirname(target)),
-      `.${basename(target)}.ompweb-project.lock`,
+      `.${basename(target)}.keylime-project.lock`,
     );
     handle = await open(path, "wx", 0o600);
   } catch (error) {

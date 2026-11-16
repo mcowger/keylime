@@ -25,10 +25,10 @@ export function hostName(
 export const isLocalRow = (host: HostRow): host is LocalHostRow =>
   host.id === "local";
 
-/** The command that installs the ompweb-host service on the server's platform (`LocalHostRow.serverPlatform`). */
+/** The command that installs the keylime-host service on the server's platform (`LocalHostRow.serverPlatform`). */
 export function localInstallCommand(platform: string): string {
-  if (platform === "darwin") return "ompweb launchd install";
-  return "ompweb systemd install";
+  if (platform === "darwin") return "keylime launchd install";
+  return "keylime systemd install";
 }
 
 export function hostStatusText(t: Translate, host: HostRow): string {

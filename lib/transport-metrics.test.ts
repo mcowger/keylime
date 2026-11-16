@@ -15,7 +15,7 @@ const route = await import("../app/api/transport-metrics/route");
 const { appendTransportSamples, transportMetricsPath } =
   await import("./transport-metrics");
 
-const agentDir = mkdtempSync(join(tmpdir(), "omp-web-transport-metrics-"));
+const agentDir = mkdtempSync(join(tmpdir(), "keylime-transport-metrics-"));
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 process.env.PI_CODING_AGENT_DIR = agentDir;
 
@@ -46,7 +46,7 @@ const lines = () =>
 test("the store lives under the agent dir", () => {
   assert.equal(
     transportMetricsPath(),
-    join(agentDir, "omp-web", "transport-metrics.jsonl"),
+    join(agentDir, "keylime", "transport-metrics.jsonl"),
   );
 });
 

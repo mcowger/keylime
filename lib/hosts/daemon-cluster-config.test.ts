@@ -106,7 +106,7 @@ let own: string;
 beforeEach(() => {
   dead = false;
   base = realpathSync(
-    mkdtempSync(join(tmpdir(), "omp-web-member-config-test-")),
+    mkdtempSync(join(tmpdir(), "keylime-member-config-test-")),
   );
   roots = {
     agent: join(base, "member", "agent"),
@@ -118,9 +118,9 @@ beforeEach(() => {
   };
   for (const dir of [...Object.values(roots), ...Object.values(master)])
     mkdirSync(dir, { recursive: true });
-  stateDir = join(roots.agent, "omp-web");
+  stateDir = join(roots.agent, "keylime");
   own = join(stateDir, "own-config");
-  // web-settings resolves omp-web-settings.json in the agent directory.
+  // web-settings resolves keylime-settings.json in the agent directory.
   process.env.PI_CODING_AGENT_DIR = roots.agent;
   renameHook = null;
 });
@@ -143,12 +143,12 @@ function put(root: string, path: string, content = "x", fileMode = 0o644) {
   return file;
 }
 
-/** Every entry under both member roots (omp-web's own state excluded): type, mode, bytes or link target. */
+/** Every entry under both member roots (keylime's own state excluded): type, mode, bytes or link target. */
 function tree() {
   const out: Record<string, string> = {};
   const walk = (dir: string, rel: string) => {
     for (const name of readdirSync(dir).sort()) {
-      if (dir === roots.agent && name === "omp-web") continue;
+      if (dir === roots.agent && name === "keylime") continue;
       const path = join(dir, name);
       const key = `${rel}/${name}`;
       const stat = lstatSync(path);
@@ -510,10 +510,10 @@ test("config.yml keeps the member's shellPath and takes the master's other keys"
   assert.equal(settings.modelRoles.default, "master-model");
 });
 
-test("agentEnv in the member's omp-web-settings.json equals the manifest's", async () => {
+test("agentEnv in the member's keylime-settings.json equals the manifest's", async () => {
   const { build } = await firstApply();
   assert.deepEqual(
-    JSON.parse(read(join(roots.agent, "omp-web-settings.json"))).agentEnv,
+    JSON.parse(read(join(roots.agent, "keylime-settings.json"))).agentEnv,
     build.manifest.agentEnv,
   );
   assert.deepEqual(loadWebServerSettings().agentEnv, build.manifest.agentEnv);

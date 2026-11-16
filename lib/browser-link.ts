@@ -234,7 +234,7 @@ function guarded(ws: BrowserSocket, handle: () => void): void {
 
 function fail(ws: BrowserSocket, error: unknown): void {
   console.error(
-    `[omp-web] browser link failed; closing it: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
+    `[keylime] browser link failed; closing it: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
   );
   const link = ws.data.link;
   // Nothing half-applied is resumed: the browser resyncs.
@@ -705,7 +705,7 @@ function apply(
         typeof host === "string" && host.length <= 128 ? host : undefined,
       ).catch((error: unknown) =>
         console.error(
-          `[omp-web] upload abort failed: ${error instanceof Error ? error.message : String(error)}`,
+          `[keylime] upload abort failed: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
       return;
@@ -794,7 +794,7 @@ function onUploadStart(
       if (error instanceof HostOpError)
         return sink.error(error.status, error.code, error.message);
       console.error(
-        `[omp-web] upload start failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
+        `[keylime] upload start failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
       );
       sink.error(500, "upload_failed", "The upload could not start");
     },

@@ -186,7 +186,7 @@ test("controls named like HTMLFormElement members still submit", async () => {
 test("a choice's label keeps its text and inline markup in one block beside the control", () => {
   // The row is a flex container: without the wrapper every text run and <code> became its own column.
   renderForm(`<form><fieldset><legend>Get omp</legend>
-    <label><input type="radio" name="npm" value="download" checked> Download the matching <code>ompweb-omp</code> and <strong>check</strong> its sha256.</label>
+    <label><input type="radio" name="npm" value="download" checked> Download the matching <code>keylime-omp</code> and <strong>check</strong> its sha256.</label>
     <label><input type="radio" name="npm" value="bundle"> Bundle it</label>
   </fieldset></form>`);
   const label = screen
@@ -206,6 +206,6 @@ test("a choice's label keeps its text and inline markup in one block beside the 
   );
   assert.equal(
     text.textContent!.trim(),
-    "Download the matching ompweb-omp and check its sha256.",
+    "Download the matching keylime-omp and check its sha256.",
   );
 });

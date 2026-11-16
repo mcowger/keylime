@@ -106,7 +106,7 @@ export interface MarkdownBodyRendering {
   urlTransform: UrlTransform;
 }
 
-/** Builds omp-web's markdown rendering setup (links, images, tables, code) so any renderer can reuse it. */
+/** Builds keylime's markdown rendering setup (links, images, tables, code) so any renderer can reuse it. */
 export function useMarkdownBodyRendering({
   children,
   isStreaming,

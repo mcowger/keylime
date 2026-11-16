@@ -32,7 +32,7 @@ type UploadInternals = {
 const { sanitizeUploadName, StagedUploads, STAGED_MAX_AGE_MS } =
   await import("./uploads.ts");
 
-const scratch = mkdtempSync(join(tmpdir(), "omp-web-staged-"));
+const scratch = mkdtempSync(join(tmpdir(), "keylime-staged-"));
 after(() => rmSync(scratch, { recursive: true, force: true }));
 
 function staging() {
@@ -114,7 +114,7 @@ test("a sweep that cannot delete an idle upload's files resolves, still cleans t
     (message) =>
       typeof message === "string" &&
       message.startsWith(
-        `[ompweb host] could not delete staged upload ${stuck}:`,
+        `[keylime host] could not delete staged upload ${stuck}:`,
       ) &&
       message.includes("EISDIR"),
   );

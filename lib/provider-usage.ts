@@ -286,7 +286,7 @@ async function fetchProviderUsage(refresh = false): Promise<string> {
       timeout: USAGE_TIMEOUT_MS,
       maxBuffer: USAGE_MAX_BUFFER,
       // No `env` option would inherit the server's full environment,
-      // including omp-web's own secrets, into this child.
+      // including keylime's own secrets, into this child.
       env: createChildProcessEnvironment(),
     });
   }

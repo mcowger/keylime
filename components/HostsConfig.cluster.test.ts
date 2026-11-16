@@ -35,7 +35,7 @@ afterEach(() => {
 
 const member = (hostId: string) => ({
   hostId,
-  projectsRoot: `/srv/${hostId}/ompweb-cluster`,
+  projectsRoot: `/srv/${hostId}/keylime-cluster`,
   provisioned: true,
   draining: false,
 });
@@ -121,7 +121,7 @@ async function showHosts(
           : Response.json({ home });
       }
       if (String(url).includes("/updates"))
-        return Response.json({ ompweb: null, omp: null, operation: null });
+        return Response.json({ keylime: null, omp: null, operation: null });
       calls.push({
         method,
         url: String(url),
@@ -364,7 +364,7 @@ test("joining asks for the folder, prefilled from the host's home, and sends it"
   const folder = within(dialog).getByLabelText<HTMLInputElement>(
     "Folder on Laptop for the cluster's checkouts",
   );
-  await waitFor(() => assert.equal(folder.value, "/home/andre/ompweb-cluster"));
+  await waitFor(() => assert.equal(folder.value, "/home/andre/keylime-cluster"));
   assert.deepEqual(
     calls.filter((call) => call.url.startsWith("/api/home")),
     [{ method: "GET", url: "/api/home?hostId=h1" }],
@@ -396,7 +396,7 @@ test("joining asks for the folder, prefilled from the host's home, and sends it"
       {
         method: "PUT",
         url: "/api/hosts/h1/cluster",
-        body: { projectsRoot: "/home/andre/ompweb-cluster" },
+        body: { projectsRoot: "/home/andre/keylime-cluster" },
       },
     ),
   );
@@ -424,7 +424,7 @@ for (const [label, pools, says] of <[string, Pools, boolean][]>[
     if (says)
       assert.match(
         note!.textContent!,
-        /unless they are inside or contain the ompweb-cluster folder in its home folder.*any member with capacity \(currently Linux hosts only\)/,
+        /unless they are inside or contain the keylime-cluster folder in its home folder.*any member with capacity \(currently Linux hosts only\)/,
       );
   });
 }
@@ -561,7 +561,7 @@ test("a relative folder is refused in the dialog without a request", async (t) =
     within(dialog).getByLabelText<HTMLInputElement>(/Folder on Laptop/);
   await waitFor(() => assert.notEqual(folder.value, ""));
   await user.clear(folder);
-  await user.type(folder, "ompweb-cluster");
+  await user.type(folder, "keylime-cluster");
   await user.click(
     within(dialog).getByRole("button", { name: "Add to cluster" }),
   );
@@ -623,7 +623,7 @@ test("a leave whose own configuration could not be put back says so and why", as
     respond: async () =>
       Response.json({
         pools: cluster("local"),
-        restoreError: "omp-web/own-config/agent is not readable",
+        restoreError: "keylime/own-config/agent is not readable",
       }),
   });
   await user.click(clusterSwitch("Laptop"));
@@ -634,7 +634,7 @@ test("a leave whose own configuration could not be put back says so and why", as
   );
   await waitFor(() =>
     assert.deepEqual(errors, [
-      "Laptop left the cluster, but its own omp configuration could not be put back: omp-web/own-config/agent is not readable. It is retried automatically while the host is linked.",
+      "Laptop left the cluster, but its own omp configuration could not be put back: keylime/own-config/agent is not readable. It is retried automatically while the host is linked.",
     ]),
   );
 });

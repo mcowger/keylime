@@ -59,7 +59,7 @@ export class ChannelLifecycle {
       });
     this.cancel = options.clearTimeout ?? clearTimeout;
     const configured = Number(
-      process.env.OMP_WEB_DISCONNECT_DESTROY_MS ?? 120000,
+      process.env.KEYLIME_DISCONNECT_DESTROY_MS ?? 120000,
     );
     this.abandonedMs =
       options.abandonedMs ??

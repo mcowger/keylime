@@ -56,7 +56,7 @@ import { ChatMinimap, useMessageRefs } from "./ChatMinimap";
 import { ActivityPanel, ComposerPanels } from "./ComposerPanels";
 import { SidebarActivity } from "./SidebarActivity";
 import { BtwHistoryDialog, type BtwPanelProps } from "./BtwPanel";
-import OmpWebLogo from "./OmpWebLogo";
+import KeylimeLogo from "./KeylimeLogo";
 import { CHAT_COLUMN_MAX_WIDTH, MINIMAP_WIDTH } from "@/lib/chat-layout";
 import { WorkspaceState } from "./AppShell-layout";
 import {
@@ -473,7 +473,7 @@ export const CommittedTranscript = memo(function CommittedTranscript({
     // With "Hide tool activity while working" on (the default) the running turn
     // folds like a finished one; off restores the flat tail.
     if (hideToolActivity) return false;
-    // `sessionBusy` only goes true for a run omp-web owns, so a session driven
+    // `sessionBusy` only goes true for a run keylime owns, so a session driven
     // by another `omp` process would never get a live tail; the transcript-tail
     // heuristic supplies that missing case.
     return (
@@ -1813,7 +1813,7 @@ export function ChatWindow({
                             overflow: "hidden",
                           }}
                         >
-                          <OmpWebLogo size={26} />
+                          <KeylimeLogo size={26} />
                           <span
                             className="omp-wordmark"
                             style={{

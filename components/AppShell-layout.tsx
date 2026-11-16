@@ -12,7 +12,7 @@ export function projectLabel(projectPath: string): string {
 
 // Resizable desktop sidebar: the width is stored on the container as the
 // --sidebar-width CSS variable (globals.css) and persisted between sessions.
-export const SIDEBAR_WIDTH_STORAGE_KEY = "omp-web:sidebar-width";
+export const SIDEBAR_WIDTH_STORAGE_KEY = "keylime:sidebar-width";
 export const SIDEBAR_MIN_WIDTH = 200;
 export const SIDEBAR_MAX_WIDTH = 520;
 export const SIDEBAR_DEFAULT_WIDTH = 260;
@@ -40,7 +40,7 @@ export function loadSidebarWidth(): number {
 // Resizable right (file) panel: null means the fluid 42% default; a number is
 // a user-chosen pixel width persisted between sessions (same drag pattern as
 // the left sidebar, mirrored — the handle sits on the panel's left edge).
-export const RIGHT_PANEL_WIDTH_STORAGE_KEY = "omp-web:right-panel-width";
+export const RIGHT_PANEL_WIDTH_STORAGE_KEY = "keylime:right-panel-width";
 export const RIGHT_PANEL_MIN_WIDTH = 300;
 export const RIGHT_PANEL_MAX_WIDTH = 900;
 

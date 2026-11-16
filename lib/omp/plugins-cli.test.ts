@@ -11,12 +11,12 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import test, { after } from "node:test";
 
-const scratch = mkdtempSync(join(tmpdir(), "omp-web-plugins-cli-test-"));
-const previousBin = process.env.OMP_WEB_OMP_BIN;
-process.env.OMP_WEB_OMP_BIN = join(scratch, "missing-omp");
+const scratch = mkdtempSync(join(tmpdir(), "keylime-plugins-cli-test-"));
+const previousBin = process.env.KEYLIME_OMP_BIN;
+process.env.KEYLIME_OMP_BIN = join(scratch, "missing-omp");
 after(() => {
-  if (previousBin === undefined) delete process.env.OMP_WEB_OMP_BIN;
-  else process.env.OMP_WEB_OMP_BIN = previousBin;
+  if (previousBin === undefined) delete process.env.KEYLIME_OMP_BIN;
+  else process.env.KEYLIME_OMP_BIN = previousBin;
   rmSync(scratch, { recursive: true, force: true });
 });
 const { listPlugins, runOmpCli } = await import("./plugins-cli.ts");
@@ -243,7 +243,7 @@ test("an aborted signal ends a running omp", async (t) => {
   const source = `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); process.stdin.resume();`;
   const waiting = join(scratch, "waiting-omp");
   writeFileSync(waiting, `#!${process.execPath}\n${source}`, { mode: 0o755 });
-  process.env.OMP_WEB_OMP_BIN = waiting;
+  process.env.KEYLIME_OMP_BIN = waiting;
   const alive = (pid: number) => {
     try {
       process.kill(pid, 0);
@@ -254,7 +254,7 @@ test("an aborted signal ends a running omp", async (t) => {
   };
   let pid = 0;
   t.after(() => {
-    process.env.OMP_WEB_OMP_BIN = join(scratch, "missing-omp");
+    process.env.KEYLIME_OMP_BIN = join(scratch, "missing-omp");
     if (pid && alive(pid)) process.kill(pid, "SIGKILL");
     rmSync(waiting);
   });

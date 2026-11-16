@@ -10,7 +10,7 @@ import type { DownMessage, HelloChannel } from "./link-protocol.ts";
 import type { OpResult, SessionOps } from "./session-ops.ts";
 
 // The hub keeps its links on globalThis; every test links its own host.
-const agentDir = mkdtempSync(join(tmpdir(), "omp-web-hub-test-"));
+const agentDir = mkdtempSync(join(tmpdir(), "keylime-hub-test-"));
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 process.env.PI_CODING_AGENT_DIR = agentDir;
 after(() => {
@@ -38,7 +38,7 @@ function linkSamplesOnDisk(hostId: string, dir = agentDir) {
   let text;
   try {
     text = readFileSync(
-      join(dir, "omp-web", "transport-metrics.jsonl"),
+      join(dir, "keylime", "transport-metrics.jsonl"),
       "utf8",
     );
   } catch {
@@ -1197,7 +1197,7 @@ test("freezeHostLinks closes every link socket with 1001, answers upgrades 503 a
   hub.freezeHostLinks();
   assert.deepEqual(link.down.socket.closed, {
     code: 1001,
-    reason: "omp-web is restarting",
+    reason: "keylime is restarting",
   });
   // A frame already on its way, and a hello on a socket upgraded before the freeze: neither is applied or answered.
   assert.deepEqual(
@@ -2602,7 +2602,7 @@ test("freezeHostLinks writes the samples dropped past the budget", async (t) => 
 
 test("a batch of link samples is written to the agent dir it started under, even if the dir changed before the flush", async (t) => {
   freshLinkSamples();
-  const later = mkdtempSync(join(tmpdir(), "omp-web-hub-test-later-"));
+  const later = mkdtempSync(join(tmpdir(), "keylime-hub-test-later-"));
   t.after(() => {
     process.env.PI_CODING_AGENT_DIR = agentDir;
     rmSync(later, { recursive: true, force: true });
@@ -2766,7 +2766,7 @@ test("getHost resolves local, linked and unknown ids", async () => {
 
 test("an unreadable host registry answers 503, never 401", async () => {
   const { token } = createHost("Registry");
-  const file = join(agentDir, "omp-web", "hosts.json");
+  const file = join(agentDir, "keylime", "hosts.json");
   const saved = readFileSync(file, "utf8");
   const early = upgradeSocket(token).socket;
   assert.ok(early);

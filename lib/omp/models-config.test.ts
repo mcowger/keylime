@@ -49,7 +49,7 @@ providers:
 `;
 
 function withAgentDir(run: (dir: string, path: string) => void) {
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-models-config-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-models-config-"));
   const previous = {
     agentDir: process.env.PI_CODING_AGENT_DIR,
     xdg: process.env.XDG_DATA_HOME,

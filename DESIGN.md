@@ -21,8 +21,8 @@ do not assume that Pi-specific implementation changes can be merged unchanged.
 2. **Local-first by default.** The server binds to `127.0.0.1`; remote access
    is an explicit user choice and must be protected by a trusted network
    boundary and HTTPS.
-3. **Bun-first installation.** Install Bun, then run `bunx --bun @kahme247/ompweb@latest`
-   or install the npm package globally with `bun add -g @kahme247/ompweb`.
+3. **Bun-first installation.** Install Bun, then run `bunx --bun @mcowger/keylime@latest`
+   or install the npm package globally with `bun add -g @mcowger/keylime`.
    Native compiled releases do not require a separate Bun installation.
 4. **Native compatibility over imitation.** Prefer OMP's CLI and documented
    on-disk formats to copied SDK internals. If a capability cannot be done
@@ -34,12 +34,11 @@ do not assume that Pi-specific implementation changes can be merged unchanged.
 
 ## Distribution and identity
 
-- npm package: `@kahme247/ompweb`; CLI command: `ompweb`.
+- npm package: `@mcowger/keylime`; CLI command: `keylime`.
 - Default server address: `http://127.0.0.1:30177`.
-- Existing `OMP_WEB_*` environment variables remain the configuration prefix
-  for compatibility: `OMP_WEB_HOSTNAME`, `OMP_WEB_NO_OPEN`, and
-  `OMP_WEB_OMP_BIN`. `OMP_WEB_PASSWORD` is accepted only as a migration step
-  (see the security contract).
+- The `KEYLIME_*` environment variables configure the application, including
+  `KEYLIME_HOSTNAME`, `KEYLIME_NO_OPEN`, and `KEYLIME_OMP_BIN`.
+  `KEYLIME_PASSWORD` is accepted only as a migration step (see the security contract).
 - `PI_CODING_AGENT_DIR` and OMP's own directory conventions are
   respected because they identify the user's existing OMP state.
 - The web UI displays its own package version separately from the detected
@@ -51,13 +50,13 @@ do not assume that Pi-specific implementation changes can be merged unchanged.
 Browser
   │ HTTP / WebSocket or Server-Sent Events
   ▼
-ompweb (Bun web server)
+keylime (Bun web server)
   ├─ serves allow-listed project files through the host link
-  └─ links to a separate Bun `ompweb host` daemon
-       └─ starts one `ompweb-omp --headless` child per active session
-       │ ompweb channel, NDJSON over stdio
+  └─ links to a separate Bun `keylime host` daemon
+       └─ starts one `keylime-omp --headless` child per active session
+       │ keylime channel, NDJSON over stdio
        ▼
-     ompweb's own omp build (runner/) and the existing ~/.omp/agent state
+     keylime's own omp build (runner/) and the existing ~/.omp/agent state
 ```
 
 ### The omp boundary
@@ -72,12 +71,12 @@ fork's integration build: an `ompweb-dev/oh-my-pi` release that is an upstream o
 release plus the PRs the fork carries (among them `runSessionHost`, which the
 headless mode needs), pinned to one release in `runner/omp-build.json` and
 re-pinned to the newest one by each key lime release. The runner replaces omp's
-launch command: its session factory connects every session to `ompweb host`
+launch command: its session factory connects every session to `keylime host`
 over key lime's channel. The host receives the same `AgentSession` events and
 calls the same session methods omp's TUI does, so nothing depends on omp's RPC
 mode. A session started from the runner's TUI connects to the daemon's Unix
 socket and shows up live in the web; dialogs open on both sides and the first
-answer wins. Each key lime release attaches its runners (`ompweb-omp-<platform>`),
+answer wins. Each key lime release attaches its runners (`keylime-omp-<platform>`),
 and every install downloads the one of its own version
 (`lib/omp/runner-fetch.ts`), so omp updates with key lime. The design and the wire are in
 `docs/specs/2026-11-12-omp-runner-design.md`; the fork build in
@@ -86,18 +85,18 @@ and every install downloads the one of its own version
 ### The Host seam
 
 Every machine-local action of a session goes through one interface,
-`Host` (`lib/hosts/host.ts`): spawning `ompweb-omp --headless`, checking that a
+`Host` (`lib/hosts/host.ts`): spawning `keylime-omp --headless`, checking that a
 session file exists, invalidating cached session lists, and the
 file-reading operations behind the session and project routes. The web server
 has no direct path to any machine, its own included: it reaches every host
 through the link described below. The implementation on the web server is
-`RemoteHost`; the daemon (`ompweb host`) runs the other side, `LocalHost`, on
+`RemoteHost`; the daemon (`keylime host`) runs the other side, `LocalHost`, on
 the machine whose omp it owns.
 
 ```
-Browser ─▶ ompweb ◀── link (loopback)  ── ompweb host ── spawn ompweb-omp --headless (stdio)
-                 ◀── link (WebSocket) ── ompweb host on another machine
-                                           └─ spawn ompweb-omp --headless
+Browser ─▶ keylime ◀── link (loopback)  ── keylime host ── spawn keylime-omp --headless (stdio)
+                 ◀── link (WebSocket) ── keylime host on another machine
+                                           └─ spawn keylime-omp --headless
 ```
 
 "This machine" is the host with the fixed id `local`, linked to the daemon
@@ -118,7 +117,7 @@ knowing where omp runs. Session routes address a session by id; the owning
 host resolves the file path, so a remote path never reaches the serving
 machine's filesystem.
 
-The link is one WebSocket that the `ompweb host` daemon opens to the
+The link is one WebSocket that the `keylime host` daemon opens to the
 server: text frames carry the messages in both directions and binary frames
 carry large op results (daemon → server). The daemon
 forwards omp's NDJSON unchanged and answers a fixed allow-list of host
@@ -136,7 +135,7 @@ the daemon requires `https://` except for loopback or an explicit
 - `~/.omp/agent` is the source of
   truth for sessions, configuration, models, skills, plugins, and blobs.
 - `agent.db` contains authentication data. key lime never reads or writes it;
-  authentication actions go through the `ompweb-omp` process.
+  authentication actions go through the `keylime-omp` process.
 - A live OMP process owns writes to its session file. key lime routes supported
   live actions through the runner's channel and never races a live file rewrite.
 
@@ -236,29 +235,29 @@ Deploy the frontend and API support together; no native OMP upgrade is required.
 ## Security contract
 
 - Bind loopback-only by default. A non-loopback hostname is an explicit opt-in. Password authentication is optional on every address, including `0.0.0.0`; deployment access controls are the user's decision. Without authentication, every reachable client can use the app's agent and file capabilities.
-- `OMP_WEB_PASSWORD_HASH` protects every route with a password-only sign-in
-  screen. Only a scrypt hash reaches the server (`ompweb hash-password`),
+- `KEYLIME_PASSWORD_HASH` protects every route with a password-only sign-in
+  screen. Only a scrypt hash reaches the server (`keylime hash-password`),
   because every `omp` session inherits the server's environment and an agent
   could print the password into its transcript, session file and
-  model-provider traffic. `--password`, or a plaintext `OMP_WEB_PASSWORD` next
-  to a hash, refuses to start. A lone `OMP_WEB_PASSWORD` is hashed by the
+  model-provider traffic. `--password`, or a plaintext `KEYLIME_PASSWORD` next
+  to a hash, refuses to start. A lone `KEYLIME_PASSWORD` is hashed by the
   launcher, removed from the server's environment, and logged as a warning with
   the hash to use instead; the server itself still refuses a plaintext.
   Successful sign-in creates an HTTP-only, signed cookie with a 30-day expiry;
   the signing key is a per-installation random value mixed with the hash, so a
   copied password hash cannot forge a session and changing the password still
   invalidates existing sessions. Exposed deployments require HTTPS through a
-  trusted reverse proxy or VPN. With `OMP_WEB_TRUSTED_HEADER_SHA256` set, a
-  request whose `X-Omp-Web-Auth` header hashes to that digest counts as signed
+  trusted reverse proxy or VPN. With `KEYLIME_TRUSTED_HEADER_SHA256` set, a
+  request whose `X-Keylime-Auth` header hashes to that digest counts as signed
   in; key lime never holds the secret itself. Deciding which clients get the
   header is the reverse proxy's job, because key lime has no client address it
   can trust.
-- key lime's own secrets (`OMP_WEB_PASSWORD`, `OMP_WEB_PASSWORD_HASH`,
-  `OMP_WEB_TRUSTED_HEADER_SHA256` and its legacy name
-  `OMP_WEB_TRUSTED_HEADER_SECRET`) are stripped from every child process
+- key lime's own secrets (`KEYLIME_PASSWORD`, `KEYLIME_PASSWORD_HASH`,
+  `KEYLIME_TRUSTED_HEADER_SHA256` and its legacy name
+  `KEYLIME_TRUSTED_HEADER_SECRET`) are stripped from every child process
   environment through `createChildProcessEnvironment`
-  (`lib/project-command-env.ts`). `OMP_WEB_*` values that are configuration
-  rather than secrets (`OMP_WEB_PACKAGE_DIR`, `OMP_WEB_OMP_BIN`, ...) are kept.
+  (`lib/project-command-env.ts`). `KEYLIME_*` values that are configuration
+  rather than secrets (`KEYLIME_PACKAGE_DIR`, `KEYLIME_OMP_BIN`, ...) are kept.
 - API requests are origin-checked. Do not add browser-to-host execution paths
   that bypass this boundary.
 - Host tools (`host_tool_call`) come from a fixed set: the browser's own tools
@@ -296,8 +295,8 @@ Releases are independent:
 
 1. Run `bun run typecheck` (Bun checks the root project and runner), relevant tests, and a production build.
 2. Confirm `bun pm pack` contains the built `dist/` output and exposes
-   the `ompweb` binary.
-3. Publish `@kahme247/ompweb@<version>` to the npm registry through the
+   the `keylime` binary.
+3. Publish `@mcowger/keylime@<version>` to the npm registry through the
    configured trusted publisher.
 4. Tag and release the repository that owns this downstream project.
 

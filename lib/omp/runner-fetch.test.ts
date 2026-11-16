@@ -16,7 +16,7 @@ const { fetchOmpRunner, OMP_RUNNER_CHECKSUMS } =
   await import("./runner-fetch.ts");
 const { OMP_RUNNER_ASSET } = await import("./omp-cli.ts");
 const { releaseRepo } = await import("../release-repo.ts");
-const dir = mkdtempSync(join(tmpdir(), "ompweb-runner-fetch-"));
+const dir = mkdtempSync(join(tmpdir(), "keylime-runner-fetch-"));
 const original = globalThis.fetch;
 after(() => {
   globalThis.fetch = original;
@@ -44,9 +44,9 @@ function serve(sums: string, served: string[] = []) {
 
 test("the runner comes from this version's release, checked against its checksum listing, and lands executable", async () => {
   const served = serve(
-    `${"0".repeat(64)}  ompweb-omp-other\n${sha}  ${OMP_RUNNER_ASSET}\n`,
+    `${"0".repeat(64)}  keylime-omp-other\n${sha}  ${OMP_RUNNER_ASSET}\n`,
   );
-  const target = join(dir, "ok", "ompweb-omp");
+  const target = join(dir, "ok", "keylime-omp");
   assert.equal(await fetchOmpRunner(target, "9.9.9"), target);
   assert.deepEqual(readFileSync(target), runner);
   assert.equal(statSync(target).mode & 0o777, 0o755);
@@ -56,39 +56,39 @@ test("the runner comes from this version's release, checked against its checksum
   ]);
   assert.deepEqual(
     readdirSync(join(dir, "ok")),
-    ["ompweb-omp"],
+    ["keylime-omp"],
     "no partial file is left",
   );
 });
 
 test("a runner whose SHA-256 differs from the listed one is refused and nothing is written", async () => {
   serve(`${"a".repeat(64)}  ${OMP_RUNNER_ASSET}\n`);
-  const target = join(dir, "mismatch", "ompweb-omp");
+  const target = join(dir, "mismatch", "keylime-omp");
   await assert.rejects(fetchOmpRunner(target, "9.9.9"), /SHA-256/);
   assert.equal(existsSync(target), false);
   assert.deepEqual(readdirSync(join(dir, "mismatch")), []);
-  serve(`${sha}  ompweb-omp-other\n`);
+  serve(`${sha}  keylime-omp-other\n`);
   await assert.rejects(
     fetchOmpRunner(target, "9.9.9"),
     new RegExp(`lists no ${OMP_RUNNER_ASSET}`),
   );
 });
 
-test("offline, the error names the runner URL and OMP_WEB_OMP_BIN", async () => {
+test("offline, the error names the runner URL and KEYLIME_OMP_BIN", async () => {
   globalThis.fetch = Object.assign(
     async () => {
       throw new TypeError("fetch failed");
     },
     { preconnect: original.preconnect },
   );
-  const target = join(dir, "offline", "ompweb-omp");
+  const target = join(dir, "offline", "keylime-omp");
   await assert.rejects(fetchOmpRunner(target, "9.9.9"), (error) => {
     assert.ok(error instanceof Error);
     assert.ok(
       error.message.includes(`${base}/${OMP_RUNNER_ASSET}`),
       error.message,
     );
-    assert.match(error.message, /fetch failed.*OMP_WEB_OMP_BIN/);
+    assert.match(error.message, /fetch failed.*KEYLIME_OMP_BIN/);
     return true;
   });
   assert.equal(existsSync(target), false);

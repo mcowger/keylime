@@ -18,7 +18,7 @@ function createStorage(values: Record<string, string> = {}) {
 }
 
 test("defaults to the full OMP toolset and persists explicit choices", () => {
-  const storage = createStorage({ "omp-web:tool-preset": "unknown" });
+  const storage = createStorage({ "keylime:tool-preset": "unknown" });
   assert.equal(getPreferredToolPreset(storage), "full");
 
   setPreferredToolPreset("default", storage);

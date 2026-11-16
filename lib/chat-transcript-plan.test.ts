@@ -340,7 +340,7 @@ test("mount notices, which never render, do not open an empty fold", () => {
 });
 
 test("#136 a tail awaiting a tool result counts as a live foreign run", () => {
-  // omp-web gets no SSE frames for a run owned by another `omp` process, so the
+  // keylime gets no SSE frames for a run owned by another `omp` process, so the
   // transcript tail is the only signal that a turn is still in flight.
   assert.equal(
     looksLikeRunningTurn([user("u1"), assistant("a1", [toolCall("tc1")])]),

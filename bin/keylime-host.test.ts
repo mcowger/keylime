@@ -15,15 +15,15 @@ import type { TestContext } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const bin = fileURLToPath(new URL("./omp-web.ts", import.meta.url));
+const bin = fileURLToPath(new URL("./keylime.ts", import.meta.url));
 
-test("SIGTERM to `ompweb host` stops the daemon itself, leaving no orphan", async (t) => {
-  const scratch = mkdtempSync(join(tmpdir(), "omp-web-host-cli-"));
+test("SIGTERM to `keylime host` stops the daemon itself, leaving no orphan", async (t) => {
+  const scratch = mkdtempSync(join(tmpdir(), "keylime-host-cli-"));
   const agentDir = join(scratch, "agent");
-  mkdirSync(join(agentDir, "omp-web"), { recursive: true });
+  mkdirSync(join(agentDir, "keylime"), { recursive: true });
   // Nothing listens on this loopback port: the daemon redials until it is stopped.
   writeFileSync(
-    join(agentDir, "omp-web", "host.json"),
+    join(agentDir, "keylime", "host.json"),
     JSON.stringify({ url: "http://127.0.0.1:9", token: "t" }),
     { mode: 0o600 },
   );
@@ -68,13 +68,13 @@ test("SIGTERM to `ompweb host` stops the daemon itself, leaving no orphan", asyn
   );
 });
 
-/** Run `ompweb host login` with `input` on stdin (left open unless `end`). */
+/** Run `keylime host login` with `input` on stdin (left open unless `end`). */
 async function login(
   t: TestContext,
   input: string,
   { end = true }: { end?: boolean } = {},
 ) {
-  const scratch = mkdtempSync(join(tmpdir(), "omp-web-host-login-"));
+  const scratch = mkdtempSync(join(tmpdir(), "keylime-host-login-"));
   const agentDir = join(scratch, "agent");
   t.after(() => rmSync(scratch, { recursive: true, force: true }));
   const child = spawn(
@@ -99,7 +99,7 @@ async function login(
     closed,
     sleep(10_000, "timeout", { ref: false }),
   ]);
-  const file = join(agentDir, "omp-web", "host.json");
+  const file = join(agentDir, "keylime", "host.json");
   return {
     code,
     stderr,
@@ -107,13 +107,13 @@ async function login(
   };
 }
 
-test("`ompweb host login` saves the first stdin line as the token", async (t) => {
+test("`keylime host login` saves the first stdin line as the token", async (t) => {
   const { code, saved } = await login(t, " tok-123 \nignored\n");
   assert.equal(code, 0);
   assert.equal(saved?.token, "tok-123");
 });
 
-test("`ompweb host login` refuses a token line over 4096 bytes without waiting for more input", async (t) => {
+test("`keylime host login` refuses a token line over 4096 bytes without waiting for more input", async (t) => {
   const { code, stderr, saved } = await login(t, "a".repeat(5000), {
     end: false,
   });
@@ -155,7 +155,7 @@ function controlFixture(
   t: TestContext,
   { url, longRoot = false }: { url?: string; longRoot?: boolean } = {},
 ) {
-  const scratch = mkdtempSync(join(tmpdir(), "omp-web-host-control-cli-"));
+  const scratch = mkdtempSync(join(tmpdir(), "keylime-host-control-cli-"));
   const agentDir = join(
     scratch,
     ...(longRoot ? ["long-agent-directory-".repeat(10), "agent"] : ["agent"]),
@@ -174,11 +174,11 @@ function controlFixture(
     XDG_DATA_HOME: join(scratch, "data"),
     XDG_STATE_HOME: join(scratch, "state"),
     XDG_CACHE_HOME: join(scratch, "cache"),
-    OMP_WEB_OMP_BIN: omp,
+    KEYLIME_OMP_BIN: omp,
   };
-  mkdirSync(join(agentDir, "omp-web"), { recursive: true, mode: 0o700 });
+  mkdirSync(join(agentDir, "keylime"), { recursive: true, mode: 0o700 });
   writeFileSync(
-    join(agentDir, "omp-web", "host.json"),
+    join(agentDir, "keylime", "host.json"),
     JSON.stringify({
       url: url ?? "http://127.0.0.1:9",
       token: "private-cli-fixture-token",
@@ -351,7 +351,7 @@ test(
 
 test("worker maintenance startup is drained before linking and can be explicitly resumed", async (t) => {
   const f = controlFixture(t);
-  const daemon = launchHost(t, { ...f.env, OMP_WEB_HOST_DRAINED: "1" });
+  const daemon = launchHost(t, { ...f.env, KEYLIME_HOST_DRAINED: "1" });
   const { hostControlPath } = await import("../lib/hosts/host-control.ts");
   t.after(() =>
     rmSync(join(hostControlPath(f.agentDir), ".."), {
@@ -367,11 +367,11 @@ test("worker maintenance startup is drained before linking and can be explicitly
   assert.equal(JSON.parse(resumed.stdout).drained, false);
 });
 
-test("`ompweb host login --add` and logout change only the selected URL without argv tokens", async (t) => {
-  const scratch = mkdtempSync(join(tmpdir(), "omp-web-host-multi-login-"));
+test("`keylime host login --add` and logout change only the selected URL without argv tokens", async (t) => {
+  const scratch = mkdtempSync(join(tmpdir(), "keylime-host-multi-login-"));
   const agentDir = join(scratch, "agent");
-  const file = join(agentDir, "omp-web", "host.json");
-  mkdirSync(join(agentDir, "omp-web"), { recursive: true });
+  const file = join(agentDir, "keylime", "host.json");
+  mkdirSync(join(agentDir, "keylime"), { recursive: true });
   const primary = {
     url: "https://production.example",
     token: "production-secret",

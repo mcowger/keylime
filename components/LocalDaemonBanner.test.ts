@@ -70,7 +70,7 @@ const mount = async () => {
   render(createElement(LocalDaemonBanner));
   await waitFor(() => assert.ok(opens() > before));
 };
-const text = /needs the ompweb-host service/;
+const text = /needs the keylime-host service/;
 
 test("the install banner appears after 90 s offline, once: dismissing it keeps it away", async (t) => {
   await mount();
@@ -83,15 +83,15 @@ test("the install banner appears after 90 s offline, once: dismissing it keeps i
     screen
       .getByText(text)
       .textContent?.startsWith(
-        "This machine needs the ompweb-host service. Install it with:",
+        "This machine needs the keylime-host service. Install it with:",
       ),
   );
-  // A foreground ompweb has no service: it needs `ompweb host` running beside it.
+  // A foreground keylime has no service: it needs `keylime host` running beside it.
   assert.deepEqual(
     [...screen.getByRole("status").querySelectorAll("code")].map(
       (code) => code.textContent,
     ),
-    ["ompweb systemd install", "ompweb host"],
+    ["keylime systemd install", "keylime host"],
   );
   assert.match(
     screen.getByRole("status").textContent ?? "",

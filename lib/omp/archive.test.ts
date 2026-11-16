@@ -181,7 +181,7 @@ test("real archived attachment trees are excluded while nested and hidden projec
 });
 
 test("lists archive metadata and restores the session with artifacts", async () => {
-  const root = mkdtempSync(join(tmpdir(), "omp-web-archive-browser-"));
+  const root = mkdtempSync(join(tmpdir(), "keylime-archive-browser-"));
   try {
     const sessions = join(root, "sessions");
     const archive = join(root, "archive", "sessions");
@@ -226,7 +226,7 @@ test("lists archive metadata and restores the session with artifacts", async () 
 });
 
 test("restore runs its commit through the publish guard, and a refusing guard leaves archive and sessions untouched", async () => {
-  const root = mkdtempSync(join(tmpdir(), "omp-web-archive-publish-"));
+  const root = mkdtempSync(join(tmpdir(), "keylime-archive-publish-"));
   try {
     const sessions = join(root, "sessions");
     const archive = join(root, "archive", "sessions");
@@ -284,7 +284,7 @@ test("restore runs its commit through the publish guard, and a refusing guard le
 
 /** An archived session with artifacts (one of them an upload the transcript links as local://uploads/photo.txt) and an empty sessions root. */
 function archivedWithArtifacts() {
-  const root = mkdtempSync(join(tmpdir(), "omp-web-archive-commit-"));
+  const root = mkdtempSync(join(tmpdir(), "keylime-archive-commit-"));
   const sessions = join(root, "sessions");
   const archive = join(root, "archive", "sessions");
   const archiveFile = join(archive, "project", "2026_session.jsonl.gz");
@@ -1694,7 +1694,7 @@ for (const escape of [
   "destination artifacts",
 ]) {
   test(`rejects escaping symlink at ${escape} without changing archive or outside data`, async () => {
-    const root = mkdtempSync(join(tmpdir(), "omp-web-archive-escape-"));
+    const root = mkdtempSync(join(tmpdir(), "keylime-archive-escape-"));
     try {
       const sessions = join(root, "sessions");
       const archive = join(root, "archive");
@@ -1747,7 +1747,7 @@ for (const escape of [
 }
 
 test("restores byte-identical transcript and artifacts into a missing project parent", async () => {
-  const root = mkdtempSync(join(tmpdir(), "omp-web-archive-missing-parent-"));
+  const root = mkdtempSync(join(tmpdir(), "keylime-archive-missing-parent-"));
   try {
     const sessions = join(root, "sessions");
     const archive = join(root, "archive");
@@ -1784,7 +1784,7 @@ test("restores byte-identical transcript and artifacts into a missing project pa
 });
 
 test("rejects unsupported archived IDs before publishing or moving artifacts", async () => {
-  const root = mkdtempSync(join(tmpdir(), "omp-web-archive-invalid-id-"));
+  const root = mkdtempSync(join(tmpdir(), "keylime-archive-invalid-id-"));
   try {
     const archive = join(root, "archive");
     const sessions = join(root, "sessions");
@@ -1813,7 +1813,7 @@ test("rejects unsupported archived IDs before publishing or moving artifacts", a
 
 for (const limit of ["compressed", "expanded"]) {
   test(`rejects archives exceeding the ${limit} limit without consuming data`, async () => {
-    const root = mkdtempSync(join(tmpdir(), "omp-web-archive-limit-"));
+    const root = mkdtempSync(join(tmpdir(), "keylime-archive-limit-"));
     try {
       const archive = join(root, "archive");
       const sessions = join(root, "sessions");
@@ -1862,7 +1862,7 @@ for (const limit of ["compressed", "expanded"]) {
 }
 
 test("restore yields to the event loop before completing streamed I/O", async () => {
-  const root = mkdtempSync(join(tmpdir(), "omp-web-archive-async-"));
+  const root = mkdtempSync(join(tmpdir(), "keylime-archive-async-"));
   try {
     const archive = join(root, "archive");
     mkdirSync(archive);
@@ -1888,7 +1888,7 @@ test("restore yields to the event loop before completing streamed I/O", async ()
 
 for (const operation of ["lstat", "realpath"] as const) {
   test(`restore keeps the event loop responsive during delayed ${operation} metadata`, async (t) => {
-    const root = mkdtempSync(join(tmpdir(), "omp-web-archive-metadata-"));
+    const root = mkdtempSync(join(tmpdir(), "keylime-archive-metadata-"));
     const archive = join(root, "archive");
     const sessions = join(root, "sessions");
     const source = join(archive, "session.jsonl.gz");
@@ -1955,7 +1955,7 @@ for (const operation of ["lstat", "realpath"] as const) {
 
 for (const code of ["EACCES", "EIO"]) {
   test(`restore propagates ${code} from the source existence check without consuming data`, async (t) => {
-    const root = mkdtempSync(join(tmpdir(), "omp-web-archive-metadata-error-"));
+    const root = mkdtempSync(join(tmpdir(), "keylime-archive-metadata-error-"));
     const archive = join(root, "archive");
     const sessions = join(root, "sessions");
     const source = join(archive, "session.jsonl.gz");
@@ -1989,7 +1989,7 @@ for (const code of ["EACCES", "EIO"]) {
 
 for (const failure of ["destination", "artifacts", "corrupt gzip"]) {
   test(`preserves source on ${failure} failure`, async () => {
-    const root = mkdtempSync(join(tmpdir(), "omp-web-archive-rollback-"));
+    const root = mkdtempSync(join(tmpdir(), "keylime-archive-rollback-"));
     try {
       const archive = join(root, "archive");
       const sessions = join(root, "sessions");
@@ -2027,7 +2027,7 @@ for (const failure of ["destination", "artifacts", "corrupt gzip"]) {
 }
 
 test("restores a native title-slot-prefixed header byte-for-byte", async () => {
-  const root = mkdtempSync(join(tmpdir(), "omp-web-archive-title-slot-"));
+  const root = mkdtempSync(join(tmpdir(), "keylime-archive-title-slot-"));
   try {
     const archive = join(root, "archive");
     const sessions = join(root, "sessions");

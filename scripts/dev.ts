@@ -35,7 +35,7 @@ const env = { ...process.env };
 // Never inherit a running installation's auth, package root, session, or broker connection.
 for (const name of Object.keys(env)) {
   if (
-    /^(OMP_|OMPWEB_|PI_|XDG_)/.test(name) ||
+    /^(OMP_|KEYLIME_|PI_|XDG_)/.test(name) ||
     name === "PORT" ||
     name === "NODE_ENV"
   )
@@ -44,8 +44,8 @@ for (const name of Object.keys(env)) {
 Object.assign(env, {
   HOME: home,
   PI_CODING_AGENT_DIR: agent,
-  OMP_WEB_PACKAGE_DIR: root,
-  OMPWEB_HOST_SOCKET: path.join(directory, "host.sock"),
+  KEYLIME_PACKAGE_DIR: root,
+  KEYLIME_HOST_SOCKET: path.join(directory, "host.sock"),
   XDG_CONFIG_HOME: path.join(home, ".config"),
   XDG_DATA_HOME: path.join(home, ".local", "share"),
   XDG_CACHE_HOME: path.join(home, ".cache"),
@@ -146,7 +146,7 @@ try {
       "--port",
       String(port),
     ]);
-    spawn(["--hot", "--no-clear-screen", "bin/omp-web-host.ts"]);
+    spawn(["--hot", "--no-clear-screen", "bin/keylime-host.ts"]);
   }
   await finished;
 } catch (error) {

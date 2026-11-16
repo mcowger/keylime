@@ -1,4 +1,4 @@
-// omp-web live-event multiplexer.
+// keylime live-event multiplexer.
 //
 // Runs as a SharedWorker (one per browser profile) — or a dedicated Worker where SharedWorker is unavailable — and
 // carries every tab's stream (lib/event-stream.ts) as a subscription on its one connection, so opening more tabs no
@@ -13,7 +13,7 @@
 // it in node:vm with fake browser globals.
 //
 // It also owns the browser's message outbox (docs/specs/2026-11-04-message-outbox-design.md O2): IndexedDB
-// `omp-web-outbox`, sent as `outbox_add` agent commands until the server has stored each (lib/service-worker.ts reads it too).
+// `keylime-outbox`, sent as `outbox_add` agent commands until the server has stored each (lib/service-worker.ts reads it too).
 //
 // Tab -> worker:  { op: "open", id, channel } | { op: "close", id }
 //                 { op: "lock", name }  (tab holds this Web Lock while alive)
@@ -2129,11 +2129,11 @@ function diagnostics(): ConnectionDiagnostics {
 // IndexedDB before the tab's composer clears, then goes as `outbox_add` over the current transport until the server
 // has stored it. Each session's entries go one at a time, oldest first: the server queues them in arrival order. ----
 
-const OUTBOX_DB = "omp-web-outbox";
+const OUTBOX_DB = "keylime-outbox";
 const OUTBOX_STORE = "entries";
 /** The server keeps delivered ids 8 days: an older entry is never sent again, or a resend could deliver it twice. */
 const OUTBOX_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-// Adapted from ompweb 13d8eb21095f: retries retain upload proofs for delivery, but lineage compares only server-visible upload IDs; proofs must never enter receipts.
+// Adapted from keylime 13d8eb21095f: retries retain upload proofs for delivery, but lineage compares only server-visible upload IDs; proofs must never enter receipts.
 /** The immutable intent used by server retry validation: mode, text, images and upload IDs. */
 function sameOutboxIntent(a: LocalOutboxEntry, b: LocalOutboxEntry): boolean {
   if (a.mode !== b.mode || a.message !== b.message) return false;

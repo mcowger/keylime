@@ -46,9 +46,9 @@ it("times tools from the first tool in each batch, not the model request", () =>
 });
 
 it("observes real model calls before and after a tool", async () => {
-  process.env.OMPWEB_HOST_SOCKET = path.join(
+  process.env.KEYLIME_HOST_SOCKET = path.join(
     os.tmpdir(),
-    `ompweb-activity-${process.pid}.sock`,
+    `keylime-activity-${process.pid}.sock`,
   );
   test = await createTestSession({
     toolNames: ["read"],

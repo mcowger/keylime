@@ -123,7 +123,7 @@ export class DaemonLink {
   ) {
     if (!dialable(login.url, deps.allowHttp))
       throw new Error(
-        "ompweb host needs an https:// server URL (http:// only for loopback, or with --allow-http)",
+        "keylime host needs an https:// server URL (http:// only for loopback, or with --allow-http)",
       );
     this.runtime = linkRuntime(this, deps);
   }
@@ -750,14 +750,14 @@ function linkRuntime(owner: DaemonLink, deps: LinkDeps) {
           }
           log(
             typeof newest === "number" && newest < LINK_PROTOCOL_VERSION
-              ? "this host's ompweb is newer than the server's: update ompweb on the server"
-              : "the server speaks a different link protocol: update ompweb on this host",
+              ? "this host's keylime is newer than the server's: update keylime on the server"
+              : "the server speaks a different link protocol: update keylime on this host",
           );
           endLink("version");
           return;
         }
         if (typeof closed !== "string" && closed.code === LINK_CLOSE.replaced) {
-          log("another ompweb host linked with this token; exiting this link");
+          log("another keylime host linked with this token; exiting this link");
           endLink("replaced");
           return;
         }
@@ -784,7 +784,7 @@ function linkRuntime(owner: DaemonLink, deps: LinkDeps) {
               ? "the server is unavailable (503); redialing"
               : "the server did not accept the WebSocket upgrade (HTTP " +
                   status +
-                  "): check that a reverse proxy forwards Upgrade and Connection, and that the server runs an ompweb at least as new as this host's",
+                  "): check that a reverse proxy forwards Upgrade and Connection, and that the server runs an keylime at least as new as this host's",
           );
         } else
           log(

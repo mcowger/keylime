@@ -29,7 +29,7 @@ const fail = (error: string, status: number) =>
   Response.json({ error }, { status, headers: noStore });
 const poolStorageFailure = () =>
   fail(
-    "The pool registry (omp-web/pools.json) cannot be read or written; fix it before changing pools",
+    "The pool registry (keylime/pools.json) cannot be read or written; fix it before changing pools",
     503,
   );
 
@@ -45,7 +45,7 @@ function hasOnlyKeys(
 function failFor(error: unknown) {
   if (error instanceof HostRegistryUnreadableError) {
     return fail(
-      "The linked-hosts registry (omp-web/hosts.json) cannot be read; fix or remove it before changing hosts",
+      "The linked-hosts registry (keylime/hosts.json) cannot be read; fix or remove it before changing hosts",
       503,
     );
   }
@@ -226,7 +226,7 @@ export async function POST(req: Request) {
       {
         host: listHosts().find((h) => h.id === host.id),
         token,
-        command: `ompweb host login --url ${requestOrigin(req)}`,
+        command: `keylime host login --url ${requestOrigin(req)}`,
       },
       { headers: noStore },
     );

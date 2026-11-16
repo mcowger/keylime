@@ -58,7 +58,7 @@ jobs:
         run: bun runner/scripts/use-omp-build.ts "$OMP_TAG" && bun check -p runner
       - name: Build the release binaries
         run: sh scripts/build-release-binaries.sh
-      - run: bun run smoke --binary release/ompweb-linux-x64/ompweb
+      - run: bun run smoke --binary release/keylime-linux-x64/keylime
 
       - name: Publish the prerelease
         env:
@@ -69,7 +69,7 @@ jobs:
           tag=$(date -u -d "@$now" +%Y%m%dT%H%M%SZ)-$(git rev-parse --short=10 "$SHA")
           subject=$(git log -1 --format=%s "$SHA")
           # A draft first, so a failed upload never leaves a published prerelease missing archives.
-          gh release create "$tag" release/ompweb-*.tar.gz \
+          gh release create "$tag" release/keylime-*.tar.gz \
             --repo "$GITHUB_REPOSITORY" --target "$SHA" --draft --prerelease --title "$title" \
             --notes "Binaries built from $GITHUB_REPOSITORY@$SHA ($subject), omp: ompweb-dev/oh-my-pi $OMP_TAG. Not a release: no npm package, no update notice."
           gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false

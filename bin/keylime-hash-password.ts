@@ -1,8 +1,8 @@
-// `ompweb hash-password` plus the password prompt the launcher and the service
+// `keylime hash-password` plus the password prompt the launcher and the service
 // installers use. The password is read from stdin, never from argv, so it
 // stays out of shell history and out of `ps` output (issue #239).
 
-import { hashPassword, isPasswordHash } from "./omp-web-password-hash";
+import { hashPassword, isPasswordHash } from "./keylime-password-hash";
 
 /** Key sent when the user presses Ctrl+C at a prompt. */
 const INTERRUPT_KEY = Buffer.from([0x03]);
@@ -111,7 +111,7 @@ export async function promptPassword(
 }
 
 /**
- * `ompweb hash-password`: print the `OMP_WEB_PASSWORD_HASH` value for the
+ * `keylime hash-password`: print the `KEYLIME_PASSWORD_HASH` value for the
  * password read from stdin.
  * @returns {Promise<number>} process exit code
  */
@@ -152,7 +152,7 @@ export async function runHashPasswordCommand(
 
 /**
  * Resolve the password hash an installer should write: an existing
- * `OMP_WEB_PASSWORD_HASH`, or a plaintext `OMP_WEB_PASSWORD` hashed here.
+ * `KEYLIME_PASSWORD_HASH`, or a plaintext `KEYLIME_PASSWORD` hashed here.
  * Reading a plaintext password is allowed on this side only — the hash is what
  * gets stored, and the plaintext never reaches a service definition or a child
  * process. Returns null when neither is configured, and throws when a hash was
@@ -160,18 +160,18 @@ export async function runHashPasswordCommand(
  */
 export function resolvePasswordHash(env: NodeJS.ProcessEnv = process.env) {
   const existing =
-    typeof env.OMP_WEB_PASSWORD_HASH === "string"
-      ? env.OMP_WEB_PASSWORD_HASH.trim()
+    typeof env.KEYLIME_PASSWORD_HASH === "string"
+      ? env.KEYLIME_PASSWORD_HASH.trim()
       : "";
   if (existing) {
     if (!isPasswordHash(existing)) {
       throw new Error(
-        "OMP_WEB_PASSWORD_HASH is not a valid password hash; generate one with: ompweb hash-password",
+        "KEYLIME_PASSWORD_HASH is not a valid password hash; generate one with: keylime hash-password",
       );
     }
     return existing;
   }
-  const plaintext = env.OMP_WEB_PASSWORD;
+  const plaintext = env.KEYLIME_PASSWORD;
   return typeof plaintext === "string" && plaintext.length > 0
     ? hashPassword(plaintext)
     : null;

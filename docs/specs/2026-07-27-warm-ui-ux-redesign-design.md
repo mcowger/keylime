@@ -1,4 +1,4 @@
-# omp-web UI/UX redesign: Warm Paper
+# keylime UI/UX redesign: Warm Paper
 
 - Date: 2026-07-27
 - Status: pending user review
@@ -6,7 +6,7 @@
 
 ## Background and goals
 
-This historical proposal describes omp-web as a Next.js 16, React 19 and Tailwind CSS 4 interface with custom CSS variable themes. It already had responsive layouts, accessibility, and loading, empty and error states, but lacked a distinctive visual style, shared component primitives and consistent feedback.
+This historical proposal describes keylime as a Next.js 16, React 19 and Tailwind CSS 4 interface with custom CSS variable themes. It already had responsive layouts, accessibility, and loading, empty and error states, but lacked a distinctive visual style, shared component primitives and consistent feedback.
 
 Give the interface a warm, human character with paper-like light surfaces and warm charcoal dark surfaces. Keep existing functionality, data flows, shortcuts and routes intact, except for additive frontend interactions such as a command palette.
 

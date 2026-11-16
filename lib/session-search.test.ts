@@ -92,7 +92,7 @@ test("fuzzy scoring handles equal-length typos, prefix typos, and words exceedin
 
 test("transcriptField extracts user/assistant text and bounds cache with LRU eviction", async () => {
   const tmpDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), "ompweb-search-test-"),
+    path.join(os.tmpdir(), "keylime-search-test-"),
   );
   try {
     const fileA = path.join(tmpDir, "session-a.jsonl");

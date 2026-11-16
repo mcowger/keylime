@@ -21,7 +21,7 @@ import {
   until,
 } from "./hosts/link-driver.test-helper.ts";
 
-/** A new omp-web process: fresh tracker, same agent dir. */
+/** A new keylime process: fresh tracker, same agent dir. */
 function restart() {
   globalThis.__ompResumeTracker = undefined;
 }
@@ -58,7 +58,7 @@ const joined = ({ expectedChannel, launch }: Record<string, unknown>) => {
 
 /** Fresh agent dir and tracker per test; the resume setting starts as given. */
 function setup(t: TestContext, { enabled }: { enabled: boolean }) {
-  const agentDir = mkdtempSync(join(tmpdir(), "omp-web-resume-test-"));
+  const agentDir = mkdtempSync(join(tmpdir(), "keylime-resume-test-"));
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = agentDir;
   globalThis.__ompResumeTracker = undefined;
@@ -74,10 +74,10 @@ function setup(t: TestContext, { enabled }: { enabled: boolean }) {
   });
   saveWebServerSettings({ autoResumeSessions: enabled });
   // Seeds use the pre-per-instance name; this instance writes its own pid's list.
-  const listPath = join(agentDir, "omp-web-interrupted-sessions.json");
+  const listPath = join(agentDir, "keylime-interrupted-sessions.json");
   const ownPath = join(
     agentDir,
-    `omp-web-interrupted-sessions-${process.pid}.json`,
+    `keylime-interrupted-sessions-${process.pid}.json`,
   );
   const recorded = () =>
     existsSync(ownPath)
@@ -119,7 +119,7 @@ test("a run that ends normally leaves the list; one still running stays", (t) =>
   assert.deepEqual(recorded(), []);
 });
 
-test("a crashed child is dropped after the grace window while omp-web keeps running", (t) => {
+test("a crashed child is dropped after the grace window while keylime keeps running", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const { recorded } = setup(t, { enabled: true });
   recordRunningSessions([A], () => true);
@@ -161,7 +161,7 @@ test("entries with an invalid session id are ignored", (t) => {
   assert.deepEqual(takeInterruptedSessions(), [A]);
 });
 
-/** A running process standing in for another omp-web instance. */
+/** A running process standing in for another keylime instance. */
 function liveInstance(t: TestContext) {
   const child = spawn(
     process.execPath,
@@ -176,7 +176,7 @@ test("another live instance's list is neither resumed nor overwritten, and this 
   const { agentDir, recorded } = setup(t, { enabled: true });
   const ownerPath = join(
     agentDir,
-    `omp-web-interrupted-sessions-${liveInstance(t)}.json`,
+    `keylime-interrupted-sessions-${liveInstance(t)}.json`,
   );
   writeFileSync(ownerPath, JSON.stringify({ sessions: [A] }));
   restart();
@@ -196,7 +196,7 @@ test("a list whose writer has exited is resumed", (t) => {
   const { agentDir } = setup(t, { enabled: true });
   const deadPath = join(
     agentDir,
-    `omp-web-interrupted-sessions-${spawnSync(process.execPath, ["-e", "0"]).pid}.json`,
+    `keylime-interrupted-sessions-${spawnSync(process.execPath, ["-e", "0"]).pid}.json`,
   );
   writeFileSync(deadPath, JSON.stringify({ sessions: [A] }));
   restart();
@@ -208,7 +208,7 @@ test("a list from before the last boot is resumed even if its pid is in use agai
   const { agentDir } = setup(t, { enabled: true });
   const stalePath = join(
     agentDir,
-    `omp-web-interrupted-sessions-${liveInstance(t)}.json`,
+    `keylime-interrupted-sessions-${liveInstance(t)}.json`,
   );
   writeFileSync(stalePath, JSON.stringify({ sessions: [A] }));
   utimesSync(stalePath, 0, 0);

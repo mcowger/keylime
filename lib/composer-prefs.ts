@@ -1,11 +1,11 @@
 /**
  * Client-side composer preferences (localStorage). These live outside the
- * native OMP config because they are ompweb UI behaviors.
+ * native OMP config because they are keylime UI behaviors.
  */
 
 export type SubmitDuringRunBehavior = "steer" | "queue";
 
-const SUBMIT_DURING_RUN_KEY = "omp-web:submit-during-run";
+const SUBMIT_DURING_RUN_KEY = "keylime:submit-during-run";
 
 /** The default, applied when nothing was ever stored under the key. */
 export const DEFAULT_SUBMIT_DURING_RUN_BEHAVIOR: SubmitDuringRunBehavior =
@@ -46,7 +46,7 @@ export function setSubmitDuringRunBehavior(
 /** Ghost-text word completion: `auto` enables it only with a physical keyboard. */
 export type WordCompletionMode = "auto" | "on" | "off";
 
-const WORD_COMPLETION_KEY = "omp-web:word-completion";
+const WORD_COMPLETION_KEY = "keylime:word-completion";
 
 export function getWordCompletionMode(): WordCompletionMode {
   if (typeof window === "undefined") return "auto";

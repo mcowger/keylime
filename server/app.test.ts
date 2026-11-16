@@ -15,7 +15,7 @@ import { hashPassword } from "@/lib/web-password-hash";
 import { LINK_PROTOCOL_VERSION } from "@/lib/hosts/link-protocol";
 
 const repo = path.join(import.meta.dir, "..");
-const root = mkdtempSync(path.join(os.tmpdir(), "omp-web-app-"));
+const root = mkdtempSync(path.join(os.tmpdir(), "keylime-app-"));
 const home = path.join(root, "home");
 mkdirSync(path.join(root, "dist"));
 mkdirSync(home);
@@ -30,14 +30,14 @@ for (const dir of ["public", "node_modules"])
 const ENV = {
   HOME: home,
   PI_CODING_AGENT_DIR: path.join(home, ".omp", "agent"),
-  OMP_WEB_OMP_BIN: "/nonexistent/omp",
+  KEYLIME_OMP_BIN: "/nonexistent/omp",
 };
 // XDG_DATA_HOME could move the blobs dir out of the temp home (lib/omp/paths.ts).
 const UNSET = [
-  "OMP_WEB_PASSWORD_HASH",
-  "OMP_WEB_PASSWORD",
-  "OMP_WEB_TRUSTED_HEADER_SHA256",
-  "OMP_WEB_FRONTEND_ROOT",
+  "KEYLIME_PASSWORD_HASH",
+  "KEYLIME_PASSWORD",
+  "KEYLIME_TRUSTED_HEADER_SHA256",
+  "KEYLIME_FRONTEND_ROOT",
   "XDG_DATA_HOME",
 ];
 const saved = Object.fromEntries(
@@ -115,7 +115,7 @@ after(async () => {
 });
 
 test("production switches frontend releases without restarting and retains versioned workers", async (t) => {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "omp-web-frontends-"));
+  const dir = mkdtempSync(path.join(os.tmpdir(), "keylime-frontends-"));
   const pointer = path.join(dir, "current");
   const releases = ["one", "two"].map((name) => path.join(dir, name));
   for (const [i, release] of releases.entries()) {
@@ -139,16 +139,16 @@ test("production switches frontend releases without restarting and retains versi
     writeFileSync(path.join(release, "public", "probe.txt"), `public ${i}`);
   }
   symlinkSync(releases[0], pointer);
-  const previous = process.env.OMP_WEB_FRONTEND_ROOT;
-  process.env.OMP_WEB_FRONTEND_ROOT = pointer;
+  const previous = process.env.KEYLIME_FRONTEND_ROOT;
+  process.env.KEYLIME_FRONTEND_ROOT = pointer;
   const switched = startServer({
     port: 0,
     hostname: "127.0.0.1",
     dev: false,
     root,
   });
-  if (previous === undefined) delete process.env.OMP_WEB_FRONTEND_ROOT;
-  else process.env.OMP_WEB_FRONTEND_ROOT = previous;
+  if (previous === undefined) delete process.env.KEYLIME_FRONTEND_ROOT;
+  else process.env.KEYLIME_FRONTEND_ROOT = previous;
   t.after(async () => {
     await switched.stop(true);
     rmSync(dir, { recursive: true, force: true });
@@ -232,7 +232,7 @@ test("API routes answer through the gate", async () => {
   assert.equal((await fetch(url("/api"))).status, 404);
 });
 
-// Bun.serve sets SO_REUSEPORT when `development` is false unless `reusePort: false` says otherwise; a second omp-web
+// Bun.serve sets SO_REUSEPORT when `development` is false unless `reusePort: false` says otherwise; a second keylime
 // on the same agent dir must fail to start, as it did under Next, instead of sharing the port.
 test("a second server on a port this one holds fails with EADDRINUSE", () => {
   assert.throws(
@@ -258,7 +258,7 @@ test("server/main.ts on a taken port says so in one line and exits 1", () => {
       "127.0.0.1",
     ],
     {
-      env: { ...process.env, OMP_WEB_PACKAGE_DIR: root },
+      env: { ...process.env, KEYLIME_PACKAGE_DIR: root },
       encoding: "utf8",
       timeout: 20_000,
     },
@@ -266,7 +266,7 @@ test("server/main.ts on a taken port says so in one line and exits 1", () => {
   assert.equal(result.status, 1, result.stderr);
   assert.equal(
     result.stderr.trim(),
-    `Port ${server.port} on 127.0.0.1 is already in use: is ompweb already running? Otherwise stop the process using it or start ompweb with --port ${server.port! + 1}.`,
+    `Port ${server.port} on 127.0.0.1 is already in use: is keylime already running? Otherwise stop the process using it or start keylime with --port ${server.port! + 1}.`,
   );
 });
 
@@ -290,9 +290,9 @@ test("a path that leaves its route after `..` resolution never reaches that rout
   mkdirSync(ENV.PI_CODING_AGENT_DIR, { recursive: true });
   writeFileSync(secret, "TOP-SECRET");
   const file = secret.split(path.sep).join("/").replace(/^\/?/, "/");
-  process.env.OMP_WEB_PASSWORD_HASH = hashPassword("pw", { logN: 12 });
+  process.env.KEYLIME_PASSWORD_HASH = hashPassword("pw", { logN: 12 });
   t.after(() => {
-    delete process.env.OMP_WEB_PASSWORD_HASH;
+    delete process.env.KEYLIME_PASSWORD_HASH;
   });
 
   assert.equal(
@@ -335,9 +335,9 @@ test("a path that leaves its route after `..` resolution never reaches that rout
 });
 
 test("only /api/hosts/broker/v1/ passes the gate to the broker route", async (t) => {
-  process.env.OMP_WEB_PASSWORD_HASH = hashPassword("pw", { logN: 12 });
+  process.env.KEYLIME_PASSWORD_HASH = hashPassword("pw", { logN: 12 });
   t.after(() => {
-    delete process.env.OMP_WEB_PASSWORD_HASH;
+    delete process.env.KEYLIME_PASSWORD_HASH;
   });
   // The route's own refusal: no bearer token.
   const healthz = await rawRequest("GET", "/api/hosts/broker/v1/healthz");
@@ -359,9 +359,9 @@ test("only /api/hosts/broker/v1/ passes the gate to the broker route", async (t)
 });
 
 test("only the two cluster-config routes pass the gate, not hosts/[id]/cluster or hosts/[id]/updates", async (t) => {
-  process.env.OMP_WEB_PASSWORD_HASH = hashPassword("pw", { logN: 12 });
+  process.env.KEYLIME_PASSWORD_HASH = hashPassword("pw", { logN: 12 });
   t.after(() => {
-    delete process.env.OMP_WEB_PASSWORD_HASH;
+    delete process.env.KEYLIME_PASSWORD_HASH;
   });
   // The routes' own refusal: no bearer token.
   for (const target of [
@@ -388,9 +388,9 @@ test("only the two cluster-config routes pass the gate, not hosts/[id]/cluster o
 });
 
 test("an ungated path is the file itself, and an ungated miss never gets the app shell", async (t) => {
-  process.env.OMP_WEB_PASSWORD_HASH = hashPassword("pw", { logN: 12 });
+  process.env.KEYLIME_PASSWORD_HASH = hashPassword("pw", { logN: 12 });
   t.after(() => {
-    delete process.env.OMP_WEB_PASSWORD_HASH;
+    delete process.env.KEYLIME_PASSWORD_HASH;
   });
   assert.equal((await fetch(url("/icon.svg"))).status, 200);
   for (const pathname of ["/icon.svg/foo", "/sw.js/not-a-file"]) {
@@ -450,9 +450,9 @@ test("a trailing slash 308-redirects to the path without it, behind the gate", a
   }
   assert.equal((await rawRequest("GET", "/")).status, 200);
 
-  process.env.OMP_WEB_PASSWORD_HASH = hashPassword("pw", { logN: 12 });
+  process.env.KEYLIME_PASSWORD_HASH = hashPassword("pw", { logN: 12 });
   t.after(() => {
-    delete process.env.OMP_WEB_PASSWORD_HASH;
+    delete process.env.KEYLIME_PASSWORD_HASH;
   });
   assert.equal((await rawRequest("GET", "/api/hosts/")).status, 401);
   assert.equal(
@@ -495,9 +495,9 @@ test("each route answers under its own path with decoded params, and the manifes
   );
 
   // Its link carries credentials (spec invariant 4).
-  process.env.OMP_WEB_PASSWORD_HASH = hashPassword("pw", { logN: 12 });
+  process.env.KEYLIME_PASSWORD_HASH = hashPassword("pw", { logN: 12 });
   t.after(() => {
-    delete process.env.OMP_WEB_PASSWORD_HASH;
+    delete process.env.KEYLIME_PASSWORD_HASH;
   });
   assert.equal((await fetch(url("/api/manifest"))).status, 401);
 });
@@ -592,15 +592,15 @@ test(
   "Bun's idle timeout spares the event stream, the browser link and the host link, and only them",
   { timeout: 30_000 },
   async (t) => {
-    process.env.OMP_WEB_PASSWORD_HASH = hashPassword("pw", { logN: 12 });
-    process.env.OMP_WEB_TRUSTED_HEADER_SHA256 = new Bun.CryptoHasher("sha256")
+    process.env.KEYLIME_PASSWORD_HASH = hashPassword("pw", { logN: 12 });
+    process.env.KEYLIME_TRUSTED_HEADER_SHA256 = new Bun.CryptoHasher("sha256")
       .update("trusted")
       .digest("hex");
     t.after(() => {
-      delete process.env.OMP_WEB_PASSWORD_HASH;
-      delete process.env.OMP_WEB_TRUSTED_HEADER_SHA256;
+      delete process.env.KEYLIME_PASSWORD_HASH;
+      delete process.env.KEYLIME_TRUSTED_HEADER_SHA256;
     });
-    const signedIn = { "x-omp-web-auth": "trusted" };
+    const signedIn = { "x-keylime-auth": "trusted" };
     const controller = new AbortController();
     const stream = await fetch(url("/api/events"), {
       headers: signedIn,
@@ -710,9 +710,9 @@ test(
           "POST /api/hosts/link HTTP/1.1\r\nAuthorization: Bearer nope\r\nContent-Length: 100",
         ),
         page: stall("GET /login HTTP/1.1"),
-        keptAlive: stall("GET /api/hosts HTTP/1.1\r\nx-omp-web-auth: trusted"),
+        keptAlive: stall("GET /api/hosts HTTP/1.1\r\nx-keylime-auth: trusted"),
         keptAliveStream: stall(
-          "GET /api/sessions/search?q=x HTTP/1.1\r\nx-omp-web-auth: trusted",
+          "GET /api/sessions/search?q=x HTTP/1.1\r\nx-keylime-auth: trusted",
         ),
       };
       // Real waits: Bun.serve's native idle timer (10 s, checked every 4 s) cannot be faked. The 20 s deadline only
@@ -798,17 +798,17 @@ test("the host link and the browser link refuse an unauthenticated upgrade with 
     body: JSON.stringify({ label: "refusing" }),
   });
   const bearer = { authorization: `Bearer ${(await created.json()).token}` };
-  process.env.OMP_WEB_PASSWORD_HASH = hashPassword("pw", { logN: 12 });
-  process.env.OMP_WEB_TRUSTED_HEADER_SHA256 = new Bun.CryptoHasher("sha256")
+  process.env.KEYLIME_PASSWORD_HASH = hashPassword("pw", { logN: 12 });
+  process.env.KEYLIME_TRUSTED_HEADER_SHA256 = new Bun.CryptoHasher("sha256")
     .update("trusted")
     .digest("hex");
   t.after(() => {
-    delete process.env.OMP_WEB_PASSWORD_HASH;
-    delete process.env.OMP_WEB_TRUSTED_HEADER_SHA256;
+    delete process.env.KEYLIME_PASSWORD_HASH;
+    delete process.env.KEYLIME_TRUSTED_HEADER_SHA256;
   });
 
   // The gate runs before the upgrade route: no session, or a foreign origin, never reaches the 426.
-  const signedIn = { "x-omp-web-auth": "trusted" };
+  const signedIn = { "x-keylime-auth": "trusted" };
   assert.equal((await fetch(url("/api/events/link"))).status, 401);
   assert.equal(
     (

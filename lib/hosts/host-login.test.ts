@@ -15,10 +15,10 @@ import test, { after, beforeEach } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-const agentDir = mkdtempSync(join(tmpdir(), "omp-web-host-links-test-"));
+const agentDir = mkdtempSync(join(tmpdir(), "keylime-host-links-test-"));
 const previous = process.env.PI_CODING_AGENT_DIR;
 process.env.PI_CODING_AGENT_DIR = agentDir;
-const directory = join(agentDir, "omp-web");
+const directory = join(agentDir, "keylime");
 const file = join(directory, "host.json");
 const lock = `${file}.lock`;
 const primary = {
@@ -255,7 +255,7 @@ test(
   },
 );
 
-const bin = fileURLToPath(new URL("../../bin/omp-web.ts", import.meta.url));
+const bin = fileURLToPath(new URL("../../bin/keylime.ts", import.meta.url));
 function writer(t: test.TestContext, args: string[], token: string) {
   const child = spawn(process.execPath, [bin, "host", "login", ...args], {
     env: { ...process.env, PI_CODING_AGENT_DIR: agentDir },

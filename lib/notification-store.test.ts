@@ -51,7 +51,7 @@ const openHandles = (file: string) =>
     }
   }).length;
 
-/** A fresh agent dir; `reopen()` drops the cached handle, as a restart or a second omp-web instance would. */
+/** A fresh agent dir; `reopen()` drops the cached handle, as a restart or a second keylime instance would. */
 function isolated(t: TestContext) {
   const dir = mkdtempSync(join(tmpdir(), "omp-notify-store-"));
   const previous = process.env.PI_CODING_AGENT_DIR;
@@ -81,7 +81,7 @@ test("the database is owner-only", (t) => {
   const { dir } = isolated(t);
   store.getVapidKeys(() => keys);
   assert.equal(
-    statSync(join(dir, "omp-web", "notifications.db")).mode & 0o077,
+    statSync(join(dir, "keylime", "notifications.db")).mode & 0o077,
     0,
   );
 });
@@ -91,7 +91,7 @@ test("the database and its WAL file are owner-only", (t) => {
   store.getVapidKeys(() => keys);
   for (const name of ["notifications.db", "notifications.db-wal"])
     assert.equal(
-      statSync(join(dir, "omp-web", name)).mode & 0o777,
+      statSync(join(dir, "keylime", name)).mode & 0o777,
       0o600,
       name,
     );
@@ -99,8 +99,8 @@ test("the database and its WAL file are owner-only", (t) => {
 
 test("a store file written by node:sqlite opens with the same VAPID keys and device", (t) => {
   const { dir } = isolated(t);
-  mkdirSync(join(dir, "omp-web"), { recursive: true });
-  const legacy = new DatabaseSync(join(dir, "omp-web", "notifications.db"));
+  mkdirSync(join(dir, "keylime"), { recursive: true });
+  const legacy = new DatabaseSync(join(dir, "keylime", "notifications.db"));
   legacy.exec("PRAGMA journal_mode = WAL");
   legacy.exec(`
     CREATE TABLE vapid (id INTEGER PRIMARY KEY CHECK (id = 1), public_key TEXT NOT NULL, private_key TEXT NOT NULL);
@@ -176,7 +176,7 @@ test("changing PI_CODING_AGENT_DIR moves the cached handle to the new location a
   // No reopen(): the cached handle itself must follow the directory.
   process.env.PI_CODING_AGENT_DIR = second;
   assert.equal(store.getDevice("desk-0001"), undefined);
-  assert.ok(existsSync(join(second, "omp-web", "notifications.db")));
+  assert.ok(existsSync(join(second, "keylime", "notifications.db")));
   process.env.PI_CODING_AGENT_DIR = first;
   assert.equal(store.getDevice("desk-0001")?.deviceId, "desk-0001");
 });
@@ -186,7 +186,7 @@ test(
   { skip: !existsSync("/proc/self/fd") && "needs /proc/self/fd" },
   (t) => {
     const { dir: first } = isolated(t);
-    const firstFile = join(first, "omp-web", "notifications.db");
+    const firstFile = join(first, "keylime", "notifications.db");
     store.saveDevice("desk-0001", prefs());
     store.recordHistory(event("s1"));
     assert.ok(openHandles(firstFile) > 0);
@@ -196,7 +196,7 @@ test(
     store.listDevices();
     assert.equal(openHandles(firstFile), 0);
     store.closeNotificationStore();
-    assert.equal(openHandles(join(second, "omp-web", "notifications.db")), 0);
+    assert.equal(openHandles(join(second, "keylime", "notifications.db")), 0);
   },
 );
 
@@ -205,7 +205,7 @@ test("a location that cannot be opened does not break the store once it is valid
   store.saveDevice("desk-0001", prefs());
   const bad = mkdtempSync(join(tmpdir(), "omp-notify-store-"));
   t.after(() => rmSync(bad, { recursive: true, force: true }));
-  writeFileSync(join(bad, "omp-web"), "");
+  writeFileSync(join(bad, "keylime"), "");
   process.env.PI_CODING_AGENT_DIR = bad;
   assert.throws(() => store.getDevice("desk-0001"));
   process.env.PI_CODING_AGENT_DIR = good;
@@ -294,8 +294,8 @@ test("mark read by ids, remove one, clear", (t) => {
 });
 
 function writeLegacy(dir: string, content: unknown) {
-  mkdirSync(join(dir, "omp-web"), { recursive: true });
-  const file = join(dir, "omp-web", "notifications.json");
+  mkdirSync(join(dir, "keylime"), { recursive: true });
+  const file = join(dir, "keylime", "notifications.json");
   writeFileSync(
     file,
     typeof content === "string" ? content : JSON.stringify(content),
@@ -356,7 +356,7 @@ test("a corrupt notifications.json stays in place and the store starts empty", (
   assert.ok(existsSync(file));
 });
 
-// An installed omp-web and `npm run dev` can open a fresh agent dir at the same moment.
+// An installed keylime and `npm run dev` can open a fresh agent dir at the same moment.
 test("processes racing to open a fresh store all succeed and share one key pair", async () => {
   const opener = `const store = await import(${JSON.stringify(new URL("./notification-store.ts", import.meta.url).href)});
     const at = Number(process.argv[1]);

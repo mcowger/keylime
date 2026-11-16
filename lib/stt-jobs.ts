@@ -14,12 +14,12 @@ export interface SttConfig {
   model: string | undefined;
 }
 
-/** STT settings from OMP_WEB_STT_*; null when neither an endpoint nor a model is configured. Server-only: lib/stt.ts is shared with the browser. */
+/** STT settings from KEYLIME_STT_*; null when neither an endpoint nor a model is configured. Server-only: lib/stt.ts is shared with the browser. */
 export function readSttConfig(): SttConfig | null {
-  const endpoint = cleanEnvVar(process.env.OMP_WEB_STT_ENDPOINT);
-  const model = cleanEnvVar(process.env.OMP_WEB_STT_MODEL);
+  const endpoint = cleanEnvVar(process.env.KEYLIME_STT_ENDPOINT);
+  const model = cleanEnvVar(process.env.KEYLIME_STT_MODEL);
   if (!endpoint && !model) return null;
-  return { endpoint, apiKey: cleanEnvVar(process.env.OMP_WEB_STT_KEY), model };
+  return { endpoint, apiKey: cleanEnvVar(process.env.KEYLIME_STT_KEY), model };
 }
 
 /**

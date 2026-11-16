@@ -22,7 +22,7 @@ import type { OutboxScopeResultSchema } from "@/lib/api-contracts/browser-agent-
 // decision happens inside the route, which only sees id + query string.
 const advisorSpawnSessions = new Set<string>();
 
-const OUTBOX_SCOPE_KEY = "omp-web:outbox-scope";
+const OUTBOX_SCOPE_KEY = "keylime:outbox-scope";
 let outboxScope: string | null = null;
 
 /** Nonsecret installation/auth fingerprint, not a cookie: reuse it offline, but never rebind a stored entry. */

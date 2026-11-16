@@ -635,7 +635,7 @@ function HostCard({
                 value={localInstallCommand(host.serverPlatform)}
               />
               {t("hostsConfig.localForegroundHint")}
-              <CopyField label={t("hostsConfig.command")} value="ompweb host" />
+              <CopyField label={t("hostsConfig.command")} value="keylime host" />
             </div>
           )}
       </div>

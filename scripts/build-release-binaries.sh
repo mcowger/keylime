@@ -1,12 +1,12 @@
 #!/bin/sh
 # The four binaries every release and prerelease ships (after `bun run build`), into release/:
-# release/ompweb-<os>-<arch>.tar.gz, and the four omp runners, runner/release/ompweb-omp-<os>-<arch>.
-# A prerelease archive holds its runner as ompweb-omp beside ompweb; with --no-runner (releases) it does not, and
-# ompweb fetches it from the release instead, which attaches each runner (lib/omp/runner-fetch.ts). Bun
+# release/keylime-<os>-<arch>.tar.gz, and the four omp runners, runner/release/keylime-omp-<os>-<arch>.
+# A prerelease archive holds its runner as keylime-omp beside keylime; with --no-runner (releases) it does not, and
+# keylime fetches it from the release instead, which attaches each runner (lib/omp/runner-fetch.ts). Bun
 # cross-compiles all of them from one machine.
 # The x64 targets name -baseline (no AVX2 needed): in Bun 1.4.4 that is the default x64 runtime too (the
 # same bytes), and naming it keeps a later Bun from shipping a -modern one. They keep the plain
-# ompweb-<os>-x64 names.
+# keylime-<os>-x64 names.
 set -eu
 # The pinned omp packages, then every platform's native addon package, which the runner embeds per target.
 (cd runner && bun scripts/use-omp-build.ts && bun install --frozen-lockfile --os='*' --cpu='*' && bun scripts/build-binary.ts linux-x64 linux-arm64 darwin-x64 darwin-arm64)

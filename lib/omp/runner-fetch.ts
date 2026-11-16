@@ -10,12 +10,12 @@ import {
   sourceCheckoutOmpBin,
 } from "./omp-cli";
 
-// Every install gets its omp runner (ompweb-omp) from its own version's GitHub release: the asset OMP_RUNNER_ASSET,
+// Every install gets its omp runner (keylime-omp) from its own version's GitHub release: the asset OMP_RUNNER_ASSET,
 // checked against that release's OMP_RUNNER_CHECKSUMS. Releases attach both (.github/workflows/publish.yml).
 // Loaded by Bun's native TypeScript runtime and the compiled binary: no `@/` imports.
 
 /** The `sha256sum` listing of every runner asset a release attaches. */
-export const OMP_RUNNER_CHECKSUMS = "ompweb-omp.sha256";
+export const OMP_RUNNER_CHECKSUMS = "keylime-omp.sha256";
 
 /** Downloads this version's runner to `target` (atomically, executable) once its SHA-256 matches the release's. */
 export async function fetchOmpRunner(
@@ -52,7 +52,7 @@ export async function fetchOmpRunner(
     rmSync(partial, { force: true });
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `Could not fetch ompweb's omp from ${url}: ${reason}. Check this machine's connection to GitHub, or set OMP_WEB_OMP_BIN to an ompweb-omp binary.`,
+      `Could not fetch keylime's omp from ${url}: ${reason}. Check this machine's connection to GitHub, or set KEYLIME_OMP_BIN to an keylime-omp binary.`,
     );
   }
 }
@@ -63,7 +63,7 @@ let ensuring: Promise<string | null> | null = null;
 export function ensureOmpRunner(): Promise<string | null> {
   ensuring ??= (async () => {
     const found = resolveOmpBin(true);
-    if (found || process.env.OMP_WEB_OMP_BIN || sourceCheckoutOmpBin())
+    if (found || process.env.KEYLIME_OMP_BIN || sourceCheckoutOmpBin())
       return found;
     await fetchOmpRunner();
     return resolveOmpBin(true);
@@ -73,14 +73,14 @@ export function ensureOmpRunner(): Promise<string | null> {
   return ensuring;
 }
 
-/** `ompweb fetch-omp`: fetch the runner if missing; exit 1 names what failed. */
+/** `keylime fetch-omp`: fetch the runner if missing; exit 1 names what failed. */
 export async function runFetchOmp(): Promise<number> {
   try {
     const bin = await ensureOmpRunner();
     if (!bin)
       throw new Error(
-        process.env.OMP_WEB_OMP_BIN
-          ? `OMP_WEB_OMP_BIN=${process.env.OMP_WEB_OMP_BIN} does not exist`
+        process.env.KEYLIME_OMP_BIN
+          ? `KEYLIME_OMP_BIN=${process.env.KEYLIME_OMP_BIN} does not exist`
           : `this source checkout has no ${sourceCheckoutOmpBin()}: build it with \`bun runner/scripts/build-binary.ts\``,
       );
     console.log(`omp: ${bin}`);

@@ -289,7 +289,7 @@ export const UpMessageSchema = Type.Union(
         type: Type.Literal("hello"),
         v: Type.Number(),
         ompVersion: Type.Union([Type.String(), Type.Null()]),
-        ompwebVersion: Type.Optional(Type.String()),
+        keylimeVersion: Type.Optional(Type.String()),
         link: Type.Optional(
           Type.Object({ id: Type.String(), notifier: Type.Boolean() }),
         ),

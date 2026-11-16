@@ -76,7 +76,7 @@ function messageContent(value: unknown): Record<string, unknown>[] {
 }
 let isolatedFresh = 0;
 
-/** A line ompweb wrote to a fake omp, read back in RPC's shape: `cmd {id, op, args}` → `{...args, id, type: op}`, any other `{t, ...}` → `{type: t, ...}`. */
+/** A line keylime wrote to a fake omp, read back in RPC's shape: `cmd {id, op, args}` → `{...args, id, type: op}`, any other `{t, ...}` → `{type: t, ...}`. */
 function readCommand(line: string): RpcFrame {
   const { t, op, args, ...rest } = JSON.parse(line) as {
     t: string;
@@ -87,7 +87,7 @@ function readCommand(line: string): RpcFrame {
   return t === "cmd" ? { ...args, ...rest, type: op } : { ...rest, type: t };
 }
 
-/** An RPC-shaped frame as ompweb's omp writes it: `ready` → `hello`, `response` → `res`, anything else an `event`. */
+/** An RPC-shaped frame as keylime's omp writes it: `ready` → `hello`, `response` → `res`, anything else an `event`. */
 function ompLine(frame: RpcFrame) {
   if (frame.type === "ready") return JSON.stringify({ t: "hello", proto: 1 });
   if (frame.type === "response") {
@@ -1753,7 +1753,7 @@ test("a returned background tool's later updates stay out of the live snapshot",
 });
 
 test("live tool-result images reach tabs and the replay snapshot as media URLs", async (t) => {
-  const agentDir = mkdtempSync(join(tmpdir(), "omp-web-live-media-"));
+  const agentDir = mkdtempSync(join(tmpdir(), "keylime-live-media-"));
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = agentDir;
   t.after(() => {
@@ -1929,11 +1929,11 @@ test("session identity changes invalidate the stream epoch and all prior partial
 });
 
 test("reload replaces the native stream epoch and subscribes to replacement events", async (t) => {
-  const previousBin = process.env.OMP_WEB_OMP_BIN;
-  process.env.OMP_WEB_OMP_BIN = process.execPath;
+  const previousBin = process.env.KEYLIME_OMP_BIN;
+  process.env.KEYLIME_OMP_BIN = process.execPath;
   t.after(() => {
-    if (previousBin === undefined) delete process.env.OMP_WEB_OMP_BIN;
-    else process.env.OMP_WEB_OMP_BIN = previousBin;
+    if (previousBin === undefined) delete process.env.KEYLIME_OMP_BIN;
+    else process.env.KEYLIME_OMP_BIN = previousBin;
   });
   let transport!: { stdout: PassThrough };
   const spawnReplacement = () => {
@@ -2715,7 +2715,7 @@ test("closing the last tab starts a fresh window instead of reaping on stale act
   // A reload closes the stream and reopens it within a second or two. Reaping
   // on the *last* activity instead of on the detach would kill the child under
   // a tab that is already on its way back, and the reconnected stream would 409
-  // ("Session is not managed by omp-web") until a POST respawns it.
+  // ("Session is not managed by keylime") until a POST respawns it.
   const GRACE_MS = 400;
   const disposed: number[] = [];
   const { wrapper } = snapshotSession(
@@ -2816,7 +2816,7 @@ test("reaping is disabled when the disconnect window is 0", async (t) => {
   assert.deepEqual(
     disposed,
     [],
-    "OMP_WEB_DISCONNECT_DESTROY_MS=0 keeps only the 10min idle backstop",
+    "KEYLIME_DISCONNECT_DESTROY_MS=0 keeps only the 10min idle backstop",
   );
   assert.equal(wrapper.isAlive(), true);
 });
@@ -3000,7 +3000,7 @@ test("generateTitle never sends /rename while a run is in flight", async (t) => 
 });
 
 function sessionFileFixture(t: TestContext) {
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-auto-title-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-auto-title-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const sessionFile = join(dir, "s.jsonl");
   writeFileSync(sessionFile, "{}\n");
@@ -4144,8 +4144,8 @@ async function startupMoveHarness(
   movedId: string,
   newId: string,
 ) {
-  const previousBin = process.env.OMP_WEB_OMP_BIN;
-  process.env.OMP_WEB_OMP_BIN = process.execPath;
+  const previousBin = process.env.KEYLIME_OMP_BIN;
+  process.env.KEYLIME_OMP_BIN = process.execPath;
   const current = {
     sessionId: movedId,
     sessionFile: join(isolatedAgentDir, `${movedId}.jsonl`),
@@ -4199,8 +4199,8 @@ async function startupMoveHarness(
   };
   await mockBuiltin(t, "node:child_process", { spawn: spawnMoved });
   t.after(() => {
-    if (previousBin === undefined) delete process.env.OMP_WEB_OMP_BIN;
-    else process.env.OMP_WEB_OMP_BIN = previousBin;
+    if (previousBin === undefined) delete process.env.KEYLIME_OMP_BIN;
+    else process.env.KEYLIME_OMP_BIN = previousBin;
   });
   return { current, children };
 }
@@ -4250,14 +4250,14 @@ test("independent Fork still sends native branch and returns a new session ID an
 test("server agent tools are answered by the server, not the browser (#275)", async (t) => {
   // Enable the off-by-default gate via the isolated settings file, and
   // drop the cached settings so this test's gate value is actually read.
-  globalThis.__ompWebSettingsCache = undefined;
-  const settingsPath = join(isolatedAgentDir, "omp-web-settings.json");
+  globalThis.__keylimeSettingsCache = undefined;
+  const settingsPath = join(isolatedAgentDir, "keylime-settings.json");
   writeFileSync(
     settingsPath,
     JSON.stringify({ agentToolsEnabled: true, agentEnv: {} }),
   );
   t.after(() => {
-    globalThis.__ompWebSettingsCache = undefined;
+    globalThis.__keylimeSettingsCache = undefined;
     try {
       rmSync(settingsPath);
     } catch {
@@ -4318,9 +4318,9 @@ test("server agent tools are answered by the server, not the browser (#275)", as
 });
 
 test("server agent tools are rejected when the gate is off (#275)", async (t) => {
-  globalThis.__ompWebSettingsCache = undefined;
+  globalThis.__keylimeSettingsCache = undefined;
   t.after(() => {
-    globalThis.__ompWebSettingsCache = undefined;
+    globalThis.__keylimeSettingsCache = undefined;
   });
   const { emit, sentFrames } = snapshotSession(
     t,
@@ -5911,15 +5911,15 @@ test("a replayed host tool call no tab comes back for is settled after the disco
       frame.isError,
       resultText(frame),
     ]),
-    [["h1", true, "No omp-web tab reconnected to answer this host tool"]],
+    [["h1", true, "No keylime tab reconnected to answer this host tool"]],
   );
 });
 
 test("replayed standalone new_session and other mutating agent tools stay unknown; list_sessions runs", async (t) => {
   const { adoptRpcSession } = await import("./rpc-manager.ts");
   const { until } = await import("./hosts/link-driver.test-helper.ts");
-  globalThis.__ompWebSettingsCache = undefined;
-  const settingsPath = join(isolatedAgentDir, "omp-web-settings.json");
+  globalThis.__keylimeSettingsCache = undefined;
+  const settingsPath = join(isolatedAgentDir, "keylime-settings.json");
   writeFileSync(
     settingsPath,
     JSON.stringify({ agentToolsEnabled: true, agentEnv: {} }),
@@ -5955,7 +5955,7 @@ test("replayed standalone new_session and other mutating agent tools stay unknow
   });
   t.after(async () => {
     await session.destroyAndWait();
-    globalThis.__ompWebSettingsCache = undefined;
+    globalThis.__keylimeSettingsCache = undefined;
     rmSync(settingsPath, { force: true });
   });
   await until(
@@ -5963,7 +5963,7 @@ test("replayed standalone new_session and other mutating agent tools stay unknow
     "every replayed agent tool answered",
   );
   const unknown =
-    "omp-web restarted while this ran; the outcome is unknown, check with list_sessions before retrying";
+    "keylime restarted while this ran; the outcome is unknown, check with list_sessions before retrying";
   assert.deepEqual(
     hostToolResults(transport).map((frame) => [
       frame.id,
@@ -5981,9 +5981,9 @@ test("replayed standalone new_session and other mutating agent tools stay unknow
 test("an agent tool omp called during the adoption handshake is live, not replayed", async (t) => {
   const { adoptRpcSession } = await import("./rpc-manager.ts");
   // The gate is off: a live call gets the gate's answer, a replayed one "outcome unknown".
-  globalThis.__ompWebSettingsCache = undefined;
+  globalThis.__keylimeSettingsCache = undefined;
   t.after(() => {
-    globalThis.__ompWebSettingsCache = undefined;
+    globalThis.__keylimeSettingsCache = undefined;
   });
   const id = "11111111-2222-4333-8444-adadadadad0a";
   const live = {
@@ -6011,7 +6011,7 @@ test("an agent tool omp called during the adoption handshake is live, not replay
   assert.deepEqual(
     hostToolResults(transport).map((frame) => [
       frame.id,
-      resultText(frame).startsWith("omp-web restarted"),
+      resultText(frame).startsWith("keylime restarted"),
       /disabled/.test(resultText(frame)),
     ]),
     [

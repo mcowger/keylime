@@ -441,7 +441,7 @@ test("a worker that fails answers its unanswered commands transport_lost", async
 test("outbox scope is learned before first enqueue, then remains available offline until hydration replaces it", async () => {
   const { getOutboxScope, rememberOutboxScope } =
     await import("./agent-client.ts");
-  localStorage.removeItem("omp-web:outbox-scope");
+  localStorage.removeItem("keylime:outbox-scope");
   respond = () => ({
     ok: false,
     status: 503,
@@ -474,5 +474,5 @@ test("outbox scope is learned before first enqueue, then remains available offli
     "installation-b",
     "new hydration only scopes new entries",
   );
-  localStorage.removeItem("omp-web:outbox-scope");
+  localStorage.removeItem("keylime:outbox-scope");
 });

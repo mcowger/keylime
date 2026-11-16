@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import * as launcherImpl from "../bin/omp-web-password-hash";
+import * as launcherImpl from "../bin/keylime-password-hash";
 
 const {
   hashPassword,

@@ -12,7 +12,7 @@ import {
   truncateSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import test, { after, before } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -61,10 +61,10 @@ type FileJson = {
 // Real daemon processes, native files and the authenticated WebSocket link. The
 // same relative path has different bytes under each owner's root and main's decoy.
 const scratch = realpathSync(
-  mkdtempSync(join(tmpdir(), "ompweb-owner-files-")),
+  mkdtempSync(join(homedir(), ".keylime-owner-files-")),
 );
 const hostBin = fileURLToPath(
-  new URL("../../bin/omp-web-host.ts", import.meta.url),
+  new URL("../../bin/keylime-host.ts", import.meta.url),
 );
 const originalEnv = { ...process.env };
 const MAIN_ID = "11111111-2222-4333-8444-000000000011";
@@ -159,7 +159,7 @@ function machine(name: string, id: string, byte: number): Machine {
     );
   git(project, "init", "-q");
   git(project, "config", "user.name", "owner files fixture");
-  git(project, "config", "user.email", "ompweb@example.invalid");
+  git(project, "config", "user.email", "keylime@example.invalid");
   git(project, "add", "tracked.txt");
   git(project, "-c", "commit.gpgsign=false", "commit", "-qm", "fixture");
   writeFileSync(join(project, "tracked.txt"), `${name} dirty\n`);
@@ -351,7 +351,7 @@ async function startDaemon(machine: Machine, token: string) {
     HOME: machine.home,
     PI_CONFIG_DIR: ".omp",
     PI_CODING_AGENT_DIR: machine.agent,
-    OMP_WEB_OMP_BIN: fakeOmp,
+    KEYLIME_OMP_BIN: fakeOmp,
   };
   const url = `http://127.0.0.1:${server.port}`;
   const login = spawnSync(process.execPath, [hostBin, "login", "--url", url], {
@@ -993,7 +993,7 @@ test("owner config instructions remain readable but credentials and SQLite sidec
   writeFileSync(join(ownerA.agent, "models.yml"), "public committed fixture\n");
   git(ownerA.agent, "init", "-q");
   git(ownerA.agent, "config", "user.name", "owner files fixture");
-  git(ownerA.agent, "config", "user.email", "ompweb@example.invalid");
+  git(ownerA.agent, "config", "user.email", "keylime@example.invalid");
   git(ownerA.agent, "add", "models.yml");
   git(
     ownerA.agent,
@@ -1267,7 +1267,7 @@ test("a lost native link retains resumable staged bytes and blocks maintenance u
   const id = randomUUID(),
     attempt = randomUUID();
   const bytes = Buffer.from("partial native workspace upload");
-  const part = join(ownerB.agent, "omp-web", "uploads", `${id}.part`);
+  const part = join(ownerB.agent, "keylime", "uploads", `${id}.part`);
   await hub.hostUploadOp(ownerB.hostId, "uploadStart", {
     id,
     attempt,

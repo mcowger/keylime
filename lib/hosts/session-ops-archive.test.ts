@@ -70,7 +70,7 @@ async function withArchive(
     project: string;
   }) => Promise<void>,
 ) {
-  const root = mkdtempSync(join(tmpdir(), "omp-web-session-ops-archive-"));
+  const root = mkdtempSync(join(tmpdir(), "keylime-session-ops-archive-"));
   const agent = join(root, "agent");
   const archived = join(agent, "archive", "sessions", "-project");
   mkdirSync(join(archived, "2026_restored.jsonl"), { recursive: true });
@@ -135,7 +135,7 @@ test("a staged restore cannot consume a newer archive of the same session after 
       release = resolve;
     });
     afterFs = async (name, [file]) => {
-      if (name !== "open" || !String(file).includes(".omp-web-restore-"))
+      if (name !== "open" || !String(file).includes(".keylime-restore-"))
         return;
       afterFs = null;
       staged();
@@ -198,7 +198,7 @@ test("concurrent restores of one key publish it once and refuse the rest without
       publish = resolve;
     });
     afterFs = async (name, [path]) => {
-      if (name !== "open" || !String(path).includes(".omp-web-restore-"))
+      if (name !== "open" || !String(path).includes(".keylime-restore-"))
         return;
       if (++staged === 4) publish();
       await allStaged;
@@ -268,7 +268,7 @@ test("a restore starts only under a reserved claim, and a fence revokes it and r
       proceed = resolve;
     });
     afterFs = async (name, [path]) => {
-      if (name !== "open" || !String(path).includes(".omp-web-restore-"))
+      if (name !== "open" || !String(path).includes(".keylime-restore-"))
         return;
       staged();
       await gate;
@@ -446,7 +446,7 @@ for (const [point, matches] of [
   [
     "the staged transcript is written",
     (name: string, [path]: unknown[]) =>
-      name === "open" && String(path).includes(".omp-web-restore-"),
+      name === "open" && String(path).includes(".keylime-restore-"),
   ],
 ] satisfies Array<[string, (name: string, args: unknown[]) => boolean]>) {
   test(`restoreArchive writes nothing outside the sessions root when the project turns into a symlink after ${point}`, () =>

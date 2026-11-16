@@ -119,7 +119,7 @@ test("preserves CRLF line endings", () => {
 });
 
 test("scan roots cover the compat directories the app installs into", () => {
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-skill-roots-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-skill-roots-"));
   const agentDir = join(dir, ".omp", "agent");
   const claudeDir = join(dir, ".claude");
   const oldAgentDir = process.env.PI_CODING_AGENT_DIR;
@@ -150,7 +150,7 @@ test("scan roots cover the compat directories the app installs into", () => {
 test("discovery honors all three frontmatter spellings", async () => {
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   const previousClaudeDir = process.env.CLAUDE_CONFIG_DIR;
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-skill-scan-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-skill-scan-"));
   process.env.PI_CODING_AGENT_DIR = join(dir, ".omp", "agent");
   process.env.CLAUDE_CONFIG_DIR = join(dir, ".claude");
   try {
@@ -233,7 +233,7 @@ test("discovery honors all three frontmatter spellings", async () => {
 });
 
 test("discovery runs `omp skill list --json` in cwd when the binary supports it", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-skill-cli-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-skill-cli-"));
   try {
     // Shell metacharacters in the project name: it must never reach cmd.exe
     // as an argument.
@@ -278,7 +278,7 @@ test("discovery runs `omp skill list --json` in cwd when the binary supports it"
 test("a failed `skill list` is cached per binary and cwd until it changes or expires", async () => {
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   const realNow = Date.now;
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-skill-cli-miss-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-skill-cli-miss-"));
   process.env.PI_CODING_AGENT_DIR = join(dir, "agent");
   try {
     const bad = join(dir, "bad");
@@ -343,7 +343,7 @@ test("a failed `skill list` is cached per binary and cwd until it changes or exp
 
 test("the user-level listing keeps a user skill whose directory is also a project root", async () => {
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-skill-user-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-skill-user-"));
   // The walk up from the agent directory `<dir>/.omp` reaches `<dir>`, whose `.omp/skills` is the user root as well.
   process.env.PI_CODING_AGENT_DIR = join(dir, ".omp");
   try {
@@ -369,7 +369,7 @@ test("the user-level listing keeps a user skill whose directory is also a projec
 
 test("only user-owned skills are togglable, and PATCH agrees", async () => {
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-skill-patch-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-skill-patch-"));
   process.env.PI_CODING_AGENT_DIR = join(dir, "agent");
   try {
     const owned = join(dir, "agent", "skills", "owned", "SKILL.md");
@@ -385,7 +385,7 @@ test("only user-owned skills are togglable, and PATCH agrees", async () => {
     // A monorepo skill above the session dir: a project walk-up root.
     const pkg = join(dir, "mono", "pkg");
     const walkUp = join(dir, "mono", ".omp", "skills", "w", "SKILL.md");
-    // The same layout under a directory omp-web never allowed.
+    // The same layout under a directory keylime never allowed.
     const strangerPkg = join(dir, "stranger", "pkg");
     const strangerWalkUp = join(
       dir,

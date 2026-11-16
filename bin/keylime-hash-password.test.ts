@@ -3,8 +3,8 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { verifyPassword } from "./omp-web-password-hash";
-const launcher = fileURLToPath(new URL("./omp-web.ts", import.meta.url));
+import { verifyPassword } from "./keylime-password-hash";
+const launcher = fileURLToPath(new URL("./keylime.ts", import.meta.url));
 
 // util-linux `script` gives the command a real terminal, so the prompt runs in raw mode.
 const hasScript =

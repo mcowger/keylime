@@ -12,7 +12,7 @@ import type { AgentSessionWrapper } from "./rpc-manager.ts";
 // (lib/browser-link.ts) through an in-process socket pair: each direction delivers in order on the next turn, and a
 // drop loses whatever is still in flight, as a broken connection does.
 const isolatedAgentDir = fs.mkdtempSync(
-  path.join(os.tmpdir(), "omp-web-browser-link-int-"),
+  path.join(os.tmpdir(), "keylime-browser-link-int-"),
 );
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 process.env.PI_CODING_AGENT_DIR = isolatedAgentDir;

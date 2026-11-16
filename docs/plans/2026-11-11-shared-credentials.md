@@ -16,7 +16,7 @@
 
 - `LINK_PROTOCOL_VERSION = 9`, `MIN_LINK_PROTOCOL_VERSION = 4` (literal one-line exports: the deploy script `sed`s them).
 - Daemon-loaded files (`lib/hosts/daemon*.ts`, `host.ts`, `host-resume.ts`, `local-host.ts`, `link-protocol.ts`, the new `lib/hosts/daemon-broker.ts`, and their `lib/` imports): relative imports only, no `Bun` global.
-- ompweb never imports `@oh-my-pi/*` and never reads `agent.db`.
+- keylime never imports `@oh-my-pi/*` and never reads `agent.db`.
 - A host with sharing on never runs a session with its own stored logins: every failure path refuses, none falls back.
 - Minimum omp on a sharing host: `15.13.1`.
 - The broker child binds `127.0.0.1` only. Ready timeout 60 s; idle stop 5 min after the last forwarded request ends; stop is SIGTERM, then SIGKILL after 5 s.
@@ -114,7 +114,7 @@ Behaviour the signature does not fix:
 - A request is in flight until its response body ends, errors or is cancelled. The idle timer runs only at zero in flight.
 - Upstream 401 → stop the child and throw `AuthBrokerUnavailableError`. A start failure, a ready timeout and a child that exits mid-start throw it too.
 
-- [ ] **Step 1: Write the failing tests.** Use a fake `omp` through `OMP_WEB_OMP_BIN`: a script that prints `tok-N` for `auth-broker token` (N from a counter file) and, for `auth-broker serve`, appends a line to a starts file, listens on port 0, prints the listening line, answers `GET /v1/echo` with the received `authorization` header, `GET /v1/stream` with one chunk and then stays open, and `GET /v1/deny` with 401.
+- [ ] **Step 1: Write the failing tests.** Use a fake `omp` through `KEYLIME_OMP_BIN`: a script that prints `tok-N` for `auth-broker token` (N from a counter file) and, for `auth-broker serve`, appends a line to a starts file, listens on port 0, prints the listening line, answers `GET /v1/echo` with the received `authorization` header, `GET /v1/stream` with one chunk and then stays open, and `GET /v1/deny` with 401.
   - `starts once for concurrent calls`: no starts-file line before the first call; two parallel `brokerFetch("h1", "/v1/echo")` → one line; both bodies equal `Bearer tok-1`.
   - `stays up while a stream is open, stops when idle`: `idleMs = 50`; with `/v1/stream` open, the child is alive after 200 ms; after cancelling the body, it exits within 1 s.
   - `aborts only the named host`: streams open for `h1` and `h2`; `abortBrokerRequests("h1")` → `h1`'s reader rejects, `h2`'s reads on.
@@ -164,7 +164,7 @@ Order of checks, each answering JSON `{ error }` with `cache-control: no-store`:
 4. `disableIdleTimeout()`.
 5. Body over 1 MiB → 413 (read it for `POST` and `DELETE`: omp's single-block delete carries a JSON body).
 6. `brokerFetch(host.id, path + url.search, …)` with `signal: request.signal`; `AuthBrokerUnavailableError` → 503; any other failure → 502.
-7. Log `[omp-web] broker <host id> <method> <path> <status>` (no query).
+7. Log `[keylime] broker <host id> <method> <path> <status>` (no query).
 
 `UNGATED` gains the alternative `api\/hosts\/broker\/` (a prefix; `/api/hosts/broker` itself and `/api/hosts/brokerx` stay gated).
 
@@ -217,7 +217,7 @@ shareCredentials?: true;
 credentialsServer?: string;
 ```
 
-`spawnRpc`, before it sends anything: read the host's record with `loadHosts()`. If sharing is on and the link's `hostVersion` is below 9, throw `new HostOpError(426, "host_upgrade_required", "Update ompweb on <label> to share credentials with it")`. Otherwise the `open` launch is `{ ...spawnRequest, shareCredentials: true }` for a sharing host and `spawnRequest` unchanged for any other. `local` never shares.
+`spawnRpc`, before it sends anything: read the host's record with `loadHosts()`. If sharing is on and the link's `hostVersion` is below 9, throw `new HostOpError(426, "host_upgrade_required", "Update keylime on <label> to share credentials with it")`. Otherwise the `open` launch is `{ ...spawnRequest, shareCredentials: true }` for a sharing host and `spawnRequest` unchanged for any other. `local` never shares.
 
 - [ ] **Step 1: Write the failing tests** in `hub-v7.test.mjs`:
   - sharing host linked at v9 → the daemon side receives `open` with `launch.shareCredentials === true`;
@@ -272,7 +272,7 @@ Behaviour the signatures do not fix:
   - no bearer, and a wrong bearer → 401, upstream not called;
   - right bearer, `GET /<key>/v1/snapshot?wait=5` → upstream sees `/api/hosts/broker/v1/snapshot?wait=5` with `authorization: Bearer <login token>`; the secret appears in no upstream header; `cookie` and `x-extra` are not forwarded;
   - `login` returns a new token on the second request → the second upstream request carries it;
-  - server URL `http://127.0.0.1:<p>/ompweb/` → upstream path `/ompweb/api/hosts/broker/v1/healthz`;
+  - server URL `http://127.0.0.1:<p>/keylime/` → upstream path `/keylime/api/hosts/broker/v1/healthz`;
   - `login` returns null → 403; upstream closed → 502; a body of 1 MiB + 1 byte → 413;
   - streaming: the upstream writes one chunk and holds the response; the client reads that chunk before the upstream writes the second; when the client aborts, the upstream sees `close`;
   - `stop()` ends an open stream and frees the port;
@@ -366,10 +366,10 @@ Documentation, normal prose, taken from the spec:
 Uses the installed `omp` (18.18.6 here), two temporary home directories and a free port. No real login is involved: the shared credential is a fake API key.
 
 - [ ] **Step 1:** `npm run build`. Create homes `A` (server) and `B` (host). In `A`, seed one credential: start `omp auth-broker serve --bind=127.0.0.1:0` with `HOME=A`, `POST /v1/credential` `{"provider":"openrouter","credential":{"type":"api_key","key":"sk-probe-FAKE-0001"}}` with the token from `omp auth-broker token`, stop it.
-- [ ] **Step 2:** Start the server as `scripts/smoke.ts` does (`bin/omp-web.js -p <free port> -H 127.0.0.1 --no-open`, `HOME=A`). `POST /api/hosts {label:"b"}`, save the token with `ompweb host login --url http://127.0.0.1:<port>` under `HOME=B`, start `ompweb host` under `HOME=B`, wait for the host to be `online`.
+- [ ] **Step 2:** Start the server as `scripts/smoke.ts` does (`bin/keylime.js -p <free port> -H 127.0.0.1 --no-open`, `HOME=A`). `POST /api/hosts {label:"b"}`, save the token with `keylime host login --url http://127.0.0.1:<port>` under `HOME=B`, start `keylime host` under `HOME=B`, wait for the host to be `online`.
 - [ ] **Step 3:** With sharing off, start a session on host `b` (an omp process spawned there is enough; no prompt has to succeed). Expected: no `broker` line in the server log; `B/.omp/cache/auth-broker-snapshot.enc` does not exist.
-- [ ] **Step 4:** `PATCH /api/hosts {id, shareCredentials:true}`; start a second session on `b`. Expected: the server log has `[omp-web] broker <id> GET /v1/snapshot 200` and a `/v1/snapshot/stream` request; `B/.omp/cache/auth-broker-snapshot.enc` exists; `sk-probe-FAKE-0001` and the host token appear in no file under `B` except `B/.omp/agent/omp-web/host.json` (token only) — check with a recursive search; the omp child's environment (`ps eww <pid>` on macOS) has a loopback `OMP_AUTH_BROKER_URL` and no host token.
-- [ ] **Step 5:** Leave the session idle. About 15 s after the `/v1/snapshot/stream` line (past the 10 s idle timeout, before omp parks an idle stream at about 20 s), check the connection itself: `lsof -nP -a -p <omp child pid> -iTCP -sTCP:ESTABLISHED` still lists the child's connection to the port in `OMP_AUTH_BROKER_URL`, and `lsof -nP -a -p <ompweb host pid> -iTCP:<server port> -sTCP:ESTABLISHED` still lists the forwarder's connection beside the link's. Expected: both are open, which proves the 10 s idle timeout is off for the stream. The absence of a new `snapshot/stream` line proves nothing: a stream closed at 10 s need not reopen at once.
+- [ ] **Step 4:** `PATCH /api/hosts {id, shareCredentials:true}`; start a second session on `b`. Expected: the server log has `[keylime] broker <id> GET /v1/snapshot 200` and a `/v1/snapshot/stream` request; `B/.omp/cache/auth-broker-snapshot.enc` exists; `sk-probe-FAKE-0001` and the host token appear in no file under `B` except `B/.omp/agent/keylime/host.json` (token only) — check with a recursive search; the omp child's environment (`ps eww <pid>` on macOS) has a loopback `OMP_AUTH_BROKER_URL` and no host token.
+- [ ] **Step 5:** Leave the session idle. About 15 s after the `/v1/snapshot/stream` line (past the 10 s idle timeout, before omp parks an idle stream at about 20 s), check the connection itself: `lsof -nP -a -p <omp child pid> -iTCP -sTCP:ESTABLISHED` still lists the child's connection to the port in `OMP_AUTH_BROKER_URL`, and `lsof -nP -a -p <keylime host pid> -iTCP:<server port> -sTCP:ESTABLISHED` still lists the forwarder's connection beside the link's. Expected: both are open, which proves the 10 s idle timeout is off for the stream. The absence of a new `snapshot/stream` line proves nothing: a stream closed at 10 s need not reopen at once.
 - [ ] **Step 6:** `PATCH {id, shareCredentials:false}`. Expected: the stream closes at once and the client's retry logs `403`.
 - [ ] **Step 7:** Stop both processes, delete both homes. Report each expectation as met or not, with the log lines.
 

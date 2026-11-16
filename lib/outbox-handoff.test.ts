@@ -12,7 +12,7 @@ import {
 } from "./hosts/link-driver.test-helper.ts";
 
 const SESSION = "01a0e6b0-d916-7610-8343-f4a766ba0052";
-const agentDir = mkdtempSync(join(tmpdir(), "omp-web-outbox-handoff-"));
+const agentDir = mkdtempSync(join(tmpdir(), "keylime-outbox-handoff-"));
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 process.env.PI_CODING_AGENT_DIR = agentDir;
 

@@ -113,7 +113,7 @@ async function add(
   );
 }
 
-// The fixture speaks ompweb's frame shapes; this encodes each as the omp runner channel puts it on stdout.
+// The fixture speaks keylime's frame shapes; this encodes each as the omp runner channel puts it on stdout.
 function wire({ type, ...rest }: FixtureEvent, sessionId: string) {
   if (type === "ready")
     return {
@@ -138,7 +138,7 @@ function wire({ type, ...rest }: FixtureEvent, sessionId: string) {
     return { t: type, ...rest };
   return { t: "event", event: { type, ...rest } };
 }
-/** A channel stdin frame back in ompweb's command shape: `cmd` as `{type: op, id, ...args}`, others as `{type: t, ...}`. */
+/** A channel stdin frame back in keylime's command shape: `cmd` as `{type: op, id, ...args}`, others as `{type: t, ...}`. */
 function unwire(line: string): Command {
   const { t, op, args, ...rest } = JSON.parse(line);
   return t === "cmd"
@@ -1233,7 +1233,7 @@ test("a failed settle read leaves the unsent message held for a retry", async (t
     t,
     "warn",
     (message) =>
-      message === "[omp-web] outbox: settle read failed: state unavailable",
+      message === "[keylime] outbox: settle read failed: state unavailable",
   );
   const sid = "settle-read-failed";
   const { session, transport } = await ambiguousSession(sid);
@@ -1802,7 +1802,7 @@ test("a real server agent-tool steer also invalidates an overlapping identical t
   saveWebServerSettings({ agentToolsEnabled: true });
   const sid = "overlap-agent-target";
   const sourceId = "overlap-agent-source";
-  const message = `[From session ${sourceId} via omp-web agent tools]: same`;
+  const message = `[From session ${sourceId} via keylime agent tools]: same`;
   const target = await liveSession(sid, { supportsClientMessageIds: false });
   const source = await liveSession(sourceId);
   await add(sid, "agent-overlap", message);
@@ -2713,7 +2713,7 @@ test(
       "warn",
       (message) =>
         typeof message === "string" &&
-        message.startsWith("[omp-web] outbox startup failed: ") &&
+        message.startsWith("[keylime] outbox startup failed: ") &&
         message.includes("readonly database"),
     );
     const sid = uuid(40);
@@ -3519,7 +3519,7 @@ test(
 test("upload continuity: concurrent store upgrades preserve one completion proof", async () => {
   const { Database } = await import("bun:sqlite");
   const { mkdirSync } = await import("node:fs");
-  const dir = join(process.env.PI_CODING_AGENT_DIR!, "omp-web");
+  const dir = join(process.env.PI_CODING_AGENT_DIR!, "keylime");
   const barrier = join(process.env.PI_CODING_AGENT_DIR!, "upgrade-readers");
   mkdirSync(dir, { recursive: true });
   mkdirSync(barrier);

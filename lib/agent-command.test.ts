@@ -36,7 +36,7 @@ const { invalidateHostSessionList } = await import("./hosts/session-index.ts");
 // `open` is the observable proof that an omp child was created (its launch is
 // kept in `spawns`), and every command the child received is kept in `stdin`.
 const SAVED_ID = "01a0e6b0-d916-7610-8343-f4a766ba0052";
-const agentDir = mkdtempSync(join(tmpdir(), "omp-web-agent-command-"));
+const agentDir = mkdtempSync(join(tmpdir(), "keylime-agent-command-"));
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 process.env.PI_CODING_AGENT_DIR = agentDir;
 
@@ -425,7 +425,7 @@ test("an oversized body is 413 request_too_large; a malformed body is 400 invali
   assert.deepEqual(live.sent, [], "neither body reached the session");
 });
 
-test("an RPC failure from the session is 400 with its code; an omp-web failure keeps its own code", async (t) => {
+test("an RPC failure from the session is 400 with its code; an keylime failure keeps its own code", async (t) => {
   const failing = fake({
     send: async (command) => {
       throw command.type === "a"

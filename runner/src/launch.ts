@@ -1,6 +1,6 @@
 /**
  * omp's root `launch` command (`commands/launch.ts`), with two changes: the agent session factory
- * hosts the session for ompweb, and `--headless` boots omp for `ompweb host` on stdio (see
+ * hosts the session for keylime, and `--headless` boots omp for `keylime host` on stdio (see
  * `headless.ts`). Keep it in step with upstream's copy on every omp bump.
  */
 import {
@@ -40,7 +40,7 @@ export default class Index extends Command {
     }
     if (parsed.mode === "rpc" || parsed.mode === "rpc-ui") {
       process.stderr.write(
-        "Error: ompweb-omp has no RPC mode; ompweb host starts it with --headless\n",
+        "Error: keylime-omp has no RPC mode; keylime host starts it with --headless\n",
       );
       process.exitCode = 2;
       return;

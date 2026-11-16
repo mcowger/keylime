@@ -73,7 +73,7 @@ test("the one-time host token survives Escape; only Done closes it", async (t) =
     Response.json({
       host: { id: "h1", label: "Laptop" },
       token: "tok-once",
-      command: "ompweb host login --url https://omp.test",
+      command: "keylime host login --url https://omp.test",
     }),
   );
   render(createElement(HostsConfig));
@@ -208,12 +208,12 @@ test("an offline this-machine row says to start the service, with the server's i
     );
 
   send([row({})]);
-  const hint = await screen.findByText(/ompweb-host service/);
+  const hint = await screen.findByText(/keylime-host service/);
   const hintRow = hint.closest("li");
   assert.ok(hintRow);
   assert.deepEqual(
     [...hintRow.querySelectorAll("code")].map((code) => code.textContent),
-    ["ompweb launchd install", "ompweb host"],
+    ["keylime launchd install", "keylime host"],
   );
   assert.match(hintRow.textContent!, /in a terminal or with bunx/);
   // The commands are copyable; the local row still has no Revoke.
@@ -221,21 +221,21 @@ test("an offline this-machine row says to start the service, with the server's i
 
   send([row({ serverPlatform: "linux" })]);
   assert.equal(
-    (await screen.findByText(/ompweb-host service/))
+    (await screen.findByText(/keylime-host service/))
       .closest("li")!
       .querySelector("code")!.textContent,
-    "ompweb systemd install",
+    "keylime systemd install",
   );
 
   // Dev mode: offline by design, nothing to install.
   send([row({ daemonManaged: false })]);
   await waitFor(() =>
-    assert.equal(screen.queryByText(/ompweb-host service/), null),
+    assert.equal(screen.queryByText(/keylime-host service/), null),
   );
 
   send([row({ status: "online", hostVersion: 2, serverVersion: 3 })]);
   await waitFor(() =>
-    assert.equal(screen.queryByText(/ompweb-host service/), null),
+    assert.equal(screen.queryByText(/keylime-host service/), null),
   );
   // The daemon's protocol on its row, the web app's in the header; a needs-upgrade status already names both.
   assert.match(

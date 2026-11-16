@@ -1,5 +1,5 @@
 // The "rpc" in this file's name (and in RpcProcess/RpcTransport, lib/omp/rpc-*.ts) is a leftover: sessions no
-// longer use omp's RPC mode. They run on ompweb's own omp runner channel (docs/specs/2026-11-12-omp-runner-design.md).
+// longer use omp's RPC mode. They run on keylime's own omp runner channel (docs/specs/2026-11-12-omp-runner-design.md).
 import { randomUUID } from "crypto";
 import { validateAgentImages } from "./image-attachments";
 import { hasVisibleAssistantContent } from "./assistant-response";
@@ -133,14 +133,14 @@ const IDLE_DESTROY_MS = 10 * 60 * 1000;
  * browser retries with capped backoff (`EVENT_STREAM_RETRY_MAX_MS` = 30s in
  * `hooks/useAgentSession-stream.ts`), and a backgrounded tab clamps its timers
  * to ~1/min. A window anywhere near 60s therefore races the reconnect and turns
- * a returning tab into a 409 "Session is not managed by omp-web" plus a cold
+ * a returning tab into a 409 "Session is not managed by keylime" plus a cold
  * respawn. 120s keeps ~2x the retry ceiling and still reclaims 5x faster than
- * the idle backstop. Set `OMP_WEB_DISCONNECT_DESTROY_MS=0` to disable reaping
+ * the idle backstop. Set `KEYLIME_DISCONNECT_DESTROY_MS=0` to disable reaping
  * and fall back to IDLE_DESTROY_MS alone.
  */
 const DISCONNECT_DESTROY_MS =
-  process.env.OMP_WEB_DISCONNECT_DESTROY_MS !== undefined
-    ? Math.max(0, Number(process.env.OMP_WEB_DISCONNECT_DESTROY_MS) || 0)
+  process.env.KEYLIME_DISCONNECT_DESTROY_MS !== undefined
+    ? Math.max(0, Number(process.env.KEYLIME_DISCONNECT_DESTROY_MS) || 0)
     : 120_000;
 const READY_TIMEOUT_MS = 120_000;
 const MCP_LIST_TIMEOUT_MS = 15_000;
@@ -172,10 +172,10 @@ const AWAITING_AGENT_START_TIMEOUT_MS = 10_000;
 const RESTARTING_MESSAGE = "This session is restarting — retry in a moment.";
 /** Answer to a replayed server agent tool call that changes things: it may have run before the restart. */
 const AGENT_TOOL_UNKNOWN_OUTCOME =
-  "omp-web restarted while this ran; the outcome is unknown, check with list_sessions before retrying";
+  "keylime restarted while this ran; the outcome is unknown, check with list_sessions before retrying";
 
 /**
- * Failure raised by omp-web itself (not by omp) carrying a stable snake_case
+ * Failure raised by keylime itself (not by omp) carrying a stable snake_case
  * code. API routes forward `{ error, code }` so the client dictionary can
  * localize it via `errors.<code>` while unknown codes fall back to the text.
  */
@@ -287,7 +287,7 @@ function patchEstimatedTokensAfter(result: unknown): void {
 
 // ============================================================================
 // AgentSessionWrapper
-// Wraps one session's ompweb-omp runner (its channel, runner/src/channel.ts) with the interface the rest of
+// Wraps one session's keylime-omp runner (its channel, runner/src/channel.ts) with the interface the rest of
 // the app expects (same command surface pi-web's in-process wrapper offered).
 // ============================================================================
 
@@ -669,7 +669,7 @@ export class AgentSessionWrapper {
   private listeners: EventListener[] = [];
   private pendingUiRequests = new Map<string, UnsequencedAgentEvent>();
   private uiExpiryTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  /** Dialogs omp-web itself raised (confirmFromServer): answered here, never forwarded to omp. */
+  /** Dialogs keylime itself raised (confirmFromServer): answered here, never forwarded to omp. */
   private serverUiRequests = new Map<string, (confirmed: boolean) => void>();
   private extensionStatuses = new Map<string, string>();
   private extensionWidgets = new Map<string, ExtensionWidgetItem>();
@@ -768,7 +768,7 @@ export class AgentSessionWrapper {
   >();
   /** Own host calls no tab has seen yet (see parkHostTool), with their deadlines. */
   private parkedHostTools = new Map<string, ReturnType<typeof setTimeout>>();
-  /** Listeners omp-web attaches itself (waitForTurnEnd), not tabs: a parked host call waits for a tab. */
+  /** Listeners keylime attaches itself (waitForTurnEnd), not tabs: a parked host call waits for a tab. */
   private readonly internalListeners = new WeakSet<EventListener>();
   /** URI schemes the web UI registered via set_host_uri_schemes. */
   private hostUriSchemes: Map<string, { writable?: boolean }> = new Map();
@@ -1017,7 +1017,7 @@ export class AgentSessionWrapper {
       return;
     }
     console.info(
-      "[omp-web] automatic-session-cleanup",
+      "[keylime] automatic-session-cleanup",
       JSON.stringify({
         sessionId: this._sessionId,
         reason: "disconnected-idle",
@@ -1508,7 +1508,7 @@ export class AgentSessionWrapper {
       })
       .catch((error) => {
         console.warn(
-          `[omp-web] could not title session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
+          `[keylime] could not title session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
         );
       })
       .finally(() => {
@@ -1769,7 +1769,7 @@ export class AgentSessionWrapper {
         if (this.hasPendingMessageCommands()) {
           void this.clearMessageProofTaintIfSettled().catch((error) => {
             console.warn(
-              `[omp-web] could not read whether session ${this._sessionId} settled: ${error instanceof Error ? error.message : String(error)}`,
+              `[keylime] could not read whether session ${this._sessionId} settled: ${error instanceof Error ? error.message : String(error)}`,
             );
           });
         }
@@ -1860,7 +1860,7 @@ export class AgentSessionWrapper {
                 content: [
                   {
                     type: "text",
-                    text: 'Agent tools are disabled. Enable "Agent tools" in omp-web Settings (System) first.',
+                    text: 'Agent tools are disabled. Enable "Agent tools" in keylime Settings (System) first.',
                   },
                 ],
               },
@@ -1875,7 +1875,7 @@ export class AgentSessionWrapper {
         }
         // Route REGISTERED host tools to an attached UI (the browser answers
         // via host_tool_result). With no tab on this session, hand the call to
-        // any open omp-web tab (the user switched sessions mid-run). Otherwise
+        // any open keylime tab (the user switched sessions mid-run). Otherwise
         // reject immediately so the agent never hangs on a tool nobody will
         // answer.
         if (
@@ -2024,7 +2024,7 @@ export class AgentSessionWrapper {
    */
   confirmFromServer(title: string): Promise<boolean> {
     if (!this._alive) return Promise.resolve(false);
-    const id = `omp-web:${randomUUID()}`;
+    const id = `keylime:${randomUUID()}`;
     const { promise, resolve } = Promise.withResolvers<boolean>();
     this.serverUiRequests.set(id, resolve);
     this.handleFrame({
@@ -2126,7 +2126,7 @@ export class AgentSessionWrapper {
         content: [
           {
             type: "text",
-            text: `Host tool \"${toolName}\" is not available in omp-web. Use OMP's built-in tools within the selected workspace.`,
+            text: `Host tool \"${toolName}\" is not available in keylime. Use OMP's built-in tools within the selected workspace.`,
           },
         ],
       },
@@ -2203,7 +2203,7 @@ export class AgentSessionWrapper {
           content: [
             {
               type: "text",
-              text: "No omp-web tab reconnected to answer this host tool",
+              text: "No keylime tab reconnected to answer this host tool",
             },
           ],
         },
@@ -2436,7 +2436,7 @@ export class AgentSessionWrapper {
         return;
       }
       console.info(
-        "[omp-web] automatic-session-cleanup",
+        "[keylime] automatic-session-cleanup",
         JSON.stringify({
           sessionId: this._sessionId,
           reason: "idle-timeout",
@@ -2450,7 +2450,7 @@ export class AgentSessionWrapper {
     this.idleTimer.unref?.();
   }
 
-  /** `internal`: omp-web's own listener (waitForTurnEnd), never handed a parked host call. */
+  /** `internal`: keylime's own listener (waitForTurnEnd), never handed a parked host call. */
   onEvent(
     listener: EventListener,
     { internal = false }: { internal?: boolean } = {},
@@ -3074,7 +3074,7 @@ export class AgentSessionWrapper {
   }
 
   /** Full restart of the child process against the same session file. This is
-   * omp-web's `reload`: extensions, skills, prompts, and tools are rediscovered
+   * keylime's `reload`: extensions, skills, prompts, and tools are rediscovered
    * on boot, matching a fresh CLI launch. */
   private async restart(): Promise<void> {
     if (this.restarting)
@@ -3443,7 +3443,7 @@ export class AgentSessionWrapper {
       throw this.hostOfflineError("refused");
     if (typeof command.type === "string" && command.type.startsWith("abort")) {
       console.info(
-        "[omp-web] cancellation-command",
+        "[keylime] cancellation-command",
         JSON.stringify({
           sessionId: this._sessionId,
           type: command.type,
@@ -3665,7 +3665,7 @@ export class AgentSessionWrapper {
             // This is only an observer poll. A busy event loop or delayed RPC
             // response is not authority to stop generation or a pending tool.
             console.warn(
-              "[omp-web] status-query-timeout",
+              "[keylime] status-query-timeout",
               JSON.stringify({
                 sessionId: this._sessionId,
                 timeoutMs: GET_STATE_TIMEOUT_MS,
@@ -3830,7 +3830,7 @@ export class AgentSessionWrapper {
           throw new WebRpcError("Invalid dialog id", "invalid_ui_response");
         const key = String(id);
         const serverRequest = this.serverUiRequests.get(key);
-        // The runner numbers its dialogs and ignores any other id; only ompweb's own confirms keep string ids.
+        // The runner numbers its dialogs and ignores any other id; only keylime's own confirms keep string ids.
         const runnerId = serverRequest
           ? undefined
           : /^\d+$/.test(key)
@@ -4090,7 +4090,7 @@ export class AgentSessionWrapper {
   }
 
   /**
-   * Degrade a prompt/steer frame into omp's follow-up queue while omp-web's own
+   * Degrade a prompt/steer frame into omp's follow-up queue while keylime's own
    * `!!` shell command owns the child (`bashRunning`, set for the whole `bash`
    * RPC). omp would refuse a prompt then — and aborting or erroring loses the
    * user's message mid-task — so the message is forwarded as `follow_up`
@@ -4136,7 +4136,7 @@ export class AgentSessionWrapper {
       return untilHostDown(this.host, this.destroyPromise);
     if (!this._alive) return;
     console.info(
-      "[omp-web] session-dispose",
+      "[keylime] session-dispose",
       JSON.stringify({
         sessionId: this._sessionId,
         reason,
@@ -4434,7 +4434,7 @@ export function onSessionMove(
 // Cross-session host tool calls
 //
 // A registered host tool called while no tab watches its session goes to every
-// open omp-web tab (over the `host-tools` event-stream channel) instead of being rejected.
+// open keylime tab (over the `host-tools` event-stream channel) instead of being rejected.
 // ----------------------------------------------------------------------------
 
 function getHostToolListeners(): Set<
@@ -4517,7 +4517,7 @@ export function syncInterruptibleSessions(): void {
 }
 
 /**
- * Restart the sessions that were mid-run when omp-web last stopped and ask
+ * Restart the sessions that were mid-run when keylime last stopped and ask
  * each to continue. Only runs when the auto-resume setting is on. Each session,
  * this machine's included, waits for its host's hello: a child its daemon still
  * runs is adopted there, and only a dead one resumes, after its orphan's exit.
@@ -4548,10 +4548,10 @@ async function resumeSession({
       host,
     );
     await session.send({ type: "prompt", message: RESUME_PROMPT });
-    console.log(`[omp-web] resumed interrupted session ${id}`);
+    console.log(`[keylime] resumed interrupted session ${id}`);
   } catch (error) {
     console.warn(
-      `[omp-web] could not resume session ${id}: ${error instanceof Error ? error.message : String(error)}`,
+      `[keylime] could not resume session ${id}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }

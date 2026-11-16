@@ -15,7 +15,7 @@ import { after, beforeEach, test } from "node:test";
 import { loadPools, savePools } from "./pools.ts";
 import type { HostPool, PoolMember } from "./pools.ts";
 
-const scratch = mkdtempSync(join(tmpdir(), "omp-web-pools-test-"));
+const scratch = mkdtempSync(join(tmpdir(), "keylime-pools-test-"));
 const environmentKeys = [
   "HOME",
   "PI_CODING_AGENT_DIR",
@@ -33,7 +33,7 @@ process.env.PI_CODING_AGENT_DIR = join(scratch, "agent");
 process.env.XDG_CONFIG_HOME = join(scratch, "config");
 process.env.XDG_DATA_HOME = join(scratch, "data");
 
-const configDirectory = join(process.env.PI_CODING_AGENT_DIR, "omp-web");
+const configDirectory = join(process.env.PI_CODING_AGENT_DIR, "keylime");
 const configFile = join(configDirectory, "pools.json");
 after(() => {
   for (const [key, value] of previousEnvironment) {

@@ -14,7 +14,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import type { TestContext } from "node:test";
@@ -63,7 +63,9 @@ type SessionFixture = {
 /** Each test's own agent dir, workspace and custom session dir. The custom sessions live outside the agent dir, so no
  * allowed root covers their `local/` directories: only a session's own local-root admission can read them. */
 function world(t: TestContext) {
-  const base = realpathSync(mkdtempSync(join(tmpdir(), "omp-web-local-uri-")));
+  const base = realpathSync(
+    mkdtempSync(join(homedir(), ".keylime-local-uri-")),
+  );
   const agentDir = join(base, "agent");
   const workspace = join(base, "workspace");
   mkdirSync(agentDir);

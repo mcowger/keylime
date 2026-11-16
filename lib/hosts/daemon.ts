@@ -68,7 +68,7 @@ import {
 export { nextRedialDelay };
 const reason = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
-const log = (message: string) => console.error("[ompweb host] " + message);
+const log = (message: string) => console.error("[keylime host] " + message);
 /** realpath of the longest existing prefix; null when a component is a dangling symlink. */
 function canonicalPath(path: string): string | null {
   try {
@@ -148,7 +148,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   for (const link of initial)
     if (!dialable(link.url, options.allowHttp))
       throw new Error(
-        "ompweb host needs an https:// server URL (http:// only for loopback, or with --allow-http)",
+        "keylime host needs an https:// server URL (http:// only for loopback, or with --allow-http)",
       );
   const primaryUrl = (
     explicit?.[0]?.url ??
@@ -168,7 +168,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     ompVersion: string | null = null;
   let stopping: Promise<void> | undefined;
   let reloadTimer: NodeJS.Timeout | undefined;
-  let drained = process.env.OMP_WEB_HOST_DRAINED === "1";
+  let drained = process.env.KEYLIME_HOST_DRAINED === "1";
   let operationsInFlight = 0;
   const executable = realpathSync(process.execPath);
   const entrypoint =
@@ -179,7 +179,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   // Each link is told whether the configuration this host holds is its server's.
   const config = createClusterConfig({
     roots: () => ({ agent: getAgentDir(), home: homedir() }),
-    stateDir: () => join(getAgentDir(), "omp-web"),
+    stateDir: () => join(getAgentDir(), "keylime"),
     fetch: async (serverUrl, path, signal) => {
       const login = links.get(serverUrl)?.login;
       const pending =
@@ -420,7 +420,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   const startupSweep = sweepUploads();
   const sweepTimer = setInterval(sweepUploads, UPLOAD_SWEEP_INTERVAL_MS);
   sweepTimer.unref?.();
-  const configDir = join(getAgentDir(), "omp-web");
+  const configDir = join(getAgentDir(), "keylime");
   mkdirSync(configDir, { recursive: true, mode: 0o700 });
   const watcher = watch(configDir, (_event, name) => {
     if (name !== null && String(name) !== "host.json") return;
@@ -566,7 +566,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
           type: "hello",
           v: link.version,
           ompVersion,
-          ompwebVersion: packageJson.version,
+          keylimeVersion: packageJson.version,
           workspaceOps: Object.keys(WORKSPACE_OP_PARAMS),
           platform: process.platform,
           home: homedir(),

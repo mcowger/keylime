@@ -347,7 +347,7 @@ export function writeModelsConfig(
   // which would disable every custom model until the user repairs it by hand.
   const temp = join(
     dir,
-    `.${basename(current.path)}.omp-web-${process.pid}-${Date.now()}.tmp`,
+    `.${basename(current.path)}.keylime-${process.pid}-${Date.now()}.tmp`,
   );
   try {
     writeFileSync(temp, text, "utf8");

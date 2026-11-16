@@ -43,7 +43,7 @@ const FULL_PRESET_KEY = [...PRESET_FULL]
   .sort()
   .join(",");
 
-/** Extra CLI args for spawning `ompweb-omp --headless` for a session. */
+/** Extra CLI args for spawning `keylime-omp --headless` for a session. */
 export function buildSessionSpawnArgs(
   sessionFile: string,
   toolNames?: string[],

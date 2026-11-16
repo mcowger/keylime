@@ -20,9 +20,9 @@ import {
 import { isRecord } from "./type-guards";
 
 /**
- * Server-only persistent notification state in omp-web's data directory:
+ * Server-only persistent notification state in keylime's data directory:
  * VAPID keys, devices (prefs + push subscription), and the notification
- * history. Every omp-web instance sharing the agent directory shares it;
+ * history. Every keylime instance sharing the agent directory shares it;
  * SQLite serializes their writes.
  */
 
@@ -143,7 +143,7 @@ function importLegacy(db: Database, file: string): boolean {
 
 /** The store for the current agent directory; reopened when PI_CODING_AGENT_DIR changes. */
 function db(): Database {
-  const dir = join(getAgentDir(), "omp-web");
+  const dir = join(getAgentDir(), "keylime");
   const path = join(dir, "notifications.db");
   const cached = globalThis.__ompNotificationStore;
   if (cached?.path === path) return cached.db;
@@ -168,7 +168,7 @@ function open(dir: string, path: string): Database {
   const database = new Database(path);
   try {
     database.exec("PRAGMA busy_timeout = 5000");
-    // Switching a new database to WAL takes an exclusive lock that ignores busy_timeout; another omp-web may hold it.
+    // Switching a new database to WAL takes an exclusive lock that ignores busy_timeout; another keylime may hold it.
     for (let attempt = 0; ; attempt++) {
       try {
         database.exec("PRAGMA journal_mode = WAL");

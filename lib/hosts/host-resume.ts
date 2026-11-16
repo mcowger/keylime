@@ -40,7 +40,7 @@ export class HostResumeTracker {
     options: { path?: string; sessionsRoot?: string; enabled?: boolean } = {},
   ) {
     this.path =
-      options.path ?? join(getAgentDir(), "omp-web", "host-running.json");
+      options.path ?? join(getAgentDir(), "keylime", "host-running.json");
     this.root = options.sessionsRoot ?? getSessionsDir();
     this.enabled =
       options.enabled ?? loadWebServerSettings().autoResumeSessions;

@@ -1,7 +1,7 @@
 import { createHostControlServer, requestHostControl } from "./host-control";
 import type { HostDaemon } from "./daemon";
 
-// `ompweb host`: link this machine to web servers through ./daemon.
+// `keylime host`: link this machine to web servers through ./daemon.
 // Loaded by Bun's native TypeScript runtime and the compiled binary: no `@/` imports.
 // Tokens are read from stdin, never from argv.
 import {
@@ -12,7 +12,7 @@ import {
 } from "./host-login";
 
 const USAGE =
-  "Usage: ompweb host login [--add] --url <server url>   (the host token is read from stdin)\n       ompweb host logout --url <server url>\n       ompweb host [--allow-http]\n       ompweb host status|drain|drain-idle|drain-force|resume";
+  "Usage: keylime host login [--add] --url <server url>   (the host token is read from stdin)\n       keylime host logout --url <server url>\n       keylime host [--allow-http]\n       keylime host status|drain|drain-idle|drain-force|resume";
 
 /** A host token is 43 characters; anything this long is not one. */
 const MAX_TOKEN_LINE_BYTES = 4096;
@@ -66,7 +66,7 @@ async function main(argv: string[], signal?: AbortSignal): Promise<number> {
       const link = { url, token: (await readTokenLine()).trim() };
       if (add) await addHostLink(link);
       else await loginHost(link);
-      console.log(`Saved. Run \`ompweb host\` to link this machine to ${url}.`);
+      console.log(`Saved. Run \`keylime host\` to link this machine to ${url}.`);
     }
     return 0;
   }
@@ -89,7 +89,7 @@ async function main(argv: string[], signal?: AbortSignal): Promise<number> {
   }
   if (readHostLinks().length === 0) {
     console.error(
-      "This machine is not linked yet. Start ompweb on this machine (it writes the link), or run `ompweb host login --url <server url>`.",
+      "This machine is not linked yet. Start keylime on this machine (it writes the link), or run `keylime host login --url <server url>`.",
     );
     return 1;
   }
@@ -104,7 +104,7 @@ async function main(argv: string[], signal?: AbortSignal): Promise<number> {
   // Sessions need the runner; until it is here they fail with OMP_NOT_FOUND and the next start retries.
   void ensureOmpRunner().catch((error: unknown) =>
     console.error(
-      `ompweb host: ${error instanceof Error ? error.message : String(error)}`,
+      `keylime host: ${error instanceof Error ? error.message : String(error)}`,
     ),
   );
   let daemon: HostDaemon | undefined;
@@ -119,7 +119,7 @@ async function main(argv: string[], signal?: AbortSignal): Promise<number> {
       hostSocket: hostSocketPath(),
     });
     // Worker cutover starts fail-closed; ordinary hosts have no maintenance environment.
-    if (process.env.OMP_WEB_HOST_DRAINED === "1") daemon.control("drain");
+    if (process.env.KEYLIME_HOST_DRAINED === "1") daemon.control("drain");
     const stop = () => void daemon!.stop();
     if (signal) signal.addEventListener("abort", stop, { once: true });
     else
@@ -139,14 +139,14 @@ async function main(argv: string[], signal?: AbortSignal): Promise<number> {
   }
 }
 
-/** `ompweb host <argv>`: errors are printed and return 1. A supplied signal owns shutdown instead of process listeners. */
+/** `keylime host <argv>`: errors are printed and return 1. A supplied signal owns shutdown instead of process listeners. */
 export function runHostCli(
   argv: string[],
   signal?: AbortSignal,
 ): Promise<number> {
   return main(argv, signal).catch((error: unknown) => {
     console.error(
-      `ompweb host: ${error instanceof Error ? error.message : String(error)}`,
+      `keylime host: ${error instanceof Error ? error.message : String(error)}`,
     );
     return 1;
   });

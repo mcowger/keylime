@@ -37,7 +37,7 @@ export function writeLicenses(
   const dir = path.join(out, "licenses");
   cpSync(bunLicense, path.join(dir, "bun", "LICENSE.md"));
   const rows = [
-    `| Bun (the runtime in \`ompweb\`) | ${Bun.version} | MIT; JavaScriptCore and WebKit LGPL-2; see the file for the rest | bun/LICENSE.md |`,
+    `| Bun (the runtime in \`keylime\`) | ${Bun.version} | MIT; JavaScriptCore and WebKit LGPL-2; see the file for the rest | bun/LICENSE.md |`,
   ];
   const seen = new Set<string>();
   for (const packageDir of packageDirs) {
@@ -67,7 +67,7 @@ export function writeLicenses(
     [
       "# Third-party licenses",
       "",
-      "ompweb itself is MIT-licensed (`../LICENSE`). The `ompweb` program embeds the Bun runtime and the npm packages below,",
+      "keylime itself is MIT-licensed (`../LICENSE`). The `keylime` program embeds the Bun runtime and the npm packages below,",
       "and `dist/` carries the ones the browser app bundles. Each directory here holds the license files its package ships.",
       "The fonts' licenses are in `../app/fonts/`, and KaTeX's (for its CSS and fonts) is also in `../node_modules/katex/`.",
       "",

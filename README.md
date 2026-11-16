@@ -38,10 +38,10 @@ This fork supports macOS and Linux only. Windows support is removed, with no com
 
 ## Requirements
 
-- Supported platforms are macOS and glibc Linux on x64 and arm64. key lime downloads its matching `ompweb-omp` build from its GitHub release, verifies its SHA-256, and stores it beside the single binary or under `~/.omp/agent/omp-web/omp/<version>/`. Run `ompweb fetch-omp` to fetch it explicitly.
+- Supported platforms are macOS and glibc Linux on x64 and arm64. key lime downloads its matching `keylime-omp` build from its GitHub release, verifies its SHA-256, and stores it beside the single binary or under `~/.omp/agent/keylime/omp/<version>/`. Run `keylime fetch-omp` to fetch it explicitly.
 - [mise](https://mise.jdx.dev) manages the Bun runtime. Run `mise trust && mise install` in this checkout to install the pinned Bun version, then use `mise exec -- bun` if mise is not activated in your shell. The launcher, web server and host daemon all run on Bun; the native single binary embeds it.
 
-The **Steer**, **Delete** and **Edit** actions on a queued message are commands of the `ompweb-omp` channel (`promote_queued_message`, `remove_queued_message`). Deletion is confirmed by omp before the chip disappears; editing recalls text only after cancellation succeeds. A message that is no longer pending leaves the queue unchanged and displays a notice; key lime does not send a duplicate steering message.
+The **Steer**, **Delete** and **Edit** actions on a queued message are commands of the `keylime-omp` channel (`promote_queued_message`, `remove_queued_message`). Deletion is confirmed by omp before the chip disappears; editing recalls text only after cancellation succeeds. A message that is no longer pending leaves the queue unchanged and displays a notice; key lime does not send a duplicate steering message.
 
 The queue panel shows omp's own queue (`queuedMessages` in `get_state` and `queue_update` events), so every device viewing a session sees the same queued messages. **Stop** moves the text of messages still waiting in the queue back into the composer instead of letting the agent run them; a steer the model already picked up through live steering still runs.
 
@@ -88,7 +88,7 @@ session you are viewing. Clicking a notification opens its session.
 - Desktop browsers show notifications through the operating system's
   notification center. Push delivery needs the browser process running.
 
-Completion notifications use the `ompweb-omp` channel's `prompt_result` and
+Completion notifications use the `keylime-omp` channel's `prompt_result` and
 `session_settled` frames.
 
 ## Quick Start
@@ -96,14 +96,14 @@ Completion notifications use the `ompweb-omp` channel's `prompt_result` and
 **Run directly without installing:**
 
 ```bash
-bunx --bun @kahme247/ompweb@latest
+bunx --bun @mcowger/keylime@latest
 ```
 
 **Or install globally:**
 
 ```bash
-bun add -g @kahme247/ompweb
-ompweb
+bun add -g @mcowger/keylime
+keylime
 ```
 
 **Or download the single binary** (no Bun installation): see [Single binary](#single-binary).
@@ -113,16 +113,16 @@ Open [http://127.0.0.1:30177](http://127.0.0.1:30177) in your browser.
 ### CLI Options
 
 ```bash
-ompweb --port 8080                         # Custom port
-ompweb --hostname 0.0.0.0                  # Listen on network
-ompweb hash-password                       # Print the value for OMP_WEB_PASSWORD_HASH
-ompweb fetch-omp                           # Download this version's ompweb-omp from its GitHub release (SHA-256-checked) if it is missing
-ompweb preflight                           # Start the session omp once (as a new session would) and wait for its hello; exit 1 says why it failed
-ompweb --no-open                           # Don't auto-open the browser
-ompweb systemd install                     # Install Linux systemd user services (web + ompweb-host daemon)
-ompweb launchd install                     # Install the macOS launchd agents (web + ompweb-host daemon)
-ompweb --help                              # Show help
-ompweb --version                           # Show version
+keylime --port 8080                         # Custom port
+keylime --hostname 0.0.0.0                  # Listen on network
+keylime hash-password                       # Print the value for KEYLIME_PASSWORD_HASH
+keylime fetch-omp                           # Download this version's keylime-omp from its GitHub release (SHA-256-checked) if it is missing
+keylime preflight                           # Start the session omp once (as a new session would) and wait for its hello; exit 1 says why it failed
+keylime --no-open                           # Don't auto-open the browser
+keylime systemd install                     # Install Linux systemd user services (web + keylime-host daemon)
+keylime launchd install                     # Install the macOS launchd agents (web + keylime-host daemon)
+keylime --help                              # Show help
+keylime --version                           # Show version
 ```
 
 ### Password protection
@@ -131,24 +131,24 @@ key lime **never passes a plaintext password to the server**, because every
 `omp` session inherits the server's environment: an agent running `env` would
 print the password into its session file and send it to the model provider.
 
-Password protection is optional on every bind address, including `0.0.0.0`. Without `OMP_WEB_PASSWORD_HASH`, anyone who can reach the server can access its agent and file capabilities. Choose authentication and network access controls for your deployment.
-`--password` stops `ompweb` at startup. An `OMP_WEB_PASSWORD` still works for
-now: `ompweb` hashes it at startup, keeps it out of the server's environment,
-and logs a warning with the hash to put in `OMP_WEB_PASSWORD_HASH` instead.
-Switch soon: agents can still read the plaintext from the `ompweb` launcher
+Password protection is optional on every bind address, including `0.0.0.0`. Without `KEYLIME_PASSWORD_HASH`, anyone who can reach the server can access its agent and file capabilities. Choose authentication and network access controls for your deployment.
+`--password` stops `keylime` at startup. An `KEYLIME_PASSWORD` still works for
+now: `keylime` hashes it at startup, keeps it out of the server's environment,
+and logs a warning with the hash to put in `KEYLIME_PASSWORD_HASH` instead.
+Switch soon: agents can still read the plaintext from the `keylime` launcher
 process, and each start makes a new hash, so every restart signs all browsers
-out. Setting both variables stops `ompweb`; remove `OMP_WEB_PASSWORD`.
+out. Setting both variables stops `keylime`; remove `KEYLIME_PASSWORD`.
 
 Generate a hash instead and give that to the server:
 
 ```bash
-ompweb hash-password                       # asks twice, input hidden
-echo "a-long-random-password" | ompweb hash-password   # or pipe it in
+keylime hash-password                       # asks twice, input hidden
+echo "a-long-random-password" | keylime hash-password   # or pipe it in
 
-OMP_WEB_PASSWORD_HASH='scrypt$15$8$1$…' ompweb
+KEYLIME_PASSWORD_HASH='scrypt$15$8$1$…' keylime
 ```
 
-`ompweb hash-password` reads the password from stdin — never from a command
+`keylime hash-password` reads the password from stdin — never from a command
 line argument — so it stays out of your shell history and out of `ps` output.
 The hash is scrypt (N = 2^15, r = 8, p = 1) with a fresh 16-byte salt, printed
 in the self-describing form `scrypt$<ln>$<r>$<p>$<salt>$<digest>`. Anyone who
@@ -156,11 +156,11 @@ reads the hash cannot sign in with it, and it cannot be turned back into the
 password.
 
 Sessions are not signed with the password hash. A random signing key is created
-on first start in `~/.omp/agent/omp-web/web-auth-secret.json` (mode `0600`) and
+on first start in `~/.omp/agent/keylime/web-auth-secret.json` (mode `0600`) and
 mixed with the hash, so changing the password still signs everyone out while the
 stored hash alone is never enough to forge a session.
 
-The service installers (`ompweb systemd install` and `ompweb launchd install`) accept `OMP_WEB_PASSWORD` at install time and store only its hash.
+The service installers (`keylime systemd install` and `keylime launchd install`) accept `KEYLIME_PASSWORD` at install time and store only its hash.
 
 ### Behind a reverse proxy
 
@@ -172,14 +172,14 @@ Cluster members also fetch this machine's omp configuration from `/api/hosts/clu
 
 ### Two services: the web server and the local daemon
 
-key lime runs the web server and `ompweb host` as separate Bun processes. The daemon
+key lime runs the web server and `keylime host` as separate Bun processes. The daemon
 runs this machine's `omp` sessions and links to the web server over loopback.
-The service installers (`ompweb systemd install` and `ompweb launchd install`)
-install both the web service and `ompweb-host`. Uninstall removes both.
+The service installers (`keylime systemd install` and `keylime launchd install`)
+install both the web service and `keylime-host`. Uninstall removes both.
 
-**Running key lime in the foreground** (`ompweb` in a terminal, or
-`bunx --bun @kahme247/ompweb@latest`) installs no service, so keep
-`ompweb host` (with bunx: `bunx --bun @kahme247/ompweb@latest host`) running in a
+**Running key lime in the foreground** (`keylime` in a terminal, or
+`bunx --bun @mcowger/keylime@latest`) installs no service, so keep
+`keylime host` (with bunx: `bunx --bun @mcowger/keylime@latest host`) running in a
 second terminal. Without it "This machine" stays offline. The web server writes
 the daemon's link when it starts, so start the web server first.
 
@@ -187,7 +187,7 @@ the daemon's link when it starts, so start the web server first.
   keeps the omp processes running; the restarted web server takes them over, with
   no resume prompt, and dialogs or tool calls omp was waiting on reappear.
 - **Restarting the daemon does end runs** (it owns the omp processes). With auto-resume
-  on, sessions that were running resume once. `ompweb systemd restart` restarts the
+  on, sessions that were running resume once. `keylime systemd restart` restarts the
   web service only; upgrades restart the daemon only when its link protocol version
   is outside the range the new release supports.
 - **First start after an upgrade:** if no daemon has linked after about 90 seconds,
@@ -196,7 +196,7 @@ the daemon's link when it starts, so start the web server first.
   sessions on it cannot start.
 - **It is a host like any other.** Rename "This machine" in **Settings → Hosts**
   (clear the name to reset it); it cannot be revoked. The web server writes the
-  daemon's link (`~/.omp/agent/omp-web/host.json`, mode `600`) at startup, only
+  daemon's link (`~/.omp/agent/keylime/host.json`, mode `600`) at startup, only
   for a loopback bind address.
 - **Development:** `bun run dev` does not take the daemon (see
   [Development](#development)).
@@ -259,7 +259,7 @@ Each member uses this machine's omp configuration: models, MCP servers, skills, 
   leaves the member not current, so placement skips it; it is retried about every 30 s and
   Settings shows omp's message.
 - **Joining:** needs link protocol 10 on the host. Before the first apply, the host's own
-  version of every mirrored file and directory moves to `<agent dir>/omp-web/own-config/` on
+  version of every mirrored file and directory moves to `<agent dir>/keylime/own-config/` on
   the host, with its plugin list and agent environment variables; the join dialog says the host
   receives this machine's configuration, API keys and environment values included, in place of
   its own until it leaves. A host holds one key lime server's configuration at
@@ -311,17 +311,17 @@ Each member uses this machine's omp configuration: models, MCP servers, skills, 
 
 ### Local worker maintenance
 
-`ompweb host status` prints daemon PID, native version/protocol, welcomed-link readiness,
+`keylime host status` prints daemon PID, native version/protocol, welcomed-link readiness,
 executable/entrypoint identity and maintenance state without credentials.
-`ompweb host drain` synchronously checks children (idle included), preparations,
+`keylime host drain` synchronously checks children (idle included), preparations,
 uploads/controls, pending operations and reliable results, and closes new-work admission
 only when idle. A busy refusal never kills work or changes admission.
-`ompweb host resume` reopens the live daemon. Controls run inside the existing daemon, not
+`keylime host resume` reopens the live daemon. Controls run inside the existing daemon, not
 TCP or a separate service: a private Unix socket on Linux and macOS. A disconnected
 deployer cannot release a live drain.
 Disable central member admission before worker rollout; native drain is the final race-free guard.
 
-Worker service cutovers can additionally start drained through `OMP_WEB_HOST_DRAINED=1`
+Worker service cutovers can additionally start drained through `KEYLIME_HOST_DRAINED=1`
 in their protected temporary unit environment. Live resume does not remove that startup
 setting. After a deployer crash or lost final resume reply, verify the selected release,
 PID and welcomed-link health, and remove the known worker maintenance flag before explicit
@@ -330,47 +330,46 @@ stop or roll back a candidate after its deployment commit point.
 
 ### Single binary
 
-Each [release](https://github.com/ompweb-dev/ompweb/releases/latest) also ships
-ompweb as one compiled program with the files it serves beside it:
-`ompweb-linux-x64.tar.gz`, `ompweb-linux-arm64.tar.gz`, `ompweb-darwin-x64.tar.gz`,
-`ompweb-darwin-arm64.tar.gz`. It needs no separate Bun installation or omp: on its first start it downloads its own omp build, `ompweb-omp`, from the same release
+Each [release](https://github.com/mcowger/keylime/releases/latest) also ships
+keylime as one compiled program with the files it serves beside it:
+`keylime-linux-x64.tar.gz`, `keylime-linux-arm64.tar.gz`, `keylime-darwin-x64.tar.gz`,
+`keylime-darwin-arm64.tar.gz`. It needs no separate Bun installation or omp: on its first start it downloads its own omp build, `keylime-omp`, from the same release
 (SHA-256-checked) and keeps it beside itself (prerelease archives already carry it). The x64 builds use Bun's baseline runtime, so
 they also run on CPUs without AVX2. Each archive carries the licenses of what it
-bundles in `licenses/`. Every commit on `main` that passes CI is also published as a
-[prerelease](https://github.com/ompweb-dev/ompweb/releases) named after the time it was
-built (for example `2026-11-01T10:30:00Z`), with the same four archives.
+bundles in `licenses/`. GitHub Actions workflows are disabled; pushing a tag
+does not build or publish a release. See [release documentation](docs/release.md).
 
 ```bash
-tar -xzf ompweb-linux-x64.tar.gz -C ~/.local/share   # unpacks ompweb-linux-x64/
-~/.local/share/ompweb-linux-x64/ompweb               # the web server: same options and environment variables as above
-~/.local/share/ompweb-linux-x64/ompweb host          # the local daemon, in a second terminal
+tar -xzf keylime-linux-x64.tar.gz -C ~/.local/share   # unpacks keylime-linux-x64/
+~/.local/share/keylime-linux-x64/keylime               # the web server: same options and environment variables as above
+~/.local/share/keylime-linux-x64/keylime host          # the local daemon, in a second terminal
 ```
 
-- **Keep `ompweb` in its directory.** It runs the `ompweb-omp` beside it and serves `dist/`, `public/` and the other
+- **Keep `keylime` in its directory.** It runs the `keylime-omp` beside it and serves `dist/`, `public/` and the other
   files from the directory it is in (a symlink to it on your `PATH` works), or
-  from `OMP_WEB_PACKAGE_DIR` when that is set.
-- **macOS** quarantines downloads: run `xattr -dr com.apple.quarantine ompweb-darwin-arm64`
+  from `KEYLIME_PACKAGE_DIR` when that is set.
+- **macOS** quarantines downloads: run `xattr -dr com.apple.quarantine keylime-darwin-arm64`
   once before the first start.
 - **macOS 15 and later** ask before an app may reach your local network. If
-  `ompweb host` on a Mac reports `ECONNREFUSED` for a server on your LAN while
-  `curl` reaches it, allow your terminal (or `ompweb`) under System Settings →
+  `keylime host` on a Mac reports `ECONNREFUSED` for a server on your LAN while
+  `curl` reaches it, allow your terminal (or `keylime`) under System Settings →
   Privacy & Security → Local Network. A server reached over a VPN such as
   Tailscale, or a host started from an SSH session, is not affected.
-- **Updating.** Stop `ompweb` and `ompweb host`, replace the directory with the
+- **Updating.** Stop `keylime` and `keylime host`, replace the directory with the
   new release, and start both again. Your sessions and settings live in `~/.omp`,
   not in that directory. The single binary has no service installers.
 - **As systemd user services**, write the two units yourself (adjust the paths):
 
 ```ini
-# ~/.config/systemd/user/ompweb.service
+# ~/.config/systemd/user/keylime.service
 [Unit]
-Description=ompweb web service
+Description=keylime web service
 
 [Service]
 WorkingDirectory=%h
-ExecStart=%h/.local/share/ompweb-linux-x64/ompweb --no-open
+ExecStart=%h/.local/share/keylime-linux-x64/keylime --no-open
 Environment=PATH=%h/.local/bin:%h/.bun/bin:/usr/local/bin:/usr/bin:/bin
-# OMP_WEB_PASSWORD_HASH, PORT and OMP_WEB_HOSTNAME go here, as for ompweb-systemd.
+# KEYLIME_PASSWORD_HASH, PORT and KEYLIME_HOSTNAME go here, as for keylime-systemd.
 EnvironmentFile=-%h/.omp/agent/web-service.env
 Restart=on-failure
 RestartSec=3
@@ -380,15 +379,15 @@ WantedBy=default.target
 ```
 
 ```ini
-# ~/.config/systemd/user/ompweb-host.service
+# ~/.config/systemd/user/keylime-host.service
 [Unit]
-Description=ompweb host daemon
+Description=keylime host daemon
 # It exits until the web server has written its link: keep restarting.
 StartLimitIntervalSec=0
 
 [Service]
 WorkingDirectory=%h
-ExecStart=%h/.local/share/ompweb-linux-x64/ompweb host
+ExecStart=%h/.local/share/keylime-linux-x64/keylime host
 Environment=PATH=%h/.local/bin:%h/.bun/bin:/usr/local/bin:/usr/bin:/bin
 EnvironmentFile=-%h/.omp/agent/web-service.env
 Restart=always
@@ -400,50 +399,50 @@ WantedBy=default.target
 
 ```bash
 systemctl --user daemon-reload
-systemctl --user enable --now ompweb ompweb-host
+systemctl --user enable --now keylime keylime-host
 ```
 
-On macOS, two launchd agents (`ProgramArguments` `…/ompweb --no-open` and
-`…/ompweb host`, with `RunAtLoad` and `KeepAlive`) do the same.
+On macOS, two launchd agents (`ProgramArguments` `…/keylime --no-open` and
+`…/keylime host`, with `RunAtLoad` and `KeepAlive`) do the same.
 
 ### Run as a macOS Service (launchd)
 
 Install key lime as a launchd user agent that starts at login and restarts on crash:
 
 ```bash
-bunx --bun --package=@kahme247/ompweb@latest ompweb-launchd install
+bunx --bun --package=@mcowger/keylime@latest keylime-launchd install
 ```
 
 Manage it with:
 
 ```bash
-bunx --bun --package=@kahme247/ompweb@latest ompweb-launchd status      # Show service state
-bunx --bun --package=@kahme247/ompweb@latest ompweb-launchd uninstall   # Stop and remove
+bunx --bun --package=@mcowger/keylime@latest keylime-launchd status      # Show service state
+bunx --bun --package=@mcowger/keylime@latest keylime-launchd uninstall   # Stop and remove
 ```
 
-The service runs `bunx --bun @kahme247/ompweb@latest`; pass a package spec to pin a
-version, e.g. `ompweb-launchd install @kahme247/ompweb@0.3.6`. All
+The service runs `bunx --bun @mcowger/keylime@latest`; pass a package spec to pin a
+version, e.g. `keylime-launchd install @mcowger/keylime@0.3.6`. All
 [environment variables](#environment-variables) are read at install time and baked
-into the plist, plus `OMP_WEB_PKG` (package spec, same as the positional argument).
+into the plist, plus `KEYLIME_PKG` (package spec, same as the positional argument).
 As a service, the browser is **not** auto-opened by default — install with
-`OMP_WEB_NO_OPEN=0` to restore that.
+`KEYLIME_NO_OPEN=0` to restore that.
 
 ```bash
-OMP_WEB_PASSWORD=secret bunx --bun --package=@kahme247/ompweb@latest ompweb-launchd install
+KEYLIME_PASSWORD=secret bunx --bun --package=@mcowger/keylime@latest keylime-launchd install
 ```
 
-`OMP_WEB_PASSWORD` is hashed at install time; the plist holds the hash, never
-the password. Pass `OMP_WEB_PASSWORD_HASH` to install a hash you generated with
-`ompweb hash-password`.
+`KEYLIME_PASSWORD` is hashed at install time; the plist holds the hash, never
+the password. Pass `KEYLIME_PASSWORD_HASH` to install a hash you generated with
+`keylime hash-password`.
 
 Authentication is your choice on every bind address. For remote access, a password, trusted reverse proxy, or VPN can limit who reaches the app. Use HTTPS when sending a password or session cookie over an untrusted network.
 
-Logs go to `~/Library/Logs/ompweb/ompweb.log` (web) and
-`~/Library/Logs/ompweb/ompweb-host.log` (the
+Logs go to `~/Library/Logs/keylime/keylime.log` (web) and
+`~/Library/Logs/keylime/keylime-host.log` (the
 [local daemon](#two-services-the-web-server-and-the-local-daemon)). The plists live at
-`~/Library/LaunchAgents/com.kahme247.ompweb.plist` (mode 600; the password
+`~/Library/LaunchAgents/com.kahme247.keylime.plist` (mode 600; the password
 hash — not the password — is stored there) and
-`~/Library/LaunchAgents/com.kahme247.ompweb-host.plist`.
+`~/Library/LaunchAgents/com.kahme247.keylime-host.plist`.
 
 ### Run as a Linux Service (systemd)
 
@@ -451,7 +450,7 @@ Install key lime as a systemd **user** service that starts at login and restarts
 on crash:
 
 ```bash
-bunx --bun --package=@kahme247/ompweb@latest ompweb-systemd install
+bunx --bun --package=@mcowger/keylime@latest keylime-systemd install
 ```
 
 The installer creates `~/.omp/agent/web-service.env` automatically with mode
@@ -462,8 +461,8 @@ To bind the service to all IPv4 interfaces for LAN access, set a password while
 installing:
 
 ```bash
-OMP_WEB_HOSTNAME=0.0.0.0 OMP_WEB_PASSWORD='change-me' \
-  bunx --bun --package=@kahme247/ompweb@latest ompweb-systemd install
+KEYLIME_HOSTNAME=0.0.0.0 KEYLIME_PASSWORD='change-me' \
+  bunx --bun --package=@mcowger/keylime@latest keylime-systemd install
 ```
 
 The password is hashed before it is written to `web-service.env`.
@@ -471,24 +470,24 @@ The password is hashed before it is written to `web-service.env`.
 Manage it with:
 
 ```bash
-bunx --bun --package=@kahme247/ompweb@latest ompweb-systemd status    # Show service state
-bunx --bun --package=@kahme247/ompweb@latest ompweb-systemd restart   # start / stop / restart
-bunx --bun --package=@kahme247/ompweb@latest ompweb-systemd uninstall # Stop and remove
+bunx --bun --package=@mcowger/keylime@latest keylime-systemd status    # Show service state
+bunx --bun --package=@mcowger/keylime@latest keylime-systemd restart   # start / stop / restart
+bunx --bun --package=@mcowger/keylime@latest keylime-systemd uninstall # Stop and remove
 ```
 
-The service runs the locally installed `ompweb` binary resolved at install time
-(override with `OMP_WEB_SYSTEMD_BIN`). Runtime configuration lives in
+The service runs the locally installed `keylime` binary resolved at install time
+(override with `KEYLIME_SYSTEMD_BIN`). Runtime configuration lives in
 `~/.omp/agent/web-service.env`. Edit the port, hostname, or password hash there
 and restart the service; no reinstall needed.
 Install-time [environment variables](#environment-variables) are baked into
 that file. As a service, the browser is **not** auto-opened by default. The
-units live at `~/.config/systemd/user/ompweb.service` and
-`~/.config/systemd/user/ompweb-host.service` (the
+units live at `~/.config/systemd/user/keylime.service` and
+`~/.config/systemd/user/keylime-host.service` (the
 [local daemon](#two-services-the-web-server-and-the-local-daemon)); logs go to
 the journal:
 
 ```bash
-journalctl --user -u ompweb -u ompweb-host -f
+journalctl --user -u keylime -u keylime-host -f
 ```
 
 On a headless server, enable user lingering if the service must keep running
@@ -501,7 +500,7 @@ loginctl enable-linger "$USER"
 ## Run sessions on another machine
 
 One key lime can start and watch omp sessions on other machines. Each machine keeps
-its own key lime (with its `ompweb-omp`), `~/.omp/agent` directory, sessions, and credentials (unless you
+its own key lime (with its `keylime-omp`), `~/.omp/agent` directory, sessions, and credentials (unless you
 [share the server's provider logins](#use-the-servers-provider-logins-on-a-host));
 key lime only routes. The remote machine needs either Bun (for `bunx`) or
 the [single binary](#single-binary), and must be able to reach the key lime server over
@@ -513,16 +512,16 @@ HTTP(S). It dials out, so it can sit behind NAT.
    an argument, so it does not show up in `ps`:
 
    ```bash
-   bunx --bun @kahme247/ompweb@latest host login --url https://your-ompweb.example.com
+   bunx --bun @mcowger/keylime@latest host login --url https://your-ompweb.example.com
    ```
 
    Paste the token when prompted (or pipe it in). It is saved to
-   `~/.omp/agent/omp-web/host.json` with mode `600`.
+   `~/.omp/agent/keylime/host.json` with mode `600`.
 
 3. Start the link and leave it running:
 
    ```bash
-   bunx --bun @kahme247/ompweb@latest host
+   bunx --bun @mcowger/keylime@latest host
    ```
 
    The host shows **online** in Settings → Hosts, the sidebar gets a group for it,
@@ -536,8 +535,8 @@ with the web server first. omp is part of each key lime release and updates with
 with `--allow-http` (for example on a tailnet):
 
 ```bash
-bunx --bun @kahme247/ompweb@latest host login --url http://100.64.0.1:30177
-bunx --bun @kahme247/ompweb@latest host --allow-http
+bunx --bun @mcowger/keylime@latest host login --url http://100.64.0.1:30177
+bunx --bun @mcowger/keylime@latest host --allow-http
 ```
 
 If the connection drops, the daemon reconnects by itself (1 s backoff doubling to
@@ -556,7 +555,7 @@ Update key lime on the server before its hosts: a host from before this version 
 
 Notes:
 
-- **Service helpers:** `ompweb systemd install` and `ompweb launchd install` set up
+- **Service helpers:** `keylime systemd install` and `keylime launchd install` set up
   this machine's own daemon next to its web server (see
   [Two services](#two-services-the-web-server-and-the-local-daemon)). On the other
   machine you only need the daemon, so use
@@ -567,7 +566,7 @@ Notes:
   the older side), and `0` when a newer link for the same host replaces it.
   SIGTERM or SIGINT stops the daemon and its omp processes.
   A link is one-per-host, so never run two daemons with the same token.
-- **The server's agent directory holds the host list** (`omp-web/hosts.json`).
+- **The server's agent directory holds the host list** (`keylime/hosts.json`).
   Starting the key lime server with a different `PI_CODING_AGENT_DIR`, or losing
   that file, makes every host token unknown: each daemon is told it was revoked,
   stops its omp processes and exits.
@@ -613,7 +612,7 @@ By default a host uses its own omp logins. Turn on **Use this server's provider 
 - **What the host can read:** the current access token of every OAuth login and every stored API key, in full. A process running as the daemon's user can do the same. OAuth refresh tokens never leave the server machine, and the host cannot add or replace a login. It can mark a login disabled or rate-limited for every machine.
 - **Turning it off:** turning sharing off, or revoking the host, aborts the host's open requests to the server and refuses later ones. Access tokens the host already read stay valid until they expire, and API keys until you rotate them at the provider.
 - **Dependence on the server:** a running session asks the server whenever an access token needs a refresh, so it fails to authenticate once its token expires while the server is unreachable. An `omp` you run yourself in the host's terminal is unaffected.
-- **Troubleshooting:** when sessions on a sharing host fail at startup, check the server log for `[omp-web] broker` lines and that the reverse proxy lets `/api/hosts/broker/` through.
+- **Troubleshooting:** when sessions on a sharing host fail at startup, check the server log for `[keylime] broker` lines and that the reverse proxy lets `/api/hosts/broker/` through.
 
 The host token is not put in an omp process's environment. The daemon listens on a loopback port with a secret it generates at each start, gives omp that address and secret, and forwards the requests to the server with the host token.
 
@@ -622,9 +621,9 @@ The host token is not put in an omp process's environment. The daemon listens on
 These run the [single binary](#single-binary) in host mode. On Linux a service
 keeps the link up across logouts and reboots; on macOS a script keeps it
 running in a terminal (see below for why). Unpack the release for the machine first,
-then save the link once with `ompweb host login --url …` as in step 2 (with the
-binary's path in place of `bunx --bun @kahme247/ompweb@latest`). Each setup starts
-`ompweb host` again 10 seconds after it fails, but not after exit 0: that means a
+then save the link once with `keylime host login --url …` as in step 2 (with the
+binary's path in place of `bunx --bun @mcowger/keylime@latest`). Each setup starts
+`keylime host` again 10 seconds after it fails, but not after exit 0: that means a
 newer link with the same token replaced it, and restarting would take the link back
 every 10 seconds. Add `--allow-http` after `host` if
 the server URL is plain `http://`, and set `PI_CODING_AGENT_DIR` in the service too
@@ -633,17 +632,17 @@ key lime web server on it, which writes the same link file for its own daemon. T
 update, stop the service, replace the release directory, and start it again. After
 revoking a host, stop and remove its service: it otherwise keeps retrying.
 
-**Linux (systemd user service).** Create `~/.config/systemd/user/ompweb-host.service`
+**Linux (systemd user service).** Create `~/.config/systemd/user/keylime-host.service`
 (adjust the release path):
 
 ```ini
 [Unit]
-Description=ompweb host
+Description=keylime host
 StartLimitIntervalSec=0
 
 [Service]
 WorkingDirectory=%h
-ExecStart=%h/.local/share/ompweb-linux-x64/ompweb host
+ExecStart=%h/.local/share/keylime-linux-x64/keylime host
 Environment=PATH=%h/.local/bin:%h/.bun/bin:/usr/local/bin:/usr/bin:/bin
 Restart=always
 # Exit 0: a newer link for this host replaced it. Restarting would take the link back.
@@ -656,9 +655,9 @@ WantedBy=default.target
 
 ```bash
 systemctl --user daemon-reload
-systemctl --user enable --now ompweb-host
+systemctl --user enable --now keylime-host
 loginctl enable-linger "$USER"            # keep it running while you are logged out
-journalctl --user -u ompweb-host -f       # logs
+journalctl --user -u keylime-host -f       # logs
 ```
 
 **macOS (from a terminal).** No launchd job can run a host that omp sessions can
@@ -669,32 +668,32 @@ run the host there, in tmux so it outlives the window.
 
 tmux does not keep the terminal's Local Network permission, though: the tmux server
 detaches from the terminal app, and macOS Local Network privacy then blocks the
-ad-hoc signed `ompweb` binary from LAN addresses (`connect` fails with "No route to
+ad-hoc signed `keylime` binary from LAN addresses (`connect` fails with "No route to
 host", which the daemon reports as `ECONNREFUSED`; Apple's own tools such as `curl`
 are not blocked, so a `curl` test passes). Link the host to a URL that does not
 resolve to a LAN address, for example the server's public URL, or its VPN or
 tailnet name (a Tailscale MagicDNS name served by your reverse proxy with its own
-certificate). Save this as `~/.local/bin/ompweb-host-run` (adjust `DIR`) and make
+certificate). Save this as `~/.local/bin/keylime-host-run` (adjust `DIR`) and make
 it executable with `chmod +x`:
 
 ```sh
 #!/bin/sh
-# Keeps `ompweb host` running in this terminal, which lends it its keychain and SSH agent.
+# Keeps `keylime host` running in this terminal, which lends it its keychain and SSH agent.
 # Restarts it 10 s after a crash; stops when the token is revoked or the link protocol is
 # unsupported (exit 1), or on exit 0: a newer link replaced it, or it was stopped (Ctrl-C).
-DIR=${OMPWEB_DIR:-$HOME/.local/share/ompweb-darwin-arm64}
+DIR=${KEYLIME_DIR:-$HOME/.local/share/keylime-darwin-arm64}
 # A tmux started over SSH sees the login keychain locked: unlock it while a terminal can ask.
 security show-keychain-info login.keychain-db 2>/dev/null || security unlock-keychain login.keychain-db || exit 1
 while :; do
-	(cd "$DIR" && exec ./ompweb host)
+	(cd "$DIR" && exec ./keylime host)
 	rc=$?
 	case $rc in 0 | 1) exit "$rc" ;; esac
-	echo "ompweb host exited $rc; restarting in 10 s" >&2
+	echo "keylime host exited $rc; restarting in 10 s" >&2
 	sleep 10
 done
 ```
 
-Run `ompweb-host-run` in a tmux window; Ctrl-C stops the daemon and its sessions.
+Run `keylime-host-run` in a tmux window; Ctrl-C stops the daemon and its sessions.
 Start it again after a reboot or logout. If the login keychain locks itself after
 inactivity or on sleep, SSH key passphrases and signing fail until you restart it.
 
@@ -712,7 +711,7 @@ inactivity or on sleep, SSH key passphrases and signing fail until you restart i
 - **Git Worktree Support**: Create, import, and manage workspaces under host-bound projects; sessions are registered within each workspace.
 - **Remote Hosts**: Link other machines (for example a MacBook) and run sessions there from one key lime. The sidebar groups sessions by host. See [Run sessions on another machine](#run-sessions-on-another-machine).
 - **Usage & Analytics**: Dashboard in **Settings → Usage** for tokens, costs, cache savings, and breakdowns by provider / model / day / project with SQLite persistence.
-- **macOS launchd Service**: LaunchAgent that starts at login, restarts on crash, and logs under `~/Library/Logs/ompweb`.
+- **macOS launchd Service**: LaunchAgent that starts at login, restarts on crash, and logs under `~/Library/Logs/keylime`.
 - **Linux systemd Service**: User services that start at login and restart on crash.
 - **Notifications**: Desktop and mobile (PWA) notifications for finished tasks, questions waiting for an answer, failed runs, and automatic model switches, with Web Push when served over HTTPS. See [Notifications](#notifications).
 - **Web-based Settings** (11 tabs): Interface & Behavior, Safety & Approvals, AI Model Defaults, API Keys & Providers, Usage, Agent & Intelligence (advisor, memory, compaction), Agents, Extensions & Tools (MCP, skills, plugins), Hosts, Notifications, System.
@@ -724,27 +723,27 @@ inactivity or on sleep, SSH key passphrases and signing fail until you restart i
 | Variable                        | Description                                                                                                                                                                                                                                                                                                                                                                       | Default                               |
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
 | `PORT`                          | Server port                                                                                                                                                                                                                                                                                                                                                                       | `30177`                               |
-| `OMP_WEB_HOSTNAME`              | Server bind host                                                                                                                                                                                                                                                                                                                                                                  | `127.0.0.1`                           |
-| `OMP_WEB_PASSWORD_HASH`         | Optional scrypt hash of the web login password, from `ompweb hash-password`. Optional on every bind address, including `0.0.0.0`                                                                                                                                                                                                                                                  | _None (auth disabled)_                |
-| `OMP_WEB_TRUSTED_HEADER_SHA256` | SHA-256 hex digest of the secret a trusted reverse proxy sends in `X-Omp-Web-Auth` to skip the password for that request; see [Skipping the password on trusted networks](#skipping-the-password-on-trusted-networks)                                                                                                                                                             | _None (disabled)_                     |
-| `OMP_WEB_NO_OPEN`               | Set to `1` to prevent auto-opening browser                                                                                                                                                                                                                                                                                                                                        | `0`                                   |
-| `OMP_WEB_NAME`                  | Name shown in browser tabs and installed-app names. `url`, `host` or `domain` (any case) uses the hostname the browser connected to, without port; localhost and IP addresses keep `key lime`. Any other value is used as-is. Restart after changing                                                                                                                               | `key lime`                             |
-| `OMP_WEB_OMP_BIN`               | Path to an `ompweb-omp` build to use instead of the downloaded one: a copy of the release's `ompweb-omp-<os>-<arch>` on a machine that cannot reach GitHub, or `runner/release/ompweb-omp-<os>-<arch>` from a source checkout. A stock `omp` does not work: it does not speak key lime's channel. The service installers write it into the service environment only when you set it | _the downloaded `ompweb-omp`_         |
+| `KEYLIME_HOSTNAME`              | Server bind host                                                                                                                                                                                                                                                                                                                                                                  | `127.0.0.1`                           |
+| `KEYLIME_PASSWORD_HASH`         | Optional scrypt hash of the web login password, from `keylime hash-password`. Optional on every bind address, including `0.0.0.0`                                                                                                                                                                                                                                                  | _None (auth disabled)_                |
+| `KEYLIME_TRUSTED_HEADER_SHA256` | SHA-256 hex digest of the secret a trusted reverse proxy sends in `X-Keylime-Auth` to skip the password for that request; see [Skipping the password on trusted networks](#skipping-the-password-on-trusted-networks)                                                                                                                                                             | _None (disabled)_                     |
+| `KEYLIME_NO_OPEN`               | Set to `1` to prevent auto-opening browser                                                                                                                                                                                                                                                                                                                                        | `0`                                   |
+| `KEYLIME_NAME`                  | Name shown in browser tabs and installed-app names. `url`, `host` or `domain` (any case) uses the hostname the browser connected to, without port; localhost and IP addresses keep `key lime`. Any other value is used as-is. Restart after changing                                                                                                                               | `key lime`                             |
+| `KEYLIME_OMP_BIN`               | Path to an `keylime-omp` build to use instead of the downloaded one: a copy of the release's `keylime-omp-<os>-<arch>` on a machine that cannot reach GitHub, or `runner/release/keylime-omp-<os>-<arch>` from a source checkout. A stock `omp` does not work: it does not speak key lime's channel. The service installers write it into the service environment only when you set it | _the downloaded `keylime-omp`_         |
 | `PI_CODING_AGENT_DIR`           | Custom omp agent directory                                                                                                                                                                                                                                                                                                                                                        | `~/.omp/agent`                        |
-| `OMP_WEB_STT_ENDPOINT`          | OpenAI-compatible transcription endpoint URL. Leave unset to transcribe with `OMP_WEB_STT_MODEL` through omp's own credentials                                                                                                                                                                                                                                                    | _None_                                |
-| `OMP_WEB_STT_KEY`               | Optional API key for the STT endpoint                                                                                                                                                                                                                                                                                                                                             | _None_                                |
-| `OMP_WEB_STT_MODEL`             | Model name for the STT endpoint. Without an endpoint: an omp speech-to-text model run with omp's logins, such as `openai-codex/codex-transcribe` (ChatGPT subscription; needs an omp version with that model)                                                                                                                                                                     | _None (disabled without an endpoint)_ |
+| `KEYLIME_STT_ENDPOINT`          | OpenAI-compatible transcription endpoint URL. Leave unset to transcribe with `KEYLIME_STT_MODEL` through omp's own credentials                                                                                                                                                                                                                                                    | _None_                                |
+| `KEYLIME_STT_KEY`               | Optional API key for the STT endpoint                                                                                                                                                                                                                                                                                                                                             | _None_                                |
+| `KEYLIME_STT_MODEL`             | Model name for the STT endpoint. Without an endpoint: an omp speech-to-text model run with omp's logins, such as `openai-codex/codex-transcribe` (ChatGPT subscription; needs an omp version with that model)                                                                                                                                                                     | _None (disabled without an endpoint)_ |
 
-**`OMP_WEB_NAME` and installed apps.** An installed app (PWA) is usually named after the page it was installed from. If you later change `OMP_WEB_NAME`, or reach key lime through a different address while `OMP_WEB_NAME` is `url`, `host` or `domain`, your operating system may rename the installed app as well. Leave `OMP_WEB_NAME` empty, or set a name that identifies this key lime server whatever domain name or address is used to reach it.
+**`KEYLIME_NAME` and installed apps.** An installed app (PWA) is usually named after the page it was installed from. If you later change `KEYLIME_NAME`, or reach key lime through a different address while `KEYLIME_NAME` is `url`, `host` or `domain`, your operating system may rename the installed app as well. Leave `KEYLIME_NAME` empty, or set a name that identifies this key lime server whatever domain name or address is used to reach it.
 
 ## Skipping the password on trusted networks
 
 key lime cannot see the client's address itself, so it leaves the decision to
-your reverse proxy. The proxy sends a secret in the `X-Omp-Web-Auth` header,
+your reverse proxy. The proxy sends a secret in the `X-Keylime-Auth` header,
 and key lime holds only that secret's SHA-256 digest in
-`OMP_WEB_TRUSTED_HEADER_SHA256`. A request whose header hashes to that digest
+`KEYLIME_TRUSTED_HEADER_SHA256`. A request whose header hashes to that digest
 is treated as signed in. Everyone else still signs in with the password whose
-hash is in `OMP_WEB_PASSWORD_HASH`; without a password there is nothing to
+hash is in `KEYLIME_PASSWORD_HASH`; without a password there is nothing to
 skip, and the header is ignored. Keep key lime bound to `127.0.0.1` so only the
 proxy reaches it.
 
@@ -755,14 +754,14 @@ digest:
 
 ```bash
 secret=$(openssl rand -hex 32)
-printf 'map $ompweb_trusted $ompweb_auth {\n    1        "%s";\n    default  "";\n}\n' "$secret" \
-  | sudo install -m 0640 -o root -g www-data /dev/stdin /etc/nginx/ompweb-auth.conf
+printf 'map $keylime_trusted $keylime_auth {\n    1        "%s";\n    default  "";\n}\n' "$secret" \
+  | sudo install -m 0640 -o root -g www-data /dev/stdin /etc/nginx/keylime-auth.conf
 printf %s "$secret" | sha256sum | cut -d' ' -f1
 unset secret
 ```
 
 Use your nginx group in place of `www-data` (`nginx` on some distributions).
-Set the printed digest as `OMP_WEB_TRUSTED_HEADER_SHA256`. The command history
+Set the printed digest as `KEYLIME_TRUSTED_HEADER_SHA256`. The command history
 holds only the commands, never the secret.
 
 Always generate the secret this way; do not reuse a password or another chosen
@@ -774,18 +773,18 @@ With nginx, send the secret only to the address ranges you trust:
 
 ```nginx
 # http {} context
-geo $ompweb_trusted {
+geo $keylime_trusted {
     default       0;
     10.0.0.0/16   1;
 }
-include /etc/nginx/ompweb-auth.conf;  # the map written above
+include /etc/nginx/keylime-auth.conf;  # the map written above
 
 # the location that proxies to key lime
-proxy_set_header X-Omp-Web-Auth $ompweb_auth;
+proxy_set_header X-Keylime-Auth $keylime_auth;
 ```
 
 Always set the header, as above: the empty value for other clients replaces any
-`X-Omp-Web-Auth` a client sends itself. nginx only inherits `proxy_set_header`
+`X-Keylime-Auth` a client sends itself. nginx only inherits `proxy_set_header`
 from outer blocks when a block sets none of its own, so put this line next to
 the location's other `proxy_set_header` lines.
 
@@ -816,13 +815,13 @@ addresses you list in `set_real_ip_from`:
   connected, before `realip` replaced it:
 
   ```nginx
-  geo $realip_remote_addr $ompweb_peer_allowed {
+  geo $realip_remote_addr $keylime_peer_allowed {
       default          0;
       173.245.48.0/20  1;  # ...every Cloudflare range
       10.0.0.0/16      1;
   }
   # in the server block
-  if ($ompweb_peer_allowed = 0) { return 403; }
+  if ($keylime_peer_allowed = 0) { return 403; }
   ```
 
 - **Cloudflare Tunnel (`cloudflared`):** the tunnel connects to nginx from
@@ -831,7 +830,7 @@ addresses you list in `set_real_ip_from`:
   `real_ip_header CF-Connecting-IP;`. Any local process can then send its own
   `CF-Connecting-IP` to nginx and claim a trusted address, and a local
   connection without that header keeps `127.0.0.1`, so listing `127.0.0.1` in
-  `$ompweb_trusted` trusts every local process that connects to nginx.
+  `$keylime_trusted` trusts every local process that connects to nginx.
 - **Any other proxy or load balancer:**
 
   ```nginx
@@ -852,7 +851,7 @@ mise trust
 mise install
 bun install --frozen-lockfile
 bun runner/scripts/use-omp-build.ts && (cd runner && bun install --frozen-lockfile)
-bun runner/scripts/build-binary.ts   # key lime's omp build for this machine: runner/release/ompweb-omp-<os>-<arch>
+bun runner/scripts/build-binary.ts   # key lime's omp build for this machine: runner/release/keylime-omp-<os>-<arch>
 bun run dev
 ```
 
@@ -861,7 +860,7 @@ The dev server prints its URL. It finds the runner in `runner/release/` by itsel
 
 The dev server uses an isolated host daemon and does not take over the installed daemon.
 
-`bun run dev` starts a seeded development environment with Bun hot reload and a separate host daemon, printing its temporary directory and URL. Use the printed URL rather than choosing a fixed port for concurrent worktrees. See [CONTRIBUTING.md](CONTRIBUTING.md) for details. `bun run build` bundles the browser app into `dist/`, and `bun run start` serves it on port 30177 (`bun run smoke` checks the result). `bun run build:binary` builds the [single binary](#single-binary) for this machine into `release/` (`-- --target bun-linux-arm64` and the like for another platform; `bun run smoke -- --binary release/ompweb-linux-x64/ompweb` checks it).
+`bun run dev` starts a seeded development environment with Bun hot reload and a separate host daemon, printing its temporary directory and URL. Use the printed URL rather than choosing a fixed port for concurrent worktrees. See [CONTRIBUTING.md](CONTRIBUTING.md) for details. `bun run build` bundles the browser app into `dist/`, and `bun run start` serves it on port 30177 (`bun run smoke` checks the result). `bun run build:binary` builds the [single binary](#single-binary) for this machine into `release/` (`-- --target bun-linux-arm64` and the like for another platform; `bun run smoke -- --binary release/keylime-linux-x64/keylime` checks it).
 
 API documentation is generated explicitly with `bun run api:generate` and checked
 with `bun run api:check`. Development, builds and deployments do not regenerate or

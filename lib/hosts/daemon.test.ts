@@ -49,16 +49,16 @@ type ScriptedServer = {
 };
 
 // The daemon in-process against a scripted server on a real WebSocket (`bun test`).
-const scratch = mkdtempSync(join(tmpdir(), "omp-web-daemon-test-"));
+const scratch = mkdtempSync(join(tmpdir(), "keylime-daemon-test-"));
 const saved = {
   agentDir: process.env.PI_CODING_AGENT_DIR,
-  bin: process.env.OMP_WEB_OMP_BIN,
+  bin: process.env.KEYLIME_OMP_BIN,
 };
 process.env.PI_CODING_AGENT_DIR = join(scratch, "agent");
 const fakeOmp = join(scratch, "fake-omp");
 const pidFile = join(scratch, "omp.pid");
 const childrenFile = join(scratch, "children.jsonl");
-process.env.OMP_WEB_OMP_BIN = fakeOmp;
+process.env.KEYLIME_OMP_BIN = fakeOmp;
 function writeFakeOmp(file: string, source: string) {
   writeFileSync(file, `#!${process.execPath}\n${source}`, { mode: 0o755 });
 }
@@ -67,7 +67,7 @@ after(() => {
   for (const server of servers) server.stop();
   for (const [key, value] of [
     ["PI_CODING_AGENT_DIR", saved.agentDir],
-    ["OMP_WEB_OMP_BIN", saved.bin],
+    ["KEYLIME_OMP_BIN", saved.bin],
   ] as const) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
@@ -855,7 +855,7 @@ test("a running host deletes expired staged uploads every hour, not only when it
   t.mock.timers.enable({ apis: ["setInterval"] });
   const server = scriptedServer();
   const daemon = start(server);
-  const staged = join(process.env.PI_CODING_AGENT_DIR!, "omp-web", "uploads");
+  const staged = join(process.env.PI_CODING_AGENT_DIR!, "keylime", "uploads");
   try {
     await waitFor(() => server.hellos.length === 1, "the link");
     // A cancel that never arrived left this behind after the start-up sweep ran.
@@ -1030,7 +1030,7 @@ test("setUploadRetention validates days, persists them under the agent dir and s
   };
   const stored = join(
     process.env.PI_CODING_AGENT_DIR!,
-    "omp-web",
+    "keylime",
     "upload-retention.json",
   );
   const old = upload("old.bin", 40);
@@ -1497,10 +1497,10 @@ test("close 4426 exits 1 naming the side to update; close 4409 exits 0", async (
     for (const [serverVersion, advice] of [
       [
         2,
-        "this host's ompweb is newer than the server's: update ompweb on the server",
+        "this host's keylime is newer than the server's: update keylime on the server",
       ],
-      [10, "update ompweb on the server"],
-      [LINK_PROTOCOL_VERSION + 1, "update ompweb on this host"],
+      [10, "update keylime on the server"],
+      [LINK_PROTOCOL_VERSION + 1, "update keylime on this host"],
     ] as const) {
       log.lines.length = 0;
       const server = scriptedServer();
@@ -1520,7 +1520,7 @@ test("close 4426 exits 1 naming the side to update; close 4409 exits 0", async (
     assert.equal(await replaced.done, 0);
     assert.ok(
       log.lines.some((line) =>
-        line.includes("another ompweb host linked with this token; exiting"),
+        line.includes("another keylime host linked with this token; exiting"),
       ),
       log.lines.join("|"),
     );
@@ -1925,7 +1925,7 @@ test("spawn reports a fallback when a new session's cwd is missing on this host"
   }
 });
 
-const hostJson = join(scratch, "agent", "omp-web", "host.json");
+const hostJson = join(scratch, "agent", "keylime", "host.json");
 function writeHostJson(url: string, token: string) {
   mkdirSync(dirname(hostJson), { recursive: true });
   writeFileSync(hostJson, JSON.stringify({ url, token }));
@@ -2869,7 +2869,7 @@ test("synchronous local drain closes spawn and upload admission until explicit r
         existsSync(
           join(
             process.env.PI_CODING_AGENT_DIR!,
-            "omp-web",
+            "keylime",
             "uploads",
             `${id}.part`,
           ),
@@ -3020,7 +3020,7 @@ test("an open partial upload blocks drain; its actual completed bytes survive ex
   const id = "0f7d9e43-61b8-4619-8053-000000000001";
   const part = join(
     process.env.PI_CODING_AGENT_DIR!,
-    "omp-web",
+    "keylime",
     "uploads",
     `${id}.part`,
   );

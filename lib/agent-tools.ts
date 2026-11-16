@@ -3,9 +3,9 @@ import { isRecord } from "./type-guards";
 
 /**
  * Server-side agent tools for issue #275: tools an agent running inside
- * omp-web can call to reach *other* top-level omp-web sessions. omp's own
+ * keylime can call to reach *other* top-level keylime sessions. omp's own
  * `task` tool and `write agent://<id>` only work inside one omp process,
- * so cross-session work has to be answered by the omp-web server itself —
+ * so cross-session work has to be answered by the keylime server itself —
  * never by an attached browser tab (the issue's key requirement: these
  * tools keep working with no tab open).
  *
@@ -13,7 +13,7 @@ import { isRecord } from "./type-guards";
  * the session registry, or the session files. The caller (lib/rpc-manager)
  * supplies those through AgentToolSessionOps, which keeps the validation,
  * gating, attribution and loop-guard logic unit-testable without a live
- * omp child. The only omp-web surface this module touches is the
+ * omp child. The only keylime surface this module touches is the
  * HostToolDefinition shape omp already understands for set_host_tools.
  */
 
@@ -28,13 +28,13 @@ export const AGENT_TOOL_DEFINITIONS: HostToolDefinition[] = [
   {
     name: "list_sessions",
     description:
-      "List omp-web sessions on every host (ID, name, working directory, host, running or idle) so send_to_session can address one without the user copying IDs.",
+      "List keylime sessions on every host (ID, name, working directory, host, running or idle) so send_to_session can address one without the user copying IDs.",
     parameters: { type: "object", properties: {} },
   },
   {
     name: "new_session",
     description:
-      "Start an independent omp-web session. Registered pooled projects receive an isolated worktree on an eligible worker. Set shareWorkspace to keep unpublished parent workspace dependencies on the calling session's owner. Returns its session ID.",
+      "Start an independent keylime session. Registered pooled projects receive an isolated worktree on an eligible worker. Set shareWorkspace to keep unpublished parent workspace dependencies on the calling session's owner. Returns its session ID.",
     parameters: {
       type: "object",
       properties: {
@@ -276,7 +276,7 @@ export function formatAttributedMessage(
   sourceSessionId: string,
   message: string,
 ): string {
-  return `[From session ${sourceSessionId} via omp-web agent tools]: ${message}`;
+  return `[From session ${sourceSessionId} via keylime agent tools]: ${message}`;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -439,7 +439,7 @@ export async function executeAgentTool(
 ): Promise<unknown> {
   if (!ctx.enabled) {
     throw new Error(
-      'Agent tools are disabled. Enable "Agent tools" in omp-web Settings (System) first.',
+      'Agent tools are disabled. Enable "Agent tools" in keylime Settings (System) first.',
     );
   }
   if (!AGENT_TOOL_NAMES.has(toolName))

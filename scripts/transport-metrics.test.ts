@@ -870,7 +870,7 @@ test("formatReport prints one line per row", () => {
 });
 
 test("the CLI prints the table for a file, reading .1 before the file, and the ackMs note under link rows", () => {
-  const dir = mkdtempSync(path.join(tmpdir(), "omp-web-transport-summary-"));
+  const dir = mkdtempSync(path.join(tmpdir(), "keylime-transport-summary-"));
   try {
     const file = path.join(dir, "m.jsonl");
     const sample = (req: string, serverAt: number, ua: string) =>

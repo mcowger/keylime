@@ -171,7 +171,7 @@ export interface ConfigState {
 }
 export function createClusterConfig(deps: {
   roots(): Record<ConfigRoot, string>;
-  stateDir(): string; // <agent dir>/omp-web
+  stateDir(): string; // <agent dir>/keylime
   fetch(serverUrl: string, path: string): Promise<Response>; // authenticated by the caller; path starts with /api/hosts/cluster-config/
   runOmp(args: string[], timeoutMs: number): Promise<string>;
   commandExists(command: string): Promise<boolean>;
@@ -205,7 +205,7 @@ Layout under `stateDir()`: `cluster-config/state.json` (`{ version, plugins }`),
   - first apply: files appear with mode 0600 (0700 for `exec`), a nested directory is created, `own-config/` holds the member's previous files, `state()` is `files: "current"`;
   - a member file inside a mirrored directory that the master does not have is gone from the live tree and present in the backup;
   - `config.yml` keeps the member's `shellPath` and takes the master's other keys;
-  - `agentEnv` in the member's `omp-web-settings.json` equals the manifest's;
+  - `agentEnv` in the member's `keylime-settings.json` equals the manifest's;
   - a second `ensure` with the applied version fetches nothing;
   - two concurrent `ensure` calls → one manifest fetch;
   - a manifest with `path: "../x"` or `root: "agent", path: "sessions/a"` → rejected with `cluster_config_failed`, nothing written;
@@ -250,7 +250,7 @@ clusterConfig?: ConfigState & { current: boolean };
 
 Hub:
 
-- `RemoteHost.spawnRpc`, for a host that is a cluster member and not `local`, on an open that can start a process: a daemon below protocol 10 → 426 `host_upgrade_required` ("Update ompweb on <label> to use it in the cluster"); `clusterConfigVersion()` throwing → 409 `cluster_config_invalid` with the error's message; otherwise the launch gets `configVersion`.
+- `RemoteHost.spawnRpc`, for a host that is a cluster member and not `local`, on an open that can start a process: a daemon below protocol 10 → 426 `host_upgrade_required` ("Update keylime on <label> to use it in the cluster"); `clusterConfigVersion()` throwing → 409 `cluster_config_invalid` with the error's message; otherwise the launch gets `configVersion`.
 - `config_state` is stored per link when `hostVersion ≥ 10`; `current` is `state.version === the master's version && state.files === "current" && state.plugins === "current"`; a change calls `notifyHostsChange()`.
 - A timer started from `instrumentation.node.ts` runs every 30 s while a cluster exists: for each online member whose reported version differs from the master's, send `clusterConfig` `apply`. A failing master configuration is logged once per version.
 

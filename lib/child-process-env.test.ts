@@ -3,21 +3,21 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   createChildProcessEnvironment,
-  OMP_WEB_SECRET_ENV_VARS,
+  KEYLIME_SECRET_ENV_VARS,
 } from "./project-command-env.ts";
 
 test("strips the server-side STT key from child environments", () => {
-  assert.ok(OMP_WEB_SECRET_ENV_VARS.includes("OMP_WEB_STT_KEY"));
+  assert.ok(KEYLIME_SECRET_ENV_VARS.includes("KEYLIME_STT_KEY"));
   const env = createChildProcessEnvironment(
     {},
     {
-      OMP_WEB_STT_KEY: "sk-stt-secret",
-      OMP_WEB_PASSWORD_HASH: "scrypt$hash",
+      KEYLIME_STT_KEY: "sk-stt-secret",
+      KEYLIME_PASSWORD_HASH: "scrypt$hash",
       KEEP_ME: "1",
     },
   );
-  assert.equal(env.OMP_WEB_STT_KEY, undefined);
-  assert.equal(env.OMP_WEB_PASSWORD_HASH, undefined);
+  assert.equal(env.KEYLIME_STT_KEY, undefined);
+  assert.equal(env.KEYLIME_PASSWORD_HASH, undefined);
   assert.equal(env.KEEP_ME, "1");
 });
 

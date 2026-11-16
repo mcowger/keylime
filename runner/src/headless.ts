@@ -1,5 +1,5 @@
 /**
- * Headless omp: `ompweb-omp --headless [omp flags]`, spawned by `ompweb host`, which speaks the
+ * Headless omp: `keylime-omp --headless [omp flags]`, spawned by `keylime host`, which speaks the
  * channel (`channel.ts`) on this process's stdin/stdout. Nothing else may write to stdout.
  *
  * Startup is omp's own `runRootCommand` (settings, auth, models, --resume/--continue, extensions,

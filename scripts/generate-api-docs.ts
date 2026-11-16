@@ -21,8 +21,8 @@ import { browserAgentCommandNames } from "../lib/api-contracts/browser-agent-ope
 import { HOST_OP_NAMES, SESSION_OP_PARAMS } from "../lib/hosts/link-protocol";
 import { WORKSPACE_OP_PARAMS } from "../lib/workspace-types";
 import {
-  OMP_WEB_SESSION_COOKIE,
-  OMP_WEB_TRUSTED_HEADER,
+  KEYLIME_SESSION_COOKIE,
+  KEYLIME_TRUSTED_HEADER,
 } from "../lib/web-auth";
 import { portableDocument } from "./api-schema";
 import {
@@ -149,7 +149,7 @@ export function socketDocument(contract: SocketContract): JsonObject {
           webSession: {
             type: "httpApiKey",
             in: "cookie",
-            name: OMP_WEB_SESSION_COOKIE,
+            name: KEYLIME_SESSION_COOKIE,
             description:
               "Optional configured web authentication. Open deployments require no cookie; trusted proxies can authenticate the upgrade. Origin checks still apply.",
           },
@@ -517,12 +517,12 @@ export function httpDocument(
         webSession: {
           type: "apiKey",
           in: "cookie",
-          name: OMP_WEB_SESSION_COOKIE,
+          name: KEYLIME_SESSION_COOKIE,
         },
         trustedProxy: {
           type: "apiKey",
           in: "header",
-          name: OMP_WEB_TRUSTED_HEADER,
+          name: KEYLIME_TRUSTED_HEADER,
           description:
             "Only a configured trusted proxy should set this header.",
         },

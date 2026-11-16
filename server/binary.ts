@@ -1,7 +1,7 @@
-// The compiled `ompweb` (scripts/build-binary.ts): the web server by default, with the npm launcher's flags and
-// password env, `ompweb host` (the session daemon) and `ompweb hash-password`. The server runs in this process: there
+// The compiled `keylime` (scripts/build-binary.ts): the web server by default, with the npm launcher's flags and
+// password env, `keylime host` (the session daemon) and `keylime hash-password`. The server runs in this process: there
 // is no launcher, so no in-app update or service installer. Static root: the directory the executable sits in
-// (dist/, public/, node_modules/katex/, lib/omp/session-edit-extension.mjs), unless OMP_WEB_PACKAGE_DIR names another.
+// (dist/, public/, node_modules/katex/, lib/omp/session-edit-extension.mjs), unless KEYLIME_PACKAGE_DIR names another.
 import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 import packageJson from "../package.json";
@@ -12,20 +12,20 @@ import {
   getBrowserUrl,
   openInBrowser,
 } from "../bin/network-addresses";
-import { runHashPasswordCommand } from "../bin/omp-web-hash-password";
+import { runHashPasswordCommand } from "../bin/keylime-hash-password";
 import {
   checkLaunchSecurity,
   parseLaunchOptions,
-} from "../bin/omp-web-options";
+} from "../bin/keylime-options";
 import { runHostCli } from "@/lib/hosts/host-cli";
 
 // Before any server module loads: app/api/manifest reads public/ from it when it loads, and the daemon names
 // lib/omp/session-edit-extension.mjs in it to omp.
-process.env.OMP_WEB_PACKAGE_DIR ??= path.dirname(
+process.env.KEYLIME_PACKAGE_DIR ??= path.dirname(
   realpathSync(process.execPath),
 );
-const root = process.env.OMP_WEB_PACKAGE_DIR;
-const SEE_README = `https://github.com/${releaseRepo()}#single-binary shows how to run \`ompweb\` and \`ompweb host\` as services instead.`;
+const root = process.env.KEYLIME_PACKAGE_DIR;
+const SEE_README = `https://github.com/${releaseRepo()}#single-binary shows how to run \`keylime\` and \`keylime host\` as services instead.`;
 
 const command = process.argv[2];
 if (command === "host") process.exit(await runHostCli(process.argv.slice(3)));
@@ -46,9 +46,9 @@ if (command === "hash-password" || command === "hash_password") {
   );
 }
 if (
-  ["launchd", "ompweb-launchd", "systemd", "ompweb-systemd"].includes(command)
+  ["launchd", "keylime-launchd", "systemd", "keylime-systemd"].includes(command)
 ) {
-  console.error(`The ompweb binary has no service installer. ${SEE_README}`);
+  console.error(`The keylime binary has no service installer. ${SEE_README}`);
   process.exit(2);
 }
 
@@ -61,12 +61,12 @@ if (options.error) {
 const passwordHash = checkLaunchSecurity(options);
 if (!existsSync(path.join(root, "dist", "index.html"))) {
   console.error(
-    `No dist/index.html in ${root}. Keep the ompweb binary in the directory it was released in, or set OMP_WEB_PACKAGE_DIR to that directory.`,
+    `No dist/index.html in ${root}. Keep the keylime binary in the directory it was released in, or set KEYLIME_PACKAGE_DIR to that directory.`,
   );
   process.exit(1);
 }
 const { hostname, port } = options;
-// Loaded after OMP_WEB_PACKAGE_DIR is set above, for the modules that read it when they load.
+// Loaded after KEYLIME_PACKAGE_DIR is set above, for the modules that read it when they load.
 const { startProduction } = await import("./app");
 await startProduction({ port: Number(port), hostname });
 const { entries, hint } = getAccessibleAddresses({ hostname, port });

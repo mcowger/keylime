@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Compiles `src/cli.ts` into a standalone `ompweb-omp-<os>-<arch>` binary under `release/`, the way
+ * Compiles `src/cli.ts` into a standalone `keylime-omp-<os>-<arch>` binary under `release/`, the way
  * omp builds its release binaries (`scripts/ci-release-build-binaries.ts` and
  * `packages/coding-agent/scripts/compile-binary.ts` upstream). Those helpers assume the monorepo
  * (addons under `packages/natives/native`, docs and the stats client generated in place), so this
@@ -30,25 +30,25 @@ const TARGETS: Record<string, Target> = {
     platform: "linux",
     arch: "x64",
     bun: "bun-linux-x64-baseline",
-    outName: "ompweb-omp-linux-x64",
+    outName: "keylime-omp-linux-x64",
   },
   "linux-arm64": {
     platform: "linux",
     arch: "arm64",
     bun: "bun-linux-arm64",
-    outName: "ompweb-omp-linux-arm64",
+    outName: "keylime-omp-linux-arm64",
   },
   "darwin-x64": {
     platform: "darwin",
     arch: "x64",
     bun: "bun-darwin-x64",
-    outName: "ompweb-omp-darwin-x64",
+    outName: "keylime-omp-darwin-x64",
   },
   "darwin-arm64": {
     platform: "darwin",
     arch: "arm64",
     bun: "bun-darwin-arm64",
-    outName: "ompweb-omp-darwin-arm64",
+    outName: "keylime-omp-darwin-arm64",
   },
 };
 

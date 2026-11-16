@@ -196,7 +196,7 @@ test("serveFile refuses traversal and sets the cache policy", async () => {
   ]) {
     assert.equal(await get(pathname), null, pathname);
   }
-  const fixture = mkdtempSync(path.join(os.tmpdir(), "omp-web-sw-"));
+  const fixture = mkdtempSync(path.join(os.tmpdir(), "keylime-sw-"));
   try {
     mkdirSync(path.join(fixture, "dist"));
     mkdirSync(path.join(fixture, "public"));
@@ -227,7 +227,7 @@ test("serveFile refuses traversal and sets the cache policy", async () => {
 });
 
 test("serveFile never follows a symlink out of its directory", async (t) => {
-  const packageDir = mkdtempSync(path.join(os.tmpdir(), "omp-web-serve-link-"));
+  const packageDir = mkdtempSync(path.join(os.tmpdir(), "keylime-serve-link-"));
   t.after(() => rmSync(packageDir, { recursive: true, force: true }));
   const outside = path.join(packageDir, "outside");
   mkdirSync(outside);
@@ -297,7 +297,7 @@ test("serveFile sends Last-Modified and a weak ETag, and answers a match with 30
 });
 
 test("serveFile marks hashed assets immutable", async () => {
-  const packageDir = mkdtempSync(path.join(os.tmpdir(), "omp-web-serve-file-"));
+  const packageDir = mkdtempSync(path.join(os.tmpdir(), "keylime-serve-file-"));
   try {
     await Bun.write(
       path.join(packageDir, "dist", "assets", "app-1234.js"),
@@ -328,7 +328,7 @@ test("serveFile marks hashed assets immutable", async () => {
 
 test("serveFile skips a missing directory and serves from it once it exists", async (t) => {
   const packageDir = mkdtempSync(
-    path.join(os.tmpdir(), "omp-web-serve-missing-"),
+    path.join(os.tmpdir(), "keylime-serve-missing-"),
   );
   t.after(() => rmSync(packageDir, { recursive: true, force: true }));
   const get = () =>
@@ -340,7 +340,7 @@ test("serveFile skips a missing directory and serves from it once it exists", as
 
 test("serveFile follows a static directory swapped while it runs", async (t) => {
   // A release swapped in place: public/ is a link that moves to a new directory.
-  const packageDir = mkdtempSync(path.join(os.tmpdir(), "omp-web-serve-swap-"));
+  const packageDir = mkdtempSync(path.join(os.tmpdir(), "keylime-serve-swap-"));
   t.after(() => rmSync(packageDir, { recursive: true, force: true }));
   for (const release of ["old", "new"])
     await Bun.write(path.join(packageDir, release, "page.txt"), release);
@@ -363,8 +363,8 @@ test("serveFile follows a static directory swapped while it runs", async (t) => 
 test("renderIndex escapes the install name into the titles and adds the manifest link", () => {
   const html =
     '<html><head><title>key lime</title><meta name="apple-mobile-web-app-title" content="key lime" /></head><body></body></html>';
-  const previous = process.env.OMP_WEB_NAME;
-  process.env.OMP_WEB_NAME = "<script>";
+  const previous = process.env.KEYLIME_NAME;
+  process.env.KEYLIME_NAME = "<script>";
   try {
     const rendered = renderIndex(html, new Request("http://localhost/"));
     assert.match(rendered, /<title>&lt;script&gt;<\/title>/);
@@ -377,8 +377,8 @@ test("renderIndex escapes the install name into the titles and adds the manifest
       /<link rel="manifest" href="\/api\/manifest" crossorigin="use-credentials"><\/head>/,
     );
   } finally {
-    if (previous === undefined) delete process.env.OMP_WEB_NAME;
-    else process.env.OMP_WEB_NAME = previous;
+    if (previous === undefined) delete process.env.KEYLIME_NAME;
+    else process.env.KEYLIME_NAME = previous;
   }
 });
 

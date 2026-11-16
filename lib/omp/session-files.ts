@@ -27,7 +27,7 @@ import { gunzipSync, gzipSync } from "zlib";
 import { isRecord } from "../type-guards";
 
 // Keep user-session directory traversal out of Next's static NFT globbing.
-// These paths are resolved and authorized at request time by omp-web.
+// These paths are resolved and authorized at request time by keylime.
 const readDirectorySyncRuntime = Reflect.get(
   fsRuntime,
   "readdirSync",
@@ -446,7 +446,7 @@ export interface LoadSessionOptions extends ResolveBlobOptions {
 const SESSION_READ_CHUNK_BYTES = 1024 * 1024;
 
 /**
- * Ceiling on the on-disk size omp-web will materialize into memory. omp streams
+ * Ceiling on the on-disk size keylime will materialize into memory. omp streams
  * sessions, so this is not an omp limit — it is the point past which parsing a
  * session into JS objects (and serializing it into one HTTP response) would OOM
  * the whole server. Refusing loudly beats taking the process down.
@@ -1201,7 +1201,7 @@ export function scanSessionInfo(
 // cache is invalidated after every agent turn/rename/model change, so full
 // rescans are frequent; the memo turns each UNCHANGED file's prefix+suffix
 // window reads into a single stat. (path, size, mtimeMs) covers every session
-// mutation omp-web cares about. Stored on globalThis for hot-reload safety and
+// mutation keylime cares about. Stored on globalThis for hot-reload safety and
 // LRU-bounded (Map iteration order doubles as recency order).
 interface SessionScanCacheEntry {
   size: number;
@@ -1476,7 +1476,7 @@ export function cleanSessionTitle(raw: string): string {
  * updating the header's title fields.
  *
  * Note: unlike omp's SessionManager.setSessionName this does not append a
- * title_change audit entry — omp-web only needs the display title, and a
+ * title_change audit entry — keylime only needs the display title, and a
  * bounded 256-byte write cannot corrupt a file a live omp process may hold.
  */
 export function setSessionTitle(
@@ -1560,7 +1560,7 @@ export function writeSessionFileAtomicSync(
   tag = "rewrite",
 ): void {
   const dir = path.dirname(filePath);
-  const tempDir = mkdtempSync(path.join(dir, `.omp-web-${tag}-`));
+  const tempDir = mkdtempSync(path.join(dir, `.keylime-${tag}-`));
   const tempPath = path.join(tempDir, path.basename(filePath));
   try {
     writeFileSync(tempPath, body, "utf8");
@@ -1623,7 +1623,7 @@ export function archiveSessionFileWithArtifacts(
   const destinationArtifacts = destination.slice(0, -".gz".length);
   mkdirSync(path.dirname(destination), { recursive: true });
   const tempDir = mkdtempSync(
-    path.join(path.dirname(destination), ".omp-web-archive-"),
+    path.join(path.dirname(destination), ".keylime-archive-"),
   );
   const tempCompressed = path.join(tempDir, path.basename(destination));
   const tempRestore = path.join(tempDir, path.basename(source));

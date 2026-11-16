@@ -1,5 +1,5 @@
 // Composer uploads end to end on this process: the main registry (lib/uploads.ts) and the hub, linked over a loopback
-// WebSocket to a real `ompweb host` daemon (runHostDaemon) that stages and attaches the files.
+// WebSocket to a real `keylime host` daemon (runHostDaemon) that stages and attaches the files.
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
@@ -24,14 +24,14 @@ import type { DownMessage } from "./hosts/link-protocol.ts";
 import type { MessageReplacementWatch } from "./rpc-manager.ts";
 import type { UploadSink, UploadStartRequest } from "./uploads.ts";
 
-const scratch = mkdtempSync(join(tmpdir(), "omp-web-uploads-"));
+const scratch = mkdtempSync(join(tmpdir(), "keylime-uploads-"));
 const previous = {
   agentDir: process.env.PI_CODING_AGENT_DIR,
-  ompBin: process.env.OMP_WEB_OMP_BIN,
+  ompBin: process.env.KEYLIME_OMP_BIN,
 };
 process.env.PI_CODING_AGENT_DIR = join(scratch, "agent");
 // No omp here: the host links as omp-missing, which is linked.
-process.env.OMP_WEB_OMP_BIN = join(scratch, "no-omp");
+process.env.KEYLIME_OMP_BIN = join(scratch, "no-omp");
 
 const linkRoute = await import("../app/api/hosts/link/route.ts");
 const uploadsRoute = await import("../app/api/uploads/route.ts");
@@ -126,7 +126,7 @@ after(async () => {
   closeOutboxStore();
   for (const [key, value] of [
     ["PI_CODING_AGENT_DIR", previous.agentDir],
-    ["OMP_WEB_OMP_BIN", previous.ompBin],
+    ["KEYLIME_OMP_BIN", previous.ompBin],
   ] as const) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
@@ -495,7 +495,7 @@ test("a host link dropped mid-upload fails it 503; a new start resumes from the 
   // The staged bytes are gone; the small receipt stays until the daemon's 24 h sweep.
   assert.deepEqual(
     readdirSync(
-      join(process.env.PI_CODING_AGENT_DIR!, "omp-web", "uploads"),
+      join(process.env.PI_CODING_AGENT_DIR!, "keylime", "uploads"),
     ).filter((name) => name.startsWith(id)),
     [`${id}.json`],
   );
@@ -1338,7 +1338,7 @@ test("the HTTP path (POST, PUT ?offset, DELETE) produces the same file", async (
   );
   const staged = join(
     process.env.PI_CODING_AGENT_DIR!,
-    "omp-web",
+    "keylime",
     "uploads",
     `${gone}.part`,
   );
@@ -1366,7 +1366,7 @@ test("the HTTP path (POST, PUT ?offset, DELETE) produces the same file", async (
   );
   const forgottenFile = join(
     process.env.PI_CODING_AGENT_DIR!,
-    "omp-web",
+    "keylime",
     "uploads",
     `${forgotten}.part`,
   );
@@ -1838,7 +1838,7 @@ test("a failed attach frees the fence and the waiting command selects the latest
 });
 
 const loginHeaders = (cookie: string) => ({
-  cookie: `omp_web_session=${cookie}`,
+  cookie: `keylime_session=${cookie}`,
 });
 const loginOwner = (cookie: string) =>
   requestOwner(
@@ -2141,12 +2141,12 @@ test("upload continuity: mixed original owners survive acceptance then SQLite an
   outbox.closeOutboxStore();
   globalThis.__ompOutbox = undefined;
   globalThis.__ompUploads!.clear();
-  const previous = process.env.OMP_WEB_TRUSTED_HEADER_SHA256;
-  process.env.OMP_WEB_TRUSTED_HEADER_SHA256 = "a".repeat(64);
+  const previous = process.env.KEYLIME_TRUSTED_HEADER_SHA256;
+  process.env.KEYLIME_TRUSTED_HEADER_SHA256 = "a".repeat(64);
   t.after(() => {
     if (previous === undefined)
-      delete process.env.OMP_WEB_TRUSTED_HEADER_SHA256;
-    else process.env.OMP_WEB_TRUSTED_HEADER_SHA256 = previous;
+      delete process.env.KEYLIME_TRUSTED_HEADER_SHA256;
+    else process.env.KEYLIME_TRUSTED_HEADER_SHA256 = previous;
   });
   live.offline = false;
   outbox.pumpOutbox(live.sessionId);
@@ -2284,9 +2284,9 @@ test("upload continuity: expired and changed-scope proofs cannot authorize a new
     }
     globalThis.__ompUploads!.clear();
     outbox.closeOutboxStore();
-    const previous = process.env.OMP_WEB_TRUSTED_HEADER_SHA256;
+    const previous = process.env.KEYLIME_TRUSTED_HEADER_SHA256;
     if (condition === "scope")
-      process.env.OMP_WEB_TRUSTED_HEADER_SHA256 = "b".repeat(64);
+      process.env.KEYLIME_TRUSTED_HEADER_SHA256 = "b".repeat(64);
     try {
       const response = await continuityAdd(live, file);
       assert.ok(
@@ -2297,8 +2297,8 @@ test("upload continuity: expired and changed-scope proofs cannot authorize a new
       assert.deepEqual(live.sent, []);
     } finally {
       if (previous === undefined)
-        delete process.env.OMP_WEB_TRUSTED_HEADER_SHA256;
-      else process.env.OMP_WEB_TRUSTED_HEADER_SHA256 = previous;
+        delete process.env.KEYLIME_TRUSTED_HEADER_SHA256;
+      else process.env.KEYLIME_TRUSTED_HEADER_SHA256 = previous;
     }
   }
 });
@@ -2848,7 +2848,7 @@ test("upload continuity: a completed proof is not reused after the host loses it
   rmSync(
     join(
       process.env.PI_CODING_AGENT_DIR!,
-      "omp-web",
+      "keylime",
       "uploads",
       `${file.id}.part`,
     ),

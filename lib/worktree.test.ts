@@ -30,14 +30,14 @@ test("discovers the main checkout and linked worktrees without retaining prunabl
   }
 
   const root = realpathSync(
-    mkdtempSync(join(tmpdir(), "omp-web-worktree-test-")),
+    mkdtempSync(join(tmpdir(), "keylime-worktree-test-")),
   );
   const repo = join(root, "repo");
   const worktreeBase = `${repo}-worktrees`;
   try {
     git(root, ["init", repo]);
-    git(repo, ["config", "user.email", "omp-web@example.invalid"]);
-    git(repo, ["config", "user.name", "omp-web test"]);
+    git(repo, ["config", "user.email", "keylime@example.invalid"]);
+    git(repo, ["config", "user.name", "keylime test"]);
     writeFileSync(join(repo, "README.md"), "fixture\n");
     git(repo, ["add", "README.md"]);
     git(repo, ["commit", "-m", "fixture"]);

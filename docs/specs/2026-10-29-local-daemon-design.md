@@ -2,7 +2,7 @@
 
 ## Goal
 
-Restarting or redeploying the ompweb web server never interrupts an omp run, on
+Restarting or redeploying the keylime web server never interrupts an omp run, on
 this machine or any linked host. That frees the web server to change and restart
 often.
 
@@ -15,7 +15,7 @@ restart still kills them as orphans.
 ## Decisions
 
 - **The local daemon is required.** This machine is reached only through a
-  local `ompweb host` daemon, linked over loopback. `LocalHost`'s direct spawn
+  local `keylime host` daemon, linked over loopback. `LocalHost`'s direct spawn
   path is removed; there is one code path for every host.
 - **The daemon is its own service** (systemd unit / launchd agent), installed next to the web service.
 - **Restarts adopt live children.** A restarted web server takes over the omp
@@ -36,8 +36,8 @@ restart still kills them as orphans.
 ## Process layout
 
 ```
-ompweb (web service)  ──link over 127.0.0.1──▶  ompweb host (daemon service) ──▶ omp children
-          └──link over https/tailnet──▶  ompweb host on the Mac ──▶ omp children
+keylime (web service)  ──link over 127.0.0.1──▶  keylime host (daemon service) ──▶ omp children
+          └──link over https/tailnet──▶  keylime host on the Mac ──▶ omp children
 ```
 
 - **"This machine" is a linked host with the fixed id `local`.** It is shown as
@@ -52,7 +52,7 @@ ompweb (web service)  ──link over 127.0.0.1──▶  ompweb host (daemon se
   subagent-history; listed in `AGENTS.md`).
 - **Local link bootstrap.** On start, the web server makes sure a host record
   `local` exists with a token, and writes the daemon's
-  `<agent dir>/omp-web/host.json` (`{url, token}`, mode 0600) with its own
+  `<agent dir>/keylime/host.json` (`{url, token}`, mode 0600) with its own
   loopback URL. The daemon re-reads `host.json` when its link gets 401, so a
   web server that regenerated the token is picked up without restarting the
   daemon, and after every failed dial, so a web server that came back on
@@ -107,7 +107,7 @@ adopted run has no spawn. This changes the hello shape, so
 children are killed and resumed, never adopted; see the remote-hosts spec,
 "Protocol versions and compatibility").
 
-**Framing.** omp answers `negotiate_protocol` every time, and every ompweb child
+**Framing.** omp answers `negotiate_protocol` every time, and every keylime child
 is already on protocol v2, so the adopted wrapper starts its decoder at v2,
 drops `rpc_chunk` records until the first record of a new frame, and sends
 `negotiate_protocol` again.
@@ -131,20 +131,20 @@ or an adoption failure.
 | Daemon one link protocol version behind the web server (N-1) | The web server links a daemon one version behind: today a v4 daemon links beside v5 (no `part`, whole lines, no unacked window). It runs sessions, and its hello carries `pending`, so after a web restart its live children are adopted as a v5 daemon's are. From a later protocol bump on, a version whose hello lacks what adoption needs gets its live children killed and resumed on `hello` instead. The web server is upgraded first; the daemon catches up at its next restart. |
 | Daemon on a version the web server dropped, or newer than it | 426 (a pre-WebSocket daemon's POST) or close 4426 (a hello frame); "This machine" shows "needs upgrade"; new sessions there are disabled until the daemon is restarted on a supported version. From the first link protocol version released after the WebSocket experiments (N) on, no version N or newer is dropped: the web app keeps the handshake and an update op working for them (remote-hosts spec, "Decided: backward compatibility").                                         |
 | Dev server running                                           | It never writes `host.json`, so the daemon stays linked to production; dev shows "This machine" offline.                                                                                                                                                                                                                                                                                                                                                                                 |
-| Daemon not installed or not running                          | "This machine" shows offline with "start the ompweb-host service"; new local sessions are disabled.                                                                                                                                                                                                                                                                                                                                                                                      |
+| Daemon not installed or not running                          | "This machine" shows offline with "start the keylime-host service"; new local sessions are disabled.                                                                                                                                                                                                                                                                                                                                                                                      |
 | `host.json` token stale (web regenerated it)                 | Daemon gets 401, re-reads `host.json`, redials. It exits only if the file still holds the rejected token.                                                                                                                                                                                                                                                                                                                                                                                |
 | Web server moved to another port                             | The dial to the old port fails; the daemon re-reads `host.json` and dials the new URL.                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 ## Installing and upgrading
 
-- `ompweb systemd install` and `ompweb launchd install` install two units: the
-  existing web unit and `ompweb-host` (`ompweb host`), both restarting on
+- `keylime systemd install` and `keylime launchd install` install two units: the
+  existing web unit and `keylime-host` (`keylime host`), both restarting on
   failure. Uninstall removes both.
 - **Existing installs:** on first start after the upgrade, if no local daemon
   links within 90 s (well past the daemon's redial wait, at most 3 s on
   loopback, so a restart does not trip it), the web server shows a one-time
   banner with the exact command to install the daemon service (it does not
-  install services itself), and `ompweb host` for a foreground `ompweb`
+  install services itself), and `keylime host` for a foreground `keylime`
   (terminal or npx), which has no service: the user keeps it running in another
   terminal. Not in dev mode, where this machine is offline by design.
   Until then "This machine" is offline as above.
@@ -157,11 +157,11 @@ LINK_PROTOCOL_VERSION]` range (it would get 426 and exit); otherwise the
 
 ### This machine's deployment
 
-`/opt/omp-deployment/bin/ompweb-deploy` gains a daemon unit (`ompweb-host`)
+`/opt/omp-deployment/bin/keylime-deploy` gains a daemon unit (`keylime-host`)
 from the same release:
 
-- It restarts `ompweb-api` with the existing probes and rollback.
-- It restarts `ompweb-host` only when the running daemon's link version is
+- It restarts `keylime-api` with the existing probes and rollback.
+- It restarts `keylime-host` only when the running daemon's link version is
   outside the new release's `[MIN_LINK_PROTOCOL_VERSION,
 LINK_PROTOCOL_VERSION]` range. The script reads the daemon's from the
   release its process was started from (`/proc/<MainPID>/cmdline`);

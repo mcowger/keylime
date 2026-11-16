@@ -232,7 +232,7 @@ function ownSettings(dir: string): { path: string; yaml: string } | null {
 
 export function createClusterConfig(deps: {
   roots(): Record<ConfigRoot, string>;
-  stateDir(): string; // <agent dir>/omp-web
+  stateDir(): string; // <agent dir>/keylime
   fetch(
     serverUrl: string,
     path: string,

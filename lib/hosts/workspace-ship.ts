@@ -28,7 +28,7 @@ interface RecordPr {
   /** The watcher started the automatic cleanup once; a failure leaves it to the pill's Clean up. */
   autoFinished?: boolean;
 }
-const root = () => path.join(getAgentDir(), "omp-web", "ship");
+const root = () => path.join(getAgentDir(), "keylime", "ship");
 const jobsDir = () => path.join(root(), "jobs");
 const prFile = () => path.join(root(), "prs.json");
 const active = new Map<string, ShipJob>();

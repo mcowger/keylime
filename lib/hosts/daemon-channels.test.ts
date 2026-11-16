@@ -778,8 +778,8 @@ test("a prompt's outcome reaches the other members uncorrelated, so the elected 
 });
 
 test("an adopted channel has no idle stop and is never recorded as running", async () => {
-  const saved = process.env.OMP_WEB_DISCONNECT_DESTROY_MS;
-  process.env.OMP_WEB_DISCONNECT_DESTROY_MS = "1"; // an unattended spawned child stops after 1 ms
+  const saved = process.env.KEYLIME_DISCONNECT_DESTROY_MS;
+  process.env.KEYLIME_DISCONNECT_DESTROY_MS = "1"; // an unattended spawned child stops after 1 ms
   try {
     const control = harness(),
       first = await control.table.open(control.a, { sessionId: SAVED, launch });
@@ -806,8 +806,8 @@ test("an adopted channel has no idle stop and is never recorded as running", asy
     await control.table.stop();
     await h.table.stop();
   } finally {
-    if (saved === undefined) delete process.env.OMP_WEB_DISCONNECT_DESTROY_MS;
-    else process.env.OMP_WEB_DISCONNECT_DESTROY_MS = saved;
+    if (saved === undefined) delete process.env.KEYLIME_DISCONNECT_DESTROY_MS;
+    else process.env.KEYLIME_DISCONNECT_DESTROY_MS = saved;
   }
 });
 

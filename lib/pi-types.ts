@@ -31,7 +31,7 @@ import type {
   HostUriCancelFrameSchema,
   HostUriResultFrameSchema,
 } from "./api-contracts/domain";
-// Local mirrors of the omp shapes used by omp-web. omp's SDK packages are
+// Local mirrors of the omp shapes used by keylime. omp's SDK packages are
 // Bun-only, so these types are hand-maintained against
 // oh-my-pi/packages/coding-agent/src/modes/rpc/rpc-types.ts (protocol v1).
 
@@ -64,7 +64,7 @@ export type ClientMessageStatus = Static<typeof ClientMessageStatusSchema>;
 export type RpcSessionState = Static<typeof RpcSessionStateSchema>;
 
 /**
- * The state shape omp-web's own API returns to the browser
+ * The state shape keylime's own API returns to the browser
  * (AgentSessionWrapper adapts RpcSessionState and adds process-side flags).
  */
 export type WebSessionState = Static<typeof WebSessionStateSchema>;
@@ -101,7 +101,7 @@ export type RpcAskDialogAnswer = Static<typeof RpcAskDialogAnswerSchema>;
 export type HtmlFormData = Static<typeof HtmlFormDataSchema>;
 
 /**
- * omp's RPC host-tool bridge: omp-web registers host tools (set_host_tools)
+ * omp's RPC host-tool bridge: keylime registers host tools (set_host_tools)
  * that the agent can call; the server emits host_tool_call frames the UI
  * executes, and the UI answers with host_tool_result. Mirrors
  * oh-my-pi modes/rpc/rpc-types.ts.

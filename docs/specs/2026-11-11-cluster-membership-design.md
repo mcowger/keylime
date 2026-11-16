@@ -13,7 +13,7 @@ A host that becomes a member keeps its existing projects under its own name in t
 
 Goal:
 
-- There is one cluster. The machine ompweb runs on is its master and always a member. Settings → Hosts says, per linked host, whether it is in the cluster or standalone, and changes it. A MacBook stays standalone while the Proxmox hosts are in the cluster.
+- There is one cluster. The machine keylime runs on is its master and always a member. Settings → Hosts says, per linked host, whether it is in the cluster or standalone, and changes it. A MacBook stays standalone while the Proxmox hosts are in the cluster.
 - When a host joins the cluster, its projects become the cluster's. The same repository on several members is one project, and its sessions are listed together.
 
 Not goals:
@@ -30,13 +30,13 @@ Not goals:
 - The cluster is the first pool in `pools.json`. If there is none, the first host that joins creates it, named "Cluster", with this machine as its first member.
 - This machine is always a member. If an existing pool lacks it, it is added the next time a host joins. It cannot leave. Its row in Settings → Hosts shows "Cluster master" and has no control.
 - As a member, this machine takes new sessions like any other member, and its projects move into the cluster by the rules of M3 when the cluster is created or it is added. As today, a member is chosen for a new session only while its daemon reports capacity, which daemons do on Linux only.
-- This machine's folder for the checkouts the cluster creates (`projectsRoot`) is `<home>/ompweb-cluster`. It is not asked for.
+- This machine's folder for the checkouts the cluster creates (`projectsRoot`) is `<home>/keylime-cluster`. It is not asked for.
 
 ### M2. The control
 
 - Each linked host's row gets a switch: **In the cluster**.
 - Turning it on opens a confirmation with one field and two notes:
-  - the folder on that host where the cluster keeps the checkouts it creates, prefilled with `<host home>/ompweb-cluster`;
+  - the folder on that host where the cluster keeps the checkouts it creates, prefilled with `<host home>/keylime-cluster`;
   - what happens to the host's projects (M3);
   - the credential note of M5.
 - Turning it off asks for confirmation and says what M6 does.

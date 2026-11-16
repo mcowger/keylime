@@ -19,7 +19,7 @@ import { annotateSkillsWithInstallInfo } from "@/lib/skill-lock";
 /**
  * Pure-Node skill discovery mirroring omp's providers
  * (oh-my-pi/packages/coding-agent/src/discovery/{builtin,claude,agents,codex,github}.ts).
- * omp-web cannot import the Bun-only SDK, so the scan rules are replicated:
+ * keylime cannot import the Bun-only SDK, so the scan rules are replicated:
  * each provider contributes <root>/<name>/SKILL.md skills, higher-priority
  * providers win name collisions, and `enabled: false` frontmatter hides a
  * skill entirely.
@@ -427,7 +427,7 @@ async function discoverSkillsViaCli(
         timeout: SKILLS_CLI_TIMEOUT_MS,
         maxBuffer: 16 * 1024 * 1024,
         // Otherwise this child inherits the server's full environment,
-        // including omp-web's own secrets.
+        // including keylime's own secrets.
         env: createChildProcessEnvironment(),
       },
     );

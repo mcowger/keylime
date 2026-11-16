@@ -14,7 +14,7 @@ import { mock } from "bun:test";
 import type { HostRow as HubHostRow } from "./hub";
 import type { HostPool } from "./pools";
 
-const agentDir = mkdtempSync(join(tmpdir(), "omp-web-hosts-route-test-"));
+const agentDir = mkdtempSync(join(tmpdir(), "keylime-hosts-route-test-"));
 const configEnv = [
   "HOME",
   "PI_CODING_AGENT_DIR",
@@ -52,8 +52,8 @@ const { LinkDriver, upgradeSocket } =
   await import("./link-driver.test-helper.ts");
 const { LINK_PROTOCOL_VERSION } = await import("./link-protocol.ts");
 
-const hostsFile = join(agentDir, "omp-web", "hosts.json");
-const poolsFile = join(agentDir, "omp-web", "pools.json");
+const hostsFile = join(agentDir, "keylime", "hosts.json");
+const poolsFile = join(agentDir, "keylime", "pools.json");
 const BASE = "http://main.test/api/hosts";
 
 const send = (
@@ -85,7 +85,7 @@ test("POST returns the token once; GET lists the host without any secret", async
   const { host, token, command } = await response.json();
   assert.match(token, /^[A-Za-z0-9_-]{43}$/);
   assert.equal(host.label, "laptop");
-  assert.equal(command, "ompweb host login --url https://omp.example.com:8443");
+  assert.equal(command, "keylime host login --url https://omp.example.com:8443");
 
   const text = JSON.stringify(await get());
   assert.ok(!text.includes(token) && !text.includes("tokenHash"));
@@ -107,7 +107,7 @@ test("the command follows x-forwarded-host over the request host", async () => {
   );
   assert.equal(
     (await response.json()).command,
-    "ompweb host login --url https://proxy.example.com",
+    "keylime host login --url https://proxy.example.com",
   );
 });
 
@@ -736,7 +736,7 @@ test(
   async (t) => {
     const pool = seedPools(t);
     const original = readFileSync(poolsFile, "utf8");
-    const directory = join(agentDir, "omp-web");
+    const directory = join(agentDir, "keylime");
     chmodSync(directory, 0o500);
     try {
       assert.equal(

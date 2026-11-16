@@ -6,32 +6,32 @@ import {
   LABEL,
   buildHostEnv,
   buildPlist,
-} from "./omp-web-launchd.ts";
+} from "./keylime-launchd.ts";
 
 const env = { PATH: "/usr/bin", PI_CODING_AGENT_DIR: "/Users/u/agent" };
 
-test("the host daemon plist runs `ompweb host`, restarts with KeepAlive, and is throttled", () => {
+test("the host daemon plist runs `keylime host`, restarts with KeepAlive, and is throttled", () => {
   const plist = buildPlist({
     label: HOST_LABEL,
     args: [
       "/usr/local/bin/bun",
       "x",
       "--bun",
-      "@kahme247/ompweb@latest",
+      "@mcowger/keylime@latest",
       "host",
     ],
     env,
-    logName: "ompweb-host",
+    logName: "keylime-host",
     throttleInterval: 10,
   });
-  assert.equal(HOST_LABEL, "com.kahme247.ompweb-host");
+  assert.equal(HOST_LABEL, "com.kahme247.keylime-host");
   assert.match(
     plist,
-    /<key>Label<\/key><string>com\.kahme247\.ompweb-host<\/string>/,
+    /<key>Label<\/key><string>com\.kahme247\.keylime-host<\/string>/,
   );
   assert.match(
     plist,
-    /<string>@kahme247\/ompweb@latest<\/string>\n    <string>host<\/string>\n  <\/array>/,
+    /<string>@mcowger\/keylime@latest<\/string>\n    <string>host<\/string>\n  <\/array>/,
   );
   assert.match(plist, /<key>KeepAlive<\/key><true\/>/);
   assert.match(plist, /<key>ThrottleInterval<\/key><integer>10<\/integer>/);
@@ -39,7 +39,7 @@ test("the host daemon plist runs `ompweb host`, restarts with KeepAlive, and is 
     plist,
     /<key>PI_CODING_AGENT_DIR<\/key><string>\/Users\/u\/agent<\/string>/,
   );
-  assert.match(plist, /ompweb-host\.log<\/string>/);
+  assert.match(plist, /keylime-host\.log<\/string>/);
 });
 
 test("the web plist keeps its arguments and has no throttle", () => {
@@ -47,7 +47,7 @@ test("the web plist keeps its arguments and has no throttle", () => {
     label: LABEL,
     args: ["/usr/local/bin/bun", "x", "--bun", "pkg & co"],
     env,
-    logName: "ompweb",
+    logName: "keylime",
   });
   assert.match(plist, /<string>pkg &amp; co<\/string>\n  <\/array>/);
   assert.match(plist, /<key>KeepAlive<\/key><true\/>/);
@@ -63,7 +63,7 @@ test("the host env carries PATH, the omp binary and the agent dir, but no web se
   });
   assert.deepEqual(all, {
     PATH: "/usr/bin",
-    OMP_WEB_OMP_BIN: "/opt/omp/bin/omp",
+    KEYLIME_OMP_BIN: "/opt/omp/bin/omp",
     PI_CODING_AGENT_DIR: "/Users/u/agent",
   });
   assert.deepEqual(buildHostEnv({ svcPath: "/usr/bin" }), { PATH: "/usr/bin" });

@@ -1,5 +1,5 @@
 import type { TerminalEvent } from "../terminal-types";
-// Main-server end of the host link (spec "Link protocol"): accepts `ompweb
+// Main-server end of the host link (spec "Link protocol"): accepts `keylime
 // host` daemons on /api/hosts/link and exposes each linked machine as a
 // `RemoteHost`. Everything a daemon sends is untrusted input.
 // No `next/*` or `@/` imports.
@@ -165,7 +165,7 @@ interface Link {
   /** v10: a `config_state` arrived since the link came up: from then on reports, never op answers, set `configState`. */
   configReported: boolean;
   ompVersion: string | null;
-  ompwebVersion: string | null;
+  keylimeVersion: string | null;
   workspaceOps: Set<string>;
   platform: string | null;
   lastSeenAt: string | null;
@@ -337,7 +337,7 @@ function linkFor(id: string): Link {
       configOps: 0,
       configReported: false,
       ompVersion: null,
-      ompwebVersion: null,
+      keylimeVersion: null,
       workspaceOps: new Set(),
       platform: null,
       lastSeenAt: null,
@@ -520,7 +520,7 @@ export function flushLinkSamples(): void {
     appendTransportSamples(batch.samples.splice(0), null, batch.file);
   } catch (error) {
     console.warn(
-      `[omp-web] could not write host link samples: ${error instanceof Error ? error.message : String(error)}`,
+      `[keylime] could not write host link samples: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
@@ -578,7 +578,7 @@ function applyStats(
   if (message.invalid && !link.statsWarned) {
     link.statsWarned = true;
     console.warn(
-      `[omp-web] ${labelOf(link.id)}: dropped ${message.invalid} malformed link samples (not logged again for this host)`,
+      `[keylime] ${labelOf(link.id)}: dropped ${message.invalid} malformed link samples (not logged again for this host)`,
     );
   }
   const window = link.statsWindow;
@@ -684,7 +684,7 @@ function authenticate(req: Request): HostRecord | Response {
   } catch (error) {
     if (!(error instanceof HostRegistryUnreadableError)) throw error;
     // Never 401 here: a daemon told its token is unknown stops every omp child.
-    console.error(`[omp-web] host link refused: ${error.message}`);
+    console.error(`[keylime] host link refused: ${error.message}`);
     return json({ error: "The host registry cannot be read" }, 503);
   }
 }
@@ -705,7 +705,7 @@ export function freezeHostLinks(): void {
   for (const link of hub().links.values()) {
     link.capacity = null;
     recordDropped(link);
-    link.socket?.close(LINK_CLOSE.goingAway, "omp-web is restarting");
+    link.socket?.close(LINK_CLOSE.goingAway, "keylime is restarting");
   }
   // The process exits next: keep what was measured.
   flushLinkSamples();
@@ -726,7 +726,7 @@ export function handleLinkUpgrade(
 }
 
 /** POST /api/hosts/link: only a daemon from before the WebSocket (v3) sends one, its hello. It gets the 426 that tells
- * it to update ompweb on its host. */
+ * it to update keylime on its host. */
 export async function handleOutdatedLinkPost(req: Request): Promise<Response> {
   const record = authenticate(req);
   if (record instanceof Response) return record;
@@ -825,7 +825,7 @@ function guarded(ws: LinkSocket, handle: () => void): void {
   } catch (error) {
     failedSockets.add(ws);
     console.error(
-      `[omp-web] host link of ${ws.data.hostId} failed; closing it: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
+      `[keylime] host link of ${ws.data.hostId} failed; closing it: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
     );
     ws.close();
   }
@@ -907,7 +907,7 @@ function openLink(link: Link, ws: LinkSocket, hello: Hello): void {
   link.awaitingDrain = false;
   flush(link);
   link.ompVersion = hello.ompVersion;
-  link.ompwebVersion = hello.ompwebVersion ?? null;
+  link.keylimeVersion = hello.keylimeVersion ?? null;
   link.workspaceOps = new Set(hello.workspaceOps ?? []);
   endWorkspaceWatches(link.id);
   link.platform = hello.platform;
@@ -1071,7 +1071,7 @@ function reattach(
       } catch (error) {
         child.close();
         console.warn(
-          `[omp-web] could not join session ${sessionId} on ${labelOf(link.id)}: ${error instanceof Error ? error.message : String(error)}`,
+          `[keylime] could not join session ${sessionId} on ${labelOf(link.id)}: ${error instanceof Error ? error.message : String(error)}`,
         );
         return false;
       }
@@ -1106,7 +1106,7 @@ async function adopt(
     const reason = error instanceof Error ? error.message : String(error);
     child.close();
     console.warn(
-      `[omp-web] left the shared omp child of session ${sessionId} on ${labelOf(link.id)} running: this server could not adopt it (${reason})`,
+      `[keylime] left the shared omp child of session ${sessionId} on ${labelOf(link.id)} running: this server could not adopt it (${reason})`,
     );
     return false;
   }
@@ -1166,7 +1166,7 @@ function applyUp(
     // A newer daemon's message, or one only the server sends: skipped, but its seq is applied so it is acked and never resent.
     if (message.seq !== null) link.up.applied(message.seq);
     const note = link.unknownLog.note(message);
-    if (note) console.warn(`[omp-web] ${labelOf(link.id)}: ${note}`);
+    if (note) console.warn(`[keylime] ${labelOf(link.id)}: ${note}`);
     return;
   }
   // Already applied before a resend.
@@ -1662,7 +1662,7 @@ function remoteWorkspaceOps(hostId: string): WorkspaceOps {
         throw new HostOpError(
           501,
           "workspace_unsupported",
-          `Update or restart the ompweb host daemon on ${labelOf(hostId)} to use workspace files`,
+          `Update or restart the keylime host daemon on ${labelOf(hostId)} to use workspace files`,
         );
       }
       const result = await request(
@@ -1924,7 +1924,7 @@ export class RemoteRpcTransport implements RpcTransport {
       if (error instanceof HostOpError && error.code === "host_offline") return;
       this.close();
       console.warn(
-        `[omp-web] closed shared channel ${this.ch}: ${error instanceof Error ? error.message : String(error)}`,
+        `[keylime] closed shared channel ${this.ch}: ${error instanceof Error ? error.message : String(error)}`,
       );
     } finally {
       this.refreshing = false;
@@ -2254,7 +2254,7 @@ export interface LinkedHostRow {
   label: string;
   status: HostStatus;
   ompVersion: string | null;
-  ompwebVersion?: string | null;
+  keylimeVersion?: string | null;
   platform: string | null;
   lastSeenAt: string | null;
   allowAgentStart: boolean;
@@ -2278,7 +2278,7 @@ export function listHosts(): LinkedHostRow[] {
         label: record.label,
         status: link?.status ?? "offline",
         ompVersion: link?.ompVersion ?? null,
-        ompwebVersion: link?.ompwebVersion ?? null,
+        keylimeVersion: link?.keylimeVersion ?? null,
         platform: link?.platform ?? null,
         lastSeenAt: link?.lastSeenAt ?? record.lastSeenAt,
         allowAgentStart: record.allowAgentStart,
@@ -2330,7 +2330,7 @@ export async function masterConfigVersion(): Promise<string> {
       JSON.stringify(master.error ?? null) !== JSON.stringify(failure);
     if (failure && errorChanged)
       console.warn(
-        `[omp-web] cluster members cannot get this machine's configuration (${failure.code}: ${failure.message})`,
+        `[keylime] cluster members cannot get this machine's configuration (${failure.code}: ${failure.message})`,
       );
     if (master.version !== version || errorChanged) {
       // A new version reaches the members now, not at the next 30 s round (spec K3); the sync piles no op on another.
@@ -2448,7 +2448,7 @@ export interface LocalHostRow {
   label: string;
   status: HostStatus;
   ompVersion: string | null;
-  ompwebVersion?: string | null;
+  keylimeVersion?: string | null;
   platform: string | null;
   lastSeenAt: null;
   hostVersion: number | null;
@@ -2476,7 +2476,7 @@ export function hostsSnapshot(): {
     label: customLocalLabel(),
     status: link?.status ?? "offline",
     ompVersion: link?.ompVersion ?? null,
-    ompwebVersion: link?.ompwebVersion ?? null,
+    keylimeVersion: link?.keylimeVersion ?? null,
     platform: link?.platform ?? null,
     lastSeenAt: null,
     hostVersion: link?.hostVersion ?? null,

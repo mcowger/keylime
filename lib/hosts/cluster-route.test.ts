@@ -15,7 +15,7 @@ import type { HostPool, PoolMember, PoolProject } from "./pools.ts";
 import type { ProjectRegistryEntry } from "../project-registry.ts";
 import type { LinkDriver as Driver } from "./link-driver.test-helper.ts";
 
-const agentDir = mkdtempSync(join(tmpdir(), "omp-web-cluster-route-test-"));
+const agentDir = mkdtempSync(join(tmpdir(), "keylime-cluster-route-test-"));
 const previous = process.env.PI_CODING_AGENT_DIR;
 process.env.PI_CODING_AGENT_DIR = agentDir;
 after(() => {
@@ -59,7 +59,7 @@ const { createHost, rotateLocalHostToken, updateHost } =
 const route = await import("../../app/api/hosts/[id]/cluster/route.ts");
 const index = await import("./session-index.ts");
 
-const poolsFile = join(agentDir, "omp-web", "pools.json");
+const poolsFile = join(agentDir, "keylime", "pools.json");
 const APP = "https://github.com/a/app.git";
 const TOOL = "https://github.com/a/tool.git";
 const LIB = "https://github.com/a/lib.git";
@@ -257,7 +257,7 @@ async function linkBoth(t: TestContext, box: ServeOptions = {}) {
 }
 
 function seed(pools: HostPool[]) {
-  mkdirSync(join(agentDir, "omp-web"), { recursive: true });
+  mkdirSync(join(agentDir, "keylime"), { recursive: true });
   writeFileSync(
     poolsFile,
     `${JSON.stringify({ version: 1, pools }, null, 2)}\n`,
@@ -292,7 +292,7 @@ const workers = {
 test("the first join creates the cluster: this machine first, then the host, with both hosts' Git projects", async (t) => {
   // This machine's paths in its own form: the route resolves its session paths here.
   const home = resolve("/home/me");
-  const [app, tool, clusterRoot] = ["app", "tool", "ompweb-cluster"].map(
+  const [app, tool, clusterRoot] = ["app", "tool", "keylime-cluster"].map(
     (name) => join(home, name),
   );
   const { local, box, boxCalls } = await linkBoth(t, {
@@ -439,7 +439,7 @@ test("a pool without this machine gets it on the next join; enabled and the seco
   assert.deepEqual(pools[0], {
     ...workers,
     members: [
-      member("local", "/Users/me/ompweb-cluster"),
+      member("local", "/Users/me/keylime-cluster"),
       member(box.id, "/srv/box"),
     ],
   });
@@ -960,7 +960,7 @@ test("a failing restore still removes the member and answers 200 with restoreErr
       throw new HostOpError(
         409,
         "cluster_config_failed",
-        "omp-web/own-config/agent is not readable",
+        "keylime/own-config/agent is not readable",
       );
     },
   });
@@ -976,7 +976,7 @@ test("a failing restore still removes the member and answers 200 with restoreErr
   const body = await left.json();
   assert.equal(
     body.restoreError,
-    "Box: omp-web/own-config/agent is not readable",
+    "Box: keylime/own-config/agent is not readable",
   );
   assert.deepEqual(
     body.pools[0].members.map((m: PoolMember) => m.hostId),

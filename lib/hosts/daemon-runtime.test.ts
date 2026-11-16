@@ -22,7 +22,7 @@ import {
 const scratch = mkdtempSync(join(tmpdir(), "daemon-multi-runtime-"));
 const old = {
   agent: process.env.PI_CODING_AGENT_DIR,
-  bin: process.env.OMP_WEB_OMP_BIN,
+  bin: process.env.KEYLIME_OMP_BIN,
   home: process.env.HOME,
 };
 process.env.PI_CODING_AGENT_DIR = join(scratch, "agent");
@@ -61,13 +61,13 @@ function writeFakeOmp(version: string) {
   });
 }
 writeFakeOmp("99.0.0-fake");
-process.env.OMP_WEB_OMP_BIN = fakeOmp;
+process.env.KEYLIME_OMP_BIN = fakeOmp;
 const { runHostDaemon } = await import("./daemon.ts");
 const { saveWebServerSettings } = await import("../web-settings.ts");
 test.after(() => {
   for (const [key, value] of [
     ["PI_CODING_AGENT_DIR", old.agent],
-    ["OMP_WEB_OMP_BIN", old.bin],
+    ["KEYLIME_OMP_BIN", old.bin],
     ["HOME", old.home],
   ] as const) {
     if (value === undefined) delete process.env[key];
@@ -232,13 +232,13 @@ test("configuration reload, source ops/uploads and peer-only deletion preserve o
     "error",
     (message) =>
       typeof message === "string" &&
-      message.startsWith("[ompweb host] could not reload host.json: ") &&
+      message.startsWith("[keylime host] could not reload host.json: ") &&
       message.endsWith("/host.json is not valid host link configuration"),
   );
   const a = hub(t),
     b = hub(t),
     c = hub(t);
-  const dir = join(process.env.PI_CODING_AGENT_DIR!, "omp-web"),
+  const dir = join(process.env.PI_CODING_AGENT_DIR!, "keylime"),
     root = join(process.env.PI_CODING_AGENT_DIR!, "sessions", "-project");
   mkdirSync(dir, { recursive: true });
   mkdirSync(root, { recursive: true });
@@ -454,7 +454,7 @@ test("configuration reload, source ops/uploads and peer-only deletion preserve o
 test("a channel created during another link's handshake is announced when that link comes up", async (t) => {
   const a = hub(t),
     b = hub(t, false);
-  const dir = join(process.env.PI_CODING_AGENT_DIR!, "omp-web");
+  const dir = join(process.env.PI_CODING_AGENT_DIR!, "keylime");
   const sessions = join(
     process.env.PI_CODING_AGENT_DIR!,
     "sessions",
@@ -512,7 +512,7 @@ test("a channel created during another link's handshake is announced when that l
 test("a removed link stops owning its uploads while an active link keeps exclusion", async (t) => {
   const a = hub(t),
     b = hub(t),
-    dir = join(process.env.PI_CODING_AGENT_DIR!, "omp-web");
+    dir = join(process.env.PI_CODING_AGENT_DIR!, "keylime");
   mkdirSync(dir, { recursive: true });
   const save = (servers: ReturnType<typeof hub>[]) =>
     writeFileSync(
@@ -772,7 +772,7 @@ test("a recovered sharing session resumes through its link; one whose server is 
       credentialsServer,
     },
   });
-  const dir = join(process.env.PI_CODING_AGENT_DIR!, "omp-web");
+  const dir = join(process.env.PI_CODING_AGENT_DIR!, "keylime");
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, "host-running.json"),
@@ -922,7 +922,7 @@ test("an open with a version the member lacks applies it before omp starts; host
   });
   const running = join(
     process.env.PI_CODING_AGENT_DIR!,
-    "omp-web",
+    "keylime",
     "host-running.json",
   );
   await until(
@@ -942,7 +942,7 @@ test("a failing apply starts no process and answers cluster_config_failed", asyn
     "error",
     (message) =>
       message ===
-      "[ompweb host] cluster-config: applying failed: the master answered 500 for the manifest",
+      "[keylime host] cluster-config: applying failed: the master answered 500 for the manifest",
   );
   const config = masterConfig("master rules two\n");
   config.fail = true;
@@ -1212,9 +1212,9 @@ test("a master that stops answering fails the apply within the time limit, and t
     "error",
     (message) =>
       message ===
-        "[ompweb host] cluster-config: applying failed: the master did not send the manifest within 0.3 s" ||
+        "[keylime host] cluster-config: applying failed: the master did not send the manifest within 0.3 s" ||
       message ===
-        "[ompweb host] cluster-config: applying failed: the host daemon is stopping",
+        "[keylime host] cluster-config: applying failed: the host daemon is stopping",
   );
   const { clusterConfigTimings } = await import("./daemon-cluster-config.ts");
   const config = masterConfig("master rules seven\n"),
@@ -1269,7 +1269,7 @@ test("a member re-linked to its server at a new address: that address holds the 
   // One server at two addresses: the same configuration behind both.
   const before = hub(t, true, { version: LINK_PROTOCOL_VERSION, config }),
     after = hub(t, true, { version: LINK_PROTOCOL_VERSION, config });
-  const dir = join(process.env.PI_CODING_AGENT_DIR!, "omp-web");
+  const dir = join(process.env.PI_CODING_AGENT_DIR!, "keylime");
   mkdirSync(dir, { recursive: true });
   const relink = (server: ReturnType<typeof hub>) =>
     writeFileSync(
@@ -1325,7 +1325,7 @@ for (const fullWindow of [false, true])
       version = config.build.manifest.version;
     const a = hub(t, true, { version: LINK_PROTOCOL_VERSION, config }),
       b = hub(t, true, { version: LINK_PROTOCOL_VERSION });
-    const dir = join(process.env.PI_CODING_AGENT_DIR!, "omp-web");
+    const dir = join(process.env.PI_CODING_AGENT_DIR!, "keylime");
     mkdirSync(dir, { recursive: true });
     const save = (servers: ReturnType<typeof hub>[]) =>
       writeFileSync(
@@ -1388,7 +1388,7 @@ test("a member whose server revokes it gets its own configuration back before th
   const config = masterConfig("master rules nine\n"),
     version = config.build.manifest.version;
   const a = hub(t, true, { version: LINK_PROTOCOL_VERSION, config });
-  const dir = join(process.env.PI_CODING_AGENT_DIR!, "omp-web");
+  const dir = join(process.env.PI_CODING_AGENT_DIR!, "keylime");
   rmSync(join(dir, "host.json"), { force: true });
   const daemon = runHostDaemon({
     allowHttp: false,

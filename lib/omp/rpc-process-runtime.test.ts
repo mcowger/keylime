@@ -35,7 +35,7 @@ const HELLO = {
   cwd: "/w",
 };
 
-/** A fake ompweb-omp child speaking the channel on its stdio: says hello, records each line it is sent. */
+/** A fake keylime-omp child speaking the channel on its stdio: says hello, records each line it is sent. */
 function makeTransport() {
   const stdin = new PassThrough();
   const stdout = new PassThrough();

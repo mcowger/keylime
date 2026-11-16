@@ -19,7 +19,7 @@ export async function register(): Promise<void> {
   // failures here must never block boot.
   try {
     const { getAgentDir } = await import("@/lib/session-reader");
-    console.log(`[omp-web] starting (agent-dir ${getAgentDir()})`);
+    console.log(`[keylime] starting (agent-dir ${getAgentDir()})`);
   } catch {
     // Diagnostics are best-effort.
   }
@@ -33,10 +33,10 @@ export async function register(): Promise<void> {
         await import("@/lib/web-auth");
       const problem = webPasswordConfigurationProblem();
       if (problem)
-        console.error(`[omp-web] password configuration error:\n${problem}`);
+        console.error(`[keylime] password configuration error:\n${problem}`);
     } catch (error) {
       console.warn(
-        `[omp-web] password configuration check failed: ${error instanceof Error ? error.message : String(error)}`,
+        `[keylime] password configuration check failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   })();
@@ -48,23 +48,23 @@ export async function register(): Promise<void> {
   // first use (lib/omp/rpc-utility.ts), as the session registry does.
   void (async () => {
     try {
-      if (!process.env.OMP_WEB_OMP_BIN && !resolveOmpBin()) return;
+      if (!process.env.KEYLIME_OMP_BIN && !resolveOmpBin()) return;
       const { runUtilityCommand } = await import("@/lib/omp/rpc-utility");
       await runUtilityCommand({ type: "get_state" });
       const { getOmpVersion } = await import("@/lib/omp/omp-cli");
       const version = await getOmpVersion();
       console.log(
-        `[omp-web] omp utility ready (${version ?? "version unknown"})`,
+        `[keylime] omp utility ready (${version ?? "version unknown"})`,
       );
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      const hint = process.env.OMP_WEB_OMP_BIN
-        ? "check OMP_WEB_OMP_BIN; it must point to a working Keylime ompweb-omp runner, not stock omp"
+      const hint = process.env.KEYLIME_OMP_BIN
+        ? "check KEYLIME_OMP_BIN; it must point to a working Keylime keylime-omp runner, not stock omp"
         : sourceCheckoutOmpBin()
           ? "build the checkout runner with: bun runner/scripts/build-binary.ts"
-          : "fetch this release's runner with: ompweb fetch-omp";
+          : "fetch this release's runner with: keylime fetch-omp";
       console.warn(
-        `[omp-web] omp utility warm-up failed (routes will retry on demand): ${detail} — ${hint}`,
+        `[keylime] omp utility warm-up failed (routes will retry on demand): ${detail} — ${hint}`,
       );
     }
   })();
@@ -76,10 +76,10 @@ export async function register(): Promise<void> {
         await import("@/lib/hosts/local-bootstrap");
       const target = localLinkUrl();
       if ("url" in target) await ensureLocalHostLink({ url: target.url });
-      else console.warn(`[omp-web] local daemon link skipped: ${target.skip}`);
+      else console.warn(`[keylime] local daemon link skipped: ${target.skip}`);
     } catch (error) {
       console.warn(
-        `[omp-web] local daemon link not prepared: ${error instanceof Error ? error.message : String(error)}`,
+        `[keylime] local daemon link not prepared: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
@@ -91,7 +91,7 @@ export async function register(): Promise<void> {
     startUploadRetentionSync();
   } catch (error) {
     console.warn(
-      `[omp-web] upload retention sync not started: ${error instanceof Error ? error.message : String(error)}`,
+      `[keylime] upload retention sync not started: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
@@ -101,11 +101,11 @@ export async function register(): Promise<void> {
     startClusterConfigSync();
   } catch (error) {
     console.warn(
-      `[omp-web] cluster configuration sync not started: ${error instanceof Error ? error.message : String(error)}`,
+      `[keylime] cluster configuration sync not started: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
-  // Resume sessions that were mid-run when omp-web last stopped (opt-in
+  // Resume sessions that were mid-run when keylime last stopped (opt-in
   // setting). Fire-and-forget: resuming must not block boot.
   void (async () => {
     try {
@@ -113,18 +113,18 @@ export async function register(): Promise<void> {
       await resumeInterruptedSessions();
     } catch (error) {
       console.warn(
-        `[omp-web] session auto-resume failed: ${error instanceof Error ? error.message : String(error)}`,
+        `[keylime] session auto-resume failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   })();
 
-  // Messages the outbox held when omp-web last stopped go once their hosts link (lib/message-outbox.ts).
+  // Messages the outbox held when keylime last stopped go once their hosts link (lib/message-outbox.ts).
   try {
     const { startOutbox } = await import("@/lib/message-outbox");
     startOutbox();
   } catch (error) {
     console.warn(
-      `[omp-web] message outbox not started: ${error instanceof Error ? error.message : String(error)}`,
+      `[keylime] message outbox not started: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 

@@ -1,5 +1,5 @@
 // The daemon end of a host link, driven by hand, for main-server tests that
-// need a linked host without running `ompweb host`. Not a test file itself.
+// need a linked host without running `keylime host`. Not a test file itself.
 import assert from "node:assert/strict";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { LinkSocketData } from "./hub.ts";
@@ -114,7 +114,7 @@ export async function linkLocalHost({
 }
 
 /** Link this machine's daemon and run its real session ops on the current agent dir in this
- * process, as `ompweb host` does; `ops` adds or replaces ops (spawn, say). readMedia bytes do not go as a blob. */
+ * process, as `keylime host` does; `ops` adds or replaces ops (spawn, say). readMedia bytes do not go as a blob. */
 export async function linkLocalDaemon(
   ops: Handlers = {},
   onMessage?: MessageHandler,
@@ -185,7 +185,7 @@ export async function linkLocalDaemon(
   return Object.assign(link, { workspace, uploads });
 }
 
-/** The `res` error `ompweb host` sends for an op that threw (daemon.ts `answer`). */
+/** The `res` error `keylime host` sends for an op that threw (daemon.ts `answer`). */
 function opFailure(error: unknown) {
   if (error instanceof HostOpError)
     return { status: error.status, code: error.code, message: error.message };

@@ -12,7 +12,7 @@ import { join } from "node:path";
 import test, { after } from "node:test";
 
 // Real GET /api/media/[hash] against a throwaway agent dir.
-const agentDir = mkdtempSync(join(tmpdir(), "omp-web-media-route-"));
+const agentDir = mkdtempSync(join(tmpdir(), "keylime-media-route-"));
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 process.env.PI_CODING_AGENT_DIR = agentDir;
 after(() => {
@@ -25,7 +25,7 @@ const route = await import("../app/api/media/[hash]/route.ts");
 const { eventWithToolResultImageUrls } = await import("./media-cache.ts");
 
 const blobs = join(agentDir, "blobs");
-const media = join(agentDir, "omp-web", "media");
+const media = join(agentDir, "keylime", "media");
 mkdirSync(blobs, { recursive: true });
 const sha = (bytes: Uint8Array) =>
   createHash("sha256").update(bytes).digest("hex");
@@ -170,7 +170,7 @@ test("never serves non-images or files outside the store", async () => {
   }
 });
 
-test("live tool output is served from omp-web's copy until omp has written the whole blob", async () => {
+test("live tool output is served from keylime's copy until omp has written the whole blob", async () => {
   const live = await png(64, 64);
   const hash = sha(live);
   const event = {
@@ -203,7 +203,7 @@ test("live tool output is served from omp-web's copy until omp has written the w
   writeFileSync(join(blobs, hash), live);
   assert.deepEqual(Buffer.from(await (await get(hash)).arrayBuffer()), live);
   // The daily sweep drops the copy omp now holds; it runs on the next write.
-  globalThis.__ompWebMediaSweptAt = 0;
+  globalThis.__keylimeMediaSweptAt = 0;
   eventWithToolResultImageUrls({
     type: "tool_execution_end",
     result: {

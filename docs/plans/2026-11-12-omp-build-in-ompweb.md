@@ -1,18 +1,18 @@
-# ompweb ships the omp integration build — implementation plan
+# keylime ships the omp integration build — implementation plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** the omp round runs in `ompweb-dev/oh-my-pi` from its default branch `fork-ci` (RPC dropped; also triggered by carried-PR changes; escalating on the fork; fork binaries versioned `<upstream>-int.<stamp>.g<sha7>` and updating from fork releases; each promoted release carrying an npm package zip). ompweb's `runner/` compiles against that zip, every ompweb (pre)release re-pins to the newest `integration-release` build, and the omp row follows ompweb. integration-ci keeps only the script and its other builds.
+**Goal:** the omp round runs in `ompweb-dev/oh-my-pi` from its default branch `fork-ci` (RPC dropped; also triggered by carried-PR changes; escalating on the fork; fork binaries versioned `<upstream>-int.<stamp>.g<sha7>` and updating from fork releases; each promoted release carrying an npm package zip). keylime's `runner/` compiles against that zip, every keylime (pre)release re-pins to the newest `integration-release` build, and the omp row follows keylime. integration-ci keeps only the script and its other builds.
 
 **Spec:** `docs/specs/2026-11-12-omp-build-in-ompweb-design.md` (F1–F9, W1–W3, cleanup). Read it first. No open questions.
 
-**State (2026-11-13):** I1, I2 and K1–K5 are done, and K7's schedule is back; the first promoted release is `v18.20.0-int.202611130808.gfd57e86`. W1–W3 landed in ompweb PR #473 (one PR instead of PRs B and C), pinned to that release. Open: K6's rewiring, K7's first scheduled run, W2's first pre-release after the merge, and I3.
+**State (2026-11-13):** I1, I2 and K1–K5 are done, and K7's schedule is back; the first promoted release is `v18.20.0-int.202611130808.gfd57e86`. W1–W3 landed in keylime PR #473 (one PR instead of PRs B and C), pinned to that release. Open: K6's rewiring, K7's first scheduled run, W2's first pre-release after the merge, and I3.
 
 **Owners and places:**
 
 - **integration-ci** — `andrebrait/integration-ci` (a local checkout), CI reads its `main`; the script's only home. Tasks I1, I2, I3.
 - **fork-ci** — orphan branch `fork-ci` of `ompweb-dev/oh-my-pi`, in a worktree of the local oh-my-pi checkout. Sources: integration-ci at `5db42d1`. Tasks K1–K7.
-- **ompweb** — `ompweb-dev/ompweb`, PR #473 (`feat/omp-runner`). Tasks W1–W3.
+- **keylime** — `ompweb-dev/ompweb`, PR #473 (`feat/omp-runner`). Tasks W1–W3.
 
 Order: I1 → K1–K4 → K5 → K6 → W1+W2+I2 (PR B) → W3 (PR C) → K7 → I3.
 
@@ -22,8 +22,8 @@ Order: I1 → K1–K4 → K5 → K6 → W1+W2+I2 (PR B) → W3 (PR C) → K7 →
 - `permissions: {}` at workflow level; per-job grants per spec F3. `GITHUB_TOKEN` first; `OMP_FORK_TOKEN` only as the retry on a `workflows`-permission refusal. Secrets only through `environment: omp-round`.
 - Jobs that run fork code or an agent hold no write token; publishing jobs run no fork code. No `fork-ci` workflow has `push`, `pull_request` or `pull_request_target` triggers.
 - The F9 build-step snippet and release tag line are used verbatim; the natives `jq` line is the same line on `packages/natives/package.json`, in `natives`, `binaries` and `pack` alike.
-- ompweb gets no secrets, environments or new triggers.
-- Keep pinned action SHAs and comment style. Commit titles: integration-ci `integration: …`/`ompweb: …`; fork-ci `ci: …`; ompweb `feat(runner): …`, `ci(release): …`, `feat(hosts): …`.
+- keylime gets no secrets, environments or new triggers.
+- Keep pinned action SHAs and comment style. Commit titles: integration-ci `integration: …`/`keylime: …`; fork-ci `ci: …`; keylime `feat(runner): …`, `ci(release): …`, `feat(hosts): …`.
 
 ## Review Focus
 
@@ -31,7 +31,7 @@ Order: I1 → K1–K4 → K5 → K6 → W1+W2+I2 (PR B) → W3 (PR C) → K7 →
 2. A finished round does not retrigger; a carried-branch push triggers the next; a failed round with an open issue for the same inputs is not retried hourly. (I1, K2)
 3. Every binary, the addon stamp, the leaf packages and the tag carry the same `<upstream>-int.<stamp>.g<sha7>`; old-format tags are gone before the first stamped release. (K3, K5)
 4. The runner's lockfile pins every `@oh-my-pi/*` package and all six leaves to `file:./vendor/…` with sha512; no npm leaf sneaks in. (W1)
-5. An ompweb (pre)release ships the build `integration-release` names, with no secret, and fails if it cannot. (W2)
+5. An keylime (pre)release ships the build `integration-release` names, with no secret, and fails if it cannot. (W2)
 
 ---
 
@@ -102,53 +102,53 @@ Order: I1 → K1–K4 → K5 → K6 → W1+W2+I2 (PR B) → W3 (PR C) → K7 →
 
 - [ ] Replace the `~/.config/integration` symlink with a directory: per-file symlinks into the integration-ci checkout's `config/` for everything but the omp config and fixups (keep `.retired-*`); `root--git--oh-my-pi.sh` and `fixups/root--git--oh-my-pi` → the `fork-ci` worktree's `config/…`.
 - [x] In the oh-my-pi checkout: `git fetch origin && git branch -f integration origin/integration-release && integration build && integration deploy`.
-- [ ] Verify: the deployed omp's `--version` prints the stamped version; `HOME=$(mktemp -d) <deployed omp> update --check` asks `api.github.com/repos/ompweb-dev/oh-my-pi` and reports up to date; `integration prs` still finds the graphify, superpowers and ompweb configs. Other machines on older fork binaries: install this release by hand once.
+- [ ] Verify: the deployed omp's `--version` prints the stamped version; `HOME=$(mktemp -d) <deployed omp> update --check` asks `api.github.com/repos/ompweb-dev/oh-my-pi` and reports up to date; `integration prs` still finds the graphify, superpowers and keylime configs. Other machines on older fork binaries: install this release by hand once.
 
-### Task W1 (ompweb): runner against the fork's packages (spec W1)
+### Task W1 (keylime): runner against the fork's packages (spec W1)
 
 **Files:** `runner/package.json`, `runner/bun.lock`, `runner/omp-build.json` (new), `runner/.gitignore` (`vendor/`), `runner/scripts/use-omp-build.ts` (new); delete `runner/patches/`; `.github/workflows/verify-pr.yml`, `.github/workflows/omp-runner.yml`, `scripts/build-release-binaries.sh`; doc comment in `runner/scripts/build-binary.ts`; pin paragraph in `docs/specs/2026-11-12-omp-runner-design.md`.
 
 - [x] `use-omp-build.ts [<tag>]`: no tag → read `omp-build.json`, download `https://github.com/<repo>/releases/download/<tag>/omp-packages-<version>.zip`, unzip into `runner/vendor/` (replacing it). With tag → same fetch for that tag, then rewrite `omp-build.json`, the three direct deps to `file:./vendor/<file>.tgz`, and `overrides` for all 12 `@oh-my-pi/*` packages and all 6 `@oh-my-pi/pi-natives-*` leaves from `index.json`; drop `patchedDependencies`; `bun install` in `runner/`. Fail when a `@oh-my-pi/*` dependency or leaf has no entry.
-- [x] Run it with K5's tag; delete `runner/patches/`; `grep -c 'registry.npmjs.org.*@oh-my-pi' runner/bun.lock` prints `0`; `bun x tsc -p runner`, `bun test` in `runner/`, `bun runner/scripts/build-binary.ts linux-x64`, `runner/release/ompweb-omp-linux-x64 --version` (the tag without `v`) and `--smoke-test` pass; `~/.omp/natives/<stamped version>/` is the extracted dir.
+- [x] Run it with K5's tag; delete `runner/patches/`; `grep -c 'registry.npmjs.org.*@oh-my-pi' runner/bun.lock` prints `0`; `bun x tsc -p runner`, `bun test` in `runner/`, `bun runner/scripts/build-binary.ts linux-x64`, `runner/release/keylime-omp-linux-x64 --version` (the tag without `v`) and `--smoke-test` pass; `~/.omp/natives/<stamped version>/` is the extracted dir.
 - [x] Before every runner `bun install`: `npx bun runner/scripts/use-omp-build.ts` in `verify-pr.yml`, `omp-runner.yml` (both jobs) and `scripts/build-release-binaries.sh`.
 - [x] Verify: Verify PR and `omp-runner.yml` green, including the cross-target `--os/--cpu` installs and builds (first test of fork leaves off linux-x64).
-- [x] Commit `feat(runner): compile ompweb-omp against the fork's omp packages`.
+- [x] Commit `feat(runner): compile keylime-omp against the fork's omp packages`.
 
-### Task I2 (integration-ci): ompweb build fetches the runner's packages
+### Task I2 (integration-ci): keylime build fetches the runner's packages
 
-**Files:** `.github/workflows/ompweb.yml`, `config/root--git--ompweb.sh`.
+**Files:** `.github/workflows/keylime.yml`, `config/root--git--keylime.sh`.
 
-- [x] Before each `npx bun install --cwd runner …` in `ompweb.yml` and in `BUILD_CMD`: `{ [ ! -f runner/scripts/use-omp-build.ts ] || npx bun runner/scripts/use-omp-build.ts; }`.
-- [x] Verify: `integration build-sha <W1 sha>` with the ompweb config builds. Commit `ompweb: fetch the runner's omp packages before installing`; push `main` together with PR B's merge.
+- [x] Before each `npx bun install --cwd runner …` in `keylime.yml` and in `BUILD_CMD`: `{ [ ! -f runner/scripts/use-omp-build.ts ] || npx bun runner/scripts/use-omp-build.ts; }`.
+- [x] Verify: `integration build-sha <W1 sha>` with the keylime config builds. Commit `keylime: fetch the runner's omp packages before installing`; push `main` together with PR B's merge.
 
-### Task W2 (ompweb): (pre)releases re-pin to `integration-release` (spec W2)
+### Task W2 (keylime): (pre)releases re-pin to `integration-release` (spec W2)
 
 **Files:** `.github/workflows/prerelease.yml`, `.github/workflows/publish.yml`.
 
 - [x] Before `Build the release binaries` in both: resolve `sha` and `tag` (spec W2 step 1, `GH_TOKEN: ${{ github.token }}`); no match → fail with a clear message; `npx bun runner/scripts/use-omp-build.ts "$tag" && (cd runner && npx bun x tsc -p .)`; export `OMP_TAG`. `build-release-binaries.sh`'s own fetch then finds the re-pinned `omp-build.json`.
 - [x] Notes: prerelease `--notes` and the draft release notes gain `omp: ompweb-dev/oh-my-pi $OMP_TAG`.
-- [ ] Verify `actionlint`; after merge, the next pre-release names the current `integration-release` tag and its `ompweb-omp --version` prints it without `v`.
+- [ ] Verify `actionlint`; after merge, the next pre-release names the current `integration-release` tag and its `keylime-omp --version` prints it without `v`.
 - [x] Commit `ci(release): ship the newest omp integration build with every release`. (Landed in PR #473 instead of a separate PR B.)
 
-### Task W3 (ompweb): the omp row follows ompweb (spec W3)
+### Task W3 (keylime): the omp row follows keylime (spec W3)
 
 **Files:** `lib/omp/updates.ts`, `lib/self-update.ts`, `app/api/omp-update/route.ts`, `lib/hosts/update-types.ts`, `lib/hosts/updates.ts`, `lib/hosts/daemon.ts`, `components/HostUpdates.tsx`, the Settings omp update card and its i18n keys (en, ja, zh-CN, zh-TW); tests `lib/hosts/updates.test.mjs`, `lib/hosts/host-updates-route.test.mjs`, `lib/self-update.test.mjs`, `components/SettingsConfig.updates.test.mjs`, `lib/hosts/cluster.test.mjs`; `CHANGELOG.md`.
 
 - [x] `xd://lsp` references for `checkOmpUpdate`, `runOmpUpdate`, `HostUpdateTarget`, `OmpUpdateStatus` and the `omp` `Kind`; add missing callers.
 - [x] Implement spec W3. Tests: `omp` target rejected; no omp `canUpdate`; Settings card without an update button; `18.20.0-int.202611130355.gd2c2eff` shown and accepted by `HOST_VERSION_PATTERN` and `ompSharesCredentials`. Delete tests of removed behaviour.
 - [x] Verify: `npm run typecheck`, `npm run lint`, `bun test --parallel lib/hosts lib/self-update.test.mjs components/SettingsConfig.updates.test.mjs`.
-- [x] CHANGELOG: "omp updates with ompweb: the omp row no longer runs `omp update`." Commit `feat(hosts): omp updates with ompweb`. (Landed in PR #473 instead of a separate PR C.)
+- [x] CHANGELOG: "omp updates with keylime: the omp row no longer runs `omp update`." Commit `feat(hosts): omp updates with keylime`. (Landed in PR #473 instead of a separate PR C.)
 
 ### Task K7 (fork-ci): hourly schedule
 
 - [x] Restore `schedule: - cron: "17 * * * *"` in `omp-auto.yml`. Commit `ci: run the round hourly`; push.
 - [ ] Next scheduled run: `detect` skips (inputs unchanged since K5).
 
-### Task I3 (integration-ci): cleanup (after one green scheduled fork round and one green ompweb pre-release)
+### Task I3 (integration-ci): cleanup (after one green scheduled fork round and one green keylime pre-release)
 
 - [ ] Delete the files listed in the spec's cleanup section; superseded line in `docs/specs/2026-11-11-omp-auto-integration-design.md`; trim README's oh-my-pi section; `bash integration.test.sh` passes. Commit `omp: the round moved to the fork's fork-ci branch`; push `main`.
 - [ ] `gh release delete oh-my-pi -R andrebrait/integration-ci --cleanup-tag --yes`; same for `apple-sdk`; `gh secret delete` `OMP_FORK_TOKEN`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` if `grep -rn 'secrets\.' .github` no longer names them.
-- [ ] Verify: `integration build` for graphify, superpowers and ompweb still finds its config.
+- [ ] Verify: `integration build` for graphify, superpowers and keylime still finds its config.
 
 ## Rollback
 

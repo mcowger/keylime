@@ -27,11 +27,11 @@ async function setup(
   const dir = mkdtempSync(join(tmpdir(), "omp-version-"));
   const bin = join(dir, "omp");
   writeFileSync(bin, "omp/18.1.19\n");
-  const previousBin = process.env.OMP_WEB_OMP_BIN;
-  process.env.OMP_WEB_OMP_BIN = bin;
+  const previousBin = process.env.KEYLIME_OMP_BIN;
+  process.env.KEYLIME_OMP_BIN = bin;
   t.after(() => {
-    if (previousBin === undefined) delete process.env.OMP_WEB_OMP_BIN;
-    else process.env.OMP_WEB_OMP_BIN = previousBin;
+    if (previousBin === undefined) delete process.env.KEYLIME_OMP_BIN;
+    else process.env.KEYLIME_OMP_BIN = previousBin;
     rmSync(dir, { recursive: true, force: true });
   });
   await mockBuiltin(t, "node:child_process", {
@@ -92,7 +92,7 @@ test("retargeting the release directory invalidates the cached version", async (
   writeFileSync(join(second, "omp"), "omp/18.1.21\n");
   const current = join(dir, "current");
   symlinkSync(first, current, "junction");
-  process.env.OMP_WEB_OMP_BIN = join(current, "omp");
+  process.env.KEYLIME_OMP_BIN = join(current, "omp");
   assert.equal(await getOmpVersion(), "omp/18.1.19");
   rmSync(current);
   symlinkSync(second, current, "junction");

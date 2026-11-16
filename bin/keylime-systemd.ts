@@ -9,28 +9,28 @@ import {
   readServiceEnv,
   writeServiceEnv,
 } from "./service-env.ts";
-import { resolvePasswordHash } from "./omp-web-hash-password.ts";
+import { resolvePasswordHash } from "./keylime-hash-password.ts";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 
-// Install ompweb as a Linux systemd user service.
+// Install keylime as a Linux systemd user service.
 //
 // Usage:
-//   ompweb-systemd [install|uninstall|start|stop|restart|status|open]
-//   bunx --package @kahme247/ompweb@latest ompweb-systemd install
+//   keylime-systemd [install|uninstall|start|stop|restart|status|open]
+//   bunx --package @mcowger/keylime@latest keylime-systemd install
 //
 // `install` creates ~/.omp/agent/web-service.env. The file is deliberately
 // separate from the unit so port, hostname, password, and omp path can be
 // edited without reinstalling the service.
 
-const UNIT_NAME = "ompweb";
+const UNIT_NAME = "keylime";
 const UNIT = `${UNIT_NAME}.service`;
 const HOME = os.homedir();
 const UNIT_DIR = path.join(HOME, ".config", "systemd", "user");
 const UNIT_PATH = path.join(UNIT_DIR, UNIT);
-// The host daemon links this machine to an omp-web (`ompweb host`); it runs next to the web unit.
-const HOST_UNIT_NAME = "ompweb-host";
+// The host daemon links this machine to an keylime (`keylime host`); it runs next to the web unit.
+const HOST_UNIT_NAME = "keylime-host";
 const HOST_UNIT = `${HOST_UNIT_NAME}.service`;
 const HOST_UNIT_PATH = path.join(UNIT_DIR, HOST_UNIT);
 const UNITS = [UNIT, HOST_UNIT];
@@ -39,7 +39,7 @@ const DEFAULT_PORT = "30177";
 const DEFAULT_HOSTNAME = "127.0.0.1";
 
 function printHelp() {
-  console.log(`Usage: ompweb-systemd [command] [options]
+  console.log(`Usage: keylime-systemd [command] [options]
 
 Commands:
   install      Install the web and host-daemon user services, create the env file, and enable them
@@ -53,7 +53,7 @@ Commands:
 
 Options:
   -p, --port <port>       Server port (default ${DEFAULT_PORT}, env PORT)
-  -H, --hostname <host>   Bind address (default ${DEFAULT_HOSTNAME}, env OMP_WEB_HOSTNAME)
+  -H, --hostname <host>   Bind address (default ${DEFAULT_HOSTNAME}, env KEYLIME_HOSTNAME)
       --no-autostart      Install and start, but do not enable at login
       --clean-config      Also remove web-service.env on uninstall
       --json              Output status as JSON
@@ -61,7 +61,7 @@ Options:
   -v, --version           Show version
 
 For LAN access, install with:
-  OMP_WEB_HOSTNAME=0.0.0.0 OMP_WEB_PASSWORD='change-me' ompweb-systemd install
+  KEYLIME_HOSTNAME=0.0.0.0 KEYLIME_PASSWORD='change-me' keylime-systemd install
   (the plaintext password is hashed before it is written to the env file)
 `);
 }
@@ -199,23 +199,23 @@ function formatExecStart(value: unknown) {
   return /\s/.test(String(value)) ? `"${escaped}"` : escaped;
 }
 
-// Resolve the ompweb binary the unit will run. An explicit override wins,
+// Resolve the keylime binary the unit will run. An explicit override wins,
 // followed by the sibling of Bun, then PATH.
-function resolveOmpwebBin(env: NodeJS.ProcessEnv = process.env) {
-  const override = env.OMP_WEB_SYSTEMD_BIN;
+function resolveKeylimeBin(env: NodeJS.ProcessEnv = process.env) {
+  const override = env.KEYLIME_SYSTEMD_BIN;
   if (override) {
     if (!isExecutableFile(override))
-      throw new Error(`OMP_WEB_SYSTEMD_BIN=${override} is not executable`);
+      throw new Error(`KEYLIME_SYSTEMD_BIN=${override} is not executable`);
     return override;
   }
 
-  const sibling = path.join(path.dirname(process.execPath), "ompweb");
+  const sibling = path.join(path.dirname(process.execPath), "keylime");
   if (isExecutableFile(sibling)) return sibling;
 
-  const onPath = which("ompweb", env);
+  const onPath = which("keylime", env);
   if (onPath) return onPath;
   throw new Error(
-    "ompweb binary not found (next to bun or on PATH); set OMP_WEB_SYSTEMD_BIN",
+    "keylime binary not found (next to bun or on PATH); set KEYLIME_SYSTEMD_BIN",
   );
 }
 function validatePort(value: unknown) {
@@ -235,9 +235,9 @@ function validateHostname(value: unknown) {
 // Build the unit file text. Runtime settings belong in EnvironmentFile so
 // an editor can change them without reinstalling the unit. The web and
 // host units share the env file: same user, same HOME and PI_CODING_AGENT_DIR,
-// so both read the same <agent dir>/omp-web/host.json.
+// so both read the same <agent dir>/keylime/host.json.
 type UnitOptions = {
-  ompwebBin: string;
+  keylimeBin: string;
   env?: NodeJS.ProcessEnv;
   home?: string;
   envPath?: string;
@@ -247,7 +247,7 @@ function buildUnitText({
   description,
   execArgs,
   restart,
-  ompwebBin,
+  keylimeBin,
   env: extraEnv,
   home,
   envPath,
@@ -255,12 +255,12 @@ function buildUnitText({
   description: string;
   execArgs: string;
   restart: { policy: string; delay: number; startLimit: string };
-  ompwebBin: string;
+  keylimeBin: string;
   env: NodeJS.ProcessEnv;
   home: string;
   envPath: string;
 }) {
-  const ompBin = extraEnv.OMP_WEB_OMP_BIN ?? null;
+  const ompBin = extraEnv.KEYLIME_OMP_BIN ?? null;
   const interpreterDir = ompBin ? launcherInterpreterDir(ompBin) : null;
   const pathDirs = [
     ...(ompBin ? [path.dirname(ompBin)] : []),
@@ -268,7 +268,7 @@ function buildUnitText({
     // interpreter resolved via `env`; without its directory the service
     // fails with exit 127 even though the binary itself is on PATH (#116).
     ...(interpreterDir ? [interpreterDir] : []),
-    path.dirname(ompwebBin),
+    path.dirname(keylimeBin),
     path.dirname(process.execPath),
     path.join(home, ".local", "bin"),
     "/usr/local/bin",
@@ -276,7 +276,7 @@ function buildUnitText({
     "/bin",
   ].filter((dir, index, all) => all.indexOf(dir) === index);
 
-  return `# Generated by ompweb-systemd — edits are overwritten on reinstall.
+  return `# Generated by keylime-systemd — edits are overwritten on reinstall.
 [Unit]
 Description=${description}
 Documentation=${readPackageHomepage()}
@@ -286,7 +286,7 @@ ${restart.startLimit}
 [Service]
 Type=simple
 WorkingDirectory=%h
-ExecStart=${formatExecStart(ompwebBin)}${execArgs}
+ExecStart=${formatExecStart(keylimeBin)}${execArgs}
 Environment=${environmentLine([["PATH", pathDirs.join(path.delimiter)]])}
 EnvironmentFile=${escapeUnitPath(envPath)}
 Restart=${restart.policy}
@@ -298,20 +298,20 @@ WantedBy=default.target
 }
 
 function buildUnit({
-  ompwebBin,
+  keylimeBin,
   env = {},
   home = HOME,
   envPath = getServiceEnvPath(home),
 }: UnitOptions) {
   return buildUnitText({
-    description: "ompweb web service (oh-my-pi web UI)",
+    description: "keylime web service (oh-my-pi web UI)",
     execArgs: "",
     restart: {
       policy: "on-failure",
       delay: 3,
       startLimit: "StartLimitIntervalSec=60\nStartLimitBurst=5\n",
     },
-    ompwebBin,
+    keylimeBin,
     env,
     home,
     envPath,
@@ -323,20 +323,20 @@ function buildUnit({
 // token. Restart=always with a 10 s delay covers all of those, and
 // StartLimitIntervalSec=0 keeps systemd from giving up while it waits.
 function buildHostUnit({
-  ompwebBin,
+  keylimeBin,
   env = {},
   home = HOME,
   envPath = getServiceEnvPath(home),
 }: UnitOptions) {
   return buildUnitText({
-    description: "ompweb host daemon (links this machine to an ompweb server)",
+    description: "keylime host daemon (links this machine to an keylime server)",
     execArgs: " host",
     restart: {
       policy: "always",
       delay: 10,
       startLimit: "StartLimitIntervalSec=0\n",
     },
-    ompwebBin,
+    keylimeBin,
     env,
     home,
     envPath,
@@ -380,17 +380,17 @@ function install(
     autostart?: boolean;
   } = {},
 ) {
-  let ompwebBin;
+  let keylimeBin;
   try {
-    ompwebBin = resolveOmpwebBin();
+    keylimeBin = resolveKeylimeBin();
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
   }
 
-  // Only an explicit override: ompweb runs its own omp (ompweb-omp). A stock omp on PATH cannot run its sessions.
-  const ompBin = process.env.OMP_WEB_OMP_BIN || null;
+  // Only an explicit override: keylime runs its own omp (keylime-omp). A stock omp on PATH cannot run its sessions.
+  const ompBin = process.env.KEYLIME_OMP_BIN || null;
   if (ompBin && !isExecutableFile(ompBin))
-    fail(`OMP_WEB_OMP_BIN=${ompBin} is not executable`);
+    fail(`KEYLIME_OMP_BIN=${ompBin} is not executable`);
   // Note: the missing-interpreter check lives in runCli (before the Linux
   // gate) so it fails loudly on every platform; install() only reuses the
   // resolved ompBin for the unit + env file.
@@ -400,14 +400,14 @@ function install(
   try {
     port = validatePort(options.port ?? process.env.PORT ?? DEFAULT_PORT);
     hostname = validateHostname(
-      options.hostname ?? process.env.OMP_WEB_HOSTNAME ?? DEFAULT_HOSTNAME,
+      options.hostname ?? process.env.KEYLIME_HOSTNAME ?? DEFAULT_HOSTNAME,
     );
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
   }
 
-  // Only the hash reaches the env file: omp-web never forwards a plaintext
-  // password, and `OMP_WEB_PASSWORD` set for this install is hashed here.
+  // Only the hash reaches the env file: keylime never forwards a plaintext
+  // password, and `KEYLIME_PASSWORD` set for this install is hashed here.
   let passwordHash;
   try {
     passwordHash = resolvePasswordHash();
@@ -417,8 +417,8 @@ function install(
   const agentDir = process.env.PI_CODING_AGENT_DIR?.replace(/^~(?=\/|$)/, HOME);
   const envPath = getServiceEnvPath();
   const unitOptions = {
-    ompwebBin,
-    env: ompBin ? { OMP_WEB_OMP_BIN: ompBin } : {},
+    keylimeBin,
+    env: ompBin ? { KEYLIME_OMP_BIN: ompBin } : {},
     home: HOME,
     envPath,
   };
@@ -428,19 +428,19 @@ function install(
   writeServiceEnv(
     {
       PORT: port,
-      OMP_WEB_HOSTNAME: hostname,
-      OMP_WEB_NO_OPEN: process.env.OMP_WEB_NO_OPEN ?? "1",
-      ...(process.env.OMP_WEB_NAME
-        ? { OMP_WEB_NAME: process.env.OMP_WEB_NAME }
+      KEYLIME_HOSTNAME: hostname,
+      KEYLIME_NO_OPEN: process.env.KEYLIME_NO_OPEN ?? "1",
+      ...(process.env.KEYLIME_NAME
+        ? { KEYLIME_NAME: process.env.KEYLIME_NAME }
         : {}),
-      ...(passwordHash ? { OMP_WEB_PASSWORD_HASH: passwordHash } : {}),
-      ...(process.env.OMP_WEB_TRUSTED_HEADER_SHA256
+      ...(passwordHash ? { KEYLIME_PASSWORD_HASH: passwordHash } : {}),
+      ...(process.env.KEYLIME_TRUSTED_HEADER_SHA256
         ? {
-            OMP_WEB_TRUSTED_HEADER_SHA256:
-              process.env.OMP_WEB_TRUSTED_HEADER_SHA256,
+            KEYLIME_TRUSTED_HEADER_SHA256:
+              process.env.KEYLIME_TRUSTED_HEADER_SHA256,
           }
         : {}),
-      ...(ompBin ? { OMP_WEB_OMP_BIN: ompBin } : {}),
+      ...(ompBin ? { KEYLIME_OMP_BIN: ompBin } : {}),
       ...(agentDir ? { PI_CODING_AGENT_DIR: agentDir } : {}),
     },
     envPath,
@@ -473,7 +473,7 @@ function install(
 
   console.log(`installed: ${UNIT_PATH}`);
   console.log(`installed: ${HOST_UNIT_PATH}`);
-  console.log(`binary:    ${ompwebBin}`);
+  console.log(`binary:    ${keylimeBin}`);
   console.log(
     `config:    ${envPath} (port/hostname/password — no reinstall needed)`,
   );
@@ -566,8 +566,8 @@ function readStatus() {
     ? configuredPort
     : Number(DEFAULT_PORT);
   const hostname =
-    envConfig.OMP_WEB_HOSTNAME ??
-    process.env.OMP_WEB_HOSTNAME ??
+    envConfig.KEYLIME_HOSTNAME ??
+    process.env.KEYLIME_HOSTNAME ??
     DEFAULT_HOSTNAME;
   return {
     isLinux: process.platform === "linux",
@@ -587,7 +587,7 @@ function printStatus(asJson?: string | boolean) {
     console.log(JSON.stringify(status, null, 2));
     return status;
   }
-  console.log(`=== ompweb systemd service status (${process.platform}) ===`);
+  console.log(`=== keylime systemd service status (${process.platform}) ===`);
   console.log(
     `  Unit          : ${status.unit} (${status.isInstalled ? status.unitPath : "not installed"})`,
   );
@@ -611,7 +611,7 @@ function printStatus(asJson?: string | boolean) {
 
 function openInBrowser() {
   const status = readStatus();
-  const openBin = process.env.OMP_WEB_OPEN ?? which("xdg-open") ?? "xdg-open";
+  const openBin = process.env.KEYLIME_OPEN ?? which("xdg-open") ?? "xdg-open";
   const options = { stdio: "ignore" as const, detached: true };
   const child = spawnSync(openBin, [status.serviceUrl], options);
   if (child.error)
@@ -662,12 +662,12 @@ async function runCli(argv = process.argv.slice(2)) {
   }
 
   // Validate install inputs before the platform gate so misconfigured launchers fail loudly.
-  // An OMP_WEB_OMP_BIN launcher script whose interpreter is nowhere on PATH
+  // An KEYLIME_OMP_BIN launcher script whose interpreter is nowhere on PATH
   // would install a unit that can only fail later with exit 127 (issue #116) — fail now.
   if (command === "install") {
-    const ompBin = process.env.OMP_WEB_OMP_BIN || null;
+    const ompBin = process.env.KEYLIME_OMP_BIN || null;
     if (ompBin && !isExecutableFile(ompBin)) {
-      fail(`OMP_WEB_OMP_BIN=${ompBin} is not executable`);
+      fail(`KEYLIME_OMP_BIN=${ompBin} is not executable`);
     } else if (
       ompBin &&
       readLauncherInterpreter(ompBin) &&
@@ -676,13 +676,13 @@ async function runCli(argv = process.argv.slice(2)) {
       fail(
         `omp at ${ompBin} is a launcher script whose interpreter ` +
           `(${readLauncherInterpreter(ompBin)}) was not found on PATH; ` +
-          `install that runtime (or point OMP_WEB_OMP_BIN at a standalone binary) and reinstall`,
+          `install that runtime (or point KEYLIME_OMP_BIN at a standalone binary) and reinstall`,
       );
     }
   }
 
   if (process.platform !== "linux") {
-    fail("systemd services are Linux-only (use ompweb-launchd on macOS)");
+    fail("systemd services are Linux-only (use keylime-launchd on macOS)");
   }
 
   const installOptions = {
@@ -745,7 +745,7 @@ export {
   launcherInterpreterDir,
   readLauncherInterpreter,
   readStatus,
-  resolveOmpwebBin,
+  resolveKeylimeBin,
   runCli,
   validateHostname,
   validatePort,

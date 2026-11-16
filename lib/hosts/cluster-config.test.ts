@@ -39,7 +39,7 @@ const extra = (): {
 });
 
 beforeEach(() => {
-  base = mkdtempSync(join(tmpdir(), "omp-web-cluster-config-test-"));
+  base = mkdtempSync(join(tmpdir(), "keylime-cluster-config-test-"));
   roots = { agent: join(base, "agent"), home: join(base, "home") };
   mkdirSync(roots.agent, { recursive: true });
   mkdirSync(roots.home, { recursive: true });

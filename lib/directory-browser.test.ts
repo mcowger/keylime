@@ -9,7 +9,7 @@ async function loadSubject() {
 }
 
 test("lists directories and directory symlinks without returning files", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "omp-web-browse-"));
+  const root = await mkdtemp(path.join(tmpdir(), "keylime-browse-"));
   try {
     await mkdir(path.join(root, "project"));
     await writeFile(path.join(root, "notes.txt"), "test", "utf8");
@@ -40,7 +40,7 @@ test("expands home-relative paths and rejects missing directories", async () => 
     path.join(homedir(), "project"),
   );
   await assert.rejects(
-    resolveDirectory(path.join(tmpdir(), `omp-web-missing-${Date.now()}`)),
+    resolveDirectory(path.join(tmpdir(), `keylime-missing-${Date.now()}`)),
   );
 });
 

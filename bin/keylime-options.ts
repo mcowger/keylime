@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import { hashPassword, isPasswordHash } from "./omp-web-password-hash";
+import { hashPassword, isPasswordHash } from "./keylime-password-hash";
 import { isLoopbackHost } from "./network-addresses";
 
 const TRUE_VALUES = new Set(["1", "true", "yes", "on"]);
@@ -22,7 +22,7 @@ function isEnabled(value: unknown) {
   );
 }
 
-/** Legacy plaintext credential: detected so `ompweb` can migrate (env) or refuse (flag) it. */
+/** Legacy plaintext credential: detected so `keylime` can migrate (env) or refuse (flag) it. */
 function legacyPassword(
   args: string[],
   env: NodeJS.ProcessEnv,
@@ -38,34 +38,34 @@ function legacyPassword(
     const value = inline !== undefined ? inline : (args[flagIndex + 1] ?? "");
     return { value, source: "flag" };
   }
-  const fromEnv = env.OMP_WEB_PASSWORD;
+  const fromEnv = env.KEYLIME_PASSWORD;
   if (typeof fromEnv === "string" && fromEnv.length > 0)
     return { value: fromEnv, source: "env" };
   return undefined;
 }
 
 export function printHelp() {
-  console.log(`Usage: ompweb [options]
+  console.log(`Usage: keylime [options]
 
 Options:
   -p, --port <port>        Server port (default 30177, env PORT)
-  -H, --hostname <host>    Bind hostname (default 127.0.0.1, env OMP_WEB_HOSTNAME)
+  -H, --hostname <host>    Bind hostname (default 127.0.0.1, env KEYLIME_HOSTNAME)
       --no-open            Do not open the browser automatically
   -h, --help               Show this help
       --version            Show version
 
 Commands:
   hash-password            Read a password from stdin and print the value for
-                           OMP_WEB_PASSWORD_HASH
+                           KEYLIME_PASSWORD_HASH
 
 Password:
-  ompweb hash-password                       # prompts, input hidden
-  echo "a-long-random-password" | ompweb hash-password
-  OMP_WEB_PASSWORD_HASH='scrypt$15$8$1$...' ompweb
+  keylime hash-password                       # prompts, input hidden
+  echo "a-long-random-password" | keylime hash-password
+  KEYLIME_PASSWORD_HASH='scrypt$15$8$1$...' keylime
 
-  ompweb never passes a plaintext password on: --password is rejected, and an
-  OMP_WEB_PASSWORD is hashed at startup with a warning that prints its hash
-  (set alongside OMP_WEB_PASSWORD_HASH, it is rejected), because every omp
+  keylime never passes a plaintext password on: --password is rejected, and an
+  KEYLIME_PASSWORD is hashed at startup with a warning that prints its hash
+  (set alongside KEYLIME_PASSWORD_HASH, it is rejected), because every omp
   session inherits the environment and an agent could print the password
   into its transcript.
 
@@ -97,8 +97,8 @@ export function parseLaunchOptions(
   });
 
   const passwordHash =
-    typeof env.OMP_WEB_PASSWORD_HASH === "string"
-      ? env.OMP_WEB_PASSWORD_HASH.trim()
+    typeof env.KEYLIME_PASSWORD_HASH === "string"
+      ? env.KEYLIME_PASSWORD_HASH.trim()
       : undefined;
   const legacy = legacyPassword(args, env);
 
@@ -107,12 +107,12 @@ export function parseLaunchOptions(
     port,
     hostname:
       (cliArgs.hostname as string | undefined) ??
-      env.OMP_WEB_HOSTNAME ??
+      env.KEYLIME_HOSTNAME ??
       "127.0.0.1",
     passwordHash,
     legacyPassword: legacy?.value,
     legacyPasswordSource: legacy?.source,
-    openBrowser: !cliArgs["no-open"] && !isEnabled(env.OMP_WEB_NO_OPEN),
+    openBrowser: !cliArgs["no-open"] && !isEnabled(env.KEYLIME_NO_OPEN),
     ...(/^\d{1,5}$/.test(port) && Number(port) <= 65535
       ? {}
       : { error: `Invalid port: ${port}. Use an integer from 0 to 65535.` }),
@@ -127,7 +127,7 @@ export function parseLaunchOptions(
     }
     return { ...shared, version: true };
   }
-  // Expose help flag without exiting here — caller (bin/omp-web.ts) decides
+  // Expose help flag without exiting here — caller (bin/keylime.ts) decides
   // whether to exit, keeping parseLaunchOptions testable. Print here so
   // --help works even when the caller is a test.
   if (cliArgs.help) {
@@ -138,8 +138,8 @@ export function parseLaunchOptions(
 }
 
 /**
- * Password validation before a server starts (bin/omp-web.ts, server/binary.ts). Only a password hash reaches
- * the server: a plaintext OMP_WEB_PASSWORD alone is hashed into OMP_WEB_PASSWORD_HASH and removed from process.env.
+ * Password validation before a server starts (bin/keylime.ts, server/binary.ts). Only a password hash reaches
+ * the server: a plaintext KEYLIME_PASSWORD alone is hashed into KEYLIME_PASSWORD_HASH and removed from process.env.
  * The removed --password flag, a plaintext set next to a hash, or an invalid hash print why and exit 1.
  * Authentication is optional on every bind address.
  * @returns {string | undefined} the password hash, if any
@@ -147,12 +147,12 @@ export function parseLaunchOptions(
 export function checkLaunchSecurity(launchOptions: LaunchOptions) {
   let passwordHash = launchOptions.passwordHash;
   if (launchOptions.legacyPasswordSource === "env" && !passwordHash) {
-    passwordHash = hashPassword(process.env.OMP_WEB_PASSWORD!);
-    process.env.OMP_WEB_PASSWORD_HASH = passwordHash;
-    delete process.env.OMP_WEB_PASSWORD;
+    passwordHash = hashPassword(process.env.KEYLIME_PASSWORD!);
+    process.env.KEYLIME_PASSWORD_HASH = passwordHash;
+    delete process.env.KEYLIME_PASSWORD;
     console.warn(
       [
-        "Warning: OMP_WEB_PASSWORD holds a plaintext password. This option has been deprecated and is marked for removal.",
+        "Warning: KEYLIME_PASSWORD holds a plaintext password. This option has been deprecated and is marked for removal.",
         "",
         "Every omp session inherits key lime's environment, so an agent could print",
         "the password into its transcript. key lime hashed it and kept it out of the",
@@ -160,34 +160,34 @@ export function checkLaunchSecurity(launchOptions: LaunchOptions) {
         "process, and a new hash is made on every start, which signs every browser",
         "out on each restart.",
         "",
-        "Remove OMP_WEB_PASSWORD and set this instead:",
+        "Remove KEYLIME_PASSWORD and set this instead:",
         "",
-        `  OMP_WEB_PASSWORD_HASH='${passwordHash}'`,
+        `  KEYLIME_PASSWORD_HASH='${passwordHash}'`,
       ].join("\n"),
     );
   } else if (launchOptions.legacyPasswordSource === "env") {
     console.error(
-      "OMP_WEB_PASSWORD_HASH and the plaintext OMP_WEB_PASSWORD are both set. Remove OMP_WEB_PASSWORD.",
+      "KEYLIME_PASSWORD_HASH and the plaintext KEYLIME_PASSWORD are both set. Remove KEYLIME_PASSWORD.",
     );
     process.exit(1);
   } else if (launchOptions.legacyPassword !== undefined) {
     console.error(
       [
-        "ompweb no longer accepts a plaintext password: the --password flag was removed.",
+        "keylime no longer accepts a plaintext password: the --password flag was removed.",
         "Every omp session inherits this process's environment, so an agent could",
         "print the password into its transcript.",
         "",
         "Create a hash and use that instead:",
         "",
-        "  ompweb hash-password",
-        "  OMP_WEB_PASSWORD_HASH='scrypt$...' ompweb",
+        "  keylime hash-password",
+        "  KEYLIME_PASSWORD_HASH='scrypt$...' keylime",
       ].join("\n"),
     );
     process.exit(1);
   }
   if (passwordHash !== undefined && !isPasswordHash(passwordHash)) {
     console.error(
-      `OMP_WEB_PASSWORD_HASH is not a valid password hash.\n\nGenerate one with: ompweb hash-password`,
+      `KEYLIME_PASSWORD_HASH is not a valid password hash.\n\nGenerate one with: keylime hash-password`,
     );
     process.exit(1);
   }
@@ -195,8 +195,8 @@ export function checkLaunchSecurity(launchOptions: LaunchOptions) {
   if (!isLoopbackHost(hostname)) {
     console.warn(
       passwordHash === undefined
-        ? `Warning: ompweb is listening on ${hostname} without authentication. Anyone who can reach it can access its agent and file capabilities.`
-        : `Warning: ompweb is listening on ${hostname} over HTTP. Use HTTPS or a trusted VPN to protect the password and session cookie in transit.`,
+        ? `Warning: keylime is listening on ${hostname} without authentication. Anyone who can reach it can access its agent and file capabilities.`
+        : `Warning: keylime is listening on ${hostname} over HTTP. Use HTTPS or a trusted VPN to protect the password and session cookie in transit.`,
     );
   }
   return passwordHash;

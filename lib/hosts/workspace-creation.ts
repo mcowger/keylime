@@ -46,7 +46,7 @@ const empty = (): WorkspacePipeline => ({
   postBlocking: [],
   postNonBlocking: [],
 });
-const root = () => path.join(getAgentDir(), "omp-web", "workspace-creation");
+const root = () => path.join(getAgentDir(), "keylime", "workspace-creation");
 const settingsFile = () => path.join(root(), "settings.json");
 const jobsDir = () => path.join(root(), "jobs");
 function save(file: string, value: unknown) {

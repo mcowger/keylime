@@ -62,7 +62,7 @@ const hostBase = {
   label: S,
   status: literals("online", "offline", "needs-upgrade", "omp-missing"),
   ompVersion: ns,
-  ompwebVersion: Type.Optional(ns),
+  keylimeVersion: Type.Optional(ns),
   platform: ns,
   lastSeenAt: ns,
   hostVersion: Type.Union([N, Nil]),

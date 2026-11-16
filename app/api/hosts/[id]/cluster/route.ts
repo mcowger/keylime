@@ -56,7 +56,7 @@ const fail = (error: string, code: string, status: number) =>
   Response.json({ error, code }, { status, headers: noStore });
 const storageFailure = () =>
   fail(
-    "The pool registry (omp-web/pools.json) cannot be read or written; fix it before changing the cluster",
+    "The pool registry (keylime/pools.json) cannot be read or written; fix it before changing the cluster",
     "pool_storage_unavailable",
     503,
   );

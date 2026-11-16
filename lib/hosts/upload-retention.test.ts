@@ -22,7 +22,7 @@ const { sweepSentUploads, UploadRetention } =
   await import("./upload-retention.ts");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const scratch = mkdtempSync(join(tmpdir(), "omp-web-retention-"));
+const scratch = mkdtempSync(join(tmpdir(), "keylime-retention-"));
 after(() => rmSync(scratch, { recursive: true, force: true }));
 
 /** Session roots under a fresh temp dir. */
@@ -166,7 +166,7 @@ test("a sweep never follows a symlink: not an uploads entry, not `uploads`, not 
 
 test("a retention of null deletes nothing; a number persists, sweeps, and an invalid one changes nothing", async () => {
   const { dir, roots } = layout();
-  const file = join(dir, "agent", "omp-web", "upload-retention.json");
+  const file = join(dir, "agent", "keylime", "upload-retention.json");
   const old = put(
     join(roots.sessions, "proj", "s1", "local", "uploads", "old.bin"),
     400,
@@ -220,7 +220,7 @@ test("a retention of null deletes nothing; a number persists, sweeps, and an inv
 
 test("a retention set before a restart sweeps when the daemon starts again; an absent or unreadable file sweeps nothing", async () => {
   const { dir, roots } = layout();
-  const file = join(dir, "agent", "omp-web", "upload-retention.json");
+  const file = join(dir, "agent", "keylime", "upload-retention.json");
   const old = join(roots.sessions, "proj", "s1", "local", "uploads", "old.bin");
   const fresh = put(
     join(roots.sessions, "proj", "s1", "local", "uploads", "fresh.bin"),

@@ -48,7 +48,7 @@ export async function POST(req: Request, { params }: Params) {
     return Response.json(
       {
         error:
-          "STT not configured. Set OMP_WEB_STT_ENDPOINT or OMP_WEB_STT_MODEL.",
+          "STT not configured. Set KEYLIME_STT_ENDPOINT or KEYLIME_STT_MODEL.",
       },
       { status: 501 },
     );

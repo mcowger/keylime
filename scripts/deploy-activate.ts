@@ -73,7 +73,7 @@ function defaults({
       if (!existsSync(path.join(candidate, "keylime-release.json")))
         throw new Error("Not a Keylime release directory");
       const result = Bun.spawnSync(
-        [path.join(candidate, "ompweb"), "preflight"],
+        [path.join(candidate, "keylime"), "preflight"],
         {
           cwd: home,
           env: { ...env, PI_CODING_AGENT_DIR: agent },
@@ -139,7 +139,7 @@ export async function activateRelease(
   const d = injected ?? defaults(options);
   d.preflight(candidate);
   const previous = d.previous();
-  const host = d.status("ompweb-host");
+  const host = d.status("keylime-host");
   if (host.status !== "running" || !host.pid)
     throw new Error("Production host must be running to prove it is idle");
   const hostPid = host.pid;
@@ -149,7 +149,7 @@ export async function activateRelease(
   let selected = false;
   let admitted = false;
   const sameHost = () => {
-    const current = d.status("ompweb-host");
+    const current = d.status("keylime-host");
     if (current.status !== "running" || current.pid !== hostPid)
       throw new Error("Production host changed during activation");
   };
@@ -186,7 +186,7 @@ export async function activateRelease(
     );
     onPhase("stop-web", { forced: !idle });
     webStopped = true;
-    d.run(["pitchfork", "stop", "global/ompweb"]);
+    d.run(["pitchfork", "stop", "global/keylime"]);
     if (!idle) {
       try {
         const reply = await d.control("drain-force");
@@ -200,7 +200,7 @@ export async function activateRelease(
     sameHost();
     onPhase("stop-host");
     hostStopped = true;
-    d.run(["pitchfork", "stop", "global/ompweb-host"]);
+    d.run(["pitchfork", "stop", "global/keylime-host"]);
     drained = false;
     onPhase("select", { candidate, previous });
     d.select(candidate);
@@ -208,17 +208,17 @@ export async function activateRelease(
     onPhase("start-web");
     // A failed start can still have opened admission; never roll back after attempting it.
     admitted = true;
-    d.run(["pitchfork", "start", "global/ompweb"]);
+    d.run(["pitchfork", "start", "global/keylime"]);
     webStopped = false;
     onPhase("start-host");
-    d.run(["pitchfork", "start", "global/ompweb-host"]);
+    d.run(["pitchfork", "start", "global/keylime-host"]);
     hostStopped = false;
     onPhase("verify");
     let ready = false;
     for (let attempt = 0; attempt < 30; attempt++) {
       try {
-        const web = d.status("ompweb");
-        const currentHost = d.status("ompweb-host");
+        const web = d.status("keylime");
+        const currentHost = d.status("keylime-host");
         if (
           web.status === "running" &&
           currentHost.status === "running" &&
@@ -261,9 +261,9 @@ export async function activateRelease(
     }
     // Both starts are attempted independently even when one fails.
     if (webStopped)
-      await attempt(() => d.run(["pitchfork", "start", "global/ompweb"]));
+      await attempt(() => d.run(["pitchfork", "start", "global/keylime"]));
     if (hostStopped)
-      await attempt(() => d.run(["pitchfork", "start", "global/ompweb-host"]));
+      await attempt(() => d.run(["pitchfork", "start", "global/keylime-host"]));
     if (failures.length)
       throw new AggregateError(
         [error, ...failures],

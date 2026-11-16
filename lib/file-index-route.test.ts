@@ -44,8 +44,8 @@ function repo(name: string, files: string[]) {
   writeFileSync(join(dir, ".gitignore"), "ignored.ts\n");
   writeFileSync(join(dir, "ignored.ts"), "x\n");
   git(root, ["init", dir]);
-  git(dir, ["config", "user.email", "omp-web@example.invalid"]);
-  git(dir, ["config", "user.name", "omp-web test"]);
+  git(dir, ["config", "user.email", "keylime@example.invalid"]);
+  git(dir, ["config", "user.name", "keylime test"]);
   git(dir, ["add", "-A"]);
   git(dir, ["-c", "commit.gpgsign=false", "commit", "-qm", "fixture"]);
   return dir;
@@ -83,7 +83,7 @@ test("file-index search behaves for a real git listing", async (t) => {
     return;
   }
 
-  root = mkdtempSync(join(tmpdir(), "omp-web-file-index-test-"));
+  root = mkdtempSync(join(tmpdir(), "keylime-file-index-test-"));
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = join(root, "agent");
   const daemon = await linkLocalDaemon();
@@ -179,8 +179,8 @@ test("file-index search behaves for a real git listing", async (t) => {
 });
 
 test("file-index lists a non-git directory without hiding anything by name", async (t) => {
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-file-index-walk-"));
-  const outside = mkdtempSync(join(tmpdir(), "omp-web-file-index-outside-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-file-index-walk-"));
+  const outside = mkdtempSync(join(tmpdir(), "keylime-file-index-outside-"));
   const cleanup = () => {
     rmSync(dir, { recursive: true, force: true });
     rmSync(outside, { recursive: true, force: true });
@@ -379,7 +379,7 @@ test("a pending non-Git index read lets an unrelated workspace request finish", 
 });
 
 test("file-index truncates a directory-heavy fallback without losing collected files", async (t) => {
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-file-index-dir-cap-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-file-index-dir-cap-"));
   mkdirSync(join(dir, "template"));
   writeFileSync(join(dir, "keep.ts"), "x\n");
   const entries = readdirSync(dir, { withFileTypes: true });

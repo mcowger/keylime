@@ -1,6 +1,6 @@
 import packageJson from "../package.json";
 
-/** `owner/name` of the GitHub repository whose releases ship ompweb (binaries, the omp runner): package.json's
+/** `owner/name` of the GitHub repository whose releases ship keylime (binaries, the omp runner): package.json's
  * `repository`, the one place it is named. Loaded by Bun's native TypeScript runtime and the compiled binary: no `@/` imports. */
 export function releaseRepo(): string {
   const match = /github\.com[/:]([\w.-]+\/[\w.-]+?)(?:\.git)?$/.exec(

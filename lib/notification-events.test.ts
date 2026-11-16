@@ -61,7 +61,7 @@ test("local slash commands and aborted runs do not notify", () => {
   );
 });
 
-test("a run failure reported by omp-web and again by omp notifies once; a later crash adds nothing", () => {
+test("a run failure reported by keylime and again by omp notifies once; a later crash adds nothing", () => {
   const events = run([
     { type: "prompt_error", errorMessage: "usage reserve is fail-closed" },
     {

@@ -1076,7 +1076,7 @@ function SearchResultsList({
   );
 }
 
-/** Server-side omp-web setting (lib/web-settings.ts), loaded on mount. */
+/** Server-side keylime setting (lib/web-settings.ts), loaded on mount. */
 function AutoResumeSessionsSetting() {
   const { t } = useI18n();
   const [enabled, setEnabled] = useState<boolean | null>(null);
@@ -1127,7 +1127,7 @@ function AutoResumeSessionsSetting() {
   );
 }
 
-/** Server-side omp-web setting (issue #275): cross-session agent tools.
+/** Server-side keylime setting (issue #275): cross-session agent tools.
  * Off by default; mirrors AutoResumeSessionsSetting above. */
 function AgentToolsSetting() {
   const { t } = useI18n();
@@ -1181,7 +1181,7 @@ function AgentToolsSetting() {
 
 const UPLOAD_RETENTION_CHOICES: readonly (number | null)[] = [null, 7, 30, 90];
 
-/** Server-side omp-web setting (lib/web-settings.ts): every host's daemon applies it to its own sessions' uploads. */
+/** Server-side keylime setting (lib/web-settings.ts): every host's daemon applies it to its own sessions' uploads. */
 function UploadRetentionSetting() {
   const { t, tn } = useI18n();
   // undefined until loaded; null is "Never".
@@ -1259,7 +1259,7 @@ const BROWSER_TRANSPORT_LABELS: Record<BrowserTransport, string> = {
   ws: "settingsConfig.browserTransportWs",
 };
 
-/** Server-side omp-web setting (lib/web-settings.ts): every open browser follows a save within a few seconds. */
+/** Server-side keylime setting (lib/web-settings.ts): every open browser follows a save within a few seconds. */
 function BrowserTransportSetting() {
   const { t } = useI18n();
   const [transport, setTransport] = useState<BrowserTransport | null>(null);
@@ -1325,7 +1325,7 @@ function BrowserTransportSetting() {
   );
 }
 
-/** Server-side omp-web setting (issue #104): KEY=VALUE text injected into the
+/** Server-side keylime setting (issue #104): KEY=VALUE text injected into the
  * `omp` child process. Parsing/validation lives in lib/omp/agent-env.ts; this only
  * feeds it localized messages and renders the result. `cluster`: the members run it too (spec K1). */
 function AgentEnvSetting({ cluster }: { cluster: boolean }) {

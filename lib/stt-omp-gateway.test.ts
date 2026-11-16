@@ -4,11 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
 
-// With no OMP_WEB_STT_ENDPOINT, OMP_WEB_STT_MODEL names an omp model and the
+// With no KEYLIME_STT_ENDPOINT, KEYLIME_STT_MODEL names an omp model and the
 // job runs through `omp auth-gateway stdio`. The omp binary is a stub speaking
 // that JSON-lines protocol and logging every launch and request it sees.
 
-const dir = mkdtempSync(join(tmpdir(), "omp-web-stt-gateway-"));
+const dir = mkdtempSync(join(tmpdir(), "keylime-stt-gateway-"));
 const log = join(dir, "gateway.log");
 const fakeOmp = join(dir, "fake-omp");
 const fakeOmpScript = join(dir, "fake-omp.cjs");
@@ -41,8 +41,8 @@ require("node:readline").createInterface({ input: process.stdin }).on("line", (l
 );
 
 const originalEnv = { ...process.env };
-delete process.env.OMP_WEB_STT_ENDPOINT;
-process.env.OMP_WEB_OMP_BIN = fakeOmp;
+delete process.env.KEYLIME_STT_ENDPOINT;
+process.env.KEYLIME_OMP_BIN = fakeOmp;
 const { POST } = await import("../app/api/stt/route");
 const { GET, DELETE } = await import("../app/api/stt/[jobId]/route");
 const { disposeAuthGateway } = await import("./omp/auth-gateway");
@@ -56,7 +56,7 @@ after(() => {
 const ctx = (jobId: string) => ({ params: Promise.resolve({ jobId }) });
 
 async function transcribe(model: string, fileName = "audio.webm") {
-  process.env.OMP_WEB_STT_MODEL = model;
+  process.env.KEYLIME_STT_MODEL = model;
   const formData = new FormData();
   formData.append("file", new Blob(["recorded-audio"]), fileName);
   const started = await POST(

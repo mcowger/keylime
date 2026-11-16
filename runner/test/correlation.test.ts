@@ -29,9 +29,9 @@ type Stamped = AgentSessionEvent & {
 async function correlated(
   responses: { content: string[]; delayMs?: number }[],
 ) {
-  process.env.OMPWEB_HOST_SOCKET = path.join(
+  process.env.KEYLIME_HOST_SOCKET = path.join(
     os.tmpdir(),
-    `ompweb-correlation-test-${process.pid}.sock`,
+    `keylime-correlation-test-${process.pid}.sock`,
   );
   test = await createTestSession({ responses });
   const session = test.session;

@@ -8,10 +8,10 @@ import {
 } from "@/lib/bounded-form-data";
 import { restartAllRpcSessions } from "@/lib/rpc-manager";
 
-/** Restarts every running omp session. omp itself updates with ompweb: its release ships the runner. */
+/** Restarts every running omp session. omp itself updates with keylime: its release ships the runner. */
 /**
  * @apiContract postOmpUpdate
- * @apiUsage Restart running omp RPC sessions after the runner shipped with ompweb changes; this endpoint does not install the runner.
+ * @apiUsage Restart running omp RPC sessions after the runner shipped with keylime changes; this endpoint does not install the runner.
  * @apiInputs Send application/json containing exactly {action:"restart"}, at most 4096 bytes.
  * @apiInvariants Browser-origin requests must pass the origin check. The returned count is the number reported restarted, not an update installation status.
  * @apiEffects Restarts running RPC sessions and can disrupt their connections.

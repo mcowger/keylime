@@ -9,7 +9,7 @@ import type {
 } from "./api-contracts/configuration-models";
 /**
  * models.dev catalog helpers. Ported from agegr/pi-web (lib/model-catalog.ts)
- * and adapted for omp-web: flattens the models.dev/api.json payload into a
+ * and adapted for keylime: flattens the models.dev/api.json payload into a
  * searchable model list and derives "add model" presets (id/metadata/pricing)
  * from an exact model match plus provider/base-url hints. Pure functions —
  * no I/O, no omp dependency.

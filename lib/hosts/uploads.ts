@@ -1,5 +1,5 @@
 // Composer file uploads, the daemon's side (docs/specs/2026-11-02-file-uploads-design.md, U3 and U5): an upload is
-// staged as `<agent dir>/omp-web/uploads/<id>.part` plus `<id>.json`, written in order at the part's length, and on
+// staged as `<agent dir>/keylime/uploads/<id>.part` plus `<id>.json`, written in order at the part's length, and on
 // attach hard-linked (or copied) into the session's `local://uploads/`.
 // Loaded by the daemon through Bun's native TypeScript runtime: no `@/` imports.
 import { randomUUID } from "node:crypto";
@@ -196,7 +196,7 @@ export class StagedUploads {
 
   constructor(
     private readonly send: (ack: UploadAck) => void,
-    readonly dir: string = join(getAgentDir(), "omp-web", "uploads"),
+    readonly dir: string = join(getAgentDir(), "keylime", "uploads"),
   ) {}
   /** Includes accepted controls before their first await, queued writes and still-open transfers. */
   busy(): boolean {
@@ -296,7 +296,7 @@ export class StagedUploads {
     } catch (error) {
       if (errno(error) !== "ENOENT")
         console.error(
-          "[ompweb host] could not clean workspace upload candidate",
+          "[keylime host] could not clean workspace upload candidate",
           error,
         );
     }
@@ -320,7 +320,7 @@ export class StagedUploads {
         // Its files could not be removed (a .part replaced by a directory, EPERM): the upload is closed already, and
         // the file scan below tries them again on every sweep.
         console.error(
-          `[ompweb host] could not delete staged upload ${id}: ${error instanceof Error ? error.message : String(error)}`,
+          `[keylime host] could not delete staged upload ${id}: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
@@ -778,7 +778,7 @@ export class StagedUploads {
         await this.removeCandidate(receipt);
         await rm(part, { force: true }).catch((error) =>
           console.error(
-            "[ompweb host] could not remove published staging",
+            "[keylime host] could not remove published staging",
             error,
           ),
         );

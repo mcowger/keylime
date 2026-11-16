@@ -153,8 +153,8 @@ async function devIndex(server: Bun.Server<ServerSocketData>): Promise<string> {
   return stylesheetFirst(await (await fetch(url, { proxy: false })).text());
 }
 function frontendRoot(root: string): string | undefined {
-  if (process.env.OMP_WEB_FRONTEND_ROOT)
-    return path.resolve(process.env.OMP_WEB_FRONTEND_ROOT);
+  if (process.env.KEYLIME_FRONTEND_ROOT)
+    return path.resolve(process.env.KEYLIME_FRONTEND_ROOT);
   const data = path.join(os.homedir(), ".local", "share", "keylime");
   try {
     const releases = realpathSync(path.join(data, "releases"));
@@ -228,7 +228,7 @@ export function startServer(options: {
     port: options.port,
     hostname: options.hostname,
     development: dev ? { hmr: true, console: true } : false,
-    // Bun turns SO_REUSEPORT on when development is false: a second omp-web would share the port instead of failing.
+    // Bun turns SO_REUSEPORT on when development is false: a second keylime would share the port instead of failing.
     reusePort: false,
     idleTimeout: IDLE_TIMEOUT,
     routes,
@@ -342,7 +342,7 @@ export async function startProduction(listen: {
     server = startServer({
       ...listen,
       dev: false,
-      root: process.env.OMP_WEB_PACKAGE_DIR ?? process.cwd(),
+      root: process.env.KEYLIME_PACKAGE_DIR ?? process.cwd(),
     });
   } catch (error) {
     // The npm launcher checks the port first, but another process can take it before this bind.
@@ -353,23 +353,23 @@ export async function startProduction(listen: {
     ))
       throw error;
     console.error(
-      `Port ${listen.port} on ${listen.hostname} is already in use: is ompweb already running? Otherwise stop the process using it or start ompweb with --port ${listen.port + 1}.`,
+      `Port ${listen.port} on ${listen.hostname} is already in use: is keylime already running? Otherwise stop the process using it or start keylime with --port ${listen.port + 1}.`,
     );
     process.exit(1);
   }
   // The local daemon link (local-bootstrap.ts, run by register) and the update worker dial this address; set it here
   // so `npm start` (server/main.ts) links the daemon like the launcher and the binary do.
   Object.assign(process.env, {
-    OMP_WEB_PORT: String(server.port),
-    OMP_WEB_HOSTNAME: listen.hostname,
+    KEYLIME_PORT: String(server.port),
+    KEYLIME_HOSTNAME: listen.hostname,
   });
   await register();
   // In the background: the fetch can take minutes, and what needs omp reports OMP_NOT_FOUND until it lands.
   void ensureOmpRunner().catch((error: unknown) =>
     console.error(
-      `[omp-web] ${error instanceof Error ? error.message : String(error)}`,
+      `[keylime] ${error instanceof Error ? error.message : String(error)}`,
     ),
   );
-  console.log(`[omp-web] Ready on ${server.url.origin}`);
+  console.log(`[keylime] Ready on ${server.url.origin}`);
   return server;
 }

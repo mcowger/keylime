@@ -7,14 +7,14 @@ import { getOmpVersion, resolveOmpBin } from "../omp/omp-cli";
 import { spawnOmpTransport } from "../omp/rpc-process";
 import { CHANNEL_PROTO } from "./omp-socket";
 
-// `ompweb preflight`: start the session omp the way a host starts one for a new session (same resolver, same
+// `keylime preflight`: start the session omp the way a host starts one for a new session (same resolver, same
 // spawn, plus --no-session in a scratch cwd) and wait for its channel hello. Deploy scripts grep its output
 // for the literal success prefix below.
 // Loaded by Bun's native TypeScript runtime and the compiled binary: no `@/` imports.
 // shortcut: no credentials env, --resume/--tools or cluster config as the daemon adds; upgrade if those break a start.
 
 /** Prefix for the temporary preflight working directory. */
-export const PREFLIGHT_MARKER = "ompweb-preflight-scratch-";
+export const PREFLIGHT_MARKER = "keylime-preflight-scratch-";
 
 export async function runPreflight(timeoutMs = 30_000): Promise<number> {
   const fail = (bin: string, reason: string) => {
@@ -23,7 +23,7 @@ export async function runPreflight(timeoutMs = 30_000): Promise<number> {
   };
   const bin = resolveOmpBin();
   if (!bin)
-    return fail(process.env.OMP_WEB_OMP_BIN || "ompweb-omp", "not found");
+    return fail(process.env.KEYLIME_OMP_BIN || "keylime-omp", "not found");
   try {
     accessSync(bin, constants.X_OK);
   } catch {

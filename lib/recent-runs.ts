@@ -4,7 +4,7 @@ export interface RecentRunEntry {
 }
 
 export const MAX_RECENT_COMPLETED_RUNS = 10;
-export const RECENT_RUNS_STORAGE_KEY = "ompweb.recent-completed-runs";
+export const RECENT_RUNS_STORAGE_KEY = "keylime.recent-completed-runs";
 
 export function loadRecentRuns(
   storage?: Storage,

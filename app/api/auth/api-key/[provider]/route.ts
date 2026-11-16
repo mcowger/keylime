@@ -8,7 +8,7 @@ import {
 type Params = { params: Promise<{ provider: string }> };
 
 // omp stores API keys in its encrypted SQLite credential store (agent.db),
-// which omp-web must never write from Node, and the omp RPC login command only
+// which keylime must never write from Node, and the omp RPC login command only
 // bridges browser-based flows (providers that prompt for a key before opening
 // a URL are rejected by omp's RPC mode). Keys therefore cannot be stored or
 // removed from the web UI.

@@ -38,7 +38,7 @@ function setup(
   t: TestContext,
   { localSessionId }: { localSessionId?: string } = {},
 ) {
-  const agentDir = mkdtempSync(join(tmpdir(), "omp-web-session-index-"));
+  const agentDir = mkdtempSync(join(tmpdir(), "keylime-session-index-"));
   if (localSessionId) {
     const projectDir = join(agentDir, "sessions", "-project");
     mkdirSync(projectDir, { recursive: true });
@@ -580,7 +580,7 @@ test("invalidating a warm successful list revokes its negative authority", async
   await rejected;
 });
 
-test("the hand-driven daemon answers a failed op as ompweb host does", async (t) => {
+test("the hand-driven daemon answers a failed op as keylime host does", async (t) => {
   const link = setup(t);
   const { ProjectPathError } = await import("../project-registry.ts");
   const { HostOpError } = await import("./link-protocol.ts");

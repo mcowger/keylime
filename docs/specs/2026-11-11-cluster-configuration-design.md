@@ -78,7 +78,7 @@ The list is one constant, used by the master when it builds the bundle and by th
 
 ### K6. Joining and leaving
 
-- **Joining.** Before the first apply, the daemon moves the member's own version of every mirrored file and directory into `<agent dir>/omp-web/own-config/` and records its own plugin list there. The confirmation of joining says that the host's configuration is replaced until it leaves.
+- **Joining.** Before the first apply, the daemon moves the member's own version of every mirrored file and directory into `<agent dir>/keylime/own-config/` and records its own plugin list there. The confirmation of joining says that the host's configuration is replaced until it leaves.
 - **Changes made on a member** to a mirrored file are overwritten at the next apply. Configuration is changed on the master.
 - **Leaving.** The daemon removes the mirrored files, moves the backup into place, and restores its own plugin set as far as omp allows; failures are shown. Its `config.yml` is its own file again, unchanged.
 - This machine is the master: nothing is mirrored to it and nothing of it is backed up.

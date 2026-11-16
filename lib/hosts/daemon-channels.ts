@@ -680,12 +680,12 @@ export class ChannelTable {
     try {
       if (this.stopped) {
         adopted?.transport.killTree(true);
-        throw new HostOpError(503, "host_stopping", "ompweb host is stopping");
+        throw new HostOpError(503, "host_stopping", "keylime host is stopping");
       }
       const spawned = adopted ?? (await this.deps.spawn(launch));
       if (this.stopped) {
         spawned.transport.killTree(true);
-        throw new HostOpError(503, "host_stopping", "ompweb host is stopping");
+        throw new HostOpError(503, "host_stopping", "keylime host is stopping");
       }
       try {
         this.assertWorkspaceAvailable(spawned.cwd);

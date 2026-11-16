@@ -1,14 +1,14 @@
 #!/usr/bin/env bun
 "use strict";
 
-// `ompweb host`: link this machine to a main omp-web so sessions can run here (lib/hosts/host-cli.ts).
-//   ompweb host login --url <url>   reads the host token from stdin
-//   ompweb host [--allow-http]      dials the saved server and keeps the link up (http:// is accepted without the flag for loopback)
+// `keylime host`: link this machine to a main keylime so sessions can run here (lib/hosts/host-cli.ts).
+//   keylime host login --url <url>   reads the host token from stdin
+//   keylime host [--allow-http]      dials the saved server and keeps the link up (http:// is accepted without the flag for loopback)
 
 // The daemon finds its runner from here (lib/omp/omp-cli.ts), not from whatever cwd it was started in.
 import { join } from "node:path";
 
-process.env.OMP_WEB_PACKAGE_DIR ??= join(__dirname, "..");
+process.env.KEYLIME_PACKAGE_DIR ??= join(__dirname, "..");
 // Load the CLI only after setting its package root; hot replacements also wait for the old CLI to release its endpoint.
 type HostLifecycle = {
   generation: number;
@@ -18,12 +18,12 @@ type HostLifecycle = {
 };
 
 declare global {
-  var __ompWebHostLifecycle: HostLifecycle | undefined;
+  var __keylimeHostLifecycle: HostLifecycle | undefined;
 }
 
 function failed(error: unknown): never {
   console.error(
-    `ompweb host: ${error instanceof Error ? error.message : String(error)}`,
+    `keylime host: ${error instanceof Error ? error.message : String(error)}`,
   );
   process.exit(1);
 }
@@ -37,7 +37,7 @@ if (argv.some((arg) => arg !== "--allow-http")) {
   );
 } else {
   // Bun --hot preserves this owner while re-evaluating the implementation.
-  const lifecycle: HostLifecycle = (globalThis.__ompWebHostLifecycle ??= {
+  const lifecycle: HostLifecycle = (globalThis.__keylimeHostLifecycle ??= {
     generation: 0,
     pending: Promise.resolve(),
     stopping: false,

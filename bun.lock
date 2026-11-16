@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "@kahme247/ompweb",
+      "name": "@mcowger/keylime",
       "dependencies": {
         "@base-ui/react": "^1.7.0",
         "@sinclair/typebox": "0.34.52",

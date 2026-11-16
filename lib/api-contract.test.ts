@@ -166,10 +166,10 @@ test("PUT /api/web-settings validates the transport and tells open streams only 
   const { mkdtempSync, rmSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-settings-route-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-settings-route-"));
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = dir;
-  delete globalThis.__ompWebSettingsCache;
+  delete globalThis.__keylimeSettingsCache;
   const { PUT, GET } = await import("../app/api/web-settings/route.ts");
   const { EventStreamConnection } = await import("./event-stream-hub.ts");
   const put = (body: unknown) =>
@@ -235,7 +235,7 @@ test("PUT /api/web-settings validates the transport and tells open streams only 
     connection.close();
     if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = previous;
-    delete globalThis.__ompWebSettingsCache;
+    delete globalThis.__keylimeSettingsCache;
     rmSync(dir, { recursive: true, force: true });
   }
 });

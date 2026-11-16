@@ -25,14 +25,14 @@ test("the owning host refuses legacy configuration before starting omp", async (
     mode: 0o755,
   });
   const oldAgent = process.env.PI_CODING_AGENT_DIR;
-  const oldBin = process.env.OMP_WEB_OMP_BIN;
+  const oldBin = process.env.KEYLIME_OMP_BIN;
   process.env.PI_CODING_AGENT_DIR = agentDir;
-  process.env.OMP_WEB_OMP_BIN = bin;
+  process.env.KEYLIME_OMP_BIN = bin;
   t.after(() => {
     if (oldAgent === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = oldAgent;
-    if (oldBin === undefined) delete process.env.OMP_WEB_OMP_BIN;
-    else process.env.OMP_WEB_OMP_BIN = oldBin;
+    if (oldBin === undefined) delete process.env.KEYLIME_OMP_BIN;
+    else process.env.KEYLIME_OMP_BIN = oldBin;
     rmSync(root, { recursive: true, force: true });
   });
   for (const [launchConfig, code] of [
@@ -90,7 +90,7 @@ test("spawnRpc's env reaches the child and wins over the agentEnv setting", asyn
   const seen = join(root, "seen");
   mkdirSync(agentDir);
   writeFileSync(
-    join(agentDir, "omp-web-settings.json"),
+    join(agentDir, "keylime-settings.json"),
     JSON.stringify({ agentEnv: { OMP_AUTH_BROKER_URL: "from-settings" } }),
   );
   const bin = join(root, "omp");
@@ -100,14 +100,14 @@ test("spawnRpc's env reaches the child and wins over the agentEnv setting", asyn
     { mode: 0o755 },
   );
   const oldAgent = process.env.PI_CODING_AGENT_DIR;
-  const oldBin = process.env.OMP_WEB_OMP_BIN;
+  const oldBin = process.env.KEYLIME_OMP_BIN;
   process.env.PI_CODING_AGENT_DIR = agentDir;
-  process.env.OMP_WEB_OMP_BIN = bin;
+  process.env.KEYLIME_OMP_BIN = bin;
   t.after(() => {
     if (oldAgent === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = oldAgent;
-    if (oldBin === undefined) delete process.env.OMP_WEB_OMP_BIN;
-    else process.env.OMP_WEB_OMP_BIN = oldBin;
+    if (oldBin === undefined) delete process.env.KEYLIME_OMP_BIN;
+    else process.env.KEYLIME_OMP_BIN = oldBin;
     rmSync(root, { recursive: true, force: true });
   });
   const request = { cwd, recordedCwd: cwd, sessionFile: "", advisor: false };

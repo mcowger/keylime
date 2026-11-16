@@ -3486,7 +3486,7 @@ test("a server-generated asynchronous error queued under start 1 cannot fail Ret
   const os = await import("node:os");
   const path = await import("node:path");
   const agentDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "omp-web-worker-upload-"),
+    path.join(os.tmpdir(), "keylime-worker-upload-"),
   );
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = agentDir;

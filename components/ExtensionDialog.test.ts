@@ -146,7 +146,7 @@ test("question selection survives request replay but is cleared for the next que
 test("confirm answers true, and cancel answers with no value", async () => {
   const request: Extract<UiDialogRequest, { method: "confirm" }> = {
     type: "ui_request",
-    id: "omp-web:abc",
+    id: "keylime:abc",
     method: "confirm",
     args: ["Delete it?", "This cannot be undone."],
   };
@@ -169,8 +169,8 @@ test("confirm answers true, and cancel answers with no value", async () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     assert.deepEqual(responses, [
-      { id: "omp-web:abc", value: true },
-      { id: "omp-web:abc", value: undefined },
+      { id: "keylime:abc", value: true },
+      { id: "keylime:abc", value: undefined },
     ]);
   } finally {
     view.unmount();

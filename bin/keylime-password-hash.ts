@@ -1,4 +1,4 @@
-// The `OMP_WEB_PASSWORD_HASH` format, shared by the launcher, installers and server.
+// The `KEYLIME_PASSWORD_HASH` format, shared by the launcher, installers and server.
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
 export interface PasswordHashOptions {

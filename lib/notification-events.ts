@@ -161,7 +161,7 @@ type Detect = (
 export function createNotificationDetector(): Detect {
   let lastOutcome: string | null = null;
   let heldFallback: NotificationEvent | null = null;
-  /** omp-web already reported this run's failure (from a failed `response`); its `prompt_result` must not repeat it. */
+  /** keylime already reported this run's failure (from a failed `response`); its `prompt_result` must not repeat it. */
   let failureReported = false;
 
   const releaseFallback = (detail?: string): NotificationEvent[] => {
@@ -176,7 +176,7 @@ export function createNotificationDetector(): Detect {
       case "agent_start":
         failureReported = false;
         return [];
-      // omp-web's own frames: an async prompt failure (`response` with
+      // keylime's own frames: an async prompt failure (`response` with
       // success: false) and the omp child exiting mid-run.
       case "prompt_error":
       case "process_exit": {
@@ -246,7 +246,7 @@ export function createNotificationDetector(): Detect {
         return [...events, { ...base, type: "completed" }];
       }
       case "ui_request": {
-        // Only reached for dialogs that wait on the user (omp-web answers
+        // Only reached for dialogs that wait on the user (keylime answers
         // auto-approved ones before they are emitted). args[0] is the title,
         // an ask's questions, an approval prompt, or a form's html (no detail).
         if (frame.method === "formDialog") return [{ ...base, type: "input" }];

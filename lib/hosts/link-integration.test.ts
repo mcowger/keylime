@@ -55,11 +55,11 @@ function host() {
   return result;
 }
 
-// A real `ompweb host` process with its own HOME (a second "machine") linked
+// A real `keylime host` process with its own HOME (a second "machine") linked
 // over a loopback WebSocket to the link route and the hub's socket handler, served here through Bun.serve.
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
-const hostBin = join(repoRoot, "bin", "omp-web-host.ts");
-const scratch = mkdtempSync(join(tmpdir(), "omp-web-link-it-"));
+const hostBin = join(repoRoot, "bin", "keylime-host.ts");
+const scratch = mkdtempSync(join(tmpdir(), "keylime-link-it-"));
 const mainAgentDir = join(scratch, "main-agent");
 const daemonHome = join(scratch, "laptop");
 const daemonAgentDir = join(daemonHome, ".omp", "agent");
@@ -426,7 +426,7 @@ before(async () => {
     ...process.env,
     HOME: daemonHome,
     PI_CODING_AGENT_DIR: daemonAgentDir,
-    OMP_WEB_OMP_BIN: fakeOmp,
+    KEYLIME_OMP_BIN: fakeOmp,
   };
 
   const login = spawnSync(process.execPath, [hostBin, "login", "--url", url], {
@@ -435,7 +435,7 @@ before(async () => {
     encoding: "utf8",
   });
   assert.equal(login.status, 0, login.stderr);
-  const saved = join(daemonAgentDir, "omp-web", "host.json");
+  const saved = join(daemonAgentDir, "keylime", "host.json");
   assert.equal(statSync(saved).mode & 0o777, 0o600);
   assert.deepEqual(JSON.parse(readFileSync(saved, "utf8")), {
     url,
@@ -531,7 +531,7 @@ test("the host refuses session paths outside its sessions directory", async () =
   writeFileSync(join(`${sessionsDir}-evil`, "x.jsonl"), "{}\n");
   for (const path of [
     "/etc/passwd",
-    join(sessionsDir, "..", "omp-web", "host.json"),
+    join(sessionsDir, "..", "keylime", "host.json"),
     join(sessionsDir, "escape", "secret.jsonl"),
     join(`${sessionsDir}-evil`, "x.jsonl"),
     "relative.jsonl",
@@ -572,7 +572,7 @@ test("a remote session streams a reply with no frame lost or duplicated across l
     (message) =>
       sessionId !== undefined &&
       message ===
-        `[omp-web] could not title session ${sessionId}: Laptop is offline`,
+        `[keylime] could not title session ${sessionId}: Laptop is offline`,
   );
   const remote = host();
   const { session, realSessionId } = await startRpcSession(
@@ -667,7 +667,7 @@ test("a restarted web server adopts its running omp children, resumed or new: ea
   // A shared host's daemon owns the runs' lifecycle: the web server records none of them for its own resume.
   const interrupted = join(
     mainAgentDir,
-    `omp-web-interrupted-sessions-${process.pid}.json`,
+    `keylime-interrupted-sessions-${process.pid}.json`,
   );
   assert.equal(
     existsSync(interrupted),

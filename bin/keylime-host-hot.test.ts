@@ -22,15 +22,15 @@ import {
 } from "../lib/hosts/host-control.ts";
 
 test("Bun hot reload replaces the host daemon and SIGTERM removes its endpoint", async (t) => {
-  const scratch = mkdtempSync(join(tmpdir(), "omp-web-host-hot-"));
+  const scratch = mkdtempSync(join(tmpdir(), "keylime-host-hot-"));
   const root = join(scratch, "source");
   const sourceRoot = fileURLToPath(new URL("..", import.meta.url));
   const agentDir = join(scratch, "agent");
   const endpoint = hostControlPath(agentDir);
   mkdirSync(join(root, "bin"), { recursive: true });
   copyFileSync(
-    join(sourceRoot, "bin/omp-web-host.ts"),
-    join(root, "bin/omp-web-host.ts"),
+    join(sourceRoot, "bin/keylime-host.ts"),
+    join(root, "bin/keylime-host.ts"),
   );
   cpSync(join(sourceRoot, "lib"), join(root, "lib"), { recursive: true });
   copyFileSync(join(sourceRoot, "package.json"), join(root, "package.json"));
@@ -39,7 +39,7 @@ test("Bun hot reload replaces the host daemon and SIGTERM removes its endpoint",
     join(root, "node_modules"),
     "dir",
   );
-  mkdirSync(join(agentDir, "omp-web"), { recursive: true });
+  mkdirSync(join(agentDir, "keylime"), { recursive: true });
   const runner = join(scratch, "fake-omp");
   writeFileSync(
     runner,
@@ -77,7 +77,7 @@ test("Bun hot reload replaces the host daemon and SIGTERM removes its endpoint",
     },
   });
   writeFileSync(
-    join(agentDir, "omp-web", "host.json"),
+    join(agentDir, "keylime", "host.json"),
     JSON.stringify({
       url: `http://127.0.0.1:${server.port}`,
       token: "hot-fixture-token",
@@ -86,7 +86,7 @@ test("Bun hot reload replaces the host daemon and SIGTERM removes its endpoint",
   );
   const child = spawn(
     process.execPath,
-    ["--hot", join(root, "bin/omp-web-host.ts")],
+    ["--hot", join(root, "bin/keylime-host.ts")],
     {
       cwd: root,
       env: {
@@ -97,8 +97,8 @@ test("Bun hot reload replaces the host daemon and SIGTERM removes its endpoint",
         XDG_DATA_HOME: join(scratch, "data"),
         XDG_STATE_HOME: join(scratch, "state"),
         XDG_CACHE_HOME: join(scratch, "cache"),
-        OMP_WEB_PACKAGE_DIR: root,
-        OMP_WEB_OMP_BIN: runner,
+        KEYLIME_PACKAGE_DIR: root,
+        KEYLIME_OMP_BIN: runner,
       },
       stdio: ["ignore", "pipe", "pipe"],
     },

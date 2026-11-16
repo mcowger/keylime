@@ -307,7 +307,7 @@ test("an entry without a session is not focusable or clickable", () => {
     notificationHistory.add({
       type: "completed",
       sessionId: "",
-      sessionName: "omp web",
+      sessionName: "keylime",
     });
   });
   const row = render(

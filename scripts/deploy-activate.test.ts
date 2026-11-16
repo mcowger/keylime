@@ -103,11 +103,11 @@ test("activation reports each mutation before it happens and checks both service
   expect(f.calls).toEqual([
     "preflight",
     "drain-idle",
-    "stop:global/ompweb",
-    "stop:global/ompweb-host",
+    "stop:global/keylime",
+    "stop:global/keylime-host",
     "select:new",
-    "start:global/ompweb",
-    "start:global/ompweb-host",
+    "start:global/keylime",
+    "start:global/keylime-host",
     "status",
   ]);
 });
@@ -124,20 +124,20 @@ test("failure before admission restores the old release and restarts both servic
   expect(f.selected()).toBe("old");
   expect(f.calls.slice(-3)).toEqual([
     "select:old",
-    "start:global/ompweb",
-    "start:global/ompweb-host",
+    "start:global/keylime",
+    "start:global/keylime-host",
   ]);
 });
 
 test("a failed host stop still attempts to restart both services", async () => {
   const f = fixture();
-  f.fail("stop:global/ompweb-host");
+  f.fail("stop:global/keylime-host");
   await expect(activateRelease(f.options, f.deps)).rejects.toThrow(
     "injected failure",
   );
   expect(f.calls.slice(-2)).toEqual([
-    "start:global/ompweb",
-    "start:global/ompweb-host",
+    "start:global/keylime",
+    "start:global/keylime-host",
   ]);
 });
 
@@ -157,24 +157,24 @@ test("busy and legacy daemons receive the full grace before forced cutover", asy
     await activateRelease(f.options, f.deps);
     expect(f.clock()).toBe(60_000);
     expect(f.calls.indexOf("drain-force")).toBeGreaterThan(
-      f.calls.indexOf("stop:global/ompweb"),
+      f.calls.indexOf("stop:global/keylime"),
     );
     expect(f.calls.indexOf("drain-force")).toBeLessThan(
-      f.calls.indexOf("stop:global/ompweb-host"),
+      f.calls.indexOf("stop:global/keylime-host"),
     );
   }
 });
 
 test("failure after web start retains candidate and attempts both candidate services", async () => {
   const f = fixture();
-  f.fail("start:global/ompweb");
+  f.fail("start:global/keylime");
   await expect(activateRelease(f.options, f.deps)).rejects.toThrow(
     "injected failure",
   );
   expect(f.selected()).toBe("new");
   expect(f.calls.slice(-2)).toEqual([
-    "start:global/ompweb",
-    "start:global/ompweb-host",
+    "start:global/keylime",
+    "start:global/keylime-host",
   ]);
 });
 

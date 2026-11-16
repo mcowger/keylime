@@ -17,14 +17,14 @@ import { captureExpectedConsole } from "../../tests/expected-console.ts";
 import type { ManifestFile, PluginEntry } from "./cluster-config.ts";
 
 const scratch = realpathSync(
-  mkdtempSync(join(tmpdir(), "omp-web-cluster-config-route-test-")),
+  mkdtempSync(join(tmpdir(), "keylime-cluster-config-route-test-")),
 );
 const agentDir = join(scratch, "agent");
 const homeDir = join(scratch, "home");
 mkdirSync(agentDir, { recursive: true });
 mkdirSync(homeDir, { recursive: true });
 const saved = Object.fromEntries(
-  ["PI_CODING_AGENT_DIR", "HOME", "OMP_WEB_OMP_BIN"].map((name) => [
+  ["PI_CODING_AGENT_DIR", "HOME", "KEYLIME_OMP_BIN"].map((name) => [
     name,
     process.env[name],
   ]),
@@ -40,7 +40,7 @@ writeFileSync(fakeOmp, `#!${process.execPath}\n${source}`, { mode: 0o755 });
 Object.assign(process.env, {
   PI_CODING_AGENT_DIR: agentDir,
   HOME: homeDir,
-  OMP_WEB_OMP_BIN: fakeOmp,
+  KEYLIME_OMP_BIN: fakeOmp,
 });
 after(() => {
   Date.now = realNow;
@@ -51,7 +51,7 @@ after(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-// Every readFileSync outside omp-web's own state files is a configuration read. Copies of the real modules: Bun patches
+// Every readFileSync outside keylime's own state files is a configuration read. Copies of the real modules: Bun patches
 // the live namespaces in place, so a wrapper calling them would otherwise call itself. Bun's homedir() reads HOME only
 // at startup, so it is mocked too; "fs" and "node:fs" are separate mock keys.
 const realFs = { ...(await import("node:fs")) };
@@ -73,7 +73,7 @@ const mockedFs = () => ({
     if (
       typeof path === "string" &&
       path.startsWith(scratch) &&
-      !path.startsWith(join(agentDir, "omp-web"))
+      !path.startsWith(join(agentDir, "keylime"))
     )
       configReads.push(path);
     return Reflect.apply(realFs.readFileSync, undefined, args);
@@ -111,8 +111,8 @@ const { createHost, revokeHost, rotateLocalHostToken } =
   await import("./registry.ts");
 const { savePools } = await import("./pools.ts");
 
-const hostsFile = join(agentDir, "omp-web", "hosts.json");
-const poolsFile = join(agentDir, "omp-web", "pools.json");
+const hostsFile = join(agentDir, "keylime", "hosts.json");
+const poolsFile = join(agentDir, "keylime", "pools.json");
 
 const authorized = (token: string | undefined): RequestInit => ({
   headers: token ? { authorization: `Bearer ${token}` } : {},
@@ -186,8 +186,8 @@ test("with no plugin list ever read, a failing omp is 409 unreadable and concurr
     "log",
     (message) =>
       typeof message === "string" &&
-      (message === "[omp-web] cluster-config the plugin list cannot be read" ||
-        /^\[omp-web\] cluster-config [\w-]+ unreadable the plugin list cannot be read \(omp plugin list failed\)$/.test(
+      (message === "[keylime] cluster-config the plugin list cannot be read" ||
+        /^\[keylime\] cluster-config [\w-]+ unreadable the plugin list cannot be read \(omp plugin list failed\)$/.test(
           message,
         )),
   );
@@ -210,7 +210,7 @@ test("a failure after a success keeps serving the last good plugin list", async 
     "log",
     (message) =>
       message ===
-      "[omp-web] cluster-config the plugin list cannot be read; serving the last one read",
+      "[keylime] cluster-config the plugin list cannot be read; serving the last one read",
   );
   const token = clusterMember();
   writeFileSync(countFile, "");
@@ -351,7 +351,7 @@ test("a master file over the limit is 409 file_too_large on the manifest", async
     "log",
     (message) =>
       typeof message === "string" &&
-      /^\[omp-web\] cluster-config [\w-]+ file_too_large AGENTS\.md is 5242881 bytes, over the 5242880 byte limit$/.test(
+      /^\[keylime\] cluster-config [\w-]+ file_too_large AGENTS\.md is 5242881 bytes, over the 5242880 byte limit$/.test(
         message,
       ),
   );
@@ -508,7 +508,7 @@ test("a mirrored directory that cannot be read is 409 unreadable, also when the 
     "log",
     (message) =>
       typeof message === "string" &&
-      /^\[omp-web\] cluster-config [\w-]+ unreadable skills cannot be read \(EACCES\)$/.test(
+      /^\[keylime\] cluster-config [\w-]+ unreadable skills cannot be read \(EACCES\)$/.test(
         message,
       ),
   );

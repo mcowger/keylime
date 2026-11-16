@@ -8,12 +8,12 @@
       "trustedProxy": {
         "description": "Only a configured trusted proxy should set this header.",
         "in": "header",
-        "name": "x-omp-web-auth",
+        "name": "x-keylime-auth",
         "type": "apiKey"
       },
       "webSession": {
         "in": "cookie",
-        "name": "omp_web_session",
+        "name": "keylime_session",
         "type": "apiKey"
       }
     }
@@ -53,7 +53,7 @@
                       "type": "boolean"
                     },
                     "state": {
-                      "description": "The state shape omp-web's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
+                      "description": "The state shape keylime's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
                       "properties": {
                         "autoCompactionEnabled": {
                           "type": "boolean"
@@ -12777,7 +12777,7 @@
                               "type": "object"
                             },
                             {
-                              "description": "The state shape omp-web's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
+                              "description": "The state shape keylime's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
                               "properties": {
                                 "autoCompactionEnabled": {
                                   "type": "boolean"
@@ -13662,7 +13662,7 @@
                                   "type": "boolean"
                                 },
                                 "deferred": {
-                                  "description": "omp-web: omp held the result back for the next prompt (a turn was running).",
+                                  "description": "keylime: omp held the result back for the next prompt (a turn was running).",
                                   "type": "boolean"
                                 },
                                 "exitCode": {
@@ -26894,7 +26894,7 @@
                               "type": "object"
                             },
                             {
-                              "description": "The state shape omp-web's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
+                              "description": "The state shape keylime's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
                               "properties": {
                                 "autoCompactionEnabled": {
                                   "type": "boolean"
@@ -27779,7 +27779,7 @@
                                   "type": "boolean"
                                 },
                                 "deferred": {
-                                  "description": "omp-web: omp held the result back for the next prompt (a turn was running).",
+                                  "description": "keylime: omp held the result back for the next prompt (a turn was running).",
                                   "type": "boolean"
                                 },
                                 "exitCode": {
@@ -40664,13 +40664,7 @@
                                 "const": "local",
                                 "type": "string"
                               },
-                              "label": {
-                                "type": "string"
-                              },
-                              "lastSeenAt": {
-                                "type": "null"
-                              },
-                              "ompVersion": {
+                              "keylimeVersion": {
                                 "anyOf": [
                                   {
                                     "type": "string"
@@ -40680,7 +40674,13 @@
                                   }
                                 ]
                               },
-                              "ompwebVersion": {
+                              "label": {
+                                "type": "string"
+                              },
+                              "lastSeenAt": {
+                                "type": "null"
+                              },
+                              "ompVersion": {
                                 "anyOf": [
                                   {
                                     "type": "string"
@@ -40861,6 +40861,16 @@
                               "id": {
                                 "type": "string"
                               },
+                              "keylimeVersion": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
                               "label": {
                                 "type": "string"
                               },
@@ -40875,16 +40885,6 @@
                                 ]
                               },
                               "ompVersion": {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
-                              },
-                              "ompwebVersion": {
                                 "anyOf": [
                                   {
                                     "type": "string"
@@ -41544,13 +41544,7 @@
                                   "const": "local",
                                   "type": "string"
                                 },
-                                "label": {
-                                  "type": "string"
-                                },
-                                "lastSeenAt": {
-                                  "type": "null"
-                                },
-                                "ompVersion": {
+                                "keylimeVersion": {
                                   "anyOf": [
                                     {
                                       "type": "string"
@@ -41560,7 +41554,13 @@
                                     }
                                   ]
                                 },
-                                "ompwebVersion": {
+                                "label": {
+                                  "type": "string"
+                                },
+                                "lastSeenAt": {
+                                  "type": "null"
+                                },
+                                "ompVersion": {
                                   "anyOf": [
                                     {
                                       "type": "string"
@@ -41741,6 +41741,16 @@
                                 "id": {
                                   "type": "string"
                                 },
+                                "keylimeVersion": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
                                 "label": {
                                   "type": "string"
                                 },
@@ -41755,16 +41765,6 @@
                                   ]
                                 },
                                 "ompVersion": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
-                                },
-                                "ompwebVersion": {
                                   "anyOf": [
                                     {
                                       "type": "string"
@@ -42395,13 +42395,7 @@
                               "const": "local",
                               "type": "string"
                             },
-                            "label": {
-                              "type": "string"
-                            },
-                            "lastSeenAt": {
-                              "type": "null"
-                            },
-                            "ompVersion": {
+                            "keylimeVersion": {
                               "anyOf": [
                                 {
                                   "type": "string"
@@ -42411,7 +42405,13 @@
                                 }
                               ]
                             },
-                            "ompwebVersion": {
+                            "label": {
+                              "type": "string"
+                            },
+                            "lastSeenAt": {
+                              "type": "null"
+                            },
+                            "ompVersion": {
                               "anyOf": [
                                 {
                                   "type": "string"
@@ -42592,6 +42592,16 @@
                             "id": {
                               "type": "string"
                             },
+                            "keylimeVersion": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
                             "label": {
                               "type": "string"
                             },
@@ -42606,16 +42616,6 @@
                               ]
                             },
                             "ompVersion": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            },
-                            "ompwebVersion": {
                               "anyOf": [
                                 {
                                   "type": "string"
@@ -57809,7 +57809,7 @@
     },
     "/api/omp-update": {
       "post": {
-        "description": "### Usage\n\nRestart running omp RPC sessions after the runner shipped with ompweb changes; this endpoint does not install the runner.\n\n### Inputs\n\nSend application/json containing exactly {action:\"restart\"}, at most 4096 bytes.\n\n### Invariants\n\nBrowser-origin requests must pass the origin check. The returned count is the number reported restarted, not an update installation status.\n\n### Effects\n\nRestarts running RPC sessions and can disrupt their connections.\n\n### Recovery\n\nA failed or interrupted request may have restarted some sessions; inspect session state before retrying, since another request can restart them again.",
+        "description": "### Usage\n\nRestart running omp RPC sessions after the runner shipped with keylime changes; this endpoint does not install the runner.\n\n### Inputs\n\nSend application/json containing exactly {action:\"restart\"}, at most 4096 bytes.\n\n### Invariants\n\nBrowser-origin requests must pass the origin check. The returned count is the number reported restarted, not an update installation status.\n\n### Effects\n\nRestarts running RPC sessions and can disrupt their connections.\n\n### Recovery\n\nA failed or interrupted request may have restarted some sessions; inspect session state before retrying, since another request can restart them again.",
         "operationId": "postOmpUpdate",
         "requestBody": {
           "content": {
@@ -58207,7 +58207,7 @@
           "Inputs": "Send application/json containing exactly {action:\"restart\"}, at most 4096 bytes.",
           "Invariants": "Browser-origin requests must pass the origin check. The returned count is the number reported restarted, not an update installation status.",
           "Recovery": "A failed or interrupted request may have restarted some sessions; inspect session state before retrying, since another request can restart them again.",
-          "Usage": "Restart running omp RPC sessions after the runner shipped with ompweb changes; this endpoint does not install the runner."
+          "Usage": "Restart running omp RPC sessions after the runner shipped with keylime changes; this endpoint does not install the runner."
         }
       }
     },
@@ -64165,7 +64165,7 @@
                           "type": "boolean"
                         },
                         "state": {
-                          "description": "The state shape omp-web's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
+                          "description": "The state shape keylime's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
                           "properties": {
                             "autoCompactionEnabled": {
                               "type": "boolean"
@@ -74630,7 +74630,7 @@
                       "type": "boolean"
                     },
                     "state": {
-                      "description": "The state shape omp-web's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
+                      "description": "The state shape keylime's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
                       "properties": {
                         "autoCompactionEnabled": {
                           "type": "boolean"
@@ -75655,7 +75655,7 @@
                       "type": "boolean"
                     },
                     "state": {
-                      "description": "The state shape omp-web's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
+                      "description": "The state shape keylime's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
                       "properties": {
                         "autoCompactionEnabled": {
                           "type": "boolean"

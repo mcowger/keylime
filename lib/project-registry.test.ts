@@ -32,7 +32,7 @@ const P = (p: string) => resolve(p);
 
 /** Point the omp agent dir at a throwaway location for the duration of `fn`. */
 async function withAgentDir(t: TestContext) {
-  const agentDir = mkdtempSync(join(tmpdir(), "omp-web-registry-test-"));
+  const agentDir = mkdtempSync(join(tmpdir(), "keylime-registry-test-"));
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = agentDir;
   t.after(() => {
@@ -418,7 +418,7 @@ test("comparableProjectPath respects casing and literal backslashes", () => {
 });
 
 test("validateProjectPath rejects empty, missing, and non-directory paths", (t) => {
-  const root = mkdtempSync(join(tmpdir(), "omp-web-path-test-"));
+  const root = mkdtempSync(join(tmpdir(), "keylime-path-test-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const dir = join(root, "existing-dir");
   mkdirSync(dir);
@@ -451,7 +451,7 @@ test("worktree paths canonicalize to the main repo root when registered", async 
     t.skip("git is not installed");
     return;
   }
-  const root = mkdtempSync(join(tmpdir(), "omp-web-registry-worktree-"));
+  const root = mkdtempSync(join(tmpdir(), "keylime-registry-worktree-"));
   const repo = join(root, "repo");
   const worktreeBase = `${repo}-worktrees`;
   try {
@@ -467,7 +467,7 @@ test("worktree paths canonicalize to the main repo root when registered", async 
         "safe.directory=*",
         "config",
         "user.email",
-        "omp-web@example.invalid",
+        "keylime@example.invalid",
       ],
       { stdio: "ignore" },
     );
@@ -480,7 +480,7 @@ test("worktree paths canonicalize to the main repo root when registered", async 
         "safe.directory=*",
         "config",
         "user.name",
-        "omp-web test",
+        "keylime test",
       ],
       { stdio: "ignore" },
     );
@@ -550,7 +550,7 @@ test("worktree paths canonicalize to the main repo root when registered", async 
 });
 
 test("resolveProject returns canonical on-disk casing for plain directories", (t) => {
-  const root = mkdtempSync(join(tmpdir(), "omp-web-canonical-"));
+  const root = mkdtempSync(join(tmpdir(), "keylime-canonical-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const dir = join(root, "PlainDir");
   mkdirSync(dir);

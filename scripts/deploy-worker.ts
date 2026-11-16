@@ -69,7 +69,7 @@ const onPhase = (phase: string, details: Record<string, unknown> = {}) => {
 };
 const env = { ...process.env };
 for (const key of Object.keys(env))
-  if (/^(OMP_|OMPWEB_|PI_|XDG_)/.test(key)) delete env[key];
+  if (/^(OMP_|KEYLIME_|PI_|XDG_)/.test(key)) delete env[key];
 const run = (cmd: string[], cwd = root, childEnv = env) => {
   const result = Bun.spawnSync(cmd, {
     cwd,
@@ -106,8 +106,8 @@ try {
     prepareFrontend(active, previous);
     selectFrontend(base, active);
     onPhase("recovering", { interrupted: prior });
-    run(["pitchfork", "start", "global/ompweb"]);
-    run(["pitchfork", "start", "global/ompweb-host"]);
+    run(["pitchfork", "start", "global/keylime"]);
+    run(["pitchfork", "start", "global/keylime-host"]);
     onPhase("recovered");
   } else {
     onPhase("building");
@@ -138,7 +138,7 @@ try {
         "utf8",
       );
       const frontendPointer =
-        serverSource.includes("OMP_WEB_FRONTEND_ROOT") &&
+        serverSource.includes("KEYLIME_FRONTEND_ROOT") &&
         serverSource.includes("frontend-current")
           ? 1
           : 0;
@@ -200,13 +200,13 @@ try {
                   `${metadata.sha}:${file}`,
                 ]) === text(["git", "-C", root, "rev-parse", `${sha}:${file}`]),
             );
-            const source = path.join(active, "ompweb-omp");
+            const source = path.join(active, "keylime-omp");
             if (same && existsSync(source)) {
               const destination = path.join(
                 scratch,
                 "runner",
                 "release",
-                `ompweb-omp-${process.platform}-${process.arch}`,
+                `keylime-omp-${process.platform}-${process.arch}`,
               );
               mkdirSync(path.dirname(destination), { recursive: true });
               cpSync(source, destination);
@@ -233,7 +233,7 @@ try {
         cpSync(
           path.join(
             scratch,
-            `release/ompweb-${process.platform}-${process.arch}`,
+            `release/keylime-${process.platform}-${process.arch}`,
           ),
           candidate,
           { recursive: true },

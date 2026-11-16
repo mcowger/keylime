@@ -8,12 +8,12 @@
       "trustedProxy": {
         "description": "Only a configured trusted proxy should set this header.",
         "in": "header",
-        "name": "x-omp-web-auth",
+        "name": "x-keylime-auth",
         "type": "apiKey"
       },
       "webSession": {
         "in": "cookie",
-        "name": "omp_web_session",
+        "name": "keylime_session",
         "type": "apiKey"
       }
     }

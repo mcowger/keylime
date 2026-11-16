@@ -1,8 +1,8 @@
 # Local production deployment
 
-This Mac uses Pitchfork's `global/ompweb` and `global/ompweb-host`, port 8080,
+This Mac uses Pitchfork's `global/keylime` and `global/keylime-host`, port 8080,
 existing password authentication, and `~/.omp/agent`. Both services use
-`~/.local/share/keylime/current/ompweb`. Mise's `keylime-local` tool points at
+`~/.local/share/keylime/current/keylime`. Mise's `keylime-local` tool points at
 that same stable directory.
 
 ## Deploy a new version
@@ -91,8 +91,8 @@ and mise config are in the directory named by
 `~/.local/share/keylime/initial-backup`. Returning to upstream requires manually
 restoring those selections during a quiet window, not bypassing the release check.
 
-Inspect services with `pitchfork status global/ompweb --json` and
-`pitchfork status global/ompweb-host --json`; inspect logs with `pitchfork logs`.
+Inspect services with `pitchfork status global/keylime --json` and
+`pitchfork status global/keylime-host --json`; inspect logs with `pitchfork logs`.
 The worker holds a kernel-owned SQLite writer lock; concurrent deployments are
 refused and process death releases ownership without stale PID/time expiry.
 Each phase is recorded atomically with fsync before its service mutation.

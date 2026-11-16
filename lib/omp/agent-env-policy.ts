@@ -4,14 +4,14 @@
  * UI can reuse exactly the same validation the server applies; the persistence side
  * lives in ./agent-env.ts.
  *
- * Users only ever get to add variables, never to rewrite the plumbing omp-web itself
+ * Users only ever get to add variables, never to rewrite the plumbing keylime itself
  * depends on. Two rules enforce that:
  *   1. `lib/project-command-env.ts` strips PORT / NODE_ENV from every child
  *      spawn (`sanitizeProjectCommandEnvironment`, called in `spawnOmpTransport` in lib/omp/rpc-process.ts
  *      AFTER the merge). Letting a user set them would be a silent no-op, so they are
  *      denied here too — the policy is deliberately mirrored, not re-invented.
  *   2. Names that relocate omp's own state (agent dir, config root, home) would make
- *      the child read and write a different ~/.omp than the one omp-web enumerates
+ *      the child read and write a different ~/.omp than the one keylime enumerates
  *      sessions, settings and agents from: the child would start fine and its sessions
  *      would vanish from the UI. Those are denied as well.
  *
@@ -33,7 +33,7 @@ const DENIED_NAMES: ReadonlySet<string> = new Set([
   "PATH",
   "NODE_OPTIONS",
   // Where omp keeps its state. Redirecting these splits the child from the ~/.omp
-  // that omp-web enumerates sessions, settings and agents from.
+  // that keylime enumerates sessions, settings and agents from.
   "HOME",
   "XDG_DATA_HOME",
   "XDG_CONFIG_HOME",
@@ -49,7 +49,7 @@ const DENIED_NAMES: ReadonlySet<string> = new Set([
 
 /** Prefixes that may never be overridden (compared uppercased). */
 const DENIED_PREFIXES: readonly string[] = [
-  "OMP_WEB_", // omp-web's own plumbing (auth, ports, binary overrides)
+  "KEYLIME_", // keylime's own plumbing (auth, ports, binary overrides)
   "_", // shell-internal namespace
 ];
 
@@ -73,10 +73,10 @@ const DEFAULT_LABELS: Required<AgentEnvErrorLabels> = {
   invalidName: (line, name) =>
     `Line ${line}: "${name}" is not a valid variable name`,
   deniedName: (line, name) =>
-    `Line ${line}: "${name}" is reserved by omp-web and cannot be set`,
+    `Line ${line}: "${name}" is reserved by keylime and cannot be set`,
 };
 
-/** True when the name is reserved by omp-web and may not be overridden. */
+/** True when the name is reserved by keylime and may not be overridden. */
 export function isDeniedAgentEnvName(name: string): boolean {
   const comparable = name.toUpperCase();
   return (

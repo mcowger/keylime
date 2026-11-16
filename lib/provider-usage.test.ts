@@ -378,12 +378,12 @@ test("parseProviderUsageOutput rejects invalid JSON", () => {
 });
 
 test("manual refresh replaces cached limits while automatic reads keep using the cache", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "ompweb-provider-usage-"));
+  const dir = await mkdtemp(join(tmpdir(), "keylime-provider-usage-"));
   const bin = join(dir, "omp");
   const data = join(dir, "usage.json");
   const cache = join(dir, "cached-usage.json");
   const failOnce = join(dir, "fail-once");
-  const previousBin = process.env.OMP_WEB_OMP_BIN;
+  const previousBin = process.env.KEYLIME_OMP_BIN;
   const usage = (fraction: number) =>
     JSON.stringify({
       reports: [
@@ -421,7 +421,7 @@ if (process.argv.includes("--redact")) {
 `,
       { mode: 0o755 },
     );
-    process.env.OMP_WEB_OMP_BIN = bin;
+    process.env.KEYLIME_OMP_BIN = bin;
     await writeFile(data, usage(0.1));
     await writeFile(failOnce, "");
     const automatic = getProviderUsage();
@@ -445,8 +445,8 @@ if (process.argv.includes("--redact")) {
     await writeFile(data, usage(0.4));
     assert.equal((await getProviderUsage()).reports[0].fiveHour?.percent, 80);
   } finally {
-    if (previousBin === undefined) delete process.env.OMP_WEB_OMP_BIN;
-    else process.env.OMP_WEB_OMP_BIN = previousBin;
+    if (previousBin === undefined) delete process.env.KEYLIME_OMP_BIN;
+    else process.env.KEYLIME_OMP_BIN = previousBin;
     await rm(dir, { recursive: true, force: true });
   }
 });

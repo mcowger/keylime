@@ -45,7 +45,7 @@ function log(
   reason?: string,
 ) {
   console.log(
-    `[omp-web] broker ${hostId} ${method} ${path} ${status}${reason ? ` ${reason}` : ""}`,
+    `[keylime] broker ${hostId} ${method} ${path} ${status}${reason ? ` ${reason}` : ""}`,
   );
 }
 

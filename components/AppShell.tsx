@@ -132,15 +132,15 @@ const RightPanel = dynamic(
   },
 );
 
-const TOOL_CALLS_COLLAPSED_STORAGE_KEY = "omp-web:tool-calls-collapsed";
-const HIDE_TOOL_ACTIVITY_STORAGE_KEY = "omp-web:hide-tool-activity";
-const NEVER_FOLD_ACTIVITY_STORAGE_KEY = "omp-web:never-fold-activity";
-const SHOW_TOOL_CALLS_UNFOLDED_STORAGE_KEY = "omp-web:show-tool-calls-unfolded";
+const TOOL_CALLS_COLLAPSED_STORAGE_KEY = "keylime:tool-calls-collapsed";
+const HIDE_TOOL_ACTIVITY_STORAGE_KEY = "keylime:hide-tool-activity";
+const NEVER_FOLD_ACTIVITY_STORAGE_KEY = "keylime:never-fold-activity";
+const SHOW_TOOL_CALLS_UNFOLDED_STORAGE_KEY = "keylime:show-tool-calls-unfolded";
 // Off by default, so the transcript keeps collapsing reasoning until asked.
-const EXPAND_THINKING_STORAGE_KEY = "omp-web:expand-thinking";
-const PROVIDER_USAGE_VISIBLE_STORAGE_KEY = "omp-web:provider-usage-visible";
-const NATIVE_SELECT_ALL_STORAGE_KEY = "omp-web:scope-native-select-all";
-const OPEN_URL_AUTOMATICALLY_STORAGE_KEY = "omp-web:open-url-automatically";
+const EXPAND_THINKING_STORAGE_KEY = "keylime:expand-thinking";
+const PROVIDER_USAGE_VISIBLE_STORAGE_KEY = "keylime:provider-usage-visible";
+const NATIVE_SELECT_ALL_STORAGE_KEY = "keylime:scope-native-select-all";
+const OPEN_URL_AUTOMATICALLY_STORAGE_KEY = "keylime:open-url-automatically";
 
 type AutoNameStatus =
   | { kind: "idle" }

@@ -126,7 +126,7 @@ it("scopes managed jobs, reads bounded live output, and cancels only the owner",
 });
 
 it("inspects and cancels a native async bash job", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "ompweb-bash-job-"));
+  const cwd = await mkdtemp(join(tmpdir(), "keylime-bash-job-"));
   const manager = new AsyncJobManager({});
   const tool = new BashTool({
     cwd,
@@ -189,7 +189,7 @@ it("inspects and cancels a native async bash job", async () => {
 });
 
 it("does not stop a replacement service sharing the old name", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "ompweb-jobs-"));
+  const cwd = await mkdtemp(join(tmpdir(), "keylime-jobs-"));
   const manager = new AsyncJobManager({});
   const ctx = {
     session: {
@@ -335,7 +335,7 @@ it("rejects stale managed identities after a preferred id is reused", async () =
 });
 
 it("reports service truncation from captured log windows, not raw byte counts", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "ompweb-job-logs-"));
+  const cwd = await mkdtemp(join(tmpdir(), "keylime-job-logs-"));
   const manager = new AsyncJobManager({});
   const ctx = {
     session: {

@@ -16,7 +16,7 @@
 
 - Code keeps the word `pool`; only interface text says "cluster". Nothing is renamed.
 - The cluster is `loadPools()[0]`. A created cluster has `id: "cluster"`, `label: "Cluster"`, `enabled: true`.
-- This machine (`LOCAL_HOST_ID`, `"local"`) is always a member and never leaves. Its `projectsRoot` is `<home>/ompweb-cluster`, from the `home` workspace operation of its own daemon.
+- This machine (`LOCAL_HOST_ID`, `"local"`) is always a member and never leaves. Its `projectsRoot` is `<home>/keylime-cluster`, from the `home` workspace operation of its own daemon.
 - A new member is `{ hostId, projectsRoot, provisioned: true, draining: false }`.
 - A join or a leave is one `savePools` call. If anything fails before it, nothing is saved.
 - Joining requires, of the host and of this machine when it is being added: status `online`, link protocol ≥ 9, and `gitOrigins` among its workspace operations.
@@ -104,7 +104,7 @@ Behaviour: one answer per requested path, in order. At most 500 paths, else the 
 ```ts
 export const CLUSTER_ID = "cluster";
 export const CLUSTER_LABEL = "Cluster";
-export const CLUSTER_PROJECTS_DIR = "ompweb-cluster";
+export const CLUSTER_PROJECTS_DIR = "keylime-cluster";
 export class ClusterError extends Error { constructor(readonly code: "already_member" | "not_member" | "master_cannot_leave", message: string) }
 export interface HostProjectFacts { project: ManagedProject; origin: string | null; mainCheckout: boolean }
 export function clusterOf(pools: readonly HostPool[]): HostPool | undefined;
@@ -170,7 +170,7 @@ Rules the signatures do not fix:
 The `hosts` channel payload gains `pools` (omitted when `pools.json` cannot be read), and `useHostRows` applies it when it is an array, so an open sidebar regroups (Review Focus 5).
 
 - [ ] **Step 1: Write the failing tests** with a temporary agent directory and fake hosts whose `gitOrigins` and `home` are scripted:
-  - first join → `pools.json` has one pool, members `local` then the host, `local`'s `projectsRoot` is `<home>/ompweb-cluster`, and both hosts' Git projects are cluster projects;
+  - first join → `pools.json` has one pool, members `local` then the host, `local`'s `projectsRoot` is `<home>/keylime-cluster`, and both hosts' Git projects are cluster projects;
   - each 4xx/5xx above, with its code, and `pools.json` byte-identical afterwards;
   - `gitOrigins` rejecting for the second host → nothing saved, although `local` was computed first;
   - exactly one `savePools` per successful request (spy);
@@ -260,7 +260,7 @@ Behaviour:
 
 - This machine's row shows the `clusterMaster` label when a cluster exists, and no switch.
 - A linked host's row has the switch. It is disabled, with the reason as its description, when the host is offline (`joinOffline`), speaks a protocol below 9 or lacks `gitOrigins` (`joinUpgrade`), or the pools could not be loaded (`poolsUnavailable`). A member's switch is never disabled for these reasons: leaving always works.
-- On → a dialog with the folder field (prefilled `<home>/ompweb-cluster`, required, absolute), the two notes and `joinConfirm`; a refused request shows the server's message and keeps the dialog open.
+- On → a dialog with the folder field (prefilled `<home>/keylime-cluster`, required, absolute), the two notes and `joinConfirm`; a refused request shows the server's message and keeps the dialog open.
 - Off → a `ConfirmDialog` with `leaveTitle`, `leaveDescription`, `leaveConfirm`.
 - A member's "Use this server's provider logins" toggle is shown on and disabled, described by `shareForced`.
 
@@ -280,7 +280,7 @@ Strings (keys `hostsConfig.<name>`):
 | `leaveDescription`    | It gets no new cluster sessions. Its own projects are listed under {name} again. Sessions the cluster started there stay under the cluster's projects.  | 新しいクラスターセッションは割り当てられなくなります。このホスト自身のプロジェクトは再び {name} の下に表示されます。クラスターがそこで開始したセッションはクラスターのプロジェクトに残ります。 | 它将不再接收新的集群会话。它自己的项目会重新列在 {name} 下。集群在其上启动的会话仍保留在集群项目中。   |
 | `leaveConfirm`        | Remove                                                                                                                                                  | 外す                                                                                                                                                                                           | 移出                                                                                                   |
 | `joinOffline`         | The host is offline                                                                                                                                     | ホストはオフラインです                                                                                                                                                                         | 主机离线                                                                                               |
-| `joinUpgrade`         | Update ompweb on this host first                                                                                                                        | 先にこのホストの ompweb を更新してください                                                                                                                                                     | 请先更新该主机上的 ompweb                                                                              |
+| `joinUpgrade`         | Update keylime on this host first                                                                                                                        | 先にこのホストの keylime を更新してください                                                                                                                                                     | 请先更新该主机上的 keylime                                                                              |
 | `poolsUnavailable`    | The cluster configuration could not be loaded                                                                                                           | クラスター設定を読み込めませんでした                                                                                                                                                           | 无法加载集群配置                                                                                       |
 | `shareForced`         | On while the host is in the cluster                                                                                                                     | クラスター参加中は常にオン                                                                                                                                                                     | 主机在集群中时始终开启                                                                                 |
 
@@ -298,8 +298,8 @@ Documentation: `README.md` "Transparent host pools" (one cluster with this machi
 
 Two temporary home directories, a free port, the installed `omp`. Host `b` gets three folders registered as projects: `repo-a` (`git init`, origin `git@github.com:probe/a.git`), `repo-b` (origin `https://github.com/probe/b`) and `plain` (no Git). The server's home gets `repo-a2` with origin `https://github.com/probe/a`.
 
-- [ ] **Step 1:** `npm run build`; start the server and `ompweb host` for both homes as `scripts/smoke.ts` does; link `b`.
-- [ ] **Step 2:** `PUT /api/hosts/<b>/cluster` with `b`'s folder. Expected: 200; `pools.json` has one pool with members `local` and `b`; one project for `probe/a` bound to both checkouts; one for `probe/b` bound on `b` and seeded under `<home>/ompweb-cluster/<id>` for `local`.
+- [ ] **Step 1:** `npm run build`; start the server and `keylime host` for both homes as `scripts/smoke.ts` does; link `b`.
+- [ ] **Step 2:** `PUT /api/hosts/<b>/cluster` with `b`'s folder. Expected: 200; `pools.json` has one pool with members `local` and `b`; one project for `probe/a` bound to both checkouts; one for `probe/b` bound on `b` and seeded under `<home>/keylime-cluster/<id>` for `local`.
 - [ ] **Step 3:** `GET /api/projects`. Expected: the two cluster projects, and `plain` with `hostId` `b` and no `poolId`.
 - [ ] **Step 4:** Start a session in `repo-a` on `b`. Expected: `GET /api/sessions` lists it with the `probe/a` project key, and the server log shows a `broker <b>` request although `b`'s own sharing flag is off.
 - [ ] **Step 5:** `DELETE /api/hosts/<b>/cluster`. Expected: `b` is not a member; `repo-a` and `repo-b` are listed as `b`'s projects again; the session of step 4 is under `b`; `probe/a` is still a cluster project through `local`.

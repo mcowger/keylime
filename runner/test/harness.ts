@@ -1,5 +1,5 @@
 /**
- * In-process channel harness: a fake `ompweb host` on a temporary Unix socket, and a real omp
+ * In-process channel harness: a fake `keylime host` on a temporary Unix socket, and a real omp
  * `AgentSession` (the runner's own factory) answering from a scripted mock model. No network, no
  * paid model calls.
  *
@@ -56,13 +56,13 @@ export interface TestHost {
 }
 
 /**
- * Listen on a fresh socket and point `OMPWEB_HOST_SOCKET` at it, so the next session created
+ * Listen on a fresh socket and point `KEYLIME_HOST_SOCKET` at it, so the next session created
  * connects here. Call before `createTestSession`.
  */
 export async function startHost(): Promise<TestHost> {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ompweb-runner-test-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "keylime-runner-test-"));
   const socketPath = path.join(dir, "host.sock");
-  process.env.OMPWEB_HOST_SOCKET = socketPath;
+  process.env.KEYLIME_HOST_SOCKET = socketPath;
 
   const frames: Frame[] = [];
   const waiters = new Set<{
@@ -210,7 +210,7 @@ export async function createTestSession(
     ui?: Partial<ExtensionUIContext>;
   } = {},
 ): Promise<TestSession> {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ompweb-runner-session-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "keylime-runner-session-"));
   const authStorage = new AuthStorage(
     new SqliteAuthCredentialStore(new Database(":memory:")),
   );

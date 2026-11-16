@@ -141,7 +141,7 @@ function outbox(): NonNullable<typeof globalThis.__ompOutbox> {
 
 /** The store for the current agent directory; reopened when PI_CODING_AGENT_DIR changes. */
 function db(): Database {
-  const dir = join(getAgentDir(), "omp-web");
+  const dir = join(getAgentDir(), "keylime");
   const path = join(dir, "outbox.db");
   const cached = globalThis.__ompOutboxStore;
   // A `bun --hot` reload keeps a connection the previous code migrated: reopen when the migration changed.
@@ -555,7 +555,7 @@ function pruneDelivered(database: Database, cutoff: number): void {
 }
 
 export function forgetSessionReplacementMappings(sessionId: string): void {
-  if (!existsSync(join(getAgentDir(), "omp-web", "outbox.db"))) return;
+  if (!existsSync(join(getAgentDir(), "keylime", "outbox.db"))) return;
   const database = db();
   const keys = sessionKeys(sessionId);
   database
@@ -659,7 +659,7 @@ function notifyListeners(sessionId: string): void {
         });
         retryAt = Math.min(retryAt, nextRetry);
         console.warn(
-          `[omp-web] outbox notification failed: ${error instanceof Error ? error.message : String(error)}`,
+          `[keylime] outbox notification failed: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
@@ -671,7 +671,7 @@ function notifyListeners(sessionId: string): void {
     state.notifiedRevisions.delete(sessionId);
     state.pendingNotifications.set(sessionId, now + RETRY_MS);
     console.warn(
-      `[omp-web] outbox notification failed: ${error instanceof Error ? error.message : String(error)}`,
+      `[keylime] outbox notification failed: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
@@ -729,7 +729,7 @@ export function outboxScope(): string {
   const secret = resolveWebAuthSecret();
   return createHmac("sha256", Buffer.from(secret.key, "base64url"))
     .update(
-      `omp-web-outbox-scope-v1\0${secret.salt}\0${(process.env.OMP_WEB_PASSWORD_HASH ?? "").trim()}\0${(process.env.OMP_WEB_TRUSTED_HEADER_SHA256 ?? "").trim()}`,
+      `keylime-outbox-scope-v1\0${secret.salt}\0${(process.env.KEYLIME_PASSWORD_HASH ?? "").trim()}\0${(process.env.KEYLIME_TRUSTED_HEADER_SHA256 ?? "").trim()}`,
     )
     .digest("base64url");
 }
@@ -1232,7 +1232,7 @@ export function pumpOutbox(sessionId: string): void {
       .get(...keys) as Row | null;
   } catch (error) {
     console.warn(
-      `[omp-web] outbox: ${error instanceof Error ? error.message : String(error)}`,
+      `[keylime] outbox: ${error instanceof Error ? error.message : String(error)}`,
     );
     return;
   }
@@ -1265,7 +1265,7 @@ export function pumpOutbox(sessionId: string): void {
     .catch((error: unknown) => {
       release();
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[omp-web] outbox delivery failed: ${message}`);
+      console.warn(`[keylime] outbox delivery failed: ${message}`);
       try {
         // Thrown before the claim, it is not sent and nothing else would pump it again.
         const state = row(next.id)?.state;
@@ -1289,7 +1289,7 @@ function pumpAll(): void {
     for (const { session_id } of rows) pumpOutbox(session_id);
   } catch (error) {
     console.warn(
-      `[omp-web] outbox: ${error instanceof Error ? error.message : String(error)}`,
+      `[keylime] outbox: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
@@ -1310,7 +1310,7 @@ export function startOutbox(): void {
       .run(Date.now() - STAGED_MAX_AGE_MS);
   } catch (error) {
     console.warn(
-      `[omp-web] outbox startup failed: ${error instanceof Error ? error.message : String(error)}`,
+      `[keylime] outbox startup failed: ${error instanceof Error ? error.message : String(error)}`,
     );
     state.startupRetry = setTimeout(() => {
       state.startupRetry = undefined;
@@ -1426,7 +1426,7 @@ export function startOutbox(): void {
       for (const { session_id } of rows) pumpOutbox(session_id);
     } catch (error) {
       console.warn(
-        `[omp-web] outbox maintenance failed: ${error instanceof Error ? error.message : String(error)}`,
+        `[keylime] outbox maintenance failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }, RETRY_MS);
@@ -1464,7 +1464,7 @@ export function startOutbox(): void {
       }
     } catch (error) {
       console.warn(
-        `[omp-web] outbox change check failed: ${error instanceof Error ? error.message : String(error)}`,
+        `[keylime] outbox change check failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }, 250);
@@ -1580,7 +1580,7 @@ async function deliver(entry: Row): Promise<Outcome> {
     } catch (error) {
       // Nothing of this entry was written: a failed or timed-out read leaves it unsent, so it is tried again.
       console.warn(
-        `[omp-web] outbox: settle read failed: ${error instanceof Error ? error.message : String(error)}`,
+        `[keylime] outbox: settle read failed: ${error instanceof Error ? error.message : String(error)}`,
       );
       return retry(current);
     }
@@ -1739,7 +1739,7 @@ async function deliver(entry: Row): Promise<Outcome> {
     handedOn = true;
   } catch (error) {
     console.warn(
-      `[omp-web] outbox: ${error instanceof Error ? error.message : String(error)}`,
+      `[keylime] outbox: ${error instanceof Error ? error.message : String(error)}`,
     );
     return retry(current);
   } finally {

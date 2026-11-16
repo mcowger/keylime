@@ -3,17 +3,17 @@ import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { resolvePasswordHash } from "./omp-web-hash-password.ts";
+import { resolvePasswordHash } from "./keylime-hash-password.ts";
 
-// Install ompweb as a macOS launchd user agent (starts at login, restarts on crash).
+// Install keylime as a macOS launchd user agent (starts at login, restarts on crash).
 //
-// Usage (installed as the `ompweb-launchd` bin, or run via bunx / bun directly):
-//   ompweb-launchd [install [package-spec]|uninstall|status]
-//   bunx --package @kahme247/ompweb@latest ompweb-launchd install
+// Usage (installed as the `keylime-launchd` bin, or run via bunx / bun directly):
+//   keylime-launchd [install [package-spec]|uninstall|status]
+//   bunx --package @mcowger/keylime@latest keylime-launchd install
 
-const LABEL = "com.kahme247.ompweb";
-// The host daemon links this machine to an omp-web (`ompweb host`); it runs next to the web agent.
-const HOST_LABEL = "com.kahme247.ompweb-host";
+const LABEL = "com.kahme247.keylime";
+// The host daemon links this machine to an keylime (`keylime host`); it runs next to the web agent.
+const HOST_LABEL = "com.kahme247.keylime-host";
 const HOME = os.homedir();
 const PLIST = path.join(HOME, "Library", "LaunchAgents", `${LABEL}.plist`);
 const HOST_PLIST = path.join(
@@ -22,7 +22,7 @@ const HOST_PLIST = path.join(
   "LaunchAgents",
   `${HOST_LABEL}.plist`,
 );
-const LOG_DIR = path.join(HOME, "Library", "Logs", "ompweb");
+const LOG_DIR = path.join(HOME, "Library", "Logs", "keylime");
 const DOMAIN = `gui/${process.getuid?.() ?? 0}`;
 
 function fail(message: string): never {
@@ -124,7 +124,7 @@ function buildHostEnv({
 }) {
   return {
     PATH: svcPath,
-    ...(ompBin ? { OMP_WEB_OMP_BIN: ompBin } : {}),
+    ...(ompBin ? { KEYLIME_OMP_BIN: ompBin } : {}),
     ...(agentDir ? { PI_CODING_AGENT_DIR: agentDir } : {}),
   };
 }
@@ -132,30 +132,30 @@ function buildHostEnv({
 function install(pkgArg?: string) {
   const bunBin = process.execPath;
 
-  // Only an explicit override: ompweb runs its own omp (ompweb-omp). A stock omp on PATH cannot run its sessions.
-  const ompBin = process.env.OMP_WEB_OMP_BIN || null;
+  // Only an explicit override: keylime runs its own omp (keylime-omp). A stock omp on PATH cannot run its sessions.
+  const ompBin = process.env.KEYLIME_OMP_BIN || null;
   if (ompBin) {
     try {
       fs.accessSync(ompBin, fs.constants.X_OK);
     } catch {
-      fail(`OMP_WEB_OMP_BIN=${ompBin} is not executable`);
+      fail(`KEYLIME_OMP_BIN=${ompBin} is not executable`);
     }
   }
 
-  const pkg = pkgArg ?? process.env.OMP_WEB_PKG ?? "@kahme247/ompweb@latest";
+  const pkg = pkgArg ?? process.env.KEYLIME_PKG ?? "@mcowger/keylime@latest";
   const port = process.env.PORT ?? "30177";
-  const hostname = process.env.OMP_WEB_HOSTNAME ?? "127.0.0.1";
-  const noOpen = process.env.OMP_WEB_NO_OPEN ?? "1";
-  const installName = process.env.OMP_WEB_NAME;
-  // Only a hash is stored in the plist: omp-web never forwards a plaintext
-  // password, and `OMP_WEB_PASSWORD` set for this install is hashed here.
+  const hostname = process.env.KEYLIME_HOSTNAME ?? "127.0.0.1";
+  const noOpen = process.env.KEYLIME_NO_OPEN ?? "1";
+  const installName = process.env.KEYLIME_NAME;
+  // Only a hash is stored in the plist: keylime never forwards a plaintext
+  // password, and `KEYLIME_PASSWORD` set for this install is hashed here.
   let passwordHash;
   try {
     passwordHash = resolvePasswordHash();
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
   }
-  const trustedHeaderDigest = process.env.OMP_WEB_TRUSTED_HEADER_SHA256;
+  const trustedHeaderDigest = process.env.KEYLIME_TRUSTED_HEADER_SHA256;
   const agentDir = process.env.PI_CODING_AGENT_DIR?.replace(/^~(?=\/|$)/, HOME);
 
   const asdfBin = which("asdf");
@@ -174,27 +174,27 @@ function install(pkgArg?: string) {
   const env = {
     PATH: svcPath,
     PORT: port,
-    OMP_WEB_HOSTNAME: hostname,
-    OMP_WEB_NO_OPEN: noOpen,
-    ...(installName ? { OMP_WEB_NAME: installName } : {}),
-    ...(passwordHash ? { OMP_WEB_PASSWORD_HASH: passwordHash } : {}),
+    KEYLIME_HOSTNAME: hostname,
+    KEYLIME_NO_OPEN: noOpen,
+    ...(installName ? { KEYLIME_NAME: installName } : {}),
+    ...(passwordHash ? { KEYLIME_PASSWORD_HASH: passwordHash } : {}),
     ...(trustedHeaderDigest
-      ? { OMP_WEB_TRUSTED_HEADER_SHA256: trustedHeaderDigest }
+      ? { KEYLIME_TRUSTED_HEADER_SHA256: trustedHeaderDigest }
       : {}),
-    ...(ompBin ? { OMP_WEB_OMP_BIN: ompBin } : {}),
+    ...(ompBin ? { KEYLIME_OMP_BIN: ompBin } : {}),
     ...(agentDir ? { PI_CODING_AGENT_DIR: agentDir } : {}),
   };
   const web = buildPlist({
     label: LABEL,
     args: [bunBin, "x", "--bun", pkg],
     env,
-    logName: "ompweb",
+    logName: "keylime",
   });
   const host = buildPlist({
     label: HOST_LABEL,
     args: [bunBin, "x", "--bun", pkg, "host"],
     env: buildHostEnv({ svcPath, ompBin, agentDir }),
-    logName: "ompweb-host",
+    logName: "keylime-host",
     // host.json does not exist until the web server first starts; the daemon exits until then.
     throttleInterval: 10,
   });
@@ -228,7 +228,7 @@ function install(pkgArg?: string) {
   console.log(`package:   ${pkg} (via bunx --bun)`);
   console.log(`url:       http://${hostname}:${port}`);
   console.log(
-    `logs:      ${path.join(LOG_DIR, "ompweb.log")}, ${path.join(LOG_DIR, "ompweb-host.log")}`,
+    `logs:      ${path.join(LOG_DIR, "keylime.log")}, ${path.join(LOG_DIR, "keylime-host.log")}`,
   );
   if (passwordHash)
     console.log(
@@ -278,7 +278,7 @@ function main() {
   else if (command === "status") status();
   else {
     console.error(
-      "usage: ompweb-launchd [install [package-spec]|uninstall|status]",
+      "usage: keylime-launchd [install [package-spec]|uninstall|status]",
     );
     process.exit(2);
   }

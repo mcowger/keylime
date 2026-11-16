@@ -20,7 +20,7 @@ export class CommandError extends Error {
 }
 
 /**
- * One host command. `args` is the host's JSON as sent (the host is this user's own `ompweb host`,
+ * One host command. `args` is the host's JSON as sent (the host is this user's own `keylime host`,
  * reached over a 0600 socket or the child's stdio); a handler checks what it reads and throws on bad
  * input. The resolved value is the `res` frame's `data`; a throw becomes `{ok:false, error}`.
  */

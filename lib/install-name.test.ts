@@ -4,29 +4,29 @@ import { getInstallName } from "./install-name.ts";
 
 const fromHost = (host: string | undefined) =>
   getInstallName(new Headers(host === undefined ? {} : { host }), {
-    OMP_WEB_NAME: "url",
+    KEYLIME_NAME: "url",
   });
 
-test("keeps the generic name when OMP_WEB_NAME is unset or blank, whatever the Host", () => {
+test("keeps the generic name when KEYLIME_NAME is unset or blank, whatever the Host", () => {
   const headers = new Headers({ host: "work.example.com" });
   assert.equal(getInstallName(headers, {}), "key lime");
-  assert.equal(getInstallName(headers, { OMP_WEB_NAME: "" }), "key lime");
-  assert.equal(getInstallName(headers, { OMP_WEB_NAME: "  " }), "key lime");
+  assert.equal(getInstallName(headers, { KEYLIME_NAME: "" }), "key lime");
+  assert.equal(getInstallName(headers, { KEYLIME_NAME: "  " }), "key lime");
 });
 
-test("uses any other OMP_WEB_NAME verbatim, trimmed, ignoring the Host", () => {
+test("uses any other KEYLIME_NAME verbatim, trimmed, ignoring the Host", () => {
   const headers = new Headers({ host: "work.example.com" });
-  assert.equal(getInstallName(headers, { OMP_WEB_NAME: " My Box " }), "My Box");
+  assert.equal(getInstallName(headers, { KEYLIME_NAME: " My Box " }), "My Box");
   assert.equal(
-    getInstallName(headers, { OMP_WEB_NAME: "hostname" }),
+    getInstallName(headers, { KEYLIME_NAME: "hostname" }),
     "hostname",
   );
-  assert.equal(getInstallName(headers, { OMP_WEB_NAME: "urls" }), "urls");
+  assert.equal(getInstallName(headers, { KEYLIME_NAME: "urls" }), "urls");
 });
 
 test("derives the name from the Host for url, host or domain, case-insensitively", () => {
   const headers = new Headers({ host: "work.example.com:30177" });
-  for (const OMP_WEB_NAME of [
+  for (const KEYLIME_NAME of [
     "url",
     "URL",
     "host",
@@ -35,9 +35,9 @@ test("derives the name from the Host for url, host or domain, case-insensitively
     " DOMAIN ",
   ]) {
     assert.equal(
-      getInstallName(headers, { OMP_WEB_NAME }),
+      getInstallName(headers, { KEYLIME_NAME }),
       "work.example.com",
-      OMP_WEB_NAME,
+      KEYLIME_NAME,
     );
   }
 });

@@ -14,7 +14,7 @@ import test from "node:test";
 import { clientEnv } from "./client-env";
 
 test("build identity follows HEAD and disappears only at an exact tag", (t) => {
-  const root = mkdtempSync(path.join(os.tmpdir(), "omp-web-build-"));
+  const root = mkdtempSync(path.join(os.tmpdir(), "keylime-build-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const git = (...args: string[]) =>
     execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
@@ -34,13 +34,13 @@ test("build identity follows HEAD and disappears only at an exact tag", (t) => {
   });
   const first = git("rev-parse", "HEAD");
   let env = clientEnv(root, "worker");
-  assert.equal(env.OMP_WEB_PUBLIC_APP_VERSION, "1.2.3");
-  assert.equal(env.OMP_WEB_PUBLIC_COMMIT_HASH, first);
-  assert.equal(env.OMP_WEB_PUBLIC_COMMIT_DATE, "2026-11-04");
+  assert.equal(env.KEYLIME_PUBLIC_APP_VERSION, "1.2.3");
+  assert.equal(env.KEYLIME_PUBLIC_COMMIT_HASH, first);
+  assert.equal(env.KEYLIME_PUBLIC_COMMIT_DATE, "2026-11-04");
   const archive = path.join(root, "source-archive");
   mkdirSync(archive);
   writeFileSync(path.join(archive, "package.json"), '{"version":"1.2.3"}');
-  assert.equal(clientEnv(archive, "worker").OMP_WEB_PUBLIC_COMMIT_HASH, "");
+  assert.equal(clientEnv(archive, "worker").KEYLIME_PUBLIC_COMMIT_HASH, "");
   const redirectedConfig = path.join(root, "redirected-config");
   writeFileSync(
     redirectedConfig,
@@ -67,15 +67,15 @@ test("build identity follows HEAD and disappears only at an exact tag", (t) => {
       },
     ),
   );
-  assert.equal(redirected.OMP_WEB_PUBLIC_APP_VERSION, "1.2.3");
-  assert.equal(redirected.OMP_WEB_PUBLIC_COMMIT_HASH, "");
-  assert.equal(redirected.OMP_WEB_PUBLIC_COMMIT_DATE, "");
+  assert.equal(redirected.KEYLIME_PUBLIC_APP_VERSION, "1.2.3");
+  assert.equal(redirected.KEYLIME_PUBLIC_COMMIT_HASH, "");
+  assert.equal(redirected.KEYLIME_PUBLIC_COMMIT_DATE, "");
 
   git("tag", "v1.2.3");
   env = clientEnv(root, "worker");
-  assert.equal(env.OMP_WEB_PUBLIC_APP_VERSION, "1.2.3");
-  assert.equal(env.OMP_WEB_PUBLIC_COMMIT_HASH, "");
-  assert.equal(env.OMP_WEB_PUBLIC_COMMIT_DATE, "");
+  assert.equal(env.KEYLIME_PUBLIC_APP_VERSION, "1.2.3");
+  assert.equal(env.KEYLIME_PUBLIC_COMMIT_HASH, "");
+  assert.equal(env.KEYLIME_PUBLIC_COMMIT_DATE, "");
 
   git(
     "-c",
@@ -86,26 +86,26 @@ test("build identity follows HEAD and disappears only at an exact tag", (t) => {
     "after release",
   );
   env = clientEnv(root, "worker");
-  assert.equal(env.OMP_WEB_PUBLIC_COMMIT_HASH, git("rev-parse", "HEAD"));
-  assert.notEqual(env.OMP_WEB_PUBLIC_COMMIT_HASH, first);
-  assert.match(env.OMP_WEB_PUBLIC_COMMIT_DATE, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(env.KEYLIME_PUBLIC_COMMIT_HASH, git("rev-parse", "HEAD"));
+  assert.notEqual(env.KEYLIME_PUBLIC_COMMIT_HASH, first);
+  assert.match(env.KEYLIME_PUBLIC_COMMIT_DATE, /^\d{4}-\d{2}-\d{2}$/);
 });
 
 test("source archives without Git metadata still build with their package version", (t) => {
-  const root = mkdtempSync(path.join(os.tmpdir(), "omp-web-source-"));
+  const root = mkdtempSync(path.join(os.tmpdir(), "keylime-source-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   writeFileSync(path.join(root, "package.json"), '{"version":"1.2.3"}');
   const env = clientEnv(root, "worker");
-  assert.equal(env.OMP_WEB_PUBLIC_APP_VERSION, "1.2.3");
-  assert.equal(env.OMP_WEB_PUBLIC_COMMIT_HASH, "");
-  assert.equal(env.OMP_WEB_PUBLIC_COMMIT_DATE, "");
+  assert.equal(env.KEYLIME_PUBLIC_APP_VERSION, "1.2.3");
+  assert.equal(env.KEYLIME_PUBLIC_COMMIT_HASH, "");
+  assert.equal(env.KEYLIME_PUBLIC_COMMIT_DATE, "");
 });
 
 test(
   "signature display cannot replace the commit hash or date",
   { skip: !Bun.which("ssh-keygen") },
   (t) => {
-    const root = mkdtempSync(path.join(os.tmpdir(), "omp-web-signed-build-"));
+    const root = mkdtempSync(path.join(os.tmpdir(), "keylime-signed-build-"));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const git = (...args: string[]) =>
       execFileSync("git", ["-C", root, ...args], {
@@ -136,8 +136,8 @@ test(
       },
     });
     const env = clientEnv(root, "worker");
-    assert.equal(env.OMP_WEB_PUBLIC_COMMIT_HASH, git("rev-parse", "HEAD"));
-    assert.equal(env.OMP_WEB_PUBLIC_COMMIT_DATE, "2026-11-04");
+    assert.equal(env.KEYLIME_PUBLIC_COMMIT_HASH, git("rev-parse", "HEAD"));
+    assert.equal(env.KEYLIME_PUBLIC_COMMIT_DATE, "2026-11-04");
   },
 );
 
@@ -145,7 +145,7 @@ test(
   "shared checkouts retain explicit safe.directory trust",
   { skip: process.getuid?.() !== 0 },
   (t) => {
-    const root = mkdtempSync(path.join(os.tmpdir(), "omp-web-shared-build-"));
+    const root = mkdtempSync(path.join(os.tmpdir(), "keylime-shared-build-"));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const git = (...args: string[]) =>
       execFileSync("git", ["-C", root, ...args], {
@@ -197,7 +197,7 @@ test(
       );
     assert.equal(
       inspect({ GIT_CONFIG_GLOBAL: untrustedConfig })
-        .OMP_WEB_PUBLIC_COMMIT_HASH,
+        .KEYLIME_PUBLIC_COMMIT_HASH,
       "",
       "foreign ownership must not be trusted automatically",
     );
@@ -207,7 +207,7 @@ test(
         GIT_CONFIG_COUNT: "1",
         GIT_CONFIG_KEY_0: "safe.directory",
         GIT_CONFIG_VALUE_0: "",
-      }).OMP_WEB_PUBLIC_COMMIT_HASH,
+      }).KEYLIME_PUBLIC_COMMIT_HASH,
       "",
       "an explicit trust reset must remain effective",
     );
@@ -216,7 +216,7 @@ test(
         GIT_CONFIG_GLOBAL: os.devNull,
         GIT_CONFIG_SYSTEM: globalConfig,
         GIT_CONFIG_NOSYSTEM: "1",
-      }).OMP_WEB_PUBLIC_COMMIT_HASH,
+      }).KEYLIME_PUBLIC_COMMIT_HASH,
       "",
       "disabled system trust must stay disabled",
     );
@@ -235,8 +235,8 @@ test(
       },
     ]) {
       const env = inspect(overrides);
-      assert.equal(env.OMP_WEB_PUBLIC_COMMIT_HASH, hash);
-      assert.equal(env.OMP_WEB_PUBLIC_COMMIT_DATE, "2026-11-04");
+      assert.equal(env.KEYLIME_PUBLIC_COMMIT_HASH, hash);
+      assert.equal(env.KEYLIME_PUBLIC_COMMIT_DATE, "2026-11-04");
     }
   },
 );

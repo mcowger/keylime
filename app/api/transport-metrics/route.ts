@@ -24,7 +24,7 @@ export function GET() {
   );
 }
 
-// POST /api/transport-metrics { samples } — appended to <agent dir>/omp-web/transport-metrics.jsonl.
+// POST /api/transport-metrics { samples } — appended to <agent dir>/keylime/transport-metrics.jsonl.
 /**
  * @apiContract postTransportMetrics
  * @apiUsage Append advisory client transport samples for diagnostics.

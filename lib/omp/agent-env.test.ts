@@ -14,7 +14,7 @@ const {
 
 /** Points getAgentDir() (and therefore the settings file) at a throwaway directory. */
 function withAgentDir(run: (dir: string) => void) {
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-agent-env-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-agent-env-"));
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = dir;
   try {
@@ -22,14 +22,14 @@ function withAgentDir(run: (dir: string) => void) {
   } finally {
     if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = previous;
-    delete globalThis.__ompWebSettingsCache;
+    delete globalThis.__keylimeSettingsCache;
     rmSync(dir, { recursive: true, force: true });
   }
 }
 
 function writeSettings(dir: string, contents: unknown) {
   writeFileSync(
-    join(dir, "omp-web-settings.json"),
+    join(dir, "keylime-settings.json"),
     typeof contents === "string" ? contents : JSON.stringify(contents),
     "utf8",
   );
@@ -82,7 +82,7 @@ test("rejects names that are not shell identifiers", () => {
   }
 });
 
-test("denies the plumbing omp-web and the spawner rely on", () => {
+test("denies the plumbing keylime and the spawner rely on", () => {
   // Minimum deny-list from issue #104 plus the host-runtime names that
   // sanitizeProjectCommandEnvironment() strips after the merge.
   const required = [
@@ -93,7 +93,7 @@ test("denies the plumbing omp-web and the spawner rely on", () => {
     "PORT",
     "NODE_ENV",
     "HOME",
-    "OMP_WEB_PASSWORD",
+    "KEYLIME_PASSWORD",
     "_PRIVATE",
   ];
   for (const name of required) {
@@ -101,7 +101,7 @@ test("denies the plumbing omp-web and the spawner rely on", () => {
     const { values, errors } = parseAgentEnvText(`${name}=x`);
     assert.deepEqual(values, {}, name);
     assert.equal(errors.length, 1, name);
-    assert.match(errors[0], /reserved by omp-web/);
+    assert.match(errors[0], /reserved by keylime/);
   }
   assert.equal(
     isDeniedAgentEnvName("path"),
@@ -114,12 +114,12 @@ test("denies the plumbing omp-web and the spawner rely on", () => {
 
 test("a denied line is reported but never reaches values", () => {
   const { values, errors } = parseAgentEnvText(
-    "PATH=/tmp/evil\nOMP_WEB_TOKEN=leak\nGOOD=1",
+    "PATH=/tmp/evil\nKEYLIME_TOKEN=leak\nGOOD=1",
   );
   assert.deepEqual(values, { GOOD: "1" });
   assert.equal(errors.length, 2);
   assert.match(errors[0], /"PATH"/);
-  assert.match(errors[1], /"OMP_WEB_TOKEN"/);
+  assert.match(errors[1], /"KEYLIME_TOKEN"/);
 });
 
 test("later assignments win, like a shell", () => {
@@ -170,7 +170,7 @@ test("getAgentEnvOverrides reads persisted values and drops reserved ones", () =
       agentEnv: {
         OBSIDIAN_API_KEY: "secret",
         PATH: "/evil",
-        OMP_WEB_TOKEN: "leak",
+        KEYLIME_TOKEN: "leak",
       },
     });
     assert.deepEqual(getAgentEnvOverrides(), { OBSIDIAN_API_KEY: "secret" });
@@ -193,7 +193,7 @@ test("getAgentEnvOverrides ignores a non-object agentEnv", () => {
     assert.deepEqual(getAgentEnvOverrides(), {});
     // …and the file on disk is untouched by the read.
     assert.match(
-      readFileSync(join(dir, "omp-web-settings.json"), "utf8"),
+      readFileSync(join(dir, "keylime-settings.json"), "utf8"),
       /OBSIDIAN_API_KEY=secret/,
     );
   });

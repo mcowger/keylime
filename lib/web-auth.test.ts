@@ -37,7 +37,7 @@ const TEST_SECRET = { salt: "a".repeat(43), key: "b".repeat(43) };
 /** Sets the password variables and pins the secret; returns the undo. */
 function setEnvVars(values: Record<string, string>) {
   const saved = new Map<string, string | undefined>();
-  for (const name of ["OMP_WEB_PASSWORD_HASH", "OMP_WEB_PASSWORD"]) {
+  for (const name of ["KEYLIME_PASSWORD_HASH", "KEYLIME_PASSWORD"]) {
     saved.set(name, process.env[name]);
     delete process.env[name];
   }
@@ -70,7 +70,7 @@ function response(result: ReturnType<typeof proxy>): Response {
 }
 
 test("accepts only the hashed password and validates signed sessions", () => {
-  withEnvVars({ OMP_WEB_PASSWORD_HASH: PASSWORD_HASH }, () => {
+  withEnvVars({ KEYLIME_PASSWORD_HASH: PASSWORD_HASH }, () => {
     assert.equal(isWebPasswordEnabled(), true);
     assert.equal(isValidWebPassword(PASSWORD), true);
     assert.equal(isValidWebPassword("wrong"), false);
@@ -96,17 +96,17 @@ test("accepts only the hashed password and validates signed sessions", () => {
 
 test("a different password hash invalidates existing sessions", () => {
   const now = 1_700_000_000_000;
-  const first = withEnvVars({ OMP_WEB_PASSWORD_HASH: PASSWORD_HASH }, () =>
+  const first = withEnvVars({ KEYLIME_PASSWORD_HASH: PASSWORD_HASH }, () =>
     createWebSession(now),
   );
   withEnvVars(
-    { OMP_WEB_PASSWORD_HASH: hashPassword("rotated", { logN: 12 }) },
+    { KEYLIME_PASSWORD_HASH: hashPassword("rotated", { logN: 12 }) },
     () => {
       assert.equal(isValidWebSession(first, now), false);
     },
   );
   // ...and the same hash plus the same installation secret keeps working.
-  withEnvVars({ OMP_WEB_PASSWORD_HASH: PASSWORD_HASH }, () => {
+  withEnvVars({ KEYLIME_PASSWORD_HASH: PASSWORD_HASH }, () => {
     assert.equal(isValidWebSession(first, now), true);
   });
 });
@@ -126,35 +126,35 @@ test("the signing key never equals the stored hash", () => {
 
 test("a rotated installation secret invalidates sessions too", () => {
   const now = 1_700_000_000_000;
-  const first = withEnvVars({ OMP_WEB_PASSWORD_HASH: PASSWORD_HASH }, () =>
+  const first = withEnvVars({ KEYLIME_PASSWORD_HASH: PASSWORD_HASH }, () =>
     createWebSession(now),
   );
-  withEnvVars({ OMP_WEB_PASSWORD_HASH: PASSWORD_HASH }, () => {
+  withEnvVars({ KEYLIME_PASSWORD_HASH: PASSWORD_HASH }, () => {
     pinWebAuthSecretForTests({ salt: "c".repeat(43), key: "d".repeat(43) });
     assert.equal(isValidWebSession(first, now), false);
   });
 });
 
 test("reports a plaintext or malformed configuration instead of running open", () => {
-  const plaintext = withEnvVars({ OMP_WEB_PASSWORD: "secret" }, () =>
+  const plaintext = withEnvVars({ KEYLIME_PASSWORD: "secret" }, () =>
     webPasswordConfigurationProblem(),
   );
   assert.match(plaintext ?? "", /no longer accepted/);
   assert.match(plaintext ?? "", /hash-password/);
 
-  const malformed = withEnvVars({ OMP_WEB_PASSWORD_HASH: "not-a-hash" }, () =>
+  const malformed = withEnvVars({ KEYLIME_PASSWORD_HASH: "not-a-hash" }, () =>
     webPasswordConfigurationProblem(),
   );
   assert.match(malformed ?? "", /not a valid password hash/);
 
   const both = withEnvVars(
-    { OMP_WEB_PASSWORD_HASH: PASSWORD_HASH, OMP_WEB_PASSWORD: "secret" },
+    { KEYLIME_PASSWORD_HASH: PASSWORD_HASH, KEYLIME_PASSWORD: "secret" },
     () => webPasswordConfigurationProblem(),
   );
   assert.match(both ?? "", /Both/);
 
   assert.equal(
-    withEnvVars({ OMP_WEB_PASSWORD_HASH: PASSWORD_HASH }, () =>
+    withEnvVars({ KEYLIME_PASSWORD_HASH: PASSWORD_HASH }, () =>
       webPasswordConfigurationProblem(),
     ),
     null,
@@ -163,19 +163,19 @@ test("reports a plaintext or malformed configuration instead of running open", (
     withEnvVars({}, () => webPasswordConfigurationProblem()),
     null,
   );
-  withEnvVars({ OMP_WEB_PASSWORD: "secret" }, () => {
+  withEnvVars({ KEYLIME_PASSWORD: "secret" }, () => {
     assert.equal(isWebPasswordEnabled(), false);
     assert.equal(isValidWebPassword("secret"), false);
   });
 });
 
 test("creates and reuses an installation secret with restrictive permissions", () => {
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-auth-secret-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-auth-secret-"));
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = dir;
   try {
     const path = webAuthSecretPath();
-    assert.equal(path, join(dir, "omp-web", "web-auth-secret.json"));
+    assert.equal(path, join(dir, "keylime", "web-auth-secret.json"));
     resetWebAuthSecretCache();
     const key = deriveSessionSigningKey(PASSWORD_HASH);
     const stored = JSON.parse(readFileSync(path, "utf8"));
@@ -211,7 +211,7 @@ test("creates and reuses an installation secret with restrictive permissions", (
 });
 
 test("redirects browser requests to the password screen and blocks unauthenticated APIs", () => {
-  withEnvVars({ OMP_WEB_PASSWORD_HASH: PASSWORD_HASH }, () => {
+  withEnvVars({ KEYLIME_PASSWORD_HASH: PASSWORD_HASH }, () => {
     const pageResponse = response(gate("http://localhost:30177/"));
     assert.equal(pageResponse.status, 307);
     assert.equal(pageResponse.headers.get("location"), "/login");
@@ -246,14 +246,14 @@ test("redirects browser requests to the password screen and blocks unauthenticat
 
     assert.equal(
       gate("http://localhost:30177/", {
-        headers: { cookie: `omp_web_session=${createWebSession()}` },
+        headers: { cookie: `keylime_session=${createWebSession()}` },
       }),
       "authenticated",
     );
     assert.equal(
       response(
         gate("http://localhost:30177/login", {
-          headers: { cookie: `omp_web_session=${createWebSession()}` },
+          headers: { cookie: `keylime_session=${createWebSession()}` },
         }),
       ).headers.get("location"),
       "/",
@@ -277,7 +277,7 @@ test("without a password every request continues and /login leads home", () => {
 });
 
 test("refuses every request while the password configuration is broken", () => {
-  withEnvVars({ OMP_WEB_PASSWORD: "legacy-plaintext" }, () => {
+  withEnvVars({ KEYLIME_PASSWORD: "legacy-plaintext" }, () => {
     for (const url of [
       "http://localhost:30177/",
       "http://localhost:30177/api/sessions",
@@ -290,15 +290,15 @@ test("refuses every request while the password configuration is broken", () => {
 });
 
 test("accepts the trusted proxy header only when its SHA-256 matches the configured digest", () => {
-  const previousDigest = process.env.OMP_WEB_TRUSTED_HEADER_SHA256;
+  const previousDigest = process.env.KEYLIME_TRUSTED_HEADER_SHA256;
   const digest = createHash("sha256").update("proxy-secret").digest("hex");
   const request = (path: string, value?: string) =>
     gate(`http://localhost:30177${path}`, {
-      headers: value === undefined ? {} : { "x-omp-web-auth": value },
+      headers: value === undefined ? {} : { "x-keylime-auth": value },
     });
-  withEnvVars({ OMP_WEB_PASSWORD_HASH: PASSWORD_HASH }, () => {
+  withEnvVars({ KEYLIME_PASSWORD_HASH: PASSWORD_HASH }, () => {
     try {
-      process.env.OMP_WEB_TRUSTED_HEADER_SHA256 = digest;
+      process.env.KEYLIME_TRUSTED_HEADER_SHA256 = digest;
       assert.equal(request("/", "proxy-secret"), "authenticated");
       assert.equal(request("/api/sessions", "proxy-secret"), "authenticated");
       assert.equal(
@@ -323,7 +323,7 @@ test("accepts the trusted proxy header only when its SHA-256 matches the configu
       // The digest itself is not a credential.
       assert.equal(response(request("/api/sessions", digest)).status, 401);
 
-      process.env.OMP_WEB_TRUSTED_HEADER_SHA256 = digest.toUpperCase();
+      process.env.KEYLIME_TRUSTED_HEADER_SHA256 = digest.toUpperCase();
       assert.equal(
         request("/api/sessions", "proxy-secret"),
         "authenticated",
@@ -340,8 +340,8 @@ test("accepts the trusted proxy header only when its SHA-256 matches the configu
         `${digest.slice(2)}zz`,
       ]) {
         if (value === undefined)
-          delete process.env.OMP_WEB_TRUSTED_HEADER_SHA256;
-        else process.env.OMP_WEB_TRUSTED_HEADER_SHA256 = value;
+          delete process.env.KEYLIME_TRUSTED_HEADER_SHA256;
+        else process.env.KEYLIME_TRUSTED_HEADER_SHA256 = value;
         assert.equal(
           response(request("/api/sessions", "")).status,
           401,
@@ -355,14 +355,14 @@ test("accepts the trusted proxy header only when its SHA-256 matches the configu
       }
     } finally {
       if (previousDigest === undefined)
-        delete process.env.OMP_WEB_TRUSTED_HEADER_SHA256;
-      else process.env.OMP_WEB_TRUSTED_HEADER_SHA256 = previousDigest;
+        delete process.env.KEYLIME_TRUSTED_HEADER_SHA256;
+      else process.env.KEYLIME_TRUSTED_HEADER_SHA256 = previousDigest;
     }
   });
 });
 
 test("leaves the login page's assets, the icons and the service worker outside password protection", () => {
-  withEnvVars({ OMP_WEB_PASSWORD_HASH: PASSWORD_HASH }, () => {
+  withEnvVars({ KEYLIME_PASSWORD_HASH: PASSWORD_HASH }, () => {
     for (const path of [
       "/sw.js",
       "/assets/a.js",
@@ -399,7 +399,7 @@ test("leaves the login page's assets, the icons and the service worker outside p
 });
 
 test("leaves Bun's dev bundles under /_bun/ public in dev only", () => {
-  withEnvVars({ OMP_WEB_PASSWORD_HASH: PASSWORD_HASH }, () => {
+  withEnvVars({ KEYLIME_PASSWORD_HASH: PASSWORD_HASH }, () => {
     const bundle = "http://localhost:30177/_bun/client/index.js";
     assert.equal(response(gate(bundle)).status, 307);
     const previous = process.env.NODE_ENV;
@@ -414,7 +414,7 @@ test("leaves Bun's dev bundles under /_bun/ public in dev only", () => {
 });
 
 test("leaves the host link to its own bearer check, and nothing else under /api/hosts", () => {
-  withEnvVars({ OMP_WEB_PASSWORD_HASH: PASSWORD_HASH }, () => {
+  withEnvVars({ KEYLIME_PASSWORD_HASH: PASSWORD_HASH }, () => {
     assert.equal(gate("http://localhost:30177/api/hosts/link"), "public");
     for (const path of [
       "/api/hosts",
@@ -436,7 +436,7 @@ test("leaves the host link to its own bearer check, and nothing else under /api/
 });
 
 test("leaves everything below /api/hosts/broker/v1/ to its bearer check, and nothing else under /api/hosts/broker", () => {
-  withEnvVars({ OMP_WEB_PASSWORD_HASH: PASSWORD_HASH }, () => {
+  withEnvVars({ KEYLIME_PASSWORD_HASH: PASSWORD_HASH }, () => {
     assert.equal(
       gate("http://localhost:30177/api/hosts/broker/v1/healthz"),
       "public",
@@ -460,7 +460,7 @@ test("leaves everything below /api/hosts/broker/v1/ to its bearer check, and not
 });
 
 test("leaves only the two cluster-config routes to their bearer check, and nothing beside them", () => {
-  withEnvVars({ OMP_WEB_PASSWORD_HASH: PASSWORD_HASH }, () => {
+  withEnvVars({ KEYLIME_PASSWORD_HASH: PASSWORD_HASH }, () => {
     for (const path of [
       "/api/hosts/cluster-config/manifest",
       `/api/hosts/cluster-config/file/${"a".repeat(64)}`,
@@ -493,7 +493,7 @@ test("leaves only the two cluster-config routes to their bearer check, and nothi
 });
 
 test("signing in sets an HttpOnly, SameSite=Lax session cookie, Secure only over https", async (t) => {
-  t.after(setEnvVars({ OMP_WEB_PASSWORD_HASH: PASSWORD_HASH }));
+  t.after(setEnvVars({ KEYLIME_PASSWORD_HASH: PASSWORD_HASH }));
   const signIn = async (headers: Record<string, string>) => {
     const response = await POST(
       new Request("http://localhost:30177/api/web-auth/session", {
@@ -509,9 +509,9 @@ test("signing in sets an HttpOnly, SameSite=Lax session cookie, Secure only over
   };
 
   const plain = await signIn({});
-  assert.match(plain, /^omp_web_session=[^;]+;/);
+  assert.match(plain, /^keylime_session=[^;]+;/);
   assert.equal(
-    isValidWebSession(/^omp_web_session=([^;]+)/.exec(plain)![1]),
+    isValidWebSession(/^keylime_session=([^;]+)/.exec(plain)![1]),
     true,
   );
   for (const attribute of [

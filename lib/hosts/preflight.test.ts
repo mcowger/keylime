@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const base = mkdtempSync(join(tmpdir(), "ompweb-preflight-test-"));
+const base = mkdtempSync(join(tmpdir(), "keylime-preflight-test-"));
 const omp = join(base, "omp");
 const saved = { ...process.env };
 let runPreflight: typeof import("./preflight.ts").runPreflight;
@@ -18,7 +18,7 @@ let runPreflight: typeof import("./preflight.ts").runPreflight;
 before(async () => {
   process.env.PI_CODING_AGENT_DIR = join(base, "agent");
   // resolveOmpBin caches its hit: every test rewrites this one file.
-  process.env.OMP_WEB_OMP_BIN = omp;
+  process.env.KEYLIME_OMP_BIN = omp;
   ({ runPreflight } = await import("./preflight.ts"));
 });
 after(() => {

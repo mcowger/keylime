@@ -674,7 +674,7 @@ export const BashResultInfoSchema = {
     deferred: {
       ...Type.Optional(Type.Boolean()),
       description:
-        "omp-web: omp held the result back for the next prompt (a turn was running).",
+        "keylime: omp held the result back for the next prompt (a turn was running).",
     },
   }),
   description:
@@ -746,7 +746,7 @@ export const HostToolParameterSchema = {
     },
   ),
   description:
-    "omp's RPC host-tool bridge: omp-web registers host tools (set_host_tools)\nthat the agent can call; the server emits host_tool_call frames the UI\nexecutes, and the UI answers with host_tool_result. Mirrors\noh-my-pi modes/rpc/rpc-types.ts.",
+    "omp's RPC host-tool bridge: keylime registers host tools (set_host_tools)\nthat the agent can call; the server emits host_tool_call frames the UI\nexecutes, and the UI answers with host_tool_result. Mirrors\noh-my-pi modes/rpc/rpc-types.ts.",
 };
 
 export const HostToolDefinitionSchema = Type.Object(
@@ -1907,7 +1907,7 @@ export const WebSessionStateSchema = {
     ),
   }),
   description:
-    "The state shape omp-web's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
+    "The state shape keylime's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
 };
 
 export const AgentMessageSchema = Type.Union(

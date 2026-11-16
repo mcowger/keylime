@@ -101,7 +101,7 @@ test("env: one loopback listener and one secret, a key per server", async (t) =>
   const instance = startBrokerForwarder({ login: () => null, log: () => {} });
   t.after(() => instance.stop());
   const [first, second] = await Promise.all([
-    instance.env("http://a.example/ompweb"),
+    instance.env("http://a.example/keylime"),
     instance.env("https://b.example"),
   ]);
   assert.match(
@@ -117,7 +117,7 @@ test("env: one loopback listener and one secret, a key per server", async (t) =>
       new URL(first.OMP_AUTH_BROKER_URL).pathname.slice(1),
       "base64url",
     ).toString(),
-    "http://a.example/ompweb",
+    "http://a.example/keylime",
   );
   assert.equal(
     Buffer.from(
@@ -133,7 +133,7 @@ test("env: one loopback listener and one secret, a key per server", async (t) =>
     new URL(second.OMP_AUTH_BROKER_URL).origin,
   );
   assert.equal(first.OMP_AUTH_BROKER_TOKEN, second.OMP_AUTH_BROKER_TOKEN);
-  assert.deepEqual(await instance.env("http://a.example/ompweb"), first);
+  assert.deepEqual(await instance.env("http://a.example/keylime"), first);
 });
 
 test("a request without the secret or with a wrong one is 401 and reaches neither login nor upstream", async (t) => {
@@ -255,7 +255,7 @@ test("a server URL with a path prefix and trailing slash keeps its prefix", asyn
   });
   t.after(() => instance.stop());
   const { OMP_AUTH_BROKER_URL, OMP_AUTH_BROKER_TOKEN } = await instance.env(
-    `${up.url}/ompweb/`,
+    `${up.url}/keylime/`,
   );
   await (
     await fetch(`${OMP_AUTH_BROKER_URL}/v1/healthz`, {
@@ -264,7 +264,7 @@ test("a server URL with a path prefix and trailing slash keeps its prefix", asyn
   ).arrayBuffer();
   assert.deepEqual(
     up.requests.map((seen) => seen.url),
-    ["/ompweb/api/hosts/broker/v1/healthz"],
+    ["/keylime/api/hosts/broker/v1/healthz"],
   );
 });
 
@@ -387,7 +387,7 @@ test("a body over 1 MiB is 413 and reaches no upstream; 1 MiB passes", async (t)
 test("a path that climbs out of the broker route is 404 and reaches no upstream", async (t) => {
   const up = await upstream(t);
   const f = await forwarder(t, {
-    url: `${up.url}/ompweb`,
+    url: `${up.url}/keylime`,
     token: "login-token",
   });
   const origin = new URL(f.base);

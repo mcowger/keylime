@@ -191,7 +191,7 @@
           "type": "boolean"
         },
         "deferred": {
-          "description": "omp-web: omp held the result back for the next prompt (a turn was running).",
+          "description": "keylime: omp held the result back for the next prompt (a turn was running).",
           "type": "boolean"
         },
         "exitCode": {
@@ -5620,7 +5620,7 @@
       "type": "object"
     },
     "agent_get_state_result": {
-      "description": "The state shape omp-web's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
+      "description": "The state shape keylime's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
       "properties": {
         "autoCompactionEnabled": {
           "type": "boolean"
@@ -16214,7 +16214,7 @@
           "type": "boolean"
         },
         "deferred": {
-          "description": "omp-web: omp held the result back for the next prompt (a turn was running).",
+          "description": "keylime: omp held the result back for the next prompt (a turn was running).",
           "type": "boolean"
         },
         "exitCode": {
@@ -19795,7 +19795,7 @@
       "additionalProperties": {
         "description": "Extensible JSON data supplied by the provider, tool, or extension."
       },
-      "description": "omp's RPC host-tool bridge: omp-web registers host tools (set_host_tools)\nthat the agent can call; the server emits host_tool_call frames the UI\nexecutes, and the UI answers with host_tool_result. Mirrors\noh-my-pi modes/rpc/rpc-types.ts.",
+      "description": "omp's RPC host-tool bridge: keylime registers host tools (set_host_tools)\nthat the agent can call; the server emits host_tool_call frames the UI\nexecutes, and the UI answers with host_tool_result. Mirrors\noh-my-pi modes/rpc/rpc-types.ts.",
       "properties": {
         "description": {
           "type": "string"
@@ -29013,7 +29013,7 @@
       "type": "object"
     },
     "domain_WebSessionState": {
-      "description": "The state shape omp-web's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
+      "description": "The state shape keylime's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
       "properties": {
         "autoCompactionEnabled": {
           "type": "boolean"
@@ -42536,6 +42536,9 @@
             "home": {
               "type": "string"
             },
+            "keylimeVersion": {
+              "type": "string"
+            },
             "link": {
               "properties": {
                 "id": {
@@ -42557,9 +42560,6 @@
                   "type": "null"
                 }
               ]
-            },
-            "ompwebVersion": {
-              "type": "string"
             },
             "platform": {
               "type": "string"
@@ -56405,7 +56405,7 @@
                   "type": "object"
                 },
                 {
-                  "description": "The state shape omp-web's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
+                  "description": "The state shape keylime's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
                   "properties": {
                     "autoCompactionEnabled": {
                       "type": "boolean"
@@ -57274,7 +57274,7 @@
                       "type": "boolean"
                     },
                     "deferred": {
-                      "description": "omp-web: omp held the result back for the next prompt (a turn was running).",
+                      "description": "keylime: omp held the result back for the next prompt (a turn was running).",
                       "type": "boolean"
                     },
                     "exitCode": {
@@ -66500,7 +66500,7 @@
           "type": "object"
         },
         {
-          "description": "The state shape omp-web's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
+          "description": "The state shape keylime's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
           "properties": {
             "autoCompactionEnabled": {
               "type": "boolean"
@@ -67363,7 +67363,7 @@
               "type": "boolean"
             },
             "deferred": {
-              "description": "omp-web: omp held the result back for the next prompt (a turn was running).",
+              "description": "keylime: omp held the result back for the next prompt (a turn was running).",
               "type": "boolean"
             },
             "exitCode": {

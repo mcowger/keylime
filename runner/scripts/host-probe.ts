@@ -1,4 +1,4 @@
-// Channel probe: stands in for `ompweb host` on the host socket and prints what omp sends.
+// Channel probe: stands in for `keylime host` on the host socket and prints what omp sends.
 //
 //   bun scripts/host-probe.ts
 //

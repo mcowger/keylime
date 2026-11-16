@@ -6,16 +6,16 @@ const { appendProgress, cloneDirectoryName, repositoryKey } =
 
 test("cloneDirectoryName derives git's directory name from https and ssh URLs", () => {
   assert.equal(
-    cloneDirectoryName("https://github.com/ompweb-dev/ompweb.git"),
-    "ompweb",
+    cloneDirectoryName("https://github.com/keylime-dev/keylime.git"),
+    "keylime",
   );
   assert.equal(
     cloneDirectoryName("https://user:token@gitlab.example.com/group/sub/repo/"),
     "repo",
   );
   assert.equal(
-    cloneDirectoryName("git@github.com:ompweb-dev/ompweb.git"),
-    "ompweb",
+    cloneDirectoryName("git@github.com:keylime-dev/keylime.git"),
+    "keylime",
   );
   assert.equal(cloneDirectoryName("gh:owner/repo"), "repo");
   assert.equal(cloneDirectoryName("ssh://git@host:2222/srv/repo.git"), "repo");

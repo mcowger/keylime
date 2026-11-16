@@ -26,11 +26,11 @@ test(
   "a SIGHUP to the dev parent also stops the server it re-ran",
   { timeout: 60_000 },
   async (t) => {
-    const home = mkdtempSync(path.join(os.tmpdir(), "omp-web-dev-"));
-    // Without OMP_WEB_PUBLIC_* in its environment, dev.ts runs itself once more with them set.
+    const home = mkdtempSync(path.join(os.tmpdir(), "keylime-dev-"));
+    // Without KEYLIME_PUBLIC_* in its environment, dev.ts runs itself once more with them set.
     const env = Object.fromEntries(
       Object.entries(process.env).filter(
-        ([name]) => !name.startsWith("OMP_WEB_"),
+        ([name]) => !name.startsWith("KEYLIME_"),
       ),
     );
     const parent = Bun.spawn(
@@ -41,7 +41,7 @@ test(
           ...env,
           HOME: home,
           PI_CODING_AGENT_DIR: path.join(home, ".omp", "agent"),
-          OMP_WEB_OMP_BIN: "/nonexistent/omp",
+          KEYLIME_OMP_BIN: "/nonexistent/omp",
         },
         stdout: "pipe",
         stderr: "ignore",
@@ -85,7 +85,7 @@ test(
   "hot reload of a shared worker dependency keeps the dev server listening",
   { timeout: 60_000 },
   async (t) => {
-    const home = mkdtempSync(path.join(os.tmpdir(), "omp-web-hot-"));
+    const home = mkdtempSync(path.join(os.tmpdir(), "keylime-hot-"));
     const source = path.join(home, "source");
     for (const name of [
       "server",
@@ -121,7 +121,7 @@ test(
     reservation.stop(true);
     const env = Object.fromEntries(
       Object.entries(process.env).filter(
-        ([name]) => !name.startsWith("OMP_WEB_"),
+        ([name]) => !name.startsWith("KEYLIME_"),
       ),
     );
     const parent = Bun.spawn(
@@ -141,7 +141,7 @@ test(
           ...env,
           HOME: home,
           PI_CODING_AGENT_DIR: path.join(home, ".omp", "agent"),
-          OMP_WEB_OMP_BIN: "/nonexistent/omp",
+          KEYLIME_OMP_BIN: "/nonexistent/omp",
         },
         stdout: "pipe",
         stderr: "pipe",
@@ -154,9 +154,9 @@ test(
       const forward = (line: string) => {
         if (
           !line.startsWith(
-            "[omp-web] omp utility warm-up failed (routes will retry on demand):",
+            "[keylime] omp utility warm-up failed (routes will retry on demand):",
           ) ||
-          !line.includes("check OMP_WEB_OMP_BIN")
+          !line.includes("check KEYLIME_OMP_BIN")
         )
           process.stderr.write(line);
       };

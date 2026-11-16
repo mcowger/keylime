@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { parseLaunchOptions } from "../bin/omp-web-options";
+import { parseLaunchOptions } from "../bin/keylime-options";
 
 test("opens the browser by default", () => {
   const parsed = parseLaunchOptions([], {});
@@ -16,19 +16,19 @@ test("supports the no-open CLI option", () => {
   assert.equal(parseLaunchOptions(["--no-open"], {}).openBrowser, false);
 });
 
-test("supports truthy OMP_WEB_NO_OPEN values", () => {
+test("supports truthy KEYLIME_NO_OPEN values", () => {
   for (const value of ["1", "true", "TRUE", "yes", "on"]) {
     assert.equal(
-      parseLaunchOptions([], { OMP_WEB_NO_OPEN: value }).openBrowser,
+      parseLaunchOptions([], { KEYLIME_NO_OPEN: value }).openBrowser,
       false,
     );
   }
 });
 
-test("does not disable browser opening for false OMP_WEB_NO_OPEN values", () => {
+test("does not disable browser opening for false KEYLIME_NO_OPEN values", () => {
   for (const value of ["0", "false", "off", ""]) {
     assert.equal(
-      parseLaunchOptions([], { OMP_WEB_NO_OPEN: value }).openBrowser,
+      parseLaunchOptions([], { KEYLIME_NO_OPEN: value }).openBrowser,
       true,
     );
   }
@@ -58,8 +58,8 @@ test("a port that is not an integer from 0 to 65535 is an error, from the flag o
     assert.equal(parseLaunchOptions(["-p", port], {}).error, undefined, port);
 });
 
-test("ompweb with a bad port says so in one line and exits 2", () => {
-  const launcher = fileURLToPath(new URL("../bin/omp-web.ts", import.meta.url));
+test("keylime with a bad port says so in one line and exits 2", () => {
+  const launcher = fileURLToPath(new URL("../bin/keylime.ts", import.meta.url));
   const result = spawnSync(
     process.execPath,
     [launcher, "-p", "abc", "--no-open"],
@@ -72,29 +72,29 @@ test("ompweb with a bad port says so in one line and exits 2", () => {
   assert.equal(result.status, 2);
 });
 
-test("supports OMP_WEB_HOSTNAME without trusting the ambient system HOSTNAME", () => {
+test("supports KEYLIME_HOSTNAME without trusting the ambient system HOSTNAME", () => {
   assert.equal(
     parseLaunchOptions([], { HOSTNAME: "container-id" }).hostname,
     "127.0.0.1",
   );
   assert.equal(
-    parseLaunchOptions([], { OMP_WEB_HOSTNAME: "0.0.0.0" }).hostname,
+    parseLaunchOptions([], { KEYLIME_HOSTNAME: "0.0.0.0" }).hostname,
     "0.0.0.0",
   );
 });
 
-test("accepts a password hash from OMP_WEB_PASSWORD_HASH", () => {
+test("accepts a password hash from KEYLIME_PASSWORD_HASH", () => {
   const hash =
     "scrypt$15$8$1$WlVEVcJQz1dJIPZ4AlRrFQ$8CFi0lDZHh1Gr6gAWOi0yBVJXxbFCL0-w5u_5zADk1E";
   assert.equal(parseLaunchOptions([], {}).passwordHash, undefined);
   assert.equal(
-    parseLaunchOptions([], { OMP_WEB_PASSWORD_HASH: hash }).passwordHash,
+    parseLaunchOptions([], { KEYLIME_PASSWORD_HASH: hash }).passwordHash,
     hash,
   );
   // Values arrive through .env files and service units, where a trailing
-  // newline or quote is an easy mistake; trimming keeps `ompweb` starting.
+  // newline or quote is an easy mistake; trimming keeps `keylime` starting.
   assert.equal(
-    parseLaunchOptions([], { OMP_WEB_PASSWORD_HASH: `  ${hash}\n` })
+    parseLaunchOptions([], { KEYLIME_PASSWORD_HASH: `  ${hash}\n` })
       .passwordHash,
     hash,
   );
@@ -112,7 +112,7 @@ test("flags a legacy plaintext password instead of accepting it", () => {
     }) => ({
       legacyPassword,
       legacyPasswordSource,
-    }))(parseLaunchOptions([], { OMP_WEB_PASSWORD: "secret" })),
+    }))(parseLaunchOptions([], { KEYLIME_PASSWORD: "secret" })),
     { legacyPassword: "secret", legacyPasswordSource: "env" },
   );
   assert.deepEqual(
@@ -127,7 +127,7 @@ test("flags a legacy plaintext password instead of accepting it", () => {
       legacyPasswordSource,
     }))(
       parseLaunchOptions(["--password", "from-cli"], {
-        OMP_WEB_PASSWORD: "from-env",
+        KEYLIME_PASSWORD: "from-env",
       }),
     ),
     { legacyPassword: "from-cli", legacyPasswordSource: "flag" },
@@ -147,7 +147,7 @@ test("flags a legacy plaintext password instead of accepting it", () => {
   );
   // An empty value is not a configured password.
   assert.equal(
-    parseLaunchOptions([], { OMP_WEB_PASSWORD: "" }).legacyPassword,
+    parseLaunchOptions([], { KEYLIME_PASSWORD: "" }).legacyPassword,
     undefined,
   );
 });

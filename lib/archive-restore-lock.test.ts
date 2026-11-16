@@ -35,9 +35,9 @@ test("restore lock releases a rejected callback and restricts store permissions"
       await withArchiveRestoreLock("session", async () => "released"),
       "released",
     );
-    assert.equal(statSync(join(dir, "omp-web")).mode & 0o777, 0o700);
+    assert.equal(statSync(join(dir, "keylime")).mode & 0o777, 0o700);
     assert.equal(
-      statSync(join(dir, "omp-web", "archive-restore-locks.sqlite")).mode &
+      statSync(join(dir, "keylime", "archive-restore-locks.sqlite")).mode &
         0o777,
       0o600,
     );
@@ -100,7 +100,7 @@ test("restore lock reclaims an expired lease whatever its owner, and leaves a fr
   await withDir(async (dir) => {
     await withArchiveRestoreLock("initialize", async () => {});
     const db = new Database(
-      join(dir, "omp-web", "archive-restore-locks.sqlite"),
+      join(dir, "keylime", "archive-restore-locks.sqlite"),
     );
     try {
       // A crashed holder whose PID now belongs to a live process: only the lease decides.
@@ -163,7 +163,7 @@ test("a holder renews its lease, so a restore running past the lease stays claim
     const { promise: gate, resolve: release } = Promise.withResolvers<string>();
     const holding = withArchiveRestoreLock("long", () => gate);
     const db = new Database(
-      join(dir, "omp-web", "archive-restore-locks.sqlite"),
+      join(dir, "keylime", "archive-restore-locks.sqlite"),
     );
     try {
       // Another session's lease: renewal and release must touch only the holder's own row.
@@ -209,7 +209,7 @@ test("a held claim outlives its request and the lease clock, and ends only by it
       claim.hold("host-a", "daemon-1");
     });
     const db = new Database(
-      join(dir, "omp-web", "archive-restore-locks.sqlite"),
+      join(dir, "keylime", "archive-restore-locks.sqlite"),
     );
     const held = () =>
       db
@@ -312,7 +312,7 @@ test("hold refuses a request whose lease another one already took over, before a
     await assert.rejects(
       withArchiveRestoreLock("lost", async (claim) => {
         const db = new Database(
-          join(dir, "omp-web", "archive-restore-locks.sqlite"),
+          join(dir, "keylime", "archive-restore-locks.sqlite"),
         );
         try {
           db.prepare(
@@ -329,7 +329,7 @@ test("hold refuses a request whose lease another one already took over, before a
         error.code === "archive_restore_busy",
     );
     const db = new Database(
-      join(dir, "omp-web", "archive-restore-locks.sqlite"),
+      join(dir, "keylime", "archive-restore-locks.sqlite"),
     );
     try {
       // The taker's claim is untouched, and nothing was held for the refused request.
@@ -355,7 +355,7 @@ test("publish holds the store's write lock across the publishing step, so nothin
     const result = await withArchiveRestoreLock("pub", async (claim) =>
       claim.publish(() => {
         const other = new Database(
-          join(dir, "omp-web", "archive-restore-locks.sqlite"),
+          join(dir, "keylime", "archive-restore-locks.sqlite"),
         );
         try {
           other.exec("PRAGMA busy_timeout = 0");
@@ -392,7 +392,7 @@ test("a publish step that throws rolls back and frees the store at once, and its
         /destination exists/,
       );
       const other = new Database(
-        join(dir, "omp-web", "archive-restore-locks.sqlite"),
+        join(dir, "keylime", "archive-restore-locks.sqlite"),
       );
       try {
         other.exec("PRAGMA busy_timeout = 0");
@@ -414,7 +414,7 @@ test("a holder suspended past its lease publishes only if nobody took the sessio
   await withDir(async (dir) => {
     const age = (session: string) => {
       const db = new Database(
-        join(dir, "omp-web", "archive-restore-locks.sqlite"),
+        join(dir, "keylime", "archive-restore-locks.sqlite"),
       );
       try {
         db.prepare(
@@ -458,8 +458,8 @@ test("a holder suspended past its lease publishes only if nobody took the sessio
 
 test("a table from an earlier build of this branch moves into the claims table, keeping its claims, and the old name stops accepting writes", async () => {
   await withDir(async (dir) => {
-    mkdirSync(join(dir, "omp-web"), { recursive: true });
-    const path = join(dir, "omp-web", "archive-restore-locks.sqlite");
+    mkdirSync(join(dir, "keylime"), { recursive: true });
+    const path = join(dir, "keylime", "archive-restore-locks.sqlite");
     const old = new Database(path);
     try {
       old.exec(
@@ -564,8 +564,8 @@ test("a table from an earlier build of this branch moves into the claims table, 
 
 test("a claims table made without the instance column gains it in place, keeps its held row, and that row names no process to confirm", async () => {
   await withDir(async (dir) => {
-    mkdirSync(join(dir, "omp-web"), { recursive: true });
-    const path = join(dir, "omp-web", "archive-restore-locks.sqlite");
+    mkdirSync(join(dir, "keylime"), { recursive: true });
+    const path = join(dir, "keylime", "archive-restore-locks.sqlite");
     const earlier = new Database(path);
     try {
       // The schema an earlier build of this branch left: the claims table and the legacy view, no `instance`, no user_version.

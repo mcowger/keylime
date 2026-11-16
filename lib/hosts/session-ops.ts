@@ -211,7 +211,7 @@ const sessionTooLarge = () =>
   fail(
     413,
     "session_file_too_large",
-    "Session file is too large to open in omp-web",
+    "Session file is too large to open in keylime",
   );
 
 /** This daemon process, as restore claims see it. Fresh per process, never stored: the token sets below die with the process,
@@ -832,7 +832,7 @@ export const sessionOps: SessionOps = {
   async exportSession(id) {
     const filePath = await resolveSessionPath(id);
     if (!filePath) return sessionNotFound();
-    const tempDir = join(tmpdir(), "omp-web-export");
+    const tempDir = join(tmpdir(), "keylime-export");
     mkdirSync(tempDir, { recursive: true });
     const fileName = `omp-session-${basename(filePath, ".jsonl")}.html`;
     const outputPath = join(tempDir, `${randomUUID()}.html`);

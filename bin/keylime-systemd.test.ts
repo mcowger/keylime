@@ -26,41 +26,41 @@ import {
   formatExecStart,
   launcherInterpreterDir,
   readLauncherInterpreter,
-  resolveOmpwebBin,
+  resolveKeylimeBin,
   runCli,
   validateHostname,
   validatePort,
-} from "./omp-web-systemd.ts";
+} from "./keylime-systemd.ts";
 import {
   parseServiceEnv,
   serializeServiceEnv,
   writeServiceEnv,
 } from "./service-env.ts";
-import { hashPassword, verifyPassword } from "./omp-web-password-hash.ts";
+import { hashPassword, verifyPassword } from "./keylime-password-hash.ts";
 
 test("service env files round-trip quoted values", () => {
   const serialized = serializeServiceEnv({
     PORT: "30177",
-    OMP_WEB_HOSTNAME: "0.0.0.0",
-    OMP_WEB_PASSWORD: 'secret\\with"quotes',
+    KEYLIME_HOSTNAME: "0.0.0.0",
+    KEYLIME_PASSWORD: 'secret\\with"quotes',
   });
 
-  assert.match(serialized, /OMP_WEB_PASSWORD="secret\\\\with\\"quotes"/);
+  assert.match(serialized, /KEYLIME_PASSWORD="secret\\\\with\\"quotes"/);
   assert.deepEqual(parseServiceEnv(serialized), {
     PORT: "30177",
-    OMP_WEB_HOSTNAME: "0.0.0.0",
-    OMP_WEB_PASSWORD: 'secret\\with"quotes',
+    KEYLIME_HOSTNAME: "0.0.0.0",
+    KEYLIME_PASSWORD: 'secret\\with"quotes',
   });
 });
 
 test("writeServiceEnv creates the parent directory and a private file", () => {
-  const dir = mkdtempSync(path.join(tmpdir(), "ompweb-service-env-"));
+  const dir = mkdtempSync(path.join(tmpdir(), "keylime-service-env-"));
   try {
     const envPath = path.join(dir, "nested", "web-service.env");
-    writeServiceEnv({ PORT: "40100", OMP_WEB_HOSTNAME: "127.0.0.1" }, envPath);
+    writeServiceEnv({ PORT: "40100", KEYLIME_HOSTNAME: "127.0.0.1" }, envPath);
     assert.deepEqual(parseServiceEnv(readFileSync(envPath, "utf8")), {
       PORT: "40100",
-      OMP_WEB_HOSTNAME: "127.0.0.1",
+      KEYLIME_HOSTNAME: "127.0.0.1",
     });
     assert.equal(statSync(envPath).mode & 0o777, 0o600);
   } finally {
@@ -70,21 +70,21 @@ test("writeServiceEnv creates the parent directory and a private file", () => {
 
 test("buildUnit points at the generated env file and keeps runtime settings out of the unit", () => {
   const unit = buildUnit({
-    ompwebBin: "/usr/local/bin/ompweb",
-    env: { OMP_WEB_OMP_BIN: "/home/u/.bun/bin/omp" },
+    keylimeBin: "/usr/local/bin/keylime",
+    env: { KEYLIME_OMP_BIN: "/home/u/.bun/bin/omp" },
     home: "/home/u",
     envPath: "/home/u/.omp/agent/web-service.env",
   });
 
-  assert.match(unit, /ExecStart=\/usr\/local\/bin\/ompweb\n/);
+  assert.match(unit, /ExecStart=\/usr\/local\/bin\/keylime\n/);
   assert.match(unit, /WorkingDirectory=%h/);
   assert.match(
     unit,
     /EnvironmentFile=\/home\/u\/\.omp\/agent\/web-service\.env/,
   );
   assert.doesNotMatch(unit, /PORT=/);
-  assert.doesNotMatch(unit, /OMP_WEB_PASSWORD_HASH/);
-  assert.doesNotMatch(unit, /OMP_WEB_PASSWORD=/);
+  assert.doesNotMatch(unit, /KEYLIME_PASSWORD_HASH/);
+  assert.doesNotMatch(unit, /KEYLIME_PASSWORD=/);
   assert.match(unit, /Restart=on-failure/);
   assert.match(unit, /StartLimitIntervalSec=60/);
   assert.match(unit, /StartLimitBurst=5/);
@@ -97,16 +97,16 @@ test("buildUnit points at the generated env file and keeps runtime settings out 
   }
 });
 
-test("buildHostUnit runs `ompweb host` with the web unit's env file and never gives up restarting", () => {
+test("buildHostUnit runs `keylime host` with the web unit's env file and never gives up restarting", () => {
   const options = {
-    ompwebBin: "/usr/local/bin/ompweb",
-    env: { OMP_WEB_OMP_BIN: "/home/u/.bun/bin/omp" },
+    keylimeBin: "/usr/local/bin/keylime",
+    env: { KEYLIME_OMP_BIN: "/home/u/.bun/bin/omp" },
     home: "/home/u",
     envPath: "/home/u/.omp/agent/web-service.env",
   };
   const unit = buildHostUnit(options);
 
-  assert.match(unit, /^ExecStart=\/usr\/local\/bin\/ompweb host$/m);
+  assert.match(unit, /^ExecStart=\/usr\/local\/bin\/keylime host$/m);
   assert.match(
     unit,
     /EnvironmentFile=\/home\/u\/\.omp\/agent\/web-service\.env/,
@@ -121,15 +121,15 @@ test("buildHostUnit runs `ompweb host` with the web unit's env file and never gi
   const envLine = (text: string) => text.match(/^Environment=.*$/m)![0];
   assert.equal(envLine(unit), envLine(buildUnit(options)));
   assert.equal(
-    buildHostUnit({ ...options, ompwebBin: "/opt/my tools/ompweb" }).match(
+    buildHostUnit({ ...options, keylimeBin: "/opt/my tools/keylime" }).match(
       /^ExecStart=(.*)$/m,
     )![1],
-    '"/opt/my tools/ompweb" host',
+    '"/opt/my tools/keylime" host',
   );
 });
 
 test("buildUnit adds the launcher interpreter dir for Bun/npm installs of omp", () => {
-  const dir = mkdtempSync(path.join(tmpdir(), "ompweb-systemd-bun-"));
+  const dir = mkdtempSync(path.join(tmpdir(), "keylime-systemd-bun-"));
   try {
     const fakeBinDir = path.join(dir, "local", "bin");
     const fakeBunDir = path.join(dir, "mise", "shims");
@@ -157,8 +157,8 @@ test("buildUnit adds the launcher interpreter dir for Bun/npm installs of omp", 
     );
 
     const unit = buildUnit({
-      ompwebBin: "/usr/local/bin/ompweb",
-      env: { OMP_WEB_OMP_BIN: path.join(fakeBinDir, "omp") },
+      keylimeBin: "/usr/local/bin/keylime",
+      env: { KEYLIME_OMP_BIN: path.join(fakeBinDir, "omp") },
       home: "/home/u",
       envPath: "/home/u/.omp/agent/web-service.env",
     });
@@ -202,21 +202,21 @@ test("unit helpers escape systemd values and paths", () => {
     "/home/100%%name/web-service.env",
   );
   assert.equal(
-    formatExecStart("/usr/local/bin/ompweb"),
-    "/usr/local/bin/ompweb",
+    formatExecStart("/usr/local/bin/keylime"),
+    "/usr/local/bin/keylime",
   );
   assert.equal(
-    formatExecStart("/home/user name/ompweb"),
-    '"/home/user name/ompweb"',
+    formatExecStart("/home/user name/keylime"),
+    '"/home/user name/keylime"',
   );
 });
 
-test("resolveOmpwebBin honors an executable override", () => {
-  const dir = mkdtempSync(path.join(tmpdir(), "ompweb-systemd-"));
+test("resolveKeylimeBin honors an executable override", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "keylime-systemd-"));
   try {
-    const fake = path.join(dir, "ompweb");
+    const fake = path.join(dir, "keylime");
     writeFileSync(fake, "#!/bin/sh\n", { mode: 0o755 });
-    assert.equal(resolveOmpwebBin({ OMP_WEB_SYSTEMD_BIN: fake }), fake);
+    assert.equal(resolveKeylimeBin({ KEYLIME_SYSTEMD_BIN: fake }), fake);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -235,21 +235,21 @@ test(
   "install creates the env file and unit with LAN settings",
   { skip: process.platform !== "linux" },
   () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "ompweb-systemd-install-"));
+    const dir = mkdtempSync(path.join(tmpdir(), "keylime-systemd-install-"));
     try {
       const home = path.join(dir, "home");
       const binDir = path.join(dir, "bin");
-      const fakeOmpweb = path.join(binDir, "ompweb");
+      const fakeKeylime = path.join(binDir, "keylime");
       const fakeSystemctl = path.join(binDir, "systemctl");
       mkdirSync(home, { recursive: true });
       mkdirSync(binDir, { recursive: true });
-      writeFileSync(fakeOmpweb, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+      writeFileSync(fakeKeylime, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
       writeFileSync(
         fakeSystemctl,
         '#!/bin/sh\ncase "$*" in *is-active*) exit 3 ;; *) exit 0 ;; esac\n',
         { mode: 0o755 },
       );
-      // A stock omp on PATH: pinning the services to it would replace ompweb's own omp, which its sessions need.
+      // A stock omp on PATH: pinning the services to it would replace keylime's own omp, which its sessions need.
       writeFileSync(path.join(binDir, "omp"), "#!/bin/sh\nexit 0\n", {
         mode: 0o755,
       });
@@ -258,21 +258,21 @@ test(
         ...process.env,
         HOME: home,
         PATH: binDir,
-        OMP_WEB_SYSTEMD_BIN: fakeOmpweb,
-        OMP_WEB_HOSTNAME: "0.0.0.0",
-        OMP_WEB_PASSWORD: "test-password",
-        OMP_WEB_NO_OPEN: "0",
-        OMP_WEB_TRUSTED_HEADER_SHA256: "a".repeat(64),
-        OMP_WEB_NAME: "My Box",
+        KEYLIME_SYSTEMD_BIN: fakeKeylime,
+        KEYLIME_HOSTNAME: "0.0.0.0",
+        KEYLIME_PASSWORD: "test-password",
+        KEYLIME_NO_OPEN: "0",
+        KEYLIME_TRUSTED_HEADER_SHA256: "a".repeat(64),
+        KEYLIME_NAME: "My Box",
         PORT: "40123",
       };
       delete childEnv.PI_CODING_AGENT_DIR;
-      delete childEnv.OMP_WEB_OMP_BIN;
+      delete childEnv.KEYLIME_OMP_BIN;
 
       const result = spawnSync(
         NODE,
         [
-          path.join(process.cwd(), "bin", "omp-web-systemd.ts"),
+          path.join(process.cwd(), "bin", "keylime-systemd.ts"),
           "install",
           "--no-autostart",
         ],
@@ -289,42 +289,42 @@ test(
         ".config",
         "systemd",
         "user",
-        "ompweb.service",
+        "keylime.service",
       );
       const written = parseServiceEnv(readFileSync(envPath, "utf8"));
-      // The installer hashes OMP_WEB_PASSWORD: only the hash may reach the env
-      // file, and omp-web refuses to start on a plaintext password (issue #239).
+      // The installer hashes KEYLIME_PASSWORD: only the hash may reach the env
+      // file, and keylime refuses to start on a plaintext password (issue #239).
       assert.match(
-        written.OMP_WEB_PASSWORD_HASH,
+        written.KEYLIME_PASSWORD_HASH,
         /^scrypt\$15\$8\$1\$[A-Za-z0-9_-]{22}\$[A-Za-z0-9_-]{43}$/,
       );
-      assert.equal(written.OMP_WEB_PASSWORD, undefined);
+      assert.equal(written.KEYLIME_PASSWORD, undefined);
       assert.equal(
-        verifyPassword("test-password", written.OMP_WEB_PASSWORD_HASH),
+        verifyPassword("test-password", written.KEYLIME_PASSWORD_HASH),
         true,
       );
       assert.equal(
-        verifyPassword("not-the-password", written.OMP_WEB_PASSWORD_HASH),
+        verifyPassword("not-the-password", written.KEYLIME_PASSWORD_HASH),
         false,
       );
-      delete written.OMP_WEB_PASSWORD_HASH;
+      delete written.KEYLIME_PASSWORD_HASH;
       assert.deepEqual(written, {
         PORT: "40123",
-        OMP_WEB_HOSTNAME: "0.0.0.0",
-        OMP_WEB_NO_OPEN: "0",
-        OMP_WEB_NAME: "My Box",
-        OMP_WEB_TRUSTED_HEADER_SHA256: "a".repeat(64),
+        KEYLIME_HOSTNAME: "0.0.0.0",
+        KEYLIME_NO_OPEN: "0",
+        KEYLIME_NAME: "My Box",
+        KEYLIME_TRUSTED_HEADER_SHA256: "a".repeat(64),
       });
       assert.match(
         readFileSync(unitPath, "utf8"),
         /EnvironmentFile=.*web-service\.env/,
       );
-      assert.doesNotMatch(readFileSync(unitPath, "utf8"), /OMP_WEB_OMP_BIN/);
+      assert.doesNotMatch(readFileSync(unitPath, "utf8"), /KEYLIME_OMP_BIN/);
       const hostUnit = readFileSync(
-        path.join(path.dirname(unitPath), "ompweb-host.service"),
+        path.join(path.dirname(unitPath), "keylime-host.service"),
         "utf8",
       );
-      assert.match(hostUnit, /^ExecStart=.*\/ompweb host$/m);
+      assert.match(hostUnit, /^ExecStart=.*\/keylime host$/m);
       assert.match(hostUnit, /EnvironmentFile=.*web-service\.env/);
       assert.match(result.stdout, /config:.*web-service\.env/);
     } finally {
@@ -337,15 +337,15 @@ test(
   "install writes a pre-hashed password unchanged and rejects a broken one",
   { skip: process.platform !== "linux" },
   () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "ompweb-systemd-hash-"));
+    const dir = mkdtempSync(path.join(tmpdir(), "keylime-systemd-hash-"));
     try {
       const home = path.join(dir, "home");
       const binDir = path.join(dir, "bin");
-      const fakeOmpweb = path.join(binDir, "ompweb");
+      const fakeKeylime = path.join(binDir, "keylime");
       const fakeSystemctl = path.join(binDir, "systemctl");
       mkdirSync(home, { recursive: true });
       mkdirSync(binDir, { recursive: true });
-      writeFileSync(fakeOmpweb, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+      writeFileSync(fakeKeylime, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
       writeFileSync(
         fakeSystemctl,
         '#!/bin/sh\ncase "$*" in *is-active*) exit 3 ;; *) exit 0 ;; esac\n',
@@ -355,23 +355,23 @@ test(
         ...process.env,
         HOME: home,
         PATH: binDir,
-        OMP_WEB_SYSTEMD_BIN: fakeOmpweb,
-        OMP_WEB_HOSTNAME: "0.0.0.0",
+        KEYLIME_SYSTEMD_BIN: fakeKeylime,
+        KEYLIME_HOSTNAME: "0.0.0.0",
       };
       delete base.PI_CODING_AGENT_DIR;
-      delete base.OMP_WEB_OMP_BIN;
-      delete base.OMP_WEB_PASSWORD;
+      delete base.KEYLIME_OMP_BIN;
+      delete base.KEYLIME_PASSWORD;
 
       const provided = hashPassword("preset-password");
       const ok = spawnSync(
         NODE,
         [
-          path.join(process.cwd(), "bin", "omp-web-systemd.ts"),
+          path.join(process.cwd(), "bin", "keylime-systemd.ts"),
           "install",
           "--no-autostart",
         ],
         {
-          env: { ...base, OMP_WEB_PASSWORD_HASH: provided },
+          env: { ...base, KEYLIME_PASSWORD_HASH: provided },
           encoding: "utf8",
         },
       );
@@ -382,19 +382,19 @@ test(
             path.join(home, ".omp", "agent", "web-service.env"),
             "utf8",
           ),
-        ).OMP_WEB_PASSWORD_HASH,
+        ).KEYLIME_PASSWORD_HASH,
         provided,
       );
 
       const broken = spawnSync(
         NODE,
         [
-          path.join(process.cwd(), "bin", "omp-web-systemd.ts"),
+          path.join(process.cwd(), "bin", "keylime-systemd.ts"),
           "install",
           "--no-autostart",
         ],
         {
-          env: { ...base, OMP_WEB_PASSWORD_HASH: "definitely-not-a-hash" },
+          env: { ...base, KEYLIME_PASSWORD_HASH: "definitely-not-a-hash" },
           encoding: "utf8",
         },
       );
@@ -408,13 +408,13 @@ test(
 
 test("install fails loudly when the omp launcher interpreter is missing", () => {
   const dir = mkdtempSync(
-    path.join(tmpdir(), "ompweb-systemd-missing-interp-"),
+    path.join(tmpdir(), "keylime-systemd-missing-interp-"),
   );
   try {
     const binDir = path.join(dir, "bin");
-    const fakeOmpweb = path.join(binDir, "ompweb");
+    const fakeKeylime = path.join(binDir, "keylime");
     mkdirSync(binDir, { recursive: true });
-    writeFileSync(fakeOmpweb, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    writeFileSync(fakeKeylime, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
     // Launcher script needing an interpreter that is nowhere on PATH.
     writeFileSync(path.join(binDir, "omp"), "#!/usr/bin/env bun\n", {
       mode: 0o755,
@@ -424,14 +424,14 @@ test("install fails loudly when the omp launcher interpreter is missing", () => 
       ...process.env,
       // The spawn uses an absolute Bun path, which is intentionally absent here.
       PATH: binDir,
-      OMP_WEB_SYSTEMD_BIN: fakeOmpweb,
-      OMP_WEB_OMP_BIN: path.join(binDir, "omp"),
+      KEYLIME_SYSTEMD_BIN: fakeKeylime,
+      KEYLIME_OMP_BIN: path.join(binDir, "omp"),
       PORT: "40123",
     };
     const result = spawnSync(
       NODE,
       [
-        path.join(process.cwd(), "bin", "omp-web-systemd.ts"),
+        path.join(process.cwd(), "bin", "keylime-systemd.ts"),
         "install",
         "--no-autostart",
       ],
@@ -448,10 +448,10 @@ test("install fails loudly when the omp launcher interpreter is missing", () => 
   }
 });
 
-test("main ompweb bin forwards the systemd subcommand", () => {
+test("main keylime bin forwards the systemd subcommand", () => {
   const result = spawnSync(
     NODE,
-    [path.join(process.cwd(), "bin", "omp-web.ts"), "systemd", "--version"],
+    [path.join(process.cwd(), "bin", "keylime.ts"), "systemd", "--version"],
     {
       encoding: "utf8",
     },
@@ -462,7 +462,7 @@ test("main ompweb bin forwards the systemd subcommand", () => {
 
 test("runCli handles help and unknown commands without systemd", async (t) => {
   captureExpectedConsole(t, "log", (message) =>
-    String(message).startsWith("Usage: ompweb-systemd"),
+    String(message).startsWith("Usage: keylime-systemd"),
   );
   captureExpectedConsole(
     t,
@@ -488,41 +488,41 @@ function runWithFakeSystemctl(
     hostFails?: boolean;
   } = {},
 ) {
-  // A shared dir keeps HOME and the fake ompweb path, so a repeated install generates identical units.
+  // A shared dir keeps HOME and the fake keylime path, so a repeated install generates identical units.
   const dir =
-    sharedDir ?? mkdtempSync(path.join(tmpdir(), "ompweb-systemd-cmd-"));
+    sharedDir ?? mkdtempSync(path.join(tmpdir(), "keylime-systemd-cmd-"));
   const home = path.join(dir, "home");
   const binDir = path.join(dir, "bin");
   const log = path.join(dir, "systemctl.log");
-  const fakeOmpweb = path.join(binDir, "ompweb");
+  const fakeKeylime = path.join(binDir, "keylime");
   mkdirSync(binDir, { recursive: true });
   const unitDir = path.join(home, ".config", "systemd", "user");
   mkdirSync(unitDir, { recursive: true });
-  writeFileSync(path.join(unitDir, "ompweb.service"), "[Service]\n");
-  if (hostUnit && !existsSync(path.join(unitDir, "ompweb-host.service")))
-    writeFileSync(path.join(unitDir, "ompweb-host.service"), "[Service]\n");
-  writeFileSync(fakeOmpweb, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  writeFileSync(path.join(unitDir, "keylime.service"), "[Service]\n");
+  if (hostUnit && !existsSync(path.join(unitDir, "keylime-host.service")))
+    writeFileSync(path.join(unitDir, "keylime-host.service"), "[Service]\n");
+  writeFileSync(fakeKeylime, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
   // A missing host unit makes systemctl fail, as the real one does.
   writeFileSync(
     path.join(binDir, "systemctl"),
-    `#!/bin/sh\necho "$*" >> "${log}"\n${hostFails ? 'case "$*" in *ompweb-host*) exit 5 ;; esac\n' : ""}case "$*" in *is-active*) exit ${active ? 0 : 3} ;; *) exit 0 ;; esac\n`,
+    `#!/bin/sh\necho "$*" >> "${log}"\n${hostFails ? 'case "$*" in *keylime-host*) exit 5 ;; esac\n' : ""}case "$*" in *is-active*) exit ${active ? 0 : 3} ;; *) exit 0 ;; esac\n`,
     { mode: 0o755 },
   );
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     HOME: home,
     PATH: binDir,
-    OMP_WEB_SYSTEMD_BIN: fakeOmpweb,
+    KEYLIME_SYSTEMD_BIN: fakeKeylime,
   };
   for (const key of [
     "PI_CODING_AGENT_DIR",
-    "OMP_WEB_OMP_BIN",
-    "OMP_WEB_PASSWORD",
+    "KEYLIME_OMP_BIN",
+    "KEYLIME_PASSWORD",
   ])
     delete env[key];
   const result = spawnSync(
     NODE,
-    [path.join(process.cwd(), "bin", "omp-web-systemd.ts"), command],
+    [path.join(process.cwd(), "bin", "keylime-systemd.ts"), command],
     { env, encoding: "utf8" },
   );
   const calls = existsSync(log)
@@ -544,7 +544,7 @@ test(
     const { result, calls, cleanup } = runWithFakeSystemctl("restart");
     try {
       assert.equal(result.status, 0, result.stderr);
-      assert.deepEqual(calls, ["--user restart ompweb.service"]);
+      assert.deepEqual(calls, ["--user restart keylime.service"]);
     } finally {
       cleanup();
     }
@@ -560,7 +560,7 @@ test(
       try {
         assert.equal(result.status, 0, result.stderr);
         assert.deepEqual(calls, [
-          `--user ${command} ompweb.service ompweb-host.service`,
+          `--user ${command} keylime.service keylime-host.service`,
         ]);
       } finally {
         cleanup();
@@ -579,7 +579,7 @@ test(
       });
       try {
         assert.equal(result.status, 0, result.stderr);
-        assert.deepEqual(calls, [`--user ${command} ompweb.service`]);
+        assert.deepEqual(calls, [`--user ${command} keylime.service`]);
       } finally {
         cleanup();
       }
@@ -599,17 +599,17 @@ test(
     });
     try {
       assert.equal(first.result.status, 0, first.result.stderr);
-      assert.ok(first.calls.includes("--user restart ompweb.service"));
-      assert.ok(first.calls.includes("--user restart ompweb-host.service"));
+      assert.ok(first.calls.includes("--user restart keylime.service"));
+      assert.ok(first.calls.includes("--user restart keylime-host.service"));
       // Same install again: identical unit text, so only the web unit restarts.
       const second = runWithFakeSystemctl("install", {
         active: true,
         dir: first.dir,
       });
       assert.equal(second.result.status, 0, second.result.stderr);
-      assert.ok(second.calls.includes("--user restart ompweb.service"));
+      assert.ok(second.calls.includes("--user restart keylime.service"));
       assert.ok(
-        !second.calls.includes("--user restart ompweb-host.service"),
+        !second.calls.includes("--user restart keylime-host.service"),
         second.calls.join("\n"),
       );
     } finally {

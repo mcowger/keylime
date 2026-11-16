@@ -429,7 +429,7 @@ export const sessionCommands: CommandTable = {
   },
   /**
    * Move the leaf to just before a user message so the host can resend an edited version; the old
-   * branch stays in the tree. Formerly ompweb's `omp-web-edit` extension command.
+   * branch stays in the tree. Formerly keylime's `keylime-edit` extension command.
    */
   /** @apiCommand edit_message */
   async edit_message(ctx, args) {
@@ -452,7 +452,7 @@ export const sessionCommands: CommandTable = {
       throw new Error("The session changed while editing history");
     // Navigation selects the target's parent; this non-message entry persists that leaf without adding context.
     if (!result.cancelled)
-      session.sessionManager.appendCustomEntry("omp-web-history-navigation", {
+      session.sessionManager.appendCustomEntry("keylime-history-navigation", {
         entryId,
       });
     return {

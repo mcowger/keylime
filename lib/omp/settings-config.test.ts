@@ -14,7 +14,7 @@ import type { NativeSettings } from "./settings-config";
 import { readNativeSettings, writeNativeSettings } from "./settings-config";
 
 function withAgentDir(run: (dir: string) => void) {
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-settings-config-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-settings-config-"));
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = dir;
   try {

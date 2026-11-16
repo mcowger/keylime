@@ -11,7 +11,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 const scratch = mkdtempSync(join(tmpdir(), "auth-broker-"));
-const oldBin = process.env.OMP_WEB_OMP_BIN;
+const oldBin = process.env.KEYLIME_OMP_BIN;
 
 // Fake `omp`: `auth-broker token` prints tok-N (N from a counter file); `auth-broker serve` logs its pid to a
 // starts file, listens on port 0 and prints the listening line. Files live in $FAKE_BROKER_DIR, set per test; a
@@ -48,7 +48,7 @@ if (command === "token") {
 `;
 const fakeOmp = join(scratch, "fake-omp");
 writeFileSync(fakeOmp, `#!${process.execPath}\n${source}`, { mode: 0o755 });
-process.env.OMP_WEB_OMP_BIN = fakeOmp;
+process.env.KEYLIME_OMP_BIN = fakeOmp;
 
 const {
   AUTH_BROKER_TIMINGS,
@@ -60,8 +60,8 @@ const {
 const defaultTimings = { ...AUTH_BROKER_TIMINGS };
 
 test.after(() => {
-  if (oldBin === undefined) delete process.env.OMP_WEB_OMP_BIN;
-  else process.env.OMP_WEB_OMP_BIN = oldBin;
+  if (oldBin === undefined) delete process.env.KEYLIME_OMP_BIN;
+  else process.env.KEYLIME_OMP_BIN = oldBin;
   rmSync(scratch, { recursive: true, force: true });
 });
 

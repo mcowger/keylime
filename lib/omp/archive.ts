@@ -823,7 +823,7 @@ export async function restoreArchivedSession(
   await validateRestorePath(activeRoot, destination);
   await validateRestorePath(activeRoot, destinationArtifacts);
   const tempDir = await mkdtemp(
-    path.join(path.dirname(destination), ".omp-web-restore-"),
+    path.join(path.dirname(destination), ".keylime-restore-"),
   );
   const tempFile = path.join(tempDir, path.basename(destination));
   // Same filesystem as the archive, independent of the sessions filesystem. Reading this private hard link pins exactly

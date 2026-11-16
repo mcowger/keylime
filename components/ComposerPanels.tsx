@@ -42,7 +42,7 @@ import { TodoList } from "./TodoList";
 import { SubagentStatusIcon } from "./SubagentStatusIcon";
 import { BtwPanel, type BtwPanelProps } from "./BtwPanel";
 
-const SUBAGENTS_COLLAPSED_STORAGE_KEY = "omp-web:composer-subagents-collapsed";
+const SUBAGENTS_COLLAPSED_STORAGE_KEY = "keylime:composer-subagents-collapsed";
 
 function loadCollapsed(key: string, defaultExpanded: boolean): boolean {
   if (typeof window === "undefined") return !defaultExpanded;

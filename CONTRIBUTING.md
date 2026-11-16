@@ -16,7 +16,7 @@ bun run dev   # seeded development server; prints its URL
 
 Seeded UI browsing does not need a runner. For live sessions and model/auth
 features, build it with `bun runner/scripts/build-binary.ts`: key lime finds
-`runner/release/ompweb-omp-<os>-<arch>` by itself (`OMP_WEB_OMP_BIN` overrides it).
+`runner/release/keylime-omp-<os>-<arch>` by itself (`KEYLIME_OMP_BIN` overrides it).
 A stock `omp` does not speak key lime's channel.
 
 Worktrees created with the repository's Paseo setup copy ignored `runner/vendor/` packages from the source checkout before setup. If those packages are missing or do not match the worktree's pin, run `bun runner/scripts/use-omp-build.ts` and then install the runner dependencies. The runner binary is not built during worktree setup; `bun run smoke` builds it before running the smoke checks.
@@ -36,7 +36,7 @@ host daemon, and stops both on Ctrl-C or if either exits. Files stay in the
 temporary directory after shutdown for inspection; remove it manually when done.
 
 The checkout stays in place so source edits reload normally. Existing projects,
-sessions, and stored logins aren't copied. Inherited `OMP_*`, `OMPWEB_*`, `PI_*`,
+sessions, and stored logins aren't copied. Inherited `OMP_*`, `KEYLIME_*`, `PI_*`,
 and XDG settings are cleared, and subprocesses don't load `.env` files. Other
 environment variables, including provider API keys, remain available. The runner
 uses this checkout's normal discovery; build it as described above for live sessions.
@@ -181,7 +181,7 @@ The jsdom dependency stays on 29.x for now; moving to a newer major is a separat
   icons come from `lucide-react`.
 - **UI copy**: add user-facing strings in English to `lib/i18n/locales/en.json`.
 - **Architecture**: the key lime server and daemon never import `@oh-my-pi/*` or `@earendil-works/*`
-  packages (Bun-only). Live agent features go through the `ompweb-omp` child process
+  packages (Bun-only). Live agent features go through the `keylime-omp` child process
   (`runner/`) over key lime's channel; see `DESIGN.md` and `AGENTS.md` for the full contract.
 
 ## Pull requests

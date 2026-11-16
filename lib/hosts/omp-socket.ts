@@ -18,8 +18,8 @@ export const CHANNEL_PROTO = 1;
 /** Must match `hostSocketPath()` in runner/src/channel.ts (omp-socket.test.ts checks). */
 export function hostSocketPath(): string {
   return (
-    process.env.OMPWEB_HOST_SOCKET ||
-    join(process.env.XDG_RUNTIME_DIR || tmpdir(), "ompweb", "host.sock")
+    process.env.KEYLIME_HOST_SOCKET ||
+    join(process.env.XDG_RUNTIME_DIR || tmpdir(), "keylime", "host.sock")
   );
 }
 
@@ -56,7 +56,7 @@ async function removeStale(path: string): Promise<void> {
   const probe = createConnection(path);
   probe.once("connect", () => {
     probe.destroy();
-    probed.reject(new Error(`Another ompweb host is listening on ${path}`));
+    probed.reject(new Error(`Another keylime host is listening on ${path}`));
   });
   probe.once("error", (error) =>
     errno(error) === "ECONNREFUSED" ? probed.resolve() : probed.reject(error),

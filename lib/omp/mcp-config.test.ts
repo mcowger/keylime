@@ -24,7 +24,7 @@ import {
 } from "./mcp-config";
 
 function withWorkspace(run: (dir: string) => void) {
-  const dir = mkdtempSync(join(tmpdir(), "omp-web-mcp-config-"));
+  const dir = mkdtempSync(join(tmpdir(), "keylime-mcp-config-"));
   try {
     run(dir);
   } finally {

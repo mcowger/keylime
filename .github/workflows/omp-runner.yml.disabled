@@ -55,25 +55,25 @@ jobs:
               target: linux-x64,
               os: linux,
               cpu: x64,
-              binary: ompweb-omp-linux-x64,
+              binary: keylime-omp-linux-x64,
             }
           - {
               target: linux-arm64,
               os: linux,
               cpu: arm64,
-              binary: ompweb-omp-linux-arm64,
+              binary: keylime-omp-linux-arm64,
             }
           - {
               target: darwin-x64,
               os: darwin,
               cpu: x64,
-              binary: ompweb-omp-darwin-x64,
+              binary: keylime-omp-darwin-x64,
             }
           - {
               target: darwin-arm64,
               os: darwin,
               cpu: arm64,
-              binary: ompweb-omp-darwin-arm64,
+              binary: keylime-omp-darwin-arm64,
             }
     defaults:
       run:

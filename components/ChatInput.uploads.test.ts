@@ -227,10 +227,10 @@ async function uploadOwner(t: TestContext) {
   const scratch = mkdtempSync(join(tmpdir(), "omp-composer-owner-"));
   const previous = {
     agentDir: process.env.PI_CODING_AGENT_DIR,
-    ompBin: process.env.OMP_WEB_OMP_BIN,
+    ompBin: process.env.KEYLIME_OMP_BIN,
   };
   process.env.PI_CODING_AGENT_DIR = join(scratch, "agent");
-  process.env.OMP_WEB_OMP_BIN = join(scratch, "no-omp");
+  process.env.KEYLIME_OMP_BIN = join(scratch, "no-omp");
   const linkRoute = await import("../app/api/hosts/link/route.ts");
   const uploadsRoute = await import("../app/api/uploads/route.ts");
   const uploadRoute = await import("../app/api/uploads/[id]/route.ts");
@@ -272,7 +272,7 @@ async function uploadOwner(t: TestContext) {
     closeOutboxStore();
     for (const [key, value] of [
       ["PI_CODING_AGENT_DIR", previous.agentDir],
-      ["OMP_WEB_OMP_BIN", previous.ompBin],
+      ["KEYLIME_OMP_BIN", previous.ompBin],
     ] as const) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
@@ -305,7 +305,7 @@ async function uploadOwner(t: TestContext) {
   return {
     hostId: host.id,
     staged: (id: string) =>
-      readFileSync(join(scratch, "agent", "omp-web", "uploads", `${id}.part`)),
+      readFileSync(join(scratch, "agent", "keylime", "uploads", `${id}.part`)),
   };
 }
 
@@ -489,13 +489,11 @@ test("an image over the inline budget goes As file with a notice, and Send waits
     return JSON.parse(request.body as string) as UploadOpen;
   });
   assert.deepEqual([opened.name, opened.size], ["big.png", image.size]);
-  await waitFor(() =>
-    assert.equal(
-      (screen.getByRole("button", { name: UPLOADING }) as HTMLButtonElement)
-        .disabled,
-      true,
-    ),
-  );
+  await waitFor(() => {
+    const button = screen.getByRole("button", { name: SEND }) as HTMLButtonElement;
+    assert.equal(button.disabled, true);
+    assert.match(button.textContent!, UPLOADING);
+  });
 
   await act(async () => {
     release();
@@ -661,9 +659,11 @@ test("Retry on a failed chip resumes the same upload, then the chip finishes", a
     retry.click();
   });
   assert.equal((await opened("data.zip")).id, id, "resumed under the same id");
-  await waitFor(() =>
-    assert.ok(screen.getByRole("button", { name: UPLOADING })),
-  );
+  await waitFor(() => {
+    const button = screen.getByRole("button", { name: SEND }) as HTMLButtonElement;
+    assert.equal(button.disabled, true);
+    assert.match(button.textContent!, UPLOADING);
+  });
   await release();
   await waitFor(() =>
     assert.equal(

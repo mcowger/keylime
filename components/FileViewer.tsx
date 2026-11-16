@@ -1773,7 +1773,7 @@ function TextFileViewer({
                       )
                     : null;
                   if (!linkedFile || !onOpenFile) {
-                    // Never let a preview link replace omp-web itself: in-page anchors stay,
+                    // Never let a preview link replace keylime itself: in-page anchors stay,
                     // web links open a new tab, and a path the panel cannot open (such as a
                     // relative link in a Markdown file outside the workspace) is plain text.
                     if (href?.startsWith("#"))

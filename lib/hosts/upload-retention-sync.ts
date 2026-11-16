@@ -16,7 +16,7 @@ function send(hostId: string, days: number | null, delay = 1_000): void {
     )
       return;
     console.warn(
-      `[omp-web] could not set the upload retention on host ${hostId}: ${error instanceof Error ? error.message : String(error)}`,
+      `[keylime] could not set the upload retention on host ${hostId}: ${error instanceof Error ? error.message : String(error)}`,
     );
     const timer = setTimeout(() => {
       const host = getHost(hostId);

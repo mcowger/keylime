@@ -37,7 +37,7 @@ async function until(predicate: () => boolean, what: string) {
 }
 
 test("a runner that says hello on the host socket is announced as a channel with its session id", async () => {
-  const path = join(scratch, "runtime", "ompweb", "host.sock");
+  const path = join(scratch, "runtime", "keylime", "host.sock");
   const announced: string[] = [];
   const link = {
     id: "l1",
@@ -84,7 +84,7 @@ test("a runner that says hello on the host socket is announced as a channel with
   );
   assert.equal(statSync(path).mode & 0o777, 0o600);
   assert.equal(
-    statSync(join(scratch, "runtime", "ompweb")).mode & 0o777,
+    statSync(join(scratch, "runtime", "keylime")).mode & 0o777,
     0o700,
   );
 
@@ -154,16 +154,16 @@ test("an existing directory others can read is narrowed to 0700 before the socke
 test("the host and the runner agree on the socket path and the channel protocol for the same env", () => {
   assert.equal(CHANNEL_PROTO, runner.CHANNEL_PROTO);
   const saved = {
-    OMPWEB_HOST_SOCKET: process.env.OMPWEB_HOST_SOCKET,
+    KEYLIME_HOST_SOCKET: process.env.KEYLIME_HOST_SOCKET,
     XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
   };
   try {
     for (const env of [
       {},
       { XDG_RUNTIME_DIR: "/run/user/1" },
-      { OMPWEB_HOST_SOCKET: "/x/h.sock", XDG_RUNTIME_DIR: "/run/user/1" },
+      { KEYLIME_HOST_SOCKET: "/x/h.sock", XDG_RUNTIME_DIR: "/run/user/1" },
     ]) {
-      delete process.env.OMPWEB_HOST_SOCKET;
+      delete process.env.KEYLIME_HOST_SOCKET;
       delete process.env.XDG_RUNTIME_DIR;
       Object.assign(process.env, env);
       assert.equal(

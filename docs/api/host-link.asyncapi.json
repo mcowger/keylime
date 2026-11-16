@@ -2801,6 +2801,9 @@
           "home": {
             "type": "string"
           },
+          "keylimeVersion": {
+            "type": "string"
+          },
           "link": {
             "properties": {
               "id": {
@@ -2822,9 +2825,6 @@
                 "type": "null"
               }
             ]
-          },
-          "ompwebVersion": {
-            "type": "string"
           },
           "platform": {
             "type": "string"

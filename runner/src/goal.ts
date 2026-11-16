@@ -471,7 +471,7 @@ export class GoalController {
 }
 
 function reportControllerError(error: unknown): void {
-  logger.warn("ompweb: goal controller failed", {
+  logger.warn("keylime: goal controller failed", {
     error: error instanceof Error ? error.message : String(error),
   });
 }

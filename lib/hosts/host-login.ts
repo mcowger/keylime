@@ -1,4 +1,4 @@
-// The daemon's saved links, shared by `ompweb host` and local-bootstrap.
+// The daemon's saved links, shared by `keylime host` and local-bootstrap.
 // Pure Node: no daemon/spawn code, `next/*` or `@/` imports.
 import { randomUUID } from "node:crypto";
 import {
@@ -15,7 +15,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { getAgentDir } from "../omp/paths";
 import { isRecord } from "../type-guards";
 
-const loginFile = () => join(getAgentDir(), "omp-web", "host.json");
+const loginFile = () => join(getAgentDir(), "keylime", "host.json");
 const trimUrl = (url: string) => url.replace(/\/+$/, "");
 
 export type HostLink = { url: string; token: string };

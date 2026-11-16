@@ -39,7 +39,7 @@ type WrapperOptions = {
   supportsClientMessageIds?: boolean;
 };
 
-const agentDir = mkdtempSync(join(tmpdir(), "omp-web-outbox-"));
+const agentDir = mkdtempSync(join(tmpdir(), "keylime-outbox-"));
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 process.env.PI_CODING_AGENT_DIR = agentDir;
 
@@ -974,9 +974,9 @@ test("scope is stable across cookie owners; missing, changed credentials and a c
   );
   assert.equal(missing.status, 409);
   assert.equal((await missing.json()).code, "outbox_scope_changed");
-  const previousCredential = process.env.OMP_WEB_TRUSTED_HEADER_SHA256;
+  const previousCredential = process.env.KEYLIME_TRUSTED_HEADER_SHA256;
   try {
-    process.env.OMP_WEB_TRUSTED_HEADER_SHA256 = "rotated";
+    process.env.KEYLIME_TRUSTED_HEADER_SHA256 = "rotated";
     assert.notEqual(await scopeOf("cookie1"), first);
     assert.equal(
       (
@@ -991,8 +991,8 @@ test("scope is stable across cookie owners; missing, changed credentials and a c
     );
   } finally {
     if (previousCredential === undefined)
-      delete process.env.OMP_WEB_TRUSTED_HEADER_SHA256;
-    else process.env.OMP_WEB_TRUSTED_HEADER_SHA256 = previousCredential;
+      delete process.env.KEYLIME_TRUSTED_HEADER_SHA256;
+    else process.env.KEYLIME_TRUSTED_HEADER_SHA256 = previousCredential;
   }
   const { pinWebAuthSecretForTests, resolveWebAuthSecret } =
     await import("./web-auth-secret.ts");
@@ -1590,7 +1590,7 @@ test(
       (message) =>
         typeof message === "string" &&
         message.startsWith(
-          "[omp-web] outbox delivery failed: JSON Parse error",
+          "[keylime] outbox delivery failed: JSON Parse error",
         ),
     );
     hostStatus = "online";

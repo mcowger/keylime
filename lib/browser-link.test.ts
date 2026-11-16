@@ -86,7 +86,7 @@ async function nextRequest(host: LinkDriver) {
 
 // Hello reads the browserTransport setting and `hosts` the registry; keep both off the real agent dir.
 const isolatedAgentDir = fs.mkdtempSync(
-  path.join(os.tmpdir(), "omp-web-browser-link-"),
+  path.join(os.tmpdir(), "keylime-browser-link-"),
 );
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 process.env.PI_CODING_AGENT_DIR = isolatedAgentDir;
@@ -731,8 +731,8 @@ test("the upgrade binds the socket to its web session: the cookie's hash, else t
       { upgrade: up },
     );
   assert.equal(get({}, () => false)!.status, 426);
-  assert.equal(get({ cookie: "omp_web_session=abc; other=1" }), undefined);
-  assert.equal(get({ "x-omp-web-auth": "nope" }), undefined);
+  assert.equal(get({ cookie: "keylime_session=abc; other=1" }), undefined);
+  assert.equal(get({ "x-keylime-auth": "nope" }), undefined);
   const hash = createHash("sha256").update("abc").digest("base64url");
   assert.deepEqual(seen, [
     { kind: "browser", owner: `session:${hash}`, link: null },
@@ -1370,19 +1370,19 @@ test("a second socket for the same link replaces the first with 4409, and the ol
 });
 
 test("a trusted-header request without a session cookie is owned by `trusted`; a wrong header is `open`", (t) => {
-  const saved = process.env.OMP_WEB_TRUSTED_HEADER_SHA256;
-  process.env.OMP_WEB_TRUSTED_HEADER_SHA256 = createHash("sha256")
+  const saved = process.env.KEYLIME_TRUSTED_HEADER_SHA256;
+  process.env.KEYLIME_TRUSTED_HEADER_SHA256 = createHash("sha256")
     .update("proxy-secret")
     .digest("hex");
   t.after(() => {
-    if (saved === undefined) delete process.env.OMP_WEB_TRUSTED_HEADER_SHA256;
-    else process.env.OMP_WEB_TRUSTED_HEADER_SHA256 = saved;
+    if (saved === undefined) delete process.env.KEYLIME_TRUSTED_HEADER_SHA256;
+    else process.env.KEYLIME_TRUSTED_HEADER_SHA256 = saved;
   });
   const seen: string[] = [];
   for (const secret of ["proxy-secret", "wrong"]) {
     upgradeRoute.GET(
       new Request("http://omp.test/api/events/link", {
-        headers: { "x-omp-web-auth": secret },
+        headers: { "x-keylime-auth": secret },
       }),
       { upgrade: (data) => (seen.push(data.owner), true) },
     );

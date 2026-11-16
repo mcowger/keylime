@@ -27,8 +27,8 @@ const WINDOWS: WindowDef[] = [
   { short: "30D", pick: (r) => r.monthly },
 ];
 
-const COLLAPSED_STORAGE_KEY = "omp-web:provider-usage-collapsed";
-const DISPLAY_WINDOW_STORAGE_KEY = "omp-web:provider-usage-window";
+const COLLAPSED_STORAGE_KEY = "keylime:provider-usage-collapsed";
+const DISPLAY_WINDOW_STORAGE_KEY = "keylime:provider-usage-window";
 
 function worstWindow(
   report: ProviderUsageReport,

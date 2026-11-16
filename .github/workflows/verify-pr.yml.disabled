@@ -62,21 +62,21 @@ jobs:
         run: bun run smoke
 
       # The release binary for this runner (the -baseline x64 build releases ship), from the client built above, with its
-      # own `ompweb host` daemon (scripts/build-binary.ts).
+      # own `keylime host` daemon (scripts/build-binary.ts).
       - name: Binary smoke test
         shell: bash
         run: |
           bun scripts/build-binary.ts --target bun-linux-x64-baseline
-          bin=release/ompweb-linux-x64/ompweb
+          bin=release/keylime-linux-x64/keylime
           bun run smoke --binary "$bin"
 
       - name: Packed install smoke test
         shell: bash
         run: |
           bun pm pack --ignore-scripts
-          mkdir -p "$RUNNER_TEMP/ompweb-package"
-          (cd "$RUNNER_TEMP/ompweb-package" && bun add "$GITHUB_WORKSPACE"/kahme247-ompweb-*.tgz)
-          bun run smoke --omp "$(ls runner/release/ompweb-omp-*)" --package "$RUNNER_TEMP/ompweb-package/node_modules/@kahme247/ompweb"
+          mkdir -p "$RUNNER_TEMP/keylime-package"
+          (cd "$RUNNER_TEMP/keylime-package" && bun add "$GITHUB_WORKSPACE"/mcowger-keylime-*.tgz)
+          bun run smoke --omp "$(ls runner/release/keylime-omp-*)" --package "$RUNNER_TEMP/keylime-package/node_modules/@mcowger/keylime"
 
   pr-rules:
     name: PR Rules & Quality Gates

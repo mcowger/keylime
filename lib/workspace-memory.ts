@@ -1,4 +1,4 @@
-const STORAGE_KEY = "omp-web:last-open-by-project";
+const STORAGE_KEY = "keylime:last-open-by-project";
 
 interface StorageLike {
   getItem(key: string): string | null;

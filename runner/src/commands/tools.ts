@@ -125,10 +125,10 @@ export async function closeToolsForHost(session: AgentSession): Promise<void> {
   if (!state) return;
   states.delete(session);
   state.hostTools.close(
-    "ompweb host disconnected before host tool execution completed",
+    "keylime host disconnected before host tool execution completed",
   );
   state.hostUris.close(
-    "ompweb host disconnected before host URI request completed",
+    "keylime host disconnected before host URI request completed",
   );
   state.dictation.dispose();
   await state.live.stop();

@@ -12,12 +12,12 @@ import { hostForToken, LOCAL_HOST_ID, rotateLocalHostToken } from "./registry";
 export function localLinkUrl(
   env: NodeJS.ProcessEnv = process.env,
 ): { url: string } | { skip: string } {
-  const port = env.OMP_WEB_PORT;
+  const port = env.KEYLIME_PORT;
   if (!port)
     return {
-      skip: "OMP_WEB_PORT is not set (the dev server does not link the daemon)",
+      skip: "KEYLIME_PORT is not set (the dev server does not link the daemon)",
     };
-  const bind = env.OMP_WEB_HOSTNAME || "127.0.0.1";
+  const bind = env.KEYLIME_HOSTNAME || "127.0.0.1";
   // A wildcard bind also answers on 127.0.0.1; "localhost" is dialed by name, so it matches whichever family the server bound.
   const host = ["0.0.0.0", "::", "[::]"].includes(bind)
     ? "127.0.0.1"
@@ -26,7 +26,7 @@ export function localLinkUrl(
       : bind;
   if (!isLoopbackHost(host))
     return {
-      skip: `OMP_WEB_HOSTNAME=${bind} is not loopback, so the local daemon cannot link to it over http`,
+      skip: `KEYLIME_HOSTNAME=${bind} is not loopback, so the local daemon cannot link to it over http`,
     };
   return { url: `http://${host}:${port}` };
 }

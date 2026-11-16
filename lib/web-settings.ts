@@ -19,7 +19,7 @@ import {
 } from "./upload-limits";
 import { isRecord } from "./type-guards";
 
-/** omp-web's own server-side settings (omp's config.yml stays omp's). */
+/** keylime's own server-side settings (omp's config.yml stays omp's). */
 export type WebServerSettings = ContractWebServerSettings;
 
 const DEFAULTS: WebServerSettings = {
@@ -48,18 +48,18 @@ function readAgentEnvRecord(value: unknown): Record<string, string> {
 }
 
 function settingsPath(): string {
-  return resolve(getAgentDir(), "omp-web-settings.json");
+  return resolve(getAgentDir(), "keylime-settings.json");
 }
 
 declare global {
   // Survives `bun --hot` re-evaluation, which creates fresh module instances.
-  var __ompWebSettingsCache:
+  var __keylimeSettingsCache:
     { path: string; settings: WebServerSettings } | undefined;
 }
 
 export function loadWebServerSettings(): WebServerSettings {
   const path = settingsPath();
-  const cached = globalThis.__ompWebSettingsCache;
+  const cached = globalThis.__keylimeSettingsCache;
   if (cached?.path === path) return cached.settings;
   let settings = DEFAULTS;
   try {
@@ -83,7 +83,7 @@ export function loadWebServerSettings(): WebServerSettings {
   } catch {
     // Unreadable settings fall back to the defaults.
   }
-  globalThis.__ompWebSettingsCache = { path, settings };
+  globalThis.__keylimeSettingsCache = { path, settings };
   return settings;
 }
 
@@ -108,6 +108,6 @@ export function saveWebServerSettings(
       // ignore cleanup failures
     }
   }
-  globalThis.__ompWebSettingsCache = { path, settings };
+  globalThis.__keylimeSettingsCache = { path, settings };
   return settings;
 }

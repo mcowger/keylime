@@ -23,7 +23,7 @@ function runAfterRegister(
   then: string,
   { agentDir = "agent" }: { agentDir?: string } = {},
 ) {
-  const home = mkdtempSync(join(tmpdir(), "omp-web-crash-policy-"));
+  const home = mkdtempSync(join(tmpdir(), "keylime-crash-policy-"));
   try {
     const script = `
       const { register } = await import(${JSON.stringify(join(root, "instrumentation.node.ts"))});
@@ -36,7 +36,7 @@ function runAfterRegister(
         ...process.env,
         HOME: home,
         PI_CODING_AGENT_DIR: join(home, agentDir),
-        OMP_WEB_OMP_BIN: join(home, "missing-omp"),
+        KEYLIME_OMP_BIN: join(home, "missing-omp"),
       },
       encoding: "utf8",
       timeout: 60_000,
@@ -44,9 +44,9 @@ function runAfterRegister(
     return {
       status: result.status,
       stderr: result.stderr,
-      journal: readOrEmpty(join(home, agentDir, "omp-web", "diagnostics.log")),
+      journal: readOrEmpty(join(home, agentDir, "keylime", "diagnostics.log")),
       homeJournal: readOrEmpty(
-        join(home, ".omp", "omp-web", "diagnostics.log"),
+        join(home, ".omp", "keylime", "diagnostics.log"),
       ),
     };
   } finally {
@@ -92,7 +92,7 @@ test("a client disconnect surfacing as uncaught `aborted` is journaled without e
   assert.doesNotMatch(journal, /\[crash\]/);
 });
 
-test("the journal follows an isolated agent dir and keeps ~/.omp/omp-web by default", () => {
+test("the journal follows an isolated agent dir and keeps ~/.omp/keylime by default", () => {
   const isolated = throwAfterRegister(`new Error("boom")`);
   assert.match(isolated.journal, /\[crash\] uncaughtException Error: boom/);
   assert.equal(

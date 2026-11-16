@@ -22,7 +22,7 @@ Not goals:
 
 `omp auth-broker serve` serves the credential store of the machine it runs on over HTTP and performs every OAuth refresh itself. An OMP process started with `OMP_AUTH_BROKER_URL` and `OMP_AUTH_BROKER_TOKEN` replaces its local credential store with the broker's snapshot, in which each refresh token is replaced by a sentinel; when an access token expires the process asks the broker to refresh it.
 
-ompweb adds no credential handling of its own. It still never reads `agent.db` and never imports OMP packages: it runs the installed CLI and forwards HTTP.
+keylime adds no credential handling of its own. It still never reads `agent.db` and never imports OMP packages: it runs the installed CLI and forwards HTTP.
 
 Checked against OMP's source, and run on 2026-11-11 with omp 18.18.6 in throwaway home directories: `serve --bind=127.0.0.1:0` picks a free port and prints it; a second OMP with the two variables pointing at a path-prefixed forwarder that swaps the bearer loaded the snapshot, opened the snapshot stream and read usage through it. A stored API key appears in the snapshot in full.
 
@@ -36,7 +36,7 @@ Checked against OMP's source, and run on 2026-11-11 with omp 18.18.6 in throwawa
 
 - `lib/omp/auth-broker.ts`, modelled on `lib/omp/auth-gateway.ts`: started on the first forwarded request with `omp auth-broker serve --bind=127.0.0.1:0`, ready once it prints its listening address, stopped after 5 minutes with no forwarded request in flight (an open snapshot stream counts as in flight) and when the server shuts down. Its bearer token comes from `omp auth-broker token` and stays in the server process; if the broker refuses that token (it was regenerated), the child is stopped and the next request starts a new one.
 - Sessions on this machine and the Settings screens keep using the store directly. The broker reloads the store before every snapshot and every refresh pass, so a login or logout in Settings reaches the hosts: every OMP process started afterwards uses it, and a running process picks it up the next time it is used, because OMP stops listening for updates after 20 seconds without activity and resumes on its next use. A running process keeps the access tokens and API keys it has already loaded until it ends.
-- The broker and this machine's own OMP processes refresh the same OAuth rows. That is the situation several local OMP processes are already in, handled by OMP's own store; it is checked in the live test, not by ompweb's tests.
+- The broker and this machine's own OMP processes refresh the same OAuth rows. That is the situation several local OMP processes are already in, handled by OMP's own store; it is checked in the live test, not by keylime's tests.
 
 ### C4. One forwarding route on the web server
 

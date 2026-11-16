@@ -54,7 +54,7 @@ jobs:
         run: sh scripts/build-release-binaries.sh --no-runner
       - run: bun run smoke
       # --omp: the draft release cannot serve the runner to the binary yet.
-      - run: bun run smoke --binary release/ompweb-linux-x64/ompweb --omp runner/release/ompweb-omp-linux-x64
+      - run: bun run smoke --binary release/keylime-linux-x64/keylime --omp runner/release/keylime-omp-linux-x64
 
       - name: Create draft GitHub Release
         env:
@@ -73,9 +73,9 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          runners=(ompweb-omp-linux-x64 ompweb-omp-linux-arm64 ompweb-omp-darwin-x64 ompweb-omp-darwin-arm64)
-          (cd runner/release && sha256sum "${runners[@]}" > ompweb-omp.sha256)
-          gh release upload "$TAG" release/ompweb-*.tar.gz "${runners[@]/#/runner/release/}" runner/release/ompweb-omp.sha256 --repo "$GITHUB_REPOSITORY" --clobber
+          runners=(keylime-omp-linux-x64 keylime-omp-linux-arm64 keylime-omp-darwin-x64 keylime-omp-darwin-arm64)
+          (cd runner/release && sha256sum "${runners[@]}" > keylime-omp.sha256)
+          gh release upload "$TAG" release/keylime-*.tar.gz "${runners[@]/#/runner/release/}" runner/release/keylime-omp.sha256 --repo "$GITHUB_REPOSITORY" --clobber
 
       # Before npm: an npm install fetches its runner from this release, which a draft does not serve.
       - name: Publish GitHub Release
@@ -117,10 +117,10 @@ jobs:
 
           jq -n \
             --arg body "$(jq -r '.body' <<<"$RELEASE_JSON")" \
-            --arg title "OMPWEB $TAG" \
+            --arg title "KEYLIME $TAG" \
             --arg url "$(jq -r '.url' <<<"$RELEASE_JSON")" \
             '{
-              username: "OMPWEB Releases",
+              username: "KEYLIME Releases",
               embeds: [{
                 title: $title,
                 url: $url,

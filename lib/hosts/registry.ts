@@ -1,4 +1,4 @@
-// Linked-host registry for the main omp-web server. Pure Node: no Next or `@/` imports.
+// Linked-host registry for the main keylime server. Pure Node: no Next or `@/` imports.
 import {
   createHash,
   randomBytes,
@@ -73,7 +73,7 @@ export class HostRegistryUnreadableError extends Error {
 
 /** Every usable record; a missing file is an empty registry, an unreadable one throws. */
 export function readHosts(): HostRecord[] {
-  const file = join(getAgentDir(), "omp-web", "hosts.json");
+  const file = join(getAgentDir(), "keylime", "hosts.json");
   let text: string;
   try {
     text = readFileSync(file, "utf8");
@@ -107,7 +107,7 @@ export function loadHosts(): HostRecord[] {
 }
 
 function saveHosts(hosts: HostRecord[]): void {
-  const file = join(getAgentDir(), "omp-web", "hosts.json");
+  const file = join(getAgentDir(), "keylime", "hosts.json");
   mkdirSync(dirname(file), { recursive: true });
   // Atomic write, owner-only: the file holds token hashes for every linked host.
   const temp = `${file}.${process.pid}.${Date.now()}.tmp`;

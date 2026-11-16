@@ -211,7 +211,7 @@ function isolatedStore(t: TestContext) {
   return dir;
 }
 
-test("another omp-web instance sharing the agent dir sees the same keys and devices", (t) => {
+test("another keylime instance sharing the agent dir sees the same keys and devices", (t) => {
   isolatedStore(t);
   store.saveDevice("phone-device", prefs(), subscription);
   const publicKey = hub.getVapidPublicKey();
@@ -275,7 +275,7 @@ test("a notification for the session a visible tab shows is recorded as already 
 test("an unusable store never breaks publishing", (t) => {
   const dir = isolatedStore(t);
   // The data directory's place is taken by a file: the store cannot open.
-  writeFileSync(join(dir, "omp-web"), "");
+  writeFileSync(join(dir, "keylime"), "");
   t.mock.method(console, "warn", () => {});
   assert.doesNotThrow(() => hub.publishNotification(event));
 });
@@ -293,7 +293,7 @@ test("test notifications are never recorded", (t) => {
 test("a failed history write does not stop delivery", (t) => {
   const dir = isolatedStore(t);
   store.saveDevice("desk-0001", prefs({ whenActive: "system" }));
-  const raw = new Database(join(dir, "omp-web", "notifications.db"));
+  const raw = new Database(join(dir, "keylime", "notifications.db"));
   raw.exec("DROP TABLE history");
   raw.close();
   const received: string[] = [];

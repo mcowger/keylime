@@ -258,7 +258,7 @@ class SessionSettleWatcher {
       this.#active = false;
       this.#output({ type: "session_settled" });
     } catch (error) {
-      logger.warn("ompweb: session settle check failed", {
+      logger.warn("keylime: session settle check failed", {
         error: String(error),
       });
     } finally {

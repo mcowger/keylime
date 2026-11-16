@@ -222,7 +222,7 @@ test("new_session defaults cwd, attributes the prompt, and splits provider/model
   assert.equal(input.hostId, "local");
   assert.equal(
     input.prompt,
-    "[From session source-1 via omp-web agent tools]: Do the release checklist",
+    "[From session source-1 via keylime agent tools]: Do the release checklist",
   );
   assert.equal(input.provider, "anthropic");
   assert.equal(input.modelId, "claude-sonnet-4-5");
@@ -273,7 +273,7 @@ test("send_to_session attributes, defaults to prompt, and passes wait through (#
   const input = ops.calls.deliver[0];
   assert.equal(
     input.message,
-    "[From session source-1 via omp-web agent tools]: The build passed",
+    "[From session source-1 via keylime agent tools]: The build passed",
   );
   assert.equal(input.delivery, "prompt");
   assert.equal(input.wait, true);
@@ -344,7 +344,7 @@ test("send_to_session wait timeout defaults and caps (#275)", async () => {
 test("attribution format keeps the full source ID for sidebar lookup (#275)", () => {
   assert.equal(
     formatAttributedMessage("019c625b-b900-7000-8000-000000000277", "hello"),
-    "[From session 019c625b-b900-7000-8000-000000000277 via omp-web agent tools]: hello",
+    "[From session 019c625b-b900-7000-8000-000000000277 via keylime agent tools]: hello",
   );
 });
 

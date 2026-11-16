@@ -44,7 +44,7 @@ async function readPluginList(): Promise<PluginEntry[]> {
   } catch {
     // Never omp's own output: it may name paths or settings.
     console.log(
-      `[omp-web] cluster-config the plugin list cannot be read${plugins ? "; serving the last one read" : ""}`,
+      `[keylime] cluster-config the plugin list cannot be read${plugins ? "; serving the last one read" : ""}`,
     );
     if (!plugins)
       throw new ClusterConfigError(
@@ -181,7 +181,7 @@ export function admitClusterMember(request: Request): HostRecord | Response {
 export function configErrorResponse(hostId: string, error: unknown): Response {
   if (error instanceof ClusterConfigError) {
     console.log(
-      `[omp-web] cluster-config ${hostId} ${error.code} ${error.message}`,
+      `[keylime] cluster-config ${hostId} ${error.code} ${error.message}`,
     );
     return Response.json(
       { error: error.message, code: error.code },
@@ -189,7 +189,7 @@ export function configErrorResponse(hostId: string, error: unknown): Response {
     );
   }
   console.log(
-    `[omp-web] cluster-config ${hostId} failed (${error instanceof Error ? error.name : "unknown"})`,
+    `[keylime] cluster-config ${hostId} failed (${error instanceof Error ? error.name : "unknown"})`,
   );
   return configFail("The configuration cannot be served", 500);
 }

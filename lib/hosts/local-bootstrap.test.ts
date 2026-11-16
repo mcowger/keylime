@@ -12,7 +12,7 @@ import { join } from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath } from "node:url";
 
-const agentDir = mkdtempSync(join(tmpdir(), "omp-web-local-bootstrap-test-"));
+const agentDir = mkdtempSync(join(tmpdir(), "keylime-local-bootstrap-test-"));
 const previous = process.env.PI_CODING_AGENT_DIR;
 process.env.PI_CODING_AGENT_DIR = agentDir;
 after(() => {
@@ -26,7 +26,7 @@ const { ensureLocalHostLink, localLinkUrl } =
 const { createHost, hostForToken, loadHosts, revokeHost, updateHost } =
   await import("./registry.ts");
 
-const hostJson = join(agentDir, "omp-web", "host.json");
+const hostJson = join(agentDir, "keylime", "host.json");
 const readLogin = (): {
   url: string;
   token: string;
@@ -184,48 +184,48 @@ test("the registry refuses to revoke local or change its agent-start right, and 
 
 test("the link url follows the launcher's port and bind address", () => {
   const url = (env: NodeJS.ProcessEnv) =>
-    localLinkUrl({ OMP_WEB_PORT: "30177", ...env });
+    localLinkUrl({ KEYLIME_PORT: "30177", ...env });
   assert.deepEqual(url({}), { url: "http://127.0.0.1:30177" });
-  assert.deepEqual(url({ OMP_WEB_HOSTNAME: "127.0.0.1" }), {
+  assert.deepEqual(url({ KEYLIME_HOSTNAME: "127.0.0.1" }), {
     url: "http://127.0.0.1:30177",
   });
-  assert.deepEqual(url({ OMP_WEB_HOSTNAME: "0.0.0.0" }), {
+  assert.deepEqual(url({ KEYLIME_HOSTNAME: "0.0.0.0" }), {
     url: "http://127.0.0.1:30177",
   });
-  assert.deepEqual(url({ OMP_WEB_HOSTNAME: "::" }), {
+  assert.deepEqual(url({ KEYLIME_HOSTNAME: "::" }), {
     url: "http://127.0.0.1:30177",
   });
-  assert.deepEqual(url({ OMP_WEB_HOSTNAME: "::1" }), {
+  assert.deepEqual(url({ KEYLIME_HOSTNAME: "::1" }), {
     url: "http://[::1]:30177",
   });
-  assert.deepEqual(url({ OMP_WEB_HOSTNAME: "[::1]" }), {
+  assert.deepEqual(url({ KEYLIME_HOSTNAME: "[::1]" }), {
     url: "http://[::1]:30177",
   });
   // localhost resolves to whichever family the server bound: dial it by name.
-  assert.deepEqual(url({ OMP_WEB_HOSTNAME: "localhost" }), {
+  assert.deepEqual(url({ KEYLIME_HOSTNAME: "localhost" }), {
     url: "http://localhost:30177",
   });
-  assert.deepEqual(url({ OMP_WEB_HOSTNAME: "127.0.0.2" }), {
+  assert.deepEqual(url({ KEYLIME_HOSTNAME: "127.0.0.2" }), {
     url: "http://127.0.0.2:30177",
   });
 });
 
 test("a bind address the daemon could only reach over plain http is skipped with the reason", () => {
   const nonLoopback = localLinkUrl({
-    OMP_WEB_PORT: "30177",
-    OMP_WEB_HOSTNAME: "100.64.0.1",
+    KEYLIME_PORT: "30177",
+    KEYLIME_HOSTNAME: "100.64.0.1",
   });
   assert.ok("skip" in nonLoopback);
   assert.match(nonLoopback.skip, /100\.64\.0\.1.*not loopback/);
   const hostname = localLinkUrl({
-    OMP_WEB_PORT: "30177",
-    OMP_WEB_HOSTNAME: "example.com",
+    KEYLIME_PORT: "30177",
+    KEYLIME_HOSTNAME: "example.com",
   });
   assert.ok("skip" in hostname);
   assert.match(hostname.skip, /not loopback/);
   const noPort = localLinkUrl({});
   assert.ok("skip" in noPort);
-  assert.match(noPort.skip, /OMP_WEB_PORT/);
+  assert.match(noPort.skip, /KEYLIME_PORT/);
 });
 
 test("a host.json that points at another server is left alone", async () => {

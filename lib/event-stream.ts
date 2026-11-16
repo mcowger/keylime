@@ -129,9 +129,9 @@ interface WorkerPort {
 
 // Content-hashed at build time (server/client-env.ts) so a new worker version gets
 // a new SharedWorker instead of old tabs' copy speaking a stale protocol.
-const WORKER_URL = `/event-stream-worker.js?v=${process.env.OMP_WEB_PUBLIC_EVENT_STREAM_WORKER_VERSION ?? "dev"}`;
+const WORKER_URL = `/event-stream-worker.js?v=${process.env.KEYLIME_PUBLIC_EVENT_STREAM_WORKER_VERSION ?? "dev"}`;
 
-const CLIENT_ID_KEY = "omp-web:transport-client-id";
+const CLIENT_ID_KEY = "keylime:transport-client-id";
 let clientId: string | null = null;
 
 /** This browser's id in transport samples: stored once, or one per page load where storage throws. */
@@ -428,7 +428,7 @@ class Transport {
     const locks =
       typeof navigator === "undefined" ? undefined : navigator.locks;
     if (!locks) return;
-    const name = `omp-web-event-stream:${browserUUID()}`;
+    const name = `keylime-event-stream:${browserUUID()}`;
     void locks.request(name, () => {
       this.port.postMessage({ op: "lock", name });
       return new Promise<never>(() => {});
@@ -555,7 +555,7 @@ function postOutboxOnExit(): void {
 function connectTransport(): Transport {
   if (typeof SharedWorker === "function") {
     const worker = new SharedWorker(WORKER_URL, {
-      name: "omp-web-event-stream",
+      name: "keylime-event-stream",
     });
     const shared = new Transport(worker.port);
     worker.onerror = () => shared.fail();

@@ -52,7 +52,7 @@ const askSession = (ui?: Partial<ExtensionUIContext>) =>
     ui,
   });
 
-describe("ompweb channel", () => {
+describe("keylime channel", () => {
   it("says hello and answers get_state", async () => {
     host = await startHost();
     test = await createTestSession();
@@ -269,7 +269,7 @@ describe("ompweb channel", () => {
 
   it("does not dial a socket in a directory others can write", async () => {
     host = await startHost();
-    fs.chmodSync(path.dirname(process.env.OMPWEB_HOST_SOCKET ?? ""), 0o777);
+    fs.chmodSync(path.dirname(process.env.KEYLIME_HOST_SOCKET ?? ""), 0o777);
     test = await createTestSession();
     // Proving an absence: a dial would have said hello well within this.
     await Bun.sleep(300);
@@ -389,7 +389,7 @@ describe("edit_message", () => {
     const leaf = test?.session.sessionManager.getEntry(leafId ?? "");
     expect(leaf).toMatchObject({
       type: "custom",
-      customType: "omp-web-history-navigation",
+      customType: "keylime-history-navigation",
       data: { entryId: user.id },
     });
     expect(leaf?.parentId).toBe(user.parentId);
