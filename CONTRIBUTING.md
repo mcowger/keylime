@@ -55,6 +55,10 @@ file, three saved conversations, and sample web settings in the temporary home.
 It never seeds the normal installation. Git is required; fixture changes are
 disposable and retained in the printed directory.
 
+Open `/dev/advisor-composer` on the printed development URL to inspect the
+Advisor review bar alone and above a queued follow-up. This fixture uses the
+real composer without starting a runner.
+
 `paseo.json` installs the pinned runtime, dependencies and runner for new Paseo
 worktrees. Its `dev` service starts the same seeded environment on Paseo's
 allocated port; `test` and `typecheck` are available as named scripts.

@@ -309,9 +309,27 @@ test("places the pending advisor notice at the composer's left edge", () => {
   assert.ok(notice);
   assert.match(notice.textContent ?? "", /(Advisor reviewing…|chatInput\.advisorReviewing)/);
   assert.ok(shell);
-  assert.ok(notice.parentElement?.contains(shell));
-  assert.equal(notice.parentElement?.style.position, "relative");
-  assert.equal((notice as HTMLElement).style.left, "0px");
+  assert.equal(notice.parentElement, shell.parentElement);
+  assert.equal(notice.nextElementSibling, shell);
+  assert.match(shell.getAttribute("style") ?? "", /border-radius:0 0 var\(--radius-card\) var\(--radius-card\)/);
+});
+
+test("joins the advisor notice, queue, and composer without rounded seams", () => {
+  const html = renderToStaticMarkup(React.createElement(ChatInput, {
+    async onSend() { return { status: "accepted" as const }; },
+    onAbort() {},
+    isStreaming: true,
+    advisorReviewPending: true,
+    queuedMessages: { followUp: ["Next message"], steering: [] },
+  }));
+  const document = new JSDOM(html).window.document;
+  const notice = document.querySelector('[role="status"]');
+  const queue = notice?.nextElementSibling;
+  const shell = document.querySelector('.chat-input-shell');
+  assert.ok(queue);
+  assert.equal(queue.nextElementSibling, shell);
+  assert.match(queue.getAttribute('style') ?? '', /border-radius:0/);
+  assert.match(shell?.getAttribute('style') ?? '', /border-radius:0 0 var\(--radius-card\) var\(--radius-card\)/);
 });
 
 

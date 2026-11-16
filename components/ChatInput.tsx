@@ -3409,7 +3409,6 @@ export const ChatInput = memo(
             position: "relative",
           }}
         >
-          <AdvisorReviewStatus pending={advisorReviewPending} />
           <ModelErrorBanner error={modelError} />
           <ComposerModeStatus goal={activeGoal} plan={activePlan} />
           {/* Retry banner */}
@@ -4263,6 +4262,7 @@ export const ChatInput = memo(
                   </div>
                 );
               })()}
+            <AdvisorReviewStatus pending={advisorReviewPending} />
             {/* Queued prompts panel / bar — attached to composer's top edge.
             When 1 item: compact single row. When multiple items: compact row with expand toggle, or full list when expanded. */}
             {queuedCount > 0 && (
@@ -4271,7 +4271,7 @@ export const ChatInput = memo(
                 style={{
                   border: "1px solid var(--border)",
                   borderBottom: "none",
-                  borderRadius: "var(--radius-card) var(--radius-card) 0 0",
+                  borderRadius: advisorReviewPending ? 0 : "var(--radius-card) var(--radius-card) 0 0",
                   background: "var(--bg-panel)",
                   overflow: "hidden",
                 }}
@@ -4574,7 +4574,7 @@ export const ChatInput = memo(
                     ? "1px solid var(--accent)"
                     : "1px solid var(--shell-border, color-mix(in srgb, var(--border) 70%, transparent))",
                   borderRadius:
-                    queuedCount > 0
+                    queuedCount > 0 || advisorReviewPending
                       ? "0 0 var(--radius-card) var(--radius-card)"
                       : "var(--radius-card)",
                   padding: "12px 12px 10px",

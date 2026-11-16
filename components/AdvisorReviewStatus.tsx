@@ -9,17 +9,16 @@ export function AdvisorReviewStatus({ pending }: { pending: boolean }) {
     <div
       role="status"
       style={{
-        position: "absolute",
-        bottom: "100%",
-        left: 0,
-        marginBottom: 4,
-        padding: "5px 10px",
-        borderRadius: 12,
         border: "1px solid var(--border)",
-        background: "var(--bg)",
+        borderBottom: "none",
+        borderRadius: "var(--radius-card) var(--radius-card) 0 0",
+        background: "var(--bg-panel)",
         color: "var(--text-muted)",
-        fontSize: 12,
-        whiteSpace: "nowrap",
+        padding: "5px 8px 5px 12px",
+        fontSize: 10,
+        fontWeight: 600,
+        letterSpacing: "0.06em",
+        textTransform: "uppercase",
       }}
     >
       {t("chatInput.advisorReviewing")}
