@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
 import { WorkspaceChatPicker } from "./WorkspaceChatPicker";
 import type { SessionInfo } from "@/lib/types";
 import { openEventStream } from "@/lib/event-stream";
-import { MessageSquarePlus, Terminal as TerminalIcon, X } from "lucide-react";
+import { Globe, MessageSquarePlus, Terminal as TerminalIcon, X } from "lucide-react";
 import {
   closeTerminal,
   createTerminal,
@@ -14,6 +14,7 @@ import {
 } from "@/lib/terminal-client";
 import type { WorkspaceTerminal as TerminalInfo } from "@/lib/terminal-types";
 import { WorkspaceTerminal } from "./WorkspaceTerminal";
+import { WorkspaceBrowser, useWorkspaceBrowsers } from "./WorkspaceBrowser";
 
 type Entry = { hostId: string; terminal: TerminalInfo };
 
@@ -75,6 +76,20 @@ export function WorkspaceTerminalTabs({
   const [attention, setAttention] = useState<Set<string>>(() => new Set());
   const closingChats = useRef(new Set<string>());
   const [closingChatIds, setClosingChatIds] = useState(new Set<string>());
+  const browsers = useWorkspaceBrowsers(
+    chatTabs.flatMap((tab) => tab.sessionId ? [tab.sessionId] : []),
+    enabled && Boolean(cwd),
+  );
+  const browserTabs = chatTabs.filter((tab) => tab.sessionId && browsers[tab.sessionId]?.length);
+  const browserId = (sessionId: string) => `browser:${sessionId}`;
+  useEffect(() => {
+    if (!activeId?.startsWith("browser:")) return;
+    const sessionId = activeId.slice("browser:".length);
+    if (!chatTabs.some((tab) => tab.sessionId === sessionId) ||
+        (browsers[sessionId] && browsers[sessionId].length === 0)) {
+      onSelect(null);
+    }
+  }, [activeId, browsers, chatTabs, onSelect]);
   const closeChat = async (id: string) => {
     if (closingChats.current.has(id)) return;
     closingChats.current.add(id);
@@ -223,6 +238,18 @@ export function WorkspaceTerminalTabs({
               </button>
             </div>
           ))}
+          {browserTabs.map((tab) => (
+            <div key={browserId(tab.sessionId!)} className="workspace-terminal-tab">
+              <button
+                role="tab"
+                aria-selected={activeId === browserId(tab.sessionId!)}
+                onClick={() => onSelect(browserId(tab.sessionId!))}
+                title={`Browser · ${tab.title}`}
+              >
+                <Globe size={14} /> Browser · {tab.title}
+              </button>
+            </div>
+          ))}
           <button
             onClick={() => void create()}
             disabled={busy}
@@ -243,13 +270,14 @@ export function WorkspaceTerminalTabs({
             ref={triggerRef}
             className="workspace-switcher-trigger"
             onClick={() => setPickerOpen(true)}
-            aria-label={`Workspace tabs, ${chatTabs.length + visible.length} open`}
+            aria-label={`Workspace tabs, ${chatTabs.length + visible.length + browserTabs.length} open`}
           >
             {(activeId === null
               ? chatTabs.find((tab) => tab.id === activeChatId)?.title
-              : visible.find((entry) => entry.terminal.id === activeId)
-                  ?.terminal.title) || "Workspace"}{" "}
-            · {chatTabs.length + visible.length} tabs
+              : browserTabs.find((tab) => browserId(tab.sessionId!) === activeId)
+                ? "Browser"
+                : visible.find((entry) => entry.terminal.id === activeId)?.terminal.title) || "Workspace"}{" "}
+            · {chatTabs.length + visible.length + browserTabs.length} tabs
           </button>,
           headerTarget,
         )}
@@ -370,6 +398,19 @@ export function WorkspaceTerminalTabs({
                     </button>
                   </div>
                 ))}
+                {browserTabs.map((tab) => (
+                  <div className="workspace-switcher-row" key={browserId(tab.sessionId!)}>
+                    <button
+                      onClick={() => {
+                        setPickerOpen(false);
+                        onSelect(browserId(tab.sessionId!));
+                      }}
+                      aria-current={activeId === browserId(tab.sessionId!) ? "page" : undefined}
+                    >
+                      Browser · {tab.title}{activeId === browserId(tab.sessionId!) ? " · Active" : ""}
+                    </button>
+                  </div>
+                ))}
                 <div className="workspace-switcher-actions">
                   <button
                     onClick={() => {
@@ -445,6 +486,14 @@ export function WorkspaceTerminalTabs({
             entry.terminal.cwd === cwd &&
             activeId === entry.terminal.id
           }
+        />
+      ))}
+      {browserTabs.map((tab) => (
+        <WorkspaceBrowser
+          key={tab.sessionId!}
+          sessionId={tab.sessionId!}
+          pages={browsers[tab.sessionId!]}
+          active={!contentInert && enabled && activeId === browserId(tab.sessionId!)}
         />
       ))}
       </div>

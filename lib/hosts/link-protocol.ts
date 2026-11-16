@@ -163,6 +163,8 @@ export const SESSION_OP_PARAMS: {
 export const HOST_OP_NAMES = [
   ...(Object.keys(SESSION_OP_PARAMS) as (keyof SessionOps)[]),
   ...(Object.keys(WORKSPACE_OP_PARAMS) as (keyof typeof WORKSPACE_OP_PARAMS)[]),
+  "browserList",
+  "browserCapture",
   "open",
   "close",
   "editLease",

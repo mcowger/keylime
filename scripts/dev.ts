@@ -75,10 +75,10 @@ function stop(code: number) {
   startupChild?.kill();
   finish();
 }
-function spawn(args: string[]) {
+function spawn(args: string[], extraEnv: Record<string, string> = {}) {
   const child = Bun.spawn([process.execPath, "--no-env-file", ...args], {
     cwd: root,
-    env,
+    env: { ...env, ...extraEnv },
     stdin: "ignore",
     stdout: "inherit",
     stderr: "inherit",
@@ -146,6 +146,9 @@ try {
       "--port",
       String(port),
     ]);
+    spawn(["runner/scripts/dev-browser-fixture.ts"], {
+      KEYLIME_UI_FIXTURE_ROOT: directory,
+    });
     spawn(["--hot", "--no-clear-screen", "bin/keylime-host.ts"]);
   }
   await finished;

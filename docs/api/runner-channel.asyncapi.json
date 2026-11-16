@@ -49,6 +49,12 @@
         "RunnerReply_branch": {
           "$ref": "#/components/messages/RunnerReply_branch"
         },
+        "RunnerReply_browser_capture": {
+          "$ref": "#/components/messages/RunnerReply_browser_capture"
+        },
+        "RunnerReply_browser_list": {
+          "$ref": "#/components/messages/RunnerReply_browser_list"
+        },
         "RunnerReply_btw": {
           "$ref": "#/components/messages/RunnerReply_btw"
         },
@@ -294,6 +300,12 @@
         },
         "RunnerRequest_branch": {
           "$ref": "#/components/messages/RunnerRequest_branch"
+        },
+        "RunnerRequest_browser_capture": {
+          "$ref": "#/components/messages/RunnerRequest_browser_capture"
+        },
+        "RunnerRequest_browser_list": {
+          "$ref": "#/components/messages/RunnerRequest_browser_list"
         },
         "RunnerRequest_btw": {
           "$ref": "#/components/messages/RunnerRequest_btw"
@@ -686,6 +698,30 @@
           "$ref": "#/components/schemas/RunnerReply_branch"
         },
         "title": "RunnerReply_branch"
+      },
+      "RunnerReply_browser_capture": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
+        "name": "RunnerReply_browser_capture",
+        "payload": {
+          "$ref": "#/components/schemas/RunnerReply_browser_capture"
+        },
+        "title": "RunnerReply_browser_capture"
+      },
+      "RunnerReply_browser_list": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
+        "name": "RunnerReply_browser_list",
+        "payload": {
+          "$ref": "#/components/schemas/RunnerReply_browser_list"
+        },
+        "title": "RunnerReply_browser_list"
       },
       "RunnerReply_btw": {
         "contentType": "application/json",
@@ -1670,6 +1706,30 @@
           "$ref": "#/components/schemas/RunnerRequest_branch"
         },
         "title": "RunnerRequest_branch"
+      },
+      "RunnerRequest_browser_capture": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Capture a view-only image of a session-owned Chromium tab.\nInputs: Provide the exact target id returned by browser_list.\nInvariants: Ownership and target identity are checked at capture time; the image is bounded JPEG data encoded as base64.\nEffects: Reads the visible page without input or browser lifecycle changes.\nRecovery: List tabs again if the target is unavailable.",
+        "name": "RunnerRequest_browser_capture",
+        "payload": {
+          "$ref": "#/components/schemas/RunnerRequest_browser_capture"
+        },
+        "title": "RunnerRequest_browser_capture"
+      },
+      "RunnerRequest_browser_list": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: List the session's live managed Chromium tabs.\nInputs: None.\nInvariants: Only tabs owned by this session are returned; ids identify exact CDP targets.\nEffects: None; this does not start or change a browser.\nRecovery: List again when a tab closes or is replaced.",
+        "name": "RunnerRequest_browser_list",
+        "payload": {
+          "$ref": "#/components/schemas/RunnerRequest_browser_list"
+        },
+        "title": "RunnerRequest_browser_list"
       },
       "RunnerRequest_btw": {
         "contentType": "application/json",
@@ -37654,6 +37714,150 @@
         "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
         "title": "RunnerReply_branch"
       },
+      "RunnerReply_browser_capture": {
+        "anyOf": [
+          {
+            "properties": {
+              "data": {
+                "description": "Bounded view-only capture of a session-owned Chromium tab.",
+                "properties": {
+                  "data": {
+                    "description": "Base64-encoded JPEG image, at most 1 MiB encoded.",
+                    "maxLength": 1048576,
+                    "type": "string"
+                  },
+                  "mimeType": {
+                    "const": "image/jpeg",
+                    "description": "The captured image media type.",
+                    "type": "string"
+                  }
+                },
+                "required": ["mimeType", "data"],
+                "type": "object"
+              },
+              "id": {
+                "type": "number"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "t": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["t", "id", "ok", "data"],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "id": {
+                "type": "number"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "t": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["t", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
+        "title": "RunnerReply_browser_capture"
+      },
+      "RunnerReply_browser_list": {
+        "anyOf": [
+          {
+            "properties": {
+              "data": {
+                "description": "Session-owned Chromium tabs available for view-only capture.",
+                "properties": {
+                  "tabs": {
+                    "description": "Session-owned live Chromium tabs, limited to 128.",
+                    "items": {
+                      "description": "A live managed Chromium tab owned by this session.",
+                      "properties": {
+                        "id": {
+                          "description": "Exact CDP target identifier used for capture.",
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "title": {
+                          "description": "Last reported page title, truncated when necessary.",
+                          "maxLength": 2048,
+                          "type": "string"
+                        },
+                        "url": {
+                          "description": "Last reported page URL, truncated when necessary.",
+                          "maxLength": 8192,
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "title", "url"],
+                      "type": "object"
+                    },
+                    "maxItems": 128,
+                    "type": "array"
+                  }
+                },
+                "required": ["tabs"],
+                "type": "object"
+              },
+              "id": {
+                "type": "number"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "t": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["t", "id", "ok", "data"],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "id": {
+                "type": "number"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "t": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["t", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
+        "title": "RunnerReply_browser_list"
+      },
       "RunnerReply_btw": {
         "anyOf": [
           {
@@ -56680,6 +56884,59 @@
         "title": "RunnerRequest_branch",
         "type": "object"
       },
+      "RunnerRequest_browser_capture": {
+        "description": "Usage: Capture a view-only image of a session-owned Chromium tab.\nInputs: Provide the exact target id returned by browser_list.\nInvariants: Ownership and target identity are checked at capture time; the image is bounded JPEG data encoded as base64.\nEffects: Reads the visible page without input or browser lifecycle changes.\nRecovery: List tabs again if the target is unavailable.",
+        "properties": {
+          "args": {
+            "properties": {
+              "id": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": ["id"],
+            "type": "object"
+          },
+          "id": {
+            "type": "number"
+          },
+          "op": {
+            "const": "browser_capture",
+            "type": "string"
+          },
+          "t": {
+            "const": "cmd",
+            "type": "string"
+          }
+        },
+        "required": ["t", "id", "op", "args"],
+        "title": "RunnerRequest_browser_capture",
+        "type": "object"
+      },
+      "RunnerRequest_browser_list": {
+        "description": "Usage: List the session's live managed Chromium tabs.\nInputs: None.\nInvariants: Only tabs owned by this session are returned; ids identify exact CDP targets.\nEffects: None; this does not start or change a browser.\nRecovery: List again when a tab closes or is replaced.",
+        "properties": {
+          "args": {
+            "properties": {},
+            "type": "object"
+          },
+          "id": {
+            "type": "number"
+          },
+          "op": {
+            "const": "browser_list",
+            "type": "string"
+          },
+          "t": {
+            "const": "cmd",
+            "type": "string"
+          }
+        },
+        "required": ["t", "id", "op", "args"],
+        "title": "RunnerRequest_browser_list",
+        "type": "object"
+      },
       "RunnerRequest_btw": {
         "description": "Usage: Ask a side question or continue an existing record.\nInputs: question is text; omit recordId to start a record.\nInvariants: Only one side question runs at a time; deltas and snapshots carry recordId.\nEffects: Streams an answer and checkpoints turns to the session history sidecar.\nRecovery: Inspect history after an uncertain response before submitting another question.",
         "properties": {
@@ -59660,6 +59917,52 @@
         ]
       },
       "summary": "branch"
+    },
+    "operation_browser_capture": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Capture a view-only image of a session-owned Chromium tab.\nInputs: Provide the exact target id returned by browser_list.\nInvariants: Ownership and target identity are checked at capture time; the image is bounded JPEG data encoded as base64.\nEffects: Reads the visible page without input or browser lifecycle changes.\nRecovery: List tabs again if the target is unavailable.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/RunnerRequest_browser_capture"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/RunnerReply_browser_capture"
+          }
+        ]
+      },
+      "summary": "browser_capture"
+    },
+    "operation_browser_list": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: List the session's live managed Chromium tabs.\nInputs: None.\nInvariants: Only tabs owned by this session are returned; ids identify exact CDP targets.\nEffects: None; this does not start or change a browser.\nRecovery: List again when a tab closes or is replaced.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/RunnerRequest_browser_list"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/RunnerReply_browser_list"
+          }
+        ]
+      },
+      "summary": "browser_list"
     },
     "operation_btw": {
       "action": "send",

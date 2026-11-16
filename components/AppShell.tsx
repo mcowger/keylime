@@ -3217,7 +3217,7 @@ export function AppShell({ appName }: { appName: string }) {
                 )
               }
             />
-            <div style={{ flex: 1, minHeight: 0, minWidth: 0, position: "relative", display: "flex", flexDirection: "column" }}>
+            <div style={{ flex: !settingsTab && activeTerminalId?.startsWith("browser:") ? "0 0 auto" : 1, minHeight: 0, minWidth: 0, position: "relative", display: "flex", flexDirection: "column" }}>
             <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
             {settingsTab ? (
               <SettingsConfig

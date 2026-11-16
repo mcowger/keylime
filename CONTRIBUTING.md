@@ -18,8 +18,9 @@ bun runner/scripts/use-omp-build.ts && (cd runner && bun install --frozen-lockfi
 bun run dev   # seeded development server; prints its URL
 ```
 
-Seeded UI browsing does not need a runner. For live sessions and model/auth
-features, build it with `bun runner/scripts/build-binary.ts`: key lime finds
+The dev browser fixture uses the installed runner dependencies but does not need
+a compiled runner. For other live sessions and model/auth features, build it with
+`bun runner/scripts/build-binary.ts`. Keylime finds
 `runner/release/keylime-omp-<os>-<arch>` by itself (`KEYLIME_OMP_BIN` overrides it).
 A stock `omp` does not speak key lime's channel.
 
@@ -33,11 +34,23 @@ bun run dev                 # seeded, random free loopback port
 
 Use the printed URL for browser checks. Avoid a fixed port when running multiple worktrees.
 
+Wait for `[dev] Browser fixture ready`, then open the printed URL. In the
+sidebar, open `atlas` and the `Plan the Atlas project` conversation. Select
+`Browser · Plan the Atlas project` in the workspace tabs (on mobile, open the
+workspace tab switcher first). The viewer shows a real headless Chromium tab
+scrolled to `Scrolled project dashboard`, below the initial page fold.
+
+The fixture uses an OMP session with a scripted local model, so it makes no model
+calls and does not need credentials. It is for viewing, not prompting. Chromium
+must be available; set `PUPPETEER_EXECUTABLE_PATH` to a Chrome/Chromium binary or
+allow OMP to download Chromium into the isolated home on first use.
+
 Each invocation creates a randomly named temporary directory with its own home,
 agent configuration, XDG directories, and host socket. The launcher prints its
 directory and URL, starts the web server with HMR and a separate hot-reloading
-host daemon, and stops both on Ctrl-C or if either exits. Files stay in the
-temporary directory after shutdown for inspection; remove it manually when done.
+host daemon, and stops them and the browser fixture on Ctrl-C or if a child exits.
+Files stay in the temporary directory after shutdown for inspection; remove it
+manually when done.
 
 The checkout stays in place so source edits reload normally. Existing projects,
 sessions, and stored logins aren't copied. Inherited `OMP_*`, `KEYLIME_*`, `PI_*`,

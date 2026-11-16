@@ -9,10 +9,25 @@ import {
   UploadAttachResultSchema,
 } from "./host-control-models";
 import { ConfigStateSchema } from "./host-schemas";
+import { BrowserListResultSchema, BrowserCaptureResultSchema } from "./runner-lifecycle";
 
 const empty = Type.Object({});
+export const BrowserListSchema = Type.Object(BrowserListResultSchema.properties, { description: "Browser tabs currently owned by the requested live session on the host." });
+export const BrowserFrameSchema = Type.Object(BrowserCaptureResultSchema.properties, { description: "A bounded JPEG frame captured from a browser tab owned by the requested live session." });
 /** Lifecycle and upload operations in addition to session and workspace operations. */
 export const hostControlOperations: readonly OperationContract[] = [
+  {
+    name: "browserList",
+    description: "Usage: Discover browser tabs belonging to an already-live session.\nInputs: Supply its exact session ID.\nInvariants: Never starts or attaches a runner or browser.\nEffects: Queries the session's runner.\nRecovery: Rediscover after reconnect or session changes.",
+    args: Type.Object({ sessionId: Type.String() }),
+    result: BrowserListSchema,
+  },
+  {
+    name: "browserCapture",
+    description: "Usage: Capture one session-owned browser tab.\nInputs: Supply the exact session ID and tab ID from discovery.\nInvariants: No caller-supplied CDP endpoint or browser input is accepted; capture is bounded.\nEffects: Captures a single JPEG without changing browser lifecycle.\nRecovery: Rediscover after tab or session changes.",
+    args: Type.Object({ sessionId: Type.String(), tabId: Type.String({ minLength: 1, maxLength: 1024 }) }),
+    result: BrowserFrameSchema,
+  },
   {
     name: "open",
     description:

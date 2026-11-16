@@ -1,4 +1,4 @@
-import { Type, type TSchema } from "@sinclair/typebox";
+import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import {
   BranchPreviewSchema,
   OmpModelSchema,
@@ -189,8 +189,54 @@ const nativeTreeNode = Type.Recursive((This) =>
   }),
 );
 
+export const BrowserListResultSchema = Type.Object(
+  {
+    tabs: Type.Array(
+      Type.Object(
+        {
+          id: Type.String({ minLength: 1, maxLength: 1024, description: "Exact CDP target identifier used for capture." }),
+          title: Type.String({ maxLength: 2048, description: "Last reported page title, truncated when necessary." }),
+          url: Type.String({ maxLength: 8192, description: "Last reported page URL, truncated when necessary." }),
+        },
+        { description: "A live managed Chromium tab owned by this session." },
+      ),
+      { maxItems: 128, description: "Session-owned live Chromium tabs, limited to 128." },
+    ),
+  },
+  { description: "Session-owned Chromium tabs available for view-only capture." },
+);
+export type BrowserListResult = Static<typeof BrowserListResultSchema>;
+export const BrowserCaptureResultSchema = Type.Object(
+  {
+    mimeType: Type.Literal("image/jpeg", { description: "The captured image media type." }),
+    data: Type.String({ maxLength: 1024 * 1024, description: "Base64-encoded JPEG image, at most 1 MiB encoded." }),
+  },
+  { description: "Bounded view-only capture of a session-owned Chromium tab." },
+);
+export type BrowserCaptureResult = Static<typeof BrowserCaptureResultSchema>;
+
 /** Logical runner commands before command/response framing. */
 export const lifecycleRunnerOperations: readonly OperationContract[] = [
+  command(
+    "browser_list",
+    `Usage: List the session's live managed Chromium tabs.
+Inputs: None.
+Invariants: Only tabs owned by this session are returned; ids identify exact CDP targets.
+Effects: None; this does not start or change a browser.
+Recovery: List again when a tab closes or is replaced.`,
+    empty,
+    BrowserListResultSchema,
+  ),
+  command(
+    "browser_capture",
+    `Usage: Capture a view-only image of a session-owned Chromium tab.
+Inputs: Provide the exact target id returned by browser_list.
+Invariants: Ownership and target identity are checked at capture time; the image is bounded JPEG data encoded as base64.
+Effects: Reads the visible page without input or browser lifecycle changes.
+Recovery: List tabs again if the target is unavailable.`,
+    Type.Object({ id: Type.String({ minLength: 1, maxLength: 1024 }) }),
+    BrowserCaptureResultSchema,
+  ),
   command(
     "prompt",
     `Usage: Submit user input to the session.

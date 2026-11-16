@@ -14,6 +14,8 @@ Each workspace can have multiple chat tabs alongside its terminals. Desktop show
 
 Open saved chats appear as workspace tabs in other clients connected to the same web server and are excluded from their saved-chat picker. Selecting one joins it locally. Closing a tab removes only that client's membership; it does not archive the conversation or clear its draft. A remotely opened tab may be dismissed locally. Open tabs are retained across reloads in the same browser tab; disconnecting removes its memberships once the event connection closes. Resumable WebSocket connections may retain them until their resume window expires. Membership is held by the web-server process, not the host daemon, so clients connected to different web servers do not share it. Terminal processes remain owned by the host daemon.
 
+When a live chat opens a Chromium/CDP browser, its workspace shows a Browser tab. Select it to view the agent's page; multiple pages appear in a selector. The view is read-only, and images are captured only while the tab and browser window are visible. Switching tabs or closing the chat does not close the agent's browser. WebKit, Tern and cmux pages are not shown.
+
 ## Held messages
 
 Submitted prompts, follow-ups and steers appear as dimmed messages while key lime holds them for delivery. Their status shows whether they are sending, waiting, waiting for the host, delivering, or not sent. Images and uploaded files remain attached to the held message.

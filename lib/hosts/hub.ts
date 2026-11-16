@@ -4,6 +4,9 @@ import type { TerminalEvent } from "../terminal-types";
 // `RemoteHost`. Everything a daemon sends is untrusted input.
 // No `next/*` or `@/` imports.
 import { randomUUID } from "node:crypto";
+import { Value } from "@sinclair/typebox/value";
+import { BrowserListSchema, BrowserFrameSchema } from "../api-contracts/host-control-operations";
+import type { BrowserListResult, BrowserCaptureResult } from "../api-contracts/runner-lifecycle";
 import { readBodyWithinLimit } from "../bounded-form-data";
 import type { RpcTransport } from "../omp/rpc-transport";
 import type { ProjectRegistryEntry } from "../project-registry";
@@ -2613,6 +2616,20 @@ export async function orphanExit(
 
 /** An attach may copy 2 GiB (to another device): far longer than an op's usual deadline. */
 const UPLOAD_ATTACH_TIMEOUT_MS = 10 * 60_000;
+/** Read-only browser operations are sent to the daemon owning the session. */
+export async function hostBrowserList(hostId: string, sessionId: string): Promise<BrowserListResult> {
+  const value = await request(hostId, "browserList", { sessionId });
+  if (!Value.Check(BrowserListSchema, value))
+    throw new HostOpError(502, "invalid_browser_result", "Invalid browser result from host");
+  return value;
+}
+
+export async function hostBrowserCapture(hostId: string, sessionId: string, tabId: string): Promise<BrowserCaptureResult> {
+  const value = await request(hostId, "browserCapture", { sessionId, tabId });
+  if (!Value.Check(BrowserFrameSchema, value))
+    throw new HostOpError(502, "invalid_browser_result", "Invalid browser result from host");
+  return value;
+}
 
 /** An upload op on `hostId`'s daemon (an offline one fails 503). */
 export function hostUploadOp(

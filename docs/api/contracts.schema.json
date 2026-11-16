@@ -29807,6 +29807,81 @@
         }
       ]
     },
+    "host_browserCapture_args": {
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "tabId": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": ["sessionId", "tabId"],
+      "type": "object"
+    },
+    "host_browserCapture_result": {
+      "description": "A bounded JPEG frame captured from a browser tab owned by the requested live session.",
+      "properties": {
+        "data": {
+          "description": "Base64-encoded JPEG image, at most 1 MiB encoded.",
+          "maxLength": 1048576,
+          "type": "string"
+        },
+        "mimeType": {
+          "const": "image/jpeg",
+          "description": "The captured image media type.",
+          "type": "string"
+        }
+      },
+      "required": ["mimeType", "data"],
+      "type": "object"
+    },
+    "host_browserList_args": {
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": ["sessionId"],
+      "type": "object"
+    },
+    "host_browserList_result": {
+      "description": "Browser tabs currently owned by the requested live session on the host.",
+      "properties": {
+        "tabs": {
+          "description": "Session-owned live Chromium tabs, limited to 128.",
+          "items": {
+            "description": "A live managed Chromium tab owned by this session.",
+            "properties": {
+              "id": {
+                "description": "Exact CDP target identifier used for capture.",
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "title": {
+                "description": "Last reported page title, truncated when necessary.",
+                "maxLength": 2048,
+                "type": "string"
+              },
+              "url": {
+                "description": "Last reported page URL, truncated when necessary.",
+                "maxLength": 8192,
+                "type": "string"
+              }
+            },
+            "required": ["id", "title", "url"],
+            "type": "object"
+          },
+          "maxItems": 128,
+          "type": "array"
+        }
+      },
+      "required": ["tabs"],
+      "type": "object"
+    },
     "host_cancelClone_args": {
       "properties": {
         "id": {
@@ -105967,6 +106042,73 @@
         }
       },
       "required": ["cancelled"],
+      "type": "object"
+    },
+    "runner_browser_capture_args": {
+      "properties": {
+        "id": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": ["id"],
+      "type": "object"
+    },
+    "runner_browser_capture_result": {
+      "description": "Bounded view-only capture of a session-owned Chromium tab.",
+      "properties": {
+        "data": {
+          "description": "Base64-encoded JPEG image, at most 1 MiB encoded.",
+          "maxLength": 1048576,
+          "type": "string"
+        },
+        "mimeType": {
+          "const": "image/jpeg",
+          "description": "The captured image media type.",
+          "type": "string"
+        }
+      },
+      "required": ["mimeType", "data"],
+      "type": "object"
+    },
+    "runner_browser_list_args": {
+      "properties": {},
+      "type": "object"
+    },
+    "runner_browser_list_result": {
+      "description": "Session-owned Chromium tabs available for view-only capture.",
+      "properties": {
+        "tabs": {
+          "description": "Session-owned live Chromium tabs, limited to 128.",
+          "items": {
+            "description": "A live managed Chromium tab owned by this session.",
+            "properties": {
+              "id": {
+                "description": "Exact CDP target identifier used for capture.",
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "title": {
+                "description": "Last reported page title, truncated when necessary.",
+                "maxLength": 2048,
+                "type": "string"
+              },
+              "url": {
+                "description": "Last reported page URL, truncated when necessary.",
+                "maxLength": 8192,
+                "type": "string"
+              }
+            },
+            "required": ["id", "title", "url"],
+            "type": "object"
+          },
+          "maxItems": 128,
+          "type": "array"
+        }
+      },
+      "required": ["tabs"],
       "type": "object"
     },
     "runner_btw_args": {

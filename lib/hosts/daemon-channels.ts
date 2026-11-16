@@ -158,6 +158,8 @@ export class ChannelTable {
   private spawningCount = 0;
   private commandId = 0;
   private stopped = false;
+  private readonly browserCaptures = new Set<Channel>();
+  private readonly browserLists = new Set<Channel>();
   private readonly workspaceFences = new Set<string>();
   constructor(private readonly deps: ChannelDeps) {}
   get size(): number {
@@ -195,6 +197,29 @@ export class ChannelTable {
     for (const channel of this.channels.values())
       if (channel.pending.sessionId === id) return channel.cwd;
     return undefined;
+  }
+  /** Query only an existing channel whose current identity exactly matches the requested session. */
+  async browserCommand(sessionId: string, tabId?: string): Promise<unknown> {
+    if (!isValidSessionId(sessionId)) throw invalid("Invalid session id");
+    const channel = [...this.channels.values()].find(
+      (candidate) => !candidate.exited && candidate.pending.sessionId === sessionId,
+    );
+    if (!channel) {
+      if (tabId === undefined) return { tabs: [] };
+      throw new HostOpError(404, "session_not_running", "Session is not running");
+    }
+    const inFlight = tabId === undefined ? this.browserLists : this.browserCaptures;
+    if (inFlight.has(channel))
+      throw new HostOpError(429, "browser_request_busy", "A browser request is already in progress");
+    inFlight.add(channel);
+    try {
+      const frame = await this.command(channel, tabId === undefined ? "browser_list" : "browser_capture", tabId === undefined ? {} : { id: tabId }, undefined, 7000);
+      if (channel.exited || channel.pending.sessionId !== sessionId)
+        throw new HostOpError(404, "session_not_running", "Session is no longer running");
+      return frame.data;
+    } finally {
+      inFlight.delete(channel);
+    }
   }
 
   private workspaceContains(root: string, cwd: string): boolean {
@@ -838,6 +863,7 @@ export class ChannelTable {
     op: string,
     args: Record<string, unknown>,
     onReply?: () => void,
+    timeoutMs = 5000,
   ): Promise<WireFrame> {
     if (channel.exited) return Promise.reject(new Error("omp exited"));
     const id = ++this.commandId,
@@ -847,7 +873,7 @@ export class ChannelTable {
       channel.internal.delete(id);
       channel.lifecycle?.forgetCommand(String(id));
       reject(new Error(`omp ${op} timed out`));
-    }, 5000);
+    }, timeoutMs);
     timer.unref?.();
     channel.internal.set(id, { resolve, reject, timer, onReply });
     channel.lifecycle?.noteStdin(command);

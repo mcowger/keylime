@@ -1570,3 +1570,30 @@ test("blocking workspace setup fences new starts but permits joining existing ch
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("browser requests use only the exact live session and never spawn one", async () => {
+  const h = harness();
+  assert.deepEqual(await h.table.browserCommand(SAVED), { tabs: [] });
+  await assert.rejects(h.table.browserCommand(SAVED, "tab-1"), { code: "session_not_running" });
+  assert.equal(h.children.length, 0);
+
+  const opened = await h.table.open(h.a, { sessionId: SAVED, launch });
+  h.table.release(h.a, opened.ch);
+  const child = h.children[0];
+  const listing = h.table.browserCommand(SAVED);
+  const listCommand = own(child).at(-1)!;
+  assert.equal(listCommand.op, "browser_list");
+  assert.deepEqual(listCommand.args, {});
+  child.emit({ t: "res", id: listCommand.id, ok: true, data: { tabs: [{ id: "tab-1", title: "Page", url: "https://example.org" }] } });
+  assert.deepEqual(await listing, { tabs: [{ id: "tab-1", title: "Page", url: "https://example.org" }] });
+
+  const capture = h.table.browserCommand(SAVED, "tab-1");
+  const captureCommand = own(child).at(-1)!;
+  assert.equal(captureCommand.op, "browser_capture");
+  assert.deepEqual(captureCommand.args, { id: "tab-1" });
+  await assert.rejects(h.table.browserCommand(SAVED, "tab-1"), { code: "browser_request_busy" });
+  child.emit({ t: "res", id: captureCommand.id, ok: true, data: { mimeType: "image/jpeg", data: "/9j/2Q==" } });
+  assert.deepEqual(await capture, { mimeType: "image/jpeg", data: "/9j/2Q==" });
+  assert.deepEqual(await h.table.browserCommand(MOVED), { tabs: [] });
+  await h.table.stop();
+});

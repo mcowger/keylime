@@ -103,6 +103,12 @@
         "HostReply_browseDirectories": {
           "$ref": "#/components/messages/HostReply_browseDirectories"
         },
+        "HostReply_browserCapture": {
+          "$ref": "#/components/messages/HostReply_browserCapture"
+        },
+        "HostReply_browserList": {
+          "$ref": "#/components/messages/HostReply_browserList"
+        },
         "HostReply_cancelClone": {
           "$ref": "#/components/messages/HostReply_cancelClone"
         },
@@ -309,6 +315,12 @@
         },
         "HostRequest_browseDirectories": {
           "$ref": "#/components/messages/HostRequest_browseDirectories"
+        },
+        "HostRequest_browserCapture": {
+          "$ref": "#/components/messages/HostRequest_browserCapture"
+        },
+        "HostRequest_browserList": {
+          "$ref": "#/components/messages/HostRequest_browserList"
         },
         "HostRequest_cancelClone": {
           "$ref": "#/components/messages/HostRequest_cancelClone"
@@ -800,6 +812,30 @@
           "$ref": "#/components/schemas/HostReply_browseDirectories"
         },
         "title": "HostReply_browseDirectories"
+      },
+      "HostReply_browserCapture": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Reply to browserCapture; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Capture one session-owned browser tab.\nInputs: Supply the exact session ID and tab ID from discovery.\nInvariants: No caller-supplied CDP endpoint or browser input is accepted; capture is bounded.\nEffects: Captures a single JPEG without changing browser lifecycle.\nRecovery: Rediscover after tab or session changes.",
+        "name": "HostReply_browserCapture",
+        "payload": {
+          "$ref": "#/components/schemas/HostReply_browserCapture"
+        },
+        "title": "HostReply_browserCapture"
+      },
+      "HostReply_browserList": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Reply to browserList; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Discover browser tabs belonging to an already-live session.\nInputs: Supply its exact session ID.\nInvariants: Never starts or attaches a runner or browser.\nEffects: Queries the session's runner.\nRecovery: Rediscover after reconnect or session changes.",
+        "name": "HostReply_browserList",
+        "payload": {
+          "$ref": "#/components/schemas/HostReply_browserList"
+        },
+        "title": "HostReply_browserList"
       },
       "HostReply_cancelClone": {
         "contentType": "application/json",
@@ -1628,6 +1664,30 @@
           "$ref": "#/components/schemas/HostRequest_browseDirectories"
         },
         "title": "HostRequest_browseDirectories"
+      },
+      "HostRequest_browserCapture": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Capture one session-owned browser tab.\nInputs: Supply the exact session ID and tab ID from discovery.\nInvariants: No caller-supplied CDP endpoint or browser input is accepted; capture is bounded.\nEffects: Captures a single JPEG without changing browser lifecycle.\nRecovery: Rediscover after tab or session changes.",
+        "name": "HostRequest_browserCapture",
+        "payload": {
+          "$ref": "#/components/schemas/HostRequest_browserCapture"
+        },
+        "title": "HostRequest_browserCapture"
+      },
+      "HostRequest_browserList": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Discover browser tabs belonging to an already-live session.\nInputs: Supply its exact session ID.\nInvariants: Never starts or attaches a runner or browser.\nEffects: Queries the session's runner.\nRecovery: Rediscover after reconnect or session changes.",
+        "name": "HostRequest_browserList",
+        "payload": {
+          "$ref": "#/components/schemas/HostRequest_browserList"
+        },
+        "title": "HostRequest_browserList"
       },
       "HostRequest_cancelClone": {
         "contentType": "application/json",
@@ -3674,6 +3734,59 @@
                   },
                   "required": ["t"],
                   "title": "RunnerRefused",
+                  "type": "object"
+                },
+                {
+                  "description": "Usage: List the session's live managed Chromium tabs.\nInputs: None.\nInvariants: Only tabs owned by this session are returned; ids identify exact CDP targets.\nEffects: None; this does not start or change a browser.\nRecovery: List again when a tab closes or is replaced.",
+                  "properties": {
+                    "args": {
+                      "properties": {},
+                      "type": "object"
+                    },
+                    "id": {
+                      "type": "number"
+                    },
+                    "op": {
+                      "const": "browser_list",
+                      "type": "string"
+                    },
+                    "t": {
+                      "const": "cmd",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["t", "id", "op", "args"],
+                  "title": "RunnerRequest_browser_list",
+                  "type": "object"
+                },
+                {
+                  "description": "Usage: Capture a view-only image of a session-owned Chromium tab.\nInputs: Provide the exact target id returned by browser_list.\nInvariants: Ownership and target identity are checked at capture time; the image is bounded JPEG data encoded as base64.\nEffects: Reads the visible page without input or browser lifecycle changes.\nRecovery: List tabs again if the target is unavailable.",
+                  "properties": {
+                    "args": {
+                      "properties": {
+                        "id": {
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id"],
+                      "type": "object"
+                    },
+                    "id": {
+                      "type": "number"
+                    },
+                    "op": {
+                      "const": "browser_capture",
+                      "type": "string"
+                    },
+                    "t": {
+                      "const": "cmd",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["t", "id", "op", "args"],
+                  "title": "RunnerRequest_browser_capture",
                   "type": "object"
                 },
                 {
@@ -42493,6 +42606,306 @@
         "description": "Reply to browseDirectories; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Browse host directories.\nInputs: path selects a host directory or null selects the initial location.\nInvariants: Results describe host filesystem directories, not registered projects.\nEffects: Reads directory entries.\nRecovery: Refresh after filesystem changes or choose an accessible path.",
         "title": "HostReply_browseDirectories"
       },
+      "HostReply_browserCapture": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "result": {
+                "description": "A bounded JPEG frame captured from a browser tab owned by the requested live session.",
+                "properties": {
+                  "data": {
+                    "description": "Base64-encoded JPEG image, at most 1 MiB encoded.",
+                    "maxLength": 1048576,
+                    "type": "string"
+                  },
+                  "mimeType": {
+                    "const": "image/jpeg",
+                    "description": "The captured image media type.",
+                    "type": "string"
+                  }
+                },
+                "required": ["mimeType", "data"],
+                "type": "object"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "result"],
+            "type": "object"
+          },
+          {
+            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
+            "properties": {
+              "blob": {
+                "properties": {
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["bytes"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "blob"],
+            "type": "object",
+            "x-decoded-result": {
+              "description": "A bounded JPEG frame captured from a browser tab owned by the requested live session.",
+              "properties": {
+                "data": {
+                  "description": "Base64-encoded JPEG image, at most 1 MiB encoded.",
+                  "maxLength": 1048576,
+                  "type": "string"
+                },
+                "mimeType": {
+                  "const": "image/jpeg",
+                  "description": "The captured image media type.",
+                  "type": "string"
+                }
+              },
+              "required": ["mimeType", "data"],
+              "type": "object"
+            }
+          },
+          {
+            "properties": {
+              "error": {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number"
+                  }
+                },
+                "required": ["status", "code", "message"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Reply to browserCapture; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Capture one session-owned browser tab.\nInputs: Supply the exact session ID and tab ID from discovery.\nInvariants: No caller-supplied CDP endpoint or browser input is accepted; capture is bounded.\nEffects: Captures a single JPEG without changing browser lifecycle.\nRecovery: Rediscover after tab or session changes.",
+        "title": "HostReply_browserCapture"
+      },
+      "HostReply_browserList": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "result": {
+                "description": "Browser tabs currently owned by the requested live session on the host.",
+                "properties": {
+                  "tabs": {
+                    "description": "Session-owned live Chromium tabs, limited to 128.",
+                    "items": {
+                      "description": "A live managed Chromium tab owned by this session.",
+                      "properties": {
+                        "id": {
+                          "description": "Exact CDP target identifier used for capture.",
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "title": {
+                          "description": "Last reported page title, truncated when necessary.",
+                          "maxLength": 2048,
+                          "type": "string"
+                        },
+                        "url": {
+                          "description": "Last reported page URL, truncated when necessary.",
+                          "maxLength": 8192,
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "title", "url"],
+                      "type": "object"
+                    },
+                    "maxItems": 128,
+                    "type": "array"
+                  }
+                },
+                "required": ["tabs"],
+                "type": "object"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "result"],
+            "type": "object"
+          },
+          {
+            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
+            "properties": {
+              "blob": {
+                "properties": {
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["bytes"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "blob"],
+            "type": "object",
+            "x-decoded-result": {
+              "description": "Browser tabs currently owned by the requested live session on the host.",
+              "properties": {
+                "tabs": {
+                  "description": "Session-owned live Chromium tabs, limited to 128.",
+                  "items": {
+                    "description": "A live managed Chromium tab owned by this session.",
+                    "properties": {
+                      "id": {
+                        "description": "Exact CDP target identifier used for capture.",
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "title": {
+                        "description": "Last reported page title, truncated when necessary.",
+                        "maxLength": 2048,
+                        "type": "string"
+                      },
+                      "url": {
+                        "description": "Last reported page URL, truncated when necessary.",
+                        "maxLength": 8192,
+                        "type": "string"
+                      }
+                    },
+                    "required": ["id", "title", "url"],
+                    "type": "object"
+                  },
+                  "maxItems": 128,
+                  "type": "array"
+                }
+              },
+              "required": ["tabs"],
+              "type": "object"
+            }
+          },
+          {
+            "properties": {
+              "error": {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number"
+                  }
+                },
+                "required": ["status", "code", "message"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Reply to browserList; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Discover browser tabs belonging to an already-live session.\nInputs: Supply its exact session ID.\nInvariants: Never starts or attaches a runner or browser.\nEffects: Queries the session's runner.\nRecovery: Rediscover after reconnect or session changes.",
+        "title": "HostReply_browserList"
+      },
       "HostReply_cancelClone": {
         "anyOf": [
           {
@@ -71172,6 +71585,77 @@
         "title": "HostRequest_browseDirectories",
         "type": "object"
       },
+      "HostRequest_browserCapture": {
+        "description": "Usage: Capture one session-owned browser tab.\nInputs: Supply the exact session ID and tab ID from discovery.\nInvariants: No caller-supplied CDP endpoint or browser input is accepted; capture is bounded.\nEffects: Captures a single JPEG without changing browser lifecycle.\nRecovery: Rediscover after tab or session changes.",
+        "properties": {
+          "args": {
+            "properties": {
+              "sessionId": {
+                "type": "string"
+              },
+              "tabId": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": ["sessionId", "tabId"],
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "const": "browserCapture",
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "const": "req",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "id", "op", "args"],
+        "title": "HostRequest_browserCapture",
+        "type": "object"
+      },
+      "HostRequest_browserList": {
+        "description": "Usage: Discover browser tabs belonging to an already-live session.\nInputs: Supply its exact session ID.\nInvariants: Never starts or attaches a runner or browser.\nEffects: Queries the session's runner.\nRecovery: Rediscover after reconnect or session changes.",
+        "properties": {
+          "args": {
+            "properties": {
+              "sessionId": {
+                "type": "string"
+              }
+            },
+            "required": ["sessionId"],
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "const": "browserList",
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "const": "req",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "id", "op", "args"],
+        "title": "HostRequest_browserList",
+        "type": "object"
+      },
       "HostRequest_cancelClone": {
         "description": "Usage: Cancel an active clone.\nInputs: id identifies the host clone job.\nInvariants: Returned progress reports its resulting state; cancellation can race completion.\nEffects: Requests termination of the clone process and cleanup of its target.\nRecovery: Read progress and inspect the target before starting again.",
         "properties": {
@@ -74824,7 +75308,7 @@
   "defaultContentType": "application/json",
   "id": "urn:keylime:host-link",
   "info": {
-    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 11, minimum 11; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 69 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 11, minimum 11; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 71 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
     "title": "Host daemon link",
     "version": "11"
   },
@@ -74897,6 +75381,52 @@
         ]
       },
       "summary": "browseDirectories"
+    },
+    "operation_browserCapture": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Capture one session-owned browser tab.\nInputs: Supply the exact session ID and tab ID from discovery.\nInvariants: No caller-supplied CDP endpoint or browser input is accepted; capture is bounded.\nEffects: Captures a single JPEG without changing browser lifecycle.\nRecovery: Rediscover after tab or session changes.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/HostRequest_browserCapture"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/HostReply_browserCapture"
+          }
+        ]
+      },
+      "summary": "browserCapture"
+    },
+    "operation_browserList": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Discover browser tabs belonging to an already-live session.\nInputs: Supply its exact session ID.\nInvariants: Never starts or attaches a runner or browser.\nEffects: Queries the session's runner.\nRecovery: Rediscover after reconnect or session changes.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/HostRequest_browserList"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/HostReply_browserList"
+          }
+        ]
+      },
+      "summary": "browserList"
     },
     "operation_cancelClone": {
       "action": "send",

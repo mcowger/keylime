@@ -18,6 +18,7 @@ import {
   NewAgentCommandSchema,
   agentOperations,
 } from "./runner-messages";
+import { BrowserListSchema } from "./host-control-operations";
 import {
   ApiErrorSchema,
   jsonBody,
@@ -205,6 +206,16 @@ const aid = "/api/agent/[id]";
 
 /** HTTP operations are bound to their handlers by @apiContract. */
 export const sessionHttpOperations: readonly HttpOperation[] = [
+  op(`${sid}/browser`, "get", "listSessionBrowserTabs", "List live session browser tabs", {
+    description: "Discovers tabs owned by the already-live session without starting a runner or browser.",
+    parameters: [id],
+    responses: { ...responses(BrowserListSchema), 429: err("A discovery request is already in progress for this session.") },
+  }),
+  op(`${sid}/browser/frame`, "get", "captureSessionBrowserFrame", "Capture a browser tab frame", {
+    description: "Captures one JPEG from a tab owned by the live session. This read-only request does not change browser lifecycle.",
+    parameters: [id, q("tabId", "A tab ID returned by discovery.", true)],
+    responses: { ...webErrors, ...extras, 429: err("A frame capture is already in progress for this session."), 200: binary("image/jpeg", "A single uncached JPEG frame.") },
+  }),
   op("/api/sessions", "get", "listSessions", "List sessions across hosts", {
     parameters: [
       q("id", "Filter by session ID; filtered responses do not use an ETag."),

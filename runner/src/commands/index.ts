@@ -1,6 +1,7 @@
 import { correlationCommands } from "../correlation";
 import { eventsCommands } from "../events";
 import { agentsCommands, agentsFrames } from "./agents";
+import { browserCommands } from "./browser";
 import { gitCommands } from "./git";
 import { jobsCommands } from "./jobs";
 import { modelCommands, modelFrames } from "./model";
@@ -12,6 +13,7 @@ import type { CommandTable, FrameTable } from "./types";
 /** Every host command by name; each group file owns its names. */
 export const commands: CommandTable = {
   ...promptingCommands,
+  ...browserCommands,
   ...modelCommands,
   ...sessionCommands,
   ...toolsCommands,

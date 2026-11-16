@@ -8,6 +8,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ### Added
 - Seeded development sessions include an agent chat exchange for checking incoming and outgoing Markdown.
+- Live chats with Chromium/CDP pages show a view-only Browser workspace tab. Capture runs only while the view is visible.
 - Untitled chats show a temporary topic label extracted from the first prompt until a generated or manually chosen title is available.
 - Seeded development sessions include completed and in-progress tasks for testing composer indicators.
 - Mobile composer controls use square icon actions, reduced padding, and compact running activity indicators.
