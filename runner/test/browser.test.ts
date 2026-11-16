@@ -61,7 +61,7 @@ it("lists only live Chromium tabs owned by the session and captures only the exa
     }
     expect(calls).toEqual([]);
     expect(await browserCommands.browser_capture(ctx, { id: "owned-target" })).toEqual({
-      mimeType: "image/jpeg", data: "anBlZw==",
+      mimeType: "image/jpeg", data: "anBlZw==", width: 1920, height: 1080,
     });
     expect(calls).toEqual(["attach-owned", "Page.startScreencast", "Page.getLayoutMetrics", "Page.captureScreenshot"]);
     expect(clip).toEqual({ x: 45, y: 900, width: 1920, height: 1080, scale: 2 / 3 });
@@ -96,3 +96,175 @@ it("rejects capture if ownership changes while attaching", async () => {
     tabs.delete(name);
   }
 });
+
+it("dispatches each control action only to its exact session-owned target", async () => {
+  const tabs = getTabsMapForTest();
+  const name = "keylime-test-control";
+  const calls: { method: string; params: unknown }[] = [];
+  let detached = 0;
+  const cdp = {
+    async send(method: string, params?: unknown) {
+      calls.push({ method, params });
+      if (method === "Page.getNavigationHistory") return { currentIndex: 1, entries: [{ id: 11 }, { id: 12 }, { id: 13 }] };
+      return {};
+    },
+    async detach() { detached++; },
+  };
+  const target = { _targetId: "control-target", async createCDPSession() { return cdp; } };
+  const ctx = { session: { getEvalKernelOwnerId: () => "owner" } as unknown as AgentSession, send() {} } satisfies CommandContext;
+  try {
+    tabs.set(name, {
+      name, targetId: "control-target", ownerSessionId: "owner", backend: "worker", state: "alive",
+      kindTag: "headless", info: { title: "", url: "https://example.test" },
+      browser: { browser: { targets: () => [target] } },
+    } as unknown as TabSession);
+    const actions = [
+      { type: "navigate", url: "https://example.test/path" },
+      { type: "back" }, { type: "forward" }, { type: "reload" },
+      { type: "pointer", event: "down", x: 32, y: 48, button: "left", buttons: 1, clickCount: 1, modifiers: 8 },
+      { type: "pointer", event: "up", x: 32, y: 48, button: "left", buttons: 0, clickCount: 1, modifiers: 0 },
+      { type: "pointer", event: "move", x: 33, y: 49, button: "none", buttons: 0, clickCount: 0, modifiers: 0 },
+      { type: "wheel", x: 20, y: 30, deltaX: -2, deltaY: 100, modifiers: 1 },
+      { type: "key", event: "down", key: "a", code: "KeyA", windowsVirtualKeyCode: 65, modifiers: 0, repeat: false },
+      { type: "key", event: "up", key: "a", code: "KeyA", windowsVirtualKeyCode: 65, modifiers: 0, repeat: false },
+      { type: "text", text: "héllo" },
+      { type: "touch", event: "start", points: [{ id: 1, x: 10, y: 20 }], modifiers: 0 },
+      { type: "touch", event: "end", points: [], modifiers: 0 },
+    ];
+    for (const action of actions)
+      expect(await browserCommands.browser_control(ctx, { id: "control-target", action })).toEqual({});
+    expect(calls).toEqual([
+      { method: "Page.navigate", params: { url: "https://example.test/path" } },
+      { method: "Page.getNavigationHistory", params: undefined },
+      { method: "Page.navigateToHistoryEntry", params: { entryId: 11 } },
+      { method: "Page.getNavigationHistory", params: undefined },
+      { method: "Page.navigateToHistoryEntry", params: { entryId: 13 } },
+      { method: "Page.reload", params: undefined },
+      { method: "Input.dispatchMouseEvent", params: { type: "mousePressed", x: 32, y: 48, button: "left", buttons: 1, clickCount: 1, modifiers: 8 } },
+      { method: "Input.dispatchMouseEvent", params: { type: "mouseReleased", x: 32, y: 48, button: "left", buttons: 0, clickCount: 1, modifiers: 0 } },
+      { method: "Input.dispatchMouseEvent", params: { type: "mouseMoved", x: 33, y: 49, button: "none", buttons: 0, clickCount: 0, modifiers: 0 } },
+      { method: "Input.dispatchMouseEvent", params: { type: "mouseWheel", x: 20, y: 30, deltaX: -2, deltaY: 100, modifiers: 1 } },
+      { method: "Input.dispatchKeyEvent", params: { type: "rawKeyDown", key: "a", code: "KeyA", windowsVirtualKeyCode: 65, modifiers: 0, autoRepeat: false } },
+      { method: "Input.dispatchKeyEvent", params: { type: "keyUp", key: "a", code: "KeyA", windowsVirtualKeyCode: 65, modifiers: 0, autoRepeat: false } },
+      { method: "Input.insertText", params: { text: "héllo" } },
+      { method: "Input.dispatchTouchEvent", params: { type: "touchStart", touchPoints: [{ id: 1, x: 10, y: 20 }], modifiers: 0 } },
+      { method: "Input.dispatchTouchEvent", params: { type: "touchEnd", touchPoints: [], modifiers: 0 } },
+    ]);
+    expect(detached).toBe(actions.length);
+  } finally {
+    tabs.delete(name);
+  }
+});
+
+it("rejects malformed or unauthorized control actions without dispatching input", async () => {
+  const tabs = getTabsMapForTest();
+  const name = "keylime-test-control-guard";
+  let attachments = 0;
+  const ctx = { session: { getEvalKernelOwnerId: () => "owner" } as unknown as AgentSession, send() {} } satisfies CommandContext;
+  try {
+    tabs.set(name, {
+      name, targetId: "guard-target", ownerSessionId: "owner", backend: "worker", state: "alive",
+      kindTag: "headless", info: { title: "", url: "https://example.test" },
+      browser: { browser: { targets: () => [{ _targetId: "guard-target", async createCDPSession() { attachments++; } }] } },
+    } as unknown as TabSession);
+    const invalid = [
+      { type: "navigate", url: "file:///etc/passwd" },
+      { type: "navigate", url: "not a url" },
+      { type: "pointer", event: "down", x: -1, y: 1, button: "left", clickCount: 1, modifiers: 0 },
+      { type: "pointer", event: "down", x: NaN, y: 1, button: "left", clickCount: 1, modifiers: 0 },
+      { type: "key", event: "down", key: "a", code: "KeyA", windowsVirtualKeyCode: 65, modifiers: 16, repeat: false },
+      { type: "text", text: "x".repeat(65537) },
+      { type: "reload", unexpected: true },
+      { type: "unknown" },
+    ];
+    for (const action of invalid)
+      await expect(browserCommands.browser_control(ctx, { id: "guard-target", action })).rejects.toThrow();
+    await expect(browserCommands.browser_control(ctx, { id: "wrong-target", action: { type: "reload" } })).rejects.toThrow("Browser tab not found");
+    const tab = tabs.get(name)!;
+    tab.ownerSessionId = "other";
+    await expect(browserCommands.browser_control(ctx, { id: "guard-target", action: { type: "reload" } })).rejects.toThrow("Browser tab not found");
+    expect(attachments).toBe(0);
+  } finally {
+    tabs.delete(name);
+  }
+});
+
+it("does not dispatch control after ownership changes during attachment", async () => {
+  const tabs = getTabsMapForTest();
+  const name = "keylime-test-control-changed-owner";
+  const attached = Promise.withResolvers<unknown>();
+  let dispatched = false;
+  let detached = false;
+  const tab = {
+    name, targetId: "changing-control", ownerSessionId: "owner", backend: "worker", state: "alive",
+    kindTag: "headless", info: { title: "", url: "https://example.test" },
+    browser: { browser: { targets: () => [{ _targetId: "changing-control", createCDPSession: () => attached.promise }] } },
+  } as unknown as TabSession;
+  const ctx = { session: { getEvalKernelOwnerId: () => "owner" } as unknown as AgentSession, send() {} } satisfies CommandContext;
+  try {
+    tabs.set(name, tab);
+    const control = browserCommands.browser_control(ctx, { id: "changing-control", action: { type: "reload" } });
+    tab.ownerSessionId = "other";
+    attached.resolve({ send: async () => { dispatched = true; }, detach: async () => { detached = true; } });
+    await expect(control).rejects.toThrow("Browser tab not found");
+    expect(dispatched).toBe(false);
+    expect(detached).toBe(true);
+  } finally {
+    tabs.delete(name);
+  }
+});
+
+it("does not navigate history when ownership changes while reading it", async () => {
+  const tabs = getTabsMapForTest();
+  const name = "keylime-test-control-history-owner";
+  const history = Promise.withResolvers<unknown>();
+  const started = Promise.withResolvers<void>();
+  const calls: string[] = [];
+  let detached = false;
+  const tab = {
+    name, targetId: "history-control", ownerSessionId: "owner", backend: "worker", state: "alive",
+    kindTag: "headless", info: { title: "", url: "https://example.test" },
+    browser: { browser: { targets: () => [{
+      _targetId: "history-control",
+      async createCDPSession() {
+        return { send: async (method: string) => { calls.push(method); started.resolve(); return history.promise; }, detach: async () => { detached = true; } };
+      },
+    }] } },
+  } as unknown as TabSession;
+  const ctx = { session: { getEvalKernelOwnerId: () => "owner" } as unknown as AgentSession, send() {} } satisfies CommandContext;
+  try {
+    tabs.set(name, tab);
+    const control = browserCommands.browser_control(ctx, { id: "history-control", action: { type: "back" } });
+    await started.promise;
+    tab.ownerSessionId = "other";
+    history.resolve({ currentIndex: 1, entries: [{ id: 1 }, { id: 2 }] });
+    await expect(control).rejects.toThrow("Browser tab not found");
+    expect(calls).toEqual(["Page.getNavigationHistory"]);
+    expect(detached).toBe(true);
+  } finally {
+    tabs.delete(name);
+  }
+});
+
+it("times out a stalled attachment and detaches it if it arrives late", async () => {
+  const tabs = getTabsMapForTest();
+  const name = "keylime-test-control-timeout";
+  const attached = Promise.withResolvers<unknown>();
+  let dispatched = false;
+  let detached = false;
+  const ctx = { session: { getEvalKernelOwnerId: () => "owner" } as unknown as AgentSession, send() {} } satisfies CommandContext;
+  try {
+    tabs.set(name, {
+      name, targetId: "timeout-control", ownerSessionId: "owner", backend: "worker", state: "alive",
+      kindTag: "headless", info: { title: "", url: "https://example.test" },
+      browser: { browser: { targets: () => [{ _targetId: "timeout-control", createCDPSession: () => attached.promise }] } },
+    } as unknown as TabSession);
+    await expect(browserCommands.browser_control(ctx, { id: "timeout-control", action: { type: "reload" } })).rejects.toThrow("Browser control timed out");
+    attached.resolve({ send: async () => { dispatched = true; }, detach: async () => { detached = true; } });
+    await Promise.resolve();
+    expect(dispatched).toBe(false);
+    expect(detached).toBe(true);
+  } finally {
+    tabs.delete(name);
+  }
+}, 8000);

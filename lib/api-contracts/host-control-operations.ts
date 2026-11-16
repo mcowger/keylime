@@ -9,7 +9,7 @@ import {
   UploadAttachResultSchema,
 } from "./host-control-models";
 import { ConfigStateSchema } from "./host-schemas";
-import { BrowserListResultSchema, BrowserCaptureResultSchema } from "./runner-lifecycle";
+import { BrowserListResultSchema, BrowserCaptureResultSchema, BrowserControlArgsSchema, BrowserControlResultSchema } from "./runner-lifecycle";
 
 const empty = Type.Object({});
 export const BrowserListSchema = Type.Object(BrowserListResultSchema.properties, { description: "Browser tabs currently owned by the requested live session on the host." });
@@ -27,6 +27,12 @@ export const hostControlOperations: readonly OperationContract[] = [
     description: "Usage: Capture one session-owned browser tab.\nInputs: Supply the exact session ID and tab ID from discovery.\nInvariants: No caller-supplied CDP endpoint or browser input is accepted; capture is bounded.\nEffects: Captures a single JPEG without changing browser lifecycle.\nRecovery: Rediscover after tab or session changes.",
     args: Type.Object({ sessionId: Type.String(), tabId: Type.String({ minLength: 1, maxLength: 1024 }) }),
     result: BrowserFrameSchema,
+  },
+  {
+    name: "browserControl",
+    description: "Usage: Control a session-owned browser tab.\nInputs: Supply the session ID and a target ID and action from the browser control contract.\nInvariants: The runner rechecks target ownership; no runner or browser is started and no CDP endpoint is exposed.\nEffects: Applies one navigation or input action.\nRecovery: An error may leave the action applied; do not automatically retry.",
+    args: Type.Object({ sessionId: Type.String(), control: BrowserControlArgsSchema }),
+    result: BrowserControlResultSchema,
   },
   {
     name: "open",

@@ -371,6 +371,7 @@ async function checkMessageCoverage(): Promise<void> {
       if (
         ts.isObjectLiteralExpression(node) &&
         ts.isCallExpression(node.parent) &&
+        node.parent.arguments[0] === node &&
         /(?:^send$|\.(?:send|#send|#output)$)/.test(
           node.parent.expression.getText(source),
         )

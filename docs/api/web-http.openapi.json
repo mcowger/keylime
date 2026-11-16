@@ -69733,9 +69733,793 @@
         }
       }
     },
+    "/api/sessions/{id}/browser/control": {
+      "post": {
+        "description": "### Usage\n\nSend one navigation or input action to a session-owned browser tab.\n\n### Inputs\n\nid identifies the session; the body identifies a discovered tab and a typed action.\n\n### Invariants\n\nThe host and runner recheck ownership without starting a runner or exposing CDP.\n\n### Effects\n\nApplies one browser action; other viewers and the agent remain able to interact.\n\n### Recovery\n\nAn error may mean the action was applied; do not automatically retry it.\n\n### Additional protocol details\n\nApplies one navigation or input action to a session-owned tab. A failed request may have applied the action; do not automatically retry.",
+        "operationId": "controlSessionBrowserTab",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "description": "An action addressed to one exact session-owned Chromium target.",
+                "properties": {
+                  "action": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "type": {
+                            "const": "navigate",
+                            "type": "string"
+                          },
+                          "url": {
+                            "maxLength": 8192,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type", "url"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "type": {
+                            "const": "back",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "type": {
+                            "const": "forward",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "type": {
+                            "const": "reload",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "button": {
+                            "anyOf": [
+                              {
+                                "const": "none",
+                                "type": "string"
+                              },
+                              {
+                                "const": "left",
+                                "type": "string"
+                              },
+                              {
+                                "const": "middle",
+                                "type": "string"
+                              },
+                              {
+                                "const": "right",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "buttons": {
+                            "description": "Pressed mouse buttons as the DOM/CDP bitmask: left 1, right 2, middle 4, back 8, forward 16.",
+                            "maximum": 31,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "clickCount": {
+                            "maximum": 3,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "event": {
+                            "anyOf": [
+                              {
+                                "const": "move",
+                                "type": "string"
+                              },
+                              {
+                                "const": "down",
+                                "type": "string"
+                              },
+                              {
+                                "const": "up",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "modifiers": {
+                            "description": "CDP modifier bitmask: Alt 1, Ctrl 2, Meta 4, Shift 8.",
+                            "maximum": 15,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "type": {
+                            "const": "pointer",
+                            "type": "string"
+                          },
+                          "x": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "y": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "event",
+                          "x",
+                          "y",
+                          "button",
+                          "buttons",
+                          "clickCount",
+                          "modifiers"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "deltaX": {
+                            "maximum": 100000,
+                            "minimum": -100000,
+                            "type": "number"
+                          },
+                          "deltaY": {
+                            "maximum": 100000,
+                            "minimum": -100000,
+                            "type": "number"
+                          },
+                          "modifiers": {
+                            "description": "CDP modifier bitmask: Alt 1, Ctrl 2, Meta 4, Shift 8.",
+                            "maximum": 15,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "type": {
+                            "const": "wheel",
+                            "type": "string"
+                          },
+                          "x": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "y": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "x",
+                          "y",
+                          "deltaX",
+                          "deltaY",
+                          "modifiers"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "maxLength": 128,
+                            "type": "string"
+                          },
+                          "event": {
+                            "anyOf": [
+                              {
+                                "const": "down",
+                                "type": "string"
+                              },
+                              {
+                                "const": "up",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "key": {
+                            "maxLength": 128,
+                            "type": "string"
+                          },
+                          "modifiers": {
+                            "description": "CDP modifier bitmask: Alt 1, Ctrl 2, Meta 4, Shift 8.",
+                            "maximum": 15,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "repeat": {
+                            "type": "boolean"
+                          },
+                          "type": {
+                            "const": "key",
+                            "type": "string"
+                          },
+                          "windowsVirtualKeyCode": {
+                            "maximum": 65535,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "event",
+                          "key",
+                          "code",
+                          "windowsVirtualKeyCode",
+                          "modifiers",
+                          "repeat"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "text": {
+                            "maxLength": 65536,
+                            "type": "string"
+                          },
+                          "type": {
+                            "const": "text",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type", "text"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "event": {
+                            "anyOf": [
+                              {
+                                "const": "start",
+                                "type": "string"
+                              },
+                              {
+                                "const": "move",
+                                "type": "string"
+                              },
+                              {
+                                "const": "end",
+                                "type": "string"
+                              },
+                              {
+                                "const": "cancel",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "modifiers": {
+                            "description": "CDP modifier bitmask: Alt 1, Ctrl 2, Meta 4, Shift 8.",
+                            "maximum": 15,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "points": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "id": {
+                                  "maximum": 2147483647,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "x": {
+                                  "maximum": 100000,
+                                  "minimum": 0,
+                                  "type": "number"
+                                },
+                                "y": {
+                                  "maximum": 100000,
+                                  "minimum": 0,
+                                  "type": "number"
+                                }
+                              },
+                              "required": ["id", "x", "y"],
+                              "type": "object"
+                            },
+                            "maxItems": 10,
+                            "type": "array"
+                          },
+                          "type": {
+                            "const": "touch",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type", "event", "points", "modifiers"],
+                        "type": "object"
+                      }
+                    ],
+                    "description": "A single browser navigation or input action. Coordinates are visual viewport CSS pixels; touch points are the contacts remaining after the event."
+                  },
+                  "id": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "action"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "description": "The browser accepted the action; this does not guarantee navigation or page effects completed.",
+                  "properties": {},
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request or rejected operation."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authentication is required when configured."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Origin, ownership or authorization policy refused this request."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The requested resource does not exist."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "host": {
+                      "description": "Host whose availability prevented the operation.",
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    },
+                    "sessionId": {
+                      "description": "Created session identifier, when creation succeeded before a later failure.",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Conflict: the session is busy, has active children, or a restore is unconfirmed."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "host": {
+                      "description": "Host whose availability prevented the operation.",
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    },
+                    "sessionId": {
+                      "description": "Created session identifier, when creation succeeded before a later failure.",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request, session file, or output exceeds its size limit."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The operation failed."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "host": {
+                      "description": "Host whose availability prevented the operation.",
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    },
+                    "sessionId": {
+                      "description": "Created session identifier, when creation succeeded before a later failure.",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host did not confirm the operation; a restore may still be running."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The owning host or required service is unavailable."
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "host": {
+                      "description": "Host whose availability prevented the operation.",
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    },
+                    "sessionId": {
+                      "description": "Created session identifier, when creation succeeded before a later failure.",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host operation timed out; delivery may be unknown."
+          }
+        },
+        "security": [
+          {
+            "webSession": []
+          },
+          {
+            "trustedProxy": []
+          },
+          {}
+        ],
+        "summary": "Control a session browser tab",
+        "x-client-semantics": {
+          "Effects": "Applies one browser action; other viewers and the agent remain able to interact.",
+          "Inputs": "id identifies the session; the body identifies a discovered tab and a typed action.",
+          "Invariants": "The host and runner recheck ownership without starting a runner or exposing CDP.",
+          "Recovery": "An error may mean the action was applied; do not automatically retry it.",
+          "Usage": "Send one navigation or input action to a session-owned browser tab."
+        }
+      }
+    },
     "/api/sessions/{id}/browser/frame": {
       "get": {
-        "description": "### Usage\n\nCapture a read-only JPEG frame of a session-owned browser tab.\n\n### Inputs\n\nid identifies the live session and tabId identifies a tab returned by discovery.\n\n### Invariants\n\nThe host and runner recheck ownership; callers cannot supply a CDP endpoint or browser input.\n\n### Effects\n\nCaptures one frame without starting, closing, or otherwise managing a browser.\n\n### Recovery\n\nRediscover tabs after session or tab changes, or retry when the host reconnects.\n\n### Additional protocol details\n\nCaptures one JPEG from a tab owned by the live session. This read-only request does not change browser lifecycle.",
+        "description": "### Usage\n\nCapture a read-only JPEG frame of a session-owned browser tab.\n\n### Inputs\n\nid identifies the live session and tabId identifies a tab returned by discovery.\n\n### Invariants\n\nThe host and runner recheck ownership; callers cannot supply a CDP endpoint or browser input.\n\n### Effects\n\nCaptures one frame and reports its CSS viewport dimensions in response headers without managing a browser.\n\n### Recovery\n\nRediscover tabs after session or tab changes, or retry when the host reconnects.\n\n### Additional protocol details\n\nCaptures one JPEG from a tab owned by the live session. X-Browser-Viewport-Width and X-Browser-Viewport-Height report CSS viewport dimensions. This read-only request does not change browser lifecycle.",
         "operationId": "captureSessionBrowserFrame",
         "parameters": [
           {
@@ -70227,7 +71011,7 @@
         ],
         "summary": "Capture a browser tab frame",
         "x-client-semantics": {
-          "Effects": "Captures one frame without starting, closing, or otherwise managing a browser.",
+          "Effects": "Captures one frame and reports its CSS viewport dimensions in response headers without managing a browser.",
           "Inputs": "id identifies the live session and tabId identifies a tab returned by discovery.",
           "Invariants": "The host and runner recheck ownership; callers cannot supply a CDP endpoint or browser input.",
           "Recovery": "Rediscover tabs after session or tab changes, or retry when the host reconnects.",

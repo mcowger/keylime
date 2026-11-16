@@ -165,6 +165,7 @@ export const HOST_OP_NAMES = [
   ...(Object.keys(WORKSPACE_OP_PARAMS) as (keyof typeof WORKSPACE_OP_PARAMS)[]),
   "browserList",
   "browserCapture",
+  "browserControl",
   "open",
   "close",
   "editLease",

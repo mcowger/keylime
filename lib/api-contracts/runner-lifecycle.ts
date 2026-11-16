@@ -210,10 +210,52 @@ export const BrowserCaptureResultSchema = Type.Object(
   {
     mimeType: Type.Literal("image/jpeg", { description: "The captured image media type." }),
     data: Type.String({ maxLength: 1024 * 1024, description: "Base64-encoded JPEG image, at most 1 MiB encoded." }),
+    width: Type.Number({ exclusiveMinimum: 0, description: "Visual viewport width in CSS pixels; use with the displayed image to map input coordinates." }),
+    height: Type.Number({ exclusiveMinimum: 0, description: "Visual viewport height in CSS pixels; use with the displayed image to map input coordinates." }),
   },
   { description: "Bounded view-only capture of a session-owned Chromium tab." },
 );
 export type BrowserCaptureResult = Static<typeof BrowserCaptureResultSchema>;
+
+const browserCoordinate = () => Type.Number({ minimum: 0, maximum: 100000 });
+const browserDelta = () => Type.Number({ minimum: -100000, maximum: 100000 });
+const browserModifiers = () => Type.Integer({ minimum: 0, maximum: 15, description: "CDP modifier bitmask: Alt 1, Ctrl 2, Meta 4, Shift 8." });
+const browserActionObject = { additionalProperties: false };
+export const BrowserControlActionSchema = Type.Union([
+  Type.Object({ type: Type.Literal("navigate"), url: Type.String({ minLength: 1, maxLength: 8192 }) }, browserActionObject),
+  Type.Object({ type: Type.Literal("back") }, browserActionObject),
+  Type.Object({ type: Type.Literal("forward") }, browserActionObject),
+  Type.Object({ type: Type.Literal("reload") }, browserActionObject),
+  Type.Object({
+    type: Type.Literal("pointer"),
+    event: Type.Union([Type.Literal("move"), Type.Literal("down"), Type.Literal("up")]),
+    x: browserCoordinate(), y: browserCoordinate(),
+    button: Type.Union([Type.Literal("none"), Type.Literal("left"), Type.Literal("middle"), Type.Literal("right")]),
+    buttons: Type.Integer({ minimum: 0, maximum: 31, description: "Pressed mouse buttons as the DOM/CDP bitmask: left 1, right 2, middle 4, back 8, forward 16." }),
+    clickCount: Type.Integer({ minimum: 0, maximum: 3 }), modifiers: browserModifiers(),
+  }, browserActionObject),
+  Type.Object({ type: Type.Literal("wheel"), x: browserCoordinate(), y: browserCoordinate(), deltaX: browserDelta(), deltaY: browserDelta(), modifiers: browserModifiers() }, browserActionObject),
+  Type.Object({
+    type: Type.Literal("key"), event: Type.Union([Type.Literal("down"), Type.Literal("up")]),
+    key: Type.String({ maxLength: 128 }), code: Type.String({ maxLength: 128 }),
+    windowsVirtualKeyCode: Type.Integer({ minimum: 0, maximum: 65535 }),
+    modifiers: browserModifiers(), repeat: Type.Boolean(),
+  }, browserActionObject),
+  Type.Object({ type: Type.Literal("text"), text: Type.String({ maxLength: 65536 }) }, browserActionObject),
+  Type.Object({
+    type: Type.Literal("touch"), event: Type.Union([Type.Literal("start"), Type.Literal("move"), Type.Literal("end"), Type.Literal("cancel")]),
+    points: Type.Array(Type.Object({ id: Type.Integer({ minimum: 0, maximum: 2147483647 }), x: browserCoordinate(), y: browserCoordinate() }, browserActionObject), { maxItems: 10 }),
+    modifiers: browserModifiers(),
+  }, browserActionObject),
+], { description: "A single browser navigation or input action. Coordinates are visual viewport CSS pixels; touch points are the contacts remaining after the event." });
+export type BrowserControlAction = Static<typeof BrowserControlActionSchema>;
+export const BrowserControlArgsSchema = Type.Object({
+  id: Type.String({ minLength: 1, maxLength: 1024 }),
+  action: BrowserControlActionSchema,
+}, { additionalProperties: false, description: "An action addressed to one exact session-owned Chromium target." });
+export type BrowserControlArgs = Static<typeof BrowserControlArgsSchema>;
+export const BrowserControlResultSchema = Type.Object({}, { additionalProperties: false, description: "The browser accepted the action; this does not guarantee navigation or page effects completed." });
+export type BrowserControlResult = Static<typeof BrowserControlResultSchema>;
 
 /** Logical runner commands before command/response framing. */
 export const lifecycleRunnerOperations: readonly OperationContract[] = [
@@ -236,6 +278,16 @@ Effects: Reads the visible page without input or browser lifecycle changes.
 Recovery: List tabs again if the target is unavailable.`,
     Type.Object({ id: Type.String({ minLength: 1, maxLength: 1024 }) }),
     BrowserCaptureResultSchema,
+  ),
+  command(
+    "browser_control",
+    `Usage: Send one navigation or input action to a session-owned Chromium tab.
+Inputs: Provide the exact target id and one browser control action; navigation accepts HTTP or HTTPS URLs.
+Invariants: Ownership and exact target identity are checked; input coordinates use the captured visual viewport in CSS pixels. No exclusive control or agent lock is established.
+Effects: May navigate the page or deliver mouse, wheel, keyboard, text, or touch input.
+Recovery: A timeout or disconnect leaves delivery uncertain; do not replay an action automatically.`,
+    BrowserControlArgsSchema,
+    BrowserControlResultSchema,
   ),
   command(
     "prompt",

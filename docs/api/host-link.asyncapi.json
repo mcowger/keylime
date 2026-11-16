@@ -106,6 +106,9 @@
         "HostReply_browserCapture": {
           "$ref": "#/components/messages/HostReply_browserCapture"
         },
+        "HostReply_browserControl": {
+          "$ref": "#/components/messages/HostReply_browserControl"
+        },
         "HostReply_browserList": {
           "$ref": "#/components/messages/HostReply_browserList"
         },
@@ -318,6 +321,9 @@
         },
         "HostRequest_browserCapture": {
           "$ref": "#/components/messages/HostRequest_browserCapture"
+        },
+        "HostRequest_browserControl": {
+          "$ref": "#/components/messages/HostRequest_browserControl"
         },
         "HostRequest_browserList": {
           "$ref": "#/components/messages/HostRequest_browserList"
@@ -824,6 +830,18 @@
           "$ref": "#/components/schemas/HostReply_browserCapture"
         },
         "title": "HostReply_browserCapture"
+      },
+      "HostReply_browserControl": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Reply to browserControl; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Control a session-owned browser tab.\nInputs: Supply the session ID and a target ID and action from the browser control contract.\nInvariants: The runner rechecks target ownership; no runner or browser is started and no CDP endpoint is exposed.\nEffects: Applies one navigation or input action.\nRecovery: An error may leave the action applied; do not automatically retry.",
+        "name": "HostReply_browserControl",
+        "payload": {
+          "$ref": "#/components/schemas/HostReply_browserControl"
+        },
+        "title": "HostReply_browserControl"
       },
       "HostReply_browserList": {
         "contentType": "application/json",
@@ -1676,6 +1694,18 @@
           "$ref": "#/components/schemas/HostRequest_browserCapture"
         },
         "title": "HostRequest_browserCapture"
+      },
+      "HostRequest_browserControl": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Control a session-owned browser tab.\nInputs: Supply the session ID and a target ID and action from the browser control contract.\nInvariants: The runner rechecks target ownership; no runner or browser is started and no CDP endpoint is exposed.\nEffects: Applies one navigation or input action.\nRecovery: An error may leave the action applied; do not automatically retry.",
+        "name": "HostRequest_browserControl",
+        "payload": {
+          "$ref": "#/components/schemas/HostRequest_browserControl"
+        },
+        "title": "HostRequest_browserControl"
       },
       "HostRequest_browserList": {
         "contentType": "application/json",
@@ -3787,6 +3817,355 @@
                   },
                   "required": ["t", "id", "op", "args"],
                   "title": "RunnerRequest_browser_capture",
+                  "type": "object"
+                },
+                {
+                  "description": "Usage: Send one navigation or input action to a session-owned Chromium tab.\nInputs: Provide the exact target id and one browser control action; navigation accepts HTTP or HTTPS URLs.\nInvariants: Ownership and exact target identity are checked; input coordinates use the captured visual viewport in CSS pixels. No exclusive control or agent lock is established.\nEffects: May navigate the page or deliver mouse, wheel, keyboard, text, or touch input.\nRecovery: A timeout or disconnect leaves delivery uncertain; do not replay an action automatically.",
+                  "properties": {
+                    "args": {
+                      "additionalProperties": false,
+                      "description": "An action addressed to one exact session-owned Chromium target.",
+                      "properties": {
+                        "action": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "type": {
+                                  "const": "navigate",
+                                  "type": "string"
+                                },
+                                "url": {
+                                  "maxLength": 8192,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["type", "url"],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "type": {
+                                  "const": "back",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["type"],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "type": {
+                                  "const": "forward",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["type"],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "type": {
+                                  "const": "reload",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["type"],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "button": {
+                                  "anyOf": [
+                                    {
+                                      "const": "none",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "left",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "middle",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "right",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "buttons": {
+                                  "description": "Pressed mouse buttons as the DOM/CDP bitmask: left 1, right 2, middle 4, back 8, forward 16.",
+                                  "maximum": 31,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "clickCount": {
+                                  "maximum": 3,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "event": {
+                                  "anyOf": [
+                                    {
+                                      "const": "move",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "down",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "up",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "modifiers": {
+                                  "description": "CDP modifier bitmask: Alt 1, Ctrl 2, Meta 4, Shift 8.",
+                                  "maximum": 15,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "type": {
+                                  "const": "pointer",
+                                  "type": "string"
+                                },
+                                "x": {
+                                  "maximum": 100000,
+                                  "minimum": 0,
+                                  "type": "number"
+                                },
+                                "y": {
+                                  "maximum": 100000,
+                                  "minimum": 0,
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "event",
+                                "x",
+                                "y",
+                                "button",
+                                "buttons",
+                                "clickCount",
+                                "modifiers"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "deltaX": {
+                                  "maximum": 100000,
+                                  "minimum": -100000,
+                                  "type": "number"
+                                },
+                                "deltaY": {
+                                  "maximum": 100000,
+                                  "minimum": -100000,
+                                  "type": "number"
+                                },
+                                "modifiers": {
+                                  "description": "CDP modifier bitmask: Alt 1, Ctrl 2, Meta 4, Shift 8.",
+                                  "maximum": 15,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "type": {
+                                  "const": "wheel",
+                                  "type": "string"
+                                },
+                                "x": {
+                                  "maximum": 100000,
+                                  "minimum": 0,
+                                  "type": "number"
+                                },
+                                "y": {
+                                  "maximum": 100000,
+                                  "minimum": 0,
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "x",
+                                "y",
+                                "deltaX",
+                                "deltaY",
+                                "modifiers"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "code": {
+                                  "maxLength": 128,
+                                  "type": "string"
+                                },
+                                "event": {
+                                  "anyOf": [
+                                    {
+                                      "const": "down",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "up",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "key": {
+                                  "maxLength": 128,
+                                  "type": "string"
+                                },
+                                "modifiers": {
+                                  "description": "CDP modifier bitmask: Alt 1, Ctrl 2, Meta 4, Shift 8.",
+                                  "maximum": 15,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "repeat": {
+                                  "type": "boolean"
+                                },
+                                "type": {
+                                  "const": "key",
+                                  "type": "string"
+                                },
+                                "windowsVirtualKeyCode": {
+                                  "maximum": 65535,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "event",
+                                "key",
+                                "code",
+                                "windowsVirtualKeyCode",
+                                "modifiers",
+                                "repeat"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "text": {
+                                  "maxLength": 65536,
+                                  "type": "string"
+                                },
+                                "type": {
+                                  "const": "text",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["type", "text"],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "event": {
+                                  "anyOf": [
+                                    {
+                                      "const": "start",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "move",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "end",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "cancel",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "modifiers": {
+                                  "description": "CDP modifier bitmask: Alt 1, Ctrl 2, Meta 4, Shift 8.",
+                                  "maximum": 15,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "points": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "id": {
+                                        "maximum": 2147483647,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "x": {
+                                        "maximum": 100000,
+                                        "minimum": 0,
+                                        "type": "number"
+                                      },
+                                      "y": {
+                                        "maximum": 100000,
+                                        "minimum": 0,
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": ["id", "x", "y"],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 10,
+                                  "type": "array"
+                                },
+                                "type": {
+                                  "const": "touch",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "event",
+                                "points",
+                                "modifiers"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "description": "A single browser navigation or input action. Coordinates are visual viewport CSS pixels; touch points are the contacts remaining after the event."
+                        },
+                        "id": {
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "action"],
+                      "type": "object"
+                    },
+                    "id": {
+                      "type": "number"
+                    },
+                    "op": {
+                      "const": "browser_control",
+                      "type": "string"
+                    },
+                    "t": {
+                      "const": "cmd",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["t", "id", "op", "args"],
+                  "title": "RunnerRequest_browser_control",
                   "type": "object"
                 },
                 {
@@ -42625,13 +43004,23 @@
                     "maxLength": 1048576,
                     "type": "string"
                   },
+                  "height": {
+                    "description": "Visual viewport height in CSS pixels; use with the displayed image to map input coordinates.",
+                    "exclusiveMinimum": 0,
+                    "type": "number"
+                  },
                   "mimeType": {
                     "const": "image/jpeg",
                     "description": "The captured image media type.",
                     "type": "string"
+                  },
+                  "width": {
+                    "description": "Visual viewport width in CSS pixels; use with the displayed image to map input coordinates.",
+                    "exclusiveMinimum": 0,
+                    "type": "number"
                   }
                 },
-                "required": ["mimeType", "data"],
+                "required": ["mimeType", "data", "width", "height"],
                 "type": "object"
               },
               "seq": {
@@ -42687,13 +43076,23 @@
                   "maxLength": 1048576,
                   "type": "string"
                 },
+                "height": {
+                  "description": "Visual viewport height in CSS pixels; use with the displayed image to map input coordinates.",
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
                 "mimeType": {
                   "const": "image/jpeg",
                   "description": "The captured image media type.",
                   "type": "string"
+                },
+                "width": {
+                  "description": "Visual viewport width in CSS pixels; use with the displayed image to map input coordinates.",
+                  "exclusiveMinimum": 0,
+                  "type": "number"
                 }
               },
-              "required": ["mimeType", "data"],
+              "required": ["mimeType", "data", "width", "height"],
               "type": "object"
             }
           },
@@ -42737,6 +43136,116 @@
         ],
         "description": "Reply to browserCapture; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Capture one session-owned browser tab.\nInputs: Supply the exact session ID and tab ID from discovery.\nInvariants: No caller-supplied CDP endpoint or browser input is accepted; capture is bounded.\nEffects: Captures a single JPEG without changing browser lifecycle.\nRecovery: Rediscover after tab or session changes.",
         "title": "HostReply_browserCapture"
+      },
+      "HostReply_browserControl": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "result": {
+                "additionalProperties": false,
+                "description": "The browser accepted the action; this does not guarantee navigation or page effects completed.",
+                "properties": {},
+                "type": "object"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "result"],
+            "type": "object"
+          },
+          {
+            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
+            "properties": {
+              "blob": {
+                "properties": {
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["bytes"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "blob"],
+            "type": "object",
+            "x-decoded-result": {
+              "additionalProperties": false,
+              "description": "The browser accepted the action; this does not guarantee navigation or page effects completed.",
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "properties": {
+              "error": {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number"
+                  }
+                },
+                "required": ["status", "code", "message"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Reply to browserControl; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Control a session-owned browser tab.\nInputs: Supply the session ID and a target ID and action from the browser control contract.\nInvariants: The runner rechecks target ownership; no runner or browser is started and no CDP endpoint is exposed.\nEffects: Applies one navigation or input action.\nRecovery: An error may leave the action applied; do not automatically retry.",
+        "title": "HostReply_browserControl"
       },
       "HostReply_browserList": {
         "anyOf": [
@@ -71623,6 +72132,364 @@
         "title": "HostRequest_browserCapture",
         "type": "object"
       },
+      "HostRequest_browserControl": {
+        "description": "Usage: Control a session-owned browser tab.\nInputs: Supply the session ID and a target ID and action from the browser control contract.\nInvariants: The runner rechecks target ownership; no runner or browser is started and no CDP endpoint is exposed.\nEffects: Applies one navigation or input action.\nRecovery: An error may leave the action applied; do not automatically retry.",
+        "properties": {
+          "args": {
+            "properties": {
+              "control": {
+                "additionalProperties": false,
+                "description": "An action addressed to one exact session-owned Chromium target.",
+                "properties": {
+                  "action": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "type": {
+                            "const": "navigate",
+                            "type": "string"
+                          },
+                          "url": {
+                            "maxLength": 8192,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type", "url"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "type": {
+                            "const": "back",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "type": {
+                            "const": "forward",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "type": {
+                            "const": "reload",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "button": {
+                            "anyOf": [
+                              {
+                                "const": "none",
+                                "type": "string"
+                              },
+                              {
+                                "const": "left",
+                                "type": "string"
+                              },
+                              {
+                                "const": "middle",
+                                "type": "string"
+                              },
+                              {
+                                "const": "right",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "buttons": {
+                            "description": "Pressed mouse buttons as the DOM/CDP bitmask: left 1, right 2, middle 4, back 8, forward 16.",
+                            "maximum": 31,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "clickCount": {
+                            "maximum": 3,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "event": {
+                            "anyOf": [
+                              {
+                                "const": "move",
+                                "type": "string"
+                              },
+                              {
+                                "const": "down",
+                                "type": "string"
+                              },
+                              {
+                                "const": "up",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "modifiers": {
+                            "description": "CDP modifier bitmask: Alt 1, Ctrl 2, Meta 4, Shift 8.",
+                            "maximum": 15,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "type": {
+                            "const": "pointer",
+                            "type": "string"
+                          },
+                          "x": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "y": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "event",
+                          "x",
+                          "y",
+                          "button",
+                          "buttons",
+                          "clickCount",
+                          "modifiers"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "deltaX": {
+                            "maximum": 100000,
+                            "minimum": -100000,
+                            "type": "number"
+                          },
+                          "deltaY": {
+                            "maximum": 100000,
+                            "minimum": -100000,
+                            "type": "number"
+                          },
+                          "modifiers": {
+                            "description": "CDP modifier bitmask: Alt 1, Ctrl 2, Meta 4, Shift 8.",
+                            "maximum": 15,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "type": {
+                            "const": "wheel",
+                            "type": "string"
+                          },
+                          "x": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "y": {
+                            "maximum": 100000,
+                            "minimum": 0,
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "x",
+                          "y",
+                          "deltaX",
+                          "deltaY",
+                          "modifiers"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "maxLength": 128,
+                            "type": "string"
+                          },
+                          "event": {
+                            "anyOf": [
+                              {
+                                "const": "down",
+                                "type": "string"
+                              },
+                              {
+                                "const": "up",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "key": {
+                            "maxLength": 128,
+                            "type": "string"
+                          },
+                          "modifiers": {
+                            "description": "CDP modifier bitmask: Alt 1, Ctrl 2, Meta 4, Shift 8.",
+                            "maximum": 15,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "repeat": {
+                            "type": "boolean"
+                          },
+                          "type": {
+                            "const": "key",
+                            "type": "string"
+                          },
+                          "windowsVirtualKeyCode": {
+                            "maximum": 65535,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "event",
+                          "key",
+                          "code",
+                          "windowsVirtualKeyCode",
+                          "modifiers",
+                          "repeat"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "text": {
+                            "maxLength": 65536,
+                            "type": "string"
+                          },
+                          "type": {
+                            "const": "text",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type", "text"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "event": {
+                            "anyOf": [
+                              {
+                                "const": "start",
+                                "type": "string"
+                              },
+                              {
+                                "const": "move",
+                                "type": "string"
+                              },
+                              {
+                                "const": "end",
+                                "type": "string"
+                              },
+                              {
+                                "const": "cancel",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "modifiers": {
+                            "description": "CDP modifier bitmask: Alt 1, Ctrl 2, Meta 4, Shift 8.",
+                            "maximum": 15,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "points": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "id": {
+                                  "maximum": 2147483647,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "x": {
+                                  "maximum": 100000,
+                                  "minimum": 0,
+                                  "type": "number"
+                                },
+                                "y": {
+                                  "maximum": 100000,
+                                  "minimum": 0,
+                                  "type": "number"
+                                }
+                              },
+                              "required": ["id", "x", "y"],
+                              "type": "object"
+                            },
+                            "maxItems": 10,
+                            "type": "array"
+                          },
+                          "type": {
+                            "const": "touch",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type", "event", "points", "modifiers"],
+                        "type": "object"
+                      }
+                    ],
+                    "description": "A single browser navigation or input action. Coordinates are visual viewport CSS pixels; touch points are the contacts remaining after the event."
+                  },
+                  "id": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "action"],
+                "type": "object"
+              },
+              "sessionId": {
+                "type": "string"
+              }
+            },
+            "required": ["sessionId", "control"],
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "const": "browserControl",
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "const": "req",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "id", "op", "args"],
+        "title": "HostRequest_browserControl",
+        "type": "object"
+      },
       "HostRequest_browserList": {
         "description": "Usage: Discover browser tabs belonging to an already-live session.\nInputs: Supply its exact session ID.\nInvariants: Never starts or attaches a runner or browser.\nEffects: Queries the session's runner.\nRecovery: Rediscover after reconnect or session changes.",
         "properties": {
@@ -75308,7 +76175,7 @@
   "defaultContentType": "application/json",
   "id": "urn:keylime:host-link",
   "info": {
-    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 11, minimum 11; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 71 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 11, minimum 11; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 72 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
     "title": "Host daemon link",
     "version": "11"
   },
@@ -75404,6 +76271,29 @@
         ]
       },
       "summary": "browserCapture"
+    },
+    "operation_browserControl": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Control a session-owned browser tab.\nInputs: Supply the session ID and a target ID and action from the browser control contract.\nInvariants: The runner rechecks target ownership; no runner or browser is started and no CDP endpoint is exposed.\nEffects: Applies one navigation or input action.\nRecovery: An error may leave the action applied; do not automatically retry.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/HostRequest_browserControl"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/HostReply_browserControl"
+          }
+        ]
+      },
+      "summary": "browserControl"
     },
     "operation_browserList": {
       "action": "send",

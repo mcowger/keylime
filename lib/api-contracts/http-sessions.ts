@@ -19,6 +19,7 @@ import {
   agentOperations,
 } from "./runner-messages";
 import { BrowserListSchema } from "./host-control-operations";
+import { BrowserControlArgsSchema, BrowserControlResultSchema } from "./runner-lifecycle";
 import {
   ApiErrorSchema,
   jsonBody,
@@ -212,9 +213,15 @@ export const sessionHttpOperations: readonly HttpOperation[] = [
     responses: { ...responses(BrowserListSchema), 429: err("A discovery request is already in progress for this session.") },
   }),
   op(`${sid}/browser/frame`, "get", "captureSessionBrowserFrame", "Capture a browser tab frame", {
-    description: "Captures one JPEG from a tab owned by the live session. This read-only request does not change browser lifecycle.",
+    description: "Captures one JPEG from a tab owned by the live session. X-Browser-Viewport-Width and X-Browser-Viewport-Height report CSS viewport dimensions. This read-only request does not change browser lifecycle.",
     parameters: [id, q("tabId", "A tab ID returned by discovery.", true)],
     responses: { ...webErrors, ...extras, 429: err("A frame capture is already in progress for this session."), 200: binary("image/jpeg", "A single uncached JPEG frame.") },
+  }),
+  op(`${sid}/browser/control`, "post", "controlSessionBrowserTab", "Control a session browser tab", {
+    description: "Applies one navigation or input action to a session-owned tab. A failed request may have applied the action; do not automatically retry.",
+    parameters: [id],
+    requestBody: jsonBody(BrowserControlArgsSchema),
+    responses: responses(BrowserControlResultSchema),
   }),
   op("/api/sessions", "get", "listSessions", "List sessions across hosts", {
     parameters: [

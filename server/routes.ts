@@ -50,6 +50,7 @@ import * as providersEnable from "@/app/api/providers/enable/route";
 import * as sessionsIdArchive from "@/app/api/sessions/[id]/archive/route";
 import * as sessionsIdAutoName from "@/app/api/sessions/[id]/auto-name/route";
 import * as sessionsIdBrowser from "@/app/api/sessions/[id]/browser/route";
+import * as sessionsIdBrowserControl from "@/app/api/sessions/[id]/browser/control/route";
 import * as sessionsIdBrowserFrame from "@/app/api/sessions/[id]/browser/frame/route";
 import * as sessionsIdContext from "@/app/api/sessions/[id]/context/route";
 import * as sessionsIdEntriesEntryIdThinking from "@/app/api/sessions/[id]/entries/[entryId]/thinking/route";
@@ -158,6 +159,7 @@ export const ROUTE_MODULES: Record<string, RouteModule> = {
   "sessions/[id]/archive": sessionsIdArchive,
   "sessions/[id]/auto-name": sessionsIdAutoName,
   "sessions/[id]/browser": sessionsIdBrowser,
+  "sessions/[id]/browser/control": sessionsIdBrowserControl,
   "sessions/[id]/browser/frame": sessionsIdBrowserFrame,
   "sessions/[id]/context": sessionsIdContext,
   "sessions/[id]/entries/[entryId]/thinking": sessionsIdEntriesEntryIdThinking,

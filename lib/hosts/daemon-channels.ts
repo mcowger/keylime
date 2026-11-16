@@ -1,6 +1,7 @@
 import { realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import type { BrowserControlArgs } from "../api-contracts/runner-lifecycle";
 import type { SpawnRequest, SpawnResult } from "./host";
 import type { RpcTransport } from "../omp/rpc-transport";
 import { readSessionHeaderSync } from "../omp/session-files";
@@ -221,6 +222,19 @@ export class ChannelTable {
       inFlight.delete(channel);
     }
   }
+  /** Send input only to the existing runner that owns this session; never start one. */
+  async browserControl(sessionId: string, args: BrowserControlArgs): Promise<unknown> {
+    if (!isValidSessionId(sessionId)) throw invalid("Invalid session id");
+    const channel = [...this.channels.values()].find(
+      (candidate) => !candidate.exited && candidate.pending.sessionId === sessionId,
+    );
+    if (!channel) throw new HostOpError(404, "session_not_running", "Session is not running");
+    const frame = await this.command(channel, "browser_control", args, undefined, 7000);
+    if (channel.exited || channel.pending.sessionId !== sessionId)
+      throw new HostOpError(404, "session_not_running", "Session is no longer running");
+    return frame.data;
+  }
+
 
   private workspaceContains(root: string, cwd: string): boolean {
     const canonical = (value: string) => {

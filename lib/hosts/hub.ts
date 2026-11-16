@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { Value } from "@sinclair/typebox/value";
 import { BrowserListSchema, BrowserFrameSchema } from "../api-contracts/host-control-operations";
 import type { BrowserListResult, BrowserCaptureResult } from "../api-contracts/runner-lifecycle";
+import { BrowserControlResultSchema, type BrowserControlArgs, type BrowserControlResult } from "../api-contracts/runner-lifecycle";
 import { readBodyWithinLimit } from "../bounded-form-data";
 import type { RpcTransport } from "../omp/rpc-transport";
 import type { ProjectRegistryEntry } from "../project-registry";
@@ -2627,6 +2628,14 @@ export async function hostBrowserList(hostId: string, sessionId: string): Promis
 export async function hostBrowserCapture(hostId: string, sessionId: string, tabId: string): Promise<BrowserCaptureResult> {
   const value = await request(hostId, "browserCapture", { sessionId, tabId });
   if (!Value.Check(BrowserFrameSchema, value))
+    throw new HostOpError(502, "invalid_browser_result", "Invalid browser result from host");
+  return value;
+}
+
+/** Send one action to the owning host without retrying an uncertain result. */
+export async function hostBrowserControl(hostId: string, sessionId: string, control: BrowserControlArgs): Promise<BrowserControlResult> {
+  const value = await request(hostId, "browserControl", { sessionId, control });
+  if (!Value.Check(BrowserControlResultSchema, value))
     throw new HostOpError(502, "invalid_browser_result", "Invalid browser result from host");
   return value;
 }

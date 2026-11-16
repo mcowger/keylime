@@ -1,6 +1,7 @@
 import { lstatSync, realpathSync, mkdirSync, watch } from "node:fs";
 import { Value } from "@sinclair/typebox/value";
 import { BrowserListSchema, BrowserFrameSchema } from "../api-contracts/host-control-operations";
+import { BrowserControlArgsSchema, BrowserControlResultSchema } from "../api-contracts/runner-lifecycle";
 import { access, constants } from "node:fs/promises";
 import { homedir } from "node:os";
 import {
@@ -916,6 +917,14 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
           throw new HostOpError(400, "invalid_request", "Invalid browser request");
         const result = await channels.browserCommand(args.sessionId, op === "browserCapture" ? args.tabId as string : undefined);
         if (!Value.Check(op === "browserList" ? BrowserListSchema : BrowserFrameSchema, result))
+          throw new HostOpError(502, "invalid_browser_result", "Invalid browser result from runner");
+        return result;
+      }
+      case "browserControl": {
+        if (typeof args.sessionId !== "string" || !isValidSessionId(args.sessionId) || !Value.Check(BrowserControlArgsSchema, args.control))
+          throw new HostOpError(400, "invalid_request", "Invalid browser request");
+        const result = await channels.browserControl(args.sessionId, args.control);
+        if (!Value.Check(BrowserControlResultSchema, result))
           throw new HostOpError(502, "invalid_browser_result", "Invalid browser result from runner");
         return result;
       }

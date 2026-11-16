@@ -9,7 +9,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ### Added
 - New local chats offer global skills in slash completion before a session or workspace starts.
 - Seeded development sessions include an agent chat exchange for checking incoming and outgoing Markdown.
-- Live chats with Chromium/CDP pages show a view-only Browser workspace tab. Capture runs only while the view is visible.
+- Live chats with Chromium/CDP pages show a Browser workspace tab. Capture runs only while visible; optional shared control enables navigation and input without pausing the agent.
 - Untitled chats show a temporary topic label extracted from the first prompt until a generated or manually chosen title is available.
 - Seeded development sessions include completed and in-progress tasks for testing composer indicators.
 - Mobile composer controls use square icon actions, reduced padding, and compact running activity indicators.
@@ -66,6 +66,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Seeded development sessions include an agent chat exchange for checking incoming and outgoing Markdown
 - `bun run dev -- --browser-fixture` starts the live Chromium viewer fixture alongside the seeded development server
 - New chats in a local project show available skills in the slash menu before a session starts
+- Live Chromium/CDP pages in the Browser tab can be taken over for shared control: address-bar navigation, back/forward/reload, pointer, drag, wheel, keyboard and text input without pausing the agent
 
 ### Changed
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.
@@ -218,6 +219,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Project display names no longer reset while the field is being edited; saves are debounced
 - Agent chat Markdown uses the same compact text and styles as tool output
 - Skill autocomplete matches new-session skill entries by their unprefixed name
+- `bun run dev --browser-fixture` starts its Chromium fixture session through the host daemon instead of a separate script, and reports when the seeded session fails to start
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

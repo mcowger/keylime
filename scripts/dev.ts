@@ -147,11 +147,26 @@ try {
       "--port",
       String(port),
     ]);
-    if (values["browser-fixture"])
-      spawn(["runner/scripts/dev-browser-fixture.ts"], {
-        KEYLIME_UI_FIXTURE_ROOT: directory,
-      });
-    spawn(["--hot", "--no-clear-screen", "bin/keylime-host.ts"]);
+    spawn(["--hot", "--no-clear-screen", "bin/keylime-host.ts"],
+      values["browser-fixture"] ? { KEYLIME_UI_FIXTURE_ROOT: directory, KEYLIME_BROWSER_FIXTURE: "1" } : {});
+    if (values["browser-fixture"]) {
+      const fixtureSession = "11111111-1111-4111-8111-111111111111";
+      const deadline = Date.now() + 60_000;
+      let started = false;
+      while (!stopping && Date.now() < deadline) {
+        try {
+          const response = await fetch(`${url}/api/agent/${fixtureSession}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ type: "get_state" }),
+            signal: AbortSignal.timeout(10_000),
+          });
+          if (response.ok) { started = true; break; }
+        } catch { /* Server and host start asynchronously. */ }
+        await Bun.sleep(500);
+      }
+      if (!started && !stopping) console.error("[dev] Could not start browser fixture session; check the runner build and host logs");
+    }
   }
   await finished;
 } catch (error) {

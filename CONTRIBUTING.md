@@ -18,8 +18,7 @@ bun runner/scripts/use-omp-build.ts && (cd runner && bun install --frozen-lockfi
 bun run dev   # seeded development server; prints its URL
 ```
 
-The optional dev browser fixture uses the installed runner dependencies but does not need
-a compiled runner. For other live sessions and model/auth features, build it with
+The optional dev browser fixture and other live sessions need a compiled runner:
 `bun runner/scripts/build-binary.ts`. Keylime finds
 `runner/release/keylime-omp-<os>-<arch>` by itself (`KEYLIME_OMP_BIN` overrides it).
 A stock `omp` does not speak key lime's channel.
@@ -35,16 +34,15 @@ bun run dev -- --browser-fixture  # also start the live Chromium viewer fixture
 
 Use the printed URL for browser checks. Avoid a fixed port when running multiple worktrees.
 
-With `--browser-fixture`, wait for `[dev] Browser fixture ready`, then open the printed URL. In the
-sidebar, open `atlas` and the `Plan the Atlas project` conversation. Select
-`Browser · Plan the Atlas project` in the workspace tabs (on mobile, open the
-workspace tab switcher first). The viewer shows a real headless Chromium tab
-scrolled to `Scrolled project dashboard`, below the initial page fold.
-
-The fixture uses an OMP session with a scripted local model, so it makes no model
-calls and does not need credentials. It is for viewing, not prompting. Chromium
-must be available; set `PUPPETEER_EXECUTABLE_PATH` to a Chrome/Chromium binary or
+With `--browser-fixture`, open the printed URL, select `atlas` and the `Plan the Atlas project`
+conversation, then select its Browser workspace tab (on mobile, open the workspace tab switcher
+first). The isolated host starts the seeded session, and browser discovery opens a real headless
+Chromium fixture. Use Take control to exercise navigation and input; no model call is needed.
+Chromium must be available; set `PUPPETEER_EXECUTABLE_PATH` to a Chrome/Chromium binary or
 allow OMP to download Chromium into the isolated home on first use.
+
+The real Chromium drag-selection regression is opt-in because it launches a browser and may download Chromium:
+`KEYLIME_TEST_BROWSER=1 bun test --parallel runner/test/browser-drag.integration.test.ts`.
 
 Each invocation creates a randomly named temporary directory with its own home,
 agent configuration, XDG directories, and host socket. The launcher prints its
