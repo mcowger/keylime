@@ -1,4 +1,3 @@
-import "./globals.css";
 import { createRoot } from "react-dom/client";
 import { ChatInput } from "@/components/ChatInput";
 
