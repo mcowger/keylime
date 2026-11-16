@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="public/icon.svg" alt="Keylime logo (inherited from ompweb)" width="150">
+<img src="public/icon.png" alt="Keylime logo" width="150">
 
 <h1>Keylime</h1>
 

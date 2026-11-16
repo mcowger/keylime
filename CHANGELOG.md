@@ -6,6 +6,8 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ## [Unreleased]
 
+- Replaced the inherited ompweb logo and icons with the Keylime logo.
+
 ### Added
 - `bun run deploy:local:fast:follow` streams the fast deployment log and waits for its detached worker to finish.
 - Added canonical TypeBox contracts and TypeBox Codegen bootstrapping across all HTTP handlers, host operations, browser commands, runner commands and events. OpenAPI, AsyncAPI and reusable JSON Schema are generated from source metadata with exhaustive registry and artifact drift checks; runtime validation is unchanged.
