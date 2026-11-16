@@ -87,6 +87,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Removed runtime version numbers from the chat welcome screen
 
 ### Fixed
+- The advisor review notice aligns with the composer on desktop.
 - New chats opened from a workspace's tab bar use that workspace without showing project and workspace selectors.
 - New Session opens the project picker when no workspace is selected, then opens a chat in the selected project.
 - Assistant timestamps appear after the active turn settles instead of moving between tool rows.
@@ -183,6 +184,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Aligned the mobile right-panel close button with the safe-area inset while preserving its 44px touch target
 - New Session opens the project picker when no workspace is selected, then opens a chat in the selected project
 - New chats opened from a workspace's tab bar use that workspace without showing project and workspace selectors
+- The advisor review notice aligns with the composer on desktop
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

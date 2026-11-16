@@ -292,6 +292,28 @@ test("renders goal, planning, and advisor indicators at the composer", () => {
   assert.match(html, /aria-label="(More actions|chatInput\.plusMenu)"/);
 });
 
+test("places the pending advisor notice at the composer's left edge", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(ChatInput, {
+      async onSend() {
+        return { status: "accepted" as const };
+      },
+      onAbort() {},
+      isStreaming: false,
+      advisorReviewPending: true,
+    }),
+  );
+  const document = new JSDOM(html).window.document;
+  const notice = document.querySelector('[role="status"]');
+  const shell = document.querySelector(".chat-input-shell");
+  assert.ok(notice);
+  assert.match(notice.textContent ?? "", /(Advisor reviewing…|chatInput\.advisorReviewing)/);
+  assert.ok(shell);
+  assert.ok(notice.parentElement?.contains(shell));
+  assert.equal(notice.parentElement?.style.position, "relative");
+  assert.equal((notice as HTMLElement).style.left, "0px");
+});
+
 
 test("filters model options by display name, identifier, and provider", () => {
   const options = [

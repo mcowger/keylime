@@ -48,7 +48,6 @@ import {
 import { ChatLiveTail } from "./ChatWindow-live-tail";
 import { HeldMessageView, MessageView } from "./MessageView";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
-import { AdvisorReviewStatus } from "./AdvisorReviewStatus";
 import { ExtensionDialog } from "./ExtensionDialog";
 import { ShipDialog } from "./ShipDialog";
 import { useShipAvailability } from "@/hooks/useShipAvailability";
@@ -1494,8 +1493,6 @@ export function ChatWindow({
       active.blur();
   }, [askOpen]);
   const chatInputElement = (
-    <div style={{ position: "relative" }}>
-      <AdvisorReviewStatus pending={advisorReviewPending} />
     <ChatInput
       todoPhases={todoPhases}
       subagents={subagents}
@@ -1550,6 +1547,7 @@ export function ChatWindow({
       activeGoal={activeGoal}
       activePlan={activePlan}
       advisorEnabled={advisorEnabled}
+      advisorReviewPending={advisorReviewPending}
       onAdvisorChange={handleAdvisorChange}
       advisorModel={advisorModelMeta}
       queuedMessages={queuedMessages}
@@ -1579,7 +1577,6 @@ export function ChatWindow({
          nothing to collapse. */
       onMinimize={isEmptyNew ? undefined : handleMinimize}
     />
-    </div>
   );
 
   const aboveEditorWidgets = extensionWidgets.filter(

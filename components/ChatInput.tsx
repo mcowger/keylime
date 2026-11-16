@@ -15,6 +15,7 @@ import { createPortal } from "react-dom";
 import type { ModelActivity } from "@/lib/model-activity";
 import { ModelActivityIndicator } from "./ModelActivityIndicator";
 import { ComposerActivityIndicators } from "./ComposerActivityIndicators";
+import { AdvisorReviewStatus } from "./AdvisorReviewStatus";
 import { ReasoningEffortSlider } from "./ReasoningEffortSlider";
 import {
   ChevronDown,
@@ -392,6 +393,7 @@ interface Props {
   activeGoal?: ActiveGoal | null;
   activePlan?: ActivePlan | null;
   advisorEnabled?: boolean;
+  advisorReviewPending?: boolean;
   /** Toggle the per-chat advisor (composer icon + /advisor command). */
   onAdvisorChange?: (enabled: boolean) => void;
   /** Collapse the entire composer into a minimized bar. */
@@ -540,6 +542,7 @@ export const ChatInput = memo(
       outbox = false,
       submissionBlocked = false,
       advisorModel,
+      advisorReviewPending = false,
       onCompact,
       contextUsage,
       modelActivity,
@@ -3399,7 +3402,14 @@ export const ChatInput = memo(
             e.target.value = "";
           }}
         />
-        <div style={{ maxWidth: CHAT_COLUMN_MAX_WIDTH, margin: "0 auto" }}>
+        <div
+          style={{
+            maxWidth: CHAT_COLUMN_MAX_WIDTH,
+            margin: "0 auto",
+            position: "relative",
+          }}
+        >
+          <AdvisorReviewStatus pending={advisorReviewPending} />
           <ModelErrorBanner error={modelError} />
           <ComposerModeStatus goal={activeGoal} plan={activePlan} />
           {/* Retry banner */}

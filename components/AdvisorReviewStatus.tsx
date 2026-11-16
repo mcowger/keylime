@@ -11,7 +11,7 @@ export function AdvisorReviewStatus({ pending }: { pending: boolean }) {
       style={{
         position: "absolute",
         bottom: "100%",
-        left: 16,
+        left: 0,
         marginBottom: 4,
         padding: "5px 10px",
         borderRadius: 12,
