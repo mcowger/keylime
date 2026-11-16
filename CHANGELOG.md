@@ -97,6 +97,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Removed runtime version numbers from the chat welcome screen
 
 ### Fixed
+- Open workspace chats refresh generated titles without a page reload, including chats opened on another tab.
 - Prompt-first workspace creation continues with a safe fallback name and branch when model naming fails.
 - The advisor review notice aligns with the composer on desktop.
 - New chats opened from a workspace's tab bar use that workspace without showing project and workspace selectors.
@@ -199,6 +200,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The empty-chat composer follows the configured chat width instead of a fixed 760px column
 - Hide the composer task indicator when all remaining tasks are deleted
 - Closing Ship during work no longer cancels runner commands or an already-started host job; it only stops progress tracking and discards browser state
+- Generated titles survived delayed new-chat hydration, preventing stale names from overwriting refreshed titles
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

@@ -123,6 +123,16 @@ mock.module("./ChatWindow", () => ({
         },
         "Create session",
       ),
+      React.createElement(
+        "button",
+        {
+          onClick: () => props.onSessionCreated!({
+            id: "new-chat", cwd: "/repo", path: "", created: "2026-11-14",
+            modified: "2026-11-14", messageCount: 1, firstMessage: "hello",
+          }),
+        },
+        "Create chat here",
+      ),
     );
   },
 }));
@@ -373,6 +383,52 @@ test("creating a workspace from another workspace survives sidebar synchronizati
   cleanup();
 });
 
+test("a generated title survives delayed new-chat hydration", async () => {
+  sessionStorage.clear();
+  streams.length = 0;
+  const originalFetch = globalThis.fetch;
+  const { promise: hydration, resolve: resolveHydration } = Promise.withResolvers<Response>();
+  const stale = {
+    id: "new-chat", cwd: "/repo", path: "/new-chat.jsonl", projectRoot: "/repo",
+    created: "2026-11-14", modified: "2026-11-14", messageCount: 1, firstMessage: "hello",
+  };
+  let holdHydration = false;
+  let hydrationRequested = false;
+  globalThis.fetch = (async (url, options) => {
+    if (String(url) === "/api/sessions") {
+      if (holdHydration && !hydrationRequested) {
+        hydrationRequested = true;
+        return hydration;
+      }
+      return Response.json({ sessions: [{ ...stale, name: "Generated title" }] });
+    }
+    return originalFetch(url, options);
+  }) as typeof fetch;
+  try {
+    window.history.replaceState(null, "", "/?cwd=%2Frepo");
+    const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+    await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
+    holdHydration = true;
+    fireEvent.click(view.getByRole("button", { name: "Create chat here" }));
+    await waitFor(() => assert.ok(hydrationRequested));
+    const running = streams.find((stream) => stream.channel.kind === "running");
+    assert.ok(running?.onmessage);
+    await act(async () => running.onmessage!({ data: JSON.stringify({ type: "running", refreshSessionList: true }) }));
+    await waitFor(() => {
+      assert.equal(tabProps.activeSessionName, "Generated title");
+      assert.equal(tabProps.chatTabs.find((tab) => tab.sessionId === "new-chat")?.title, "Generated title");
+    });
+    await act(async () => resolveHydration(Response.json({ sessions: [stale] })));
+    await waitFor(() => {
+      assert.equal(tabProps.activeSessionName, "Generated title");
+      assert.equal(tabProps.chatTabs.find((tab) => tab.sessionId === "new-chat")?.title, "Generated title");
+    });
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("shared chats appear without local membership and can be selected or dismissed without archiving", async () => {
   sessionStorage.clear();
   streams.length = 0;
@@ -413,6 +469,12 @@ test("shared chats appear without local membership and can be selected or dismis
     await waitFor(() =>
       assert.ok(tabProps.chatTabs.some((tab) => tab.title === "Shared")),
     );
+    session.name = "Generated title";
+    const running = streams.find((stream) => stream.channel.kind === "running");
+    assert.ok(running?.onmessage);
+    await act(async () => running.onmessage!({ data: JSON.stringify({ type: "running", refreshSessionList: true }) }));
+    await waitFor(() => assert.ok(tabProps.chatTabs.some((tab) => tab.title === "Generated title")));
+    session.name = "Shared";
     assert.ok(tabProps.openSessionIds.includes("shared"));
     assert.equal(
       streams.filter(

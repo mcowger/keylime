@@ -1941,7 +1941,7 @@ export function AppShell({ appName }: { appName: string }) {
               tab.session?.id === sessionId
                 ? {
                     ...tab,
-                    session: full,
+                    session: { ...full, name: tab.session.name || full.name },
                     cwd: full.cwd,
                     hostId: remoteHostId(full.hostId),
                   }
@@ -1952,7 +1952,7 @@ export function AppShell({ appName }: { appName: string }) {
             prev &&
             prev.id === sessionId &&
             (!prev.projectRoot || prev.path === "")
-              ? full
+              ? { ...full, name: prev.name || full.name }
               : prev,
           );
         })
@@ -1989,6 +1989,12 @@ export function AppShell({ appName }: { appName: string }) {
               return name && name !== tab.session?.name
                 ? { ...tab, session: { ...tab.session!, name } }
                 : tab;
+            }),
+          );
+          setSharedSessions((sessions) =>
+            sessions.map((session) => {
+              const name = names.get(session.id);
+              return name && name !== session.name ? { ...session, name } : session;
             }),
           );
           setSelectedSession((current) => {
