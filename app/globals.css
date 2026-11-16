@@ -4335,7 +4335,8 @@ html[data-touch-targets="accessible"] .right-panel-toolbar {
     --right-panel-close-width: 44px;
   }
   html:root .shell-toolbar-btn.right-panel-close-button {
-    padding-top: env(safe-area-inset-top, 0px) !important;
+    top: env(safe-area-inset-top, 0px);
+    height: 44px !important;
     border-bottom: 1px solid var(--border);
   }
   .shell-toolbar-divider {

@@ -177,6 +177,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Toast titles use the application's standard font instead of the display serif
 - Images referenced from system temporary directories can be displayed, and blocked local images report their path instead of showing a broken preview
 - Assistant timestamps appear after the active turn settles instead of moving between tool rows
+- Aligned the mobile right-panel close button with the safe-area inset while preserving its 44px touch target
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
