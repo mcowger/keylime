@@ -47,6 +47,7 @@ export function ModelActivityIndicator({
       : t("modelActivity.idle");
   return (
     <span
+      className="composer-model-activity"
       aria-label={label}
       title={
         kind === "streaming"

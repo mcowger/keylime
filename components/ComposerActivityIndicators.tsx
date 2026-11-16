@@ -103,12 +103,12 @@ export function ComposerActivityIndicators({
   if (todoPhases.length === 0 && activeAgents.length === 0) return null;
 
   return (
-    <span ref={rootRef} style={{ display: "inline-flex", gap: 6 }}>
+    <span ref={rootRef} className="composer-activity-indicators" style={{ display: "inline-flex", gap: 6 }}>
       {todoPhases.length > 0 && (
         <button
           ref={todoTriggerRef}
           type="button"
-          className="ui-focus-ring"
+          className="ui-focus-ring composer-activity-pill"
           style={pillStyle}
           aria-label={todoLabel}
           title={todoLabel}
@@ -125,7 +125,7 @@ export function ComposerActivityIndicators({
         <button
           ref={agentsTriggerRef}
           type="button"
-          className="ui-focus-ring"
+          className="ui-focus-ring composer-activity-pill"
           style={pillStyle}
           aria-label={agentLabel}
           title={agentLabel}

@@ -5746,6 +5746,7 @@ export const ChatInput = memo(
                   <button
                     type="button"
                     className="composer-primary-action"
+                    aria-label={primaryActionRunsShell ? t("chatInput.runShell") : t(primaryActionMode === "steer" ? "chatInput.steer" : "chatInput.queue")}
                     onClick={() => {
                       if (dictationCapturing)
                         stopAndFinishDictation(primaryActionMode);
@@ -5791,18 +5792,15 @@ export const ChatInput = memo(
                         aria-hidden="true"
                       />
                     )}
-                    {t(
-                      primaryActionRunsShell
-                        ? "chatInput.runShell"
-                        : primaryActionMode === "steer"
-                          ? "chatInput.steer"
-                          : "chatInput.queue",
-                    )}
+                    <span className="composer-action-label">
+                      {t(primaryActionRunsShell ? "chatInput.runShell" : primaryActionMode === "steer" ? "chatInput.steer" : "chatInput.queue")}
+                    </span>
                   </button>
                 ) : isStreaming && !btwMode ? (
                   <button
                     type="button"
                     className="composer-primary-action"
+                    aria-label={t("chatInput.stopAgent")}
                     onClick={isCompacting ? onAbortCompaction : onAbort}
                     title={t("chatInput.stopAgent")}
                     style={{
@@ -5836,12 +5834,13 @@ export const ChatInput = memo(
                         fill="currentColor"
                       />
                     </svg>
-                    {t("chatInput.stop")}
+                    <span className="composer-action-label">{t("chatInput.stop")}</span>
                   </button>
                 ) : (
                   <button
                     type="button"
                     className="composer-primary-action"
+                    aria-label={t("chatInput.send")}
                     onClick={
                       isRecording || isPaused || isReviewing
                         ? () => stopAndFinishDictation("send")
@@ -5946,9 +5945,11 @@ export const ChatInput = memo(
                         <polyline points="7.5 3 12 7 7.5 11" />
                       </svg>
                     )}
-                    {!btwMode && uploadingCount > 0
-                      ? t("chatInput.uploadsPending", { count: uploadingCount })
-                      : t("chatInput.send")}
+                    <span className="composer-action-label">
+                      {!btwMode && uploadingCount > 0
+                        ? t("chatInput.uploadsPending", { count: uploadingCount })
+                        : t("chatInput.send")}
+                    </span>
                   </button>
                 )}
               </div>

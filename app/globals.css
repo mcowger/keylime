@@ -2774,27 +2774,6 @@ html[data-touch-targets="accessible"]
     padding-inline: 0 !important;
   }
 }
-@container (max-width: 300px) {
-  .composer-model-control {
-    flex: 0 0 24px;
-  }
-  .composer-model-control > button {
-    justify-content: center;
-    gap: 0 !important;
-  }
-  .composer-model-control > button > span,
-  .composer-model-control > button > svg:last-child {
-    display: none;
-  }
-  .composer-toolbar > button:not(.composer-primary-action),
-  .composer-toolbar > div > button,
-  .composer-toolbar > span {
-    width: 24px !important;
-  }
-  .composer-primary-action {
-    padding-inline: 6px;
-  }
-}
 .composer-control-shelf {
   animation: ui-slide-up var(--dur-fast) var(--ease-out-warm) both;
 }
@@ -2841,15 +2820,43 @@ html[data-touch-targets="accessible"]
   .file-viewer-meta {
     display: none;
   }
-  .composer-toolbar {
-    flex-wrap: wrap !important;
-    row-gap: 6px;
+  .chat-input-shell {
+    padding: 8px !important;
   }
-  /* Own row above the controls, so it never squeezes the model picker. */
+  .composer-toolbar {
+    flex-wrap: nowrap !important;
+    gap: 0 !important;
+    margin-top: 4px !important;
+    padding-top: 4px !important;
+  }
+  .composer-model-control {
+    min-width: 0 !important;
+  }
+  .composer-model-activity {
+    width: auto !important;
+    flex: 0 0 auto !important;
+    gap: 3px !important;
+    margin-right: 2px !important;
+  }
+  .composer-activity-indicators {
+    flex: 0 0 auto;
+    gap: 2px !important;
+  }
+  .composer-activity-pill {
+    gap: 2px !important;
+    padding-inline: 4px !important;
+  }
+  .composer-primary-action {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    padding: 0;
+  }
+  .composer-action-label {
+    display: none;
+  }
   .composer-usage-limit-badge {
-    order: -1;
-    flex-basis: 100%;
-    max-width: none;
+    max-width: 80px;
   }
 
   .sidebar-icon-button,
@@ -5492,9 +5499,14 @@ html[data-touch-targets="accessible"]
   ) {
   min-width: 44px;
 }
-html[data-touch-targets="accessible"] .composer-toolbar {
-  flex-wrap: wrap !important;
-  gap: 4px;
+@media (max-width: 640px) {
+  html[data-touch-targets="accessible"] .composer-primary-action {
+    width: 44px;
+    height: 44px;
+  }
+  html[data-touch-targets="accessible"] .composer-activity-pill {
+    min-height: 44px !important;
+  }
 }
 
 /* Upstream coarse-pointer 44px targets, applied only in the Accessible mode. */
