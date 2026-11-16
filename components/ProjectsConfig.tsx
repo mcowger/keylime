@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { FolderGit2, Settings2 } from "lucide-react";
+import { useIsMobile } from "@/hooks/useIsMobile";
+import { ThemedSelect } from "./ui/primitives";
 import { useHostRows } from "@/hooks/useHostRows";
 import { useI18n } from "@/lib/i18n";
 import type {
@@ -43,25 +46,29 @@ export function ProjectsConfig() {
   }, [hostId, host?.status, revision]);
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      <label>
-        Host{" "}
+      <div className="settings-card">
+        <div className="settings-card-text">
+          <label htmlFor="project-settings-host" className="settings-card-title">Host</label>
+          <div className="settings-card-desc">Choose the host whose projects you want to configure.</div>
+        </div>
         {hosts && (
-          <select
-            value={hostId}
-            onChange={(e) => {
-              setSnapshot(null);
-              setError("");
-              setHostId(e.target.value);
-            }}
-          >
-            {hosts.map((item) => (
-              <option key={item.id} value={item.id}>
-                {hostName(t, item)} ({hostStatusText(t, item)})
-              </option>
-            ))}
-          </select>
+          <span className="settings-card-control">
+            <ThemedSelect
+              id="project-settings-host"
+              value={hostId}
+              onChange={(value) => {
+                setSnapshot(null);
+                setError("");
+                setHostId(value);
+              }}
+              options={hosts.map((item) => ({
+                value: item.id,
+                label: `${hostName(t, item)} (${hostStatusText(t, item)})`,
+              }))}
+            />
+          </span>
         )}
-      </label>
+      </div>
       {failed && <div role="alert">Could not load hosts.</div>}
       {!hosts && !failed && <div role="status">Loading hosts...</div>}
       {hosts && !host && <div>Select a host.</div>}
@@ -163,11 +170,17 @@ export function ProjectSettings({
   hostId,
   project,
   onUpdated,
+  onPendingChange,
 }: {
   hostId: string;
   project: HierarchyProject;
   onUpdated: (snapshot: HierarchySnapshot) => void;
+  onPendingChange?: (pending: boolean) => void;
 }) {
+  const [tab, setTab] = useState<"general" | "workspace">("general");
+  const mobile = useIsMobile();
+  const id = useId();
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const key = JSON.stringify([hostId, project.id]);
   const [save] = useState(() => {
     let current = nameSaves.get(key);
@@ -222,67 +235,79 @@ export function ProjectSettings({
     void saveProjectName(key, hostId, project.id, save);
   }
 
+  const tabs = [
+    { id: "general", label: "General", description: "Name and icon", Icon: Settings2 },
+    { id: "workspace", label: "Workspace setup", description: "Creation pipeline", Icon: FolderGit2 },
+  ] as const;
+
   return (
-    <section
-      style={{
-        border: "1px solid var(--border)",
-        borderRadius: 8,
-        padding: 16,
-        display: "grid",
-        gridTemplateColumns: "minmax(0, 1fr)",
-        gap: 12,
-        minWidth: 0,
-        overflowWrap: "anywhere",
-      }}
-    >
-      <h3>{project.alias ?? project.name}</h3>
-      <div
-        style={{
-          color: "var(--text-dim)",
-          fontSize: 12,
-          overflowWrap: "anywhere",
-        }}
-      >
-        {project.path}
+    <section style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+      <div style={{ padding: "0 0 16px" }}>
+        <h3 style={{ margin: 0, fontSize: 16, color: "var(--text)" }}>{project.alias ?? project.name}</h3>
+        <div style={{ marginTop: 4, color: "var(--text-dim)", fontSize: 12 }}>{project.path}</div>
       </div>
-      <label style={{ display: "grid", gap: 4, minWidth: 0 }}>
-        Display name{" "}
-        <input
-          style={{
-            width: "100%",
-            boxSizing: "border-box",
-            padding: 8,
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius-control)",
-            background: "var(--bg-panel)",
-            color: "var(--text)",
-          }}
-          value={save.name}
-          onChange={(e) => changeName(e.target.value)}
-        />
-      </label>
-      {save.error && (
-        <div role="alert">
-          {save.error}{" "}
-          <button
-            type="button"
-            onClick={() => void saveProjectName(key, hostId, project.id, save)}
-          >
-            Retry
-          </button>
+      <div style={{ display: "flex", flexDirection: mobile ? "column" : "row", minWidth: 0 }}>
+        <nav role="tablist" aria-label="Project settings" aria-orientation={mobile ? "horizontal" : "vertical"} className={mobile ? "settings-nav-horizontal" : "settings-nav"} style={mobile ? { display: "flex", gap: 3, padding: "7px 0", borderBottom: "1px solid var(--border)", overflowX: "auto" } : { width: 190, padding: "0 10px 0 0", background: "transparent" }}>
+          {tabs.map((item, index) => {
+            const selected = tab === item.id;
+            return (
+              <button
+                key={item.id}
+                ref={(element) => { tabRefs.current[index] = element; }}
+                type="button"
+                role="tab"
+                id={`${id}-tab-${item.id}`}
+                aria-controls={`${id}-panel-${item.id}`}
+                aria-selected={selected}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => setTab(item.id)}
+                onKeyDown={(event) => {
+                  let next: number;
+                  if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % tabs.length;
+                  else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index + tabs.length - 1) % tabs.length;
+                  else if (event.key === "Home") next = 0;
+                  else if (event.key === "End") next = tabs.length - 1;
+                  else return;
+                  event.preventDefault();
+                  setTab(tabs[next].id);
+                  tabRefs.current[next]?.focus();
+                }}
+                className={mobile ? undefined : `settings-nav-item${selected ? " active" : ""}`}
+                style={mobile ? { display: "inline-flex", alignItems: "flex-start", gap: 5, padding: "6px 9px", border: "none", borderRadius: "var(--radius-control)", background: selected ? "var(--bg-selected)" : "transparent", color: selected ? "var(--text)" : "var(--text-muted)", fontSize: 12, whiteSpace: "nowrap", textAlign: "left", cursor: "pointer" } : undefined}
+              >
+                <item.Icon size={mobile ? 13 : 16} aria-hidden="true" style={{ flexShrink: 0, marginTop: 2, color: selected ? "var(--accent)" : "currentColor" }} />
+                <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                  <span style={{ fontSize: mobile ? 12 : 13, fontWeight: selected ? 600 : 500, lineHeight: 1.3 }}>{item.label}</span>
+                  <span style={{ fontSize: mobile ? 10 : 11, color: "var(--text-dim)", lineHeight: 1.35 }}>{item.description}</span>
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+        <div style={{ flex: 1, minWidth: 0, padding: mobile ? "20px 0 0" : "0 0 0 20px" }}>
+          <div role="tabpanel" id={`${id}-panel-general`} aria-labelledby={`${id}-tab-general`} hidden={tab !== "general"}>
+            <h2 style={{ margin: "0 0 6px", fontFamily: "var(--font-serif, Georgia, serif)", fontSize: 22, fontWeight: 600 }}>General</h2>
+            <p className="settings-content-subtitle" style={{ margin: "0 0 24px" }}>Set how this project appears in the sidebar.</p>
+            <div className="settings-card" style={mobile ? { flexDirection: "column", alignItems: "stretch", gap: 10 } : undefined}>
+              <div className="settings-card-text">
+                <label htmlFor={`${id}-name`} className="settings-card-title">Display name</label>
+                <div id={`${id}-name-desc`} className="settings-card-desc">Choose the name shown for this project. Clear it to use the directory name.</div>
+              </div>
+              <span className="settings-card-control" style={mobile ? { width: "100%" } : { flexShrink: 1 }}>
+                <input id={`${id}-name`} aria-describedby={`${id}-name-desc`} style={{ width: "100%", minWidth: 0, boxSizing: "border-box", padding: "7px 9px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg)", color: "var(--text)", fontSize: 13 }} value={save.name} onChange={(e) => changeName(e.target.value)} />
+              </span>
+            </div>
+            {save.running && <div role="status" className="settings-card-desc">Saving name...</div>}
+            {save.error && <div role="alert" className="settings-card-desc">{save.error} <button type="button" className="dialog-action" onClick={() => void saveProjectName(key, hostId, project.id, save)}>Retry</button></div>}
+            <ProjectIconSettings hostId={hostId} project={project} onUpdated={onUpdated} onPendingChange={onPendingChange} />
+          </div>
+          <div role="tabpanel" id={`${id}-panel-workspace`} aria-labelledby={`${id}-tab-workspace`} hidden={tab !== "workspace"}>
+            <h2 style={{ margin: "0 0 6px", fontFamily: "var(--font-serif, Georgia, serif)", fontSize: 22, fontWeight: 600 }}>Workspace setup</h2>
+            <p className="settings-content-subtitle" style={{ margin: "0 0 24px" }}>Configure workspace creation for this project.</p>
+            <CreationPipelineEditor key={`${hostId}:${project.path}`} hostId={hostId} projectPath={project.path} gitProject={project.kind === "git"} />
+          </div>
         </div>
-      )}
-      <ProjectIconSettings
-        hostId={hostId}
-        project={project}
-        onUpdated={onUpdated}
-      />
-      <CreationPipelineEditor
-        key={`${hostId}:${project.path}`}
-        hostId={hostId}
-        projectPath={project.path}
-        gitProject={project.kind === "git"}
-      />
+      </div>
     </section>
   );
 }
@@ -291,14 +316,20 @@ function ProjectIconSettings({
   hostId,
   project,
   onUpdated,
+  onPendingChange,
 }: {
   hostId: string;
   project: HierarchyProject;
   onUpdated: (snapshot: HierarchySnapshot) => void;
+  onPendingChange?: (pending: boolean) => void;
 }) {
   const [candidates, setCandidates] = useState<NonNullable<HierarchySnapshot["iconCandidates"]> | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  useEffect(() => {
+    onPendingChange?.(busy);
+    return () => onPendingChange?.(false);
+  }, [busy, onPendingChange]);
   const mounted = useRef(true);
   const controller = useRef<AbortController | null>(null);
   useEffect(() => {
@@ -379,29 +410,30 @@ function ProjectIconSettings({
   }
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 8, minWidth: 0 }}>
-      <strong>Project icon</strong>
+    <div className="settings-card" style={{ display: "block", minWidth: 0 }}>
+      <div className="settings-card-title">Project icon</div>
+      <div className="settings-card-desc" style={{ marginBottom: 12 }}>Choose an image or find an icon in the repository. Uploaded images are center-cropped to a square.</div>
       {project.icon && (
-        <img src={project.icon} alt="Current project icon" width={48} height={48} style={{ objectFit: "cover", borderRadius: 6 }} />
+        <img src={project.icon} alt="Current project icon" width={48} height={48} style={{ objectFit: "cover", borderRadius: "var(--radius-control)", border: "1px solid var(--border)", marginBottom: 10 }} />
       )}
-      <label style={{ display: "grid", gap: 4, minWidth: 0 }}>
+      <label style={{ display: "grid", gap: 6, minWidth: 0, color: "var(--text-muted)", fontSize: 12, marginBottom: 10 }}>
         Upload image (center-cropped to a square)
-        <input style={{ maxWidth: "100%", minWidth: 0 }} type="file" accept="image/*" disabled={busy} onChange={(e) => {
+        <input className="project-icon-upload" style={{ maxWidth: "100%", minWidth: 0, color: "var(--text)", fontSize: 12 }} type="file" accept="image/*" disabled={busy} onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = "";
           if (file) void uploadIcon(file);
         }} />
       </label>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button type="button" disabled={busy} onClick={() => void findIcons()}>Find repository icons</button>
-        {project.icon && <button type="button" disabled={busy} onClick={() => void saveIcon(null)}>Remove icon</button>}
+        <button className="dialog-action" style={{ padding: "6px 10px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg-panel)", color: "var(--text)", fontSize: 12, cursor: busy ? "not-allowed" : "pointer" }} type="button" disabled={busy} onClick={() => void findIcons()}>Find repository icons</button>
+        {project.icon && <button className="dialog-action" style={{ padding: "6px 10px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg-panel)", color: "var(--text)", fontSize: 12, cursor: busy ? "not-allowed" : "pointer" }} type="button" disabled={busy} onClick={() => void saveIcon(null)}>Remove icon</button>}
       </div>
       {busy && <div role="status">Working...</div>}
       {error && <div role="alert">{error}</div>}
       {candidates && (candidates.length ? (
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 8, minWidth: 0 }}>
           {candidates.map((candidate) => (
-            <button key={candidate.path} type="button" disabled={busy} onClick={() => void saveIcon(candidate.icon)} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, textAlign: "left", overflowWrap: "anywhere" }}>
+            <button key={candidate.path} type="button" disabled={busy} onClick={() => void saveIcon(candidate.icon)} style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, padding: 8, border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg-panel)", color: "var(--text)", fontSize: 12, textAlign: "left", overflowWrap: "anywhere", cursor: busy ? "not-allowed" : "pointer" }}>
               <img src={candidate.icon} alt="" width={40} height={40} style={{ objectFit: "contain", flexShrink: 0 }} />
               <span style={{ minWidth: 0 }}>{candidate.path}</span>
             </button>

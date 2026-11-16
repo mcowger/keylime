@@ -9,11 +9,15 @@ import type {
 const fieldStyle = {
   width: "100%",
   boxSizing: "border-box",
-  padding: 8,
+  padding: "10px 12px",
   border: "1px solid var(--border)",
   borderRadius: "var(--radius-control)",
   background: "var(--bg-panel)",
   color: "var(--text)",
+  font: "inherit",
+  fontSize: 13,
+  lineHeight: 1.5,
+  resize: "vertical",
 } as const;
 
 const buttonStyle = {
@@ -25,6 +29,40 @@ const buttonStyle = {
   cursor: "pointer",
   fontSize: 13,
   fontWeight: 600,
+} as const;
+
+const labelStyle = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "flex-start",
+  minWidth: 0,
+} as const;
+
+const descriptionStyle = {
+  margin: 0,
+  color: "var(--text-muted)",
+  fontSize: 12.5,
+  lineHeight: 1.5,
+} as const;
+
+const choiceStyle = {
+  minWidth: 0,
+  cursor: "pointer",
+} as const;
+
+const choiceInputStyle = {
+  accentColor: "var(--accent-strong)",
+  flexShrink: 0,
+  width: 16,
+  height: 16,
+  margin: 0,
+} as const;
+
+const secondaryButtonStyle = {
+  ...buttonStyle,
+  background: "var(--bg-panel)",
+  border: "1px solid var(--border)",
+  color: "var(--text)",
 } as const;
 
 // Keep writes ordered even if an editor is closed and reopened while a request is pending.
@@ -245,16 +283,18 @@ export function CreationPipelineEditor({
     <section
       style={{
         display: "grid",
-        gap: 10,
+        gap: 14,
         gridTemplateColumns: "minmax(0, 1fr)",
         minWidth: 0,
+        borderTop: "1px solid var(--border)",
+        paddingTop: 18,
         overflowWrap: "anywhere",
       }}
     >
-      <h3>Creation commands</h3>
+      <h3 className="settings-section-title" style={{ margin: 0, fontSize: 13.5, fontWeight: 600 }}>Creation commands</h3>
       {invalidStored && !settings && (
-        <div style={{ display: "grid", gap: 8 }}>
-          <p>
+        <div style={{ display: "grid", gap: 12, minWidth: 0 }}>
+          <p style={descriptionStyle}>
             Stored workspace commands are invalid and cannot be displayed. Enter
             replacement{" "}
             {projectPath === undefined ? "host defaults" : "project commands"}{" "}
@@ -270,9 +310,13 @@ export function CreationPipelineEditor({
               ["postNonBlocking", "Post-non-blocking"],
             ] as const
           ).map(([stage, label]) => (
-            <label key={stage} style={{ display: "grid", gap: 4 }}>
-              {label} commands (one per line)
+            <label key={stage} className="settings-card" style={labelStyle}>
+              <span className="settings-card-text">
+                <span className="settings-card-title">{label} commands (one per line)</span>
+                <span className="settings-card-desc" style={{ display: "block" }}>Replace the stored {label.toLowerCase()} stage.</span>
+              </span>
               <textarea
+                aria-label={`${label} commands (one per line)`}
                 style={fieldStyle}
                 rows={3}
                 value={replacement[stage]}
@@ -295,45 +339,62 @@ export function CreationPipelineEditor({
         </div>
       )}
       {gitProject && settings && (
-        <fieldset style={{ minWidth: 0, display: "flex", flexWrap: "wrap", gap: "8px 16px" }}>
-          <legend>Workspace configuration source</legend>
-          <label>
+        <fieldset style={{ minWidth: 0, margin: 0, padding: 0, border: 0, display: "grid", gap: 10 }}>
+          <legend className="settings-section-title" style={{ padding: 0, marginBottom: 10 }}>Workspace configuration source</legend>
+          <label className="settings-card" style={choiceStyle}>
+            <span className="settings-card-text">
+              <span className="settings-card-title">Manual</span>
+              <span className="settings-card-desc" style={{ display: "block" }}>Use project commands or inherit host defaults.</span>
+            </span>
             <input
               type="radio"
+              className="settings-card-control"
+              style={choiceInputStyle}
+              aria-label="Manual"
               name={`source-${hostId}-${projectPath}`}
               checked={settings.source === "manual"}
               onChange={() => save({ ...settings, source: "manual" })}
-            />{" "}
-            Manual
-          </label>{" "}
+            />
+          </label>
           {!settings.paseo?.missing && (
-            <label>
+            <label className="settings-card" style={choiceStyle}>
+              <span className="settings-card-text">
+                <span className="settings-card-title">Follow Paseo workspace setup</span>
+                <span className="settings-card-desc" style={{ display: "block" }}>Use the project's on-disk Paseo recipe instead of manual commands.</span>
+              </span>
               <input
                 type="radio"
+                className="settings-card-control"
+                style={choiceInputStyle}
+                aria-label="Follow Paseo workspace setup"
                 name={`source-${hostId}-${projectPath}`}
                 checked={settings.source === "paseo"}
                 onChange={() => save({ ...settings, source: "paseo" })}
-              />{" "}
-              Follow Paseo workspace setup
+              />
             </label>
           )}
         </fieldset>
       )}
       {gitProject && settings?.source === "paseo" && (
-        <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
-          <p>
-            Follow Paseo uses the current on-disk project file, including
-            uncommitted changes. It bypasses all manual project and host
-            commands and uses built-in Git workspace creation, .worktreeinclude
-            copying, setup and teardown.
+        <div style={{ display: "grid", gap: 12, minWidth: 0 }}>
+          <p className="settings-card-desc" style={{ margin: 0 }}>
+            Paseo uses the current project file, including uncommitted changes,
+            instead of manual commands. Recipe commands execute as your user
+            when workspaces are created or deleted; only enable this for a trusted
+            project. Saving settings does not run the recipe.
           </p>
-          <p>
-            Services, scripts, terminals and port runtime are not supported.
-            Future edits to the recipe will execute as your user when workspaces
-            are created or deleted. Only enable this for a trusted project.
-            Saving settings does not run the recipe.
+          <p className="settings-card-desc" style={{ margin: 0 }}>
+            Refresh after editing the recipe. Changed or moved blocking commands
+            must be reviewed and removed before workspace creation can continue.
           </p>
-          <p style={{ color: "var(--text-dim)", fontSize: 12 }}>
+          <details className="settings-card-desc">
+            <summary style={{ cursor: "pointer" }}>Command environment and execution details</summary>
+          <p style={descriptionStyle}>
+            Paseo uses built-in Git workspace creation, .worktreeinclude copying,
+            setup and teardown. Services, scripts, terminals and port runtime are
+            not supported.
+          </p>
+          <p style={descriptionStyle}>
             Setup and teardown commands receive PASEO_SOURCE_CHECKOUT_PATH (the
             project checkout), PASEO_WORKTREE_PATH, and PASEO_BRANCH_NAME.
             Workspace commands also receive PASEO_PROJECT_PATH,
@@ -341,7 +402,7 @@ export function CreationPipelineEditor({
             PASEO_BRANCH_MODE, and PASEO_CREATE_RESULT as available; the
             create-result file is not used in Paseo mode.
           </p>
-          <p style={{ color: "var(--text-dim)", fontSize: 12 }}>
+          <p style={descriptionStyle}>
             Blocking setup commands run first in recipe order after the
             workspace is registered; the workspace is ready after they finish.
             Nonblocking commands then run in recipe order. Commands are
@@ -351,11 +412,12 @@ export function CreationPipelineEditor({
             blocked until you review and remove the stale choice, then select
             any commands that should block readiness.
           </p>
+          </details>
           <div>
             <button
               type="button"
               className="dialog-action"
-              style={buttonStyle}
+              style={secondaryButtonStyle}
               disabled={refreshing}
               onClick={() => void refreshPreview()}
             >
@@ -366,7 +428,7 @@ export function CreationPipelineEditor({
             <div role="alert">Preview refresh failed: {previewError}</div>
           )}
           {settings.paseo ? (
-            <div style={{ minWidth: 0 }}>
+            <div style={{ display: "grid", gap: 12, minWidth: 0, fontSize: 13, lineHeight: 1.5 }}>
               <div>Project file: {settings.paseo.path}</div>
               {settings.paseo.fingerprint && (
                 <div>Fingerprint: {settings.paseo.fingerprint}</div>
@@ -386,6 +448,7 @@ export function CreationPipelineEditor({
                     matches the recipe and blocks workspace creation.{" "}
                     <button
                       type="button"
+                      style={secondaryButtonStyle}
                       onClick={() =>
                         save(
                           {
@@ -410,14 +473,17 @@ export function CreationPipelineEditor({
                   settings.paseo.setup.map((command, index) => (
                     <label
                       key={index}
-                      style={{
-                        display: "flex",
-                        gap: 8,
-                        alignItems: "baseline",
-                      }}
+                      className="settings-card"
+                      style={choiceStyle}
                     >
+                      <span className="settings-card-text">
+                        <span className="settings-card-title">{command}</span>
+                        <span className="settings-card-desc" style={{ display: "block" }}>Block workspace readiness until this command finishes.</span>
+                      </span>
                       <input
                         type="checkbox"
+                        className="settings-card-control"
+                        style={{ ...choiceInputStyle, marginTop: 2 }}
                         aria-label={`Block readiness for setup command ${index + 1}: ${command}`}
                         disabled={settings.paseoBlocking.some(
                           (entry) =>
@@ -436,7 +502,6 @@ export function CreationPipelineEditor({
                           save({ ...settings, paseoBlocking }, true);
                         }}
                       />
-                      <span>Blocking: {command}</span>
                     </label>
                   ))
                 ) : (
@@ -456,7 +521,7 @@ export function CreationPipelineEditor({
                 <div key={label}>
                   <strong>{label}</strong>
                   <pre
-                    style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
+                    style={{ margin: "6px 0 0", color: "var(--text-muted)", fontSize: 12, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
                   >
                     {values.length ? values.join("\n") : "None"}
                   </pre>
@@ -471,9 +536,16 @@ export function CreationPipelineEditor({
       {(!gitProject || settings?.source !== "paseo") && (
         <>
           {projectPath !== undefined && settings && (
-            <label>
+            <label className="settings-card" style={choiceStyle}>
+              <span className="settings-card-text">
+                <span className="settings-card-title">Override all stages</span>
+                <span className="settings-card-desc" style={{ display: "block" }}>Otherwise, inherit host defaults.</span>
+              </span>
               <input
                 type="checkbox"
+                className="settings-card-control"
+                aria-label="Override all stages (otherwise inherit host defaults)"
+                style={choiceInputStyle}
                 checked={settings.override !== null}
                 onChange={(e) =>
                   save({
@@ -483,8 +555,7 @@ export function CreationPipelineEditor({
                       : null,
                   })
                 }
-              />{" "}
-              Override all stages (otherwise inherit host defaults)
+              />
             </label>
           )}
           {pipeline &&
@@ -496,9 +567,15 @@ export function CreationPipelineEditor({
                 ["postNonBlocking", "Post-non-blocking"],
               ] as const
             ).map(([stage, label]) => (
-              <label key={stage} style={{ display: "grid", gap: 4 }}>
-                {label} commands (one per line)
+              <label key={stage} className="settings-card" style={labelStyle}>
+                <span className="settings-card-text">
+                  <span className="settings-card-title">{label} commands (one per line)</span>
+                  <span className="settings-card-desc" style={{ display: "block" }}>
+                    {stage === "pre" ? "Run before workspace creation." : stage === "create" ? "Create the workspace; leave empty to use Git." : stage === "postBlocking" ? "Run after registration and block readiness." : "Run after blocking commands without delaying readiness."}
+                  </span>
+                </span>
                 <textarea
+                  aria-label={`${label} commands (one per line)`}
                   style={fieldStyle}
                   rows={3}
                   value={pipeline[stage].join("\n")}
@@ -517,7 +594,9 @@ export function CreationPipelineEditor({
                 />
               </label>
             ))}
-          <p style={{ color: "var(--text-dim)", fontSize: 12 }}>
+          <details className="settings-card-desc">
+            <summary style={{ cursor: "pointer" }}>Command execution and environment</summary>
+          <p style={descriptionStyle}>
             Pre and create commands run before the workspace is registered.
             Post-blocking commands run after registration and must finish before
             the workspace is ready; post-nonblocking commands run afterward.
@@ -527,13 +606,15 @@ export function CreationPipelineEditor({
             {`{"path":"/absolute/worktree/path"}`} to OMP_CREATE_RESULT to
             return a custom path. An empty create stage uses Git.
           </p>
+          </details>
         </>
       )}
       {error && (
-        <div role="alert">
+        <div role="alert" style={{ ...descriptionStyle, color: "var(--text)" }}>
           {error}{" "}
           <button
             type="button"
+            style={secondaryButtonStyle}
             onClick={() =>
               settings && latestSettings.current
                 ? save(latestSettings.current, latestSaveIncludesPaseo.current)
@@ -545,9 +626,9 @@ export function CreationPipelineEditor({
         </div>
       )}
       {!settings && !error && (
-        <div role="status">Loading creation commands...</div>
+        <div role="status" style={descriptionStyle}>Loading creation commands...</div>
       )}
-      {saving && <div role="status">Saving commands...</div>}
+      {saving && <div role="status" style={descriptionStyle}>Saving commands...</div>}
     </section>
   );
 }

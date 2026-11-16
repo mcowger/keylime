@@ -3587,6 +3587,17 @@ html.dark .dropdown-surface :is(select, option) {
   margin: 20px 0 10px;
 }
 
+.project-icon-upload::file-selector-button {
+  padding: 6px 10px;
+  margin-right: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-panel);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
 .settings-card {
   display: flex;
   align-items: center;

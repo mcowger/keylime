@@ -157,6 +157,7 @@ export function HierarchySidebar({
     host: string;
     project: HierarchyProject;
   } | null>(null);
+  const [projectSettingsPending, setProjectSettingsPending] = useState(false);
   const [openWorkspaceMenu, setOpenWorkspaceMenu] = useState<string | null>(null);
   const [shipTarget, setShipTarget] = useState<{
     host: string;
@@ -1171,18 +1172,19 @@ export function HierarchySidebar({
         <Dialog
           open
           onOpenChange={(open) => {
-            if (!open) setSettingsProject(null);
+            if (!open && !projectSettingsPending) setSettingsProject(null);
           }}
         >
-          <DialogContent style={{ width: 640, maxWidth: "92vw", boxSizing: "border-box" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-              <DialogTitle>Project settings</DialogTitle>
-              <button type="button" className="dialog-action" onClick={() => setSettingsProject(null)} style={{ padding: "6px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", color: "var(--text)", background: "var(--bg-panel)" }}>Close</button>
+          <DialogContent style={{ width: 850, maxWidth: "calc(100vw - 24px)", maxHeight: "calc(100dvh - 24px)", overflowY: "auto", boxSizing: "border-box" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, paddingBottom: 16, marginBottom: 16, borderBottom: "1px solid var(--border)" }}>
+              <DialogTitle style={{ margin: 0 }}>Project settings</DialogTitle>
+              <button type="button" className="dialog-action" disabled={projectSettingsPending} onClick={() => setSettingsProject(null)} style={{ padding: "6px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", color: "var(--text)", background: "var(--bg-panel)", cursor: projectSettingsPending ? "not-allowed" : "pointer", opacity: projectSettingsPending ? 0.5 : 1, fontSize: 13 }}>Close</button>
             </div>
             <ProjectSettings
               key={`${settingsProject.host}:${settingsProject.project.id}`}
               hostId={settingsProject.host}
               project={settingsProject.project}
+              onPendingChange={setProjectSettingsPending}
               onUpdated={(snapshot) => {
                 const host = settingsProject.host;
                 setSnapshots((previous) => ({ ...previous, [host]: snapshot }));
