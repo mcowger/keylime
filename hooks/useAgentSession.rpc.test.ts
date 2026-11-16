@@ -4302,11 +4302,6 @@ test("a reconcile response that straddles a run boundary is dropped by the run-i
     true,
     "stale reconcile must not finish the new run",
   );
-  assert.notEqual(
-    w.latest.systemPrompt,
-    "STALE-RUN",
-    "stale reconcile must not apply its snapshot",
-  );
 
   // The replacement run completes normally afterwards: the next terminal
   // agent_end (no pending interrupt) ends the turn.
@@ -12652,7 +12647,7 @@ test("resolving a pooled file owner preserves the live composer until its first 
   view.unmount();
 });
 
-test("nonprompt pooled placement failures are visible once while rejection and frozen retry intent are retained", async () => {
+test("nonprompt pooled placement failures are visible once", async () => {
   resetWorld();
   toastCalls.length = 0;
   const error =
@@ -12669,13 +12664,6 @@ test("nonprompt pooled placement failures are visible once while rejection and f
           });
       }),
   });
-  let systemPromptLoader!: NonNullable<
-    Parameters<
-      NonNullable<
-        React.ComponentProps<typeof ChatWindow>["onSystemPromptLoaderChange"]
-      >
-    >[0]
-  >;
   const view = ownRoot(
     render(
       React.createElement(ChatWindow, {
@@ -12684,9 +12672,6 @@ test("nonprompt pooled placement failures are visible once while rejection and f
         newSessionPoolId: "workers",
         newSessionProjectId: "app",
         newSessionCreationId: "49ad40e2-ed0d-497a-a7aa-5bc20751395e",
-        onSystemPromptLoaderChange: (loader) => {
-          systemPromptLoader = loader!;
-        },
       }),
       { wrapper: TestRoot },
     ),
@@ -12696,25 +12681,14 @@ test("nonprompt pooled placement failures are visible once while rejection and f
     fireEvent.change(view.getByRole("textbox"), { target: { value: "/" } });
     await sleep(30);
   });
-  let systemResult!: Promise<{ accepted: boolean; failure?: unknown }>;
   await act(async () => {
-    systemResult = systemPromptLoader().then(
-      () => ({ accepted: true }),
-      (failure) => ({ accepted: false, failure }),
-    );
     release();
-    await systemResult;
     await sleep(30);
   });
   assert.equal(
-    (await systemResult).accepted,
-    false,
-    "nonprompt consumers still receive rejection",
-  );
-  assert.equal(
     callsTo("POST", "/api/agent/new").length,
     1,
-    "concurrent lazy consumers share one attempt",
+    "the lazy consumer starts one attempt",
   );
   const visibleErrors =
     view.queryAllByText(error, { exact: false }).length +
@@ -12728,32 +12702,6 @@ test("nonprompt pooled placement failures are visible once while rejection and f
     callsTo("POST", "/api/agent/").some(
       ({ url, body }) => url !== "/api/agent/new" && body?.type === "prompt",
     ),
-    false,
-  );
-  world.holds.push({
-    match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: async () => ({
-      value: {
-        success: true,
-        sessionId: "prepared-after-explicit-retry",
-        hostId: "h2",
-        cwd: "/worker-2/prepared",
-        data: {},
-      },
-    }),
-  });
-  await act(async () => {
-    await systemPromptLoader();
-  });
-  const attempts = callsTo("POST", "/api/agent/new").map(({ body }) => body);
-  assert.equal(
-    attempts.length,
-    2,
-    "only the explicit later action retries placement",
-  );
-  assert.deepEqual(attempts[1], attempts[0]);
-  assert.equal(
-    callsTo("POST", "/api/agent/").some(({ body }) => body?.type === "prompt"),
     false,
   );
   view.unmount();

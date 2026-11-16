@@ -143,8 +143,6 @@ interface Props {
     activeLeafId: string | null,
     onLeafChange: (leafId: string | null) => void,
   ) => void;
-  onSystemPromptChange?: (prompt: string | null) => void;
-  onSystemPromptLoaderChange?: (loader: (() => Promise<void>) | null) => void;
   onSessionStatsChange?: (stats: SessionStatsInfo | null) => void;
   onSessionStatsPanelOpen?: () => void;
   onProviderUsageContextChange?: (context: ProviderUsageContext | null) => void;
@@ -570,8 +568,6 @@ export function ChatWindow({
   activityContainer,
   sidebarActivityContainer,
   onBranchDataChange,
-  onSystemPromptChange,
-  onSystemPromptLoaderChange,
   onSessionStatsChange,
   onSessionStatsPanelOpen,
   onProviderUsageContextChange,
@@ -763,8 +759,6 @@ export function ChatWindow({
     modelsRefreshKey,
     chatInputRef: composerRef,
     onBranchDataChange,
-    onSystemPromptChange,
-    onSystemPromptLoaderChange,
     onSessionStatsPanelOpen,
     onOpenFile: onOpenWorkspaceFile,
     onOpenUrl,

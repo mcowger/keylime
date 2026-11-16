@@ -358,9 +358,6 @@ export interface UseAgentSessionOptions {
     activeLeafId: string | null,
     onLeafChange: (leafId: string | null) => void,
   ) => void;
-  onSystemPromptChange?: (prompt: string | null) => void;
-  /** Registers an action that lazily starts the session and loads its system prompt. */
-  onSystemPromptLoaderChange?: (loader: (() => Promise<void>) | null) => void;
   onSessionStatsPanelOpen?: () => void;
   setToolPreset?: (preset: "none" | "default" | "full") => void;
   /** Opens a file in the web UI's file viewer (used by the open_file host tool). */
@@ -518,8 +515,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     onSessionMoved,
     modelsRefreshKey,
     onBranchDataChange,
-    onSystemPromptChange,
-    onSystemPromptLoaderChange,
     onSessionStatsPanelOpen,
     onOpenFile,
     onOpenUrl,
@@ -785,7 +780,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     contextWindow: number;
     tokens: number | null;
   } | null>(null);
-  const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
   const [forkingEntryId, setForkingEntryId] = useState<string | null>(null);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [currentModelOverride, setCurrentModelOverride] = useState<{
@@ -1936,8 +1930,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           if (liveState) {
             if (liveState.contextUsage !== undefined)
               setContextUsage(liveState.contextUsage ?? null);
-            if (liveState.systemPrompt !== undefined)
-              setSystemPrompt(liveState.systemPrompt || null);
             if (modelApplied && liveState.thinkingLevel !== undefined)
               setThinkingLevel(normalizeThinkingLevel(liveState.thinkingLevel));
             if (liveState.fastModeEnabled !== undefined)
@@ -2340,18 +2332,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     newSessionHostId,
   ]);
 
-  // The system panel may initialize a dormant session, but must not create a
-  // prompt or model run just to inspect the resolved system prompt.
-  const loadSystemPrompt = useCallback(async () => {
-    const sid = sessionIdRef.current ?? (await ensureNewSession());
-    if (!sid) return;
-
-    const state = await sendAgentCommand<AgentStateResponse>(sid, {
-      type: "get_state",
-    });
-    if (!hookAliveRef.current || sessionIdRef.current !== sid) return;
-    setSystemPrompt(state.systemPrompt ?? "");
-  }, [ensureNewSession]);
 
   const loadSlashCommands = useCallback(async () => {
     const sid = sessionIdRef.current ?? (await ensureNewSession());
@@ -3681,8 +3661,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           setContextUsage(state.contextUsage ?? null);
         if (busy || !agentRunningRef.current) return;
         if (state) {
-          if (state.systemPrompt !== undefined)
-            setSystemPrompt(state.systemPrompt ?? null);
           if (state.extensionStatuses !== undefined)
             setExtensionStatuses(state.extensionStatuses ?? []);
           if (state.extensionWidgets !== undefined)
@@ -4231,8 +4209,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
                 if (!applied) return; // stale snapshot — drop everything derived from it
                 if (d.state?.contextUsage !== undefined)
                   setContextUsage(d.state.contextUsage ?? null);
-                if (d.state?.systemPrompt !== undefined)
-                  setSystemPrompt(d.state.systemPrompt || null);
                 // Fast mode is family-scoped in omp: re-sync from the terminal
                 // state so a run that switched models/families never leaves the
                 // composer toggle stuck on a stale value.
@@ -7336,8 +7312,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
             applyNativeCompacting(agentState.state.isCompacting, compactionGen);
           if (agentState.state.contextUsage !== undefined)
             setContextUsage(agentState.state.contextUsage ?? null);
-          if (agentState.state.systemPrompt !== undefined)
-            setSystemPrompt(agentState.state.systemPrompt || null);
           if (agentState.state.extensionStatuses !== undefined)
             setExtensionStatuses(agentState.state.extensionStatuses ?? []);
           if (agentState.state.extensionWidgets !== undefined)
@@ -7349,14 +7323,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     }
   }, [attachLiveRun]);
 
-  useEffect(() => {
-    onSystemPromptChange?.(systemPrompt);
-  }, [systemPrompt, onSystemPromptChange]);
-
-  useEffect(() => {
-    onSystemPromptLoaderChange?.(loadSystemPrompt);
-    return () => onSystemPromptLoaderChange?.(null);
-  }, [loadSystemPrompt, onSystemPromptLoaderChange]);
 
   useEffect(() => {
     if (!onBranchDataChange) return;
@@ -7599,7 +7565,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     liveModelMeta,
     retryInfo,
     contextUsage,
-    systemPrompt,
     forkingEntryId,
     editingEntryId,
     isCompacting,

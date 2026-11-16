@@ -50,7 +50,6 @@ import {
   Command,
   Ellipsis,
   Folder,
-  History,
   Menu,
   PanelRight,
   Server,
@@ -688,24 +687,6 @@ export function AppShell({ appName }: { appName: string }) {
     branchLeafChangeFnRef.current?.(leafId);
   }, []);
 
-  const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
-  const [systemPromptLoading, setSystemPromptLoading] = useState(false);
-  const systemPromptLoaderRef = useRef<(() => Promise<void>) | null>(null);
-  const systemPromptLoadIdRef = useRef(0);
-  const systemBtnRef = useRef<HTMLButtonElement>(null);
-  const handleSystemPromptChange = useCallback((prompt: string | null) => {
-    setSystemPrompt(prompt);
-    setSystemPromptLoading(false);
-  }, []);
-
-  const handleSystemPromptLoaderChange = useCallback(
-    (loader: (() => Promise<void>) | null) => {
-      systemPromptLoadIdRef.current += 1;
-      systemPromptLoaderRef.current = loader;
-      setSystemPromptLoading(false);
-    },
-    [],
-  );
 
   // Session stats (tokens + cost) — populated by ChatWindow, displayed in top bar
   const [sessionStats, setSessionStats] = useState<SessionStatsInfo | null>(
@@ -737,9 +718,7 @@ export function AppShell({ appName }: { appName: string }) {
   }, []);
 
   // Single active panel — only one dropdown open at a time
-  const [activeTopPanel, setActiveTopPanel] = useState<
-    "branches" | "system" | null
-  >(null);
+  const [activeTopPanel, setActiveTopPanel] = useState<"branches" | null>(null);
   const mobileToolsRef = useRef<HTMLDetailsElement>(null);
   const mobileToolsContentRef = useRef<HTMLDivElement>(null);
   const restoreToolsFocusRef = useRef(false);
@@ -781,7 +760,7 @@ export function AppShell({ appName }: { appName: string }) {
     };
   }, [compactTopbar, activeTopPanel]);
   const toggleTopPanel = useCallback(
-    (panel: "branches" | "system") => {
+    (panel: "branches") => {
       if (isMobile) setSidebarOpen(false);
       setActiveTopPanel((cur) => (cur === panel ? null : panel));
     },
@@ -797,24 +776,6 @@ export function AppShell({ appName }: { appName: string }) {
     },
     [],
   );
-  const handleSystemPromptToggle = useCallback(() => {
-    const opening = activeTopPanel !== "system";
-    toggleTopPanel("system");
-    if (!opening || systemPromptLoading || systemPrompt !== null) return;
-
-    const load = systemPromptLoaderRef.current;
-    if (!load) return;
-    const loadId = ++systemPromptLoadIdRef.current;
-    setSystemPromptLoading(true);
-    void load()
-      .catch((error) => {
-        console.error("Failed to load system prompt:", error);
-      })
-      .finally(() => {
-        if (systemPromptLoadIdRef.current === loadId)
-          setSystemPromptLoading(false);
-      });
-  }, [activeTopPanel, systemPrompt, systemPromptLoading, toggleTopPanel]);
 
   // /session opens the same information panel as the top-bar control.
   const openSessionStatsPanel = useCallback(() => {
@@ -1048,32 +1009,6 @@ export function AppShell({ appName }: { appName: string }) {
     [],
   );
 
-  // Dismiss the topbar dropdowns on outside click or Escape. The Escape
-  // handler stops propagation so the global Esc (abort agent) does not fire
-  // while a panel is open.
-  useEffect(() => {
-    // The branch panel manages its own outside-click and Escape dismissal.
-    if (!activeTopPanel || activeTopPanel === "branches") return;
-    const onPointerDown = (event: MouseEvent) => {
-      if (
-        event.target instanceof Element &&
-        event.target.closest("[data-top-panel]")
-      )
-        return;
-      setActiveTopPanel(null);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.stopPropagation();
-      setActiveTopPanel(null);
-    };
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [activeTopPanel]);
 
   // Right panel tabs: Explorer | Git changes | open files (Tauri parity).
   const [fileTabs, setFileTabs] = useState<Tab[]>([]);
@@ -1426,8 +1361,6 @@ export function AppShell({ appName }: { appName: string }) {
       }
       setBranchTree([]);
       setBranchActiveLeafId(null);
-      setSystemPrompt(null);
-      setSystemPromptLoading(false);
       setActiveTopPanel(null);
       router.replace(
         existing?.session
@@ -1514,8 +1447,6 @@ export function AppShell({ appName }: { appName: string }) {
       )
         return;
       activateChat(tab);
-      setSystemPrompt(null);
-      setSystemPromptLoading(false);
       setInitialSessionRestored(true);
       // Skip router.replace when restoring from the URL: the param is already correct.
       if (!isRestore) {
@@ -1556,8 +1487,6 @@ export function AppShell({ appName }: { appName: string }) {
       activateChat(tab);
       setBranchTree([]);
       setBranchActiveLeafId(null);
-      setSystemPrompt(null);
-      setSystemPromptLoading(false);
       setActiveTopPanel(null);
       if (isMobile && !keepSidebarOpen) {
         setSidebarOpen(false);
@@ -2641,14 +2570,6 @@ export function AppShell({ appName }: { appName: string }) {
     setRightView("explorer");
   }, []);
 
-  const handleViewFullHistory = useCallback(() => {
-    if (!selectedSession) return;
-    window.open(
-      `/api/sessions/${encodeURIComponent(selectedSession.id)}/export?inline=1`,
-      "_blank",
-      "noopener,noreferrer",
-    );
-  }, [selectedSession]);
 
   // Show chat area if a session is selected, or if we have a cwd to start a new session in
   const candidateCwd = newSessionCwd;
@@ -3444,23 +3365,6 @@ export function AppShell({ appName }: { appName: string }) {
                               className="shell-toolbar-divider"
                               aria-hidden="true"
                             />
-                            <button
-                              onClick={handleViewFullHistory}
-                              disabled={!selectedSession}
-                              title={
-                                selectedSession
-                                  ? t("appShell.fullHistory")
-                                  : t("appShell.fullHistoryUnavailable")
-                              }
-                              aria-label={t("appShell.fullHistory")}
-                              className="shell-toolbar-btn ui-focus-ring"
-                            >
-                              <History
-                                size={16}
-                                strokeWidth={1.8}
-                                aria-hidden="true"
-                              />
-                            </button>
                             <BranchNavigator
                               tree={branchTree}
                               activeLeafId={branchActiveLeafId}
@@ -3475,107 +3379,9 @@ export function AppShell({ appName }: { appName: string }) {
                               onToggle={() => toggleTopPanel("branches")}
                               hasSession
                             />
-                            <button
-                              ref={systemBtnRef}
-                              onClick={handleSystemPromptToggle}
-                              title={t("appShell.system")}
-                              aria-label={t("appShell.system")}
-                              aria-pressed={activeTopPanel === "system"}
-                              className="shell-toolbar-btn ui-focus-ring"
-                            >
-                              <Terminal
-                                size={16}
-                                strokeWidth={1.8}
-                                aria-hidden="true"
-                                style={{
-                                  color: systemPrompt
-                                    ? "var(--accent)"
-                                    : undefined,
-                                }}
-                              />
-                            </button>
                           </>
                         )}
                       </div>
-                      {activeTopPanel === "system" && (
-                        <div
-                          data-top-panel
-                          className="dropdown-surface"
-                          style={{
-                            position: "absolute",
-                            // Compact: below the 48px tools bar, which clips its overflow (it scrolls sideways).
-                            top:
-                              isMobile || compactTopbar
-                                ? "calc(100% + 56px)"
-                                : "calc(100% + 4px)",
-                            left: isMobile ? 4 : 8,
-                            right: "auto",
-                            width: "auto",
-                            minWidth: isMobile ? undefined : 420,
-                            maxWidth: "min(680px, calc(100vw - 24px))",
-                            maxHeight:
-                              isMobile || compactTopbar
-                                ? "min(70vh, calc(100dvh - 108px))"
-                                : "min(70vh, calc(100dvh - 56px))",
-                            overflowY: "auto",
-                            overflowX: "hidden",
-                            zIndex: 500,
-                          }}
-                        >
-                          {activeTopPanel === "system" && (
-                            <div
-                              className="session-info-popover"
-                              style={{
-                                background: "var(--bg-panel)",
-                                borderBottom: "1px solid var(--border)",
-                                boxShadow: "var(--shadow-pop)",
-                                minWidth: isMobile ? undefined : 420,
-                              }}
-                            >
-                              {systemPrompt ? (
-                                <div
-                                  style={{
-                                    maxHeight: "min(600px, 75vh)",
-                                    overflowY: "auto",
-                                    padding: "12px 16px",
-                                    color: "var(--text-muted)",
-                                    fontSize: 12,
-                                    lineHeight: 1.6,
-                                    whiteSpace: "pre-wrap",
-                                    fontFamily: "var(--font-mono)",
-                                  }}
-                                >
-                                  {systemPrompt}
-                                </div>
-                              ) : systemPrompt === "" ? (
-                                <div
-                                  style={{
-                                    padding: "10px 16px",
-                                    fontSize: 12,
-                                    color: "var(--text-muted)",
-                                    fontStyle: "italic",
-                                  }}
-                                >
-                                  {t("appShell.systemPromptEmpty")}
-                                </div>
-                              ) : (
-                                <div
-                                  style={{
-                                    padding: "10px 16px",
-                                    fontSize: 12,
-                                    color: "var(--text-muted)",
-                                    fontStyle: "italic",
-                                  }}
-                                >
-                                  {systemPromptLoading
-                                    ? t("appShell.systemPromptLoading")
-                                    : t("appShell.systemPromptLoadHint")}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
                     </details>
                   </div>
                   {isMobile && (
@@ -4287,10 +4093,6 @@ export function AppShell({ appName }: { appName: string }) {
                       onOpenFile={handleOpenFile}
                       onOpenUrl={handleSessionOpenUrl}
                       onBranchDataChange={handleBranchDataChange}
-                      onSystemPromptChange={handleSystemPromptChange}
-                      onSystemPromptLoaderChange={
-                        handleSystemPromptLoaderChange
-                      }
                       onSessionStatsChange={handleSessionStatsChange}
                       onSessionStatsPanelOpen={openSessionStatsPanel}
                       sessionInfoContainer={sessionInfoContainer}
