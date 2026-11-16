@@ -1,0 +1,7 @@
+pre-commit:
+  parallel: true
+  jobs:
+    - name: typecheck
+      run: mise exec -- bun run typecheck
+    - name: basic tests
+      run: mise exec -- bun run test:basic

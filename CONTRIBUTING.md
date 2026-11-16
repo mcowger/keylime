@@ -25,6 +25,12 @@ A stock `omp` does not speak key lime's channel.
 
 Worktrees created with the repository's Paseo setup copy ignored `runner/vendor/` packages from the source checkout before setup. If those packages are missing or do not match the worktree's pin, run `bun runner/scripts/use-omp-build.ts` and then install the runner dependencies. The runner binary is not built during worktree setup; `bun run smoke` builds it before running the smoke checks.
 
+Install the Git hook once per checkout with `bunx --no-install lefthook install`.
+It runs typechecking and `bun run test:basic` before each commit. Both must pass;
+the focused tests don't replace the full suite below. Git hooks check the working
+tree, including unstaged changes. If Git uses a custom `core.hooksPath`, resolve
+that configuration before installing the hook.
+
 ### Development and browser testing
 
 ```bash

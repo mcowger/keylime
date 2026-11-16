@@ -46,6 +46,7 @@
     "start": "bun server/main.ts -H 127.0.0.1 -p 30177",
     "start:lan": "bun server/main.ts -H 0.0.0.0 -p 30177",
     "test": "bun test --parallel --timeout 30000 ./app ./bin ./components ./hooks ./lib ./scripts ./server ./tests",
+    "test:basic": "bun test --parallel --timeout 30000 server/routes.test.ts server/http.test.ts lib/web-auth.test.ts lib/session-reader.test.ts",
     "typecheck": "bun check && bun check -p runner",
     "api:generate": "bun scripts/generate-api-docs.ts",
     "api:check": "bun scripts/generate-api-docs.ts --check",
@@ -105,6 +106,7 @@
     "ajv": "8.20.0",
     "bun-plugin-tailwind": "0.1.2",
     "jsdom": "^29.1.1",
+    "lefthook": "^2.2.2",
     "micromark-util-types": "^2.0.2",
     "tailwindcss": "^4.3.3",
     "typescript": "5.9.3"
