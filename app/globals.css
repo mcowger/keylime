@@ -1255,6 +1255,11 @@ code {
   margin: 8px 0;
   border-radius: 6px;
 }
+.markdown-body :is(h1, h2, h3, h4, h5, h6) img {
+  display: inline-block;
+  margin: 0;
+  vertical-align: middle;
+}
 .markdown-body .markdown-inline-code {
   background: color-mix(in srgb, var(--bg-panel) 62%, var(--bg));
   border-radius: 5px;

@@ -1,6 +1,8 @@
-# key lime
+<h1><img src="public/icon.png" alt="" width="48" align="absmiddle"> key lime</h1>
 
 key lime is a browser workspace for the [oh-my-pi](https://github.com/can1357/oh-my-pi) coding agent. It runs agents on your own machines and lets you work with their sessions, projects, files, terminals, and Git worktrees from a browser.
+
+![key lime workspace with a chat and README file open side by side](docs/screenshots/51-03.png)
 
 The project began as [kahme247/omp-web](https://github.com/kahme247/omp-web), later developed as [ompweb](https://github.com/ompweb-dev/ompweb). Thanks to its authors and contributors for the original project. [mcowger/keylime](https://github.com/mcowger/keylime) is now an independently maintained, intentionally incompatible hard fork. It is not a drop-in replacement for upstream: configuration, data, APIs, commands, and deployments may diverge without migration or backward compatibility. Back up agent data before changing installations or rolling back.
 
@@ -13,6 +15,20 @@ The project began as [kahme247/omp-web](https://github.com/kahme247/omp-web), la
 - Link remote hosts and run sessions on the machine that owns the project. A trusted cluster can share provider credentials and OMP configuration; it does not move projects or automatically place sessions.
 - Configure models, provider logins, MCP servers, skills, plugins, and agent settings. Get browser notifications for completed runs, requests for input, and failures.
 - Use the responsive interface on desktop or mobile, including an installable web app, light and dark themes, and per-browser display settings.
+
+## Screenshots
+
+| View | Screenshot |
+| --- | --- |
+| A conversation alongside the project and workspace sidebar. | ![Conversation and project sidebar](docs/screenshots/50-17.png) |
+| Tool calls and commit output in a conversation. | ![Conversation showing tool activity](docs/screenshots/50-37.png) |
+| An advisor finding in an active coding session. | ![Advisor concern in a coding session](docs/screenshots/50-43.png) |
+| Model selection and reasoning effort controls. | ![Model picker and reasoning controls](docs/screenshots/51-09.png) |
+| Context usage, session statistics, and compaction. | ![Context usage and session statistics](docs/screenshots/51-21.png) |
+| Running services and their output in the Jobs panel. | ![Service details and output](docs/screenshots/51-28.png) |
+| Tasks and subagents in the Activity panel. | ![Task list and subagent activity](docs/screenshots/51-42.png) |
+| A subagent's task and result. | ![Subagent task and result](docs/screenshots/51-46.png) |
+| The same subagent with its transcript expanded. | ![Expanded subagent transcript](docs/screenshots/51-50.png) |
 
 ## Requirements
 
