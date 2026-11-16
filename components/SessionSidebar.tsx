@@ -1267,6 +1267,8 @@ export const SessionSidebar = memo(function SessionSidebar({
     if (expandedProjects === null) expandProject(project, selectedHostId);
   }, [selectedProject, selectedHostId, expandedProjects, expandProject]);
 
+  const newSessionAfterProjectRef = useRef(false);
+
   const commitAddProject = useCallback(
     async (candidate?: string, launchConfig?: ProjectLaunchConfig) => {
       const path = (candidate ?? "").trim();
@@ -1302,6 +1304,10 @@ export const SessionSidebar = memo(function SessionSidebar({
         // Activate + expand the newly added project and close the picker.
         activateProject(data.project);
         setAddProjectOpen(false);
+        if (newSessionAfterProjectRef.current) {
+          newSessionAfterProjectRef.current = false;
+          onNewSession?.(browserUUID(), data.project.path, addProjectHostId);
+        }
       } catch (e) {
         setAddProjectError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -1314,6 +1320,7 @@ export const SessionSidebar = memo(function SessionSidebar({
       loadProjects,
       activateProject,
       setAddProjectOpen,
+      onNewSession,
     ],
   );
 
@@ -1391,16 +1398,24 @@ export const SessionSidebar = memo(function SessionSidebar({
     [handleSelectSessionFromList, onOpenSearchMatch, hostUnavailableReason],
   );
 
+  const newSessionWorkspace = registeredWorkspaces
+    .filter((workspace) =>
+      hostOf(workspace) === selectedHostId && selectedCwd !== null &&
+      (selectedCwd === workspace.path || selectedCwd.startsWith(workspace.path === "/" ? "/" : `${workspace.path}/`)),
+    )
+    .sort((a, b) => b.path.length - a.path.length)[0];
   const handleNewSession = useCallback(() => {
-    if (!selectedCwd || hostUnavailableReason(selectedHostId)) return;
-    // Generate a temporary UUID client-side — no backend call needed.
-    // Pi will be spawned lazily when the user sends the first message.
-    const tempId = browserUUID();
-    onNewSession?.(tempId, selectedCwd, selectedHostId);
-  }, [selectedCwd, selectedHostId, onNewSession, hostUnavailableReason]);
-  const newSessionBlockedReason = hostUnavailableReason(selectedHostId);
-  const newSessionEnabled =
-    Boolean(selectedCwd) && newSessionBlockedReason === null;
+    if (!newSessionWorkspace) {
+      newSessionAfterProjectRef.current = true;
+      setAddProjectError(null);
+      setAddProjectOpen(true, selectedHostId);
+      return;
+    }
+    if (hostUnavailableReason(selectedHostId)) return;
+    onNewSession?.(browserUUID(), newSessionWorkspace.path, selectedHostId);
+  }, [newSessionWorkspace, selectedHostId, onNewSession, hostUnavailableReason, setAddProjectOpen]);
+  const newSessionBlockedReason = newSessionWorkspace ? hostUnavailableReason(selectedHostId) : null;
+  const newSessionEnabled = newSessionBlockedReason === null;
 
   const [importing, setImporting] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -1527,6 +1542,7 @@ export const SessionSidebar = memo(function SessionSidebar({
           busy={addProjectBusy}
           error={addProjectError}
           onCancel={() => {
+            newSessionAfterProjectRef.current = false;
             setAddProjectOpen(false);
             setAddProjectError(null);
           }}
@@ -1673,7 +1689,7 @@ export const SessionSidebar = memo(function SessionSidebar({
         />
         <button
           onClick={handleNewSession}
-          disabled={!selectedCwd}
+          type="button"
           aria-disabled={newSessionEnabled ? undefined : true}
           aria-describedby={
             newSessionBlockedReason ? "sidebar-new-session-reason" : undefined
@@ -1681,9 +1697,9 @@ export const SessionSidebar = memo(function SessionSidebar({
           className="sidebar-new-session"
           title={
             newSessionBlockedReason ??
-            (selectedCwd
-              ? t("sessionSidebar.newSessionIn", { cwd: selectedCwd })
-              : t("sessionSidebar.selectProjectFirst"))
+            (newSessionWorkspace
+              ? t("sessionSidebar.newSessionIn", { cwd: newSessionWorkspace.path })
+              : t("appShell.openWorkspaces"))
           }
           style={{
             width: "100%",
