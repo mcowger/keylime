@@ -109,6 +109,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - `bun run dev` no longer starts the browser fixture by default; pass `--browser-fixture` to enable it
 - The new-session slash menu lists global skills without starting a session or creating a workspace
 - `bun run dev --browser-fixture` starts its Chromium fixture session through the host daemon instead of a separate script
+- Browser video progress diagnostics now break down dropped packets by reason and report observed frame size, timestamp and capture generation
 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen

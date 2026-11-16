@@ -23,7 +23,9 @@ type Stream = {
   current: () => boolean; browserCdp: Cdp; helper: Cdp; helperId: string;
   width: number; height: number; codec: string; leases: Set<Lease>;
   failure: boolean; closed: boolean;
-  diagnosticAt: number; received: number; forwarded: number; rejected: number; emptyReads: number;
+  diagnosticAt: number; received: number; forwarded: number; emptyReads: number;
+  drops: { payloadSize: number; json: number; schema: number; stream: number; inactive: number; generation: number; geometry: number; oversized: number; queueBytes: number; queuePackets: number; awaitingKey: number };
+  observed: { bytes: number | null; width: number | null; height: number | null; timestampUs: number | null; generation: number | null };
 };
 const streams = new Map<string, Lease>();
 const sources = new Map<WorkerTabSession, Stream>();
@@ -137,12 +139,13 @@ async function startVideoInner(tab: WorkerTabSession, tabId: string, owner: stri
     await helper.send("Runtime.enable");
     await helper.send("Runtime.addBinding", { name: "nativeVideoPacket" });
     const id = randomUUID();
-    stream = { id, tabId, owner, tab, current, browserCdp, helper, helperId, width, height, codec: "", leases: new Set(), failure: false, closed: false, diagnosticAt: Date.now(), received: 0, forwarded: 0, rejected: 0, emptyReads: 0 };
+    stream = { id, tabId, owner, tab, current, browserCdp, helper, helperId, width, height, codec: "", leases: new Set(), failure: false, closed: false, diagnosticAt: Date.now(), received: 0, forwarded: 0, emptyReads: 0, drops: { payloadSize: 0, json: 0, schema: 0, stream: 0, inactive: 0, generation: 0, geometry: 0, oversized: 0, queueBytes: 0, queuePackets: 0, awaitingKey: 0 }, observed: { bytes: null, width: null, height: null, timestampUs: null, generation: null } };
     const state = stream;
     helper.on("Runtime.bindingCalled", (event: { name: string; payload: string }) => {
-      if (event.name !== "nativeVideoPacket" || event.payload.length > 3_000_000 || state.closed) return;
+      if (event.name !== "nativeVideoPacket" || state.closed) return;
+      if (event.payload.length > 3_000_000) { state.drops.payloadSize++; return; }
       let raw: unknown;
-      try { raw = JSON.parse(event.payload); } catch { return; }
+      try { raw = JSON.parse(event.payload); } catch { state.drops.json++; return; }
       if (raw && typeof raw === "object" && "type" in raw && raw.type === "diagnostic") {
         const safe = Object.fromEntries(Object.entries(raw).filter(([key, value]) => key !== "type" && (
           typeof value === "number" && Number.isFinite(value) || typeof value === "boolean" ||
@@ -153,17 +156,26 @@ async function startVideoInner(tab: WorkerTabSession, tabId: string, owner: stri
       }
       state.received++;
       if (raw && typeof raw === "object" && "error" in raw) { state.failure = true; videoLog("helper-error", { source: id }); return; }
-      if (!Value.Check(packetSchema, raw) || raw.streamId !== id) { state.rejected++; return; }
+      const fields = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+      const number = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : null;
+      state.observed = { bytes: typeof fields.dataBase64 === "string" ? fields.dataBase64.length : null, width: number(fields.width), height: number(fields.height), timestampUs: number(fields.timestampUs), generation: number(fields.captureGeneration) };
+      if (!Value.Check(packetSchema, raw)) { state.drops.schema++; return; }
+      if (raw.streamId !== id) { state.drops.stream++; return; }
       void evaluate(helper, `acknowledge(${JSON.stringify(id)},${raw.sequence})`).catch(() => {});
-      if (!state.current() || raw.captureGeneration !== 1 || raw.width !== width || raw.height !== height) { state.rejected++; return; }
+      if (!state.current()) { state.drops.inactive++; return; }
+      if (raw.captureGeneration !== 1) { state.drops.generation++; return; }
+      if (raw.width !== width || raw.height !== height) { state.drops.geometry++; return; }
       const data = raw.dataBase64;
       let requestKey = false;
       for (const lease of state.leases) {
         if (data.length > MAX_BYTES || lease.bytes + data.length > MAX_BYTES || lease.packets.length >= MAX_PACKETS) {
+          if (data.length > MAX_BYTES) state.drops.oversized++;
+          else if (lease.bytes + data.length > MAX_BYTES) state.drops.queueBytes++;
+          else state.drops.queuePackets++;
           lease.packets = []; lease.bytes = 0; lease.needsKey = true; requestKey = true;
           continue;
         }
-        if (lease.needsKey && raw.type !== "key") continue;
+        if (lease.needsKey && raw.type !== "key") { state.drops.awaitingKey++; continue; }
         if (raw.type === "key") lease.needsKey = false;
         lease.packets.push({ type: raw.type, timestamp: raw.timestampUs, capturedAt: Math.round(epochOffset + raw.timestampUs / 1000), width, height, data });
         state.forwarded++;
@@ -218,7 +230,7 @@ export async function nextVideo(id: string, tabId: string, owner: string) {
   const packets = lease.packets;
   if (!packets.length) stream.emptyReads++;
   if (Date.now() - stream.diagnosticAt >= 5000) {
-    videoLog("progress", { source: stream.id, stream: lease.id, received: stream.received, forwarded: stream.forwarded, rejected: stream.rejected, emptyReads: stream.emptyReads, leases: stream.leases.size });
+    videoLog("progress", { source: stream.id, stream: lease.id, received: stream.received, forwarded: stream.forwarded, drops: stream.drops, observed: stream.observed, width: stream.width, height: stream.height, emptyReads: stream.emptyReads, leases: stream.leases.size });
     stream.diagnosticAt = Date.now();
   }
   lease.packets = []; lease.bytes = 0;
