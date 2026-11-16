@@ -65,6 +65,8 @@ function within(root: string, child: string): boolean {
 }
 const MAX_ICON_BYTES = 256 * 1024;
 const MAX_ICON_CANDIDATES = 24;
+const MAX_ICON_DEPTH = 5;
+const MAX_ICON_ENTRIES = 2000;
 
 function iconMime(data: Buffer): string | undefined {
   if (data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
@@ -96,19 +98,33 @@ function projectIcons(project: HierarchyProject): NonNullable<HierarchySnapshot[
   const root = realpathSync(project.path);
   const candidates: NonNullable<HierarchySnapshot["iconCandidates"]> = [];
   let examined = 0;
+  let useGitIgnore = false;
+  try {
+    useGitIgnore = git(root, "rev-parse", "--is-inside-work-tree") === "true";
+  } catch { /* Projects need not be Git repositories. */ }
   function scan(dir: string, depth: number): void {
-    if (depth > 3 || examined >= 2000 || candidates.length >= MAX_ICON_CANDIDATES) return;
+    if (depth > MAX_ICON_DEPTH || examined >= MAX_ICON_ENTRIES || candidates.length >= MAX_ICON_CANDIDATES) return;
     let entries: string[];
-    try { entries = readdirSync(dir).sort(); } catch { return; }
+    try { entries = readdirSync(dir).sort().slice(0, MAX_ICON_ENTRIES - examined); } catch { return; }
+    let ignored = new Set<string>();
+    if (useGitIgnore && entries.length) {
+      const paths = entries.map((name) => path.relative(root, path.join(dir, name)));
+      try {
+        const output = execFileSync("git", ["-C", root, "check-ignore", "-z", "--stdin"], {
+          input: `${paths.join("\0")}\0`, encoding: "utf8", timeout: 10000, stdio: ["pipe", "pipe", "pipe"],
+        });
+        ignored = new Set(output.split("\0").filter(Boolean));
+      } catch { /* No ignored paths, or Git is unavailable. */ }
+    }
     for (const name of entries) {
-      if (++examined > 2000 || candidates.length >= MAX_ICON_CANDIDATES) return;
-      if (name.startsWith(".") || name === "node_modules" || name === "vendor") continue;
+      if (++examined > MAX_ICON_ENTRIES || candidates.length >= MAX_ICON_CANDIDATES) return;
+      if (name.startsWith(".") || name === "node_modules" || name === "vendor" || name === "dist" || name === "release" || ignored.has(path.relative(root, path.join(dir, name)))) continue;
       const candidate = path.join(dir, name);
       try {
         const info = lstatSync(candidate);
         if (info.isSymbolicLink()) continue;
         if (info.isDirectory()) { scan(candidate, depth + 1); continue; }
-        if (!info.isFile() || !/^(?:favicon|icon|logo|apple-touch-icon)(?:[-_.].*)?\.(?:png|jpe?g|gif|webp|ico|svg)$/i.test(name)) continue;
+        if (!info.isFile() || !/\.(?:png|jpe?g|gif|webp|ico|svg)$/i.test(name) || !/(?:^|[-_.])(?:favicon|icon|logo|apple-touch-icon)(?:$|[-_.])/i.test(name)) continue;
         const resolved = realpathSync(candidate);
         if (!within(root, resolved)) continue;
         const fd = openSync(resolved, constants.O_RDONLY | constants.O_NOFOLLOW);

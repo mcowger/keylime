@@ -8,6 +8,7 @@ import type {
 
 const fieldStyle = {
   width: "100%",
+  boxSizing: "border-box",
   padding: 8,
   border: "1px solid var(--border)",
   borderRadius: "var(--radius-control)",
@@ -245,6 +246,7 @@ export function CreationPipelineEditor({
       style={{
         display: "grid",
         gap: 10,
+        gridTemplateColumns: "minmax(0, 1fr)",
         minWidth: 0,
         overflowWrap: "anywhere",
       }}
@@ -293,7 +295,7 @@ export function CreationPipelineEditor({
         </div>
       )}
       {gitProject && settings && (
-        <fieldset style={{ minWidth: 0 }}>
+        <fieldset style={{ minWidth: 0, display: "flex", flexWrap: "wrap", gap: "8px 16px" }}>
           <legend>Workspace configuration source</legend>
           <label>
             <input

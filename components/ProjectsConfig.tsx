@@ -229,6 +229,7 @@ export function ProjectSettings({
         borderRadius: 8,
         padding: 16,
         display: "grid",
+        gridTemplateColumns: "minmax(0, 1fr)",
         gap: 12,
         minWidth: 0,
         overflowWrap: "anywhere",
@@ -244,11 +245,12 @@ export function ProjectSettings({
       >
         {project.path}
       </div>
-      <label>
+      <label style={{ display: "grid", gap: 4, minWidth: 0 }}>
         Display name{" "}
         <input
           style={{
             width: "100%",
+            boxSizing: "border-box",
             padding: 8,
             border: "1px solid var(--border)",
             borderRadius: "var(--radius-control)",
@@ -377,14 +379,14 @@ function ProjectIconSettings({
   }
 
   return (
-    <div style={{ display: "grid", gap: 8 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 8, minWidth: 0 }}>
       <strong>Project icon</strong>
       {project.icon && (
         <img src={project.icon} alt="Current project icon" width={48} height={48} style={{ objectFit: "cover", borderRadius: 6 }} />
       )}
-      <label>
-        Upload image (center-cropped to a square){" "}
-        <input type="file" accept="image/*" disabled={busy} onChange={(e) => {
+      <label style={{ display: "grid", gap: 4, minWidth: 0 }}>
+        Upload image (center-cropped to a square)
+        <input style={{ maxWidth: "100%", minWidth: 0 }} type="file" accept="image/*" disabled={busy} onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = "";
           if (file) void uploadIcon(file);
@@ -397,11 +399,11 @@ function ProjectIconSettings({
       {busy && <div role="status">Working...</div>}
       {error && <div role="alert">{error}</div>}
       {candidates && (candidates.length ? (
-        <div style={{ display: "grid", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 8, minWidth: 0 }}>
           {candidates.map((candidate) => (
-            <button key={candidate.path} type="button" disabled={busy} onClick={() => void saveIcon(candidate.icon)} style={{ display: "flex", alignItems: "center", gap: 8, textAlign: "left", overflowWrap: "anywhere" }}>
+            <button key={candidate.path} type="button" disabled={busy} onClick={() => void saveIcon(candidate.icon)} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, textAlign: "left", overflowWrap: "anywhere" }}>
               <img src={candidate.icon} alt="" width={40} height={40} style={{ objectFit: "contain", flexShrink: 0 }} />
-              <span>{candidate.path}</span>
+              <span style={{ minWidth: 0 }}>{candidate.path}</span>
             </button>
           ))}
         </div>

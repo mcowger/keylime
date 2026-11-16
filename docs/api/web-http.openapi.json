@@ -39047,7 +39047,7 @@
         }
       },
       "post": {
-        "description": "### Usage\n\nApply a hierarchy action on a host.\n\n### Inputs\n\nSend host and an input object with an action and its action-specific fields; JSON is limited to 384 KiB.\n\n### Invariants\n\nRegistration and discovery are distinct; the host validates action preconditions.\n\n### Effects\n\nActions can change project or workspace registration and presentation.\n\n### Recovery\n\nAfter an uncertain mutation, fetch the hierarchy before deciding whether to repeat it.",
+        "description": "### Usage\n\nApply a hierarchy action on a host.\n\n### Inputs\n\nSend host and an input object with an action and its action-specific fields; JSON is limited to 384 KiB.\n\n### Invariants\n\nRegistration and discovery are distinct; the host validates action preconditions. listProjectIcons scans at most five directory levels and 2,000 entries, returning at most 24 icons of at most 256 KiB. It skips hidden names, symlinks, node_modules, vendor, dist and release, and applies Git ignore rules when available. Results are best-effort.\n\n### Effects\n\nActions can change project or workspace registration and presentation.\n\n### Recovery\n\nAfter an uncertain mutation, fetch the hierarchy before deciding whether to repeat it.",
         "operationId": "workspaceHierarchyPost",
         "parameters": [],
         "requestBody": {
@@ -39916,7 +39916,7 @@
         "x-client-semantics": {
           "Effects": "Actions can change project or workspace registration and presentation.",
           "Inputs": "Send host and an input object with an action and its action-specific fields; JSON is limited to 384 KiB.",
-          "Invariants": "Registration and discovery are distinct; the host validates action preconditions.",
+          "Invariants": "Registration and discovery are distinct; the host validates action preconditions. listProjectIcons scans at most five directory levels and 2,000 entries, returning at most 24 icons of at most 256 KiB. It skips hidden names, symlinks, node_modules, vendor, dist and release, and applies Git ignore rules when available. Results are best-effort.",
           "Recovery": "After an uncertain mutation, fetch the hierarchy before deciding whether to repeat it.",
           "Usage": "Apply a hierarchy action on a host."
         }

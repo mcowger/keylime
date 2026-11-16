@@ -101,7 +101,7 @@ Recovery: Re-list or snapshot after disconnection; a restarted daemon does not p
     "hierarchy",
     `Usage: Inspect or change the registered project/workspace/session hierarchy.
 Inputs: Action-specific IDs, host paths, imports or project metadata select the operation; nullable metadata clears it.
-Invariants: Discovery yields candidates; importing or registering changes canonical membership and is distinct from filesystem discovery.
+Invariants: Discovery yields candidates; importing or registering changes canonical membership and is distinct from filesystem discovery. listProjectIcons scans at most five directory levels below the project root and examines at most 2,000 entries, returning at most 24 icons of at most 256 KiB each. It skips hidden names, symlinks, node_modules, vendor, dist and release, and applies Git ignore rules when available. Results are best-effort, not an exhaustive inventory.
 Effects: Mutations persist hierarchy changes; list and discovery return snapshots.
 Recovery: Re-read the hierarchy before repeating an uncertain mutation.`,
     obj({ input: hierarchyArgs }),

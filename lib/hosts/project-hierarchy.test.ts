@@ -8,6 +8,7 @@ import {
   existsSync,
   realpathSync,
   readFileSync,
+  symlinkSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -410,6 +411,45 @@ test("host creation defaults work without projects and base ref follows remote H
       /Stored workspace pipeline is invalid/,
     );
     await workspaceCreationSettings({ projectPath: cwd, override: null });
+  } finally {
+    if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = previous;
+    rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+test("project icon discovery finds repository assets without generated or escaped files", async () => {
+  const temporary = realpathSync(mkdtempSync(path.join(tmpdir(), "keylime-icons-")));
+  const previous = process.env.PI_CODING_AGENT_DIR;
+  process.env.PI_CODING_AGENT_DIR = path.join(temporary, "agent");
+  const project = path.join(temporary, "repo");
+  mkdirSync(project);
+  const create = (relative: string, data: string | Buffer = "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>") => {
+    const file = path.join(project, relative);
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, data);
+  };
+  try {
+    execFileSync("git", ["-C", project, "init"], { stdio: "pipe" });
+    create(".gitignore", "generated/\n*.ignored.svg\n");
+    create("docs/images/plexus_logo.png", Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    create("packages/frontend/src/assets/plexus-icon.svg");
+    create("dist/icon.svg");
+    create("release/logo.svg");
+    create("generated/icon.svg");
+    create("docs/images/logo.ignored.svg");
+    create("node_modules/pkg/icon.svg");
+    create("a/b/c/d/e/f/icon.svg");
+    writeFileSync(path.join(temporary, "outside.svg"), "<svg></svg>");
+    symlinkSync(path.join(temporary, "outside.svg"), path.join(project, "icon.svg"));
+    const registered = await hierarchyOperation({ action: "registerProject", path: project });
+    assert.ok(registered.ok);
+    const result = await hierarchyOperation({ action: "listProjectIcons", projectId: registered.value.projects[0].id });
+    assert.ok(result.ok);
+    assert.deepEqual(result.value.iconCandidates?.map((candidate) => candidate.path).sort(), [
+      "docs/images/plexus_logo.png",
+      "packages/frontend/src/assets/plexus-icon.svg",
+    ]);
   } finally {
     if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = previous;

@@ -22,7 +22,7 @@ New branch names, including local branches created from remote refs, are normali
 
 Open a project's sidebar actions menu and choose **Project settings**, or use **Settings → Projects**, to edit its display name and workspace configuration source. Changes save automatically. The project dialog is available on desktop and mobile. Configure manual host creation defaults in **Settings → Hosts**. These settings live on the owning daemon and are shared with other linked web servers; the workspace creation panel creates workspaces and displays job output.
 
-Project settings also controls the sidebar icon. Upload an image (center-cropped to a square), choose a detected repository icon, or clear the selection to use the project's initial and a deterministic color. The selection is stored on the project's host. Discovery looks for icon, favicon, logo and apple-touch-icon files up to three directories below the root, skipping hidden directories, symlinks, `node_modules` and `vendor`. It supports PNG, JPEG, GIF, WebP, ICO and SVG files up to 256 KiB. SVG icons are rendered as images, not inline markup.
+Project settings also controls the sidebar icon. Upload an image (center-cropped to a square), choose a detected repository icon, or clear the selection to use the project's initial and a deterministic color. The selection is stored on the project's host. Discovery looks for icon, favicon, logo and apple-touch-icon files up to five directories below the root, skipping hidden directories, symlinks, Git-ignored paths, `node_modules`, `vendor`, `dist` and `release`. It supports PNG, JPEG, GIF, WebP, ICO and SVG files up to 256 KiB. SVG icons are rendered as images, not inline markup.
 
 ### Manual configuration
 

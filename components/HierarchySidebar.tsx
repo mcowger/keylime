@@ -1174,8 +1174,11 @@ export function HierarchySidebar({
             if (!open) setSettingsProject(null);
           }}
         >
-          <DialogContent style={{ width: 640, maxWidth: "92vw" }}>
-            <DialogTitle>Project settings</DialogTitle>
+          <DialogContent style={{ width: 640, maxWidth: "92vw", boxSizing: "border-box" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <DialogTitle>Project settings</DialogTitle>
+              <button type="button" className="dialog-action" onClick={() => setSettingsProject(null)} style={{ padding: "6px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", color: "var(--text)", background: "var(--bg-panel)" }}>Close</button>
+            </div>
             <ProjectSettings
               key={`${settingsProject.host}:${settingsProject.project.id}`}
               hostId={settingsProject.host}

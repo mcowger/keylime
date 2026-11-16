@@ -44,6 +44,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Eval activity rows display a Python or JavaScript icon before the tool intent
 - Seeded development sessions include completed and in-progress tasks for testing composer indicators
 - Project settings can upload, select, and clear sidebar icons, including discovered icons from the repository
+- Project icon discovery now finds conventional icon filenames in nested directories, with bounded scanning that skips hidden, ignored, and generated paths
 
 ### Changed
 - Operational notices, task chat and compaction use expandable transcript rows; advisor responses render as conversation text.
@@ -155,6 +156,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Markdown tables keep readable column widths on mobile and scroll horizontally when needed
 - Disable Ship when the workspace has no changes or commits to ship
 - Hide the composer task button when all tasks are complete
+- Project settings and workspace configuration controls fit within narrow mobile dialogs
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

@@ -998,7 +998,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Reply to hierarchy; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Inspect or change the registered project/workspace/session hierarchy.\nInputs: Action-specific IDs, host paths, imports or project metadata select the operation; nullable metadata clears it.\nInvariants: Discovery yields candidates; importing or registering changes canonical membership and is distinct from filesystem discovery.\nEffects: Mutations persist hierarchy changes; list and discovery return snapshots.\nRecovery: Re-read the hierarchy before repeating an uncertain mutation.",
+        "description": "Reply to hierarchy; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Inspect or change the registered project/workspace/session hierarchy.\nInputs: Action-specific IDs, host paths, imports or project metadata select the operation; nullable metadata clears it.\nInvariants: Discovery yields candidates; importing or registering changes canonical membership and is distinct from filesystem discovery. listProjectIcons scans at most five directory levels below the project root and examines at most 2,000 entries, returning at most 24 icons of at most 256 KiB each. It skips hidden names, symlinks, node_modules, vendor, dist and release, and applies Git ignore rules when available. Results are best-effort, not an exhaustive inventory.\nEffects: Mutations persist hierarchy changes; list and discovery return snapshots.\nRecovery: Re-read the hierarchy before repeating an uncertain mutation.",
         "name": "HostReply_hierarchy",
         "payload": {
           "$ref": "#/components/schemas/HostReply_hierarchy"
@@ -1826,7 +1826,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Usage: Inspect or change the registered project/workspace/session hierarchy.\nInputs: Action-specific IDs, host paths, imports or project metadata select the operation; nullable metadata clears it.\nInvariants: Discovery yields candidates; importing or registering changes canonical membership and is distinct from filesystem discovery.\nEffects: Mutations persist hierarchy changes; list and discovery return snapshots.\nRecovery: Re-read the hierarchy before repeating an uncertain mutation.",
+        "description": "Usage: Inspect or change the registered project/workspace/session hierarchy.\nInputs: Action-specific IDs, host paths, imports or project metadata select the operation; nullable metadata clears it.\nInvariants: Discovery yields candidates; importing or registering changes canonical membership and is distinct from filesystem discovery. listProjectIcons scans at most five directory levels below the project root and examines at most 2,000 entries, returning at most 24 icons of at most 256 KiB each. It skips hidden names, symlinks, node_modules, vendor, dist and release, and applies Git ignore rules when available. Results are best-effort, not an exhaustive inventory.\nEffects: Mutations persist hierarchy changes; list and discovery return snapshots.\nRecovery: Re-read the hierarchy before repeating an uncertain mutation.",
         "name": "HostRequest_hierarchy",
         "payload": {
           "$ref": "#/components/schemas/HostRequest_hierarchy"
@@ -47294,7 +47294,7 @@
             "type": "object"
           }
         ],
-        "description": "Reply to hierarchy; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Inspect or change the registered project/workspace/session hierarchy.\nInputs: Action-specific IDs, host paths, imports or project metadata select the operation; nullable metadata clears it.\nInvariants: Discovery yields candidates; importing or registering changes canonical membership and is distinct from filesystem discovery.\nEffects: Mutations persist hierarchy changes; list and discovery return snapshots.\nRecovery: Re-read the hierarchy before repeating an uncertain mutation.",
+        "description": "Reply to hierarchy; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Inspect or change the registered project/workspace/session hierarchy.\nInputs: Action-specific IDs, host paths, imports or project metadata select the operation; nullable metadata clears it.\nInvariants: Discovery yields candidates; importing or registering changes canonical membership and is distinct from filesystem discovery. listProjectIcons scans at most five directory levels below the project root and examines at most 2,000 entries, returning at most 24 icons of at most 256 KiB each. It skips hidden names, symlinks, node_modules, vendor, dist and release, and applies Git ignore rules when available. Results are best-effort, not an exhaustive inventory.\nEffects: Mutations persist hierarchy changes; list and discovery return snapshots.\nRecovery: Re-read the hierarchy before repeating an uncertain mutation.",
         "title": "HostReply_hierarchy"
       },
       "HostReply_home": {
@@ -71851,7 +71851,7 @@
         "type": "object"
       },
       "HostRequest_hierarchy": {
-        "description": "Usage: Inspect or change the registered project/workspace/session hierarchy.\nInputs: Action-specific IDs, host paths, imports or project metadata select the operation; nullable metadata clears it.\nInvariants: Discovery yields candidates; importing or registering changes canonical membership and is distinct from filesystem discovery.\nEffects: Mutations persist hierarchy changes; list and discovery return snapshots.\nRecovery: Re-read the hierarchy before repeating an uncertain mutation.",
+        "description": "Usage: Inspect or change the registered project/workspace/session hierarchy.\nInputs: Action-specific IDs, host paths, imports or project metadata select the operation; nullable metadata clears it.\nInvariants: Discovery yields candidates; importing or registering changes canonical membership and is distinct from filesystem discovery. listProjectIcons scans at most five directory levels below the project root and examines at most 2,000 entries, returning at most 24 icons of at most 256 KiB each. It skips hidden names, symlinks, node_modules, vendor, dist and release, and applies Git ignore rules when available. Results are best-effort, not an exhaustive inventory.\nEffects: Mutations persist hierarchy changes; list and discovery return snapshots.\nRecovery: Re-read the hierarchy before repeating an uncertain mutation.",
         "properties": {
           "args": {
             "properties": {
@@ -75245,7 +75245,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: Inspect or change the registered project/workspace/session hierarchy.\nInputs: Action-specific IDs, host paths, imports or project metadata select the operation; nullable metadata clears it.\nInvariants: Discovery yields candidates; importing or registering changes canonical membership and is distinct from filesystem discovery.\nEffects: Mutations persist hierarchy changes; list and discovery return snapshots.\nRecovery: Re-read the hierarchy before repeating an uncertain mutation.",
+      "description": "Usage: Inspect or change the registered project/workspace/session hierarchy.\nInputs: Action-specific IDs, host paths, imports or project metadata select the operation; nullable metadata clears it.\nInvariants: Discovery yields candidates; importing or registering changes canonical membership and is distinct from filesystem discovery. listProjectIcons scans at most five directory levels below the project root and examines at most 2,000 entries, returning at most 24 icons of at most 256 KiB each. It skips hidden names, symlinks, node_modules, vendor, dist and release, and applies Git ignore rules when available. Results are best-effort, not an exhaustive inventory.\nEffects: Mutations persist hierarchy changes; list and discovery return snapshots.\nRecovery: Re-read the hierarchy before repeating an uncertain mutation.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/HostRequest_hierarchy"
