@@ -84,6 +84,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Project settings use tabbed sections and consistent controls on desktop and mobile
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts
 - The Ship workspace action uses an icon with an accessible label
+- The composer task button uses a checklist icon instead of a plain checkmark
 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen

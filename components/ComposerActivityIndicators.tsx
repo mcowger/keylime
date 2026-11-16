@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Check, X } from "lucide-react";
+import { Bot, ListChecks, X } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { SubagentInfo } from "@/hooks/useAgentSession";
 import { useI18n } from "@/lib/i18n";
@@ -120,7 +120,7 @@ export function ComposerActivityIndicators({
           aria-expanded={openPanel === "todos"}
           onClick={toggle("todos")}
         >
-          <Check size={14} aria-hidden />
+          <ListChecks size={14} aria-hidden />
           <span>
             {done}/{tasks.length}
           </span>
