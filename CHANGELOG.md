@@ -144,6 +144,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Runner warm-up failures avoid warnings during seeded UI browsing and give Keylime-specific build or fetch guidance
 - Expanded regression coverage for host reload, missing runners, diagnostics, and test fixtures
 - Markdown tables keep readable column widths on mobile and scroll horizontally when needed
+- Disable Ship when the workspace has no changes or commits to ship
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

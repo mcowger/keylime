@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   AlertCircle,
   Bot,
@@ -27,6 +27,7 @@ import type { WorkspaceDeleteResult } from "@/lib/workspace-creation-types";
 import { WorktreesPanel } from "./WorktreesPanel";
 import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
 import { ShipDialog } from "./ShipDialog";
+import { useShipAvailability } from "@/hooks/useShipAvailability";
 import { ConfirmDialog } from "./ui/field";
 import { ProjectSettings } from "./ProjectsConfig";
 import { toast } from "./ui/toast";
@@ -65,6 +66,18 @@ type Discovery = {
   workspaceId?: string;
   snapshot: HierarchySnapshot;
 };
+
+function SidebarShipButton({ host, projectPath, path, sessionId, disabled, open, onClick, style }: {
+  host: string; projectPath: string; path: string; sessionId?: string;
+  disabled: boolean; open: boolean; onClick: () => void; style: CSSProperties;
+}) {
+  const empty = useShipAvailability(host, projectPath, path, open && !!sessionId);
+  return <button style={style} type="button" disabled={disabled || empty}
+    title={disabled && sessionId ? "Wait for the session to finish" : empty ? "Nothing to ship" : "Ship workspace"}
+    onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); onClick(); }}>
+    Ship...
+  </button>;
+}
 
 export function HierarchySidebar({
   hosts,
@@ -123,6 +136,7 @@ export function HierarchySidebar({
     host: string;
     project: HierarchyProject;
   } | null>(null);
+  const [openWorkspaceMenu, setOpenWorkspaceMenu] = useState<string | null>(null);
   const [shipTarget, setShipTarget] = useState<{
     host: string;
     projectPath: string;
@@ -879,7 +893,7 @@ export function HierarchySidebar({
                                 )}
                               </span>
                             )}
-                          <details style={{ position: "relative" }}>
+                          <details style={{ position: "relative" }} onToggle={(e) => setOpenWorkspaceMenu(e.currentTarget.open ? `${host.id}:${workspace.path}` : null)}>
                             <summary
                               aria-label={`Actions for workspace ${workspace.name}`}
                               style={{
@@ -893,35 +907,18 @@ export function HierarchySidebar({
                             <div style={menu}>
                               {!workspace.isDefault &&
                                 project.kind === "git" && (
-                                  <button
+                                  <SidebarShipButton
                                     style={menuButton}
-                                    type="button"
-                                    disabled={
-                                      workspace.unavailable ||
-                                      !latestSession ||
-                                      runningSessionIds.has(latestSession.id)
-                                    }
-                                    title={
-                                      latestSession &&
-                                      runningSessionIds.has(latestSession.id)
-                                        ? "Wait for the session to finish"
-                                        : "Ship workspace"
-                                    }
-                                    onClick={(e) => {
-                                      e.currentTarget
-                                        .closest("details")
-                                        ?.removeAttribute("open");
-                                      if (latestSession)
-                                        setShipTarget({
-                                          host: host.id,
-                                          projectPath: project.path,
-                                          path: workspace.path,
-                                          sessionId: latestSession.id,
-                                        });
+                                    host={host.id}
+                                    projectPath={project.path}
+                                    path={workspace.path}
+                                    sessionId={latestSession?.id}
+                                    open={openWorkspaceMenu === `${host.id}:${workspace.path}`}
+                                    disabled={workspace.unavailable || !latestSession || runningSessionIds.has(latestSession.id)}
+                                    onClick={() => {
+                                      if (latestSession) setShipTarget({ host: host.id, projectPath: project.path, path: workspace.path, sessionId: latestSession.id });
                                     }}
-                                  >
-                                    Ship...
-                                  </button>
+                                  />
                                 )}
                               <button
                                 style={menuButton}

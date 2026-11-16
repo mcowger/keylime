@@ -49,6 +49,7 @@ import { HeldMessageView, MessageView } from "./MessageView";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ExtensionDialog } from "./ExtensionDialog";
 import { ShipDialog } from "./ShipDialog";
+import { useShipAvailability } from "@/hooks/useShipAvailability";
 import { SubagentTranscriptDialog } from "./SubagentTranscriptDialog";
 import { ChatMinimap, useMessageRefs } from "./ChatMinimap";
 import { ActivityPanel, ComposerPanels } from "./ComposerPanels";
@@ -632,6 +633,7 @@ export function ChatWindow({
 }: Props) {
   const { t, tn } = useI18n();
   const [shipOpen, setShipOpen] = useState(false);
+  const nothingToShip = useShipAvailability(shipWorkspace?.host, shipWorkspace?.projectPath, shipWorkspace?.path, !!session && !shipOpen);
   const chatWidth = useChatWidth();
   const fileSource = useMemo<WorkspaceFileSource>(
     () => ({
@@ -1694,11 +1696,11 @@ export function ChatWindow({
                       <button
                         type="button"
                         className="ui-focus-ring rounded-md border border-solid border-[var(--border)] bg-[var(--bg-panel)] px-3 py-1.5 text-sm font-semibold text-[var(--text)] hover:bg-[var(--bg-hover)] disabled:cursor-default disabled:opacity-50"
-                        disabled={sessionBusy || streamState.isStreaming}
+                        disabled={sessionBusy || streamState.isStreaming || nothingToShip}
                         title={
                           sessionBusy || streamState.isStreaming
                             ? "Wait for the session to finish"
-                            : "Ship workspace"
+                            : nothingToShip ? "Nothing to ship" : "Ship workspace"
                         }
                         onClick={() => setShipOpen(true)}
                       >
