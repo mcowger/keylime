@@ -428,7 +428,7 @@
   "chatInput.compacted": "Compacted",
   "chatInput.compactedWithReason": "{reason} compacted",
   "chatInput.compacting": "Compacting…",
-  "chatInput.advisorReviewingTitle": "Advisor reviewing · {model} ({reasoning})",
+  "chatInput.advisorReviewing": "Advisor reviewing…",
   "chatInput.disableSound": "Disable completion sound",
   "chatInput.advisorEnableTitle": "Enable advisor for this chat",
   "chatInput.advisorDisableTitle": "Advisor: {model} ({reasoning}) — click to disable",

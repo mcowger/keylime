@@ -960,6 +960,17 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     },
     [updateQueuedMessages],
   );
+  const [advisorReviewPending, setAdvisorReviewPending] = useState(false);
+  const advisorAppliedSeqRef = useRef(0);
+  const applyAdvisorSnapshot = useCallback((seq: number, value: unknown) => {
+    if (seq <= advisorAppliedSeqRef.current) return;
+    advisorAppliedSeqRef.current = seq;
+    setAdvisorReviewPending(value === true);
+  }, []);
+  useEffect(() => {
+    advisorAppliedSeqRef.current = ++queueSeqRef.current;
+    setAdvisorReviewPending(false);
+  }, [session?.id]);
   const [subagents, setSubagents] = useState<SubagentInfo[]>([]);
   const [subagentEvents, setSubagentEvents] = useState<
     Record<string, SubagentActivityEvent[]>
@@ -970,7 +981,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const [todoPhases, setTodoPhases] = useState<TodoPhase[]>([]);
   const [activeGoal, setActiveGoal] = useState<ActiveGoal | null>(null);
   const [activePlan, setActivePlan] = useState<ActivePlan | null>(null);
-  const [advisorActiveAt, setAdvisorActiveAt] = useState(0);
   // Advisor is a per-chat toggle (composer Sparkles + /advisor command), not a
   // global setting: each session remembers its own choice in localStorage.
   const [advisorEnabled, setAdvisorEnabled] = useState(false);
@@ -1915,6 +1925,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           }
 
           const liveState = agentState.state;
+          applyAdvisorSnapshot(queueRevision, liveState?.advisorReviewPending);
           if (liveState?.modelActivity)
             applyModelActivity(liveState.modelActivity);
           else if (!agentState.running) setModelActivity(IDLE_MODEL_ACTIVITY);
@@ -1994,6 +2005,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       applyAuthoritativeModel,
       beginAuthoritativeModelSync,
       applyQueueStateSnapshot,
+      applyAdvisorSnapshot,
     ],
   );
 
@@ -2407,12 +2419,14 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         if (!res.ok || !hookAliveRef.current || sessionIdRef.current !== sid)
           return;
         const data = (await res.json()) as { state?: AgentStateResponse };
+        if (!hookAliveRef.current || sessionIdRef.current !== sid) return;
         applyQueueStateSnapshot(queueRevision, data.state?.queuedMessages);
+        applyAdvisorSnapshot(queueRevision, data.state?.advisorReviewPending);
       } catch {
         // The next live update or state snapshot heals these views.
       }
     },
-    [applyQueueStateSnapshot],
+    [applyQueueStateSnapshot, applyAdvisorSnapshot],
   );
 
   const reconcileHandoff = useCallback(async () => {
@@ -3497,7 +3511,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         clearLiveToolResults();
         setRetryInfo(null);
         setSubagents([]);
-        setAdvisorActiveAt(0);
         subagentRosterGenerationRef.current += 1;
         // Bound per-run activity state: without this, subagentEvents and the
         // transcript-version map retain one entry per subagent id forever.
@@ -3639,6 +3652,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         )
           return;
         const state = data.state;
+        applyAdvisorSnapshot(queueRevision, state?.advisorReviewPending);
         if (state?.modelActivity) applyModelActivity(state.modelActivity);
         else if (!data.running) setModelActivity(IDLE_MODEL_ACTIVITY);
         if (!promptDispatchPendingRef.current && state?.responseObserved)
@@ -3698,6 +3712,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       applyModelActivity,
       applyNativeCompacting,
       applyQueueStateSnapshot,
+      applyAdvisorSnapshot,
       finishPromptWithoutStream,
       refreshSubagentRoster,
     ],
@@ -3932,7 +3947,10 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
   const handleAgentEvent = useCallback(
     (event: AgentEvent) => {
-      if (event.type === "process_exit") setModelActivity(IDLE_MODEL_ACTIVITY);
+      if (event.type === "process_exit") {
+        setModelActivity(IDLE_MODEL_ACTIVITY);
+        applyAdvisorSnapshot(++queueSeqRef.current, false);
+      }
       if (
         (event.type === "message_start" || event.type === "message_end") &&
         typeof event.clientMessageId === "string" &&
@@ -3948,6 +3966,10 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           return;
       }
       switch (event.type) {
+        case "advisor_review":
+          if (typeof event.pending === "boolean")
+            applyAdvisorSnapshot(++queueSeqRef.current, event.pending);
+          break;
         case "model_activity":
           applyModelActivity(event.activity);
           break;
@@ -4167,7 +4189,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           clearLiveToolResults();
           setRetryInfo(null);
           setSubagents([]);
-          setAdvisorActiveAt(0);
           subagentRosterGenerationRef.current += 1;
           resetSubagentActivityState();
           dispatch({ type: "end" });
@@ -4201,6 +4222,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
                 // The queue does not depend on a model: an exited wrapper still
                 // means nothing is queued.
                 applyQueueStateSnapshot(queueRevision, d.state?.queuedMessages);
+                applyAdvisorSnapshot(queueRevision, d.state?.advisorReviewPending);
                 if (!d.state?.model) return;
                 const applied = applyAuthoritativeModel(
                   toThinkingModelMeta(d.state.model),
@@ -4441,15 +4463,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           if (msg?.role === "user") {
             break;
           }
-          if (
-            msg?.role === "custom" &&
-            (msg as CustomMessage).customType === "advisor"
-          ) {
-            // The advisor review streams in mid-run: light the composer thunder
-            // while it works, not only once its message completes. Functional
-            // update keeps per-frame updates from re-rendering needlessly.
-            setAdvisorActiveAt((prev) => (prev === 0 ? Date.now() : prev));
-          }
           if (msg) {
             if (hasVisibleAssistantContent(msg))
               runHadContentRef.current = true;
@@ -4507,11 +4520,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
               describeMcpMountNotice(completed as CustomMessage),
               { clamp: true },
             );
-          } else if (completed) {
-            // The advisor model injects its review as a custom message mid-run;
-            // surface it as live advisor activity for the composer thunder icon.
-            if ((completed as CustomMessage).customType === "advisor")
-              setAdvisorActiveAt(Date.now());
           }
           if (completed?.role === "assistant") {
             clearTerminalReconcileTimer();
@@ -4948,6 +4956,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       applyAuthoritativeModel,
       beginAuthoritativeModelSync,
       setCompacting,
+      applyAdvisorSnapshot,
       setLiveToolResult,
       surfaceQuotaOnStream,
       updateQueuedMessages,
@@ -5287,7 +5296,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           ? { kind: "running_command" }
           : { kind: "waiting_model" },
       );
-      setAdvisorActiveAt(0);
       dispatch({ type: "start" });
       pendingScrollToUserRef.current = true;
       completionScrollAllowedRef.current = true;
@@ -7107,7 +7115,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       agentState: { running?: boolean; state?: AgentStateResponse },
       compactionGen: number,
     ) => {
-      if (!agentState.running || eventSourceRef.current) return;
+      if ((!agentState.running && !agentState.state?.advisorReviewPending) || eventSourceRef.current) return;
       void connectEvents(sid);
       applyLiveRun(sid, agentState, compactionGen);
     },
@@ -7615,7 +7623,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     extensionWidgets,
     respondToExtensionUi,
     sendExtensionCustomInput,
-    advisorActive: advisorActiveAt > 0,
+    advisorReviewPending,
     advisorEnabled,
     handleAdvisorChange,
     subagents,

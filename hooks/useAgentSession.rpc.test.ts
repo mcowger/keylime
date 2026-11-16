@@ -1130,6 +1130,41 @@ async function startRun(
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+test("advisor review follows snapshots and events beyond the primary run and reconnect", async () => {
+  resetWorld();
+  primeSession("advisor-review", [userMsg("u0", "q")]);
+  world.agents.set("advisor-review", { running: true, state: { advisorReviewPending: true } });
+  const w = await mountSession("advisor-review");
+  assert.equal(w.latest.advisorReviewPending, true);
+  const es = lastEs();
+  await act(() => es.open());
+  await settle();
+  await act(() => es.emit({ type: "agent_end", isTerminal: true }));
+  assert.equal(w.latest.advisorReviewPending, true);
+  await act(() => es.emit({ type: "advisor_review", pending: false }));
+  assert.equal(w.latest.advisorReviewPending, false);
+  await act(() => es.emit({ type: "advisor_review", pending: true }));
+  assert.equal(w.latest.advisorReviewPending, true);
+  world.agents.set("advisor-review", { running: true, state: { advisorReviewPending: false } });
+  await act(() => es.dropRecoverably());
+  await act(() => es.open());
+  await settle();
+  assert.equal(w.latest.advisorReviewPending, false);
+});
+
+test("advisor review clears when the runner exits", async () => {
+  resetWorld();
+  primeSession("advisor-exit", [userMsg("u0", "q")]);
+  world.agents.set("advisor-exit", { running: true, state: { advisorReviewPending: true } });
+  const w = await mountSession("advisor-exit");
+  assert.equal(w.latest.advisorReviewPending, true);
+  const es = lastEs();
+  await act(() => es.open());
+  await settle();
+  await act(() => es.emit({ type: "process_exit" }));
+  assert.equal(w.latest.advisorReviewPending, false);
+});
+
 
 // omp owns the queue. The panel shows its snapshot — on load (get_state, so a
 // reload or another device sees the same chips) and live via queue_update —

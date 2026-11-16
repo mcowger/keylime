@@ -1,7 +1,9 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import * as os from "node:os";
 import * as path from "node:path";
+import type { AdvisorStatusOverviewEntry } from "@oh-my-pi/pi-coding-agent/session/session-advisors";
 import { eventsCommands, subscribeHostEvents } from "../src/events";
+import { sessionState } from "../src/commands/model";
 import { createTestSession, type Frame, type TestSession } from "./harness";
 
 let test: TestSession | undefined;
@@ -25,17 +27,21 @@ async function bridged(responses: { content: string[] }[] = []) {
   test = await createTestSession({ responses });
   const session = test.session;
   const events: Event[] = [];
-  const waiters = new Map<string, () => void>();
+  const waiters = new Map<string, { count: number; resolve: () => void }>();
   const send = (frame: Frame) => {
     expect(frame.t).toBe("event");
     const event = frame.event as Event;
     events.push(event);
-    waiters.get(event.type)?.();
+    const waiter = waiters.get(event.type);
+    if (waiter && events.filter((item) => item.type === event.type).length >= waiter.count) {
+      waiters.delete(event.type);
+      waiter.resolve();
+    }
   };
-  const waitFor = (type: string) => {
+  const waitFor = (type: string, count = 1) => {
     const { promise, resolve } = Promise.withResolvers<void>();
-    if (events.some((event) => event.type === type)) resolve();
-    else waiters.set(type, resolve);
+    if (events.filter((event) => event.type === type).length >= count) resolve();
+    else waiters.set(type, { count, resolve });
     return promise;
   };
   unsubscribe = subscribeHostEvents(session, send);
@@ -110,4 +116,43 @@ describe("host events bridge", () => {
       sessionId: session.sessionId,
     });
   });
+  it("tracks advisor backlog independently of primary events and snapshots it on reconnect", async () => {
+    const { session, events, waitFor } = await bridged();
+    let advisors: AdvisorStatusOverviewEntry[] = [];
+    const status = spyOn(session, "getAdvisorStatusOverview").mockImplementation(
+      () => ({ configured: true, advisors }),
+    );
+    const reviewEvents = () => events.filter((event) => event.type === "advisor_review");
+    try {
+      expect(sessionState(session).advisorReviewPending).toBe(false);
+      advisors = [{ name: "reviewer", yielded: false, backlog: 1, status: "running", isPaused: false }];
+      expect(sessionState(session).advisorReviewPending).toBe(true);
+      await waitFor("advisor_review");
+      expect(reviewEvents()).toEqual([{ type: "advisor_review", pending: true }]);
+
+      // Finishing without advice still clears the indicator, without advisor_yielded.
+      advisors = [];
+      await waitFor("advisor_review", 2);
+      expect(reviewEvents()).toEqual([
+        { type: "advisor_review", pending: true },
+        { type: "advisor_review", pending: false },
+      ]);
+
+      advisors = [
+        { name: "paused", yielded: false, backlog: 1, status: "running", isPaused: true },
+        { name: "failed", yielded: false, backlog: 1, status: "error", isPaused: false },
+        { name: "idle", yielded: false, backlog: 0, status: "running", isPaused: false },
+      ];
+      expect(sessionState(session).advisorReviewPending).toBe(false);
+      expect(reviewEvents()).toHaveLength(2);
+
+      advisors = [{ name: "reviewer", yielded: false, backlog: 1, status: "running", isPaused: false }];
+      unsubscribe?.();
+      unsubscribe = undefined;
+      expect(sessionState(session).advisorReviewPending).toBe(true);
+    } finally {
+      status.mockRestore();
+    }
+  });
+
 });

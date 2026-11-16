@@ -20922,6 +20922,10 @@
     "domain_RpcSessionState": {
       "description": "Mirror of omp's RpcSessionState (the raw `get_state` payload).",
       "properties": {
+        "advisorReviewPending": {
+          "description": "An active, unpaused advisor has output in its review backlog; mirrored by advisor_review.",
+          "type": "boolean"
+        },
         "autoCompactionEnabled": {
           "type": "boolean"
         },
@@ -83730,6 +83734,49 @@
           "allOf": [
             {
               "properties": {
+                "pending": {
+                  "type": "boolean"
+                },
+                "type": {
+                  "const": "advisor_review",
+                  "type": "string"
+                }
+              },
+              "required": ["type", "pending"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "web": {
+                  "description": "Browser-assigned ordering cursor; a different streamId starts a distinct sequence.",
+                  "properties": {
+                    "first": {
+                      "description": "First sequence included in a merged delta; sequence is the last, and the range is inclusive. Within the same streamId, a snapshot at S where first <= S < sequence already includes only part of the delta: never replay the whole delta on it. Buffer and reconcile with a covering snapshot.",
+                      "type": "number"
+                    },
+                    "sequence": {
+                      "description": "Ordering sequence within this stream; compare only cursors with the same streamId.",
+                      "type": "number"
+                    },
+                    "streamId": {
+                      "description": "Identifies the browser event stream whose sequence is being counted.",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["streamId", "sequence"],
+                  "type": "object"
+                }
+              },
+              "required": ["web"],
+              "type": "object"
+            }
+          ],
+          "type": "object"
+        },
+        {
+          "allOf": [
+            {
+              "properties": {
                 "rules": {
                   "items": {
                     "properties": {
@@ -102972,6 +103019,19 @@
                             },
                             {
                               "properties": {
+                                "pending": {
+                                  "type": "boolean"
+                                },
+                                "type": {
+                                  "const": "advisor_review",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["type", "pending"],
+                              "type": "object"
+                            },
+                            {
+                              "properties": {
                                 "rules": {
                                   "items": {
                                     "properties": {
@@ -114154,6 +114214,10 @@
         {
           "description": "Mirror of omp's RpcSessionState (the raw `get_state` payload).",
           "properties": {
+            "advisorReviewPending": {
+              "description": "An active, unpaused advisor has output in its review backlog; mirrored by advisor_review.",
+              "type": "boolean"
+            },
             "autoCompactionEnabled": {
               "type": "boolean"
             },
@@ -114558,6 +114622,9 @@
         },
         {
           "properties": {
+            "advisorReviewPending": {
+              "type": "boolean"
+            },
             "dumpTools": {
               "items": {
                 "properties": {
@@ -114784,7 +114851,13 @@
               "type": "array"
             }
           },
-          "required": ["queuedMessages", "todoPhases", "goal", "dumpTools"],
+          "required": [
+            "advisorReviewPending",
+            "queuedMessages",
+            "todoPhases",
+            "goal",
+            "dumpTools"
+          ],
           "type": "object"
         }
       ],
@@ -139180,6 +139253,19 @@
                 },
                 {
                   "properties": {
+                    "pending": {
+                      "type": "boolean"
+                    },
+                    "type": {
+                      "const": "advisor_review",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["type", "pending"],
+                  "type": "object"
+                },
+                {
+                  "properties": {
                     "rules": {
                       "items": {
                         "properties": {
@@ -157362,6 +157448,19 @@
                         }
                       },
                       "required": ["type"],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "pending": {
+                          "type": "boolean"
+                        },
+                        "type": {
+                          "const": "advisor_review",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["type", "pending"],
                       "type": "object"
                     },
                     {

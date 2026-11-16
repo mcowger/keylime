@@ -17549,6 +17549,19 @@
                   },
                   {
                     "properties": {
+                      "pending": {
+                        "type": "boolean"
+                      },
+                      "type": {
+                        "const": "advisor_review",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type", "pending"],
+                    "type": "object"
+                  },
+                  {
+                    "properties": {
                       "rules": {
                         "items": {
                           "properties": {
@@ -35843,6 +35856,19 @@
                       },
                       {
                         "properties": {
+                          "pending": {
+                            "type": "boolean"
+                          },
+                          "type": {
+                            "const": "advisor_review",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type", "pending"],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
                           "rules": {
                             "items": {
                               "properties": {
@@ -47021,6 +47047,10 @@
                   {
                     "description": "Mirror of omp's RpcSessionState (the raw `get_state` payload).",
                     "properties": {
+                      "advisorReviewPending": {
+                        "description": "An active, unpaused advisor has output in its review backlog; mirrored by advisor_review.",
+                        "type": "boolean"
+                      },
                       "autoCompactionEnabled": {
                         "type": "boolean"
                       },
@@ -47431,6 +47461,9 @@
                   },
                   {
                     "properties": {
+                      "advisorReviewPending": {
+                        "type": "boolean"
+                      },
                       "dumpTools": {
                         "items": {
                           "properties": {
@@ -47658,6 +47691,7 @@
                       }
                     },
                     "required": [
+                      "advisorReviewPending",
                       "queuedMessages",
                       "todoPhases",
                       "goal",

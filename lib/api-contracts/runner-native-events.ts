@@ -520,6 +520,7 @@ export const runnerEventSchemas: readonly TSchema[] = [
     "todo_auto_clear",
     "session_settled",
   ].map((type) => event(type)),
+  event("advisor_review", { pending: b() }),
   event("ttsr_triggered", { rules: Type.Array(rule) }),
   event("todo_reminder", {
     todos: Type.Array(TodoItemSchema),

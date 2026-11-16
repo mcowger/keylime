@@ -292,21 +292,6 @@ test("renders goal, planning, and advisor indicators at the composer", () => {
   assert.match(html, /aria-label="(More actions|chatInput\.plusMenu)"/);
 });
 
-test("shows the advisor thunder indicator with the reviewing model and reasoning", () => {
-  const html = renderToStaticMarkup(
-    React.createElement(ChatInput, {
-      async onSend() {
-        return { status: "accepted" as const };
-      },
-      onAbort() {},
-      isStreaming: true,
-      advisorActive: true,
-      advisorModel: { name: "GPT-5.6 Luna", reasoning: "xhigh" },
-    }),
-  );
-
-  assert.match(html, /aria-label="[^"]*GPT-5\.6 Luna[^"]*xhigh[^"]*"/);
-});
 
 test("filters model options by display name, identifier, and provider", () => {
   const options = [

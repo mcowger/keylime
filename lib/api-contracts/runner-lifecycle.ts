@@ -387,6 +387,7 @@ Recovery: Refresh after reconnecting or when state changes.`,
     Type.Intersect([
       RpcSessionStateSchema,
       Type.Object({
+        advisorReviewPending: Type.Boolean(),
         queuedMessages: queueSnapshot,
         todoPhases: Type.Array(todoPhase),
         goal: nullable(goalState),

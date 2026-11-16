@@ -1772,6 +1772,11 @@ export const RpcSessionStateSchema = {
         "Includes admitted submissions, scheduled turns and background deliveries; absent on older OMP.",
     },
     hasPendingAsyncWork: Type.Optional(Type.Boolean()),
+    advisorReviewPending: {
+      ...Type.Optional(Type.Boolean()),
+      description:
+        "An active, unpaused advisor has output in its review backlog; mirrored by advisor_review.",
+    },
     queuedMessages: {
       ...Type.Optional(QueuedMessagesSchema),
       description:

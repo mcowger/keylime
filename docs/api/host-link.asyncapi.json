@@ -21786,6 +21786,19 @@
                         },
                         {
                           "properties": {
+                            "pending": {
+                              "type": "boolean"
+                            },
+                            "type": {
+                              "const": "advisor_review",
+                              "type": "string"
+                            }
+                          },
+                          "required": ["type", "pending"],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
                             "rules": {
                               "items": {
                                 "properties": {
@@ -40492,6 +40505,19 @@
                                 }
                               },
                               "required": ["type"],
+                              "type": "object"
+                            },
+                            {
+                              "properties": {
+                                "pending": {
+                                  "type": "boolean"
+                                },
+                                "type": {
+                                  "const": "advisor_review",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["type", "pending"],
                               "type": "object"
                             },
                             {

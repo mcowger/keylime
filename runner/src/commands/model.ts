@@ -7,6 +7,7 @@ import { buildAvailableSlashCommands } from "@oh-my-pi/pi-coding-agent/slash-com
 import { calculateTokensPerSecond } from "@oh-my-pi/pi-coding-agent/utils/token-rate";
 import { parseConfiguredThinkingLevel } from "@oh-my-pi/pi-tui/thinking";
 import { activityFor } from "../activity";
+import { advisorReviewPending } from "../advisor";
 import type { CommandTable, FrameTable } from "./types";
 
 /** A live in-process snapshot, not a durable completion receipt. The settled flag includes pending
@@ -28,6 +29,7 @@ export function sessionState(session: AgentSession) {
     autoCompactionEnabled: session.autoCompactionEnabled,
     queuedMessageCount: session.queuedMessageCount,
     hasPendingAsyncWork: session.hasPendingAsyncWork(),
+    advisorReviewPending: advisorReviewPending(session),
     isSettled: isSessionSettled(session),
     queuedMessages: {
       steering: [...queued.steering],

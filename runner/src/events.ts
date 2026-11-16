@@ -36,6 +36,7 @@ import { logger } from "@oh-my-pi/pi-utils";
 import type { CommandContext, CommandTable } from "./commands/types";
 import { onClientQueueChange, stampClientMessageId } from "./correlation";
 import { resetActivity, trackActivity } from "./activity";
+import { advisorReviewPending } from "./advisor";
 
 type MessageUpdates = "full" | "delta";
 
@@ -276,7 +277,7 @@ const bridges = new WeakMap<AgentSession, HostEvents>();
 /** A host-scheduled turn not yet admitted (a goal continuation); set by the prompting commands, possibly before the bridge exists. */
 const scheduledTurns = new WeakMap<AgentSession, () => boolean>();
 
-/** @apiEvent session_settled @apiEvent available_commands_update @apiEvent model_activity @apiEvent session_info_update @apiEvent notice */
+/** @apiEvent session_settled @apiEvent available_commands_update @apiEvent model_activity @apiEvent advisor_review @apiEvent session_info_update @apiEvent notice */
 export function subscribeHostEvents(
   session: AgentSession,
   send: CommandContext["send"],
@@ -288,6 +289,18 @@ export function subscribeHostEvents(
     event,
     () => scheduledTurns.get(session)?.() ?? false,
   );
+  // Advisor backlog can change without a session event, including after agent_end.
+  // Keep polling for the lifetime of the bridge, not just the primary run.
+  let reviewPending = false;
+  const checkAdvisorReview = () => {
+    const pending = advisorReviewPending(session);
+    if (pending === reviewPending) return;
+    reviewPending = pending;
+    event({ type: "advisor_review", pending });
+  };
+  const advisorTimer = setInterval(checkAdvisorReview, 100);
+  advisorTimer.unref();
+  checkAdvisorReview();
   const emitCommands = async () => {
     event({
       type: "available_commands_update",
@@ -303,6 +316,7 @@ export function subscribeHostEvents(
     session.subscribe((sessionEvent) => {
       // Synchronous: the stamp reads the live queues.
       forwarder.forward(stampClientMessageId(session, sessionEvent));
+      checkAdvisorReview();
       settle.observe(sessionEvent);
     }),
     onClientQueueChange(session, (queueEvent) => forwarder.forward(queueEvent)),
@@ -334,6 +348,7 @@ export function subscribeHostEvents(
   ];
   void emitCommands();
   return () => {
+    clearInterval(advisorTimer);
     for (const unsubscribe of unsubscribers) unsubscribe();
     bridges.delete(session);
   };

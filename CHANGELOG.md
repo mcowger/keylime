@@ -38,7 +38,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - `bun run dev:ui` starts an isolated development server seeded with sample projects, workspaces, conversations, and settings for UI testing
 - Added a live-only Jobs tab to inspect background jobs and project services, view bounded output, cancel owned jobs, and stop services without starting an agent or calling a model. Selected completed output remains visible until deselected; no durable history is stored
 - Git projects can follow their current on-disk `paseo.json` for workspace setup and teardown, including uncommitted edits, with `.worktreeinclude` copying and live previews. Manual commands remain available, and project settings are accessible directly from each sidebar project menu on desktop and mobile
-- The composer shows advisor review activity while the advisor model reviews a run
+- A composer-attached indicator shows when an advisor review is queued or in progress.
 - `bun run dev` replaces the separate development launchers with a seeded hot-reloading web server and host daemon in an isolated temporary environment. `--port` selects the port; temporary files are retained after shutdown
 - Touch terminals have an accessory row for Escape, Tab, Ctrl, Ctrl-C and arrow keys; Ctrl applies to the next typed key
 - Paseo workspace setup commands can run as blocking or background jobs, with background status and logs available after workspace creation
@@ -51,6 +51,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Untitled chats show a temporary topic label extracted from the first prompt until a generated or manually chosen title is available
 - Tool activity identifies messages to agents and calls to `xd://` devices by their destination instead of showing them as file writes
 - Advisor messages use a distinct, theme-aware card with compact copy and JSON controls
+- A composer-attached indicator shows when an advisor review is queued or in progress
 
 ### Changed
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.

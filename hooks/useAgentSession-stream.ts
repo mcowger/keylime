@@ -228,6 +228,7 @@ export type AgentStateResponse = {
   isPromptRunning?: boolean;
   isBashRunning?: boolean;
   isCompacting?: boolean;
+  advisorReviewPending?: boolean;
   responseObserved?: boolean;
   tokensPerSecond?: number | null;
   modelActivity?: ModelActivity;
