@@ -15,6 +15,7 @@ coverage/
 
 # build output
 /build
+/.build/
 /dist
 /release
 .turbo/
