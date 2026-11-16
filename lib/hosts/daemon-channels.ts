@@ -160,6 +160,7 @@ export class ChannelTable {
   private commandId = 0;
   private stopped = false;
   private readonly browserCaptures = new Set<Channel>();
+  private readonly browserVideoPulls = new Set<string>();
   private readonly browserLists = new Set<Channel>();
   private readonly workspaceFences = new Set<string>();
   constructor(private readonly deps: ChannelDeps) {}
@@ -220,6 +221,24 @@ export class ChannelTable {
       return frame.data;
     } finally {
       inFlight.delete(channel);
+    }
+  }
+  /** Video commands address only an existing runner with the exact session identity. */
+  async browserVideo(sessionId: string, op: "start" | "next" | "stop", input: { id: string; streamId?: string }): Promise<unknown> {
+    if (!isValidSessionId(sessionId)) throw invalid("Invalid session id");
+    const channel = [...this.channels.values()].find((candidate) => !candidate.exited && candidate.pending.sessionId === sessionId);
+    if (!channel) throw new HostOpError(404, "session_not_running", "Session is not running");
+    const key = `${sessionId}:${input.streamId}`;
+    if (op === "next" && this.browserVideoPulls.has(key))
+      throw new HostOpError(429, "browser_request_busy", "A video request is already in progress");
+    if (op === "next") this.browserVideoPulls.add(key);
+    try {
+      const frame = await this.command(channel, `browser_video_${op}`, input, undefined, 7000);
+      if (channel.exited || channel.pending.sessionId !== sessionId)
+        throw new HostOpError(404, "session_not_running", "Session is no longer running");
+      return frame.data;
+    } finally {
+      if (op === "next") this.browserVideoPulls.delete(key);
     }
   }
   /** Send input only to the existing runner that owns this session; never start one. */

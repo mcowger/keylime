@@ -217,6 +217,41 @@ export const BrowserCaptureResultSchema = Type.Object(
 );
 export type BrowserCaptureResult = Static<typeof BrowserCaptureResultSchema>;
 
+const videoTabId = Type.String({ minLength: 1, maxLength: 1024 });
+const videoStreamId = Type.String({ minLength: 1, maxLength: 128 });
+export const BrowserVideoStartArgsSchema = Type.Object({ id: videoTabId }, { additionalProperties: false, description: "Start an ephemeral video lease for this session-owned tab." });
+export const BrowserVideoStreamArgsSchema = Type.Object({ id: videoTabId, streamId: videoStreamId }, { additionalProperties: false, description: "Read or release a video lease for its exact session-owned tab." });
+export const BrowserVideoStartResultSchema = Type.Object({
+  streamId: videoStreamId,
+  codec: Type.String({ minLength: 1, maxLength: 128 }),
+  width: Type.Number({ exclusiveMinimum: 0 }),
+  height: Type.Number({ exclusiveMinimum: 0 }),
+}, { additionalProperties: false, description: "Ephemeral encoded video stream and its CSS viewport." });
+export const BrowserVideoNextResultSchema = Type.Object({
+  width: Type.Number({ exclusiveMinimum: 0 }),
+  height: Type.Number({ exclusiveMinimum: 0 }),
+  serverTime: Type.Integer({ minimum: 0, description: "Runner clock time in Unix milliseconds when this batch was dequeued." }),
+  packets: Type.Array(Type.Object({
+    type: Type.Union([Type.Literal("key"), Type.Literal("delta")]),
+    timestamp: Type.Integer({ minimum: 0 }),
+    capturedAt: Type.Integer({ minimum: 0, description: "Source capture time in Unix milliseconds." }),
+    width: Type.Number({ exclusiveMinimum: 0, description: "CSS viewport width at capture." }),
+    height: Type.Number({ exclusiveMinimum: 0, description: "CSS viewport height at capture." }),
+    duration: Type.Optional(Type.Integer({ minimum: 0 })),
+    data: Type.String({ minLength: 4, maxLength: 512 * 1024, pattern: "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$" }),
+  }, { additionalProperties: false }), { maxItems: 8 }),
+}, { additionalProperties: false, description: "Bounded encoded packets; timestamps and durations are in microseconds." });
+export const BrowserVideoRequestSchema = Type.Union([
+  Type.Object({ op: Type.Literal("start"), input: BrowserVideoStartArgsSchema }, { additionalProperties: false }),
+  Type.Object({ op: Type.Literal("next"), input: BrowserVideoStreamArgsSchema }, { additionalProperties: false }),
+  Type.Object({ op: Type.Literal("stop"), input: BrowserVideoStreamArgsSchema }, { additionalProperties: false }),
+], { description: "Start, read, or stop an ephemeral session browser video stream." });
+export type BrowserVideoRequest = Static<typeof BrowserVideoRequestSchema>;
+export const BrowserVideoStopResultSchema = Type.Object({}, { additionalProperties: false, description: "The requested video lease has been released." });
+export type BrowserVideoStartResult = Static<typeof BrowserVideoStartResultSchema>;
+export type BrowserVideoNextResult = Static<typeof BrowserVideoNextResultSchema>;
+
+
 const browserCoordinate = () => Type.Number({ minimum: 0, maximum: 100000 });
 const browserDelta = () => Type.Number({ minimum: -100000, maximum: 100000 });
 const browserModifiers = () => Type.Integer({ minimum: 0, maximum: 15, description: "CDP modifier bitmask: Alt 1, Ctrl 2, Meta 4, Shift 8." });
@@ -279,6 +314,21 @@ Recovery: List tabs again if the target is unavailable.`,
     Type.Object({ id: Type.String({ minLength: 1, maxLength: 1024 }) }),
     BrowserCaptureResultSchema,
   ),
+  command("browser_video_start", `Usage: Start encoded video for a session-owned tab.
+Inputs: Supply the exact discovered target id.
+Invariants: Ownership is checked and no CDP endpoint is exposed.
+Effects: Starts an ephemeral bounded video stream.
+Recovery: Stop when hidden and start again after disconnect.`, BrowserVideoStartArgsSchema, BrowserVideoStartResultSchema),
+  command("browser_video_next", `Usage: Pull encoded packets from an active video stream.
+Inputs: Supply its target id and stream id.
+Invariants: Packets are bounded and ephemeral; ownership is rechecked.
+Effects: Consumes queued packets.
+Recovery: Restart the stream after an error or decoder failure.`, BrowserVideoStreamArgsSchema, BrowserVideoNextResultSchema),
+  command("browser_video_stop", `Usage: Stop an encoded video stream.
+Inputs: Supply its target id and stream id.
+Invariants: Only the owning session can stop the stream.
+Effects: Releases video resources.
+Recovery: Streams expire when the viewer disconnects.`, BrowserVideoStreamArgsSchema, BrowserVideoStopResultSchema),
   command(
     "browser_control",
     `Usage: Send one navigation or input action to a session-owned Chromium tab.

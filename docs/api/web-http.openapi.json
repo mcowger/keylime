@@ -71019,6 +71019,662 @@
         }
       }
     },
+    "/api/sessions/{id}/browser/video": {
+      "post": {
+        "description": "### Usage\n\nStart, pull, or stop ephemeral encoded video from a session-owned browser tab.\n\n### Inputs\n\nid identifies the live session; the body identifies the exact tab and stream.\n\n### Invariants\n\nThe host and runner recheck ownership; video packets are bounded and never cached.\n\n### Effects\n\nStarts or releases capture, or consumes queued encoded packets.\n\n### Recovery\n\nStop when hidden; start a fresh stream after disconnect or decoder failure.\n\n### Additional protocol details\n\nStarts, pulls bounded encoded packets from, or stops an ephemeral session-owned browser stream. Responses are never cached.",
+        "operationId": "sessionBrowserVideo",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "input": {
+                        "additionalProperties": false,
+                        "description": "Start an ephemeral video lease for this session-owned tab.",
+                        "properties": {
+                          "id": {
+                            "maxLength": 1024,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id"],
+                        "type": "object"
+                      },
+                      "op": {
+                        "const": "start",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["op", "input"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "input": {
+                        "additionalProperties": false,
+                        "description": "Read or release a video lease for its exact session-owned tab.",
+                        "properties": {
+                          "id": {
+                            "maxLength": 1024,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "streamId": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "streamId"],
+                        "type": "object"
+                      },
+                      "op": {
+                        "const": "next",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["op", "input"],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "input": {
+                        "additionalProperties": false,
+                        "description": "Read or release a video lease for its exact session-owned tab.",
+                        "properties": {
+                          "id": {
+                            "maxLength": 1024,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "streamId": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "streamId"],
+                        "type": "object"
+                      },
+                      "op": {
+                        "const": "stop",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["op", "input"],
+                    "type": "object"
+                  }
+                ],
+                "description": "Start, read, or stop an ephemeral session browser video stream."
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Ephemeral encoded video stream and its CSS viewport.",
+                      "properties": {
+                        "codec": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "height": {
+                          "exclusiveMinimum": 0,
+                          "type": "number"
+                        },
+                        "streamId": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "width": {
+                          "exclusiveMinimum": 0,
+                          "type": "number"
+                        }
+                      },
+                      "required": ["streamId", "codec", "width", "height"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "description": "Bounded encoded packets; timestamps and durations are in microseconds.",
+                      "properties": {
+                        "height": {
+                          "exclusiveMinimum": 0,
+                          "type": "number"
+                        },
+                        "packets": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "capturedAt": {
+                                "description": "Source capture time in Unix milliseconds.",
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "data": {
+                                "maxLength": 524288,
+                                "minLength": 4,
+                                "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+                                "type": "string"
+                              },
+                              "duration": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "height": {
+                                "description": "CSS viewport height at capture.",
+                                "exclusiveMinimum": 0,
+                                "type": "number"
+                              },
+                              "timestamp": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "type": {
+                                "anyOf": [
+                                  {
+                                    "const": "key",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "delta",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "width": {
+                                "description": "CSS viewport width at capture.",
+                                "exclusiveMinimum": 0,
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "timestamp",
+                              "capturedAt",
+                              "width",
+                              "height",
+                              "data"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 8,
+                          "type": "array"
+                        },
+                        "serverTime": {
+                          "description": "Runner clock time in Unix milliseconds when this batch was dequeued.",
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "width": {
+                          "exclusiveMinimum": 0,
+                          "type": "number"
+                        }
+                      },
+                      "required": ["width", "height", "serverTime", "packets"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "description": "The requested video lease has been released.",
+                      "properties": {},
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Successful response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request or rejected operation."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authentication is required when configured."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Origin, ownership or authorization policy refused this request."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The requested resource does not exist."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "host": {
+                      "description": "Host whose availability prevented the operation.",
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    },
+                    "sessionId": {
+                      "description": "Created session identifier, when creation succeeded before a later failure.",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Conflict: the session is busy, has active children, or a restore is unconfirmed."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "host": {
+                      "description": "Host whose availability prevented the operation.",
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    },
+                    "sessionId": {
+                      "description": "Created session identifier, when creation succeeded before a later failure.",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request, session file, or output exceeds its size limit."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The operation failed."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "host": {
+                      "description": "Host whose availability prevented the operation.",
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    },
+                    "sessionId": {
+                      "description": "Created session identifier, when creation succeeded before a later failure.",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host did not confirm the operation; a restore may still be running."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The owning host or required service is unavailable."
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "host": {
+                      "description": "Host whose availability prevented the operation.",
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    },
+                    "sessionId": {
+                      "description": "Created session identifier, when creation succeeded before a later failure.",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host operation timed out; delivery may be unknown."
+          }
+        },
+        "security": [
+          {
+            "webSession": []
+          },
+          {
+            "trustedProxy": []
+          },
+          {}
+        ],
+        "summary": "Stream session browser video",
+        "x-client-semantics": {
+          "Effects": "Starts or releases capture, or consumes queued encoded packets.",
+          "Inputs": "id identifies the live session; the body identifies the exact tab and stream.",
+          "Invariants": "The host and runner recheck ownership; video packets are bounded and never cached.",
+          "Recovery": "Stop when hidden; start a fresh stream after disconnect or decoder failure.",
+          "Usage": "Start, pull, or stop ephemeral encoded video from a session-owned browser tab."
+        }
+      }
+    },
     "/api/sessions/{id}/context": {
       "get": {
         "description": "### Usage\n\nRead the selected transcript context, synchronize display history, or obtain the current persisted boundary.\n\n### Inputs\n\nleafId selects a branch; presence of deferThinking, deferMedia or includePreCompaction enables each option. sync=1 accepts an opaque cursor and a positive limit up to 200; boundary=1 excludes sync, leafId, includePreCompaction, cursor and limit.\n\n### Invariants\n\nSync pages append or replace when a branch or compaction invalidates the cursor; use the returned cursor in the same session and view. Live output is sampled after the disk read only for the current tip, so it is not an atomic disk snapshot. Boundary returns current active entry IDs only.\n\n### Effects\n\nReads persisted history and samples an existing live wrapper; it never spawns one. Sync and boundary responses are no-store. A live session without a file can return an empty initial boundary or sync history.\n\n### Recovery\n\nHonor replace and hasMore when applying pages; do not discard confirmed history merely because a file is temporarily missing. Restart synchronization when the cursor is invalidated.\n\n### Additional protocol details\n\nboundary=1 returns active entry IDs and cannot be combined with sync, leafId, includePreCompaction, cursor or limit. sync=1 returns a history page and optional live snapshot. Deferred flags are enabled by presence.",

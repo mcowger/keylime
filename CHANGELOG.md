@@ -10,6 +10,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - New local chats offer global skills in slash completion before a session or workspace starts.
 - Seeded development sessions include an agent chat exchange for checking incoming and outgoing Markdown.
 - Live chats with Chromium/CDP pages show a Browser workspace tab. Capture runs only while visible; optional shared control enables navigation and input without pausing the agent.
+- The Browser workspace tab streams encoded Chromium video when available, with snapshot mode for unsupported or already-running browsers.
 - Untitled chats show a temporary topic label extracted from the first prompt until a generated or manually chosen title is available.
 - Seeded development sessions include completed and in-progress tasks for testing composer indicators.
 - Mobile composer controls use square icon actions, reduced padding, and compact running activity indicators.
@@ -67,6 +68,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - `bun run dev -- --browser-fixture` starts the live Chromium viewer fixture alongside the seeded development server
 - New chats in a local project show available skills in the slash menu before a session starts
 - Live Chromium/CDP pages in the Browser tab can be taken over for shared control: address-bar navigation, back/forward/reload, pointer, drag, wheel, keyboard and text input without pausing the agent
+- The Browser workspace tab streams encoded Chromium video when available, with snapshot mode for unsupported or already-running browsers
 
 ### Changed
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.
@@ -101,6 +103,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The Ship workspace dialog moved from a global modal to a per-workspace overlay so the sidebar stays usable during Ship operations
 - `bun run dev` no longer starts the browser fixture by default; pass `--browser-fixture` to enable it
 - The new-session slash menu lists global skills without starting a session or creating a workspace
+- `bun run dev --browser-fixture` starts its Chromium fixture session through the host daemon instead of a separate script
 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen
@@ -219,7 +222,6 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Project display names no longer reset while the field is being edited; saves are debounced
 - Agent chat Markdown uses the same compact text and styles as tool output
 - Skill autocomplete matches new-session skill entries by their unprefixed name
-- `bun run dev --browser-fixture` starts its Chromium fixture session through the host daemon instead of a separate script, and reports when the seeded session fails to start
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

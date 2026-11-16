@@ -10,6 +10,7 @@ import {
 } from "./host-control-models";
 import { ConfigStateSchema } from "./host-schemas";
 import { BrowserListResultSchema, BrowserCaptureResultSchema, BrowserControlArgsSchema, BrowserControlResultSchema } from "./runner-lifecycle";
+import { BrowserVideoStartArgsSchema, BrowserVideoStreamArgsSchema, BrowserVideoStartResultSchema, BrowserVideoNextResultSchema, BrowserVideoStopResultSchema } from "./runner-lifecycle";
 
 const empty = Type.Object({});
 export const BrowserListSchema = Type.Object(BrowserListResultSchema.properties, { description: "Browser tabs currently owned by the requested live session on the host." });
@@ -28,6 +29,16 @@ export const hostControlOperations: readonly OperationContract[] = [
     args: Type.Object({ sessionId: Type.String(), tabId: Type.String({ minLength: 1, maxLength: 1024 }) }),
     result: BrowserFrameSchema,
   },
+  ...([ 
+    ["browserVideoStart", BrowserVideoStartArgsSchema, BrowserVideoStartResultSchema],
+    ["browserVideoNext", BrowserVideoStreamArgsSchema, BrowserVideoNextResultSchema],
+    ["browserVideoStop", BrowserVideoStreamArgsSchema, BrowserVideoStopResultSchema],
+  ] as const).map(([name, input, result]) => ({
+    name,
+    description: "Usage: Manage a session-owned encoded browser video stream.\nInputs: Supply the session and exact target and stream identifiers.\nInvariants: Video is bounded and ephemeral; ownership is checked by the runner.\nEffects: Starts, consumes, or stops the stream.\nRecovery: Restart after disconnect or decoder failure.",
+    args: Type.Object({ sessionId: Type.String(), input }),
+    result,
+  })),
   {
     name: "browserControl",
     description: "Usage: Control a session-owned browser tab.\nInputs: Supply the session ID and a target ID and action from the browser control contract.\nInvariants: The runner rechecks target ownership; no runner or browser is started and no CDP endpoint is exposed.\nEffects: Applies one navigation or input action.\nRecovery: An error may leave the action applied; do not automatically retry.",

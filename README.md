@@ -6,6 +6,8 @@ key lime is a browser workspace for the [oh-my-pi](https://github.com/can1357/oh
 
 The project began as [kahme247/omp-web](https://github.com/kahme247/omp-web), later developed as [ompweb](https://github.com/ompweb-dev/ompweb). Thanks to its authors and contributors for the original project. [mcowger/keylime](https://github.com/mcowger/keylime) is now an independently maintained, intentionally incompatible hard fork. It is not a drop-in replacement for upstream: configuration, data, APIs, commands, and deployments may diverge without migration or backward compatibility. Back up agent data before changing installations or rolling back.
 
+Thanks to [omercnet](https://github.com/omercnet) and the [Paseo shared browser plugin](https://github.com/omercnet/paseo-plugins/tree/HEAD/paseo-shared-browser) for the encoded browser video idea and capture implementation that inspired key lime's viewer.
+
 ## Features
 
 - Chat with OMP agents, steer or queue messages, edit conversation history, fork sessions, and ask side questions with `/btw`. Existing-session messages are held in an outbox until delivery is confirmed; uncertain delivery remains visible rather than being silently retried.

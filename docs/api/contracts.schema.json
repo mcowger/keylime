@@ -30232,6 +30232,194 @@
       "required": ["tabs"],
       "type": "object"
     },
+    "host_browserVideoNext_args": {
+      "properties": {
+        "input": {
+          "additionalProperties": false,
+          "description": "Read or release a video lease for its exact session-owned tab.",
+          "properties": {
+            "id": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            },
+            "streamId": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": ["id", "streamId"],
+          "type": "object"
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": ["sessionId", "input"],
+      "type": "object"
+    },
+    "host_browserVideoNext_result": {
+      "additionalProperties": false,
+      "description": "Bounded encoded packets; timestamps and durations are in microseconds.",
+      "properties": {
+        "height": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "packets": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "capturedAt": {
+                "description": "Source capture time in Unix milliseconds.",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "data": {
+                "maxLength": 524288,
+                "minLength": 4,
+                "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+                "type": "string"
+              },
+              "duration": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "height": {
+                "description": "CSS viewport height at capture.",
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              "timestamp": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "anyOf": [
+                  {
+                    "const": "key",
+                    "type": "string"
+                  },
+                  {
+                    "const": "delta",
+                    "type": "string"
+                  }
+                ]
+              },
+              "width": {
+                "description": "CSS viewport width at capture.",
+                "exclusiveMinimum": 0,
+                "type": "number"
+              }
+            },
+            "required": [
+              "type",
+              "timestamp",
+              "capturedAt",
+              "width",
+              "height",
+              "data"
+            ],
+            "type": "object"
+          },
+          "maxItems": 8,
+          "type": "array"
+        },
+        "serverTime": {
+          "description": "Runner clock time in Unix milliseconds when this batch was dequeued.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": ["width", "height", "serverTime", "packets"],
+      "type": "object"
+    },
+    "host_browserVideoStart_args": {
+      "properties": {
+        "input": {
+          "additionalProperties": false,
+          "description": "Start an ephemeral video lease for this session-owned tab.",
+          "properties": {
+            "id": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": ["id"],
+          "type": "object"
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": ["sessionId", "input"],
+      "type": "object"
+    },
+    "host_browserVideoStart_result": {
+      "additionalProperties": false,
+      "description": "Ephemeral encoded video stream and its CSS viewport.",
+      "properties": {
+        "codec": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "streamId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": ["streamId", "codec", "width", "height"],
+      "type": "object"
+    },
+    "host_browserVideoStop_args": {
+      "properties": {
+        "input": {
+          "additionalProperties": false,
+          "description": "Read or release a video lease for its exact session-owned tab.",
+          "properties": {
+            "id": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            },
+            "streamId": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": ["id", "streamId"],
+          "type": "object"
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": ["sessionId", "input"],
+      "type": "object"
+    },
+    "host_browserVideoStop_result": {
+      "additionalProperties": false,
+      "description": "The requested video lease has been released.",
+      "properties": {},
+      "type": "object"
+    },
     "host_cancelClone_args": {
       "properties": {
         "id": {
@@ -106793,6 +106981,167 @@
         }
       },
       "required": ["tabs"],
+      "type": "object"
+    },
+    "runner_browser_video_next_args": {
+      "additionalProperties": false,
+      "description": "Read or release a video lease for its exact session-owned tab.",
+      "properties": {
+        "id": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "type": "string"
+        },
+        "streamId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": ["id", "streamId"],
+      "type": "object"
+    },
+    "runner_browser_video_next_result": {
+      "additionalProperties": false,
+      "description": "Bounded encoded packets; timestamps and durations are in microseconds.",
+      "properties": {
+        "height": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "packets": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "capturedAt": {
+                "description": "Source capture time in Unix milliseconds.",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "data": {
+                "maxLength": 524288,
+                "minLength": 4,
+                "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+                "type": "string"
+              },
+              "duration": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "height": {
+                "description": "CSS viewport height at capture.",
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              "timestamp": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "anyOf": [
+                  {
+                    "const": "key",
+                    "type": "string"
+                  },
+                  {
+                    "const": "delta",
+                    "type": "string"
+                  }
+                ]
+              },
+              "width": {
+                "description": "CSS viewport width at capture.",
+                "exclusiveMinimum": 0,
+                "type": "number"
+              }
+            },
+            "required": [
+              "type",
+              "timestamp",
+              "capturedAt",
+              "width",
+              "height",
+              "data"
+            ],
+            "type": "object"
+          },
+          "maxItems": 8,
+          "type": "array"
+        },
+        "serverTime": {
+          "description": "Runner clock time in Unix milliseconds when this batch was dequeued.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": ["width", "height", "serverTime", "packets"],
+      "type": "object"
+    },
+    "runner_browser_video_start_args": {
+      "additionalProperties": false,
+      "description": "Start an ephemeral video lease for this session-owned tab.",
+      "properties": {
+        "id": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": ["id"],
+      "type": "object"
+    },
+    "runner_browser_video_start_result": {
+      "additionalProperties": false,
+      "description": "Ephemeral encoded video stream and its CSS viewport.",
+      "properties": {
+        "codec": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "streamId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": ["streamId", "codec", "width", "height"],
+      "type": "object"
+    },
+    "runner_browser_video_stop_args": {
+      "additionalProperties": false,
+      "description": "Read or release a video lease for its exact session-owned tab.",
+      "properties": {
+        "id": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "type": "string"
+        },
+        "streamId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": ["id", "streamId"],
+      "type": "object"
+    },
+    "runner_browser_video_stop_result": {
+      "additionalProperties": false,
+      "description": "The requested video lease has been released.",
+      "properties": {},
       "type": "object"
     },
     "runner_btw_args": {

@@ -2,6 +2,7 @@ import { lstatSync, realpathSync, mkdirSync, watch } from "node:fs";
 import { Value } from "@sinclair/typebox/value";
 import { BrowserListSchema, BrowserFrameSchema } from "../api-contracts/host-control-operations";
 import { BrowserControlArgsSchema, BrowserControlResultSchema } from "../api-contracts/runner-lifecycle";
+import { BrowserVideoStartArgsSchema, BrowserVideoStreamArgsSchema, BrowserVideoStartResultSchema, BrowserVideoNextResultSchema, BrowserVideoStopResultSchema } from "../api-contracts/runner-lifecycle";
 import { access, constants } from "node:fs/promises";
 import { homedir } from "node:os";
 import {
@@ -918,6 +919,21 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         const result = await channels.browserCommand(args.sessionId, op === "browserCapture" ? args.tabId as string : undefined);
         if (!Value.Check(op === "browserList" ? BrowserListSchema : BrowserFrameSchema, result))
           throw new HostOpError(502, "invalid_browser_result", "Invalid browser result from runner");
+        return result;
+      }
+      case "browserVideoStart":
+      case "browserVideoNext":
+      case "browserVideoStop": {
+        const kind = op === "browserVideoStart" ? "start" : op === "browserVideoNext" ? "next" : "stop";
+        const argsSchema = kind === "start" ? BrowserVideoStartArgsSchema : BrowserVideoStreamArgsSchema;
+        if (typeof args.sessionId !== "string" || !isValidSessionId(args.sessionId) || !Value.Check(argsSchema, args.input))
+          throw new HostOpError(400, "invalid_request", "Invalid browser video request");
+        const result = await channels.browserVideo(args.sessionId, kind, args.input as { id: string; streamId?: string });
+        const resultSchema = kind === "start" ? BrowserVideoStartResultSchema : kind === "next" ? BrowserVideoNextResultSchema : BrowserVideoStopResultSchema;
+        if (!Value.Check(resultSchema, result))
+          throw new HostOpError(502, "invalid_browser_result", "Invalid browser video result from runner");
+        if (kind === "next" && Value.Check(BrowserVideoNextResultSchema, result) && result.packets.reduce((n, packet) => n + packet.data.length, 0) > 512 * 1024)
+          throw new HostOpError(502, "invalid_browser_result", "Invalid browser video result from runner");
         return result;
       }
       case "browserControl": {

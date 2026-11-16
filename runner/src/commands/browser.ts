@@ -1,15 +1,16 @@
 import path from "node:path";
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { Value } from "@sinclair/typebox/value";
 import { BrowserControlArgsSchema } from "../../../lib/api-contracts/runner-lifecycle";
+import { BrowserVideoStartArgsSchema, BrowserVideoStreamArgsSchema } from "../../../lib/api-contracts/runner-lifecycle";
+import { startVideo, nextVideo, stopVideo } from "./browser-video";
 import {
   getTab,
   listTabs,
   type WorkerTabSession,
 } from "@oh-my-pi/pi-coding-agent/tools/browser/tab-supervisor";
 import type { CommandContext, CommandTable } from "./types";
-import { launchHeadlessBrowser, closeLaunchedBrowser, type LaunchHeadlessResult } from "@oh-my-pi/pi-coding-agent/tools/browser/launch";
 import { acquireBrowser, releaseBrowser, type BrowserHandle } from "@oh-my-pi/pi-coding-agent/tools/browser/registry";
 import { acquireTab, releaseTab } from "@oh-my-pi/pi-coding-agent/tools/browser/tab-supervisor";
 import { CommandError } from "./types";
@@ -43,13 +44,12 @@ async function openIsolatedFixture(ctx: CommandContext): Promise<void> {
       const owner = ctx.session.getEvalKernelOwnerId();
       if (!owner) throw new Error("Browser fixture session has no owner");
       const cwd = ctx.session.sessionManager.getCwd();
-      // Keep the Chromium profile inside the explicitly isolated dev directory.
-      const profile = mkdtempSync(path.join(root, "browser-profile-"));
-      let launched: LaunchHeadlessResult | undefined;
+      // The fixture's isolated project and HOME give the broker its own profile.
       let browser: BrowserHandle | undefined;
       try {
-        launched = await launchHeadlessBrowser({ headless: true, viewport: { width: 1280, height: 720 }, args: [`--user-data-dir=${profile}`] });
-        browser = await acquireBrowser({ kind: "connected", cdpUrl: `http://${new URL(launched.wsEndpoint).host}` }, { cwd });
+        browser = await acquireBrowser({ kind: "headless", headless: true }, { cwd, viewport: { width: 1280, height: 720 } });
+        if (!("sharedDaemon" in browser) || !browser.sharedDaemon)
+          throw new Error("Browser fixture requires a broker-owned Chromium");
         if (ctx.session.getEvalKernelOwnerId() !== owner ||
             ctx.session.sessionManager.getSessionId() !== "11111111-1111-4111-8111-111111111111")
           throw new Error("Browser fixture session changed");
@@ -63,9 +63,7 @@ async function openIsolatedFixture(ctx: CommandContext): Promise<void> {
           throw new Error("Browser fixture session changed");
       } catch (error) {
         await releaseTab("keylime-dev-fixture", { kill: false }).catch(() => {});
-        if (browser) await releaseBrowser(browser, { kill: false }).catch(() => {});
-        if (launched) await closeLaunchedBrowser(launched.browser).catch(() => {});
-        rmSync(profile, { recursive: true, force: true });
+        if (browser) await releaseBrowser(browser, { kill: true }).catch(() => {});
         throw error;
       }
     })();
@@ -90,6 +88,31 @@ export const browserCommands: CommandTable = {
           : [];
       }).slice(0, 128),
     };
+  },
+
+  /** @apiCommand browser_video_start */
+  async browser_video_start(ctx, args) {
+    if (!Value.Check(BrowserVideoStartArgsSchema, args)) throw new CommandError("Invalid browser video arguments", "invalid_argument");
+    const owner = ctx.session.getEvalKernelOwnerId();
+    const tab = ownedTab(ctx, args.id);
+    if (!owner || !tab) throw new CommandError("Browser tab not found", "not_found");
+    return startVideo(tab, args.id, owner, () => ctx.session.getEvalKernelOwnerId() === owner && ownedTab(ctx, args.id) === tab);
+  },
+
+  /** @apiCommand browser_video_next */
+  async browser_video_next(ctx, args) {
+    if (!Value.Check(BrowserVideoStreamArgsSchema, args)) throw new CommandError("Invalid browser video arguments", "invalid_argument");
+    const owner = ctx.session.getEvalKernelOwnerId();
+    if (!owner) throw new CommandError("Browser video stream not found", "not_found");
+    return nextVideo(args.streamId, args.id, owner);
+  },
+
+  /** @apiCommand browser_video_stop */
+  async browser_video_stop(ctx, args) {
+    if (!Value.Check(BrowserVideoStreamArgsSchema, args)) throw new CommandError("Invalid browser video arguments", "invalid_argument");
+    const owner = ctx.session.getEvalKernelOwnerId();
+    if (!owner) throw new CommandError("Browser video stream not found", "not_found");
+    return stopVideo(args.streamId, args.id, owner);
   },
 
   /** @apiCommand browser_capture */

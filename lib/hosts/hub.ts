@@ -8,6 +8,7 @@ import { Value } from "@sinclair/typebox/value";
 import { BrowserListSchema, BrowserFrameSchema } from "../api-contracts/host-control-operations";
 import type { BrowserListResult, BrowserCaptureResult } from "../api-contracts/runner-lifecycle";
 import { BrowserControlResultSchema, type BrowserControlArgs, type BrowserControlResult } from "../api-contracts/runner-lifecycle";
+import { BrowserVideoStartResultSchema, BrowserVideoNextResultSchema, BrowserVideoStopResultSchema, type BrowserVideoRequest } from "../api-contracts/runner-lifecycle";
 import { readBodyWithinLimit } from "../bounded-form-data";
 import type { RpcTransport } from "../omp/rpc-transport";
 import type { ProjectRegistryEntry } from "../project-registry";
@@ -2629,6 +2630,15 @@ export async function hostBrowserCapture(hostId: string, sessionId: string, tabI
   const value = await request(hostId, "browserCapture", { sessionId, tabId });
   if (!Value.Check(BrowserFrameSchema, value))
     throw new HostOpError(502, "invalid_browser_result", "Invalid browser result from host");
+  return value;
+}
+export async function hostBrowserVideo(hostId: string, sessionId: string, command: BrowserVideoRequest): Promise<unknown> {
+  const op = command.op === "start" ? "browserVideoStart" : command.op === "next" ? "browserVideoNext" : "browserVideoStop";
+  const value = await request(hostId, op, { sessionId, input: command.input });
+  const schema = command.op === "start" ? BrowserVideoStartResultSchema : command.op === "next" ? BrowserVideoNextResultSchema : BrowserVideoStopResultSchema;
+  if (!Value.Check(schema, value)) throw new HostOpError(502, "invalid_browser_result", "Invalid browser video result from host");
+  if (command.op === "next" && Value.Check(BrowserVideoNextResultSchema, value) && value.packets.reduce((n, packet) => n + packet.data.length, 0) > 512 * 1024)
+    throw new HostOpError(502, "invalid_browser_result", "Invalid browser video result from host");
   return value;
 }
 

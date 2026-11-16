@@ -186,6 +186,30 @@ async function embeddedStatsClient(): Promise<Record<string, string>> {
       Buffer.from(archive).toString("base64"),
   };
 }
+// The pinned OMP broker assembles Chromium's argv itself. Patch only that
+// assembly, and reject an upstream change instead of silently losing capture.
+function browserVideoLaunchPlugin(applied: () => void): Bun.BunPlugin {
+  const launchPath = path.join(codingAgentDir, "src/tools/browser/launch.ts");
+  const marker = 'args: [...defaults.filter(arg => !ignored.has(arg)), "--no-startup-window", "--remote-debugging-port=0"],';
+  return {
+    name: "keylime-browser-video-launch",
+    setup(build) {
+      build.onLoad({ filter: /[\\/]tools[\\/]browser[\\/]launch\.ts$/ }, async ({ path: file }) => {
+        if (await fs.realpath(file) !== await fs.realpath(launchPath)) return;
+        const source = await fs.readFile(file, "utf8");
+        if (source.split(marker).length !== 2) throw new Error("Pinned OMP browser launch changed; update the video launch patch");
+        applied();
+        const helper = path.join(runnerDir, "src/commands/native-video-extension.ts");
+        return {
+          loader: "ts",
+          contents: `import { prepareNativeVideoExtension as keylimePrepareVideoExtension, NATIVE_VIDEO_EXTENSION_ID as keylimeVideoExtensionId } from ${JSON.stringify(helper)};\n` + source.replace(marker,
+            'args: [...defaults.filter(arg => !ignored.has(arg) && arg !== "--disable-extensions"), "--no-startup-window", "--remote-debugging-port=0", `--load-extension=${await keylimePrepareVideoExtension(path.dirname(opts.userDataDir))}`, `--allowlisted-extension-id=${keylimeVideoExtensionId}`],'),
+        };
+      });
+    },
+  };
+}
+
 
 async function build(
   id: string,
@@ -193,6 +217,7 @@ async function build(
   statsClient: Record<string, string>,
   docsEmbed: string,
 ): Promise<void> {
+  let videoLaunchPatched = false;
   const outfile = path.join(runnerDir, "release", target.outName);
   console.log(`Building ${path.relative(runnerDir, outfile)}...`);
   const output = await Bun.build({
@@ -212,6 +237,7 @@ async function build(
     naming: { chunk: "chunks/[dir]/[name]-[hash].[ext]" },
     minify: { identifiers: true, keepNames: true },
     plugins: [
+      browserVideoLaunchPlugin(() => { videoLaunchPatched = true; }),
       createJsonParsePlugin(),
       await createLegacyPiVirtualModulePlugin(),
     ],
@@ -226,6 +252,7 @@ async function build(
     },
     throw: false,
   });
+  if (!videoLaunchPatched) throw new Error("Pinned OMP browser launch was not patched for video");
   if (!output.success)
     throw new Error(
       `${id}: bundle failed:\n${output.logs.map((log) => log.message).join("\n")}`,
@@ -248,6 +275,7 @@ await fs.cp(
   path.join(runnerDir, "release", "docs", "api"),
   { recursive: true },
 );
+await fs.copyFile(path.join(runnerDir, "src/commands/native-video-LICENSE.txt"), path.join(runnerDir, "release", "native-video-LICENSE.txt"));
 // npm packs the docs corpus the compiled binary would otherwise embed from the monorepo's `docs/`.
 const docsEmbed = (
   await Bun.file(

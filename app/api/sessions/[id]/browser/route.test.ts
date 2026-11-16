@@ -1,4 +1,6 @@
 import { beforeEach, expect, mock, test } from "bun:test";
+import { Value } from "@sinclair/typebox/value";
+import { BrowserVideoNextResultSchema } from "@/lib/api-contracts/runner-lifecycle";
 
 const sessionId = "11111111-1111-4111-8111-111111111111";
 const calls: unknown[][] = [];
@@ -29,12 +31,17 @@ mock.module("@/lib/hosts/hub", () => ({
     calls.push(["control", ...args]);
     return {};
   },
+  hostBrowserVideo: async (...args: unknown[]) => {
+    calls.push(["video", ...args]);
+    return { packets: [], width: 1280, height: 720, serverTime: 456 };
+  },
 }));
 
 // The handlers must load after their host dependencies have been mocked.
 const { GET: list } = await import("./route");
 const { GET: frame } = await import("./frame/route");
 const { POST: control } = await import("./control/route");
+const { POST: video } = await import("./video/route");
 const context = (id = sessionId) => ({ params: Promise.resolve({ id }) });
 const request = (query = "") => new Request(`http://localhost/api/sessions/${sessionId}/browser${query}`);
 
@@ -105,4 +112,29 @@ test("capture rejects invalid viewport dimensions", async () => {
   width = 1280;
   height = Infinity;
   expect((await frame(request("/frame?tabId=tab-1"), context())).status).toBe(502);
+});
+
+test("video validates commands and routes uncached pulls to the owning host", async () => {
+  const send = (body: unknown, id = sessionId) => video(new Request("http://localhost/video", { method: "POST", body: JSON.stringify(body) }), context(id));
+  expect((await send({ op: "next", input: { id: "tab-1" } })).status).toBe(400);
+  expect((await send({ op: "start", input: { id: "tab-1", endpoint: "http://localhost" } })).status).toBe(400);
+  expect((await send({ op: "start", input: { id: "tab-1" } }, "invalid")).status).toBe(400);
+  expect(calls).toEqual([]);
+  const command = { op: "next", input: { id: "tab-1", streamId: "stream-1" } };
+  const response = await send(command);
+  expect(response.status).toBe(200);
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  expect(await response.json()).toEqual({ packets: [], width: 1280, height: 720, serverTime: 456 });
+  expect(calls).toEqual([["resolve", sessionId], ["video", "remote-host", sessionId, command]]);
+  offline = true;
+  expect((await send(command)).status).toBe(503);
+});
+
+test("video packets require bounded data and capture geometry", () => {
+  const packet = { type: "key", timestamp: 123, capturedAt: 456, width: 1280, height: 720, data: "AQID" };
+  const result = { width: 1280, height: 720, serverTime: 456, packets: [packet] };
+  expect(Value.Check(BrowserVideoNextResultSchema, result)).toBe(true);
+  expect(Value.Check(BrowserVideoNextResultSchema, { ...result, packets: [{ ...packet, width: 0 }] })).toBe(false);
+  expect(Value.Check(BrowserVideoNextResultSchema, { ...result, packets: [{ ...packet, data: "not base64" }] })).toBe(false);
+  expect(Value.Check(BrowserVideoNextResultSchema, { ...result, packets: Array(9).fill(packet) })).toBe(false);
 });

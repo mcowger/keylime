@@ -71,6 +71,7 @@ const copy = (from: string, to: string) =>
   cpSync(from, path.join(out, to), { recursive: true });
 for (const file of ["dist", "public", "docs/api", "LICENSE"])
   copy(path.join(root, file), file);
+copy(path.join(root, "runner/src/commands/native-video-LICENSE.txt"), "native-video-LICENSE.txt");
 if (!values["no-runner"]) {
   const runnerTarget = name.slice("keylime-".length);
   const runner = path.join(

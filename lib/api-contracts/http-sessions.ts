@@ -20,6 +20,7 @@ import {
 } from "./runner-messages";
 import { BrowserListSchema } from "./host-control-operations";
 import { BrowserControlArgsSchema, BrowserControlResultSchema } from "./runner-lifecycle";
+import { BrowserVideoRequestSchema, BrowserVideoStartResultSchema, BrowserVideoNextResultSchema, BrowserVideoStopResultSchema } from "./runner-lifecycle";
 import {
   ApiErrorSchema,
   jsonBody,
@@ -216,6 +217,12 @@ export const sessionHttpOperations: readonly HttpOperation[] = [
     description: "Captures one JPEG from a tab owned by the live session. X-Browser-Viewport-Width and X-Browser-Viewport-Height report CSS viewport dimensions. This read-only request does not change browser lifecycle.",
     parameters: [id, q("tabId", "A tab ID returned by discovery.", true)],
     responses: { ...webErrors, ...extras, 429: err("A frame capture is already in progress for this session."), 200: binary("image/jpeg", "A single uncached JPEG frame.") },
+  }),
+  op(`${sid}/browser/video`, "post", "sessionBrowserVideo", "Stream session browser video", {
+    description: "Starts, pulls bounded encoded packets from, or stops an ephemeral session-owned browser stream. Responses are never cached.",
+    parameters: [id],
+    requestBody: jsonBody(BrowserVideoRequestSchema),
+    responses: responses(Type.Union([BrowserVideoStartResultSchema, BrowserVideoNextResultSchema, BrowserVideoStopResultSchema])),
   }),
   op(`${sid}/browser/control`, "post", "controlSessionBrowserTab", "Control a session browser tab", {
     description: "Applies one navigation or input action to a session-owned tab. A failed request may have applied the action; do not automatically retry.",

@@ -1,25 +1,71 @@
 import "../tests/setup-dom.ts";
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after } from "node:test";
 import React, { act } from "react";
 import { WorkspaceBrowser } from "./WorkspaceBrowser";
 
 // Load the testing library after the DOM test environment is installed.
 const { render, cleanup, fireEvent, waitFor } = await import("@testing-library/react/pure.js");
 
-test("browser frames are requested only while selected and visible", async (t) => {
+const originalDecoder = globalThis.VideoDecoder;
+const originalChunk = globalThis.EncodedVideoChunk;
+const originalContext = window.HTMLCanvasElement.prototype.getContext;
+const painted: number[] = [];
+class FakeChunk {
+  type: EncodedVideoChunkType;
+  timestamp: number;
+  constructor(init: EncodedVideoChunkInit) { this.type = init.type; this.timestamp = init.timestamp; }
+}
+class FakeDecoder {
+  static instances: FakeDecoder[] = [];
+  static supported = true;
+  static async isConfigSupported() { return { supported: FakeDecoder.supported }; }
+  state: CodecState = "unconfigured";
+  decodeQueueSize = 0;
+  private readonly output: VideoFrameOutputCallback;
+  constructor(init: VideoDecoderInit) { this.output = init.output; FakeDecoder.instances.push(this); }
+  configure() { this.state = "configured"; }
+  close() { this.state = "closed"; }
+  decode(chunk: FakeChunk) {
+    this.emit(chunk.timestamp);
+  }
+  emit(timestamp: number) { this.output({ timestamp, displayWidth: 1280, displayHeight: 720, close() {} } as VideoFrame); }
+}
+globalThis.VideoDecoder = FakeDecoder as unknown as typeof VideoDecoder;
+globalThis.EncodedVideoChunk = FakeChunk as unknown as typeof EncodedVideoChunk;
+window.HTMLCanvasElement.prototype.getContext = (() => ({ drawImage: (frame: VideoFrame) => { painted.push(frame.timestamp); } })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+after(() => {
+  globalThis.VideoDecoder = originalDecoder;
+  globalThis.EncodedVideoChunk = originalChunk;
+  window.HTMLCanvasElement.prototype.getContext = originalContext;
+});
+type TestPacket = { type: "key" | "delta"; timestamp: number; capturedAt: number; width: number; height: number; data: string };
+const packet = (timestamp: number, type: "key" | "delta" = "key"): TestPacket => ({ type, timestamp, capturedAt: 1000, width: 1280, height: 720, data: "AQID" });
+const batch = (...packets: TestPacket[]) => Response.json({ width: 1280, height: 720, serverTime: 1000, packets });
+const startResult = (streamId = "stream-1") => Response.json({ streamId, codec: "avc1.42E01E", width: 1280, height: 720 });
+const pendingVideo = (signal?: AbortSignal | null) => {
+  const { promise, reject } = Promise.withResolvers<Response>();
+  signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+  return promise;
+};
+
+test("decoded video paints and stops immediately when hidden or deselected", async (t) => {
   const originalFetch = globalThis.fetch;
   const hiddenDescriptor = Object.getOwnPropertyDescriptor(document, "hidden");
   let hidden = false;
-  const requests: Array<{ url: string; signal: AbortSignal }> = [];
+  let pulls = 0;
+  const commands: Array<{ op: string; input: { id: string; streamId?: string } }> = [];
+  let pullSignal: AbortSignal | null | undefined;
   Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
   globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
-    const signal = init?.signal;
-    assert.ok(signal);
-    requests.push({ url: String(input), signal });
-    const { promise, reject } = Promise.withResolvers<Response>();
-    signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
-    return promise;
+    assert.equal(String(input), "/api/sessions/session%201/browser/video");
+    const command = JSON.parse(String(init?.body));
+    commands.push(command);
+    if (command.op === "start") return Promise.resolve(startResult());
+    if (command.op === "stop") return Promise.resolve(Response.json({}));
+    if (++pulls === 1) return Promise.resolve(batch(packet(1)));
+    pullSignal = init?.signal;
+    return pendingVideo(init?.signal);
   }) as typeof fetch;
   t.after(() => {
     cleanup();
@@ -27,40 +73,72 @@ test("browser frames are requested only while selected and visible", async (t) =
     if (hiddenDescriptor) Object.defineProperty(document, "hidden", hiddenDescriptor);
     else Reflect.deleteProperty(document, "hidden");
   });
-
+  painted.length = 0;
   const pages = [{ id: "page 1", title: "Page", url: "https://example.com" }];
   const view = render(<WorkspaceBrowser sessionId="session 1" pages={pages} active={false} />);
-  assert.equal(requests.length, 0);
-
+  assert.equal(commands.length, 0);
   await act(async () => view.rerender(<WorkspaceBrowser sessionId="session 1" pages={pages} active />));
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0].url, "/api/sessions/session%201/browser/frame?tabId=page+1");
-  assert.equal(requests[0].signal.aborted, false);
+  await waitFor(() => assert.deepEqual(painted, [1]));
+  await waitFor(() => assert.ok(pullSignal));
+  const canvas = view.getByLabelText("Live browser page");
+  assert.equal(canvas.style.display, "block");
   fireEvent.click(view.getByRole("button", { name: "Take control" }));
-  assert.ok(view.getByRole("button", { name: "Release control" }));
-
-  await act(async () => {
-    hidden = true;
-    document.dispatchEvent(new Event("visibilitychange"));
-  });
-  assert.equal(requests[0].signal.aborted, true);
-  assert.equal(requests.length, 1);
+  await act(async () => { hidden = true; document.dispatchEvent(new Event("visibilitychange")); });
+  assert.equal(pullSignal?.aborted, true);
+  assert.equal(canvas.style.display, "none");
   assert.ok(view.getByRole("button", { name: "Take control" }));
-
+  assert.deepEqual(commands.at(-1), { op: "stop", input: { id: "page 1", streamId: "stream-1" } });
   await act(async () => view.rerender(<WorkspaceBrowser sessionId="session 1" pages={pages} active={false} />));
-  await act(async () => {
-    hidden = false;
-    document.dispatchEvent(new Event("visibilitychange"));
+  const count = commands.length;
+  await act(async () => { hidden = false; document.dispatchEvent(new Event("visibilitychange")); });
+  assert.equal(commands.length, count);
+});
+
+test("unavailable video falls back to labeled snapshots and stops when hidden", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const originalBitmap = globalThis.createImageBitmap;
+  const hiddenDescriptor = Object.getOwnPropertyDescriptor(document, "hidden");
+  let hidden = false;
+  let snapshots = 0;
+  Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
+  globalThis.createImageBitmap = (async () => ({ width: 1280, height: 720, timestamp: 99, close() {} })) as unknown as typeof createImageBitmap;
+  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).endsWith("/video")) return Promise.resolve(Response.json({ error: "Video unavailable" }, { status: 503 }));
+    snapshots++;
+    return Promise.resolve(new Response(new Blob(["jpeg"]), { headers: { "X-Browser-Viewport-Width": "1280", "X-Browser-Viewport-Height": "720" } }));
+  }) as typeof fetch;
+  t.after(() => {
+    cleanup(); globalThis.fetch = originalFetch; globalThis.createImageBitmap = originalBitmap;
+    if (hiddenDescriptor) Object.defineProperty(document, "hidden", hiddenDescriptor);
+    else Reflect.deleteProperty(document, "hidden");
   });
-  assert.equal(requests.length, 1);
+  painted.length = 0;
+  const view = render(<WorkspaceBrowser sessionId="session" pages={[{ id: "one", title: "One", url: "https://example.com" }]} active />);
+  await waitFor(() => assert.deepEqual(painted, [99]));
+  assert.ok(view.getByText("Snapshot mode (video unavailable)."));
+  assert.equal(view.getByLabelText("Live browser page").style.display, "block");
+  await act(async () => { hidden = true; document.dispatchEvent(new Event("visibilitychange")); });
+  assert.equal(view.getByLabelText("Live browser page").style.display, "none");
+  assert.equal(snapshots, 1);
+});
 
-  await act(async () => view.rerender(<WorkspaceBrowser sessionId="session 1" pages={pages} active />));
-  assert.equal(requests.length, 2);
-  fireEvent.click(view.getByRole("button", { name: "Take control" }));
-  await act(async () => view.rerender(<WorkspaceBrowser sessionId="session 1" pages={pages} active={false} />));
-  await act(async () => view.rerender(<WorkspaceBrowser sessionId="session 1" pages={pages} active />));
-  assert.ok(view.getByRole("button", { name: "Take control" }));
-  assert.equal(requests[1].signal.aborted, true);
+test("unsupported video codec releases the stream before trying snapshots", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const commands: string[] = [];
+  FakeDecoder.supported = false;
+  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).endsWith("/video")) {
+      const command = JSON.parse(String(init?.body));
+      commands.push(command.op);
+      return Promise.resolve(command.op === "start" ? startResult() : Response.json({}));
+    }
+    commands.push("frame");
+    return pendingVideo(init?.signal);
+  }) as typeof fetch;
+  t.after(() => { cleanup(); globalThis.fetch = originalFetch; FakeDecoder.supported = true; });
+  const view = render(<WorkspaceBrowser sessionId="session" pages={[{ id: "one", title: "One", url: "https://example.com" }]} active />);
+  await waitFor(() => assert.deepEqual(commands, ["start", "stop", "frame"]));
+  assert.ok(view.getByText("Snapshot mode (video unavailable)."));
 });
 
 test("takeover validates navigation and discards queued actions on release", async (t) => {
@@ -68,11 +146,7 @@ test("takeover validates navigation and discards queued actions on release", asy
   const pending = Promise.withResolvers<Response>();
   const actions: Array<{ id: string; action: { type: string; url?: string } }> = [];
   globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
-    if (String(input).includes("/frame?")) {
-      const { promise, reject } = Promise.withResolvers<Response>();
-      init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
-      return promise;
-    }
+    if (String(input).endsWith("/video")) return pendingVideo(init?.signal);
     actions.push(JSON.parse(String(init?.body)));
     return pending.promise;
   }) as typeof fetch;
@@ -105,11 +179,7 @@ test("takeover sends keyboard and composition input in order without clipboard t
   const originalFetch = globalThis.fetch;
   const actions: Array<{ type: string; event?: string; key?: string; text?: string }> = [];
   globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
-    if (String(input).includes("/frame?")) {
-      const { promise, reject } = Promise.withResolvers<Response>();
-      init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
-      return promise;
-    }
+    if (String(input).endsWith("/video")) return pendingVideo(init?.signal);
     actions.push(JSON.parse(String(init?.body)).action);
     return Promise.resolve(Response.json({}));
   }) as typeof fetch;
@@ -134,22 +204,25 @@ test("takeover sends keyboard and composition input in order without clipboard t
 
 test("pointer input requires a fresh frame and scales wheel coordinates to the viewport", async (t) => {
   const originalFetch = globalThis.fetch;
-  const originalCreate = URL.createObjectURL;
-  const originalRevoke = URL.revokeObjectURL;
-  URL.createObjectURL = () => "blob:frame";
-  URL.revokeObjectURL = () => {};
+  let pulls = 0;
   const actions: Array<Record<string, unknown>> = [];
   globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
-    if (String(input).includes("/frame?")) return Promise.resolve(new Response(new Blob(["frame"]), { headers: { "X-Browser-Viewport-Width": "1280", "X-Browser-Viewport-Height": "720" } }));
+    if (String(input).endsWith("/video")) {
+      const command = JSON.parse(String(init?.body));
+      if (command.op === "start") return Promise.resolve(startResult());
+      if (command.op === "stop") return Promise.resolve(Response.json({}));
+      if (++pulls === 1) return Promise.resolve(batch(packet(2)));
+      return pendingVideo(init?.signal);
+    }
     actions.push(JSON.parse(String(init?.body)).action);
     return Promise.resolve(Response.json({}));
   }) as typeof fetch;
-  t.after(() => { cleanup(); globalThis.fetch = originalFetch; URL.createObjectURL = originalCreate; URL.revokeObjectURL = originalRevoke; });
+  t.after(() => { cleanup(); globalThis.fetch = originalFetch; });
   const view = render(<WorkspaceBrowser sessionId="session" pages={[{ id: "one", title: "One", url: "https://example.com" }]} active />);
   fireEvent.click(view.getByRole("button", { name: "Take control" }));
-  const image = await view.findByRole("img", { name: "Live browser page" });
+  await waitFor(() => assert.ok(painted.includes(2)));
+  const image = view.getByLabelText("Live browser page");
   image.getBoundingClientRect = () => ({ x: 10, y: 20, left: 10, top: 20, right: 650, bottom: 380, width: 640, height: 360, toJSON() {} });
-  fireEvent.load(image);
   let captured = false;
   image.setPointerCapture = () => { captured = true; };
   image.hasPointerCapture = () => captured;
@@ -171,9 +244,44 @@ test("pointer input requires a fresh frame and scales wheel coordinates to the v
   assert.deepEqual(actions[3], { type: "touch", event: "start", points: [{ id: 1, x: 640, y: 360 }], modifiers: 0 });
   assert.deepEqual(actions[4], { type: "touch", event: "end", points: [], modifiers: 0 });
   assert.deepEqual(actions[5], { type: "wheel", x: 640, y: 360, deltaX: 0, deltaY: 25, modifiers: 0 });
-  fireEvent.error(image);
+  fireEvent(window, new Event("offline"));
   fireEvent.wheel(image, { clientX: 330, clientY: 200, deltaY: 25 });
   assert.equal(actions.length, 6);
+});
+
+test("navigation discards old decoder output and resumes with a fresh stream", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const navigation = Promise.withResolvers<Response>();
+  const commands: Array<{ op: string; input: { streamId?: string } }> = [];
+  const pulled = new Set<string>();
+  let starts = 0;
+  painted.length = 0;
+  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).endsWith("/control")) return navigation.promise;
+    const command = JSON.parse(String(init?.body));
+    commands.push(command);
+    if (command.op === "start") return Promise.resolve(startResult(`stream-${++starts}`));
+    if (command.op === "stop") return Promise.resolve(Response.json({}));
+    const id = command.input.streamId as string;
+    if (!pulled.has(id) && id !== "stream-2") {
+      pulled.add(id);
+      return Promise.resolve(batch(packet(id === "stream-1" ? 10 : 30)));
+    }
+    return pendingVideo(init?.signal);
+  }) as typeof fetch;
+  t.after(() => { cleanup(); globalThis.fetch = originalFetch; });
+  const view = render(<WorkspaceBrowser sessionId="session" pages={[{ id: "one", title: "One", url: "https://example.com" }]} active />);
+  await waitFor(() => assert.deepEqual(painted, [10]));
+  const oldDecoder = FakeDecoder.instances.at(-1)!;
+  fireEvent.click(view.getByRole("button", { name: "Take control" }));
+  fireEvent.click(view.getByRole("button", { name: "Reload" }));
+  await waitFor(() => assert.ok(commands.some((item) => item.op === "stop" && item.input.streamId === "stream-1")));
+  oldDecoder.emit(10);
+  await waitFor(() => assert.equal(starts, 2));
+  assert.deepEqual(painted, [10]);
+  await act(async () => navigation.resolve(Response.json({})));
+  await waitFor(() => assert.deepEqual(painted, [10, 30]));
+  assert.equal(view.getByLabelText("Live browser page").style.display, "block");
 });
 
 test("a failed control action is not retried and does not release control", async (t) => {
@@ -181,11 +289,7 @@ test("a failed control action is not retried and does not release control", asyn
   const pending = Promise.withResolvers<Response>();
   let calls = 0;
   globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
-    if (String(input).includes("/frame?")) {
-      const { promise, reject } = Promise.withResolvers<Response>();
-      init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
-      return promise;
-    }
+    if (String(input).endsWith("/video")) return pendingVideo(init?.signal);
     calls++;
     return calls === 1 ? pending.promise : Promise.resolve(calls === 3 ? Response.json({ code: "host_offline" }, { status: 503 }) : Response.json({}));
   }) as typeof fetch;

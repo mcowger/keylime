@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type WheelEvent } from "react";
 import { ArrowLeft, ArrowRight, RotateCw } from "lucide-react";
-import type { BrowserControlAction, BrowserListResult } from "@/lib/api-contracts/runner-lifecycle";
+import { BrowserVideoStartResultSchema, BrowserVideoNextResultSchema, type BrowserControlAction, type BrowserListResult } from "@/lib/api-contracts/runner-lifecycle";
+import { Value } from "@sinclair/typebox/value";
 import { useI18n } from "@/lib/i18n";
 
 type BrowserPage = BrowserListResult["tabs"][number];
@@ -70,7 +71,7 @@ export function useWorkspaceBrowsers(sessionIds: string[], enabled: boolean) {
   return browsers;
 }
 
-type Frame = { url: string; width: number; height: number; capturedAt: number; pageId: string };
+type Frame = { width: number; height: number; ageAtReceipt: number; receivedAt: number; pageId: string };
 
 function modifiers(event: { altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) {
   return (event.altKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.metaKey ? 4 : 0) | (event.shiftKey ? 8 : 0);
@@ -101,13 +102,15 @@ export function WorkspaceBrowser({ sessionId, pages, active }: {
   const page = pages.find((item) => item.id === pageId);
   const [address, setAddress] = useState(page?.url ?? "");
   const [frame, setFrame] = useState<Frame | null>(null);
+  const [videoVersion, setVideoVersion] = useState(0);
+  const [snapshotFallback, setSnapshotFallback] = useState(false);
   const [frameError, setFrameError] = useState(false);
   const [controlError, setControlError] = useState(false);
   const [controlling, setControlling] = useState(false);
-  const imageRef = useRef<HTMLImageElement>(null);
+  const imageRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef<Frame | null>(null);
-  const loadedFrame = useRef<string | null>(null);
   const frameGeneration = useRef(0);
+  const navigating = useRef(false);
   const touches = useRef(new Map<number, { id: number; x: number; y: number }>());
   const composing = useRef(false);
   const clipboardKeys = useRef(new Set<string>());
@@ -116,6 +119,7 @@ export function WorkspaceBrowser({ sessionId, pages, active }: {
 
   const release = () => {
     dispatch.current.generation++;
+    navigating.current = false;
     dispatch.current.enabled = false;
     dispatch.current.queue = [];
     touches.current.clear();
@@ -133,13 +137,13 @@ export function WorkspaceBrowser({ sessionId, pages, active }: {
       while (state.enabled && state.queue.length) {
         const next = state.queue.shift()!;
         const navigation = ["navigate", "back", "forward", "reload"].includes(next.action.type);
-        if (navigation) { frameGeneration.current++; frameRef.current = null; }
+        if (navigation) { navigating.current = true; frameGeneration.current++; frameRef.current = null; setVideoVersion((version) => version + 1); }
         try {
           const response = await fetch(`${browserUrl(next.sessionId)}/control`, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id: next.pageId, action: next.action }),
           });
-          if (navigation && state.generation === next.generation) { frameGeneration.current++; frameRef.current = null; }
+          if (navigation && state.generation === next.generation) { navigating.current = false; frameGeneration.current++; frameRef.current = null; setVideoVersion((version) => version + 1); }
           if (!response.ok) {
             if (await isDisconnected(response) && state.generation === next.generation) {
               setControlError(true);
@@ -149,7 +153,7 @@ export function WorkspaceBrowser({ sessionId, pages, active }: {
           }
           if (state.generation === next.generation) setControlError(false);
         } catch {
-          if (navigation && state.generation === next.generation) { frameGeneration.current++; frameRef.current = null; }
+          if (navigation && state.generation === next.generation) { navigating.current = false; frameGeneration.current++; frameRef.current = null; setVideoVersion((version) => version + 1); }
           if (state.generation === next.generation) {
             // The failed operation may have executed. Never replay it or later queued input.
             state.queue = [];
@@ -184,73 +188,172 @@ export function WorkspaceBrowser({ sessionId, pages, active }: {
     setFrame(null);
     frameRef.current = null;
     setFrameError(false);
+    setSnapshotFallback(false);
     if (!active || !pageId) return;
     let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let generation = 0;
     let controller: AbortController | undefined;
-    let objectUrl: string | undefined;
-    const poll = async () => {
-      if (document.hidden || stopped) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let streamId: string | undefined;
+    let decoder: VideoDecoder | undefined;
+    const endpoint = `${browserUrl(sessionId)}/video`;
+    const stopStream = () => {
+      generation++;
+      clearTimeout(timer);
+      controller?.abort();
+      if (decoder && decoder.state !== "closed") decoder.close();
+      decoder = undefined;
+      frameRef.current = null;
+      setFrame(null);
+      if (streamId) {
+        const id = streamId;
+        streamId = undefined;
+        void fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ op: "stop", input: { id: pageId, streamId: id } }), keepalive: true }).catch(() => {});
+      }
+    };
+    const startSnapshots = () => {
+      if (stopped || document.hidden || !navigator.onLine) return;
+      setSnapshotFallback(true);
+      const current = ++generation;
       controller = new AbortController();
       const signal = controller.signal;
-      const generation = frameGeneration.current;
-      try {
-        const response = await fetch(`${browserUrl(sessionId)}/frame?${new URLSearchParams({ tabId: pageId })}`, { signal, cache: "no-store" });
+      const poll = async () => {
+        const requestedAt = performance.now();
+        const frameVersion = frameGeneration.current;
+        try {
+          const response = await fetch(`${browserUrl(sessionId)}/frame?${new URLSearchParams({ tabId: pageId })}`, { signal, cache: "no-store" });
+          if (!response.ok) {
+            if (await isDisconnected(response) && !signal.aborted) release();
+            throw new Error("Snapshot request failed");
+          }
+          const width = Number(response.headers.get("X-Browser-Viewport-Width"));
+          const height = Number(response.headers.get("X-Browser-Viewport-Height"));
+          if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) throw new Error("Invalid snapshot viewport");
+          const bitmap = await createImageBitmap(await response.blob());
+          try {
+            const canvas = imageRef.current;
+            if (signal.aborted || current !== generation || frameVersion !== frameGeneration.current || navigating.current || !canvas) return;
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
+            canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
+            const receivedAt = performance.now();
+            const captured = { width, height, ageAtReceipt: receivedAt - requestedAt, receivedAt, pageId };
+            frameRef.current = captured;
+            setFrame(captured);
+            setFrameError(false);
+          } finally { bitmap.close(); }
+        } catch {
+          if (!signal.aborted && current === generation) { frameRef.current = null; setFrameError(true); }
+        }
+        if (!signal.aborted && current === generation) timer = setTimeout(() => void poll(), 1000);
+      };
+      void poll();
+    };
+    const start = async () => {
+      if (stopped || document.hidden || !navigator.onLine) return;
+      const current = ++generation;
+      controller = new AbortController();
+      const signal = controller.signal;
+      const request = async (body: unknown) => {
+        const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal, cache: "no-store" });
         if (!response.ok) {
           if (await isDisconnected(response) && !signal.aborted) release();
-          throw new Error("Frame request failed");
+          throw new Error("Video request failed");
         }
-        const width = Number(response.headers.get("X-Browser-Viewport-Width"));
-        const height = Number(response.headers.get("X-Browser-Viewport-Height"));
-        if (!(width > 0 && height > 0)) throw new Error("Invalid browser viewport");
-        const blob = await response.blob();
-        if (!signal.aborted && generation === frameGeneration.current) {
-          const next = URL.createObjectURL(blob);
-          if (objectUrl) URL.revokeObjectURL(objectUrl);
-          objectUrl = next;
-          const captured = { url: next, width, height, capturedAt: Date.now(), pageId };
-          loadedFrame.current = null;
-          frameRef.current = captured;
-          setFrame(captured);
-          setFrameError(false);
+        return response.json() as Promise<unknown>;
+      };
+      let videoReady = false;
+      try {
+        if (typeof VideoDecoder === "undefined") throw new Error("Video decoding unavailable");
+        const opened = await request({ op: "start", input: { id: pageId } });
+        if (!Value.Check(BrowserVideoStartResultSchema, opened)) throw new Error("Invalid video stream");
+        if (current !== generation) return;
+        streamId = opened.streamId;
+        let failed = false;
+        const metadata = new Map<number, { width: number; height: number; ageAtReceipt: number; receivedAt: number; generation: number }>();
+        decoder = new VideoDecoder({
+          output: (videoFrame) => {
+            try {
+              const canvas = imageRef.current;
+              if (current !== generation || !canvas) return;
+              const source = metadata.get(videoFrame.timestamp);
+              metadata.delete(videoFrame.timestamp);
+              if (!source || source.generation !== frameGeneration.current || navigating.current) return;
+              canvas.width = videoFrame.displayWidth;
+              canvas.height = videoFrame.displayHeight;
+              canvas.getContext("2d")?.drawImage(videoFrame, 0, 0);
+              const captured = { width: source.width, height: source.height, ageAtReceipt: source.ageAtReceipt, receivedAt: source.receivedAt, pageId };
+              frameRef.current = captured;
+              setFrame(captured);
+              setFrameError(false);
+            } finally { videoFrame.close(); }
+          },
+          error: () => { failed = true; },
+        });
+        const support = await VideoDecoder.isConfigSupported({ codec: opened.codec, optimizeForLatency: true });
+        if (!support.supported || current !== generation) throw new Error("Video codec unavailable");
+        decoder.configure({ codec: opened.codec, optimizeForLatency: true });
+        videoReady = true;
+        setSnapshotFallback(false);
+        while (!signal.aborted && current === generation) {
+          const requestedAt = performance.now();
+          const next = await request({ op: "next", input: { id: pageId, streamId: opened.streamId } });
+          const receivedAt = performance.now();
+          if (!Value.Check(BrowserVideoNextResultSchema, next) || next.packets.reduce((n, packet) => n + packet.data.length, 0) > 512 * 1024) throw new Error("Invalid video packets");
+          if (failed || decoder.state === "closed" || decoder.decodeQueueSize > 8 || metadata.size > 32) throw new Error("Video decoder failed");
+          for (const packet of next.packets) {
+            if (packet.capturedAt > next.serverTime) throw new Error("Invalid video timestamp");
+            metadata.set(packet.timestamp, { width: packet.width, height: packet.height, ageAtReceipt: next.serverTime - packet.capturedAt + receivedAt - requestedAt, receivedAt, generation: frameGeneration.current });
+            const binary = atob(packet.data);
+            const data = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+            decoder.decode(new EncodedVideoChunk({ type: packet.type, timestamp: packet.timestamp, duration: packet.duration, data }));
+          }
+          if (!next.packets.length) {
+            const { promise, resolve } = Promise.withResolvers<void>();
+            timer = setTimeout(resolve, 50);
+            await promise;
+          }
         }
       } catch {
-        if (!signal.aborted) {
-          frameRef.current = null;
-          setFrameError(true);
+        if (!signal.aborted && current === generation) {
+          stopStream();
+          if (!videoReady) startSnapshots();
+          else {
+            setFrameError(true);
+            if (!stopped && !document.hidden) timer = setTimeout(() => void start(), 1000);
+          }
         }
       }
-      if (!signal.aborted && !stopped) timer = setTimeout(poll, 1000);
     };
-    const visibilityChanged = () => {
-      clearTimeout(timer);
-      controller?.abort();
-      frameRef.current = null;
-      if (!document.hidden) void poll();
-    };
+    const visibilityChanged = () => { stopStream(); if (!document.hidden) void start(); };
+    const offline = () => stopStream();
+    const online = () => { if (!document.hidden) void start(); };
     document.addEventListener("visibilitychange", visibilityChanged);
-    void poll();
+    window.addEventListener("offline", offline);
+    window.addEventListener("online", online);
+    window.addEventListener("pagehide", offline);
+    void start();
     return () => {
       stopped = true;
-      clearTimeout(timer);
-      controller?.abort();
-      frameRef.current = null;
+      stopStream();
       document.removeEventListener("visibilitychange", visibilityChanged);
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      window.removeEventListener("offline", offline);
+      window.removeEventListener("online", online);
+      window.removeEventListener("pagehide", offline);
     };
-  }, [active, pageId, sessionId]);
+  }, [active, pageId, sessionId, videoVersion]);
 
   const coordinates = (clientX: number, clientY: number, captured = false) => {
     const current = frameRef.current;
     const rect = imageRef.current?.getBoundingClientRect();
-    if (!current || loadedFrame.current !== current.url || current.pageId !== pageId || Date.now() - current.capturedAt > 2500 || !rect?.width || !rect.height) return null;
+    if (!current || navigating.current || current.pageId !== pageId || current.ageAtReceipt + performance.now() - current.receivedAt > 2500 || !rect?.width || !rect.height) return null;
     if (!captured && (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom)) return null;
     return { x: Math.min(current.width - 1, Math.max(0, (clientX - rect.left) * current.width / rect.width)), y: Math.min(current.height - 1, Math.max(0, (clientY - rect.top) * current.height / rect.height)) };
   };
-  const pointer = (event: PointerEvent<HTMLImageElement>, kind: "down" | "move" | "up") => {
+  const pointer = (event: PointerEvent<HTMLCanvasElement>, kind: "down" | "move" | "up") => {
     if (!controlling) return;
     const point = coordinates(event.clientX, event.clientY, event.currentTarget.hasPointerCapture(event.pointerId));
-    if (!point) return;
+    if (!point) { setControlError(true); return; }
     event.preventDefault();
     if (event.pointerType === "touch") {
       if (kind === "down") {
@@ -312,17 +415,17 @@ export function WorkspaceBrowser({ sessionId, pages, active }: {
           </form>
         </div>
         <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 12, lineHeight: 1.4 }}>{t("workspaceBrowser.sharedWarning")}</p>
+        {snapshotFallback && <p role="status" style={{ margin: 0, color: "var(--text-muted)", fontSize: 12, lineHeight: 1.4 }}>{t("workspaceBrowser.snapshotFallback")}</p>}
         {controlError && <p role="alert" style={{ margin: 0, color: "var(--status-error)", fontSize: 12, lineHeight: 1.4 }}>{t("workspaceBrowser.controlError")}</p>}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-        {frame ? <img ref={imageRef} src={frame.url} alt={t("workspaceBrowser.image")} tabIndex={controlling ? 0 : -1} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", touchAction: controlling ? "none" : "auto" }} draggable={false}
+        <canvas ref={imageRef} aria-label={t("workspaceBrowser.image")} tabIndex={controlling ? 0 : -1} style={{ display: frame ? "block" : "none", maxWidth: "100%", maxHeight: "100%", objectFit: "contain", touchAction: controlling ? "none" : "auto" }}
           onPointerDown={(event) => pointer(event, "down")} onPointerMove={(event) => pointer(event, "move")} onPointerUp={(event) => pointer(event, "up")}
           onPointerCancel={(event) => { if (event.pointerType === "touch" && touches.current.has(event.pointerId)) { touches.current.clear(); if (coordinates(event.clientX, event.clientY, true)) send({ type: "touch", event: "cancel", points: [], modifiers: modifiers(event) }); } }}
           onContextMenu={(event) => { if (controlling) event.preventDefault(); }}
-          onWheel={(event: WheelEvent<HTMLImageElement>) => { const point = coordinates(event.clientX, event.clientY); if (!controlling || !point) return; event.preventDefault(); const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? (frameRef.current?.height ?? 1) : 1; send({ type: "wheel", ...point, deltaX: event.deltaX * scale, deltaY: event.deltaY * scale, modifiers: modifiers(event) }); }}
-          onKeyDown={(event) => keyboard(event, "down")} onKeyUp={(event) => keyboard(event, "up")}
-          onLoad={() => { if (frameRef.current?.url === frame.url) loadedFrame.current = frame.url; }}
-          onError={() => { frameRef.current = null; setFrameError(true); }} /> : <p>{t(frameError ? "workspaceBrowser.unavailable" : "workspaceBrowser.waiting")}</p>}
+          onWheel={(event: WheelEvent<HTMLCanvasElement>) => { const point = coordinates(event.clientX, event.clientY); if (!controlling || !point) return; event.preventDefault(); const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? (frameRef.current?.height ?? 1) : 1; send({ type: "wheel", ...point, deltaX: event.deltaX * scale, deltaY: event.deltaY * scale, modifiers: modifiers(event) }); }}
+          onKeyDown={(event) => keyboard(event, "down")} onKeyUp={(event) => keyboard(event, "up")} />
+        {!frame && <p>{t(frameError ? "workspaceBrowser.unavailable" : "workspaceBrowser.waiting")}</p>}
         {frameError && frame && <p role="status" style={{ position: "absolute", bottom: 0 }}>{t("workspaceBrowser.unavailable")}</p>}
       </div>
       {controlling && <textarea aria-label={t("workspaceBrowser.keyboard")} placeholder={t("workspaceBrowser.keyboardPlaceholder")} rows={1} style={{ ...toolbarField, resize: "none", margin: "8px 12px", padding: "8px 10px", boxSizing: "border-box" }}

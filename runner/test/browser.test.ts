@@ -268,3 +268,21 @@ it("times out a stalled attachment and detaches it if it arrives late", async ()
     tabs.delete(name);
   }
 }, 8000);
+
+it("rejects video requests for tabs and streams not owned by the session", async () => {
+  const tabs = getTabsMapForTest();
+  const name = "keylime-test-video-other-owner";
+  const ctx = { session: { getEvalKernelOwnerId: () => "owner" } as unknown as AgentSession, send() {} } satisfies CommandContext;
+  try {
+    tabs.set(name, {
+      name, targetId: "other-video", ownerSessionId: "other", backend: "worker", state: "alive",
+      kindTag: "headless", info: { title: "", url: "https://example.test" },
+    } as unknown as TabSession);
+    await expect(browserCommands.browser_video_start(ctx, { id: "other-video" })).rejects.toThrow("Browser tab not found");
+    await expect(browserCommands.browser_video_start(ctx, { id: "" })).rejects.toThrow("Invalid browser video arguments");
+    await expect(browserCommands.browser_video_next(ctx, { id: "other-video", streamId: "missing" })).rejects.toThrow("Browser video stream not found");
+    await expect(browserCommands.browser_video_stop(ctx, { id: "other-video", streamId: "missing" })).rejects.toThrow("Browser video stream not found");
+  } finally {
+    tabs.delete(name);
+  }
+});

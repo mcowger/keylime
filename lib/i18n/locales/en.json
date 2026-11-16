@@ -14,6 +14,7 @@
   "workspaceBrowser.image": "Live browser page",
   "workspaceBrowser.unavailable": "Browser view unavailable. Retrying…",
   "workspaceBrowser.waiting": "Waiting for browser frame…",
+  "workspaceBrowser.snapshotFallback": "Snapshot mode (video unavailable).",
   "workspaceBrowser.keyboard": "Browser keyboard",
   "workspaceBrowser.keyboardPlaceholder": "Type in the browser",
   "jobs.title": "Jobs",

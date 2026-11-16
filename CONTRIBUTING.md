@@ -38,6 +38,7 @@ With `--browser-fixture`, open the printed URL, select `atlas` and the `Plan the
 conversation, then select its Browser workspace tab (on mobile, open the workspace tab switcher
 first). The isolated host starts the seeded session, and browser discovery opens a real headless
 Chromium fixture. Use Take control to exercise navigation and input; no model call is needed.
+The moving bar in the fixture makes continuous browser video visible during playback checks.
 Chromium must be available; set `PUPPETEER_EXECUTABLE_PATH` to a Chrome/Chromium binary or
 allow OMP to download Chromium into the isolated home on first use.
 
