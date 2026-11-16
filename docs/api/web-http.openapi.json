@@ -11898,6 +11898,10 @@
                                                           },
                                                           "type": "object"
                                                         },
+                                                        "intent": {
+                                                          "description": "Native tool-call intent, when supplied by the runner.",
+                                                          "type": "string"
+                                                        },
                                                         "toolCallId": {
                                                           "type": "string"
                                                         },
@@ -26010,6 +26014,10 @@
                                                             }
                                                           },
                                                           "type": "object"
+                                                        },
+                                                        "intent": {
+                                                          "description": "Native tool-call intent, when supplied by the runner.",
+                                                          "type": "string"
                                                         },
                                                         "toolCallId": {
                                                           "type": "string"
@@ -67282,6 +67290,10 @@
                                               },
                                               "type": "object"
                                             },
+                                            "intent": {
+                                              "description": "Native tool-call intent, when supplied by the runner.",
+                                              "type": "string"
+                                            },
                                             "toolCallId": {
                                               "type": "string"
                                             },
@@ -68290,6 +68302,10 @@
                                                         }
                                                       },
                                                       "type": "object"
+                                                    },
+                                                    "intent": {
+                                                      "description": "Native tool-call intent, when supplied by the runner.",
+                                                      "type": "string"
                                                     },
                                                     "toolCallId": {
                                                       "type": "string"
@@ -71944,6 +71960,10 @@
                                                   },
                                                   "type": "object"
                                                 },
+                                                "intent": {
+                                                  "description": "Native tool-call intent, when supplied by the runner.",
+                                                  "type": "string"
+                                                },
                                                 "toolCallId": {
                                                   "type": "string"
                                                 },
@@ -72849,6 +72869,10 @@
                                                     }
                                                   },
                                                   "type": "object"
+                                                },
+                                                "intent": {
+                                                  "description": "Native tool-call intent, when supplied by the runner.",
+                                                  "type": "string"
                                                 },
                                                 "toolCallId": {
                                                   "type": "string"
@@ -73809,6 +73833,10 @@
                                                           }
                                                         },
                                                         "type": "object"
+                                                      },
+                                                      "intent": {
+                                                        "description": "Native tool-call intent, when supplied by the runner.",
+                                                        "type": "string"
                                                       },
                                                       "toolCallId": {
                                                         "type": "string"
@@ -79510,6 +79538,10 @@
                                                 }
                                               },
                                               "type": "object"
+                                            },
+                                            "intent": {
+                                              "description": "Native tool-call intent, when supplied by the runner.",
+                                              "type": "string"
                                             },
                                             "toolCallId": {
                                               "type": "string"

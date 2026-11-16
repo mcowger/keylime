@@ -5,6 +5,7 @@ import React from "react";
 const { act, cleanup, fireEvent, render, waitFor } =
   await import("@testing-library/react/pure.js");
 import { renderToStaticMarkup } from "react-dom/server";
+import { normalizeToolCalls } from "../lib/normalize";
 import type {
   AgentMessage,
   AssistantMessage,
@@ -445,6 +446,36 @@ test("MCP mount notices stay out of the transcript", () => {
   );
 
   assert.equal(html, "");
+});
+
+test("tool rows show native and input intents alongside their targets", () => {
+  for (const [block, intent] of [
+    [
+      { type: "toolCall", id: "native", name: "read", arguments: { path: "native.ts" }, intent: "Inspecting native file" },
+      "Inspecting native file",
+    ],
+    [
+      { type: "toolCall", id: "input", name: "write", arguments: { path: "output.ts", i: "Writing output" } },
+      "Writing output",
+    ],
+  ] as const) {
+    const message = normalizeToolCalls({
+      role: "assistant",
+      model: "test",
+      provider: "test",
+      content: [block],
+    } as unknown as AgentMessage);
+    const view = render(
+      React.createElement(MessageView, {
+        message, toolCallsDefaultCollapsed: true, onOpenFile() {},
+      }),
+    );
+    const row = view.container.querySelector(".activity-row-trigger")!;
+    assert.ok(row.textContent?.includes(intent));
+    assert.ok(row.textContent?.includes(block.arguments.path));
+    assert.ok(row.querySelector(".activity-file-link"));
+    view.unmount();
+  }
 });
 
 test("streaming tool calls start collapsed when the interface preference is enabled", () => {

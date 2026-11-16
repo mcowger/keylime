@@ -2071,6 +2071,9 @@ const ToolCallBlock = memo(
     const todoSummary =
       category === "todo" ? getTodoSummary(block.input) : null;
     const preview = getToolPreview(block);
+    const intent =
+      block.intent?.trim() ||
+      (typeof block.input?.i === "string" ? block.input.i.trim() : "");
     // Outgoing steering (`hub` op send) and the job roster (`hub` op jobs) get
     // the TUI's row titles: `IRC → X injected` and `waiting on N jobs`.
     const hubSend = category === "hub" ? getHubSendSummary(block.input) : null;
@@ -2100,6 +2103,7 @@ const ToolCallBlock = memo(
       : hubJobs
         ? hubJobs.map((job) => job.label).join(" · ")
         : null;
+    const rowPreview = hubPreview ?? preview;
 
     const rawFilePath =
       semantic.isFile &&
@@ -2155,6 +2159,9 @@ const ToolCallBlock = memo(
               {hubTool ?? block.toolName}
             </span>
             <span className="activity-row-preview">
+              {intent && intent !== rowPreview && (
+                <>{intent}{rowPreview && " · "}</>
+              )}
               {agentIds.length > 0 && openAgentLink ? (
                 <span
                   role="link"
@@ -2409,6 +2416,7 @@ const ToolCallBlock = memo(
   (prev, next) =>
     prev.block.toolCallId === next.block.toolCallId &&
     prev.block.toolName === next.block.toolName &&
+    prev.block.intent === next.block.intent &&
     inputsShallowEqual(prev.block.input, next.block.input) &&
     prev.result === next.result &&
     prev.duration === next.duration &&

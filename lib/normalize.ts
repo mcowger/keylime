@@ -20,6 +20,7 @@ function normalizeToolCallBlock(block: unknown): ToolCallContent | null {
         : typeof block.name === "string"
           ? block.name
           : "",
+    ...(typeof block.intent === "string" ? { intent: block.intent } : {}),
     input:
       typeof block.input === "object" &&
       block.input !== null &&

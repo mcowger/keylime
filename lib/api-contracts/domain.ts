@@ -80,6 +80,11 @@ export const ToolCallContentSchema = Type.Object(
     type: Type.Literal("toolCall"),
     toolCallId: Type.String(),
     toolName: Type.String(),
+    intent: Type.Optional(
+      Type.String({
+        description: "Native tool-call intent, when supplied by the runner.",
+      }),
+    ),
     input: Type.Record(
       Type.String(),
       Type.Unknown({
