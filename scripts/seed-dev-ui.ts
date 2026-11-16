@@ -53,7 +53,7 @@ const sessions = [
     cwd: repo,
     id: "11111111-1111-4111-8111-111111111111",
     title: "Plan the Atlas project",
-    advisor: "Consider the edge cases before proceeding.",
+    advisor: "Consider **edge cases** before changing `search`.",
     tasks: [
       { content: "Plan the project", status: "completed" },
       { content: "Review the plan", status: "completed" },
@@ -129,7 +129,7 @@ for (const session of sessions) {
           id: "00000004",
           parentId: "00000003",
           timestamp,
-          message: { role: "custom", customType: "advisor", display: true, content: session.advisor, timestamp: 1767225602000 },
+          message: { role: "custom", customType: "advisor", display: true, content: session.advisor, details: { notes: [{ note: session.advisor, severity: "concern" }] }, timestamp: 1767225602000 },
         }]
       : []),
   ];

@@ -1145,6 +1145,30 @@ test("advisor messages display their substantive markdown without expansion", ()
   assert.equal(view.container.querySelector(".activity-row-trigger"), null);
 });
 
+test("advisor findings show each severity and restricted markdown", () => {
+  const view = render(React.createElement(MessageView, {
+    message: {
+      role: "custom", customType: "advisor", display: true,
+      content: "agent-facing batch",
+      details: { notes: [
+        { severity: "concern", note: "Check `request` and **retry**. [link](https://example.com)" },
+        { severity: "blocker", note: "Stop here." },
+        { severity: "nit", note: "Small fix." },
+      ] },
+    },
+  }));
+  const findings = view.container.querySelectorAll(".advisor-finding");
+  assert.equal(findings.length, 3);
+  assert.equal(findings[0].querySelector(".advisor-severity-concern")?.textContent, "concern");
+  assert.equal(findings[0].querySelector("code")?.textContent, "request");
+  assert.equal(findings[0].querySelector("strong")?.textContent, "retry");
+  assert.equal(findings[0].querySelector("a"), null);
+  assert.match(findings[0].textContent!, /\[link\]\(https:\/\/example.com\)/);
+  assert.equal(findings[1].querySelector(".advisor-severity-blocker")?.textContent, "blocker");
+  assert.equal(findings[2].querySelector(".advisor-severity-nit")?.textContent, "nit");
+  assert.doesNotMatch(view.container.textContent!.split("JSON")[0], /agent-facing batch/);
+});
+
 test("skill prompts start collapsed and can be expanded and collapsed", () => {
   const view = render(
     React.createElement(MessageView, {

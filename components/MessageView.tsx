@@ -523,7 +523,7 @@ export const MessageView = memo(function MessageView({
       return <CompactionMessageView message={custom} sessionId={sessionId} />;
     }
     if (custom.customType === "advisor" && custom.display !== false) {
-      return <AdvisorMessageView message={custom} cwd={cwd} onOpenFile={onOpenFile} sessionId={sessionId} />;
+      return <AdvisorMessageView message={custom} />;
     }
     return <CustomActivityRow message={custom} cwd={cwd} onOpenFile={onOpenFile} sessionId={sessionId} defaultCollapsed={custom.customType === "async-result" || IRC_CUSTOM_TYPES.has(custom.customType) ? toolCallsDefaultCollapsed : true} />;
   }
@@ -2682,22 +2682,28 @@ function CustomActivityRow({ message, cwd, onOpenFile, sessionId, defaultCollaps
   );
 }
 
-function AdvisorMessageView({ message, cwd, onOpenFile, sessionId }: {
-  message: CustomMessage;
-  cwd?: string;
-  onOpenFile?: (filePath: string) => void;
-  sessionId?: string;
-}) {
+function AdvisorMessageView({ message }: { message: CustomMessage }) {
   const { t } = useI18n();
   const text = getMessageText(message.content);
   const images = getMessageImages(message.content);
+  const details = message.details;
+  const notes = details && typeof details === "object" && "notes" in details && Array.isArray(details.notes)
+    ? details.notes.filter((note: unknown): note is { note: string; severity?: string } =>
+        !!note && typeof note === "object" && "note" in note && typeof note.note === "string")
+    : [];
   const { copied, copy } = useCopyFeedback();
   return (
     <div className="chat-message advisor-message">
       <div className="advisor-message-label">{t("messageView.advisorLabel")}</div>
       <div data-selection-scope="message" tabIndex={-1}>
         {images.map((image, i) => { const src = imageSource(image); return src ? <ClickableImage key={i} src={src} alt="" style={{ maxWidth: 240, maxHeight: 240 }} /> : null; })}
-        {text && <MarkdownBody className="markdown-custom-message" cwd={cwd} onOpenFile={onOpenFile} sourceSessionId={sessionId}>{text}</MarkdownBody>}
+        {notes.length > 0 ? notes.map((note, i) => {
+          const severity = note.severity === "blocker" || note.severity === "concern" || note.severity === "nit" ? note.severity : undefined;
+          return <div className="advisor-finding" key={i}>
+            {severity && <div className={`advisor-severity advisor-severity-${severity}`}>{severity}</div>}
+            <ThinkingMarkdown>{note.note}</ThinkingMarkdown>
+          </div>;
+        }) : text && <ThinkingMarkdown>{text}</ThinkingMarkdown>}
         <div className="advisor-message-actions">
           {(text || message.details !== undefined) && <button className="message-copy-action" aria-label={copied ? t("messageView.copied") : t("messageView.copy")} title={copied ? t("messageView.copied") : t("messageView.copy")} onClick={() => copy(text || safeJson(message.details))}>{copied ? <Check size={14} /> : <Copy size={14} />}</button>}
           {message.details !== undefined && <details className="advisor-message-details"><summary>JSON</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{safeJson(message.details)}</pre></details>}
