@@ -1059,10 +1059,9 @@ data}` messages (`PartJoiner` joins them, one partial line at a time, ≤ 512
 
 ### Browser compatibility
 
-Client code (`components/`, `hooks/`) must not call `AbortSignal.timeout`,
-`AbortSignal.any` or `Promise.withResolvers` — older mobile browsers throw and
-the whole tree shows the "unexpected error" screen. Use `AbortController` + timers and
-executor-style promises instead. Server code may use them freely.
+Support Safari and Chrome versions released less than six months ago. Do not add
+fallbacks solely for older browser versions. Check that APIs used by client code
+work in the supported versions of both browsers.
 
 ### Editing and branching — don't confuse them
 
@@ -1569,8 +1568,9 @@ dir>/omp-web/transport-metrics.jsonl` (`.jsonl.1` above 20 MiB). One worker-wide
     20 000, kept beside the POST buffer). Command rows include confirmed successful replies only; app ↔ omp and round-trip rows skip commands whose reply does not confirm omp got them (`NO_OMP_REPLY_COMMANDS`: the `NO_SPAWN_REPLIES` the web app answers itself, a test keeps them included, plus the results `dispatchCommand` forwards without awaiting omp). A new command of either kind belongs there. Shared durations
     come from `lib/transport-stats.ts`; one-way estimates use clock correction and assume symmetric latency.
     Without a SharedWorker (Chrome for Android) each tab has its own worker, so the numbers are that tab's.
-  - **Worker rules.** Browser code: no `AbortSignal.timeout`/`any` or `Promise.withResolvers` (a test checks
-    the bundle). Every global the worker uses must be injectable into the `vm` context of
+  - **Worker rules.** The bundle test currently restricts `AbortSignal.timeout`/`any` and
+    `Promise.withResolvers`; update it when using APIs supported by the browser policy.
+    Every global the worker uses must be injectable into the `vm` context of
     `lib/event-stream-worker.test.ts`. The link URL is absolute (`new URL(path, self.location.href)`,
     `http`→`ws`). Ids are `Math.random().toString(36).slice(2, 12) + Date.now().toString(36)`: insecure LAN
     origins have no `crypto.randomUUID`.
