@@ -1,6 +1,10 @@
-# Rename deployment considerations
+# Moving from ompweb to key lime
 
-The Keylime rename does not migrate existing installations. Before deploying it, inventory and rename or otherwise transfer the existing installation's data and configuration. Stop the affected services first and keep a backup. Do not overwrite an existing destination without checking its contents.
+key lime is an incompatible hard fork, not an in-place upgrade of ompweb. The
+rename does not migrate existing installations, and moving data does not guarantee
+that older formats or protocols will work. Before deploying, inventory the existing
+installation, stop affected services, and keep a backup. Do not overwrite an
+existing destination without checking its contents.
 
 - Agent-directory data and settings previously named `omp-web` or `omp-web-*`, including host links, credentials-related secrets, registries, SQLite databases, archives, uploads, deployment state, and runner caches. Preserve ownership and permissions.
 - Browser storage: localStorage, sessionStorage, IndexedDB, service-worker registrations and caches. Drafts, preferences, upload proofs and unsent outbox entries can otherwise remain under old names. Drain or preserve pending messages and uploads before cutover.

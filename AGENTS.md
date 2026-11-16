@@ -2,7 +2,7 @@
 
 ## Hard fork policy
 
-This repository is Keylime (`mcowger/keylime`), Matt Cowger's independent, intentionally breaking hard fork of `ompweb-dev/ompweb`, not a compatibility-preserving downstream. It is a standalone GitHub repository, outside any fork network. This policy takes precedence over inherited compatibility and migration requirements elsewhere in this file, `DESIGN.md`, and other upstream documentation. Internal ompweb package/CLI names and runner download sources remain unchanged unless a task explicitly changes them.
+This repository is Keylime (`mcowger/keylime`), Matt Cowger's independent, intentionally breaking hard fork of `ompweb-dev/ompweb`, not a compatibility-preserving downstream. It is a standalone GitHub repository, outside any fork network. This policy takes precedence over inherited compatibility and migration requirements elsewhere in this file, `DESIGN.md`, and other upstream documentation. Current package, CLI, and runner names use `keylime`; historical references below may still use old names. Check the implementation before relying on those references.
 
 - Do not preserve backward compatibility with upstream or earlier versions of this fork unless the user explicitly requests it for a specific change.
 - No migration paths are required for legacy data, schemas, configuration, APIs, protocols, CLI commands, or deployment workflows.
@@ -62,8 +62,8 @@ bun run dev     # seeded web HMR + hot-reloading host, random port and temporary
 bun run build   # bundle the SPA into dist/ (scripts/build-client.ts)
 bun run start   # serve dist/ + the API, port 30177
 bun run test    # bun test --parallel
-bun run smoke   # start the built server and `ompweb host` (or a packed install: -- --package <dir>; a binary: -- --binary <path>) and check them
-bun run build:binary --target bun-<os>-<arch>   # compile release/ompweb-<os>-<arch>/ and its .tar.gz
+bun run smoke   # build the runner, start the built server and `keylime host`, and check them
+bun run build:binary --target bun-<os>-<arch>   # compile release/keylime-<os>-<arch>/ and its .tar.gz
 bun run typecheck  # bun check for the root project and runner
 bun run api:generate # regenerate and validate source-derived API documents
 bun run api:check    # validate semantic coverage and checked-in freshness
@@ -74,10 +74,10 @@ Use native `bun check` for typechecking and `bun fmt` for formatting. `bun run t
 
 GitHub Actions are disabled. All four workflow definitions are preserved as `.github/workflows/*.yml.disabled`; do not reactivate them or add active workflows without an explicit request. Run checks locally. `bun run release:check` runs formatting, typechecking, tests, build, and smoke verification; it does not publish or check API documentation.
 
-Live-agent features need ompweb's omp build (`runner/`). Fetch the pinned omp packages first, then install
+Live-agent features need key lime's omp build (`runner/`). Fetch the pinned omp packages first, then install
 (`bun run test` needs this too):
 `bun runner/scripts/use-omp-build.ts && cd runner && bun install --frozen-lockfile`; then build
-`runner/release/ompweb-omp-<os>-<arch>` (`bun runner/scripts/build-binary.ts`, this machine's target).
+`runner/release/keylime-omp-<os>-<arch>` (`bun runner/scripts/build-binary.ts`, this machine's target).
 Session browsing and seeded UI checks work without it.
 
 ### Development and browser testing
@@ -89,12 +89,12 @@ It runs the web server with HMR and a separate hot-reloading host daemon. The
 source checkout stays in place.
 
 Each run gets a fresh HOME, agent directory, XDG directories, and private host
-socket. The launcher clears inherited `OMP_*`, `OMPWEB_*`, `PI_*`, and XDG settings
+socket. The launcher clears inherited `OMP_*`, `KEYLIME_*`, `PI_*`, and XDG settings
 and disables subprocess `.env` loading. It bootstraps its isolated local host link
 and seeds sample projects, worktrees and saved conversations; existing projects,
 sessions and stored logins aren't copied. Other environment variables, including
 provider API keys, remain available. Build the
-checkout's runner first for live-agent checks; inherited `OMP_WEB_OMP_BIN` is cleared.
+checkout's runner first for live-agent checks; inherited `KEYLIME_OMP_BIN` is cleared.
 
 Ctrl-C stops both services; either service exiting also stops its peer. Temporary
 files remain for inspection. Remove the printed directory manually when finished.

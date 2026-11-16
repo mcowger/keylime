@@ -2,6 +2,10 @@
 
 Thanks for your interest in contributing!
 
+key lime is an independent hard fork of `ompweb-dev/ompweb`. Changes may break
+compatibility with upstream and older key lime releases. Preserve attribution,
+but don't add compatibility layers or migrations unless explicitly requested.
+
 ## Setup
 
 - [mise](https://mise.jdx.dev) manages the Bun version pinned in `mise.toml`. No Node or Nix setup is required.

@@ -2,16 +2,15 @@
 
 ## Purpose
 
-key lime is a local, browser-based workspace for the
-[oh-my-pi](https://github.com/can1357/oh-my-pi) (`omp`) coding agent. It lets a
-user browse the same local sessions they use in the terminal, continue live
-work, configure supported OMP settings, and inspect project files without
-creating a second agent runtime or a second source of truth.
+key lime is an independent, intentionally incompatible hard fork of
+[`ompweb-dev/ompweb`](https://github.com/ompweb-dev/ompweb). It provides a
+local browser workspace for the [oh-my-pi](https://github.com/can1357/oh-my-pi)
+(`omp`) coding agent. Users can browse sessions, continue live work, configure
+supported OMP settings, and inspect project files without a second agent runtime.
 
-The project originated from [agegr/pi-web](https://github.com/agegr/pi-web)
-(MIT), but it is maintained as an OMP-focused downstream. We preserve the
-license and attribution, and selectively learn from upstream improvements; we
-do not assume that Pi-specific implementation changes can be merged unchanged.
+The project also traces its origins to [agegr/pi-web](https://github.com/agegr/pi-web)
+(MIT). We preserve license attribution and selectively port useful upstream changes;
+compatibility with either upstream or earlier key lime releases is not guaranteed.
 
 ## Product principles
 
@@ -19,8 +18,8 @@ do not assume that Pi-specific implementation changes can be merged unchanged.
    behavior belong to omp (run as key lime's own build of it, `runner/`). key lime
    must not invent a parallel data format or credential store.
 2. **Local-first by default.** The server binds to `127.0.0.1`; remote access
-   is an explicit user choice and must be protected by a trusted network
-   boundary and HTTPS.
+   is an explicit user choice. Protect exposed deployments with HTTPS and
+   suitable access controls.
 3. **Bun-first installation.** Install Bun, then run `bunx --bun @mcowger/keylime@latest`
    or install the npm package globally with `bun add -g @mcowger/keylime`.
    Native compiled releases do not require a separate Bun installation.
@@ -76,11 +75,12 @@ over key lime's channel. The host receives the same `AgentSession` events and
 calls the same session methods omp's TUI does, so nothing depends on omp's RPC
 mode. A session started from the runner's TUI connects to the daemon's Unix
 socket and shows up live in the web; dialogs open on both sides and the first
-answer wins. Each key lime release attaches its runners (`keylime-omp-<platform>`),
-and every install downloads the one of its own version
-(`lib/omp/runner-fetch.ts`), so omp updates with key lime. The design and the wire are in
-`docs/specs/2026-11-12-omp-runner-design.md`; the fork build in
-`docs/specs/2026-11-12-omp-build-in-ompweb-design.md`.
+answer wins. Release runners are named `keylime-omp-<platform>`. An installed
+package or binary fetches its version's runner on demand from the key lime
+release and verifies its checksum (`lib/omp/runner-fetch.ts`). A source checkout
+uses its locally built runner instead. The design and wire are described in
+`docs/specs/2026-11-12-omp-runner-design.md`; the integration build is described in
+`docs/specs/2026-11-12-omp-build-in-ompweb-design.md`. These specs are historical.
 
 ### The Host seam
 
@@ -154,12 +154,12 @@ first. key lime does not provide a general editor for session JSONL or opaque OM
 state.
 
 Models and allow-listed OMP settings use surgical YAML updates that preserve
-unrelated content. Plugin operations run the installed `omp plugin` CLI. MCP
-configuration is project-local, validated before writing, and saved atomically.
+unrelated content. Plugin operations use the resolved key lime runner's `plugin`
+CLI. MCP configuration is project-local, validated before writing, and saved atomically.
 
 ### Host-owned hierarchy
 
-Each daemon owns the explicit project → workspace → session registrations shared by its linked web servers. The hierarchy starts empty; adding a host-bound project registers only its default workspace. Existing worktrees and sessions are selectively imported, while app-created sessions and forks register in their workspace. A non-Git project has one workspace. Multiple agents can share a workspace and its files. Unavailable resources remain visible. Unregistering a project or workspace forgets children without deleting files or stopping processes; re-registration starts fresh.
+Each daemon owns the explicit project → workspace → session registrations shared by its linked web servers. The hierarchy starts empty; adding a host-bound project registers only its default workspace. Existing worktrees and sessions are selectively imported, while app-created sessions and forks register in their workspace. A non-Git project has one workspace. Multiple agents can share a workspace and its files. Unavailable resources remain visible. Unregistering a project forgets its children without deleting files or stopping processes; re-registration starts fresh. Unregistering a linked workspace removes its worktree using the deletion process below. The default workspace cannot be unregistered separately from its project.
 
 Workspace creation runs as a daemon-owned pre/create/post job with host settings, captured output and status. A validated worktree registers before post setup, so agents may start while post runs. Deletion fences starts and stops managed descendant processes before the separate dirty-file confirmation; declining that confirmation leaves them stopped. Successful deletion unregisters children but preserves branches and session history. See `docs/worktrees.md` for the command contract and failure behavior.
 
@@ -230,7 +230,7 @@ File-only catch-up also refreshes model and thinking metadata without replacing
 newer or pending channel choices. Replacement observer connections restore browser
 registrations and the subagent roster only after successfully connecting.
 
-Deploy the frontend and API support together; no native OMP upgrade is required.
+Deploy the frontend and API support together, and use a compatible key lime runner.
 
 ## Security contract
 
@@ -286,19 +286,13 @@ Deploy the frontend and API support together; no native OMP upgrade is required.
 
 ## Upstream and release strategy
 
-`agegr/pi-web` is the historical source and a useful source of UI ideas,
-bug fixes, and tests. Before adopting an upstream change, verify that it does
-not depend on Pi runtime behavior. Port the user-visible
-behavior, not blindly the implementation.
+`ompweb-dev/ompweb` and `agegr/pi-web` are sources of ideas, fixes, and tests.
+Port useful changes selectively; neither upstream's implementation nor its
+data formats, protocols, or release process define a compatibility requirement.
 
-Releases are independent:
-
-1. Run `bun run typecheck` (Bun checks the root project and runner), relevant tests, and a production build.
-2. Confirm `bun pm pack` contains the built `dist/` output and exposes
-   the `keylime` binary.
-3. Publish `@mcowger/keylime@<version>` to the npm registry through the
-   configured trusted publisher.
-4. Tag and release the repository that owns this downstream project.
+GitHub Actions are disabled, and release publication is not automated in this
+repository. Run local checks and verify publication destinations separately; see
+`docs/release.md`. Do not assume inherited workflows publish key lime.
 
 ## Non-goals
 

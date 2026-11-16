@@ -14,6 +14,14 @@ Each workspace can have multiple chat tabs alongside its terminals. Desktop show
 
 Open saved chats appear as workspace tabs in other clients connected to the same web server and are excluded from their saved-chat picker. Selecting one joins it locally. Closing a tab removes only that client's membership; it does not archive the conversation or clear its draft. A remotely opened tab may be dismissed locally. Open tabs are retained across reloads in the same browser tab; disconnecting removes its memberships once the event connection closes. Resumable WebSocket connections may retain them until their resume window expires. Membership is held by the web-server process, not the host daemon, so clients connected to different web servers do not share it. Terminal processes remain owned by the host daemon.
 
+## Held messages
+
+Submitted prompts, follow-ups and steers appear as dimmed messages while key lime holds them for delivery. Their status shows whether they are sending, waiting, waiting for the host, delivering, or not sent. Images and uploaded files remain attached to the held message.
+
+The browser stores a submitted message before clearing its draft. The web server then holds it until the host accepts it, so a host outage does not require leaving the composer open. Messages still waiting on the browser are visible only there; messages held by the web server appear to other clients viewing the session. Once omp has a message, its own queue controls delivery.
+
+Waiting or failed messages can be deleted. Failed messages can also be retried. If delivery is uncertain, the interface asks for confirmation: the original may already have reached omp or may still arrive. Deleting its tracking record does not cancel work already sent to omp.
+
 ## Creating a workspace
 
 For a Git project, create a workspace from an existing local branch, a remote branch, or a new branch based on a selected ref. Listing branches fetches remote refs. Base ref initially selects the repository's advertised default branch (preferring origin), not the currently checked-out feature branch. Without a remote default, it uses main, master, then the current branch. Checkout paths are derived from the branch under the project's sibling worktrees directory; the display name is editable.
@@ -70,6 +78,12 @@ Teardown must not change the linked workspace's HEAD or branch identity, or the 
 Changing configuration source affects subsequent operations only and never reruns setup automatically. Returning to Manual also disables Paseo teardown for subsequent removals.
 
 ## Shipping a workspace
+
+Ship is available from a linked workspace's chat. It checks for Git problems before generating a commit plan, which can stage workspace changes. Review and edit the proposed commit messages and any PR title and description before shipping. The base is the default workspace's current branch; rebase uses that local branch without fetching it first.
+
+Choose **Land locally**, **Open PR**, or **PR + auto-merge**. Rebase is selected by default when the workspace is behind the base. For an existing open PR, auto-merge adopts it without changing its title or body. Auto-merge defaults to squash, with merge and rebase also available. If a preflight check or rebase finds a conflict, **Ask agent to resolve** sends the issue to the session.
+
+**Clean up when done** is selected by default. Local shipping cleans up after landing; PR shipping waits for the PR to merge. Cleanup archives registered sessions and removes the workspace and branch, subject to the workspace deletion checks above. The host watches PRs and can also offer cleanup after a merge.
 
 Ship opens over the workspace content, not the whole application. Use the sidebar to switch workspaces while the commit plan, PR description or Ship job runs. Returning to that workspace restores the same edits and progress, even if you open a different chat there. Each workspace and host has its own Ship flow, using the session that opened it.
 
