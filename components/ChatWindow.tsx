@@ -20,6 +20,7 @@ import {
   ChevronDown,
   ChevronUp,
   Paperclip,
+  Ship,
   Square,
 } from "lucide-react";
 import type {
@@ -1651,6 +1652,7 @@ export function ChatWindow({
                     createPortal(
                       <button
                         type="button"
+                        aria-label="Ship workspace"
                         className="ui-focus-ring rounded-md border border-solid border-[var(--border)] bg-[var(--bg-panel)] px-3 py-1.5 text-sm font-semibold text-[var(--text)] hover:bg-[var(--bg-hover)] disabled:cursor-default disabled:opacity-50"
                         disabled={sessionBusy || streamState.isStreaming || nothingToShip}
                         title={
@@ -1660,7 +1662,7 @@ export function ChatWindow({
                         }
                         onClick={() => setShipOpen(true)}
                       >
-                        Ship
+                        <Ship size={16} aria-hidden="true" />
                       </button>,
                       shipButtonContainer,
                     )}

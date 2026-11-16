@@ -81,6 +81,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Operational notices, task chat and compaction use expandable transcript rows; advisor responses render as conversation text
 - Project settings use tabbed sections and consistent controls on desktop and mobile
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts
+- The Ship workspace action uses an icon with an accessible label
 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen
