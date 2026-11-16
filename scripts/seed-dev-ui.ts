@@ -112,17 +112,17 @@ for (const session of sessions) {
         timestamp: 1767225601000,
       },
     },
+    ...("tasks" in session && session.tasks
+      ? [{
+          type: "custom",
+          id: "00000003",
+          parentId: "00000002",
+          timestamp,
+          customType: "user_todo_edit",
+          data: { phases: [{ name: "Tasks", tasks: session.tasks }] },
+        }]
+      : []),
   ];
-  if ("tasks" in session && session.tasks) {
-    entries.push({
-      type: "custom",
-      id: "00000003",
-      parentId: "00000002",
-      timestamp,
-      customType: "user_todo_edit",
-      data: { phases: [{ name: "Tasks", tasks: session.tasks }] },
-    } as (typeof entries)[number]);
-  }
   writeFileSync(
     path.join(dir, `2026-01-01_${session.id}.jsonl`),
     entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n",

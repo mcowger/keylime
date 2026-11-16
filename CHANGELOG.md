@@ -45,6 +45,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Seeded development sessions include completed and in-progress tasks for testing composer indicators
 
 ### Changed
+- Operational notices, task chat and compaction use expandable transcript rows; advisor responses render as conversation text.
 - Removed in-app key lime update checks and installation for the web server and host daemons. Update installations manually; runner downloads and local deployment remain available.
 - Ship visibly disables its action while the commit plan is being generated.
 - Sidebar host headings use consistent sizing and a host icon; the only connected host shows projects without a heading, while offline hosts remain grouped.
@@ -66,6 +67,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Development documentation now directs concurrent worktrees to use the printed random-port URL rather than a fixed port
 - Ship visibly disables its action while the commit plan is being generated
 - Removed in-app key lime update checks and installation for the web server and host daemons. Update installations manually; runner downloads and local deployment remain available
+- Operational notices, task chat and compaction use expandable transcript rows; advisor responses render as conversation text
 
 ### Fixed
 - Hide the composer task button when all tasks are complete.

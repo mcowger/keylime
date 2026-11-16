@@ -893,6 +893,20 @@ test("irc:incoming custom messages title with the sender name", () => {
   assert.match(html, /Please review the current tree/);
   assert.doesNotMatch(html, /Incoming IRC message from agent/);
 });
+test("task chat uses a collapsible activity row and renders its full message", () => {
+  const view = render(React.createElement(MessageView, {
+    message: { role: "custom", customType: "irc:incoming", display: true,
+      content: "<irc>\nIncoming IRC message from agent `Worker`:\nFirst line\n\n**Full message**" },
+  }));
+  const row = view.getByRole("button", { expanded: false });
+  assert.match(row.textContent!, /Worker.*First line/);
+  assert.doesNotMatch(view.container.textContent!, /Full message/);
+  fireEvent.click(row);
+  assert.equal(view.container.querySelector("strong")?.textContent, "Full message");
+  fireEvent.click(view.getByRole("button", { expanded: true }));
+  assert.doesNotMatch(view.container.textContent!, /Full message/);
+});
+
 
 test("hub send renders as an IRC row with the steered message", () => {
   const html = renderToStaticMarkup(
@@ -1094,20 +1108,19 @@ test("hub jobs without structured details keeps the raw result", () => {
   assert.match(html, /Still Running/);
 });
 
-test("advisor custom messages use the localized advisor label", () => {
-  const html = renderToStaticMarkup(
-    React.createElement(MessageView, {
-      message: {
-        role: "custom",
-        customType: "advisor",
-        content: "Consider handling the edge case.",
-        display: true,
-      },
-    }),
-  );
-  assert.match(html, /Advisor/);
-  assert.match(html, /Consider handling the edge case/);
-  assert.doesNotMatch(html, /customType/);
+test("advisor messages display their substantive markdown without expansion", () => {
+  const view = render(React.createElement(MessageView, {
+    message: {
+      role: "custom",
+      customType: "advisor",
+      content: "Consider **the edge case**.\n\nA second recommendation.",
+      display: true,
+    },
+  }));
+  assert.match(view.container.textContent!, /Advisor/);
+  assert.equal(view.container.querySelector("strong")?.textContent, "the edge case");
+  assert.match(view.container.textContent!, /A second recommendation/);
+  assert.equal(view.container.querySelector(".activity-row-trigger"), null);
 });
 
 test("skill prompts start collapsed and can be expanded and collapsed", () => {
@@ -1121,6 +1134,8 @@ test("skill prompts start collapsed and can be expanded and collapsed", () => {
       },
     }),
   );
+  assert.match(view.getByRole("button", { expanded: false }).textContent!, /Skill invoked/);
+  assert.ok(view.container.querySelector(".activity-row-trigger"));
   assert.doesNotMatch(view.container.textContent!, /Full skill instructions/);
   fireEvent.click(view.getByRole("button", { expanded: false }));
   assert.match(view.container.textContent!, /Full skill instructions/);
@@ -1141,10 +1156,8 @@ test("async-result notices start collapsed to their first line and expand to the
     }),
   );
   assert.equal(view.container.querySelector("pre"), null);
-  assert.match(
-    view.container.textContent!,
-    /Background job bg_1 has completed\. Resume your work using the result below\. …/,
-  );
+  assert.match(view.container.textContent!, /Background job bg_1 has completed/);
+  assert.ok(view.container.querySelector(".activity-row-trigger"));
   assert.doesNotMatch(view.container.textContent!, /Wall time/);
 
   fireEvent.click(view.getByRole("button", { expanded: false }));
@@ -1186,7 +1199,8 @@ test("async-result details show job status and duration while retaining raw JSON
       },
     }),
   );
-  fireEvent.click(view.getByText("Show details"));
+  assert.ok(view.getByRole("button", { expanded: false }).querySelector(".activity-row-indicator-error svg.lucide-circle-alert"));
+  fireEvent.click(view.getByRole("button", { expanded: false }));
   assert.match(view.container.textContent!, /HttpSystem/);
   assert.match(view.container.textContent!, /3m14s/);
   assert.match(view.container.textContent!, /3m31s/);
@@ -1209,7 +1223,8 @@ test("cancelled async jobs render the aborted status instead of a running indica
       },
     }),
   );
-  fireEvent.click(view.getByText("Show details"));
+  assert.ok(view.getByRole("button", { expanded: false }).querySelector(".activity-row-indicator svg.lucide-ban"));
+  fireEvent.click(view.getByRole("button", { expanded: false }));
   assert.ok(view.container.querySelector("svg.lucide-ban"));
   assert.equal(view.container.querySelector(".live-status-dot"), null);
 });
@@ -1226,6 +1241,10 @@ test("late LSP diagnostic notices expand to their exact line layout", () => {
       },
     }),
   );
+  assert.match(view.getByRole("button", { expanded: false }).textContent!, /Late LSP diagnostics/);
+  assert.ok(view.container.querySelector(".activity-row-trigger"));
+  assert.ok(view.getByRole("button", { expanded: false }).querySelector(".activity-row-indicator svg.lucide-circle-alert"));
+  assert.doesNotMatch(view.container.textContent!, /Organize imports/);
   fireEvent.click(view.getByRole("button", { expanded: false }));
   assert.equal(
     view.container.querySelector("pre")!.textContent,
@@ -1251,15 +1270,14 @@ test("developer reminders show their wrapper attributes, start collapsed, and to
     }),
   );
   const header = view.getByRole("button", { expanded: false });
-  assert.match(
-    header.textContent!,
-    /^system-reminder · reason=rule_violation · rule=ts-no-tiny-functions · path=builtin-defaults:ts-no-tiny-functions\.md · note=a>b/,
-  );
+  assert.ok(header.classList.contains("activity-row-trigger"));
+  assert.match(header.textContent!, /system-reminder/);
+  assert.match(header.textContent!, /rule_violation/);
+  assert.match(header.textContent!, /ts-no-tiny-functions/);
+  assert.match(header.textContent!, /builtin-defaults:ts-no-tiny-functions\.md/);
+  assert.match(header.textContent!, /note=a>b/);
   // A `>` inside an attribute value must not leak wrapper syntax into the body.
-  assert.match(
-    view.container.textContent!,
-    /User-defined rule matched tool-call arguments\. …/,
-  );
+  assert.match(header.textContent!, /User-defined rule matched tool-call arguments/);
   assert.doesNotMatch(view.container.textContent!, /b">/);
   assert.doesNotMatch(view.container.textContent!, /One-line wrappers/);
 
@@ -1273,6 +1291,80 @@ test("developer reminders show their wrapper attributes, start collapsed, and to
 
   fireEvent.click(header);
   assert.doesNotMatch(view.container.textContent!, /One-line wrappers/);
+});
+
+test("hook and unknown operational messages preview, expand, and preserve markdown and details", () => {
+  for (const customType of ["hook", "extension-event"]) {
+    const view = render(React.createElement(MessageView, {
+      message: {
+        role: "custom",
+        customType,
+        content: "Operation started\n\n**Full operation output**",
+        details: { source: "extension", count: 42 },
+        display: true,
+      },
+    }));
+    const row = view.getByRole("button", { expanded: false });
+    assert.ok(row.classList.contains("activity-row-trigger"));
+    assert.match(row.textContent!, /Operation started/);
+    assert.doesNotMatch(view.container.textContent!, /Full operation output/);
+    fireEvent.click(row);
+    assert.equal(view.container.querySelector("strong")?.textContent, "Full operation output");
+    assert.match(view.container.textContent!, /42/);
+    assert.match(view.container.textContent!, /extension/);
+    fireEvent.click(view.getByRole("button", { expanded: true }));
+    assert.doesNotMatch(view.container.textContent!, /Full operation output/);
+    view.unmount();
+  }
+});
+
+test("hidden extension messages remain distinct collapsed activity rows with their content and image", () => {
+  const view = render(React.createElement(MessageView, {
+    message: {
+      role: "custom",
+      customType: "extension-event",
+      display: false,
+      content: [
+        { type: "text", text: "Hidden event\n\n**Private extension output**" },
+        { type: "image", data: "aGVsbG8=", mimeType: "image/png" },
+      ],
+      details: { eventId: "hidden-123" },
+    },
+  }));
+  const row = view.getByRole("button", { expanded: false });
+  assert.ok(row.classList.contains("activity-row-trigger"));
+  assert.match(row.textContent!, /hidden/i);
+  assert.match(row.textContent!, /Hidden event/);
+  assert.equal(view.container.querySelector("img"), null);
+  assert.doesNotMatch(view.container.textContent!, /Private extension output/);
+  fireEvent.click(row);
+  assert.equal(view.container.querySelector("strong")?.textContent, "Private extension output");
+  assert.match(view.container.querySelector("img")?.getAttribute("src") ?? "", /^data:image\/png;base64,aGVsbG8=/);
+  assert.match(view.container.textContent!, /hidden-123/);
+});
+
+test("compaction is a collapsed boundary that retains token metadata and the summary", () => {
+  const view = render(React.createElement(MessageView, {
+    message: {
+      role: "custom",
+      customType: "compaction",
+      display: true,
+      content: "## Summary\n\n**Important retained context**\n\n<read-files>\n/repo/read.ts\n</read-files>\n<modified-files>\n/repo/write.ts\n</modified-files>",
+      details: { tokensBefore: 120000, tokensAfter: 18000, method: "auto" },
+    },
+  }));
+  const boundary = view.getByRole("button", { expanded: false });
+  assert.match(boundary.textContent!, /compact/i);
+  assert.match(boundary.textContent!, /120/);
+  assert.match(boundary.textContent!, /18/);
+  assert.doesNotMatch(view.container.textContent!, /Important retained context/);
+  fireEvent.click(boundary);
+  assert.equal(view.container.querySelector("strong")?.textContent, "Important retained context");
+  assert.match(view.container.textContent!, /auto/i);
+  assert.match(view.container.textContent!, /read\.ts/);
+  assert.match(view.container.textContent!, /write\.ts/);
+  fireEvent.click(view.getByRole("button", { expanded: true }));
+  assert.doesNotMatch(view.container.textContent!, /Important retained context/);
 });
 
 test("passive tool context from a session file renders on the batch's last tool card", () => {
@@ -1453,7 +1545,7 @@ test("passive tool context from a session file renders on the batch's last tool 
     row.segments.map((segment) =>
       segment.kind === "text"
         ? "text"
-        : segment.pieces.map((piece) => piece.index),
+        : segment.kind === "message" ? segment.index : segment.pieces.map((piece) => piece.index),
     ),
     [[1, 5], "text"],
   );

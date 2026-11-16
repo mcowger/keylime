@@ -154,6 +154,11 @@ export function renderTranscriptGroupRow(
   // A message split across segments keeps its navigation ref on the first one.
   const attached = new Set<number>();
   segments.forEach((segment, segmentIdx) => {
+    if (segment.kind === "message") {
+      rendered.push(renderMessage(segment.index));
+      attached.add(segment.index);
+      return;
+    }
     if (segment.kind === "text") {
       const msg = messages[segment.index] as AssistantMessage;
       const override = withAssistantBlocks(msg, segment.blocks, {

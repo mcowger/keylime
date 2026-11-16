@@ -13,7 +13,6 @@ import {
   type ComponentProps,
 } from "react";
 import {
-  Copy,
   Check,
   GitFork,
   CornerUpLeft,
@@ -40,6 +39,7 @@ import {
   Trash2,
   Paperclip,
   RotateCcw,
+  Ban,
 } from "lucide-react";
 import { MarkdownBody } from "./MarkdownBody";
 import { ThinkingMarkdown } from "./ThinkingMarkdown";
@@ -511,24 +511,10 @@ export const MessageView = memo(function MessageView({
     if (custom.customType === "compaction") {
       return <CompactionMessageView message={custom} sessionId={sessionId} />;
     }
-    if (custom.display === false) {
-      return (
-        <HiddenExtensionView
-          message={custom}
-          cwd={cwd}
-          onOpenFile={onOpenFile}
-          sessionId={sessionId}
-        />
-      );
+    if (custom.customType === "advisor" && custom.display !== false) {
+      return <AdvisorMessageView message={custom} cwd={cwd} onOpenFile={onOpenFile} sessionId={sessionId} />;
     }
-    return (
-      <CustomMessageView
-        message={custom}
-        cwd={cwd}
-        onOpenFile={onOpenFile}
-        sessionId={sessionId}
-      />
-    );
+    return <CustomActivityRow message={custom} cwd={cwd} onOpenFile={onOpenFile} sessionId={sessionId} defaultCollapsed={custom.customType === "async-result" || IRC_CUSTOM_TYPES.has(custom.customType) ? toolCallsDefaultCollapsed : true} />;
   }
   if (message.role === "bashExecution") {
     return (
@@ -2436,157 +2422,35 @@ const ToolCallBlock = memo(
     prev.sessionId === next.sessionId,
 );
 
-function CompactionMessageView({
-  message,
-  sessionId,
-}: {
+function CompactionMessageView({ message, sessionId }: {
   message: CustomMessage;
   sessionId?: string;
 }) {
   const { t, locale } = useI18n();
+  const [expanded, setExpanded] = useState(false);
   const summary = getMessageText(message.content);
-  const parsedSummary = useMemo(
-    () => parseCompactionSummary(summary),
-    [summary],
-  );
+  const parsedSummary = useMemo(() => parseCompactionSummary(summary), [summary]);
+  const details = (message.details ?? null) as { tokensBefore?: unknown; tokensAfter?: unknown; method?: unknown } | null;
+  const before = typeof details?.tokensBefore === "number" ? formatCompactNumber(details.tokensBefore, locale) : null;
+  const after = typeof details?.tokensAfter === "number" ? formatCompactNumber(details.tokensAfter, locale) : null;
+  const method = typeof details?.method === "string" ? details.method : null;
   const time = formatTime(message.timestamp, locale);
-  // omp ≥17.4 compaction entries carry the maintenance method and the real
-  // post-compaction token count; older sessions only have tokensBefore.
-  const details = (message.details ?? null) as {
-    tokensBefore?: unknown;
-    tokensAfter?: unknown;
-    method?: unknown;
-  } | null;
-  const tokensBefore =
-    typeof details?.tokensBefore === "number" ? details.tokensBefore : null;
-  const tokensAfter =
-    typeof details?.tokensAfter === "number" ? details.tokensAfter : null;
-  const method =
-    typeof details?.method === "string" && details.method
-      ? details.method
-      : null;
-
   return (
-    <div style={{ marginBottom: 16 }}>
-      <div
-        style={{
-          border: "1px solid var(--border)",
-          borderRadius: 8,
-          overflow: "hidden",
-          background: "var(--bg)",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "7px 10px",
-            borderBottom: "1px solid var(--border)",
-            background: "var(--bg-panel)",
-            color: "var(--text-muted)",
-          }}
-        >
-          <span
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: 11,
-              fontWeight: 650,
-            }}
-          >
-            {t("messageView.compactionLabel")}
-          </span>
-          {time && (
-            <span
-              style={{
-                marginLeft: "auto",
-                color: "var(--text-dim)",
-                fontSize: 10,
-              }}
-            >
-              {time}
-            </span>
-          )}
-        </div>
-        <div
-          data-selection-scope="message"
-          tabIndex={-1}
-          style={{ padding: "11px 13px 12px" }}
-        >
-          <div
-            style={{
-              color: "var(--text)",
-              fontSize: 15,
-              fontWeight: 700,
-              lineHeight: 1.35,
-            }}
-          >
-            {t("messageView.conversationCompacted")}
-          </div>
-          {(method || (tokensBefore !== null && tokensAfter !== null)) && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                marginBottom: 8,
-                flexWrap: "wrap",
-              }}
-            >
-              {method && (
-                <span
-                  style={{
-                    padding: "1px 7px",
-                    borderRadius: 4,
-                    background: "var(--bg-subtle)",
-                    color: "var(--text-muted)",
-                    fontSize: 11,
-                    fontFamily: "var(--font-mono)",
-                    fontWeight: 600,
-                  }}
-                >
-                  {method}
-                </span>
-              )}
-              {tokensBefore !== null && tokensAfter !== null && (
-                <span style={{ color: "var(--text-muted)", fontSize: 11 }}>
-                  {t("messageView.compactionTokenDelta", {
-                    before: formatCompactNumber(tokensBefore, locale),
-                    after: formatCompactNumber(tokensAfter, locale),
-                  })}
-                </span>
-              )}
-            </div>
-          )}
-          <div
-            style={{
-              marginTop: 3,
-              marginBottom: 10,
-              color: "var(--text)",
-              fontSize: 14,
-              lineHeight: 1.5,
-            }}
-          >
-            {t("messageView.compactionDescription")}
-          </div>
-          {parsedSummary.body ? (
-            <MarkdownBody
-              className="markdown-compaction-message"
-              sourceSessionId={sessionId}
-            >
-              {parsedSummary.body}
-            </MarkdownBody>
-          ) : (
-            <span style={{ color: "var(--text-dim)", fontSize: 12 }}>
-              {t("messageView.noSummary")}
-            </span>
-          )}
-          <CompactionFileMetadata
-            readFiles={parsedSummary.readFiles}
-            modifiedFiles={parsedSummary.modifiedFiles}
-          />
-        </div>
-      </div>
+    <div className="activity-row" data-selection-scope="message" tabIndex={-1} style={{ borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)", margin: "8px 0" }}>
+      <Collapsible open={expanded} onOpenChange={setExpanded}>
+        <CollapsibleTrigger className="activity-row-trigger">
+          <span className="activity-row-tool">{t("messageView.conversationCompacted")}</span>
+          {method && <span className="activity-row-preview">{method}</span>}
+          {before !== null && <span className="activity-row-preview">{after !== null ? t("messageView.compactionTokenDelta", { before, after }) : `${before} tokens`}</span>}
+          <ChevronDown size={12} strokeWidth={1.8} aria-hidden style={{ flexShrink: 0, transform: expanded ? "none" : "rotate(-90deg)" }} />
+        </CollapsibleTrigger>
+        {expanded && <div className="tool-call-details">
+          {time && <div style={{ color: "var(--text-dim)", fontSize: 10 }}>{time}</div>}
+          <div>{t("messageView.compactionDescription")}</div>
+          {parsedSummary.body ? <MarkdownBody className="markdown-compaction-message" sourceSessionId={sessionId}>{parsedSummary.body}</MarkdownBody> : <span style={{ color: "var(--text-dim)", fontSize: 12 }}>{t("messageView.noSummary")}</span>}
+          <CompactionFileMetadata readFiles={parsedSummary.readFiles} modifiedFiles={parsedSummary.modifiedFiles} />
+        </div>}
+      </Collapsible>
     </div>
   );
 }
@@ -2740,677 +2604,85 @@ function friendlyHiddenLabel(
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function HiddenExtensionView({
-  message,
-  cwd,
-  onOpenFile,
-  sessionId,
-}: {
+
+function CustomActivityRow({ message, cwd, onOpenFile, sessionId, defaultCollapsed }: {
   message: CustomMessage;
   cwd?: string;
   onOpenFile?: (filePath: string) => void;
   sessionId?: string;
+  defaultCollapsed: boolean;
 }) {
+  const [expanded, setExpanded] = useState(!defaultCollapsed);
   const { t, locale } = useI18n();
-  const [expanded, setExpanded] = useState(false);
-  const [detailsExpanded, setDetailsExpanded] = useState(false);
-  const { copied, copy: copyContent } = useCopyFeedback();
-  const rawText = getMessageText(message.content);
+  const { copied, copy } = useCopyFeedback();
+  const text = getMessageText(message.content);
+  const isAsync = message.customType === "async-result";
+  const isIrc = IRC_CUSTOM_TYPES.has(message.customType);
+  const isHidden = message.display === false;
+  const isDeveloper = message.customType === "developer";
+  const isPlainText = isAsync || message.customType === "lsp-late-diagnostic";
+  const wrapper = isDeveloper ? parseLeadingWrapper(text) : null;
+  const envelope = isIrc ? parseIrcEnvelope(text) : null;
+  const body = envelope ? envelope.body : isAsync || isDeveloper || message.customType === "lsp-late-diagnostic" || isHidden ? stripHiddenWrappers(text) : text;
+  const label = envelope ? `IRC ← ${envelope.sender ?? formatCustomType(message.customType)}` : wrapper ? wrapperTitle(wrapper) : isHidden ? friendlyHiddenLabel(message.customType, t) : formatCustomType(message.customType);
   const images = getMessageImages(message.content);
-  const cleanText = useMemo(() => stripHiddenWrappers(rawText), [rawText]);
-  const preview = useMemo(() => {
-    const normalized = cleanText.replace(/\s+/g, " ").trim();
-    if (!normalized) return "";
-    return normalized.length > 92 ? `${normalized.slice(0, 92)}…` : normalized;
-  }, [cleanText]);
-  const hasDetails = message.details !== undefined;
-  const detailsText = hasDetails ? safeJson(message.details) : "";
-  const label = friendlyHiddenLabel(message.customType, t);
   const time = formatTime(message.timestamp, locale);
-
+  const jobs = (isAsync || message.customType === "job-result") && message.details && typeof message.details === "object" &&
+    "jobs" in message.details && Array.isArray(message.details.jobs)
+    ? message.details.jobs.map((job: unknown) =>
+        job && typeof job === "object" && "jobId" in job && typeof job.jobId === "string"
+          ? { ...job, id: job.jobId } : job)
+    : null;
+  const jobRows = jobs !== null ? getHubJobs({ op: "jobs", jobs }) : null;
+  const hasJobs = jobRows !== null;
+  const failed = (jobRows?.some((job) => job.status === "failed") ?? false) || (message.customType === "lsp-late-diagnostic" && /\b[1-9]\d*\s+error\(s\)|\[error\]/i.test(body));
+  const cancelled = jobRows?.some((job) => job.status === "cancelled") ?? false;
+  const running = jobRows?.some((job) => ["running", "started", "waiting"].includes(job.status)) ?? false;
+  const warning = message.customType === "lsp-late-diagnostic" && /\b[1-9]\d*\s+warning\(s\)|\[warning\]/i.test(body);
   return (
-    <div style={{ marginBottom: 8, display: "flex", justifyContent: "center" }}>
-      <div
-        data-selection-scope="message"
-        tabIndex={-1}
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: 0,
-          width: "100%",
-          maxWidth: 640,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            width: "100%",
-          }}
-        >
-          <div
-            style={{
-              flex: 1,
-              height: 1,
-              background: "var(--border)",
-              opacity: 0.55,
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            aria-expanded={expanded}
-            aria-label={
-              expanded ? t("messageView.collapse") : t("messageView.expand")
-            }
-            style={{
-              userSelect: expanded ? "none" : undefined,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              maxWidth: "78%",
-              padding: "4px 10px",
-              border:
-                "1px dashed color-mix(in srgb, var(--border) 88%, transparent)",
-              borderRadius: 999,
-              background: "color-mix(in srgb, var(--bg-subtle) 92%, var(--bg))",
-              color: "var(--text-dim)",
-              cursor: "pointer",
-              fontSize: 11,
-              lineHeight: 1.2,
-              whiteSpace: "nowrap",
-            }}
-          >
-            <EyeOff
-              size={12}
-              strokeWidth={1.8}
-              style={{ flexShrink: 0, opacity: 0.85 }}
-            />
-            <span
-              style={{
-                userSelect: "none",
-                fontFamily: "var(--font-mono)",
-                fontWeight: 650,
-                letterSpacing: "0.01em",
-                color: "var(--text-muted)",
-                fontSize: 11,
-              }}
-            >
-              {label}
-            </span>
-            {preview ? (
-              <>
-                <span
-                  style={{
-                    width: 3,
-                    height: 3,
-                    borderRadius: 999,
-                    background: "var(--text-dim)",
-                    opacity: 0.5,
-                    flexShrink: 0,
-                  }}
-                />
-                <span
-                  style={{
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    minWidth: 0,
-                    fontSize: 11,
-                  }}
-                >
-                  {preview}
-                </span>
-              </>
-            ) : null}
-            <ChevronRight
-              size={11}
-              strokeWidth={1.8}
-              style={{
-                flexShrink: 0,
-                opacity: 0.7,
-                transform: expanded ? "rotate(90deg)" : "none",
-                transition: "transform var(--dur-fast) var(--ease-out-warm)",
-              }}
-            />
-          </button>
-          <div
-            style={{
-              flex: 1,
-              height: 1,
-              background: "var(--border)",
-              opacity: 0.55,
-            }}
-          />
-        </div>
-        {time ? (
-          <span
-            style={{
-              userSelect: "none",
-              marginTop: 2,
-              color: "var(--text-dim)",
-              fontSize: 10,
-              fontVariantNumeric: "tabular-nums",
-              opacity: 0.75,
-            }}
-          >
-            {time}
+    <div className="activity-row" data-selection-scope="message" tabIndex={-1}>
+      <Collapsible open={expanded} onOpenChange={setExpanded}>
+        <CollapsibleTrigger className="activity-row-trigger">
+          <span className={`activity-row-indicator${failed ? " activity-row-indicator-error" : ""}`} aria-hidden>
+            {failed ? <CircleAlert size={12} strokeWidth={1.8} /> : cancelled ? <Ban size={12} strokeWidth={1.8} /> : running ? <LoaderCircle size={12} strokeWidth={1.8} className="activity-row-spinner" /> : warning ? <CircleAlert size={12} strokeWidth={1.8} style={{ color: "var(--status-modified)" }} /> : <Check size={12} strokeWidth={2} />}
           </span>
-        ) : null}
-        {expanded ? (
-          <div
-            style={{
-              marginTop: 6,
-              width: "100%",
-              border: "1px solid var(--border)",
-              borderRadius: 8,
-              overflow: "hidden",
-              background: "var(--bg-subtle)",
-            }}
-          >
-            <div style={{ padding: "8px 10px" }}>
-              {images.length > 0 && (
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 6,
-                    flexWrap: "wrap",
-                    marginBottom: cleanText ? 8 : 0,
-                  }}
-                >
-                  {images.map((img, i) => {
-                    const src = imageSource(img);
-                    if (!src) return null;
-                    return (
-                      <ClickableImage
-                        key={i}
-                        src={src}
-                        alt=""
-                        style={{
-                          maxWidth: 240,
-                          maxHeight: 240,
-                          borderRadius: 6,
-                          objectFit: "contain",
-                          display: "block",
-                          border: "1px solid var(--border)",
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-              {cleanText ? (
-                <MarkdownBody
-                  className="markdown-custom-message"
-                  cwd={cwd}
-                  onOpenFile={onOpenFile}
-                  sourceSessionId={sessionId}
-                >
-                  {cleanText}
-                </MarkdownBody>
-              ) : (
-                <span style={{ color: "var(--text-dim)", fontSize: 12 }}>
-                  {t("messageView.noMessage")}
-                </span>
-              )}
-            </div>
-            <div
-              style={{
-                userSelect: "none",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "4px 9px",
-                borderTop: "1px solid var(--border)",
-                background: "var(--bg-panel)",
-              }}
-            >
-              {cleanText || detailsText ? (
-                <button
-                  onClick={() => copyContent(cleanText || detailsText)}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 4,
-                    padding: "3px 7px",
-                    border: "none",
-                    background: "none",
-                    color: copied ? "var(--accent)" : "var(--text-dim)",
-                    cursor: "pointer",
-                    fontSize: 11,
-                  }}
-                >
-                  {copied ? (
-                    <Check size={11} strokeWidth={1.8} />
-                  ) : (
-                    <Copy size={11} strokeWidth={1.8} />
-                  )}
-                  {copied ? t("messageView.copied") : t("messageView.copy")}
-                </button>
-              ) : null}
-              {hasDetails ? (
-                <button
-                  onClick={() => setDetailsExpanded((v) => !v)}
-                  style={{
-                    marginLeft: "auto",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 4,
-                    padding: "3px 7px",
-                    border: "none",
-                    background: "none",
-                    color: "var(--text-dim)",
-                    cursor: "pointer",
-                    fontSize: 11,
-                  }}
-                >
-                  {detailsExpanded
-                    ? t("messageView.hideDetails")
-                    : t("messageView.showDetails")}
-                  <ChevronDown
-                    size={11}
-                    strokeWidth={1.8}
-                    style={{
-                      transform: detailsExpanded ? "rotate(180deg)" : "none",
-                      transition:
-                        "transform var(--dur-fast) var(--ease-out-warm)",
-                    }}
-                  />
-                </button>
-              ) : (
-                <button
-                  onClick={() => setExpanded(false)}
-                  style={{
-                    marginLeft: "auto",
-                    padding: "3px 7px",
-                    border: "none",
-                    background: "none",
-                    color: "var(--text-dim)",
-                    cursor: "pointer",
-                    fontSize: 11,
-                  }}
-                >
-                  {t("messageView.collapse")}
-                </button>
-              )}
-            </div>
-            {hasDetails && detailsExpanded ? (
-              <pre
-                style={{
-                  margin: 0,
-                  padding: "9px 10px",
-                  borderTop: "1px solid var(--border)",
-                  backgroundColor: "var(--bg)",
-                  color: "var(--text-muted)",
-                  fontSize: 12,
-                  lineHeight: 1.5,
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                  maxHeight: 360,
-                  overflow: "auto",
-                  fontFamily: "var(--font-mono)",
-                }}
-              >
-                {detailsText}
-              </pre>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+          <span className="activity-tool-icon" aria-hidden>{isHidden ? <EyeOff size={12} /> : isAsync ? <Clock size={12} /> : <MessagesSquare size={12} />}</span>
+          <span className="activity-row-tool" style={{ minWidth: 0, maxWidth: "55%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={`${label}${isHidden ? " · hidden" : ""}`}>{label}{isHidden ? " · hidden" : ""}</span>
+          <span className="activity-row-preview">{previewText(body.split("\n").find((line) => line.trim()) ?? "")}</span>
+          <ChevronDown size={12} strokeWidth={1.8} aria-hidden style={{ flexShrink: 0, transform: expanded ? "none" : "rotate(-90deg)" }} />
+        </CollapsibleTrigger>
+        {expanded && <div className="tool-call-details">
+          {time && <div style={{ color: "var(--text-dim)", fontSize: 10 }}>{time}</div>}
+          {wrapper && <div style={{ color: "var(--text-dim)", fontSize: 11, overflowWrap: "anywhere" }}>{wrapperTitle(wrapper)}</div>}
+          {images.map((image, i) => { const src = imageSource(image); return src ? <ClickableImage key={i} src={src} alt="" style={{ maxWidth: 240, maxHeight: 240 }} /> : null; })}
+          {isPlainText ? <pre style={{ margin: 0, overflow: "auto", whiteSpace: "pre", fontFamily: "var(--font-mono)" }}>{body}</pre> : <MarkdownBody className="markdown-custom-message" cwd={cwd} onOpenFile={onOpenFile} sourceSessionId={sessionId}>{body}</MarkdownBody>}
+          {(text || message.details !== undefined) && <button onClick={() => copy(body || safeJson(message.details))}>{copied ? t("messageView.copied") : t("messageView.copy")}</button>}
+          {hasJobs && <HubResultPanel input={{ op: "jobs" }} result={{ role: "toolResult", toolCallId: "", toolName: "hub", content: [], details: { op: "jobs", jobs } }} />}
+          {message.details !== undefined && <details><summary>JSON</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{safeJson(message.details)}</pre></details>}
+        </div>}
+      </Collapsible>
     </div>
   );
 }
 
-function CustomMessageView({
-  message,
-  cwd,
-  onOpenFile,
-  sessionId,
-}: {
+function AdvisorMessageView({ message, cwd, onOpenFile, sessionId }: {
   message: CustomMessage;
   cwd?: string;
   onOpenFile?: (filePath: string) => void;
   sessionId?: string;
 }) {
-  const { t, locale } = useI18n();
-  // Notices and skill prompts start collapsed to their first line.
-  const asyncJobs =
-    message.customType === "async-result" &&
-    message.details &&
-    typeof message.details === "object" &&
-    "jobs" in message.details &&
-    Array.isArray(message.details.jobs)
-      ? message.details.jobs.map((job: unknown) => {
-          if (
-            !job ||
-            typeof job !== "object" ||
-            !("jobId" in job) ||
-            typeof job.jobId !== "string"
-          )
-            return job;
-          return { ...job, id: job.jobId };
-        })
-      : null;
-  const hasAsyncJobRows =
-    asyncJobs !== null && getHubJobs({ op: "jobs", jobs: asyncJobs }) !== null;
-  const isDeveloper = message.customType === "developer";
-  const isNotice =
-    isDeveloper ||
-    message.customType === "async-result" ||
-    message.customType === "lsp-late-diagnostic" ||
-    message.customType === "skill-prompt";
-  const [contentExpanded, setContentExpanded] = useState(!isNotice);
-  const [detailsExpanded, setDetailsExpanded] = useState(false);
-  const { copied, copy: copyContent } = useCopyFeedback();
+  const { t } = useI18n();
   const text = getMessageText(message.content);
   const images = getMessageImages(message.content);
-  const hasDetails = message.details !== undefined;
-  const detailsText = hasDetails ? safeJson(message.details) : "";
-  const isIrc = IRC_CUSTOM_TYPES.has(message.customType);
-  const ircEnvelope = isIrc ? parseIrcEnvelope(text) : null;
-  // Async results (raw job output) and late LSP diagnostics are plain text wrapped
-  // in <system-notice>. As markdown the wrapper turns the body into one raw HTML
-  // block (newlines collapse) and `---` becomes a heading, so strip it and show
-  // them verbatim.
-  const isPlainText =
-    message.customType === "async-result" ||
-    message.customType === "lsp-late-diagnostic";
-  const displayText = ircEnvelope
-    ? ircEnvelope.body
-    : isPlainText || isDeveloper
-      ? stripHiddenWrappers(text)
-      : text;
-  const wrapper = isDeveloper ? parseLeadingWrapper(text) : null;
-  const firstLine =
-    displayText
-      .split("\n")
-      .find((line) => line.trim())
-      ?.trim() ?? "";
-  const collapsedPreview =
-    firstLine && firstLine !== displayText.trim()
-      ? `${firstLine} …`
-      : firstLine;
-  const title = wrapper
-    ? wrapperTitle(wrapper)
-    : isIrc
-      ? (ircEnvelope?.sender ?? formatCustomType(message.customType))
-      : message.customType === "advisor"
-        ? t("messageView.advisorLabel")
-        : formatCustomType(message.customType);
-  const time = formatTime(message.timestamp, locale);
-
+  const { copied, copy } = useCopyFeedback();
   return (
-    <div style={{ marginBottom: 16 }}>
-      <div
-        data-selection-scope="message"
-        tabIndex={-1}
-        style={{
-          border: "1px solid var(--border)",
-          borderRadius: 8,
-          overflow: "hidden",
-          background: "var(--bg)",
-        }}
-      >
-        <div
-          role={isNotice ? "button" : undefined}
-          tabIndex={isNotice ? 0 : undefined}
-          aria-expanded={isNotice ? contentExpanded : undefined}
-          onClick={isNotice ? () => setContentExpanded((v) => !v) : undefined}
-          onKeyDown={
-            isNotice
-              ? (e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setContentExpanded((v) => !v);
-                  }
-                }
-              : undefined
-          }
-          style={{
-            userSelect: "none",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "7px 10px",
-            borderBottom: "1px solid var(--border)",
-            background: "var(--bg-panel)",
-            color: "var(--text-muted)",
-            fontSize: 12,
-            cursor: isNotice ? "pointer" : undefined,
-          }}
-        >
-          {isNotice && (
-            <ChevronDown
-              size={12}
-              strokeWidth={1.8}
-              aria-hidden="true"
-              style={{
-                flexShrink: 0,
-                transform: contentExpanded ? "none" : "rotate(-90deg)",
-              }}
-            />
-          )}
-          <span
-            style={{
-              color: "var(--text-muted)",
-              fontFamily: "var(--font-mono)",
-              fontSize: 11,
-              fontWeight: 650,
-              minWidth: 0,
-              // Collapsed notices keep the header to one line, like a tool call's arguments.
-              ...(isNotice && !contentExpanded
-                ? {
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }
-                : { overflowWrap: "anywhere" }),
-            }}
-          >
-            {isIrc && message.customType === "irc:incoming"
-              ? `← ${title}`
-              : title}
-          </span>
-          {time && (
-            <span
-              style={{
-                marginLeft: "auto",
-                flexShrink: 0,
-                color: "var(--text-dim)",
-                fontSize: 10,
-              }}
-            >
-              {time}
-            </span>
-          )}
-        </div>
-
-        {contentExpanded ? (
-          <div style={{ padding: "6px 9px" }}>
-            {images.length > 0 && (
-              <div
-                style={{
-                  display: "flex",
-                  gap: 6,
-                  flexWrap: "wrap",
-                  marginBottom: displayText ? 8 : 0,
-                }}
-              >
-                {images.map((img, i) => {
-                  const src = imageSource(img);
-                  if (!src) return null;
-                  return (
-                    <ClickableImage
-                      key={i}
-                      src={src}
-                      alt=""
-                      style={{
-                        maxWidth: 240,
-                        maxHeight: 240,
-                        borderRadius: 6,
-                        objectFit: "contain",
-                        display: "block",
-                        border: "1px solid var(--border)",
-                      }}
-                    />
-                  );
-                })}
-              </div>
-            )}
-            {!displayText ? (
-              <span style={{ color: "var(--text-dim)", fontSize: 12 }}>
-                {t("messageView.noMessage")}
-              </span>
-            ) : isPlainText ? (
-              <pre
-                style={{
-                  margin: 0,
-                  maxHeight: 420,
-                  overflow: "auto",
-                  whiteSpace: "pre",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: 12,
-                  lineHeight: 1.5,
-                  color: "var(--text-muted)",
-                }}
-              >
-                {displayText}
-              </pre>
-            ) : (
-              <MarkdownBody
-                className="markdown-custom-message"
-                cwd={cwd}
-                onOpenFile={onOpenFile}
-                sourceSessionId={sessionId}
-              >
-                {displayText}
-              </MarkdownBody>
-            )}
-          </div>
-        ) : (
-          <button
-            onClick={() => setContentExpanded(true)}
-            style={{
-              display: "block",
-              width: "100%",
-              padding: "8px 10px",
-              border: "none",
-              background: "transparent",
-              color: "var(--text-dim)",
-              cursor: "pointer",
-              fontSize: 12,
-              textAlign: "left",
-              ...(isNotice
-                ? {
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }
-                : {}),
-            }}
-          >
-            {isNotice && collapsedPreview
-              ? collapsedPreview
-              : displayText
-                ? previewText(displayText)
-                : t("messageView.showExtensionMessage")}
-          </button>
-        )}
-
-        <div
-          style={{
-            userSelect: "none",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "4px 9px",
-            borderTop: "1px solid var(--border)",
-            background: "var(--bg-subtle)",
-          }}
-        >
-          {text || detailsText ? (
-            <button
-              onClick={() => copyContent(displayText || detailsText)}
-              style={{
-                padding: "3px 7px",
-                border: "none",
-                background: "none",
-                color: copied ? "var(--accent)" : "var(--text-dim)",
-                cursor: "pointer",
-                fontSize: 11,
-              }}
-            >
-              {copied ? t("messageView.copied") : t("messageView.copy")}
-            </button>
-          ) : null}
-          {hasDetails && (
-            <button
-              onClick={() => {
-                setDetailsExpanded((v) => !v);
-              }}
-              style={{
-                marginLeft: "auto",
-                padding: "3px 7px",
-                border: "none",
-                background: "none",
-                color: "var(--text-dim)",
-                cursor: "pointer",
-                fontSize: 11,
-              }}
-            >
-              {detailsExpanded
-                ? t("messageView.hideDetails")
-                : t("messageView.showDetails")}
-            </button>
-          )}
-        </div>
-
-        {hasDetails && detailsExpanded && hasAsyncJobRows && (
-          <HubResultPanel
-            input={{ op: "jobs" }}
-            result={{
-              role: "toolResult",
-              toolCallId: "",
-              toolName: "hub",
-              content: [],
-              details: { op: "jobs", jobs: asyncJobs },
-            }}
-          />
-        )}
-        {hasDetails && detailsExpanded && (
-          <details open={!hasAsyncJobRows}>
-            <summary
-              style={{
-                padding: "6px 10px",
-                color: "var(--text-dim)",
-                cursor: "pointer",
-                fontSize: 11,
-              }}
-            >
-              JSON
-            </summary>
-            <pre
-              style={{
-                margin: 0,
-                padding: "9px 10px",
-                borderTop: "1px solid var(--border)",
-                backgroundColor: "var(--bg)",
-                color: "var(--text-muted)",
-                fontSize: 12,
-                lineHeight: 1.5,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                maxHeight: 360,
-                overflow: "auto",
-                fontFamily: "var(--font-mono)",
-              }}
-            >
-              {detailsText}
-            </pre>
-          </details>
-        )}
+    <div className="chat-message" style={{ marginBottom: 6 }}>
+      <div className="message-model-label" style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 4 }}>{t("messageView.advisorLabel")}</div>
+      <div data-selection-scope="message" tabIndex={-1}>
+        {images.map((image, i) => { const src = imageSource(image); return src ? <ClickableImage key={i} src={src} alt="" style={{ maxWidth: 240, maxHeight: 240 }} /> : null; })}
+        {text && <MarkdownBody className="markdown-custom-message" cwd={cwd} onOpenFile={onOpenFile} sourceSessionId={sessionId}>{text}</MarkdownBody>}
+        {(text || message.details !== undefined) && <button onClick={() => copy(text || safeJson(message.details))}>{copied ? t("messageView.copied") : t("messageView.copy")}</button>}
+        {message.details !== undefined && <details><summary>JSON</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{safeJson(message.details)}</pre></details>}
       </div>
     </div>
   );

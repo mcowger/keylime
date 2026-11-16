@@ -61,6 +61,7 @@ function shape(row: TranscriptRow) {
           "text",
           segment.blocks.map((block) => (block as TextContent).text).join("|"),
         ];
+      if (segment.kind === "message") return ["message", segment.index];
       return ["activity", segment.pieces.map((piece) => piece.index)];
     },
   );
@@ -98,6 +99,12 @@ test("plans a plain Q/A pair as standalone rows", () => {
     { kind: "message", index: 1 },
   ]);
 });
+test("advisor content stays visible between folded activity", () => {
+  const advisor: CustomMessage = { role: "custom", customType: "advisor", display: true, content: "Review this." };
+  const rows = planTranscriptRows([user("u"), assistant("a", [toolCall("one")]), advisor, assistant("b", [toolCall("two")])]);
+  assert.deepEqual(shape(rows[0]), [["activity", [1]], ["message", 2], ["activity", [3]]]);
+});
+
 
 test("an answer that ended the turn stays visible when a reminder resumes the agent", () => {
   // Session 01a0d187: the agent yields a reply carrying drafts, a todo
@@ -229,7 +236,7 @@ test("showThinking keeps thinking out of the fold, so an expanded block is not h
   const kinds = rows[0].segments.map((segment) =>
     segment.kind === "text"
       ? ["text", segment.index, segment.blocks.map((block) => block.type)]
-      : [
+      : segment.kind === "message" ? ["message", segment.index] : [
           "activity",
           segment.pieces.map((piece) =>
             piece.blocks?.map((block) => block.type),
@@ -273,7 +280,7 @@ test("showToolCalls keeps tool call rows out of the fold; with showThinking noth
       (segment) =>
         segment.kind === "text"
           ? ["text", segment.blocks.map((block) => block.type)]
-          : [
+          : segment.kind === "message" ? ["message", segment.index] : [
               "activity",
               segment.pieces.map((piece) =>
                 piece.blocks?.map((block) => block.type),

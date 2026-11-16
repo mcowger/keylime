@@ -36,6 +36,7 @@ export type TranscriptSegment =
       blocks: AssistantContentBlock[];
       last: boolean;
     }
+  | { kind: "message"; index: number }
   | {
       kind: "activity";
       pieces: ActivityPiece[];
@@ -143,6 +144,11 @@ export function planTurnSegments(
         isPassiveToolContext(msg))
     )
       continue;
+    if (msg.role === "custom" && (msg as CustomMessage).customType === "advisor" && (msg as CustomMessage).display !== false) {
+      segments.push({ kind: "message", index: idx });
+      activity = null;
+      continue;
+    }
     if (msg.role !== "assistant") {
       // Job results, reminders, and other notices are activity, as in the TUI.
       addActivity({ index: idx }, 0);
