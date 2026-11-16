@@ -203,6 +203,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Closing Ship during work no longer cancels runner commands or an already-started host job; it only stops progress tracking and discards browser state
 - Generated titles survived delayed new-chat hydration, preventing stale names from overwriting refreshed titles
 - Ship leaves the removed workspace when its hierarchy entry disappears, returning to the parent project instead of staying on the deleted workspace
+- The mobile sidebar toggle keeps the same menu icon whether the sidebar is open or closed
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

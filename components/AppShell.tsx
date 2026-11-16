@@ -52,7 +52,6 @@ import {
   Folder,
   History,
   Menu,
-  PanelLeft,
   PanelRight,
   Server,
   Terminal,
@@ -3382,15 +3381,7 @@ export function AppShell({ appName }: { appName: string }) {
                       }
                       className="shell-toolbar-btn ui-focus-ring"
                     >
-                      {sidebarOpen ? (
-                        <PanelLeft
-                          size={16}
-                          strokeWidth={1.8}
-                          aria-hidden="true"
-                        />
-                      ) : (
-                        <Menu size={16} strokeWidth={1.8} aria-hidden="true" />
-                      )}
+                      <Menu size={16} strokeWidth={1.8} aria-hidden="true" />
                     </button>
                     <details
                       ref={mobileToolsRef}
