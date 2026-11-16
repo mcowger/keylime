@@ -46,7 +46,9 @@ export function ComposerActivityIndicators({
 
   const tasks = todoPhases.flatMap((phase) => phase.tasks);
   const done = tasks.filter((task) => task.status === "completed").length;
-  const hasIncompleteTasks = tasks.length > done;
+  const hasIncompleteTasks = tasks.some(
+    (task) => task.status !== "completed" && task.status !== "abandoned",
+  );
   const activeAgents = subagents.filter(
     (subagent) =>
       subagent.status === "started" && subagent.source !== "history",

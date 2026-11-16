@@ -4,7 +4,9 @@ import test from "node:test";
 import React from "react";
 const { render, fireEvent, cleanup } =
   await import("@testing-library/react/pure.js");
+// Load components after the DOM fixture so browser-dependent modules see it.
 const { SidebarActivity } = await import("./SidebarActivity");
+const { ComposerActivityIndicators } = await import("./ComposerActivityIndicators");
 
 test("sidebar shows only live agents and unfinished actionable todos", () => {
   let selected: string | undefined;
@@ -47,5 +49,23 @@ test("sidebar shows only live agents and unfinished actionable todos", () => {
   assert.equal(view.queryByText(/Historic:/), null);
   fireEvent.click(view.getByRole("button", { name: /Live:/ }));
   assert.equal(selected, "Live");
+  cleanup();
+});
+
+test("composer hides the task panel when all remaining tasks are abandoned", () => {
+  const props = {
+    todoPhases: [{ name: "Phase", tasks: [{ content: "Work", status: "pending" as const }] }],
+    subagents: [],
+    onSelectSubagent: () => {},
+  };
+  const view = render(React.createElement(ComposerActivityIndicators, props));
+  fireEvent.click(view.getByRole("button", { name: /Tasks/ }));
+  assert.ok(view.getByRole("dialog"));
+  view.rerender(React.createElement(ComposerActivityIndicators, {
+    ...props,
+    todoPhases: [{ name: "Phase", tasks: [{ content: "Work", status: "abandoned" as const }] }],
+  }));
+  assert.equal(view.queryByRole("button", { name: /Tasks/ }), null);
+  assert.equal(view.queryByRole("dialog"), null);
   cleanup();
 });

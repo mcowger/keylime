@@ -193,6 +193,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - New chats opened from a workspace's tab bar use that workspace without showing project and workspace selectors
 - The advisor review notice aligns with the composer on desktop
 - The empty-chat composer follows the configured chat width instead of a fixed 760px column
+- Hide the composer task indicator when all remaining tasks are deleted
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
