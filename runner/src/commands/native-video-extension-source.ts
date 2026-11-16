@@ -26,6 +26,8 @@ async function stopCapture() {
   pendingEncoders.clear();
   if (!previous) return;
   previous.stopped = true;
+  previous.latestFrame?.close();
+  previous.latestFrame = null;
   for (const encoder of encoders.values()) {
     try {
       encoder.encoder.close();
@@ -84,6 +86,7 @@ async function startCapture(targetId, width, height, generation) {
       generation,
       minimumTimestampUs: -Infinity,
       stopped: false,
+      latestFrame: null,
       loop: null,
     };
     capture = current;
@@ -101,6 +104,8 @@ async function startCapture(targetId, width, height, generation) {
             if (capture !== current || current.stopped) break;
             if (frame.timestamp < current.minimumTimestampUs) continue;
             encodingFrame = frameForViewport(frame, width, height);
+            current.latestFrame?.close();
+            current.latestFrame = frame.clone();
             if (!encodingFrame) {
               // Only native YUV even-alignment is correctable. Keep unexpected
               // source geometry terminal without changing viewport or density.
@@ -160,6 +165,12 @@ async function startCapture(targetId, width, height, generation) {
                 );
                 continue;
               }
+              if (keyFrame) void state.encoder.flush().catch((error) => {
+                if (error?.name !== "AbortError" && capture === current && encoders.get(state.quality) === state && !state.failed) {
+                  state.failed = true;
+                  nativeVideoPacket(JSON.stringify({ error: "Native video encoder stopped", streamId: state.streamId }));
+                }
+              });
               if (keyFrame) state.lastKeyTimestamp = frame.timestamp;
               state.forceKey = false;
             }
@@ -241,6 +252,7 @@ async function addEncoder(quality, streamId, bitrate, fps) {
       state = {
         streamId,
         codec: configuration.codec,
+        quality,
         sequence: 0,
         pending: new Set(),
         forceKey: true,
@@ -343,6 +355,27 @@ function requestKeyFrame(quality) {
     // can keep consuming an intact in-flight chain until that key is encoded.
     // Preserve any existing needsKey from actual output loss or source reset.
     state.forceKey = true;
+    if (capture?.latestFrame && state.pending.size < 2 && state.encoder.encodeQueueSize < 2 && !state.frameGenerations.has(capture.latestFrame.timestamp)) {
+      const frame = capture.latestFrame;
+      const adjusted = frameForViewport(frame, capture.width, capture.height);
+      if (adjusted) {
+        try {
+          state.frameGenerations.set(frame.timestamp, capture.generation);
+          state.encoder.encode(adjusted, { keyFrame: true });
+          void state.encoder.flush().catch((error) => {
+            if (error?.name !== "AbortError" && encoders.get(quality) === state && !state.failed) {
+              state.failed = true;
+              nativeVideoPacket(JSON.stringify({ error: "Native video encoder stopped", streamId: state.streamId }));
+            }
+          });
+          state.lastEncodedTimestampUs = frame.timestamp;
+          state.lastKeyTimestamp = frame.timestamp;
+          state.forceKey = false;
+        } finally {
+          if (adjusted !== frame) adjusted.close();
+        }
+      }
+    }
   }
 }
 /** Release producer pressure for this exact stream/sequence, including refused stale packets. */
@@ -354,6 +387,8 @@ function acknowledge(streamId, sequence) {
 function resetCapture(generation, minimumTimestampUs) {
   if (!capture) return;
   if (generation < capture.generation) return;
+  capture.latestFrame?.close();
+  capture.latestFrame = null;
   capture.generation = generation;
   capture.minimumTimestampUs = minimumTimestampUs;
   for (const state of encoders.values()) {
