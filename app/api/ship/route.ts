@@ -11,7 +11,7 @@ import type { ShipRequest } from "@/lib/workspace-ship-types";
  * @apiContract workspaceShipGet
  * @apiUsage Preview a ship operation.
  * @apiInputs Provide host, projectPath and path on the daemon machine.
- * @apiInvariants The host checks the requested project and workspace.
+ * @apiInvariants The host reports an existing open pull request when found; lookup failure is distinct from absence and does not block local shipping.
  * @apiEffects Returns a preview snapshot; it does not start shipping.
  * @apiRecovery Refresh the preview if repository state changes.
  */
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
  * @apiContract workspaceShipPost
  * @apiUsage Start a ship job.
  * @apiInputs Send host and the ship input object for its project and workspace.
- * @apiInvariants The host validates ship preconditions; job acceptance is not completion.
+ * @apiInvariants The host validates ship preconditions; a failed post-push lookup retains the job preview's PR, while a successful empty lookup does not; job acceptance is not completion.
  * @apiEffects Starts a host job that may mutate Git and remote state.
  * @apiRecovery Poll job status and inspect repository state after an uncertain response before starting another job.
  */

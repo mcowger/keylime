@@ -279,7 +279,7 @@ export const ShipModeSchema = Type.Union(
   [Type.Literal("local"), Type.Literal("pr"), Type.Literal("pr-auto")],
   {
     description:
-      "Land locally, create a pull request, or create a pull request with auto-merge.",
+      "Land locally, create a pull request, or enable auto-merge on a new or existing pull request.",
   },
 );
 export const ShipMergeMethodSchema = Type.Union(
@@ -324,8 +324,15 @@ export const ShipPreviewSchema = Type.Object(
     github: Type.Object({
       repo: nullable(Type.String()),
       gh: literals("ok", "missing", "unauthenticated"),
+      prLookupError: Type.Union([Type.String(), Type.Null()], {
+        description:
+          "Pull request discovery error, or null if discovery did not fail. A failed lookup leaves the existence of a PR unknown.",
+      }),
     }),
-    pr: nullable(ShipPrSchema),
+    pr: Type.Union([ShipPrSchema, Type.Null()], {
+      description:
+        "Open pull request for the branch when found; null when none was found or discovery failed. Check github.prLookupError before interpreting null.",
+    }),
   },
   {
     description:
@@ -340,7 +347,8 @@ export const ShipRequestSchema = Type.Object(
     rebase: Type.Boolean(),
     pr: Type.Optional(
       Type.Object(PrDescriptionSchema.properties, {
-        description: "Required with nonempty title and body for PR modes.",
+        description:
+          "Required with nonempty title and body when creating a pull request; not required when auto-merging an existing open pull request.",
       }),
     ),
     mergeMethod: Type.Optional(

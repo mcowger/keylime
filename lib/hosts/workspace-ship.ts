@@ -142,6 +142,54 @@ async function ghState(cwd: string): Promise<ShipPreview["github"]["gh"]> {
   ghCache = { at: Date.now(), value };
   return value;
 }
+async function openPr(
+  cwd: string,
+  repo: string,
+  head: string,
+): Promise<ShipPr | null> {
+  const [owner, name] = repo.split("/");
+  const data = JSON.parse(
+    await command(cwd, "gh", [
+      "pr",
+      "list",
+      "--repo",
+      repo,
+      "--head",
+      head,
+      "--state",
+      "open",
+      "--json",
+      "number,url,autoMergeRequest,headRepositoryOwner,headRepository",
+      "--limit",
+      "100",
+    ]),
+  ) as {
+    number: number;
+    url: string;
+    autoMergeRequest?: unknown;
+    headRepositoryOwner: { login: string };
+    headRepository: { name: string };
+  }[];
+  const matches = data.filter(
+    (pr) =>
+      pr.headRepositoryOwner?.login.toLowerCase() === owner.toLowerCase() &&
+      pr.headRepository?.name.toLowerCase() === name.toLowerCase(),
+  );
+  if (matches.length > 1)
+    throw new Error("Multiple open pull requests found for this branch");
+  const pr = matches[0];
+  return pr
+    ? {
+        number: pr.number,
+        url: pr.url,
+        state: "open",
+        checks: "none",
+        autoMerge: !!pr.autoMergeRequest,
+        cleanup: false,
+        checkedAt: new Date().toISOString(),
+      }
+    : null;
+}
 export async function shipPreview(input: {
   projectPath: string;
   path: string;
@@ -282,6 +330,20 @@ export async function shipPreview(input: {
       if (temporary) fs.rmSync(temporary, { recursive: true, force: true });
     }
   }
+  let detected: ShipPr | null = null;
+  let prLookupError: string | null = null;
+  if (current && repo && gh === "ok") {
+    try {
+      detected = await openPr(input.path, repo, current);
+    } catch (error) {
+      prLookupError = `Pull request lookup failed: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+  const saved = records()[input.path]?.pr;
+  const pr =
+    detected && saved?.number === detected.number
+      ? { ...saved, ...detected, cleanup: saved.cleanup }
+      : detected;
   return {
     branch: current,
     base: baseBranch,
@@ -291,8 +353,8 @@ export async function shipPreview(input: {
     dirty: workspaceDirty,
     baseDirty,
     issues,
-    github: { repo, gh },
-    pr: records()[input.path]?.pr ?? null,
+    github: { repo, gh, prLookupError },
+    pr,
   };
 }
 function recover() {
@@ -492,12 +554,13 @@ export async function startShip(input: ShipRequest): Promise<ShipJob> {
     typeof input.cleanup !== "boolean" ||
     (input.mergeMethod !== undefined &&
       !["squash", "merge", "rebase"].includes(input.mergeMethod)) ||
-    (input.mode !== "local" &&
+    (input.pr !== undefined &&
       (!input.pr ||
         typeof input.pr.title !== "string" ||
         !input.pr.title.trim() ||
         typeof input.pr.body !== "string" ||
-        !input.pr.body.trim()))
+        !input.pr.body.trim())) ||
+    (input.mode === "pr" && !input.pr)
   )
     throw new HostOpError(400, "invalid_request", "Invalid ship request");
   const job = createJob(input, "ship", input.mode);
@@ -519,6 +582,12 @@ export async function startShip(input: ShipRequest): Promise<ShipJob> {
     const preview = await shipPreview(input);
     if (preview.dirty) throw new Error("Workspace has uncommitted changes");
     if (!preview.branch) throw new Error("Workspace is not on a branch");
+    if (input.mode === "pr" && preview.pr)
+      throw new Error("An open pull request already exists for this branch");
+    if (input.mode === "pr-auto" && !preview.pr && !input.pr)
+      throw new Error(
+        "A pull request title and body are required when no open pull request exists",
+      );
     if (input.rebase)
       await step(job, "rebase", async () => {
         try {
@@ -575,35 +644,65 @@ export async function startShip(input: ShipRequest): Promise<ShipJob> {
         );
       });
       await step(job, "createPr", async () => {
-        const url = await command(
+        if (!preview.github.repo || preview.github.gh !== "ok")
+          throw new Error(
+            "GitHub repository and authentication are required to ship a pull request",
+          );
+        let existing = await openPr(
           input.path,
-          "gh",
-          [
-            "pr",
-            "create",
-            "--base",
-            preview.base,
-            "--head",
-            preview.branch!,
-            "--title",
-            input.pr!.title,
-            "--body-file",
-            "-",
-          ],
-          input.pr!.body,
-          job,
-        );
-        const match = url.match(/https:\/\/[^\s]+\/pull\/(\d+)/);
-        if (!match) throw new Error("Could not parse created PR URL");
-        const pr: ShipPr = {
-          number: Number(match[1]),
-          url: match[0],
-          state: "open",
-          checks: "none",
-          autoMerge: input.mode === "pr-auto",
-          cleanup: input.cleanup,
-          checkedAt: new Date().toISOString(),
-        };
+          preview.github.repo,
+          preview.branch!,
+        ).catch(() => preview.pr);
+        if (existing && input.mode === "pr")
+          throw new Error(
+            "An open pull request already exists for this branch",
+          );
+        if (!existing) {
+          if (!input.pr)
+            throw new Error(
+              "A pull request title and body are required when no open pull request exists",
+            );
+          try {
+            const url = await command(
+              input.path,
+              "gh",
+              [
+                "pr",
+                "create",
+                "--base",
+                preview.base,
+                "--head",
+                preview.branch!,
+                "--title",
+                input.pr.title,
+                "--body-file",
+                "-",
+              ],
+              input.pr.body,
+              job,
+            );
+            const match = url.match(/https:\/\/[^\s]+\/pull\/(\d+)/);
+            if (!match) throw new Error("Could not parse created PR URL");
+            existing = {
+              number: Number(match[1]),
+              url: match[0],
+              state: "open",
+              checks: "none",
+              autoMerge: false,
+              cleanup: false,
+              checkedAt: new Date().toISOString(),
+            };
+          } catch (error) {
+            if (input.mode !== "pr-auto") throw error;
+            existing = await openPr(
+              input.path,
+              preview.github.repo,
+              preview.branch!,
+            ).catch(() => null);
+            if (!existing) throw error;
+          }
+        }
+        const pr: ShipPr = { ...existing, cleanup: input.cleanup };
         const all = records();
         all[input.path] = {
           projectPath: input.projectPath,
@@ -616,19 +715,26 @@ export async function startShip(input: ShipRequest): Promise<ShipJob> {
       });
       if (input.mode === "pr-auto")
         await step(job, "autoMerge", async () => {
-          await command(
-            input.path,
-            "gh",
-            [
-              "pr",
-              "merge",
-              String(job.pr!.number),
-              `--${input.mergeMethod ?? "squash"}`,
-              "--auto",
-            ],
-            undefined,
-            job,
-          );
+          if (!job.pr!.autoMerge)
+            await command(
+              input.path,
+              "gh",
+              [
+                "pr",
+                "merge",
+                String(job.pr!.number),
+                `--${input.mergeMethod ?? "squash"}`,
+                "--auto",
+              ],
+              undefined,
+              job,
+            );
+          job.pr!.autoMerge = true;
+          const all = records();
+          if (all[input.path]?.pr.number === job.pr!.number) {
+            all[input.path].pr.autoMerge = true;
+            save(prFile(), all);
+          }
         });
     }
   });

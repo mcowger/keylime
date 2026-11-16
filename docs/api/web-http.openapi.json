@@ -82325,7 +82325,7 @@
     },
     "/api/ship": {
       "get": {
-        "description": "### Usage\n\nPreview a ship operation.\n\n### Inputs\n\nProvide host, projectPath and path on the daemon machine.\n\n### Invariants\n\nThe host checks the requested project and workspace.\n\n### Effects\n\nReturns a preview snapshot; it does not start shipping.\n\n### Recovery\n\nRefresh the preview if repository state changes.",
+        "description": "### Usage\n\nPreview a ship operation.\n\n### Inputs\n\nProvide host, projectPath and path on the daemon machine.\n\n### Invariants\n\nThe host reports an existing open pull request when found; lookup failure is distinct from absence and does not block local shipping.\n\n### Effects\n\nReturns a preview snapshot; it does not start shipping.\n\n### Recovery\n\nRefresh the preview if repository state changes.",
         "operationId": "workspaceShipGet",
         "parameters": [
           {
@@ -82409,6 +82409,17 @@
                             }
                           ]
                         },
+                        "prLookupError": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Pull request discovery error, or null if discovery did not fail. A failed lookup leaves the existence of a PR unknown."
+                        },
                         "repo": {
                           "anyOf": [
                             {
@@ -82420,7 +82431,7 @@
                           ]
                         }
                       },
-                      "required": ["repo", "gh"],
+                      "required": ["repo", "gh", "prLookupError"],
                       "type": "object"
                     },
                     "issues": {
@@ -82501,7 +82512,8 @@
                         {
                           "type": "null"
                         }
-                      ]
+                      ],
+                      "description": "Open pull request for the branch when found; null when none was found or discovery failed. Check github.prLookupError before interpreting null."
                     }
                   },
                   "required": [
@@ -82802,13 +82814,13 @@
         "x-client-semantics": {
           "Effects": "Returns a preview snapshot; it does not start shipping.",
           "Inputs": "Provide host, projectPath and path on the daemon machine.",
-          "Invariants": "The host checks the requested project and workspace.",
+          "Invariants": "The host reports an existing open pull request when found; lookup failure is distinct from absence and does not block local shipping.",
           "Recovery": "Refresh the preview if repository state changes.",
           "Usage": "Preview a ship operation."
         }
       },
       "post": {
-        "description": "### Usage\n\nStart a ship job.\n\n### Inputs\n\nSend host and the ship input object for its project and workspace.\n\n### Invariants\n\nThe host validates ship preconditions; job acceptance is not completion.\n\n### Effects\n\nStarts a host job that may mutate Git and remote state.\n\n### Recovery\n\nPoll job status and inspect repository state after an uncertain response before starting another job.",
+        "description": "### Usage\n\nStart a ship job.\n\n### Inputs\n\nSend host and the ship input object for its project and workspace.\n\n### Invariants\n\nThe host validates ship preconditions; a failed post-push lookup retains the job preview's PR, while a successful empty lookup does not; job acceptance is not completion.\n\n### Effects\n\nStarts a host job that may mutate Git and remote state.\n\n### Recovery\n\nPoll job status and inspect repository state after an uncertain response before starting another job.",
         "operationId": "workspaceShipPost",
         "requestBody": {
           "content": {
@@ -82857,13 +82869,13 @@
                             "type": "string"
                           }
                         ],
-                        "description": "Land locally, create a pull request, or create a pull request with auto-merge."
+                        "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
                       },
                       "path": {
                         "type": "string"
                       },
                       "pr": {
-                        "description": "Required with nonempty title and body for PR modes.",
+                        "description": "Required with nonempty title and body when creating a pull request; not required when auto-merging an existing open pull request.",
                         "properties": {
                           "body": {
                             "type": "string"
@@ -82952,7 +82964,7 @@
                           "type": "string"
                         }
                       ],
-                      "description": "Land locally, create a pull request, or create a pull request with auto-merge."
+                      "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
                     },
                     "path": {
                       "type": "string"
@@ -83422,7 +83434,7 @@
         "x-client-semantics": {
           "Effects": "Starts a host job that may mutate Git and remote state.",
           "Inputs": "Send host and the ship input object for its project and workspace.",
-          "Invariants": "The host validates ship preconditions; job acceptance is not completion.",
+          "Invariants": "The host validates ship preconditions; a failed post-push lookup retains the job preview's PR, while a successful empty lookup does not; job acceptance is not completion.",
           "Recovery": "Poll job status and inspect repository state after an uncertain response before starting another job.",
           "Usage": "Start a ship job."
         }
@@ -83503,7 +83515,7 @@
                           "type": "string"
                         }
                       ],
-                      "description": "Land locally, create a pull request, or create a pull request with auto-merge."
+                      "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
                     },
                     "path": {
                       "type": "string"
@@ -84058,7 +84070,7 @@
                           "type": "string"
                         }
                       ],
-                      "description": "Land locally, create a pull request, or create a pull request with auto-merge."
+                      "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
                     },
                     "path": {
                       "type": "string"

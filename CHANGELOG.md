@@ -36,6 +36,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 - `bun run dev` replaces the separate development launchers with a seeded hot-reloading web server and host daemon in an isolated temporary environment. `--port` selects the port; temporary files are retained after shutdown
 - Touch terminals have an accessory row for Escape, Tab, Ctrl, Ctrl-C and arrow keys; Ctrl applies to the next typed key
 - Paseo workspace setup commands can run as blocking or background jobs, with background status and logs available after workspace creation
+- Ship can detect an existing open pull request and enable auto-merge on it without creating a duplicate
 
 ### Changed
 - Explicit skill prompts start collapsed; select the header to show their full instructions.

@@ -119,7 +119,7 @@ export function ShipDialog({
         setPreview(value);
         setRebase(value.behind > 0);
         if (value.baseDirty && value.github.gh === "ok" && value.github.repo)
-          setMode("pr");
+          setMode(value.pr?.state === "open" ? "pr-auto" : "pr");
         if (value.issues.length) return;
         return sendAgentCommand<{ plan: CommitPlan | null }>(sessionId, {
           type: "commit_plan",
@@ -143,6 +143,7 @@ export function ShipDialog({
       !open ||
       mode === "local" ||
       !preview ||
+      (mode === "pr-auto" && preview.pr?.state === "open") ||
       preview.issues.length ||
       plan === undefined ||
       (plan === null && preview.ahead === 0) ||
@@ -195,7 +196,7 @@ export function ShipDialog({
             mode,
             rebase,
             cleanup,
-            ...(mode !== "local" ? { pr, mergeMethod } : {}),
+            ...(mode !== "local" ? { mergeMethod, ...(pr ? { pr } : {}) } : {}),
           },
         }),
         signal,
@@ -264,6 +265,9 @@ export function ShipDialog({
     : preview.github.gh !== "ok"
       ? `GitHub CLI: ${preview.github.gh}`
       : null;
+  const existingPr = preview?.pr?.state === "open";
+  const openPrReason =
+    githubReason ?? (existingPr ? "An open PR already exists" : null);
   const nothing = plan === null && preview?.ahead === 0;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -325,7 +329,7 @@ export function ShipDialog({
         )}
         {preview && plan !== undefined && !job && (
           <div style={{ display: "grid", gap: 14, marginTop: 16 }}>
-            {nothing && (
+            {nothing && !(mode === "pr-auto" && existingPr) && (
               <p
                 style={{ margin: 0, color: "var(--text-muted)", fontSize: 13 }}
               >
@@ -397,7 +401,7 @@ export function ShipDialog({
               label={`Rebase first (${preview.behind} behind ${preview.base})`}
             />
             <fieldset
-              disabled={working || !!nothing}
+              disabled={working || (!!nothing && !existingPr)}
               style={{
                 display: "grid",
                 gap: 8,
@@ -438,16 +442,16 @@ export function ShipDialog({
                   : ""}
               </label>
               <label
-                title={githubReason ?? undefined}
+                title={openPrReason ?? undefined}
                 style={{ display: "flex", alignItems: "center", gap: 8 }}
               >
                 <input
                   type="radio"
                   checked={mode === "pr"}
-                  disabled={!!githubReason}
+                  disabled={!!openPrReason}
                   onChange={() => setMode("pr")}
                 />{" "}
-                Open PR{githubReason ? ` (${githubReason})` : ""}
+                Open PR{openPrReason ? ` (${openPrReason})` : ""}
               </label>
               <label
                 title={githubReason ?? undefined}
@@ -459,10 +463,17 @@ export function ShipDialog({
                   disabled={!!githubReason}
                   onChange={() => setMode("pr-auto")}
                 />{" "}
-                PR + auto-merge
+                PR + auto-merge{githubReason ? ` (${githubReason})` : ""}
               </label>
             </fieldset>
+            {preview.github.prLookupError && (
+              <Alert
+                variant="warning"
+                description={`${preview.github.prLookupError}. The branch may already have an open PR.`}
+              />
+            )}
             {mode !== "local" &&
+              !(mode === "pr-auto" && existingPr) &&
               (prLoading ? (
                 <p
                   role="status"
@@ -654,9 +665,11 @@ export function ShipDialog({
                 working ||
                 !preview ||
                 plan === undefined ||
-                !!nothing ||
+                (!!nothing && !(mode === "pr-auto" && existingPr)) ||
                 (mode === "local" && !!preview?.baseDirty) ||
-                (mode !== "local" && (!pr || !!githubReason))
+                (mode !== "local" &&
+                  (!!githubReason ||
+                    (!pr && !(mode === "pr-auto" && existingPr))))
               }
               onClick={() => void ship()}
             >

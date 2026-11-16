@@ -11,6 +11,91 @@ type Command = {
   plannedMessages: string[];
 };
 
+test("PR lookup failure warns but leaves all paths available", async () => {
+  const originalFetch = globalThis.fetch;
+  const commands: string[] = [];
+  globalThis.fetch = Object.assign(
+    async (url: Parameters<typeof fetch>[0], init: RequestInit = {}) => {
+      if (String(url).startsWith("/api/ship?"))
+        return Response.json({
+          branch: "work",
+          base: "main",
+          baseCheckout: "/repo",
+          ahead: 1,
+          behind: 0,
+          dirty: false,
+          baseDirty: false,
+          issues: [],
+          pr: null,
+          github: {
+            repo: "owner/repo",
+            gh: "ok",
+            prLookupError: "Pull request lookup failed: rate limit exceeded",
+          },
+        });
+      const command = JSON.parse(String(init.body)) as Command;
+      commands.push(command.type);
+      return Response.json({
+        success: true,
+        data:
+          command.type === "commit_plan"
+            ? { plan: null }
+            : { title: "Feature", body: "Details" },
+      });
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+  try {
+    const view = render(
+      React.createElement(ShipDialog, {
+        open: true,
+        onOpenChange() {},
+        host: "local",
+        projectPath: "/repo",
+        path: "/work",
+        sessionId: "session",
+        onAskAgentToResolve: async () => {},
+      }),
+    );
+    await view.findByText(/Pull request lookup failed: rate limit exceeded/);
+    assert.equal(
+      (view.getByRole("radio", { name: /Open PR/ }) as HTMLInputElement)
+        .disabled,
+      false,
+    );
+    assert.equal(
+      (
+        view.getByRole("radio", {
+          name: /PR \+ auto-merge/,
+        }) as HTMLInputElement
+      ).disabled,
+      false,
+    );
+    assert.equal(
+      (view.getByRole("radio", { name: /Land locally/ }) as HTMLInputElement)
+        .disabled,
+      false,
+    );
+    assert.equal(
+      (view.getByRole("button", { name: "Ship" }) as HTMLButtonElement)
+        .disabled,
+      false,
+    );
+    assert.deepEqual(commands, ["commit_plan"]);
+    fireEvent.click(view.getByRole("radio", { name: /PR \+ auto-merge/ }));
+    await view.findByLabelText("PR description");
+    assert.equal(
+      (view.getByRole("button", { name: "Ship" }) as HTMLButtonElement)
+        .disabled,
+      false,
+    );
+    assert.deepEqual(commands, ["commit_plan", "generate_pr_description"]);
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("ship loads a plan and submits edited commit messages", async () => {
   const originalFetch = globalThis.fetch;
   const commands: Command[] = [];
@@ -153,6 +238,139 @@ test("PR generation waits for the commit plan when the base is dirty", async () 
     );
     await view.findByLabelText("PR description");
     assert.deepEqual(commands[1].plannedMessages, ["Add feature"]);
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("an existing open PR disables Open PR and can be auto-merged without a description", async () => {
+  const originalFetch = globalThis.fetch;
+  const commands: string[] = [];
+  let submitted: Record<string, unknown> | undefined;
+  globalThis.fetch = Object.assign(
+    async (url: Parameters<typeof fetch>[0], init: RequestInit = {}) => {
+      const path = String(url);
+      if (path.startsWith("/api/ship?"))
+        return Response.json({
+          branch: "work",
+          base: "main",
+          baseCheckout: "/repo",
+          ahead: 0,
+          behind: 0,
+          dirty: false,
+          baseDirty: true,
+          issues: [],
+          github: { repo: "owner/repo", gh: "ok" },
+          pr: {
+            number: 42,
+            url: "https://github.com/owner/repo/pull/42",
+            state: "open",
+            checks: "none",
+            autoMerge: false,
+            cleanup: false,
+            checkedAt: "2026-01-01T00:00:00Z",
+          },
+        });
+      if (path.startsWith("/api/agent/")) {
+        const command = JSON.parse(String(init.body)) as Command;
+        commands.push(command.type);
+        if (command.type === "commit_plan")
+          return Response.json({ success: true, data: { plan: null } });
+        throw new Error(`Unexpected command ${command.type}`);
+      }
+      if (path === "/api/ship") {
+        submitted = JSON.parse(String(init.body)).input;
+        return Response.json({
+          id: "job",
+          status: "failed",
+          steps: [],
+          error: "Stopped",
+          logs: "",
+        });
+      }
+      throw new Error(`Unexpected request ${path}`);
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+  try {
+    const view = render(
+      React.createElement(ShipDialog, {
+        open: true,
+        onOpenChange() {},
+        host: "local",
+        projectPath: "/repo",
+        path: "/work",
+        sessionId: "session",
+        onAskAgentToResolve: async () => {},
+      }),
+    );
+    const openPr = (await view.findByRole("radio", {
+      name: /Open PR/,
+    })) as HTMLInputElement;
+    const autoMerge = view.getByRole("radio", {
+      name: "PR + auto-merge",
+    }) as HTMLInputElement;
+    assert.equal(openPr.disabled, true);
+    assert.equal(autoMerge.disabled, false);
+    assert.equal(autoMerge.checked, true);
+    assert.equal(view.queryByLabelText("PR description"), null);
+    fireEvent.click(view.getByRole("button", { name: "Ship" }));
+    await waitFor(() => assert.ok(submitted));
+    assert.equal(submitted!.mode, "pr-auto");
+    assert.equal("pr" in submitted!, false);
+    assert.deepEqual(commands, ["commit_plan"]);
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a closed PR does not disable Open PR", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = Object.assign(
+    async (url: Parameters<typeof fetch>[0]) => {
+      if (String(url).startsWith("/api/ship?"))
+        return Response.json({
+          branch: "work",
+          base: "main",
+          baseCheckout: "/repo",
+          ahead: 1,
+          behind: 0,
+          dirty: false,
+          baseDirty: false,
+          issues: [],
+          github: { repo: "owner/repo", gh: "ok" },
+          pr: {
+            number: 42,
+            url: "https://github.com/owner/repo/pull/42",
+            state: "closed",
+            checks: "none",
+            autoMerge: false,
+            cleanup: false,
+            checkedAt: "2026-01-01T00:00:00Z",
+          },
+        });
+      return Response.json({ success: true, data: { plan: null } });
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+  try {
+    const view = render(
+      React.createElement(ShipDialog, {
+        open: true,
+        onOpenChange() {},
+        host: "local",
+        projectPath: "/repo",
+        path: "/work",
+        sessionId: "session",
+        onAskAgentToResolve: async () => {},
+      }),
+    );
+    const openPr = (await view.findByRole("radio", {
+      name: "Open PR",
+    })) as HTMLInputElement;
+    assert.equal(openPr.disabled, false);
   } finally {
     cleanup();
     globalThis.fetch = originalFetch;
