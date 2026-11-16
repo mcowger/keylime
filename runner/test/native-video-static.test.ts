@@ -10,10 +10,13 @@ test.each([true, false])("static capture supplies keyframes when frame precedes 
   let timerCleared = false;
   const consumed = Promise.withResolvers<void>();
   class Frame {
-    timestamp = 1000000;
+    timestamp = 1731607680723;
     displayWidth = 640;
     displayHeight = 480;
     format = "I420";
+    constructor(source?: Frame, init?: { timestamp?: number }) {
+      this.timestamp = init?.timestamp ?? source?.timestamp ?? this.timestamp;
+    }
     clone() { consumed.resolve(); return new Frame(); }
     close() {}
   }
@@ -25,7 +28,7 @@ test.each([true, false])("static capture supplies keyframes when frame precedes 
     configure() {}
     encode(frame: Frame) { this.pending.push(frame); }
     async flush() {
-      for (const frame of this.pending.splice(0)) this.callbacks.output({ timestamp: frame.timestamp, type: "key", byteLength: 3, copyTo(bytes: Uint8Array) { bytes.set([1, 2, 3]); } }, {});
+      for (const frame of this.pending.splice(0)) this.callbacks.output({ timestamp: frame.timestamp > 1e12 ? frame.timestamp - 1731607463005 : frame.timestamp, type: "key", byteLength: 3, copyTo(bytes: Uint8Array) { bytes.set([1, 2, 3]); } }, {});
     }
     close() {}
   }
@@ -55,6 +58,7 @@ test.each([true, false])("static capture supplies keyframes when frame precedes 
   expect(packets.filter((packet) => packet.type === "key")).toHaveLength(1);
   runInContext('acknowledge("stream", 1); requestKeyFrame("medium")', ctx);
   expect(packets.filter((packet) => packet.type === "key")).toHaveLength(2);
+  expect(packets.filter((packet) => packet.type === "key").map((packet) => packet.timestampUs)).toEqual([1731607680723, 1731607680723]);
   reportProgress();
   expect(packets).toContainEqual(expect.objectContaining({ type: "diagnostic", stage: "capture", event: "first-frame", width: 640, height: 480 }));
   expect(packets).toContainEqual(expect.objectContaining({ type: "diagnostic", stage: "encoder", event: "first-output", key: true, bytes: 3 }));

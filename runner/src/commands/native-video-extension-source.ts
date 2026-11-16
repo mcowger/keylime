@@ -174,7 +174,8 @@ async function startCapture(targetId, width, height, generation) {
                 continue;
               }
               state.lastEncodedTimestampUs = frame.timestamp;
-              state.frameGenerations.set(frame.timestamp, current.generation);
+              const encoderTimestamp = ++state.encoderTimestamp;
+              state.frameGenerations.set(encoderTimestamp, { generation: current.generation, timestampUs: frame.timestamp });
               // encodeQueueSize drops when the codec dequeues a frame, not when it
               // outputs, so a slow encode keeps more frames in flight than the gate
               // above admits. Bound by one second at the 60fps ceiling, the host's
@@ -185,7 +186,8 @@ async function startCapture(targetId, width, height, generation) {
               const keyFrame =
                 state.forceKey || frame.timestamp - state.lastKeyTimestamp >= 1000000;
               try {
-                state.encoder.encode(encodingFrame, { keyFrame });
+                const input = new VideoFrame(encodingFrame, { timestamp: encoderTimestamp });
+                try { state.encoder.encode(input, { keyFrame }); } finally { input.close(); }
                 state.framesEncoded++;
               } catch {
                 // A synchronous codec rejection belongs to this cohort, just
@@ -304,6 +306,9 @@ async function addEncoder(quality, streamId, bitrate, fps) {
         needsKey: true,
         configuration,
         frameGenerations: new Map(),
+        // Chromium may rebase large native capture timestamps. Small unique input
+        // timestamps identify outputs; the map preserves source time and generation.
+        encoderTimestamp: 0,
         failed: false,
         framesEncoded: 0, outputs: 0, packets: 0, inactive: 0, backpressure: 0,
         rateLimited: 0, staleOutputs: 0, outputBackpressure: 0, awaitingKey: 0,
@@ -314,7 +319,8 @@ async function addEncoder(quality, streamId, bitrate, fps) {
           if (!capture || encoders.get(quality) !== state || state.failed) return;
           state.outputs++;
           if (state.outputs === 1) diagnostic("encoder", "first-output", { quality, key: chunk.type === "key", bytes: chunk.byteLength });
-          const generation = state.frameGenerations.get(chunk.timestamp);
+          const source = state.frameGenerations.get(chunk.timestamp);
+          const generation = source?.generation;
           state.frameGenerations.delete(chunk.timestamp);
           if (chunk.byteLength > 2097152) {
             diagnostic("encoder", "packet-size-error", { quality, bytes: chunk.byteLength });
@@ -347,7 +353,7 @@ async function addEncoder(quality, streamId, bitrate, fps) {
               streamId,
               captureGeneration: generation,
               sequence,
-              timestampUs: chunk.timestamp,
+              timestampUs: source.timestampUs,
               type: chunk.type,
               codec: state.codec,
               width: capture.width,
@@ -408,13 +414,15 @@ function requestKeyFrame(quality) {
     // can keep consuming an intact in-flight chain until that key is encoded.
     // Preserve any existing needsKey from actual output loss or source reset.
     state.forceKey = true;
-    if (capture?.latestFrame && state.pending.size < 2 && state.encoder.encodeQueueSize < 2 && !state.frameGenerations.has(capture.latestFrame.timestamp)) {
+    if (capture?.latestFrame && state.pending.size < 2 && state.encoder.encodeQueueSize < 2) {
       const frame = capture.latestFrame;
       const adjusted = frameForViewport(frame, capture.width, capture.height);
       if (adjusted) {
         try {
-          state.frameGenerations.set(frame.timestamp, capture.generation);
-          state.encoder.encode(adjusted, { keyFrame: true });
+          const encoderTimestamp = ++state.encoderTimestamp;
+          state.frameGenerations.set(encoderTimestamp, { generation: capture.generation, timestampUs: frame.timestamp });
+          const input = new VideoFrame(adjusted, { timestamp: encoderTimestamp });
+          try { state.encoder.encode(input, { keyFrame: true }); } finally { input.close(); }
           state.framesEncoded++;
           void state.encoder.flush().catch((error) => {
             if (error?.name !== "AbortError" && encoders.get(quality) === state && !state.failed) {

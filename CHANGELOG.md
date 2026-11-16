@@ -14,6 +14,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The Browser workspace tab streams encoded Chromium video when available, with snapshot mode for unsupported or already-running browsers.
 - Encoded browser video delivers keyframes for static pages and newly attached viewers.
 - Browser video logs capture, encoder, delivery and viewer diagnostics without recording page contents or video data.
+- Fixed blank browser video caused by Chromium changing large capture timestamps during encoding. Encoder correlation now preserves capture timestamps separately.
 - Untitled chats show a temporary topic label extracted from the first prompt until a generated or manually chosen title is available.
 - Seeded development sessions include completed and in-progress tasks for testing composer indicators.
 - Mobile composer controls use square icon actions, reduced padding, and compact running activity indicators.
@@ -74,6 +75,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The Browser workspace tab streams encoded Chromium video when available, with snapshot mode for unsupported or already-running browsers
 - Encoded browser video delivers keyframes for static pages and newly attached viewers
 - Browser video logs capture, encoder, delivery and viewer diagnostics without recording page contents or video data
+- Fixed blank browser video caused by Chromium changing large capture timestamps during encoding. Encoder correlation now preserves capture timestamps separately
 
 ### Changed
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.
@@ -228,6 +230,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Project display names no longer reset while the field is being edited; saves are debounced
 - Agent chat Markdown uses the same compact text and styles as tool output
 - Skill autocomplete matches new-session skill entries by their unprefixed name
+- Browser video frames are now correlated with capture timestamps using separate encoder timestamps, preventing blank video from Chromium timestamp rewrites
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
