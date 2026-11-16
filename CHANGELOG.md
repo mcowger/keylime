@@ -63,6 +63,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Ship opens as a per-workspace overlay instead of a global dialog, allowing sidebar workspace switching while the commit plan, PR description or Ship job runs. Returning to a workspace restores its Ship progress and edits. Each workspace and host has its own Ship flow
 - Ship dialog changed its close button to Close while work or a job is active, and Cancel otherwise
 - Seeded development sessions include an agent chat exchange for checking incoming and outgoing Markdown
+- `bun run dev -- --browser-fixture` starts the live Chromium viewer fixture alongside the seeded development server
 
 ### Changed
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.
@@ -95,6 +96,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The Ship workspace action uses an icon with an accessible label
 - The composer task button uses a checklist icon instead of a plain checkmark
 - The Ship workspace dialog moved from a global modal to a per-workspace overlay so the sidebar stays usable during Ship operations
+- `bun run dev` no longer starts the browser fixture by default; pass `--browser-fixture` to enable it
 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen

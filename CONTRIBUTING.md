@@ -18,7 +18,7 @@ bun runner/scripts/use-omp-build.ts && (cd runner && bun install --frozen-lockfi
 bun run dev   # seeded development server; prints its URL
 ```
 
-The dev browser fixture uses the installed runner dependencies but does not need
+The optional dev browser fixture uses the installed runner dependencies but does not need
 a compiled runner. For other live sessions and model/auth features, build it with
 `bun runner/scripts/build-binary.ts`. Keylime finds
 `runner/release/keylime-omp-<os>-<arch>` by itself (`KEYLIME_OMP_BIN` overrides it).
@@ -30,11 +30,12 @@ Worktrees created with the repository's Paseo setup copy ignored `runner/vendor/
 
 ```bash
 bun run dev                 # seeded, random free loopback port
+bun run dev -- --browser-fixture  # also start the live Chromium viewer fixture
 ```
 
 Use the printed URL for browser checks. Avoid a fixed port when running multiple worktrees.
 
-Wait for `[dev] Browser fixture ready`, then open the printed URL. In the
+With `--browser-fixture`, wait for `[dev] Browser fixture ready`, then open the printed URL. In the
 sidebar, open `atlas` and the `Plan the Atlas project` conversation. Select
 `Browser · Plan the Atlas project` in the workspace tabs (on mobile, open the
 workspace tab switcher first). The viewer shows a real headless Chromium tab
@@ -48,7 +49,7 @@ allow OMP to download Chromium into the isolated home on first use.
 Each invocation creates a randomly named temporary directory with its own home,
 agent configuration, XDG directories, and host socket. The launcher prints its
 directory and URL, starts the web server with HMR and a separate hot-reloading
-host daemon, and stops them and the browser fixture on Ctrl-C or if a child exits.
+host daemon, and stops them and any enabled browser fixture on Ctrl-C or if a child exits.
 Files stay in the temporary directory after shutdown for inspection; remove it
 manually when done.
 

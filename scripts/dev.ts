@@ -7,13 +7,14 @@ const { values } = parseArgs({
   args: Bun.argv.slice(2),
   options: {
     port: { type: "string" },
+    "browser-fixture": { type: "boolean" },
     help: { type: "boolean", short: "h" },
   },
   strict: true,
 });
 if (values.help) {
   console.log(
-    "Usage: bun run dev [--port <port>]\nDefaults to a free loopback port. Each run keeps its temporary home/config after exit.",
+    "Usage: bun run dev [--port <port>] [--browser-fixture]\nDefaults to a free loopback port. Each run keeps its temporary home/config after exit.",
   );
   process.exit(0);
 }
@@ -146,9 +147,10 @@ try {
       "--port",
       String(port),
     ]);
-    spawn(["runner/scripts/dev-browser-fixture.ts"], {
-      KEYLIME_UI_FIXTURE_ROOT: directory,
-    });
+    if (values["browser-fixture"])
+      spawn(["runner/scripts/dev-browser-fixture.ts"], {
+        KEYLIME_UI_FIXTURE_ROOT: directory,
+      });
     spawn(["--hot", "--no-clear-screen", "bin/keylime-host.ts"]);
   }
   await finished;
