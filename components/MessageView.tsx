@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { MarkdownBody } from "./MarkdownBody";
 import { ThinkingMarkdown } from "./ThinkingMarkdown";
+import { JavaScriptIcon, PythonIcon } from "./FileIcons";
 import { WorkspaceFileContext } from "@/lib/workspace-file-context";
 import { AgentLinkContext, agentLinkIds } from "../lib/agent-links";
 import { MessageCopyActions } from "./MessageCopyActions";
@@ -2071,6 +2072,10 @@ const ToolCallBlock = memo(
     const todoSummary =
       category === "todo" ? getTodoSummary(block.input) : null;
     const preview = getToolPreview(block);
+    const evalLanguage =
+      category === "code" && typeof block.input?.language === "string"
+        ? block.input.language.trim().toLowerCase()
+        : "";
     const intent =
       block.intent?.trim() ||
       (typeof block.input?.i === "string" ? block.input.i.trim() : "");
@@ -2103,7 +2108,7 @@ const ToolCallBlock = memo(
       : hubJobs
         ? hubJobs.map((job) => job.label).join(" · ")
         : null;
-    const rowPreview = hubPreview ?? preview;
+    const rowPreview = category === "code" ? "" : hubPreview ?? preview;
 
     const rawFilePath =
       semantic.isFile &&
@@ -2158,6 +2163,11 @@ const ToolCallBlock = memo(
             >
               {hubTool ?? block.toolName}
             </span>
+            {evalLanguage && (
+              <span className="activity-row-language" role="img" aria-label={evalLanguage === "py" ? "Python" : evalLanguage === "js" ? "JavaScript" : evalLanguage} title={evalLanguage === "py" ? "Python" : evalLanguage === "js" ? "JavaScript" : evalLanguage}>
+                {evalLanguage === "py" ? <PythonIcon size={14} /> : evalLanguage === "js" ? <JavaScriptIcon size={14} /> : <Code2 size={14} />}
+              </span>
+            )}
             <span className="activity-row-preview">
               {intent && intent !== rowPreview && (
                 <>{intent}{rowPreview && " · "}</>
@@ -2220,7 +2230,7 @@ const ToolCallBlock = memo(
                   {hubPreview ?? preview}
                 </span>
               ) : (
-                (hubPreview ?? preview)
+                rowPreview
               )}
             </span>
             {duration !== undefined && (

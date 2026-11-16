@@ -40,6 +40,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Paseo workspace setup commands can run as blocking or background jobs, with background status and logs available after workspace creation
 - Ship can detect an existing open pull request and enable auto-merge on it without creating a duplicate
 - Tool activity rows show available intent alongside their target
+- Eval activity rows display a Python or JavaScript icon before the tool intent
 
 ### Changed
 - Removed in-app key lime update checks and installation for the web server and host daemons. Update installations manually; runner downloads and local deployment remain available.

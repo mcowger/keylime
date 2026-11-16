@@ -332,6 +332,40 @@ test("expanded oversized user message can be collapsed again", (t) => {
   assert.equal(document.activeElement, toggle);
 });
 
+test("eval rows place language icons before the intent", () => {
+  for (const [toolName, language, label] of [
+    ["eval", "py", "Python"],
+    ["eval", "js", "JavaScript"],
+    ["tools.eval", "js", "JavaScript"],
+  ]) {
+    const view = render(
+      React.createElement(MessageView, {
+        isStreaming: true,
+        message: {
+          role: "assistant",
+          model: "test",
+          provider: "test",
+          content: [{
+            type: "toolCall",
+            toolCallId: "eval-call",
+            toolName,
+            intent: "Inspecting settings",
+            input: { language, code: "example()" },
+          }],
+        },
+      }),
+    );
+    const row = view.container.querySelector("button.activity-row-trigger")!;
+    const tool = row.querySelector(".activity-row-tool")!;
+    const icon = row.querySelector('[role="img"]')!;
+    assert.equal(tool.textContent, toolName);
+    assert.equal(tool.nextElementSibling, icon);
+    assert.equal(icon.getAttribute("aria-label"), label);
+    assert.equal(icon.nextElementSibling?.textContent, "Inspecting settings");
+    view.unmount();
+  }
+});
+
 test("expanded tool inputs follow streaming arguments without toggling output", () => {
   const code = "print('first')\nprint('complete')";
   const editInput = {
