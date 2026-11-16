@@ -269,6 +269,14 @@ export function ShipDialog({
   const openPrReason =
     githubReason ?? (existingPr ? "An open PR already exists" : null);
   const nothing = plan === null && preview?.ahead === 0;
+  const shipDisabled =
+    working ||
+    !preview ||
+    plan === undefined ||
+    (!!nothing && !(mode === "pr-auto" && existingPr)) ||
+    (mode === "local" && !!preview?.baseDirty) ||
+    (mode !== "local" &&
+      (!!githubReason || (!pr && !(mode === "pr-auto" && existingPr))));
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -657,20 +665,12 @@ export function ShipDialog({
                 border: "none",
                 borderRadius: "var(--radius-control)",
                 color: "var(--on-accent)",
-                cursor: working ? "wait" : "pointer",
+                cursor: working ? "wait" : shipDisabled ? "not-allowed" : "pointer",
+                opacity: shipDisabled ? 0.5 : 1,
                 fontSize: 13,
                 fontWeight: 600,
               }}
-              disabled={
-                working ||
-                !preview ||
-                plan === undefined ||
-                (!!nothing && !(mode === "pr-auto" && existingPr)) ||
-                (mode === "local" && !!preview?.baseDirty) ||
-                (mode !== "local" &&
-                  (!!githubReason ||
-                    (!pr && !(mode === "pr-auto" && existingPr))))
-              }
+              disabled={shipDisabled}
               onClick={() => void ship()}
             >
               {working ? "Shipping..." : "Ship"}

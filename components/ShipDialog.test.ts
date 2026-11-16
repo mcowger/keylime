@@ -222,6 +222,9 @@ test("PR generation waits for the commit plan when the base is dirty", async () 
     );
     await waitFor(() => assert.equal(commands.length, 1));
     assert.equal(commands[0].type, "commit_plan");
+    const ship = view.getByRole("button", { name: "Ship" }) as HTMLButtonElement;
+    assert.equal(ship.disabled, true);
+    assert.equal(ship.style.opacity, "0.5");
     finishPlan(
       Response.json({
         success: true,

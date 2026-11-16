@@ -42,6 +42,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Tool activity rows show available intent alongside their target
 
 ### Changed
+- Ship visibly disables its action while the commit plan is being generated.
 - Sidebar host headings use consistent sizing and a host icon; the only connected host shows projects without a heading, while offline hosts remain grouped.
 - Explicit skill prompts start collapsed; select the header to show their full instructions.
 - Reloading without a session link leaves projects unselected instead of activating the newest project.
@@ -59,6 +60,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Explicit skill prompts start collapsed; select the header to show their full instructions
 - Sidebar host headings use consistent sizing and a host icon; the only connected host shows projects without a heading, while offline hosts remain grouped
 - Development documentation now directs concurrent worktrees to use the printed random-port URL rather than a fixed port
+- Ship visibly disables its action while the commit plan is being generated
 
 ### Fixed
 - Markdown tables keep readable column widths on mobile and scroll horizontally when needed.
