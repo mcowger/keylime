@@ -118,12 +118,12 @@ function requireReady(host: Host): void {
     ? new HostOpError(
         409,
         "host_restart_required",
-        "Restart this machine's ompweb host daemon to join the cluster",
+        "Restart this machine's key lime host daemon to join the cluster",
       )
     : new HostOpError(
         409,
         "host_upgrade_required",
-        `Update ompweb on ${host.label} to join the cluster`,
+        `Update key lime on ${host.label} to join the cluster`,
       );
 }
 

@@ -104,7 +104,7 @@ const viaSocket =
     replyBehindOtherBytes: null,
   });
 const LOST =
-  "The connection to omp-web dropped before the answer arrived. The command may have run; check before sending it again.";
+  "The connection to key lime dropped before the answer arrived. The command may have run; check before sending it again.";
 /** transport_lost: the localized message, and the command may have run (the composer must not offer it again). */
 const isLost = (error: unknown) =>
   error instanceof TransportLostError &&
@@ -157,7 +157,7 @@ test("ws goes through the worker and maps errors like HTTP", async () => {
       !(error instanceof TransportLostError) &&
       !(error instanceof HostOfflineError) &&
       error instanceof Error &&
-      error.message === "Not sent: no connection to omp-web. Try again.",
+      error.message === "Not sent: no connection to key lime. Try again.",
   );
   assert.equal(
     new Set(commands.map((command) => command.req)).size,

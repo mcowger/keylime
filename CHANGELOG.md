@@ -1,12 +1,13 @@
 # Changelog
 
-All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this file.
+All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this file.
 
 ---
 
 ## [Unreleased]
 
-- Replaced the inherited ompweb logo and icons with the Keylime logo.
+- Replaced the inherited ompweb logo and icons with the key lime logo.
+- Updated the product name to key lime across the interface and documentation.
 
 ### Added
 - `bun run deploy:local:fast:follow` streams the fast deployment log and waits for its detached worker to finish.

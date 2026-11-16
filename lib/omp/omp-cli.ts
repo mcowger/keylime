@@ -55,7 +55,7 @@ function probeOmpBin(): string | null {
 
 /** What every caller that needs omp reports when resolveOmpBin finds none. */
 export const OMP_NOT_FOUND =
-  "ompweb's omp binary (ompweb-omp) not found. Reinstall ompweb or set OMP_WEB_OMP_BIN.";
+  "key lime's omp binary (ompweb-omp) not found. Reinstall key lime or set OMP_WEB_OMP_BIN.";
 
 /** Resolve ompweb's omp binary: OMP_WEB_OMP_BIN override, else the source checkout's build or the fetched runner
  * (see probeOmpBin). Returns null when none exists. A hit is cached while the file exists; a miss is re-probed after

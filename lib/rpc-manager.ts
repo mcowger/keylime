@@ -1964,7 +1964,7 @@ export class AgentSessionWrapper {
           type: "host_uri_result",
           id,
           isError: true,
-          error: `URI scheme \"${scheme}\" is not registered by omp-web`,
+          error: `URI scheme \"${scheme}\" is not registered by key lime`,
         });
         return;
       }

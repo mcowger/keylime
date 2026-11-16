@@ -1886,7 +1886,7 @@ export function ChatWindow({
                               fontFamily: "var(--font-mono)",
                             }}
                           >
-                            omp web
+                            key lime
                           </span>
                         </div>
                         <div

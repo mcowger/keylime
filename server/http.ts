@@ -210,9 +210,9 @@ export function renderIndex(html: string, request: Request): string {
     ),
   );
   return html
-    .replace("<title>omp web</title>", () => `<title>${name}</title>`)
+    .replace("<title>key lime</title>", () => `<title>${name}</title>`)
     .replace(
-      '<meta name="apple-mobile-web-app-title" content="omp web"',
+      '<meta name="apple-mobile-web-app-title" content="key lime"',
       () => `<meta name="apple-mobile-web-app-title" content="${name}"`,
     )
     .replace(

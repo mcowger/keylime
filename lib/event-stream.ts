@@ -400,7 +400,7 @@ class Transport {
         status: 503,
         body: {
           error:
-            "The connection to omp-web dropped before the answer arrived; the command may have run.",
+            "The connection to key lime dropped before the answer arrived; the command may have run.",
           code: "transport_lost",
         },
         via: "ws",

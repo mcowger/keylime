@@ -51,7 +51,7 @@ export async function getOutboxScope(sessionId: string): Promise<string> {
     });
     if (!result?.scope)
       throw new Error(
-        "The message cannot be saved until omp-web has confirmed this installation.",
+        "The message cannot be saved until key lime has confirmed this installation.",
       );
     rememberOutboxScope(result.scope);
     return result.scope;

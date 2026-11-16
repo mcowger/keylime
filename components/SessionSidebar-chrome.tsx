@@ -394,7 +394,7 @@ function OmpWebTitle() {
 
   const target = showVersion
     ? `v${process.env.OMP_WEB_PUBLIC_APP_VERSION ?? "0.0.0"}`
-    : "omp web";
+    : "key lime";
   const display = useScramble(target, scrambling, reducedMotion);
 
   const triggerScramble = useCallback(
@@ -452,13 +452,13 @@ function OmpWebTitle() {
           alignItems: "center",
           gap: 7,
         }}
-        title={showVersion ? "Show ompweb name" : "Show ompweb version"}
+        title={showVersion ? "Show key lime name" : "Show key lime version"}
       >
         <OmpWebLogo size={20} />
         {!scrambling && !showVersion ? (
           <span>
-            <span style={{ color: "var(--accent)" }}>omp</span>
-            <span style={{ color: "var(--text)" }}>web</span>
+            <span style={{ color: "var(--accent)" }}>key</span>{" "}
+            <span style={{ color: "var(--text)" }}>lime</span>
           </span>
         ) : (
           <span

@@ -1226,7 +1226,7 @@ test("freezeHostLinks closes every link socket with 1001, answers upgrades 503 a
   );
   assert.ok(refused);
   assert.equal(refused.status, 503);
-  assert.deepEqual(await refused.json(), { error: "omp-web is shutting down" });
+  assert.deepEqual(await refused.json(), { error: "key lime is shutting down" });
 });
 
 for (const [op, call, value] of [

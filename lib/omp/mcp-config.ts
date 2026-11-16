@@ -334,7 +334,7 @@ export function readMcpConfig(cwd: string): {
   if (!existsSync(resolved.path))
     return { ...resolved, config: { mcpServers: {} }, exists: false };
   if (statSync(resolved.path).size > MAX_MCP_CONFIG_BYTES)
-    throw new Error("MCP configuration is too large to edit in omp-web");
+    throw new Error("MCP configuration is too large to edit in key lime");
   let config: unknown;
   try {
     config = JSON.parse(readFileSync(resolved.path, "utf8"));

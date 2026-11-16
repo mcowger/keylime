@@ -34,7 +34,7 @@ worker.addEventListener("push", (event) => {
   }
   const shown = {
     type: data.type === "error" ? "error" : "info",
-    title: data.title || "omp web",
+    title: data.title || "key lime",
     body: data.body || "",
     tag: data.tag || "",
     sessionId: data.sessionId || "",

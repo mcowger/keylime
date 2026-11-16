@@ -378,7 +378,7 @@ test("local host shows both installed versions and a blocked candidate with its 
   );
   assert.ok(
     within(row).getByRole<HTMLButtonElement>("button", {
-      name: "Update ompweb host",
+      name: "Update key lime host",
     }).disabled,
   );
   // omp is read-only: it updates with ompweb.
@@ -386,7 +386,7 @@ test("local host shows both installed versions and a blocked candidate with its 
     within(row).queryByRole("button", { name: "Update omp runtime" }),
     null,
   );
-  within(row).getByText("Updated with ompweb");
+  within(row).getByText("Updated with key lime");
   assert.match(row.textContent!, /Current: 1\.0\.0/);
   assert.match(row.textContent!, /Current: 2\.0\.0/);
   assert.match(row.textContent!, /Available: 1\.1\.0/);
@@ -434,7 +434,7 @@ test("remote daemon update requires closing host sessions and targets only that 
   ]);
   const user = userEvent.setup();
   await user.click(
-    await screen.findByRole("button", { name: "Update ompweb host" }),
+    await screen.findByRole("button", { name: "Update key lime host" }),
   );
   assert.equal(posts.length, 0);
   assert.match(
@@ -452,7 +452,7 @@ test("remote daemon update requires closing host sessions and targets only that 
   await user.click(
     within(screen.getByRole("dialog")).getByRole("button", { name: "Update" }),
   );
-  await screen.findByText("Updating ompweb host to 1.1.0…");
+  await screen.findByText("Updating key lime host to 1.1.0…");
   assert.deepEqual(posts, [
     ["/api/hosts/h%2Fremote/updates", { target: "ompweb", version: "1.1.0" }],
   ]);
@@ -486,7 +486,7 @@ test("offline and protocol-incompatible hosts render unavailable rows without re
       allowAgentStart: false,
     }),
   ]);
-  assert.equal(screen.getAllByText("ompweb host").length, 2);
+  assert.equal(screen.getAllByText("key lime host").length, 2);
   assert.equal(screen.getAllByText("omp runtime").length, 2);
   screen.getByText("Updates unavailable while this host is offline.");
   screen.getByText(
@@ -596,7 +596,7 @@ for (const [lost, answer] of [
     await showHosts([hostRow()]);
     const user = userEvent.setup();
     await user.click(
-      await screen.findByRole("button", { name: "Update ompweb host" }),
+      await screen.findByRole("button", { name: "Update key lime host" }),
     );
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
@@ -630,12 +630,12 @@ test("an unknown update outcome keeps Update disabled until a status read succee
   const user = userEvent.setup();
   const updateButton = () =>
     screen.getByRole<HTMLButtonElement>("button", {
-      name: "Update ompweb host",
+      name: "Update key lime host",
     });
   assert.equal(
     (
       await screen.findByRole<HTMLButtonElement>("button", {
-        name: "Update ompweb host",
+        name: "Update key lime host",
       })
     ).disabled,
     false,
@@ -698,7 +698,7 @@ test("idle host checks stop, and a manual check bypasses cached release data", a
     return Response.json(updateInfo());
   });
   await showHosts([hostRow()]);
-  await screen.findByRole("button", { name: "Update ompweb host" });
+  await screen.findByRole("button", { name: "Update key lime host" });
   await act(() => delay(1100));
   assert.deepEqual(urls, ["/api/hosts/local/updates"]);
   await userEvent
@@ -731,13 +731,13 @@ test("reconnect polling is bounded and requires a status check before any retry"
     );
   });
   await showHosts([hostRow()]);
-  await screen.findByText("Updating ompweb host to 1.1.0…");
+  await screen.findByText("Updating key lime host to 1.1.0…");
   offset = 5 * 60 * 1000 + 1;
   await act(() => delay(1100));
   screen.getByText(/Stopped waiting after 5 minutes/);
   assert.ok(
     screen.getByRole<HTMLButtonElement>("button", {
-      name: "Update ompweb host",
+      name: "Update key lime host",
     }).disabled,
   );
   assert.equal(calls, 1);
@@ -800,7 +800,7 @@ test("a registry version that is not newer is not shown as an available candidat
   assert.equal(screen.queryByText(/^Available:/), null);
   assert.equal(
     screen.queryByRole("button", {
-      name: /^Update (ompweb host|omp runtime)$/,
+      name: /^Update (key lime host|omp runtime)$/,
     }),
     null,
   );
@@ -828,14 +828,14 @@ test("resident-session blocking stays readable with a disabled daemon update; th
   );
   assert.ok(
     screen.getByRole<HTMLButtonElement>("button", {
-      name: "Update ompweb host",
+      name: "Update key lime host",
     }).disabled,
   );
   assert.equal(
     screen.queryByRole("button", { name: "Update omp runtime" }),
     null,
   );
-  screen.getByText("Updated with ompweb");
+  screen.getByText("Updated with key lime");
 });
 
 test("sharing credentials is confirmed before it is turned on, and turned off at once", async (t) => {

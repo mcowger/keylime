@@ -284,7 +284,7 @@ test("test notifications are never recorded", (t) => {
   hub.publishNotification({
     type: "test",
     sessionId: "",
-    sessionName: "omp web",
+    sessionName: "key lime",
   });
   assert.deepEqual(store.listHistory(), []);
 });

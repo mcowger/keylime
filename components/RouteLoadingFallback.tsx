@@ -9,7 +9,7 @@ export function RouteLoadingFallback() {
       className="route-fallback"
       role="status"
       aria-busy="true"
-      aria-label="Loading omp web"
+      aria-label="Loading key lime"
     >
       <aside className="route-fallback-sidebar" aria-hidden="true">
         <div className="skeleton route-fallback-sidebar-title" />

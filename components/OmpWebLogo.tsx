@@ -1,6 +1,6 @@
 export default function OmpWebLogo({
   size = 20,
-  label = "Keylime logo",
+  label = "key lime logo",
 }: {
   size?: number;
   label?: string;

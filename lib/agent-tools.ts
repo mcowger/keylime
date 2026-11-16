@@ -81,7 +81,7 @@ export const AGENT_TOOL_DEFINITIONS: HostToolDefinition[] = [
   {
     name: "send_to_session",
     description:
-      "Send a message to another omp-web session by ID. If the target is not running it is resumed first, as when a user opens it. The delivered message is prefixed with the sending session's ID so the target transcript shows where it came from.",
+      "Send a message to another key lime session by ID. If the target is not running it is resumed first, as when a user opens it. The delivered message is prefixed with the sending session's ID so the target transcript shows where it came from.",
     parameters: {
       type: "object",
       properties: {

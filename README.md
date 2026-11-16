@@ -1,14 +1,14 @@
 <div align="center">
 
-<img src="public/icon.png" alt="Keylime logo" width="150">
+<img src="public/icon.png" alt="key lime logo" width="150">
 
-<h1>Keylime</h1>
+<h1>key lime</h1>
 
 <p>A personal, intentionally breaking OMP workspace.</p>
 
 </div>
 
-Keylime is Matt Cowger's independent, public continuation of [ompweb](https://github.com/ompweb-dev/ompweb), a browser workspace for the [oh-my-pi (OMP)](https://github.com/can1357/oh-my-pi) coding agent. It supports chatting with agents, browsing sessions and projects, configuring OMP, and inspecting files.
+key lime is Matt Cowger's independent, public continuation of [ompweb](https://github.com/ompweb-dev/ompweb), a browser workspace for the [oh-my-pi (OMP)](https://github.com/can1357/oh-my-pi) coding agent. It supports chatting with agents, browsing sessions and projects, configuring OMP, and inspecting files.
 
 ## Hard fork
 
@@ -23,25 +23,25 @@ This fork supports macOS and Linux only. Windows support is removed, with no com
 - Formatting uses `bun fmt`; typechecking uses `bun check`. ESLint and standalone TypeScript tooling are removed, with no lint gate.
 - The repository has been fully reformatted. Local release checks enforce formatting and typechecking.
 - All four GitHub Actions workflows are disabled, preserved as `.github/workflows/*.yml.disabled`. There are no automatic CI, builds, or releases.
-- Internal package names, CLI commands, and release URLs below still identify upstream. They do not install or publish Keylime's changes. Build this checkout using [Development](#development). Repository publication does not rename the runtime package or redirect runner downloads.
+- Internal package names, CLI commands, and release URLs below still identify upstream. They do not install or publish key lime's changes. Build this checkout using [Development](#development). Repository publication does not rename the runtime package or redirect runner downloads.
 
-![ompweb — live session demo](docs/demo.gif)
+![key lime — live session demo](docs/demo.gif)
 
 <details>
 <summary>Screenshots (light / dark)</summary>
 
-![ompweb — light theme](docs/screenshot-light.png)
+![key lime — light theme](docs/screenshot-light.png)
 
-![ompweb — dark theme](docs/screenshot-dark.png)
+![key lime — dark theme](docs/screenshot-dark.png)
 
 </details>
 
 ## Requirements
 
-- Supported platforms are macOS and glibc Linux on x64 and arm64. ompweb downloads its matching `ompweb-omp` build from its GitHub release, verifies its SHA-256, and stores it beside the single binary or under `~/.omp/agent/omp-web/omp/<version>/`. Run `ompweb fetch-omp` to fetch it explicitly.
+- Supported platforms are macOS and glibc Linux on x64 and arm64. key lime downloads its matching `ompweb-omp` build from its GitHub release, verifies its SHA-256, and stores it beside the single binary or under `~/.omp/agent/omp-web/omp/<version>/`. Run `ompweb fetch-omp` to fetch it explicitly.
 - [mise](https://mise.jdx.dev) manages the Bun runtime. Run `mise trust && mise install` in this checkout to install the pinned Bun version, then use `mise exec -- bun` if mise is not activated in your shell. The launcher, web server and host daemon all run on Bun; the native single binary embeds it.
 
-The **Steer**, **Delete** and **Edit** actions on a queued message are commands of the `ompweb-omp` channel (`promote_queued_message`, `remove_queued_message`). Deletion is confirmed by omp before the chip disappears; editing recalls text only after cancellation succeeds. A message that is no longer pending leaves the queue unchanged and displays a notice; ompweb does not send a duplicate steering message.
+The **Steer**, **Delete** and **Edit** actions on a queued message are commands of the `ompweb-omp` channel (`promote_queued_message`, `remove_queued_message`). Deletion is confirmed by omp before the chip disappears; editing recalls text only after cancellation succeeds. A message that is no longer pending leaves the queue unchanged and displays a notice; key lime does not send a duplicate steering message.
 
 The queue panel shows omp's own queue (`queuedMessages` in `get_state` and `queue_update` events), so every device viewing a session sees the same queued messages. **Stop** moves the text of messages still waiting in the queue back into the composer instead of letting the agent run them; a steer the model already picked up through live steering still runs.
 
@@ -69,22 +69,22 @@ installation on a physical phone works as expected behind Cloudflare Access.
 
 Turn on notifications in **Settings → Notifications**. Each browser keeps its own
 settings: which events notify (task finished, waiting for input, run failed,
-model switched automatically) and what happens while you use omp-web in another
+model switched automatically) and what happens while you use key lime in another
 tab (an in-app toast, or always a system notification). Nothing is shown for the
 session you are viewing. Clicking a notification opens its session.
 
-- **Push** reaches the browser even when no omp-web tab is open. It needs a
+- **Push** reaches the browser even when no key lime tab is open. It needs a
   secure context (HTTPS through your reverse proxy, or `localhost`), and the
-  omp-web server needs outbound HTTPS access to the browser vendors' push
-  services. omp-web generates its push (VAPID) keys on first use and stores them,
+  key lime server needs outbound HTTPS access to the browser vendors' push
+  services. key lime generates its push (VAPID) keys on first use and stores them,
   with the device list and the notification history, in its data directory
   (owner-only), so they survive restarts.
 - On **iPhone and iPad** (iOS 16.4 or later), push works only in the app added
   to the Home Screen.
 - In a secure context without push support, system notifications appear while
-  an omp-web tab is open. Over plain HTTP on a non-localhost address, browsers
+  an key lime tab is open. Over plain HTTP on a non-localhost address, browsers
   allow no system notifications: only the in-app toasts shown while you use
-  omp-web remain.
+  key lime remain.
 - Desktop browsers show notifications through the operating system's
   notification center. Push delivery needs the browser process running.
 
@@ -127,7 +127,7 @@ ompweb --version                           # Show version
 
 ### Password protection
 
-omp-web **never passes a plaintext password to the server**, because every
+key lime **never passes a plaintext password to the server**, because every
 `omp` session inherits the server's environment: an agent running `env` would
 print the password into its session file and send it to the model provider.
 
@@ -166,18 +166,18 @@ The service installers (`ompweb systemd install` and `ompweb launchd install`) a
 
 Forward WebSocket upgrades on `/api/events/link` (browsers) and `/api/hosts/link` (hosts); without the upgrade, a browser falls back to server-sent events after a few seconds. In nginx that means `proxy_http_version 1.1;`, `proxy_set_header Upgrade $http_upgrade;`, `proxy_set_header Connection "upgrade";`, and a `proxy_read_timeout` well above 30 s.
 
-Hosts that [use the server's provider logins](#use-the-servers-provider-logins-on-a-host) also call `/api/hosts/broker/`, authenticated by their host token. That path must reach ompweb without the proxy's own authentication (a proxy login page or `auth_request` would block the daemon), without response buffering (it carries a long-lived event stream; in nginx, `proxy_buffering off;`) and without redirects.
+Hosts that [use the server's provider logins](#use-the-servers-provider-logins-on-a-host) also call `/api/hosts/broker/`, authenticated by their host token. That path must reach key lime without the proxy's own authentication (a proxy login page or `auth_request` would block the daemon), without response buffering (it carries a long-lived event stream; in nginx, `proxy_buffering off;`) and without redirects.
 
 Cluster members also fetch this machine's omp configuration from `/api/hosts/cluster-config/manifest` and `/api/hosts/cluster-config/file/<hash>` (exactly these two paths, `<hash>` being 64 hexadecimal digits), authenticated by their host token and answering members only. Unlike the broker's prefix, they must be reachable at exactly these paths, without the proxy's own authentication and without redirects.
 
 ### Two services: the web server and the local daemon
 
-ompweb runs the web server and `ompweb host` as separate Bun processes. The daemon
+key lime runs the web server and `ompweb host` as separate Bun processes. The daemon
 runs this machine's `omp` sessions and links to the web server over loopback.
 The service installers (`ompweb systemd install` and `ompweb launchd install`)
 install both the web service and `ompweb-host`. Uninstall removes both.
 
-**Running ompweb in the foreground** (`ompweb` in a terminal, or
+**Running key lime in the foreground** (`ompweb` in a terminal, or
 `bunx --bun @kahme247/ompweb@latest`) installs no service, so keep
 `ompweb host` (with bunx: `bunx --bun @kahme247/ompweb@latest host`) running in a
 second terminal. Without it "This machine" stays offline. The web server writes
@@ -191,7 +191,7 @@ the daemon's link when it starts, so start the web server first.
   web service only; upgrades restart the daemon only when its link protocol version
   is outside the range the new release supports.
 - **First start after an upgrade:** if no daemon has linked after about 90 seconds,
-  ompweb shows a banner with the install command for your platform. It never installs
+  key lime shows a banner with the install command for your platform. It never installs
   services itself. Until the daemon runs, "This machine" shows offline and new
   sessions on it cannot start.
 - **It is a host like any other.** Rename "This machine" in **Settings → Hosts**
@@ -245,7 +245,7 @@ Each member uses this machine's omp configuration: models, MCP servers, skills, 
   files are written whole or not at all: a failure leaves the previous version in place. Every
   session start carries this machine's version, and a start on that member is refused with the reason when the
   files cannot be applied. A session recovered after a daemon restart, or
-  started by another ompweb server, runs on whatever is on the member's disk at that moment.
+  started by another key lime server, runs on whatever is on the member's disk at that moment.
   Sessions already running are not restarted. The applied files are readable by the daemon's
   user only.
 - **Plugins:** after the files, the member runs `omp plugin` itself to install what it lacks
@@ -262,9 +262,9 @@ Each member uses this machine's omp configuration: models, MCP servers, skills, 
   version of every mirrored file and directory moves to `<agent dir>/omp-web/own-config/` on
   the host, with its plugin list and agent environment variables; the join dialog says the host
   receives this machine's configuration, API keys and environment values included, in place of
-  its own until it leaves. A host holds one ompweb server's configuration at
+  its own until it leaves. A host holds one key lime server's configuration at
   a time: a host already in another server's cluster cannot join (409 `host_in_other_cluster`)
-  and must leave that cluster first. If the host also runs sessions for another ompweb server
+  and must leave that cluster first. If the host also runs sessions for another key lime server
   (as a standalone host there), they run on this server's configuration for as long as the host
   is a member here.
 - **Changes made on a member** to a mirrored file are overwritten at the next apply; change the
@@ -280,7 +280,7 @@ Each member uses this machine's omp configuration: models, MCP servers, skills, 
   that races a leave is refused. This machine is the master: nothing is
   mirrored to it and nothing of it is backed up.
 - **Settings:** each member's line in **Settings → Hosts** shows _same as the master_,
-  _updating…_, _failed_ with the reason, _held by another ompweb server_, or that the host needs
+  _updating…_, _failed_ with the reason, _held by another key lime server_, or that the host needs
   an update, and the MCP server commands in the mirrored files that are not installed there.
   When this machine's configuration cannot be mirrored, one message names the file, and no
   member line says _updating…_. For a session or project of the cluster, the Models, settings, MCP, Skills, Plugins and Agents
@@ -409,7 +409,7 @@ On macOS, two launchd agents (`ProgramArguments` `…/ompweb --no-open` and
 
 ### Run as a macOS Service (launchd)
 
-Install ompweb as a launchd user agent that starts at login and restarts on crash:
+Install key lime as a launchd user agent that starts at login and restarts on crash:
 
 ```bash
 bunx --bun --package=@kahme247/ompweb@latest ompweb-launchd install
@@ -448,7 +448,7 @@ hash — not the password — is stored there) and
 
 ### Run as a Linux Service (systemd)
 
-Install ompweb as a systemd **user** service that starts at login and restarts
+Install key lime as a systemd **user** service that starts at login and restarts
 on crash:
 
 ```bash
@@ -501,14 +501,14 @@ loginctl enable-linger "$USER"
 
 ## Run sessions on another machine
 
-One ompweb can start and watch omp sessions on other machines. Each machine keeps
-its own ompweb (with its `ompweb-omp`), `~/.omp/agent` directory, sessions, and credentials (unless you
+One key lime can start and watch omp sessions on other machines. Each machine keeps
+its own key lime (with its `ompweb-omp`), `~/.omp/agent` directory, sessions, and credentials (unless you
 [share the server's provider logins](#use-the-servers-provider-logins-on-a-host));
-ompweb only routes. The remote machine needs either Bun (for `bunx`) or
-the [single binary](#single-binary), and must be able to reach the ompweb server over
+key lime only routes. The remote machine needs either Bun (for `bunx`) or
+the [single binary](#single-binary), and must be able to reach the key lime server over
 HTTP(S). It dials out, so it can sit behind NAT.
 
-1. On the ompweb server, open **Settings → Hosts → Add host**, enter a name, and copy
+1. On the key lime server, open **Settings → Hosts → Add host**, enter a name, and copy
    the token. The token is shown once; only its hash is stored.
 2. On the remote machine, save the link. The token is read from stdin, never from
    an argument, so it does not show up in `ps`:
@@ -529,12 +529,12 @@ HTTP(S). It dials out, so it can sit behind NAT.
    The host shows **online** in Settings → Hosts, the sidebar gets a group for it,
    and the new-session screen gets a host picker.
 
-**Settings → Hosts** also shows each machine's ompweb daemon and omp versions,
+**Settings → Hosts** also shows each machine's key lime daemon and omp versions,
 available updates and update actions, including **This machine**.
 Checks and installations run on the selected host, not on the web server. A host
 update whose link protocol is incompatible with the current web app stays visible
 but is blocked with a reason; update the web server first. An unverifiable target
-protocol is blocked too. omp is part of each ompweb release and updates with it.
+protocol is blocked too. omp is part of each key lime release and updates with it.
 Before updating a daemon, close its session processes: the updater refuses to
 interrupt sessions or subagents. **Settings → System** keeps the web server's
 own application update and service settings.
@@ -575,7 +575,7 @@ Settings closes its link and the daemon stops its omp processes.
 
 A reverse proxy must forward the upgrade on `/api/hosts/link`. For hosts that share the server's logins it must also pass `/api/hosts/broker/` without the proxy's own authentication and without response buffering; for cluster members, likewise `/api/hosts/cluster-config/manifest` and `/api/hosts/cluster-config/file/<hash>` without the proxy's own authentication. See [Behind a reverse proxy](#behind-a-reverse-proxy).
 
-Update ompweb on the server before its hosts: a host from before this version shows **needs upgrade** until it is updated.
+Update key lime on the server before its hosts: a host from before this version shows **needs upgrade** until it is updated.
 
 Notes:
 
@@ -586,16 +586,16 @@ Notes:
   [Keep a host running as a service](#keep-a-host-running-as-a-service) instead.
   The daemon exits with code `1` when the server revokes its token or when its
   link protocol version is outside the range the server supports (older than the
-  server's oldest supported version, or newer than the server: update ompweb on
+  server's oldest supported version, or newer than the server: update key lime on
   the older side), and `0` when a newer link for the same host replaces it.
   SIGTERM or SIGINT stops the daemon and its omp processes.
   A link is one-per-host, so never run two daemons with the same token.
 - **The server's agent directory holds the host list** (`omp-web/hosts.json`).
-  Starting the ompweb server with a different `PI_CODING_AGENT_DIR`, or losing
+  Starting the key lime server with a different `PI_CODING_AGENT_DIR`, or losing
   that file, makes every host token unknown: each daemon is told it was revoked,
   stops its omp processes and exits.
 - **Trust:** a linked host runs omp with full tool access on that machine for
-  whoever controls the ompweb server or the token. Keep the token private and
+  whoever controls the key lime server or the token. Keep the token private and
   revoke it when a machine is retired.
 - **Workspace files on every host:** Explorer, previews, downloads, file search,
   @-mentions and live file watching use the owning machine's daemon, including
@@ -627,7 +627,7 @@ Notes:
 
 ### Use the server's provider logins on a host
 
-By default a host uses its own omp logins. Turn on **Use this server's provider logins** for a host in **Settings → Hosts** and the sessions started there use the logins stored on the ompweb server instead, so you log in to a provider once. The setting is per host and off by default; turning it on asks for confirmation. This machine does not have it, because it already uses the server's logins.
+By default a host uses its own omp logins. Turn on **Use this server's provider logins** for a host in **Settings → Hosts** and the sessions started there use the logins stored on the key lime server instead, so you log in to a provider once. The setting is per host and off by default; turning it on asks for confirmation. This machine does not have it, because it already uses the server's logins.
 
 - **What is shared:** the provider logins stored on the server (OAuth logins and stored API keys). The server runs `omp auth-broker serve` for this and starts it on the first request; it stops after 5 minutes without one.
 - **When a change reaches a host:** every omp process started after a login or logout on the server uses it. A running process picks it up the next time it is used, because omp stops listening for updates after 20 seconds without activity and resumes on its next use. A running process keeps the access tokens and API keys it has already loaded until it ends.
@@ -652,7 +652,7 @@ newer link with the same token replaced it, and restarting would take the link b
 every 10 seconds. Add `--allow-http` after `host` if
 the server URL is plain `http://`, and set `PI_CODING_AGENT_DIR` in the service too
 if you saved the link with it set. A machine links to one server: do not also run an
-ompweb web server on it, which writes the same link file for its own daemon. To
+key lime web server on it, which writes the same link file for its own daemon. To
 update, stop the service, replace the release directory, and start it again. After
 revoking a host, stop and remove its service: it otherwise keeps retrying.
 
@@ -733,7 +733,7 @@ inactivity or on sleep, SSH key passphrases and signing fail until you restart i
 - **Tool Preset Picker**: Choose the toolset for new sessions in the composer — `none` / `default` (`read,bash,edit,write`) / `full` (all tools including subagents). Persists to localStorage.
 - **File Explorer & Previews**: Browse workspaces side-by-side with chat; preview code, markdown, Mermaid, images, audio, PDFs, and diffs with allow-listed access.
 - **Git Worktree Support**: Create, import, and manage workspaces under host-bound projects; sessions are registered within each workspace.
-- **Remote Hosts**: Link other machines (for example a MacBook) and run sessions there from one ompweb. The sidebar groups sessions by host. See [Run sessions on another machine](#run-sessions-on-another-machine).
+- **Remote Hosts**: Link other machines (for example a MacBook) and run sessions there from one key lime. The sidebar groups sessions by host. See [Run sessions on another machine](#run-sessions-on-another-machine).
 - **Usage & Analytics**: Dashboard in **Settings → Usage** for tokens, costs, cache savings, and breakdowns by provider / model / day / project with SQLite persistence.
 - **macOS launchd Service**: LaunchAgent that starts at login, restarts on crash, and logs under `~/Library/Logs/ompweb`.
 - **Linux systemd Service**: User services that start at login and restart on crash.
@@ -752,24 +752,24 @@ inactivity or on sleep, SSH key passphrases and signing fail until you restart i
 | `OMP_WEB_TRUSTED_HEADER_SHA256` | SHA-256 hex digest of the secret a trusted reverse proxy sends in `X-Omp-Web-Auth` to skip the password for that request; see [Skipping the password on trusted networks](#skipping-the-password-on-trusted-networks)                                                                                                                                                             | _None (disabled)_                     |
 | `OMP_WEB_NO_OPEN`               | Set to `1` to prevent auto-opening browser                                                                                                                                                                                                                                                                                                                                        | `0`                                   |
 | `OMP_WEB_DISABLE_AUTOUPDATE`    | Set to `1` to disable update checks and in-app updates; restart after changing                                                                                                                                                                                                                                                                                                    | `0`                                   |
-| `OMP_WEB_NAME`                  | Name shown in browser tabs and installed-app names. `url`, `host` or `domain` (any case) uses the hostname the browser connected to, without port; localhost and IP addresses keep `omp web`. Any other value is used as-is. Restart after changing                                                                                                                               | `omp web`                             |
-| `OMP_WEB_OMP_BIN`               | Path to an `ompweb-omp` build to use instead of the downloaded one: a copy of the release's `ompweb-omp-<os>-<arch>` on a machine that cannot reach GitHub, or `runner/release/ompweb-omp-<os>-<arch>` from a source checkout. A stock `omp` does not work: it does not speak ompweb's channel. The service installers write it into the service environment only when you set it | _the downloaded `ompweb-omp`_         |
+| `OMP_WEB_NAME`                  | Name shown in browser tabs and installed-app names. `url`, `host` or `domain` (any case) uses the hostname the browser connected to, without port; localhost and IP addresses keep `key lime`. Any other value is used as-is. Restart after changing                                                                                                                               | `key lime`                             |
+| `OMP_WEB_OMP_BIN`               | Path to an `ompweb-omp` build to use instead of the downloaded one: a copy of the release's `ompweb-omp-<os>-<arch>` on a machine that cannot reach GitHub, or `runner/release/ompweb-omp-<os>-<arch>` from a source checkout. A stock `omp` does not work: it does not speak key lime's channel. The service installers write it into the service environment only when you set it | _the downloaded `ompweb-omp`_         |
 | `PI_CODING_AGENT_DIR`           | Custom omp agent directory                                                                                                                                                                                                                                                                                                                                                        | `~/.omp/agent`                        |
 | `OMP_WEB_STT_ENDPOINT`          | OpenAI-compatible transcription endpoint URL. Leave unset to transcribe with `OMP_WEB_STT_MODEL` through omp's own credentials                                                                                                                                                                                                                                                    | _None_                                |
 | `OMP_WEB_STT_KEY`               | Optional API key for the STT endpoint                                                                                                                                                                                                                                                                                                                                             | _None_                                |
 | `OMP_WEB_STT_MODEL`             | Model name for the STT endpoint. Without an endpoint: an omp speech-to-text model run with omp's logins, such as `openai-codex/codex-transcribe` (ChatGPT subscription; needs an omp version with that model)                                                                                                                                                                     | _None (disabled without an endpoint)_ |
 
-**`OMP_WEB_NAME` and installed apps.** An installed app (PWA) is usually named after the page it was installed from. If you later change `OMP_WEB_NAME`, or reach omp-web through a different address while `OMP_WEB_NAME` is `url`, `host` or `domain`, your operating system may rename the installed app as well. Leave `OMP_WEB_NAME` empty, or set a name that identifies this omp-web server whatever domain name or address is used to reach it.
+**`OMP_WEB_NAME` and installed apps.** An installed app (PWA) is usually named after the page it was installed from. If you later change `OMP_WEB_NAME`, or reach key lime through a different address while `OMP_WEB_NAME` is `url`, `host` or `domain`, your operating system may rename the installed app as well. Leave `OMP_WEB_NAME` empty, or set a name that identifies this key lime server whatever domain name or address is used to reach it.
 
 ## Skipping the password on trusted networks
 
-omp-web cannot see the client's address itself, so it leaves the decision to
+key lime cannot see the client's address itself, so it leaves the decision to
 your reverse proxy. The proxy sends a secret in the `X-Omp-Web-Auth` header,
-and omp-web holds only that secret's SHA-256 digest in
+and key lime holds only that secret's SHA-256 digest in
 `OMP_WEB_TRUSTED_HEADER_SHA256`. A request whose header hashes to that digest
 is treated as signed in. Everyone else still signs in with the password whose
 hash is in `OMP_WEB_PASSWORD_HASH`; without a password there is nothing to
-skip, and the header is ignored. Keep omp-web bound to `127.0.0.1` so only the
+skip, and the header is ignored. Keep key lime bound to `127.0.0.1` so only the
 proxy reaches it.
 
 Generate the secret and its digest without typing the secret on a command line,
@@ -790,7 +790,7 @@ Set the printed digest as `OMP_WEB_TRUSTED_HEADER_SHA256`. The command history
 holds only the commands, never the secret.
 
 Always generate the secret this way; do not reuse a password or another chosen
-value. omp-web stores only a fast, unsalted SHA-256 digest, which is safe only
+value. key lime stores only a fast, unsalted SHA-256 digest, which is safe only
 for a long random secret: anyone who reads the digest could recover a short or
 guessable one with a dictionary attack.
 
@@ -804,7 +804,7 @@ geo $ompweb_trusted {
 }
 include /etc/nginx/ompweb-auth.conf;  # the map written above
 
-# the location that proxies to omp-web
+# the location that proxies to key lime
 proxy_set_header X-Omp-Web-Auth $ompweb_auth;
 ```
 
@@ -813,7 +813,7 @@ Always set the header, as above: the empty value for other clients replaces any
 from outer blocks when a block sets none of its own, so put this line next to
 the location's other `proxy_set_header` lines.
 
-Serve omp-web only for its own hostname: give its `server` block an explicit
+Serve key lime only for its own hostname: give its `server` block an explicit
 `server_name`, and add a `default_server` block that answers every other
 hostname with `return 444;`. Otherwise a web page that a trusted browser visits
 can point its own domain name at your nginx (DNS rebinding) and have nginx add
@@ -876,7 +876,7 @@ mise trust
 mise install
 bun install --frozen-lockfile
 bun runner/scripts/use-omp-build.ts && (cd runner && bun install --frozen-lockfile)
-bun runner/scripts/build-binary.ts   # ompweb's omp build for this machine: runner/release/ompweb-omp-<os>-<arch>
+bun runner/scripts/build-binary.ts   # key lime's omp build for this machine: runner/release/ompweb-omp-<os>-<arch>
 bun run dev
 ```
 
@@ -885,7 +885,7 @@ The dev server runs at [http://127.0.0.1:30178](http://127.0.0.1:30178). It find
 
 A dev server does not take over the local daemon: only the production web
 server writes the daemon's `host.json`, so "This machine" shows offline in dev
-and the daemon stays linked to your installed ompweb.
+and the daemon stays linked to your installed key lime.
 
 `bun run dev` starts a seeded development environment with Bun hot reload and a separate host daemon, printing its temporary directory and URL. Pass `--port 30278` to select a port. See [CONTRIBUTING.md](CONTRIBUTING.md) for details. `bun run build` bundles the browser app into `dist/`, and `bun run start` serves it on port 30177 (`bun run smoke` checks the result). `bun run build:binary` builds the [single binary](#single-binary) for this machine into `release/` (`-- --target bun-linux-arm64` and the like for another platform; `bun run smoke -- --binary release/ompweb-linux-x64/ompweb` checks it).
 
@@ -911,6 +911,6 @@ Run `bun fmt` to format files. Linting is intentionally removed: pinned Bun 1.4.
 
 ## License & Credits
 
-- Keylime is derived from [ompweb-dev/ompweb](https://github.com/ompweb-dev/ompweb), which originated from [agegr/pi-web](https://github.com/agegr/pi-web), and integrates [can1357/oh-my-pi](https://github.com/can1357/oh-my-pi).
+- key lime is derived from [ompweb-dev/ompweb](https://github.com/ompweb-dev/ompweb), which originated from [agegr/pi-web](https://github.com/agegr/pi-web), and integrates [can1357/oh-my-pi](https://github.com/can1357/oh-my-pi).
 - Thanks to the upstream authors and contributors. Original Git history and the copyright notice in [LICENSE](./LICENSE) are retained.
-- Keylime remains [MIT-licensed](./LICENSE). It is an independent project, not an upstream release or an endorsement by its predecessors.
+- key lime remains [MIT-licensed](./LICENSE). It is an independent project, not an upstream release or an endorsement by its predecessors.

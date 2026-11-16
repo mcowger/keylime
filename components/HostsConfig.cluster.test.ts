@@ -262,12 +262,12 @@ for (const [label, row, reason] of <
   [
     "no gitOrigins operation",
     { workspaceOps: [] },
-    "Update ompweb on this host first",
+    "Update key lime on this host first",
   ],
   [
     "flagged needs-upgrade by the hub",
     { status: "needs-upgrade", hostVersion: 9 },
-    "Update ompweb on this host first",
+    "Update key lime on this host first",
   ],
   // Members always share credentials; the daemon refuses that below omp 15.13.1, and on an omp it cannot read.
   [
@@ -283,7 +283,7 @@ for (const [label, row, reason] of <
   [
     "on an outdated daemon and an old omp (the daemon first)",
     { workspaceOps: [], ompVersion: "omp/15.13.0" },
-    "Update ompweb on this host first",
+    "Update key lime on this host first",
   ],
   [
     "without omp (its own status text is the reason)",
@@ -652,7 +652,7 @@ const configState = (fields: Record<string, unknown> = {}) => ({
 const configLines = (name: string) =>
   within(rowOf(name))
     .queryAllByText(
-      /^(Configuration:|Not installed on this host:|Update ompweb on this host first)/,
+      /^(Configuration:|Not installed on this host:|Update key lime on this host first)/,
     )
     .map((line) => line.textContent);
 
@@ -685,7 +685,7 @@ for (const [label, overrides, lines] of <
     "held by another server",
     { clusterConfig: configState({ owned: false, current: false }) },
     [
-      "Configuration: held by another ompweb server; remove it from that server's cluster first",
+      "Configuration: held by another key lime server; remove it from that server's cluster first",
     ],
   ],
   [

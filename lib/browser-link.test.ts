@@ -374,7 +374,7 @@ test("sub opens a channel and every frame is answered with an ack; a refused sub
         type: "refused",
         sub: "s4",
         status: 409,
-        error: "Session is not managed by omp-web",
+        error: "Session is not managed by key lime",
         code: "session_not_managed",
       },
     ],

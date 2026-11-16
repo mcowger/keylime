@@ -697,7 +697,7 @@ function authenticate(req: Request): HostRecord | Response {
 }
 
 // The daemon retries a 503: what it sends lands on the next server instead.
-const stopping = () => json({ error: "omp-web is shutting down" }, 503);
+const stopping = () => json({ error: "key lime is shutting down" }, 503);
 
 /**
  * This server is shutting down. From here on nothing reaches a daemon (sendDown
@@ -1298,7 +1298,7 @@ function request(
   const label = labelOf(hostId);
   if (hub().frozen)
     return Promise.reject(
-      new HostOpError(503, "server_stopping", "omp-web is shutting down"),
+      new HostOpError(503, "server_stopping", "key lime is shutting down"),
     );
   if (!link.socket || !isLinkUp(link.status)) {
     return Promise.reject(
@@ -1749,7 +1749,7 @@ export class RemoteRpcTransport implements RpcTransport {
     if (this.exitInfo || this.closed)
       return callback(new Error("RPC process is not running"));
     // sendDown would drop it: a command waiting on it fails now instead of at its timeout.
-    if (hub().frozen) return callback(new Error("omp-web is shutting down"));
+    if (hub().frozen) return callback(new Error("key lime is shutting down"));
     try {
       // Kept in the link outbox until the daemon acks it, across reconnects; queued per channel, in order.
       sendDown(

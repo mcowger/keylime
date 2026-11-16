@@ -767,7 +767,7 @@ export async function runOutboxCommand(
     return Response.json(
       {
         error:
-          "This message belongs to another omp-web installation or sign-in configuration.",
+          "This message belongs to another key lime installation or sign-in configuration.",
         code: "outbox_scope_changed",
       },
       { status: 409 },
@@ -1506,7 +1506,7 @@ function recoverDelivering(sessionId?: string, startup = false): void {
         "UPDATE entries SET state = 'failed', error = ?, may_have_been_sent = 1, previous_entry_ids = NULL WHERE id = ? AND state = 'delivering' AND dispatch_pid IS ?",
       )
       .run(
-        "omp-web restarted while this message was being delivered",
+        "key lime restarted while this message was being delivered",
         entry.id,
         entry.dispatch_pid,
       );

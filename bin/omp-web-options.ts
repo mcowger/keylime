@@ -154,8 +154,8 @@ export function checkLaunchSecurity(launchOptions: LaunchOptions) {
       [
         "Warning: OMP_WEB_PASSWORD holds a plaintext password. This option has been deprecated and is marked for removal.",
         "",
-        "Every omp session inherits omp-web's environment, so an agent could print",
-        "the password into its transcript. ompweb hashed it and kept it out of the",
+        "Every omp session inherits key lime's environment, so an agent could print",
+        "the password into its transcript. key lime hashed it and kept it out of the",
         "server's environment, but agents can still read it from this launcher",
         "process, and a new hash is made on every start, which signs every browser",
         "out on each restart.",

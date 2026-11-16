@@ -1,4 +1,4 @@
-# Contributing to omp-web
+# Contributing to key lime
 
 Thanks for your interest in contributing!
 
@@ -10,13 +10,13 @@ Thanks for your interest in contributing!
 mise trust
 mise install
 bun install
-bun runner/scripts/use-omp-build.ts && (cd runner && bun install --frozen-lockfile)   # ompweb's omp build; bun run test needs it too
+bun runner/scripts/use-omp-build.ts && (cd runner && bun install --frozen-lockfile)   # key lime's omp build; bun run test needs it too
 bun run dev   # seeded development server; prints its URL
 ```
 
-For live sessions, build the runner for this machine with `bun runner/scripts/build-binary.ts`: ompweb finds
+For live sessions, build the runner for this machine with `bun runner/scripts/build-binary.ts`: key lime finds
 `runner/release/ompweb-omp-<os>-<arch>` by itself (`OMP_WEB_OMP_BIN` overrides it). A stock `omp` does not
-speak ompweb's channel.
+speak key lime's channel.
 
 Worktrees created with the repository's Paseo setup copy ignored `runner/vendor/` packages from the source checkout before setup. If those packages are missing or do not match the worktree's pin, run `bun runner/scripts/use-omp-build.ts` and then install the runner dependencies. The runner binary is not built during worktree setup; `bun run smoke` builds it before running the smoke checks.
 
@@ -173,9 +173,9 @@ The jsdom dependency stays on 29.x for now; moving to a newer major is a separat
   `components/ui/` (Dialog/Tooltip/Collapsible/field/toast, built on Base UI);
   icons come from `lucide-react`.
 - **UI copy**: add user-facing strings in English to `lib/i18n/locales/en.json`.
-- **Architecture**: the ompweb server and daemon never import `@oh-my-pi/*` or `@earendil-works/*`
+- **Architecture**: the key lime server and daemon never import `@oh-my-pi/*` or `@earendil-works/*`
   packages (Bun-only). Live agent features go through the `ompweb-omp` child process
-  (`runner/`) over ompweb's channel; see `DESIGN.md` and `AGENTS.md` for the full contract.
+  (`runner/`) over key lime's channel; see `DESIGN.md` and `AGENTS.md` for the full contract.
 
 ## Pull requests
 

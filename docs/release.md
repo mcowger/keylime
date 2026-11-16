@@ -1,6 +1,6 @@
 # Release Checklist
 
-Keylime is an independent hard fork. The inherited package name
+key lime is an independent hard fork. The inherited package name
 `@kahme247/ompweb` and upstream release URLs do not publish this fork's changes.
 All GitHub Actions workflows are disabled; pushing a tag does not start a build
 or publish a release. Do not re-enable them as part of local verification.
@@ -26,11 +26,11 @@ releases include the checked-in documents, which may be stale.
 
 Release publication is not automated by this repository. Verify any publication
 procedure and destination separately; inherited upstream release settings are not
-instructions for publishing Keylime.
+instructions for publishing key lime.
 
 ### Build identity in the UI
 
-Click or tap the ompweb logo to reveal the package version. If the build's
+Click or tap the key lime logo to reveal the package version. If the build's
 Git `HEAD` has no tag, the reveal also shows the full commit hash and the
 committer date in `YYYY-MM-DD` format. Any tag pointing exactly at `HEAD`
 keeps the version-only display; a tag on an ancestor does not.

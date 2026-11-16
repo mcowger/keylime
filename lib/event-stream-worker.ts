@@ -118,12 +118,12 @@ const ABORT_DELETE_TIMEOUT_MS = 40_000;
 /** Marks an up_abort's line in the sender (a command's `rid` is the tab's request id). */
 const ABORT_RID = "abort:";
 const TRANSPORT_UNAVAILABLE = {
-  error: "Not sent: no connection to omp-web.",
+  error: "Not sent: no connection to key lime.",
   code: "transport_unavailable",
 };
 const TRANSPORT_LOST = {
   error:
-    "The connection to omp-web dropped before the answer arrived; the command may have run.",
+    "The connection to key lime dropped before the answer arrived; the command may have run.",
   code: "transport_lost",
 };
 // Transport samples (spec D6 of the experiment): POSTed in batches to the metrics route, whose GET is the SSE clock probe.

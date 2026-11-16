@@ -61,7 +61,7 @@ export async function PUT(req: Request) {
       if (error instanceof ModelsConfigParseError) {
         return Response.json(
           {
-            error: `${error.message} — fix it by hand; omp-web will not overwrite it`,
+            error: `${error.message} — fix it by hand; key lime will not overwrite it`,
             code: "models_config_unparseable",
           },
           { status: 409 },

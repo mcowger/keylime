@@ -856,7 +856,7 @@ const SETTING_INDEX: SettingIndexEntry[] = [
     fallbackSection: "System",
     fallbackLabel: "Resume running sessions after a restart",
     fallbackDesc:
-      'When omp-web restarts while agents are working, restart those sessions and tell each agent: "Session interrupted and resumed. Continue as you would have done without the interruption." Work in progress at the moment of the restart, such as a running command, is lost.',
+      'When key lime restarts while agents are working, restart those sessions and tell each agent: "Session interrupted and resumed. Continue as you would have done without the interruption." Work in progress at the moment of the restart, such as a running command, is lost.',
   },
   {
     id: "agent-tools-cross-session",
@@ -867,7 +867,7 @@ const SETTING_INDEX: SettingIndexEntry[] = [
     fallbackSection: "System",
     fallbackLabel: "Agent tools (cross-session)",
     fallbackDesc:
-      "Allow agents to call list_sessions, new_session and send_to_session to reach other omp-web sessions, even with no browser tab open. Delivered messages are prefixed with the sending session's ID.",
+      "Allow agents to call list_sessions, new_session and send_to_session to reach other key lime sessions, even with no browser tab open. Delivered messages are prefixed with the sending session's ID.",
   },
   {
     id: "upload-retention",
@@ -958,7 +958,7 @@ const SETTING_INDEX: SettingIndexEntry[] = [
     labelKey: "notifications.whenActive",
     descKey: "notifications.whenActiveDesc",
     fallbackSection: "Notifications",
-    fallbackLabel: "When I'm using omp-web in another tab",
+    fallbackLabel: "When I'm using key lime in another tab",
     fallbackDesc: "Nothing is shown for the session you are viewing.",
     scope: "UI",
   },
@@ -1634,7 +1634,7 @@ function NotificationSettingsPanel() {
   // With push, the server sends a real push; otherwise this tab shows one itself.
   const sendTest = async () => {
     const testNotification = renderNotification(
-      { type: "test", sessionId: "", sessionName: "omp web" },
+      { type: "test", sessionId: "", sessionName: "key lime" },
       t,
     );
     try {

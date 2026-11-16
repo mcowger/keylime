@@ -451,7 +451,7 @@ test("a refused subscription fails only its own stream as CLOSED", async () => {
         ? {
             status: 409,
             body: {
-              error: "Session is not managed by omp-web",
+              error: "Session is not managed by key lime",
               code: "session_not_managed",
             },
           }
@@ -1131,7 +1131,7 @@ test("resync when the gap is gone: streams subscribe again, unsent commands go, 
           status: 503,
           body: {
             error:
-              "The connection to omp-web dropped before the answer arrived; the command may have run.",
+              "The connection to key lime dropped before the answer arrived; the command may have run.",
             code: "transport_lost",
           },
           attempts: 1,
@@ -1159,7 +1159,7 @@ test("a command with no link answers transport_unavailable after 15 s; an oversi
     cmd: 1,
     status: 503,
     body: {
-      error: "Not sent: no connection to omp-web.",
+      error: "Not sent: no connection to key lime.",
       code: "transport_unavailable",
     },
   });
@@ -1489,7 +1489,7 @@ test("refused fails only its stream as CLOSED; end resubscribes after 3 s on the
     type: "refused",
     sub: "s2",
     status: 409,
-    error: "Session is not managed by omp-web",
+    error: "Session is not managed by key lime",
     code: "session_not_managed",
   });
   assert.deepEqual(tab.received, [{ id: 2, type: "error", readyState: 2 }]);

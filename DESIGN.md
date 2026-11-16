@@ -1,8 +1,8 @@
-# ompweb — Product & Architecture Contract
+# key lime — Product & Architecture Contract
 
 ## Purpose
 
-ompweb is a local, browser-based workspace for the
+key lime is a local, browser-based workspace for the
 [oh-my-pi](https://github.com/can1357/oh-my-pi) (`omp`) coding agent. It lets a
 user browse the same local sessions they use in the terminal, continue live
 work, configure supported OMP settings, and inspect project files without
@@ -16,7 +16,7 @@ do not assume that Pi-specific implementation changes can be merged unchanged.
 ## Product principles
 
 1. **OMP remains authoritative.** Sessions, credentials, providers, and agent
-   behavior belong to omp (run as ompweb's own build of it, `runner/`). ompweb
+   behavior belong to omp (run as key lime's own build of it, `runner/`). key lime
    must not invent a parallel data format or credential store.
 2. **Local-first by default.** The server binds to `127.0.0.1`; remote access
    is an explicit user choice and must be protected by a trusted network
@@ -63,23 +63,23 @@ ompweb (Bun web server)
 ### The omp boundary
 
 OMP SDK packages are Bun-only TypeScript and import Bun APIs. Importing
-`@oh-my-pi/*` or `@earendil-works/*` into the ompweb server, even though it runs on
+`@oh-my-pi/*` or `@earendil-works/*` into the key lime server, even though it runs on
 Bun, would tie it to omp's internals and make the application unreliable.
-Therefore, the ompweb server and daemon must not add those runtime dependencies.
+Therefore, the key lime server and daemon must not add those runtime dependencies.
 
-Live work goes through ompweb's own omp build, `runner/`, compiled against the
+Live work goes through key lime's own omp build, `runner/`, compiled against the
 fork's integration build: an `ompweb-dev/oh-my-pi` release that is an upstream omp
 release plus the PRs the fork carries (among them `runSessionHost`, which the
 headless mode needs), pinned to one release in `runner/omp-build.json` and
-re-pinned to the newest one by each ompweb release. The runner replaces omp's
+re-pinned to the newest one by each key lime release. The runner replaces omp's
 launch command: its session factory connects every session to `ompweb host`
-over ompweb's channel. The host receives the same `AgentSession` events and
+over key lime's channel. The host receives the same `AgentSession` events and
 calls the same session methods omp's TUI does, so nothing depends on omp's RPC
 mode. A session started from the runner's TUI connects to the daemon's Unix
 socket and shows up live in the web; dialogs open on both sides and the first
-answer wins. Each ompweb release attaches its runners (`ompweb-omp-<platform>`),
+answer wins. Each key lime release attaches its runners (`ompweb-omp-<platform>`),
 and every install downloads the one of its own version
-(`lib/omp/runner-fetch.ts`), so omp updates with ompweb. The design and the wire are in
+(`lib/omp/runner-fetch.ts`), so omp updates with key lime. The design and the wire are in
 `docs/specs/2026-11-12-omp-runner-design.md`; the fork build in
 `docs/specs/2026-11-12-omp-build-in-ompweb-design.md`.
 
@@ -111,7 +111,7 @@ The omp boundary above holds on every machine: a remote machine runs its own
 runner build, its own `~/.omp/agent` and its own credentials, unless sharing is
 turned on for that host (Settings → Hosts): then its sessions use the server's
 provider logins through `omp auth-broker serve`, and the host never gets a
-refresh token. ompweb only routes. `RpcProcess` takes its byte pipe
+refresh token. key lime only routes. `RpcProcess` takes its byte pipe
 (`RpcTransport`) from the host, so the
 session wrapper, event streams, notifications and queue handle frames without
 knowing where omp runs. Session routes address a session by id; the owning
@@ -135,9 +135,9 @@ the daemon requires `https://` except for loopback or an explicit
 
 - `~/.omp/agent` is the source of
   truth for sessions, configuration, models, skills, plugins, and blobs.
-- `agent.db` contains authentication data. ompweb never reads or writes it;
+- `agent.db` contains authentication data. key lime never reads or writes it;
   authentication actions go through the `ompweb-omp` process.
-- A live OMP process owns writes to its session file. ompweb routes supported
+- A live OMP process owns writes to its session file. key lime routes supported
   live actions through the runner's channel and never races a live file rewrite.
 
 ### Direct file access
@@ -151,7 +151,7 @@ tree. The session and project routes run it in the daemon of the session's host
 Direct session mutation is deliberately narrow and explicit: rename/title,
 archive, deletion, and required branch-parent maintenance. These writes are
 atomic where possible; archive or deletion stops the associated live process
-first. ompweb does not provide a general editor for session JSONL or opaque OMP
+first. key lime does not provide a general editor for session JSONL or opaque OMP
 state.
 
 Models and allow-listed OMP settings use surgical YAML updates that preserve
@@ -250,10 +250,10 @@ Deploy the frontend and API support together; no native OMP upgrade is required.
   invalidates existing sessions. Exposed deployments require HTTPS through a
   trusted reverse proxy or VPN. With `OMP_WEB_TRUSTED_HEADER_SHA256` set, a
   request whose `X-Omp-Web-Auth` header hashes to that digest counts as signed
-  in; omp-web never holds the secret itself. Deciding which clients get the
-  header is the reverse proxy's job, because omp-web has no client address it
+  in; key lime never holds the secret itself. Deciding which clients get the
+  header is the reverse proxy's job, because key lime has no client address it
   can trust.
-- omp-web's own secrets (`OMP_WEB_PASSWORD`, `OMP_WEB_PASSWORD_HASH`,
+- key lime's own secrets (`OMP_WEB_PASSWORD`, `OMP_WEB_PASSWORD_HASH`,
   `OMP_WEB_TRUSTED_HEADER_SHA256` and its legacy name
   `OMP_WEB_TRUSTED_HEADER_SECRET`) are stripped from every child process
   environment through `createChildProcessEnvironment`
@@ -304,7 +304,7 @@ Releases are independent:
 ## Non-goals
 
 - Reimplementing OMP, its provider registry, or its credential database.
-- Embedding Bun-only OMP SDK packages in the omp-web server.
+- Embedding Bun-only OMP SDK packages in the key lime server.
 - Turning a local agent workspace into an internet-facing multi-user service.
 - Unrestricted filesystem browsing or arbitrary browser-triggered host tools.
 - Automatic bulk synchronization from `agegr/pi-web`.

@@ -362,7 +362,7 @@ test("serveFile follows a static directory swapped while it runs", async (t) => 
 
 test("renderIndex escapes the install name into the titles and adds the manifest link", () => {
   const html =
-    '<html><head><title>omp web</title><meta name="apple-mobile-web-app-title" content="omp web" /></head><body></body></html>';
+    '<html><head><title>key lime</title><meta name="apple-mobile-web-app-title" content="key lime" /></head><body></body></html>';
   const previous = process.env.OMP_WEB_NAME;
   process.env.OMP_WEB_NAME = "<script>";
   try {

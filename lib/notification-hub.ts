@@ -311,6 +311,6 @@ export async function sendTestPush(
   return sendPush(device, {
     type: "test",
     sessionId: "",
-    sessionName: "omp web",
+    sessionName: "key lime",
   });
 }

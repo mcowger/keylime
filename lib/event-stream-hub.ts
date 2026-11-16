@@ -623,7 +623,7 @@ function openSessionChannel(
     return {
       ok: false,
       status: 409,
-      error: "Session is not managed by omp-web",
+      error: "Session is not managed by key lime",
       code: "session_not_managed",
     };
   }

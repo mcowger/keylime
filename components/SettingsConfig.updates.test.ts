@@ -203,7 +203,7 @@ test("a host's omp row shows the omp its ompweb shipped and offers no update of 
     container.textContent ?? "",
   );
   assert.ok(
-    container.textContent?.includes("Updated with ompweb"),
+    container.textContent?.includes("Updated with key lime"),
     container.textContent ?? "",
   );
   assert.deepEqual(

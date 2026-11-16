@@ -132,10 +132,10 @@ test("an unreadable push still shows a notification and reports it as info", asy
     { postMessage: (message) => messages.push(structuredClone(message)) },
   ]);
   await worker.push(undefined);
-  assert.equal(worker.shown[0].title, "omp web");
+  assert.equal(worker.shown[0].title, "key lime");
   assert.deepEqual(messages[0].notification, {
     type: "info",
-    title: "omp web",
+    title: "key lime",
     body: "",
     tag: "",
     sessionId: "",

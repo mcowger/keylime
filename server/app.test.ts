@@ -21,7 +21,7 @@ mkdirSync(path.join(root, "dist"));
 mkdirSync(home);
 writeFileSync(
   path.join(root, "dist", "index.html"),
-  "<!doctype html><html><head><title>omp web</title></head><body></body></html>",
+  "<!doctype html><html><head><title>key lime</title></head><body></body></html>",
 );
 writeFileSync(path.join(root, "dist", "sw.js"), "production service worker");
 for (const dir of ["public", "node_modules"])
@@ -422,7 +422,7 @@ test("pages get the index, files their content, and anything else 404", async ()
     page.headers.get("cache-control"),
     "private, no-cache, max-age=0, must-revalidate",
   );
-  assert.match(await page.text(), /<title>omp web<\/title>/);
+  assert.match(await page.text(), /<title>key lime<\/title>/);
   assert.equal((await fetch(url("/missing.js"))).status, 404);
   assert.equal(
     (await fetch(url("/sw.js"))).headers.get("cache-control"),
@@ -513,7 +513,7 @@ test("dev pages put the stylesheet before the pre-paint scripts, even when HTTP_
   writeFileSync(path.join(root, "dev.css"), "body { color: red; }");
   writeFileSync(
     path.join(root, "dev.html"),
-    '<!doctype html><html><head><title>omp web</title><script>void 0</script><link rel="stylesheet" href="./dev.css" /></head><body></body></html>',
+    '<!doctype html><html><head><title>key lime</title><script>void 0</script><link rel="stylesheet" href="./dev.css" /></head><body></body></html>',
   );
   // A file written at run time, so no static import; Bun turns it into an HTML bundle as dev.ts's import does.
   const { default: html } = await import(path.join(root, "dev.html"));

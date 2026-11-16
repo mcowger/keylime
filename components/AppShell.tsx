@@ -2859,7 +2859,7 @@ export function AppShell({ appName }: { appName: string }) {
         { kind: "url", target: url, name: url, sessionId, crossSession },
       ]);
       return crossSession
-        ? `Asked the user to confirm opening ${url}; they are viewing another omp-web session.`
+        ? `Asked the user to confirm opening ${url}; they are viewing another key lime session.`
         : `Asked the user to confirm opening ${url}.`;
     },
     [openUrlAutomatically],
@@ -2900,7 +2900,7 @@ export function AppShell({ appName }: { appName: string }) {
                   crossSession: true,
                 },
               ]);
-              return `Asked the user to confirm opening ${path}; they are viewing another omp-web session.`;
+              return `Asked the user to confirm opening ${path}; they are viewing another key lime session.`;
             },
           },
           call.sessionId,

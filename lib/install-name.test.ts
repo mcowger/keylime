@@ -9,9 +9,9 @@ const fromHost = (host: string | undefined) =>
 
 test("keeps the generic name when OMP_WEB_NAME is unset or blank, whatever the Host", () => {
   const headers = new Headers({ host: "work.example.com" });
-  assert.equal(getInstallName(headers, {}), "omp web");
-  assert.equal(getInstallName(headers, { OMP_WEB_NAME: "" }), "omp web");
-  assert.equal(getInstallName(headers, { OMP_WEB_NAME: "  " }), "omp web");
+  assert.equal(getInstallName(headers, {}), "key lime");
+  assert.equal(getInstallName(headers, { OMP_WEB_NAME: "" }), "key lime");
+  assert.equal(getInstallName(headers, { OMP_WEB_NAME: "  " }), "key lime");
 });
 
 test("uses any other OMP_WEB_NAME verbatim, trimmed, ignoring the Host", () => {
@@ -56,13 +56,13 @@ test("Host mode uses the generic name for localhost and IP addresses", () => {
     "[::1]:30177",
     "[2001:db8::1]:30177",
   ]) {
-    assert.equal(fromHost(host), "omp web", host);
+    assert.equal(fromHost(host), "key lime", host);
   }
 });
 
 test("Host mode falls back to the generic name when Host is missing or malformed", () => {
-  assert.equal(fromHost(undefined), "omp web");
-  assert.equal(fromHost("[broken"), "omp web");
+  assert.equal(fromHost(undefined), "key lime");
+  assert.equal(fromHost("[broken"), "key lime");
 });
 
 test("Host mode rejects Host values URL.parse would silently truncate", () => {
@@ -78,7 +78,7 @@ test("Host mode rejects Host values URL.parse would silently truncate", () => {
     "evil.com\\good.com",
     "e vil.com",
   ]) {
-    assert.equal(fromHost(host), "omp web", host);
+    assert.equal(fromHost(host), "key lime", host);
   }
 });
 
@@ -88,7 +88,7 @@ test("Host mode treats localhost subdomains as localhost", () => {
     "foo.localhost.",
     "FOO.LOCALHOST:30177",
   ]) {
-    assert.equal(fromHost(host), "omp web", host);
+    assert.equal(fromHost(host), "key lime", host);
   }
   // ...but a domain that merely contains the word is a real, distinct host.
   assert.equal(fromHost("localhost.evil.com"), "localhost.evil.com");
