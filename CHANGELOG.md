@@ -63,6 +63,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Ship visibly disables its action while the commit plan is being generated
 
 ### Fixed
+- Select menus keep their portal inside the viewport to avoid focus-induced page shifts on iOS.
 - Markdown tables keep readable column widths on mobile and scroll horizontally when needed.
 - Select menus no longer lock the page and shift it on iOS.
 - Kept the mobile toolbar below the iOS 27 standalone status-bar blur.

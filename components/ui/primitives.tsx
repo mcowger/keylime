@@ -75,9 +75,16 @@ export const ThemedSelect = forwardRef<HTMLButtonElement, ThemedSelectProps>(
             aria-hidden="true"
           />
         </BaseSelect.Trigger>
-        {/* Nonzero bounds let the positioner measure both axes of Interface Scale. */}
+        {/* Keep the measurable portal in the viewport so focusing an option cannot scroll the page. */}
         <BaseSelect.Portal
-          style={{ position: "relative", height: 1, zIndex: 1100 }}
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: 1,
+            zIndex: 1100,
+          }}
         >
           <BaseSelect.Positioner
             className="themed-select-positioner"
