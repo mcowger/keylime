@@ -415,7 +415,7 @@ function Toaster() {
           >
             <KindIcon kind={t.type as ToastKind | undefined} />
             <Toast.Content style={{ flex: 1, minWidth: 0 }}>
-              <Toast.Title style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.4 }} />
+              <Toast.Title className="display-heading" style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.4 }} />
               {t.data?.clamp ? (
                 <Toast.Description
                   render={<div />}

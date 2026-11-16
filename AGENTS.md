@@ -2196,11 +2196,14 @@ color:  --bg --bg-panel --bg-hover --bg-selected --border --bg-subtle
         --text --text-muted --text-dim
         --accent --accent-strong --accent-hover   (links / filled buttons / hover)
         --user-bg --tool-bg
-type:   --font-serif (display headings, class .display-serif)  --font-mono
+type:   --font-display (display headings, class .display-heading)  --font-mono
 shape:  --radius-control (8) --radius-card (12) --radius-modal (16)
 depth:  --shadow-card --shadow-pop --shadow-modal
 motion: --dur-fast (150ms) --dur-med (220ms) --dur-slow (320ms) --ease-out-warm
 ```
+
+Interface text and headings use sans-serif fonts. Mathematical notation is an
+exception: retain KaTeX's serif math fonts.
 
 `components/ui/` holds the shared primitives (built on `@base-ui/react`):
 `primitives.tsx` (Dialog/Tooltip/Collapsible), `field.tsx` (form fields +

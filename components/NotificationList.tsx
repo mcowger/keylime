@@ -342,7 +342,7 @@ function NotificationRow({ entry }: { entry: NotificationHistoryEntry }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
           <span
-            className="display-serif"
+            className="display-heading"
             style={{
               flex: 1,
               minWidth: 0,

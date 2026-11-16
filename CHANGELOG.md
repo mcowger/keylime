@@ -53,6 +53,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Advisor messages use a distinct, theme-aware card with compact copy and JSON controls
 
 ### Changed
+- Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.
 - Project settings use tabbed sections and consistent controls on desktop and mobile.
 - Operational notices, task chat and compaction use expandable transcript rows; advisor responses render as conversation text.
 - Removed in-app key lime update checks and installation for the web server and host daemons. Update installations manually; runner downloads and local deployment remain available.
@@ -78,6 +79,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Removed in-app key lime update checks and installation for the web server and host daemons. Update installations manually; runner downloads and local deployment remain available
 - Operational notices, task chat and compaction use expandable transcript rows; advisor responses render as conversation text
 - Project settings use tabbed sections and consistent controls on desktop and mobile
+- Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts
 
 ### Fixed
 - Assistant timestamps appear after the active turn settles instead of moving between tool rows.

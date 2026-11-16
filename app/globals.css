@@ -327,17 +327,6 @@
   font-display: swap;
   unicode-range: U+E000-F8FF, U+F0000-FFFFD;
 }
-/* CJK display serif for headings, bundled instead of fetched from Google
-   Fonts (whose extensionless /l/font?kit= URLs crashed the font build).
-   A GB2312 + kana subset of Noto Serif SC, weights 600-700; unicode-range
-   keeps Latin-only pages from downloading it. See fonts/NotoSerifSC-README.md. */
-@font-face {
-  font-family: "Noto Serif SC";
-  src: url("./fonts/NotoSerifSC-Subset.woff2") format("woff2");
-  font-weight: 600 700;
-  font-display: swap;
-  unicode-range: U+3000-30FF, U+4E00-9FFF, U+FF00-FFEF;
-}
 /* Variable UI faces from @fontsource-variable (SIL OFL 1.1; licenses in fonts/*-OFL.txt),
    latin subsets (plus cyrillic for Noto Sans Mono) as before. unicode-range keeps
    cyrillic from downloading until needed. */
@@ -385,18 +374,6 @@
     U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
     U+2215, U+FEFF, U+FFFD;
 }
-@font-face {
-  font-family: "Source Serif 4 Variable";
-  font-style: normal;
-  font-display: swap;
-  font-weight: 200 900;
-  src: url("./fonts/source-serif-4-latin-wght-normal.woff2")
-    format("woff2-variations");
-  unicode-range:
-    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
-    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
-    U+2215, U+FEFF, U+FFFD;
-}
 /* Metric-adjusted local fallbacks, the values next/font (adjustFontFallback) generated: until a
    webfont swaps in, text set in the fallback takes the same space, so the swap reflows less. */
 @font-face {
@@ -423,19 +400,10 @@
   line-gap-override: 0%;
   size-adjust: 134.59%;
 }
-@font-face {
-  font-family: "Source Serif 4 Fallback";
-  src: local("Times New Roman");
-  ascent-override: 87.87%;
-  descent-override: 28.41%;
-  line-gap-override: 0%;
-  size-adjust: 117.91%;
-}
 :root {
   --font-geist: "Geist Variable", "Geist Fallback";
   --font-jb-mono: "JetBrains Mono Variable", "JetBrains Mono Fallback";
   --font-noto-mono: "Noto Sans Mono Variable", "Noto Sans Mono Fallback";
-  --font-source-serif: "Source Serif 4 Variable", "Source Serif 4 Fallback";
 }
 @theme {
   --color-bg: var(--bg);
@@ -453,7 +421,6 @@
   --color-tool-bg: var(--tool-bg);
   --color-bg-subtle: var(--bg-subtle);
   --font-mono-font: var(--font-mono);
-  --font-serif-display: var(--font-serif);
 }
 
 /* Warm-paper palette (light). All text/background pairs verified WCAG AA
@@ -557,8 +524,7 @@ html.omp :focus-visible {
   outline-color: var(--accent-2);
 }
 
-/* omp.sh type voice: Geist for UI text, JetBrains Mono for code. Scoped to
-   the omp theme so the warm themes keep their system/serif identity. */
+/* omp.sh type voice: Geist for UI text, JetBrains Mono for code. */
 html.omp,
 html.omp body {
   font-family:
@@ -1184,13 +1150,7 @@ body {
     "Symbols Nerd Font Mono", var(--font-noto-mono), 'JetBrains Mono',
     'Fira Code', 'Consolas', ui-monospace, 'PingFang SC', 'Microsoft YaHei',
     monospace;
-  /* Display serif for headings / session titles / modal titles / empty states.
-     Latin: Source Serif 4; CJK: the bundled Noto Serif SC subset, then system
-     CJK serifs for characters outside it or if a webfont fails. */
-  --font-serif:
-    "Symbols Nerd Font Mono", var(--font-source-serif), 'Noto Serif SC',
-    Georgia, 'Songti SC', 'Noto Serif CJK SC', 'Source Han Serif SC', 'SimSun',
-    serif;
+  --font-display: "Symbols Nerd Font Mono", var(--font-geist), ui-sans-serif, system-ui, sans-serif;
 }
 
 pre,
@@ -1198,9 +1158,9 @@ code {
   font-family: var(--font-mono);
 }
 
-/* Serif display utility: opt-in via class on headings, titles, empty states. */
-.display-serif {
-  font-family: var(--font-serif);
+/* Display utility for headings, titles and empty states. */
+.display-heading {
+  font-family: var(--font-display);
   font-weight: 600;
   letter-spacing: 0.005em;
 }
@@ -1224,7 +1184,7 @@ code {
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
-  font-family: var(--font-serif);
+  font-family: var(--font-display);
   font-weight: 600;
   color: var(--text);
   line-height: 1.35;
@@ -3567,7 +3527,7 @@ html.dark .dropdown-surface :is(select, option) {
 
 .settings-content h2 {
   margin: 0 0 6px;
-  font-family: var(--font-serif, Georgia, serif);
+  font-family: var(--font-display);
   font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.01em;

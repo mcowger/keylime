@@ -350,7 +350,7 @@ export function UsageConfig() {
             style={{
               fontSize: 20,
               fontWeight: 600,
-              fontFamily: "var(--font-serif, serif)",
+              fontFamily: "var(--font-display)",
               margin: 0,
               color: "var(--text)",
               letterSpacing: "-0.01em",
@@ -513,7 +513,7 @@ export function UsageConfig() {
                 style={{
                   fontSize: 32,
                   fontWeight: 700,
-                  fontFamily: "var(--font-serif, serif)",
+                  fontFamily: "var(--font-display)",
                   color: "var(--text)",
                   letterSpacing: "-0.02em",
                 }}
@@ -1003,7 +1003,7 @@ export function UsageConfig() {
             style={{
               fontSize: 18,
               fontWeight: 700,
-              fontFamily: "var(--font-serif, serif)",
+              fontFamily: "var(--font-display)",
               color: "var(--text)",
             }}
           >
@@ -1035,7 +1035,7 @@ export function UsageConfig() {
             style={{
               fontSize: 18,
               fontWeight: 700,
-              fontFamily: "var(--font-serif, serif)",
+              fontFamily: "var(--font-display)",
               color: "var(--text)",
             }}
           >
@@ -1067,7 +1067,7 @@ export function UsageConfig() {
             style={{
               fontSize: 18,
               fontWeight: 700,
-              fontFamily: "var(--font-serif, serif)",
+              fontFamily: "var(--font-display)",
               color: "var(--text)",
             }}
           >
@@ -1099,7 +1099,7 @@ export function UsageConfig() {
             style={{
               fontSize: 18,
               fontWeight: 700,
-              fontFamily: "var(--font-serif, serif)",
+              fontFamily: "var(--font-display)",
               color: "var(--text)",
             }}
           >
@@ -1131,7 +1131,7 @@ export function UsageConfig() {
             style={{
               fontSize: 18,
               fontWeight: 700,
-              fontFamily: "var(--font-serif, serif)",
+              fontFamily: "var(--font-display)",
               color: "var(--accent)",
             }}
           >

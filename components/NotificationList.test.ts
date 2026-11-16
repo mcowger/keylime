@@ -94,7 +94,7 @@ test("only unread rows carry the unread marker", () => {
     (li) => li.querySelector('[role="img"]'),
   );
   assert.deepEqual(
-    markedRows.map((li) => li.querySelector(".display-serif")!.textContent),
+    markedRows.map((li) => li.querySelector(".display-heading")!.textContent),
     ["New"],
   );
 });
@@ -218,7 +218,7 @@ test("clicking or pressing Enter on a row marks it read and opens its session, b
           }),
         );
       });
-    act(() => row().querySelector<HTMLElement>(".display-serif")!.click());
+    act(() => row().querySelector<HTMLElement>(".display-heading")!.click());
     assert.deepEqual(opened, ["n1-session"]);
     assert.equal(notificationHistory.get()[0].read, true);
     assert.equal(row().tabIndex, 0);
@@ -231,8 +231,8 @@ test("clicking or pressing Enter on a row marks it read and opens its session, b
     assert.equal(description.getAttribute("aria-expanded"), "true");
     window
       .getSelection()!
-      .selectAllChildren(row().querySelector(".display-serif")!);
-    act(() => row().querySelector<HTMLElement>(".display-serif")!.click());
+      .selectAllChildren(row().querySelector(".display-heading")!);
+    act(() => row().querySelector<HTMLElement>(".display-heading")!.click());
     window.getSelection()!.removeAllRanges();
     enter(row().querySelector("button")!);
     assert.equal(opened.length, 2);
@@ -257,7 +257,7 @@ test("a row shows the event in the viewer's language, and its session name as th
   const row = render(
     React.createElement(NotificationList),
   ).container.querySelector("li")!;
-  assert.equal(row.querySelector(".display-serif")!.textContent, "Deploy");
+  assert.equal(row.querySelector(".display-heading")!.textContent, "Deploy");
   assert.match(row.textContent!, /Ship it\?/);
 });
 
@@ -296,7 +296,7 @@ test("an entry whose session no longer exists still renders and opens by id", ()
     React.createElement(NotificationList),
   ).container.querySelector("li")!;
   assert.ok(
-    row.querySelector(".display-serif")!.textContent!.length > 0,
+    row.querySelector(".display-heading")!.textContent!.length > 0,
     "an untitled session still gets a title",
   );
   assert.equal(row.tabIndex, 0);

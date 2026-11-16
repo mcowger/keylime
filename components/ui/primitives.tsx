@@ -214,7 +214,7 @@ export function DialogTitle({
 }) {
   return (
     <BaseDialog.Title
-      className="display-serif"
+      className="display-heading"
       style={{ fontSize: 20, margin: "0 0 12px", ...style }}
     >
       {children}

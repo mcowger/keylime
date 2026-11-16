@@ -114,7 +114,7 @@ function show(
 test("clicking anywhere on a toast card runs its action and closes it", () => {
   const { opened, card } = show("Body");
   assert.equal(card().style.cursor, "pointer");
-  const title = card().querySelector<HTMLElement>(".display-serif");
+  const title = card().querySelector<HTMLElement>(".display-heading");
   pointer(title, "pointerdown", 100, 50);
   pointer(title, "click", 102, 51);
   assert.equal(opened.length, 1);
@@ -174,7 +174,7 @@ test("buttons, links, expandable text, drags and text selection do not trigger t
   pointer(card().querySelector("[aria-expanded]"), "pointerdown", 100, 50);
   pointer(card(), "click", 100, 50);
   // A drag that fell short of a swipe.
-  const title = card().querySelector<HTMLElement>(".display-serif");
+  const title = card().querySelector<HTMLElement>(".display-heading");
   assert.ok(title);
   pointer(title, "pointerdown", 100, 50);
   pointer(title, "click", 130, 50);
@@ -221,7 +221,7 @@ test("a session notification toast opens its session from a card click; one with
       document.querySelectorAll<HTMLElement>(".toast-card"),
     ).find(
       (card) =>
-        card.querySelector(".display-serif")?.textContent === sessionName,
+        card.querySelector(".display-heading")?.textContent === sessionName,
     );
   };
   const withSession = deliver("s1", "Fix bug");
@@ -231,7 +231,7 @@ test("a session notification toast opens its session from a card click; one with
     withSession.querySelectorAll("button:not(.toast-close-button), a").length,
     0,
   );
-  act(() => withSession.querySelector<HTMLElement>(".display-serif")!.click());
+  act(() => withSession.querySelector<HTMLElement>(".display-heading")!.click());
   assert.deepEqual(sessions, ["s1"]);
   // Session notifications are listed; opening one from its toast reads it.
   assert.deepEqual(
@@ -245,7 +245,7 @@ test("a session notification toast opens its session from a card click; one with
   assert.ok(withoutSession);
   assert.equal(withoutSession.style.cursor, "");
   act(() =>
-    withoutSession.querySelector<HTMLElement>(".display-serif")!.click(),
+    withoutSession.querySelector<HTMLElement>(".display-heading")!.click(),
   );
   assert.deepEqual(sessions, ["s1"]);
 });

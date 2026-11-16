@@ -2621,7 +2621,7 @@ export function SettingsConfig({
                     >
                       <div style={{ marginBottom: 4 }}>
                         <h2
-                          className="display-serif"
+                          className="display-heading"
                           style={{
                             fontSize: "var(--text-2xl)",
                             fontWeight: 600,
@@ -3130,7 +3130,7 @@ export function SettingsConfig({
                     >
                       <div style={{ marginBottom: 4 }}>
                         <h2
-                          className="display-serif"
+                          className="display-heading"
                           style={{
                             fontSize: "var(--text-2xl)",
                             fontWeight: 600,
@@ -3275,7 +3275,7 @@ export function SettingsConfig({
                     >
                       <div style={{ marginBottom: 4 }}>
                         <h2
-                          className="display-serif"
+                          className="display-heading"
                           style={{
                             fontSize: "var(--text-2xl)",
                             fontWeight: 600,
@@ -3484,7 +3484,7 @@ export function SettingsConfig({
                     >
                       <div style={{ marginBottom: 12 }}>
                         <h2
-                          className="display-serif"
+                          className="display-heading"
                           style={{
                             fontSize: 22,
                             fontWeight: 600,
@@ -3549,7 +3549,7 @@ export function SettingsConfig({
                     >
                       <div style={{ marginBottom: 4 }}>
                         <h2
-                          className="display-serif"
+                          className="display-heading"
                           style={{
                             fontSize: 22,
                             fontWeight: 600,
@@ -3985,7 +3985,7 @@ export function SettingsConfig({
                     >
                       <div style={{ marginBottom: 4 }}>
                         <h2
-                          className="display-serif"
+                          className="display-heading"
                           style={{
                             fontSize: 22,
                             fontWeight: 600,
@@ -4191,7 +4191,7 @@ export function SettingsConfig({
                     >
                       <div style={{ marginBottom: 4 }}>
                         <h2
-                          className="display-serif"
+                          className="display-heading"
                           style={{
                             fontSize: 22,
                             fontWeight: 600,
@@ -4236,7 +4236,7 @@ export function SettingsConfig({
                     >
                       <div style={{ marginBottom: 4 }}>
                         <h2
-                          className="display-serif"
+                          className="display-heading"
                           style={{
                             fontSize: 22,
                             fontWeight: 600,
@@ -4264,7 +4264,7 @@ export function SettingsConfig({
                       }}
                     >
                       <h2
-                        className="display-serif"
+                        className="display-heading"
                         style={{
                           fontSize: 22,
                           fontWeight: 600,
@@ -4293,7 +4293,7 @@ export function SettingsConfig({
                     >
                       <div style={{ marginBottom: 4 }}>
                         <h2
-                          className="display-serif"
+                          className="display-heading"
                           style={{
                             fontSize: "var(--text-2xl)",
                             fontWeight: 600,
@@ -4345,7 +4345,7 @@ export function SettingsConfig({
                     >
                       <div style={{ marginBottom: 4 }}>
                         <h2
-                          className="display-serif"
+                          className="display-heading"
                           style={{
                             fontSize: 22,
                             fontWeight: 600,

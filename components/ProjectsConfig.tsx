@@ -286,7 +286,7 @@ export function ProjectSettings({
         </nav>
         <div style={{ flex: 1, minWidth: 0, padding: mobile ? "20px 0 0" : "0 0 0 20px" }}>
           <div role="tabpanel" id={`${id}-panel-general`} aria-labelledby={`${id}-tab-general`} hidden={tab !== "general"}>
-            <h2 style={{ margin: "0 0 6px", fontFamily: "var(--font-serif, Georgia, serif)", fontSize: 22, fontWeight: 600 }}>General</h2>
+            <h2 style={{ margin: "0 0 6px", fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600 }}>General</h2>
             <p className="settings-content-subtitle" style={{ margin: "0 0 24px" }}>Set how this project appears in the sidebar.</p>
             <div className="settings-card" style={mobile ? { flexDirection: "column", alignItems: "stretch", gap: 10 } : undefined}>
               <div className="settings-card-text">
@@ -302,7 +302,7 @@ export function ProjectSettings({
             <ProjectIconSettings hostId={hostId} project={project} onUpdated={onUpdated} onPendingChange={onPendingChange} />
           </div>
           <div role="tabpanel" id={`${id}-panel-workspace`} aria-labelledby={`${id}-tab-workspace`} hidden={tab !== "workspace"}>
-            <h2 style={{ margin: "0 0 6px", fontFamily: "var(--font-serif, Georgia, serif)", fontSize: 22, fontWeight: 600 }}>Workspace setup</h2>
+            <h2 style={{ margin: "0 0 6px", fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600 }}>Workspace setup</h2>
             <p className="settings-content-subtitle" style={{ margin: "0 0 24px" }}>Configure workspace creation for this project.</p>
             <CreationPipelineEditor key={`${hostId}:${project.path}`} hostId={hostId} projectPath={project.path} gitProject={project.kind === "git"} />
           </div>

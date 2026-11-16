@@ -37,7 +37,7 @@ export function AppCrashScreen({
         aria-hidden
       />
       <h2
-        className="display-serif"
+        className="display-heading"
         style={{ margin: 0, fontSize: "1.5rem", color: "var(--text)" }}
       >
         {translate("errors.appCrash.title")}

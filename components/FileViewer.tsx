@@ -1567,7 +1567,7 @@ function TextFileViewer({
             <span style={{ color: "var(--text-muted)" }}>{breadcrumbDir}</span>
           )}
           <span
-            className="display-serif"
+            className="display-heading"
             style={{
               color: "var(--text)",
               fontWeight: 600,

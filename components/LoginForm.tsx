@@ -79,7 +79,7 @@ export function LoginForm({
         </div>
         <h1
           id="login-title"
-          className="display-serif"
+          className="display-heading"
           style={{
             margin: 0,
             fontSize: 28,

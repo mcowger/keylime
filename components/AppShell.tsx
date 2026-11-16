@@ -4359,7 +4359,7 @@ export function AppShell({ appName }: { appName: string }) {
                       </svg>
                       <div>
                         <div
-                          className="display-serif"
+                          className="display-heading"
                           style={{
                             fontSize: 20,
                             color: "var(--text)",
