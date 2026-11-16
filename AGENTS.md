@@ -82,10 +82,11 @@ Session browsing and seeded UI checks work without it.
 
 ### Development and browser testing
 
-Use `bun run dev` for seeded development and browser checks. `bun run dev --port 30278`
-selects a fixed loopback port; otherwise the launcher picks a free port. It prints
-the URL and randomly named temporary directory, then runs the web server with HMR
-and a separate hot-reloading host daemon. The source checkout stays in place.
+Use `bun run dev` for seeded development and browser checks. The launcher picks
+a free loopback port and prints the URL and randomly named temporary directory.
+Use the printed URL rather than choosing a fixed port for concurrent worktrees.
+It runs the web server with HMR and a separate hot-reloading host daemon. The
+source checkout stays in place.
 
 Each run gets a fresh HOME, agent directory, XDG directories, and private host
 socket. The launcher clears inherited `OMP_*`, `OMPWEB_*`, `PI_*`, and XDG settings

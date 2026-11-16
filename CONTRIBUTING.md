@@ -25,8 +25,9 @@ Worktrees created with the repository's Paseo setup copy ignored `runner/vendor/
 
 ```bash
 bun run dev                 # seeded, random free loopback port
-bun run dev --port 30278    # seeded, fixed loopback port
 ```
+
+Use the printed URL for browser checks. Avoid a fixed port when running multiple worktrees.
 
 Each invocation creates a randomly named temporary directory with its own home,
 agent configuration, XDG directories, and host socket. The launcher prints its

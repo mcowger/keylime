@@ -58,6 +58,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Paseo setup command parsing and ordering now distinguish multiline command lists from shell scripts; blocking command selections are revalidated when recipes change
 - Explicit skill prompts start collapsed; select the header to show their full instructions
 - Sidebar host headings use consistent sizing and a host icon; the only connected host shows projects without a heading, while offline hosts remain grouped
+- Development documentation now directs concurrent worktrees to use the printed random-port URL rather than a fixed port
 
 ### Fixed
 - Markdown tables keep readable column widths on mobile and scroll horizontally when needed.

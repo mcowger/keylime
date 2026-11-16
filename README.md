@@ -880,14 +880,12 @@ bun runner/scripts/build-binary.ts   # key lime's omp build for this machine: ru
 bun run dev
 ```
 
-The dev server runs at [http://127.0.0.1:30178](http://127.0.0.1:30178). It finds the runner in
-`runner/release/` by itself; `bun run test` and `bun run build:binary` need the runner set up too.
+The dev server prints its URL. It finds the runner in `runner/release/` by itself;
+`bun run test` and `bun run build:binary` need the runner set up too.
 
-A dev server does not take over the local daemon: only the production web
-server writes the daemon's `host.json`, so "This machine" shows offline in dev
-and the daemon stays linked to your installed key lime.
+The dev server uses an isolated host daemon and does not take over the installed daemon.
 
-`bun run dev` starts a seeded development environment with Bun hot reload and a separate host daemon, printing its temporary directory and URL. Pass `--port 30278` to select a port. See [CONTRIBUTING.md](CONTRIBUTING.md) for details. `bun run build` bundles the browser app into `dist/`, and `bun run start` serves it on port 30177 (`bun run smoke` checks the result). `bun run build:binary` builds the [single binary](#single-binary) for this machine into `release/` (`-- --target bun-linux-arm64` and the like for another platform; `bun run smoke -- --binary release/ompweb-linux-x64/ompweb` checks it).
+`bun run dev` starts a seeded development environment with Bun hot reload and a separate host daemon, printing its temporary directory and URL. Use the printed URL rather than choosing a fixed port for concurrent worktrees. See [CONTRIBUTING.md](CONTRIBUTING.md) for details. `bun run build` bundles the browser app into `dist/`, and `bun run start` serves it on port 30177 (`bun run smoke` checks the result). `bun run build:binary` builds the [single binary](#single-binary) for this machine into `release/` (`-- --target bun-linux-arm64` and the like for another platform; `bun run smoke -- --binary release/ompweb-linux-x64/ompweb` checks it).
 
 API documentation is generated explicitly with `bun run api:generate` and checked
 with `bun run api:check`. Development, builds and deployments do not regenerate or
