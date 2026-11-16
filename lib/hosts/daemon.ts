@@ -1,4 +1,7 @@
 import { lstatSync, realpathSync, mkdirSync, watch } from "node:fs";
+import { randomUUID } from "node:crypto";
+import type { SpawnResult } from "./host";
+import { SessionPtyManager } from "./session-pty";
 import { Value } from "@sinclair/typebox/value";
 import { BrowserListSchema, BrowserFrameSchema } from "../api-contracts/host-control-operations";
 import { BrowserControlArgsSchema, BrowserControlResultSchema } from "../api-contracts/runner-lifecycle";
@@ -56,8 +59,8 @@ import {
   type OpenChannelRequest,
   type UnknownMessage,
 } from "./link-protocol";
-import { localHost, resolveSpawnCwdResult } from "./local-host";
-import { listenHostSocket, type HostSocket } from "./omp-socket";
+import { localHost, prepareInteractiveLaunch, resolveSpawnCwdResult } from "./local-host";
+import { hostSocketPath, listenHostSocket, type HostSocket } from "./omp-socket";
 import { sessionOps } from "./session-ops";
 import packageJson from "../../package.json";
 import { UploadRetention } from "./upload-retention";
@@ -217,6 +220,15 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     login: (url) => links.get(url)?.login ?? null,
     log,
   });
+  const socketPath = options.hostSocket ?? hostSocketPath();
+  const attached = new Set<string>();
+  const ptys = new SessionPtyManager(socketPath + ".attach", (runtimeId, on) => {
+    if (on) attached.add(runtimeId);
+    else attached.delete(runtimeId);
+    channels.setTerminalAttached(runtimeId, on);
+  });
+  const ptyStarted = ptys.start();
+  const pendingPtys = new Map<number, { resolve(spawned: SpawnResult): void; reject(error: Error): void; kill(): void }>();
   const channels = new ChannelTable({
     spawn: async (launch) => {
       if (!launch.sessionFile) {
@@ -272,13 +284,46 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
           );
         await config.ensure(launch.configVersion, launch.credentialsServer);
       }
-      const spawned = await localHost.spawnRpc(
-        { ...launch, cwd: resolved.cwd },
-        null,
-        { env },
-      );
-      return { ...spawned, fellBack: resolved.fellBack || spawned.fellBack };
+      await ptyStarted;
+      if (!(await hostSocket)) throw new Error("Host socket is unavailable for terminal launch");
+      if (stopped) throw new Error("Host is stopping");
+      const prepared = await prepareInteractiveLaunch({ ...launch, cwd: resolved.cwd }, { ...env, KEYLIME_HOST_SOCKET: socketPath });
+      if (stopped) throw new Error("Host is stopping");
+      const runtimeId = randomUUID();
+      const child = ptys.spawn({ runtimeId, argv: prepared.argv, cwd: prepared.cwd, env: prepared.env });
+      const handshake = Promise.withResolvers<SpawnResult>();
+      pendingPtys.set(child.pid, { resolve: handshake.resolve, reject: handshake.reject, kill: () => child.kill(true) });
+      const timeout = setTimeout(() => handshake.reject(new Error("Timed out waiting for the terminal runner to connect")), LINK_LIMITS.channelReadyMs);
+      timeout.unref?.();
+      void child.exited.then((code) => handshake.reject(new Error(`Terminal runner exited before connecting (${code})`)));
+      try {
+        const connected = await handshake.promise;
+        const socket = connected.transport;
+        socket.onExit(() => child.kill());
+        return {
+          ...connected,
+          cwd: prepared.cwd,
+          fellBack: resolved.fellBack,
+          launchAdvisor: prepared.launchAdvisor,
+          transport: {
+            ...socket,
+            id: runtimeId,
+            killTree: (force: boolean) => child.kill(force),
+            onExit: (listener: (code: number | null, signal: NodeJS.Signals | null) => void) => {
+              void child.exited.then((code) => listener(code, null));
+            },
+          },
+        };
+      } catch (error) {
+        child.kill(true);
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+        pendingPtys.delete(child.pid);
+      }
     },
+    bindTerminal: (runtimeId, sessionId) => ptys.bind(runtimeId, sessionId),
+    terminalAttached: (runtimeId) => attached.has(runtimeId),
     prepareLaunch: (launch) => {
       if (
         !isRecord(launch) ||
@@ -387,10 +432,14 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     },
   });
   const hostSocket: Promise<HostSocket | undefined> =
-    options.hostSocket === undefined
-      ? Promise.resolve(undefined)
-      : listenHostSocket(options.hostSocket, {
+    listenHostSocket(socketPath, {
           adopt: async (spawned, launch, sessionId) => {
+            const pending = pendingPtys.get(Number(spawned.transport.id));
+            if (pending) {
+              pendingPtys.delete(Number(spawned.transport.id));
+              pending.resolve(spawned);
+              return;
+            }
             if (stopped)
               throw new HostOpError(
                 503,
@@ -1100,7 +1149,12 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         ...[...services.values()].map((service) => service.stop()),
       ]);
       await (await hostSocket)?.close();
+      for (const pending of pendingPtys.values()) {
+        pending.reject(new Error("Host is stopping"));
+        pending.kill();
+      }
       await channels.stop();
+      await ptys.close();
       await configStopped;
       await forwarder.stop();
       resume.dispose();
@@ -1148,6 +1202,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     startupSweep,
     startupRecovery,
     versionRead,
+    ptyStarted,
     hostSocket,
   ]).then(() => {});
   return { stop: () => shutdown(0), done, control, started };

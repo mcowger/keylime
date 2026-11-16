@@ -76,6 +76,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Encoded browser video delivers keyframes for static pages and newly attached viewers
 - Browser video logs capture, encoder, delivery and viewer diagnostics without recording page contents or video data
 - Fixed blank browser video caused by Chromium changing large capture timestamps during encoding. Encoder correlation now preserves capture timestamps separately
+- Host daemons own interactive PTY sessions and `keylime attach <session-id>` joins a running session from a local terminal with a serialized screen snapshot, shared resize, and kept-alive shells after detach
+- Attached terminals suppress device and color queries so replies from the physical terminal cannot leak into the agent session
 
 ### Changed
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.
@@ -112,6 +114,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The new-session slash menu lists global skills without starting a session or creating a workspace
 - `bun run dev --browser-fixture` starts its Chromium fixture session through the host daemon instead of a separate script
 - Browser video progress diagnostics now break down dropped packets by reason and report observed frame size, timestamp and capture generation
+- Session lifecycle treats an attached terminal as active, preventing idle shutdown while someone is attached
 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen

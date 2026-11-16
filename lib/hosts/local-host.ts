@@ -16,6 +16,9 @@ import type { ProjectLaunchConfig } from "../types";
 import { resolveProject } from "../worktree";
 import { HostOpError } from "./link-protocol";
 import type { Host } from "./host";
+import type { SpawnRequest } from "./host";
+import { resolveOmpBin, OMP_NOT_FOUND } from "../omp/omp-cli";
+import { sanitizeProjectCommandEnvironment } from "../project-command-env";
 import { sessionOps } from "./session-ops";
 
 // omp aliases "find"->"glob" and has no "ls" tool; the web UI presets still use
@@ -43,7 +46,7 @@ const FULL_PRESET_KEY = [...PRESET_FULL]
   .sort()
   .join(",");
 
-/** Extra CLI args for spawning `keylime-omp --headless` for a session. */
+/** Extra CLI args for spawning a session. */
 export function buildSessionSpawnArgs(
   sessionFile: string,
   toolNames?: string[],
@@ -176,6 +179,31 @@ export async function launchConfigForCwd(
     const projectKey = comparableProjectPath(project.path);
     return projectKey === rootKey || key.startsWith(`${projectKey}-worktrees/`);
   })?.launchConfig;
+}
+
+export async function prepareInteractiveLaunch(request: SpawnRequest, overrides?: Record<string, string>) {
+  const { cwd } = request;
+  const launchConfig = await launchConfigForCwd(cwd);
+  if (request.creationId !== undefined) {
+    try {
+      if (!statSync(cwd).isDirectory() || comparableProjectPath(realpathSync(cwd)) !== comparableProjectPath(cwd))
+        throw new Error("Prepared cwd changed");
+    } catch {
+      throw new HostOpError(409, "prepared_cwd_changed", "The prepared worktree is no longer available");
+    }
+  }
+  const bin = resolveOmpBin();
+  if (!bin) throw new Error(OMP_NOT_FOUND);
+  const extraEnv = { ...getAgentEnvOverrides(), ...overrides };
+  const env = sanitizeProjectCommandEnvironment({ ...process.env, ...extraEnv });
+  if (extraEnv.OMP_PROFILE === undefined) delete env.OMP_PROFILE;
+  if (extraEnv.PI_PROFILE === undefined) delete env.PI_PROFILE;
+  return {
+    argv: [bin, "--cwd", cwd, ...buildSessionSpawnArgs(request.sessionFile, request.toolNames, request.advisor, launchConfig, request.spawnModel)],
+    cwd,
+    env: Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined)),
+    launchAdvisor: launchConfig?.advisor === true,
+  };
 }
 
 /** This machine: `child_process.spawn` and direct `fs`. */

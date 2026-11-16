@@ -99,6 +99,8 @@ type Channel = {
 };
 type ChannelDeps = {
   spawn(launch: SpawnRequest): Promise<SpawnResult>;
+  bindTerminal?(runtimeId: string, sessionId: string): void;
+  terminalAttached?(runtimeId: string): boolean;
   prepareLaunch(launch: SpawnRequest): SpawnRequest;
   sessionId?(file: string): string | null;
   autoApproveExtension?(): boolean;
@@ -164,6 +166,11 @@ export class ChannelTable {
   private readonly browserLists = new Set<Channel>();
   private readonly workspaceFences = new Set<string>();
   constructor(private readonly deps: ChannelDeps) {}
+  setTerminalAttached(runtimeId: string, attached: boolean): void {
+    for (const channel of this.channels.values())
+      if (!channel.adopted && channel.transport.id === runtimeId)
+        channel.lifecycle?.setTerminalAttached(attached);
+  }
   get size(): number {
     return this.channels.size;
   }
@@ -788,6 +795,11 @@ export class ChannelTable {
         },
         onRunning: () => this.deps.runningChanged?.(),
       });
+      const transportId = channel.transport.id;
+      if (!channel.adopted && transportId !== undefined) {
+        channel.lifecycle.setTerminalAttached(this.deps.terminalAttached?.(transportId) ?? false);
+        if (identity) this.deps.bindTerminal?.(transportId, identity);
+      }
       if (preparingLinkId)
         channel.lifecycle.setPreparing(preparingLinkId, true);
       channel.shared = new SharedRequests({
@@ -955,6 +967,9 @@ export class ChannelTable {
       }
       channel.sessionMovePending = false;
       channel.pending.sessionId = id;
+      const transportId = channel.transport.id;
+      if (!channel.adopted && transportId !== undefined)
+        this.deps.bindTerminal?.(transportId, id);
       channel.aliases.add(id);
       if (channel.opened) this.deps.channelsChanged?.(channel.ch);
     }

@@ -42,6 +42,7 @@ export class ChannelLifecycle {
   private unsettled = false;
   private compacting = false;
   private startup = true;
+  private terminalAttached = false;
   private wasProtected = true;
   private disposed = false;
   private idleSince: number;
@@ -79,6 +80,7 @@ export class ChannelLifecycle {
     if (
       this.disposed ||
       this.startup ||
+      this.terminalAttached ||
       this.isRunning ||
       this.compacting ||
       this.commands.size > 0 ||
@@ -90,6 +92,11 @@ export class ChannelLifecycle {
       return false;
     for (const link of this.links.values()) if (link.preparing) return false;
     return true;
+  }
+  setTerminalAttached(attached: boolean): void {
+    if (this.terminalAttached === attached) return;
+    this.terminalAttached = attached;
+    this.changed();
   }
   setStartup(on: boolean): void {
     this.startup = on;

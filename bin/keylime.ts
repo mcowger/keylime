@@ -44,6 +44,13 @@ if (
 }
 
 function startLauncher() {
+  if (process.argv[2] === "attach") {
+    import("./keylime-attach.ts").then(
+      ({ runAttach }) => runAttach(process.argv[3]).then((code) => { process.exitCode = code; }),
+      (error) => { console.error(`Could not attach: ${error instanceof Error ? error.message : String(error)}`); process.exitCode = 1; },
+    );
+    return;
+  }
   // Verify that the installed runner starts and speaks the expected protocol.
   if (process.argv[2] === "preflight") {
     process.env.KEYLIME_PACKAGE_DIR ??= module
