@@ -14,6 +14,7 @@ import {
 } from "react";
 import {
   Check,
+  Copy,
   GitFork,
   CornerUpLeft,
   ChevronRight,
@@ -32,6 +33,7 @@ import {
   Bot,
   Code2,
   Globe,
+  MessageCircle,
   MessagesSquare,
   Wrench,
   Volume2,
@@ -100,7 +102,7 @@ function ToolCategoryIcon({
   className,
   style,
 }: {
-  category: ToolCategory;
+  category: ToolCategory | "agent-message";
   size?: number;
   className?: string;
   style?: React.CSSProperties;
@@ -158,6 +160,15 @@ function ToolCategoryIcon({
           strokeWidth={1.8}
           className={className}
           style={{ color: "var(--accent-2, #7DD7E8)", ...style }}
+        />
+      );
+    case "agent-message":
+      return (
+        <MessageCircle
+          size={size}
+          strokeWidth={1.8}
+          className={className}
+          style={{ color: "var(--accent-2, var(--accent))", ...style }}
         />
       );
     case "hub":
@@ -2054,6 +2065,12 @@ const ToolCallBlock = memo(
     const resultMeta = getToolResultMeta(result);
     const command = formatToolCommand(block);
     const category = getToolCategory(block.toolName);
+    const path = typeof block.input?.path === "string" ? block.input.path : "";
+    const isWrite = block.toolName.toLowerCase() === "write";
+    const agentMessage = isWrite && /^agent:\/\//i.test(path);
+    const device = isWrite ? /^xd:\/\/([a-z][a-z0-9_]*)(?:[?#].*)?$/i.exec(path)?.[1] : undefined;
+    const displayName = agentMessage ? "agent" : device ?? block.toolName;
+    const displayCategory = agentMessage ? "agent-message" : device ? getToolCategory(device) : category;
     const semantic = getSemanticToolLabel(block);
     const todoSummary =
       category === "todo" ? getTodoSummary(block.input) : null;
@@ -2142,12 +2159,12 @@ const ToolCallBlock = memo(
               )}
             </span>
             <span className="activity-tool-icon" aria-hidden>
-              <ToolCategoryIcon category={category} size={12} />
+              <ToolCategoryIcon category={displayCategory} size={12} />
             </span>
             <span
               className={`activity-row-tool${isError ? " activity-row-tool-error" : ""}`}
             >
-              {hubTool ?? block.toolName}
+              {hubTool ?? displayName}
             </span>
             {evalLanguage && (
               <span className="activity-row-language" role="img" aria-label={evalLanguage === "py" ? "Python" : evalLanguage === "js" ? "JavaScript" : evalLanguage} title={evalLanguage === "py" ? "Python" : evalLanguage === "js" ? "JavaScript" : evalLanguage}>
@@ -2676,13 +2693,15 @@ function AdvisorMessageView({ message, cwd, onOpenFile, sessionId }: {
   const images = getMessageImages(message.content);
   const { copied, copy } = useCopyFeedback();
   return (
-    <div className="chat-message" style={{ marginBottom: 6 }}>
-      <div className="message-model-label" style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 4 }}>{t("messageView.advisorLabel")}</div>
+    <div className="chat-message advisor-message">
+      <div className="advisor-message-label">{t("messageView.advisorLabel")}</div>
       <div data-selection-scope="message" tabIndex={-1}>
         {images.map((image, i) => { const src = imageSource(image); return src ? <ClickableImage key={i} src={src} alt="" style={{ maxWidth: 240, maxHeight: 240 }} /> : null; })}
         {text && <MarkdownBody className="markdown-custom-message" cwd={cwd} onOpenFile={onOpenFile} sourceSessionId={sessionId}>{text}</MarkdownBody>}
-        {(text || message.details !== undefined) && <button onClick={() => copy(text || safeJson(message.details))}>{copied ? t("messageView.copied") : t("messageView.copy")}</button>}
-        {message.details !== undefined && <details><summary>JSON</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{safeJson(message.details)}</pre></details>}
+        <div className="advisor-message-actions">
+          {(text || message.details !== undefined) && <button className="message-copy-action" aria-label={copied ? t("messageView.copied") : t("messageView.copy")} title={copied ? t("messageView.copied") : t("messageView.copy")} onClick={() => copy(text || safeJson(message.details))}>{copied ? <Check size={14} /> : <Copy size={14} />}</button>}
+          {message.details !== undefined && <details className="advisor-message-details"><summary>JSON</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{safeJson(message.details)}</pre></details>}
+        </div>
       </div>
     </div>
   );

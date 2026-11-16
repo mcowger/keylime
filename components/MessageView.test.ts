@@ -366,6 +366,28 @@ test("eval rows place language icons before the intent", () => {
   }
 });
 
+test("tool rows distinguish agent messages and device calls from file access", () => {
+  for (const [toolName, path, label, icon] of [
+    ["write", "agent://TempRoots", "agent", "lucide-message-circle"],
+    ["write", "xd://ast_grep", "ast_grep", "lucide-wrench"],
+    ["write", "xd://mcp__github_issue_read", "mcp__github_issue_read", "lucide-file-text"],
+    ["read", "xd://ast_grep", "read", "lucide-file-text"],
+    ["write", "xd://read/sources", "write", "lucide-file-pen"],
+    ["write", "notes.txt", "write", "lucide-file-pen"],
+  ]) {
+    const view = render(React.createElement(MessageView, {
+      isStreaming: true,
+      message: { role: "assistant", model: "test", provider: "test", content: [
+        { type: "toolCall", toolCallId: "call", toolName, input: { path } },
+      ] },
+    }));
+    const row = view.container.querySelector("button.activity-row-trigger")!;
+    assert.equal(row.querySelector(".activity-row-tool")?.textContent, label, path);
+    assert.ok(row.querySelector(`.activity-tool-icon svg.${icon}`), path);
+    view.unmount();
+  }
+});
+
 test("expanded tool inputs follow streaming arguments without toggling output", () => {
   const code = "print('first')\nprint('complete')";
   const editInput = {

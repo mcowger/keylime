@@ -3994,6 +3994,46 @@ html[data-touch-targets="accessible"] .chat-scroll-bottom {
   animation: chat-message-in var(--dur-med) var(--ease-out-warm) both;
 }
 
+.advisor-message {
+  margin: 8px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-card);
+  background: var(--bg-subtle);
+}
+.advisor-message-label {
+  margin-bottom: 6px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+.advisor-message-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  margin-top: 4px;
+}
+.advisor-message-details {
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+.advisor-message-details summary {
+  padding: 7px 0;
+  cursor: pointer;
+}
+.advisor-message-details summary:hover {
+  color: var(--text-muted);
+}
+.advisor-message-details pre {
+  margin: 0;
+}
+html[data-touch-targets="accessible"] .advisor-message-details summary {
+  min-height: 44px;
+  padding: 15px 0;
+}
+
 .message-copy-actions {
   display: flex;
   flex-wrap: wrap;
