@@ -112,6 +112,7 @@ type NameSave = {
   version: number;
   running: boolean;
   error: string;
+  timer: number | null;
   listeners: Set<() => void>;
   updated: Set<(snapshot: HierarchySnapshot) => void>;
 };
@@ -151,18 +152,19 @@ async function saveProjectName(
       save.saved = alias;
       for (const updated of save.updated) updated(data);
     } catch (e) {
+      if (save.timer) break;
       if (version === save.version) {
         save.error = e instanceof Error ? e.message : String(e);
         break;
       }
       continue;
     }
-    if (version === save.version || (save.name.trim() || null) === save.saved)
+    if (save.timer || version === save.version || (save.name.trim() || null) === save.saved)
       break;
   }
   save.running = false;
   notifyNameSave(save);
-  if (!save.listeners.size && !save.error && nameSaves.get(key) === save)
+  if (!save.listeners.size && !save.timer && !save.error && nameSaves.get(key) === save)
     nameSaves.delete(key);
 }
 
@@ -180,6 +182,7 @@ export function ProjectSettings({
   const [tab, setTab] = useState<"general" | "workspace">("general");
   const mobile = useIsMobile();
   const id = useId();
+  const nameFocused = useRef(false);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const key = JSON.stringify([hostId, project.id]);
   const [save] = useState(() => {
@@ -191,6 +194,7 @@ export function ProjectSettings({
         version: 0,
         running: false,
         error: "",
+        timer: null,
         listeners: new Set(),
         updated: new Set(),
       };
@@ -214,6 +218,7 @@ export function ProjectSettings({
       if (
         !save.listeners.size &&
         !save.running &&
+        !save.timer &&
         !save.error &&
         nameSaves.get(key) === save
       )
@@ -221,7 +226,7 @@ export function ProjectSettings({
     };
   }, [key, save]);
   useEffect(() => {
-    if (!save.running && !save.error) {
+    if (!nameFocused.current && !save.running && !save.timer && !save.error) {
       save.name = project.alias ?? project.name;
       save.saved = project.alias ?? null;
       notifyNameSave(save);
@@ -232,7 +237,11 @@ export function ProjectSettings({
     save.version++;
     save.error = "";
     notifyNameSave(save);
-    void saveProjectName(key, hostId, project.id, save);
+    clearTimeout(save.timer ?? undefined);
+    save.timer = window.setTimeout(() => {
+      save.timer = null;
+      void saveProjectName(key, hostId, project.id, save);
+    }, 500);
   }
 
   const tabs = [
@@ -294,7 +303,7 @@ export function ProjectSettings({
                 <div id={`${id}-name-desc`} className="settings-card-desc">Choose the name shown for this project. Clear it to use the directory name.</div>
               </div>
               <span className="settings-card-control" style={mobile ? { width: "100%" } : { flexShrink: 1 }}>
-                <input id={`${id}-name`} aria-describedby={`${id}-name-desc`} style={{ width: "100%", minWidth: 0, boxSizing: "border-box", padding: "7px 9px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg)", color: "var(--text)", fontSize: 13 }} value={save.name} onChange={(e) => changeName(e.target.value)} />
+                <input id={`${id}-name`} aria-describedby={`${id}-name-desc`} style={{ width: "100%", minWidth: 0, boxSizing: "border-box", padding: "7px 9px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg)", color: "var(--text)", fontSize: 13 }} value={save.name} onFocus={() => { nameFocused.current = true; }} onBlur={() => { nameFocused.current = false; }} onChange={(e) => changeName(e.target.value)} />
               </span>
             </div>
             {save.running && <div role="status" className="settings-card-desc">Saving name...</div>}
