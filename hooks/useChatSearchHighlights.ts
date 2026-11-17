@@ -82,6 +82,8 @@ export function useChatSearchHighlights({
   query: rawQuery,
   target,
   ready,
+  navigationKey,
+  sessionId,
   entryIds,
   revealMessage,
   holdScrollPosition,
@@ -92,6 +94,9 @@ export function useChatSearchHighlights({
   target: SearchMatchTarget | null;
   /** The transcript is mounted (loaded, not the empty new-chat screen). */
   ready: boolean;
+  /** Identifies the selected session and history view. */
+  navigationKey: string;
+  sessionId: string | null;
   entryIds: string[];
   /** Widens the render window to include the message; false while that is pending. */
   revealMessage: (messageIndex: number) => boolean;
@@ -105,6 +110,7 @@ export function useChatSearchHighlights({
     target: SearchMatchTarget;
   } | null>(null);
   const handledRef = useRef<SearchMatchTarget | null>(null);
+  const pendingViewRef = useRef<{ target: SearchMatchTarget; key: string } | null>(null);
 
   useEffect(() => {
     const element = container.current;
@@ -148,6 +154,22 @@ export function useChatSearchHighlights({
   }, [container, rawQuery, ready]);
 
   useEffect(() => {
+    if (!target) {
+      pendingViewRef.current = null;
+      return;
+    }
+    if (target.sessionId !== sessionId) {
+      pendingViewRef.current = null;
+      return;
+    }
+    if (pendingViewRef.current?.target !== target) {
+      pendingViewRef.current = { target, key: navigationKey };
+    } else if (pendingViewRef.current.key !== navigationKey) {
+      handledRef.current = target;
+      pendingViewRef.current = null;
+      onTargetHandled?.();
+      return;
+    }
     const element = container.current;
     const query = compileSearchQuery(rawQuery);
     if (
@@ -199,6 +221,8 @@ export function useChatSearchHighlights({
     rawQuery,
     target,
     ready,
+    navigationKey,
+    sessionId,
     entryIds,
     revealMessage,
     holdScrollPosition,

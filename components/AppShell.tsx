@@ -1607,7 +1607,7 @@ export function AppShell({ appName }: { appName: string }) {
       setPendingSessionImport(null);
       try {
         const response = await fetch(
-          `/api/sessions/${encodeURIComponent(id)}?deferThinking&deferMedia`,
+          `/api/sessions/${encodeURIComponent(id)}?deferThinking&deferMedia&tail=1`,
         );
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const detail = (await response.json()) as {

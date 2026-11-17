@@ -52,10 +52,10 @@ function sessionsErrorResponse(error: unknown): Response {
 /**
  * @apiContract getSession
  * @apiUsage Read a session's persisted transcript from its owning host, optionally with live agent state.
- * @apiInputs id selects the session; presence of deferThinking or deferMedia defers those payloads, and presence of includeState requests the live wrapper state.
- * @apiInvariants agent is omitted if its live state request fails, rather than invalidating the transcript; a nonrunning wrapper reports running false. The disk read and live state are not an atomic snapshot.
+ * @apiInputs id selects the session; deferThinking and deferMedia defer payloads; includeState requests live wrapper state. tail selects the newest 1–200 display entries, and before plus historyRevision selects an exclusive preceding page.
+ * @apiInvariants Tail pages are chronological on the active branch, without overlap. Continuations omit session metadata and navigation tree. historyRevision identifies the file generation; a stale revision or missing active cursor returns 409 session_history_changed. Without tail the full transcript is returned. agent is omitted if its live state request fails. Disk and live state are not an atomic snapshot.
  * @apiEffects Reads host session storage and may send get_state to an existing wrapper; it does not start a process.
- * @apiRecovery Fetch agent state separately when agent is omitted; retry reads when the host is available, and preserve confirmed history if a new session file has not landed yet.
+ * @apiRecovery On session_history_changed discard partial pages and synchronize again. Fetch agent state separately when omitted; retry reads when the host is available.
  */
 export async function GET(
   req: Request,
@@ -68,9 +68,20 @@ export async function GET(
 
     const searchParams = new URL(req.url).searchParams;
     const includeState = searchParams.has("includeState");
+    const tailRaw = searchParams.get("tail");
+    const before = searchParams.get("before");
+    const historyRevision = searchParams.get("historyRevision");
+    if ((tailRaw !== null && (!/^[1-9]\d*$/.test(tailRaw) || Number(tailRaw) > 200)) ||
+        (before !== null && (!tailRaw || !historyRevision || before.length === 0 || before.length > 256)) ||
+        (historyRevision !== null && (before === null || historyRevision.length === 0 || historyRevision.length > 256))) {
+      return Response.json({ code: "invalid_history_page", error: "Invalid session history page parameters" }, { status: 400 });
+    }
     const read = await resolved.host.sessionOps.readSession(id, {
       deferThinking: searchParams.has("deferThinking"),
       deferMedia: searchParams.has("deferMedia"),
+      ...(tailRaw !== null ? { tail: Number(tailRaw) } : {}),
+      ...(before !== null ? { before } : {}),
+      ...(historyRevision !== null ? { historyRevision } : {}),
     });
     if (!read.ok) return opErrorResponse(read);
 

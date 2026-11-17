@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import {
   closeSync,
   existsSync,
@@ -646,6 +647,7 @@ interface SessionHistoryIndex {
   entryIds: string[];
   positions: Map<string, number>;
   compactionId: string | null;
+  treeEntries: SessionEntry[];
   metadata: Omit<SessionContext, "messages" | "entryIds">;
   leafId: string | null;
   tipId: string | null;
@@ -706,6 +708,9 @@ function historyEntryMetadata(entry: SessionEntry): SessionEntry {
     compact.firstKeptEntryIndex = (
       entry as unknown as Record<string, unknown>
     ).firstKeptEntryIndex;
+  } else if (entry.type === "label") {
+    compact.targetId = entry.targetId;
+    compact.label = entry.label;
   } else if (entry.type === "branch_summary") {
     compact.summary = entry.summary ? "present" : "";
   } else if (entry.type === "custom" && entry.customType === "user_todo_edit") {
@@ -737,6 +742,22 @@ function historyEntryMetadata(entry: SessionEntry): SessionEntry {
     };
   }
   return compact as unknown as SessionEntry;
+}
+
+/** Navigation only needs a bounded text preview, never a transcript body. */
+function historyPreview(entry: SessionEntry): string {
+  if (entry.type !== "message" || !isRecord(entry.message)) return "";
+  const content = "content" in entry.message ? entry.message.content : undefined;
+  if (typeof content === "string") return content.slice(0, 500);
+  if (!Array.isArray(content)) return "";
+  let text = "";
+  for (const part of content) {
+    if (!isRecord(part) || part.type !== "text" || typeof part.text !== "string") continue;
+    if (text) text += " ";
+    text += part.text.slice(0, 500 - text.length);
+    if (text.length >= 500) break;
+  }
+  return text;
 }
 
 function buildHistoryIndex(
@@ -781,6 +802,7 @@ function buildHistoryIndex(
     compactionId,
     metadata,
     tipId,
+    treeEntries: loaded.entries,
     leafId:
       leafId && loaded.entries.some((entry) => entry.id === leafId)
         ? leafId
@@ -788,7 +810,7 @@ function buildHistoryIndex(
   });
   const detached = JSON.parse(serialized) as Pick<
     SessionHistoryIndex,
-    "rows" | "compactionId" | "metadata" | "tipId" | "leafId"
+    "rows" | "compactionId" | "metadata" | "tipId" | "leafId" | "treeEntries"
   >;
   const entryIds = detached.rows.map((row) => row.id);
   const positions = new Map(entryIds.map((id, position) => [id, position]));
@@ -831,8 +853,14 @@ function getSessionHistoryIndex(
   let index = cache.get(key);
   if (!index) {
     index = buildHistoryIndex(filePath, version, leafId, includePreCompaction);
-    if (stat && historyFileVersion(statSync(filePath)) !== version)
-      throw new Error("Session changed while indexing history");
+    if (stat) {
+      try {
+        if (historyFileVersion(statSync(filePath)) !== version)
+          throw new SessionHistoryChangedError();
+      } catch {
+        throw new SessionHistoryChangedError();
+      }
+    }
     // An unusually metadata-heavy file still opens, but cannot evict every
     // peer or retain more than the entire index budget by itself.
     if (stat && index.bytes <= MAX_HISTORY_INDEX_BYTES) cache.set(key, index);
@@ -862,8 +890,25 @@ export function getSessionContextBoundary(filePath: string): {
   return { entryIds: index.entryIds };
 }
 
-/** Seek only page bodies. A file changed during indexing/reading must not
- * advance the browser cursor using offsets from a different file version. */
+/** A backfill belongs to a different file generation or active branch. */
+export class SessionHistoryChangedError extends Error {
+  constructor() {
+    super("Session changed while reading history");
+    this.name = "SessionHistoryChangedError";
+  }
+}
+
+export function assertSessionHistoryRevision(filePath: string, revision: string): void {
+  try {
+    const actual = createHash("sha256").update(sessionPathKey(filePath)).update("\0").update(historyFileVersion(statSync(filePath))).digest("base64url");
+    if (actual === revision) return;
+  } catch {
+    // Missing or replaced files invalidate the snapshot too.
+  }
+  throw new SessionHistoryChangedError();
+}
+
+/** Seek only selected bodies and reject offsets from a different generation. */
 export function getSessionHistoryPage(
   filePath: string,
   cursor: SessionHistoryCursor | null,
@@ -873,11 +918,17 @@ export function getSessionHistoryPage(
     deferThinking?: boolean;
     deferToolResultImages?: boolean;
     includePreCompaction?: boolean;
+    tail?: { limit: number; before?: string; revision?: string };
   } = {},
 ): {
   history: SessionHistoryPage;
   leafId: string | null;
   tipId: string | null;
+  treeEntries: SessionEntry[];
+  firstMessage: string;
+  totalMessages: number;
+  historyRevision: string;
+  historyHasMore: boolean;
 } {
   const { index, cache, key } = getSessionHistoryIndex(
     filePath,
@@ -886,19 +937,23 @@ export function getSessionHistoryPage(
   );
   const version = index.version;
 
-  const { start, end, ...page } = selectHistoryRange(
-    index.entryIds,
-    cursor,
-    limit,
-    index.positions,
-  );
+  const historyRevision = createHash("sha256").update(index.pathKey).update("\0").update(version).digest("base64url");
+  const tail = options.tail;
+  if (tail?.before && (tail.revision !== historyRevision || !index.positions.has(tail.before)))
+    throw new SessionHistoryChangedError();
+  const end = tail ? (tail.before ? index.positions.get(tail.before)! : index.entryIds.length) : undefined;
+  const start = tail ? Math.max(0, end! - tail.limit) : undefined;
+  const range = tail
+    ? { start: start!, end: end!, mode: "replace" as const, baseEntryId: null, cursor: { firstEntryId: index.entryIds[0] ?? null, lastEntryId: index.entryIds[end! - 1] ?? null }, hasMore: start! > 0 }
+    : selectHistoryRange(index.entryIds, cursor, limit, index.positions);
+  const { start: pageStart, end: pageEnd, ...page } = range;
   const rawEntries: SessionEntry[] = [];
-  if (start < end) {
+  if (pageStart < pageEnd) {
     const fd = openSync(filePath, "r");
     try {
       if (historyFileVersion(fstatSync(fd)) !== version)
-        throw new Error("Session changed before reading history");
-      for (let i = start; i < end; i++) {
+        throw new SessionHistoryChangedError();
+      for (let i = pageStart; i < pageEnd; i++) {
         const row = index.rows[i];
         const buffer = Buffer.allocUnsafe(row.length);
         let read = 0;
@@ -910,8 +965,7 @@ export function getSessionHistoryPage(
             buffer.length - read,
             row.offset + read,
           );
-          if (count === 0)
-            throw new Error("Session truncated while reading history");
+          if (count === 0) throw new SessionHistoryChangedError();
           read += count;
         }
         const entry = JSON.parse(
@@ -933,15 +987,17 @@ export function getSessionHistoryPage(
         historyFileVersion(fstatSync(fd)) !== version ||
         historyFileVersion(statSync(filePath)) !== version
       ) {
-        throw new Error("Session changed while reading history");
+        throw new SessionHistoryChangedError();
       }
     } catch (error) {
       cache.delete(key);
+      assertSessionHistoryRevision(filePath, historyRevision);
       throw error;
     } finally {
       closeSync(fd);
     }
   }
+  assertSessionHistoryRevision(filePath, historyRevision);
   const entries = toDisplayEntries(rawEntries, {
     skipToolResultImages: options.deferToolResultImages,
   });
@@ -949,7 +1005,7 @@ export function getSessionHistoryPage(
     ...page,
     context: {
       ...index.metadata,
-      entryIds: index.entryIds.slice(start, end),
+      entryIds: index.entryIds.slice(pageStart, pageEnd),
       messages: entries.map((entry) =>
         entry.type === "compaction"
           ? compactionUiMessage(entry, entry.id === index.compactionId)
@@ -957,7 +1013,24 @@ export function getSessionHistoryPage(
       ),
     },
   };
-  return { history, leafId: index.leafId, tipId: index.tipId };
+  // Only tail reads need navigation previews. Derive them from already-read
+  // page bodies, never from entries encountered while indexing other pages.
+  const previews = new Map<string, string>();
+  let firstMessage = "(no messages)";
+  if (tail && !tail.before) {
+    for (const entry of entries) {
+      if (entry.type !== "message" || !isRecord(entry.message)) continue;
+      const preview = historyPreview(entry);
+      previews.set(entry.id, preview);
+      if (firstMessage === "(no messages)" && entry.message.role === "user" && preview)
+        firstMessage = preview;
+    }
+  }
+  const treeEntries = previews.size ? index.treeEntries.map((entry: SessionEntry) => {
+    if (entry.type !== "message" || !previews.has(entry.id) || !isRecord(entry.message)) return entry;
+    return { ...entry, message: { ...entry.message, content: previews.get(entry.id)! } } as SessionEntry;
+  }) : index.treeEntries;
+  return { history, leafId: index.leafId, tipId: index.tipId, treeEntries, firstMessage, totalMessages: index.entryIds.length, historyRevision, historyHasMore: pageStart > 0 };
 }
 
 function parseTodoPhases(value: unknown): TodoPhase[] | null {

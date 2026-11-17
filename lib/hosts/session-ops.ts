@@ -28,7 +28,7 @@ import type {
   OperationResult,
   ProjectUpdateSchema,
   SessionReadOptionsSchema,
-  SessionReadValueSchema,
+  SessionReadResultSchema,
   SessionStateValueSchema,
   SubagentHistoryValueSchema,
   SubagentTranscriptValueSchema,
@@ -67,6 +67,7 @@ import {
   type ProjectRegistryEntry,
 } from "../project-registry";
 import {
+  assertSessionHistoryRevision,
   buildSessionContext,
   getSessionContextBoundary,
   getSessionEntries,
@@ -81,6 +82,7 @@ import {
   resolveSessionIdByPath,
   resolveSessionPath,
   SessionFileTooLargeError,
+  SessionHistoryChangedError,
 } from "../session-reader";
 import {
   extractSubagentHistory,
@@ -105,14 +107,14 @@ export type OpResult<T> = OperationResult<T>;
 export type SessionReadOptions = Static<typeof SessionReadOptionsSchema>;
 export type ContextReadOptions = Static<typeof ContextReadOptionsSchema>;
 /** `GET /api/sessions/[id]` minus the route's `sessionId` and live `agent`. */
-export type SessionReadValue = Static<typeof SessionReadValueSchema>;
+export type SessionReadValue = Static<typeof SessionReadResultSchema>;
 export type ProjectUpdate = Static<typeof ProjectUpdateSchema>;
 
 export interface SessionOps {
   listSessions(): Promise<SessionInfo[]>;
   /** Strict, uncached active-ID inventory for restore conflict checks; errors mean absence cannot be established. */
   listSessionIdsForRestore(): Promise<string[]>;
-  /** Load metadata, projected navigation tree and display context for a session ID. */
+  /** Load session metadata and context, or an older history-only continuation page. */
   readSession(
     id: string,
     options: SessionReadOptions,
@@ -456,21 +458,39 @@ export const sessionOps: SessionOps = {
   listSessions: () => listAllSessions(),
   listSessionIdsForRestore: async () => listSessionIdsForRestore(),
 
-  async readSession(id, { deferThinking, deferMedia: deferToolResultImages }) {
+  async readSession(id, { deferThinking, deferMedia: deferToolResultImages, tail, before, historyRevision }) {
     const filePath = await resolveSessionPath(id);
     if (!filePath) return sessionNotFound();
     try {
-      // Single unified read path: the cached parse serves unchanged files from
-      // memory (a stat per request), and blob resolution happens on a per-entry
-      // deep copy so shared cached objects are never mutated.
-      const header = readSessionHeader(filePath);
+      if ((tail !== undefined && (!Number.isInteger(tail) || tail < 1 || tail > 200)) ||
+          (before !== undefined && (!tail || !historyRevision || before.length === 0 || before.length > 256)) ||
+          (historyRevision !== undefined && (!before || historyRevision.length > 256)))
+        return fail(400, "invalid_history_page", "Invalid session history page parameters");
+      let header = readSessionHeader(filePath);
       if (header === null) return unreadableSession(filePath);
-      const displayEntries = await getSessionEntriesForDisplayAsync(filePath, {
+      const page = tail ? getSessionHistoryPage(filePath, null, tail, undefined, {
+        deferThinking,
+        deferToolResultImages,
+        tail: { limit: tail, before, revision: historyRevision },
+      }) : null;
+      if (page) {
+        header = readSessionHeader(filePath);
+        assertSessionHistoryRevision(filePath, page.historyRevision);
+        if (header === null) return unreadableSession(filePath);
+      }
+      if (page && before) {
+        return ok({
+          context: page.history.context,
+          historyHasMore: page.historyHasMore,
+          historyRevision: page.historyRevision,
+        });
+      }
+      const displayEntries = page ? null : await getSessionEntriesForDisplayAsync(filePath, {
         skipToolResultImages: deferToolResultImages,
       });
-      const leafId = getLeafEntryId(displayEntries);
-      const tree = projectTreeForResponse(buildSessionTree(displayEntries));
-      const context = buildSessionContext(displayEntries, leafId, {
+      const leafId = page ? page.leafId : getLeafEntryId(displayEntries!);
+      const tree = projectTreeForResponse(buildSessionTree(page ? page.treeEntries : displayEntries!));
+      const context = page ? page.history.context : buildSessionContext(displayEntries!, leafId, {
         deferThinking,
         deferToolResultImages,
       });
@@ -492,8 +512,8 @@ export const sessionOps: SessionOps = {
         name: header.title,
         created: header.timestamp,
         modified,
-        messageCount: context.messages.length,
-        firstMessage: firstUser
+        messageCount: page ? page.totalMessages : context.messages.length,
+        firstMessage: page ? page.firstMessage : firstUser
           ? (() => {
               const c = (firstUser as { content: unknown }).content;
               return typeof c === "string"
@@ -508,9 +528,11 @@ export const sessionOps: SessionOps = {
           : "(no messages)",
         parentSessionId,
       };
-      return ok({ filePath, info, leafId, tree, context });
+      if (page) assertSessionHistoryRevision(filePath, page.historyRevision);
+      return ok({ filePath, info, leafId, tree, context, ...(page ? { historyHasMore: page.historyHasMore, historyRevision: page.historyRevision } : {}) });
     } catch (error) {
       if (error instanceof SessionFileTooLargeError) return sessionTooLarge();
+      if (error instanceof SessionHistoryChangedError) return fail(409, "session_history_changed", "Session history changed; reload before paging");
       throw error;
     }
   },
@@ -533,13 +555,12 @@ export const sessionOps: SessionOps = {
       if (header === null) return unreadableSession(filePath);
       if (boundary) return ok(getSessionContextBoundary(filePath));
       if (sync) {
-        return ok(
-          getSessionHistoryPage(filePath, sync.cursor, sync.limit, leafId, {
-            deferThinking,
-            deferToolResultImages,
-            includePreCompaction,
-          }),
-        );
+        const { history, leafId: selectedLeaf, tipId } = getSessionHistoryPage(filePath, sync.cursor, sync.limit, leafId, {
+          deferThinking,
+          deferToolResultImages,
+          includePreCompaction,
+        });
+        return ok({ history, leafId: selectedLeaf, tipId });
       }
       // Deduplicated cached read; blob resolution on per-entry deep copies.
       const entries = await getSessionEntriesForDisplayAsync(filePath, {

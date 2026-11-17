@@ -25,7 +25,9 @@ export interface SessionCatchUp {
   seed(
     context: SessionContext,
     position?: SessionHistoryCursor | null,
+    complete?: boolean,
   ): SessionContext;
+  backfill(revision: string, complete?: () => void): void;
   invalidate(): void;
   view(): SessionView;
   position(): SessionHistoryCursor | null;
@@ -46,12 +48,14 @@ export function createSessionCatchUp(options: {
     context: SessionContext,
     leafId: string | null,
     metadata?: { version: number; hasLive: boolean },
+    complete?: boolean,
   ) => void;
   live: (snapshot: SessionLiveSnapshot, fields: SessionLiveFields) => void;
   subscribe: (force: boolean) => boolean;
   metadataVersion?: () => number;
 }): SessionCatchUp {
   let context: SessionContext | null = null;
+  let historyComplete = false;
   let cursor: SessionHistoryCursor | null = null;
   let view: SessionView = { leafId: null, includePreCompaction: false };
   let revision = 0;
@@ -75,6 +79,7 @@ export function createSessionCatchUp(options: {
   let missingBaseAt = -Infinity;
   let missingBaseTimer: ReturnType<typeof setTimeout> | undefined;
   let pending: Promise<SessionContext | null> | null = null;
+  let paging: Promise<void> | null = null;
 
   const invalidate = () => {
     revision += 1;
@@ -86,6 +91,7 @@ export function createSessionCatchUp(options: {
   const seed = (
     next: SessionContext,
     position: SessionHistoryCursor | null = cursor,
+    complete = true,
   ) => {
     // A newer completed sync may reflect truncation, not just an append.
     // Keep it and re-read rather than inferring freshness from transcript length.
@@ -96,17 +102,96 @@ export function createSessionCatchUp(options: {
     invalidate();
     context = next;
     cursor = historyCursor(next);
-    options.history(next, view.leafId);
+    historyComplete = complete;
+    options.history(next, view.leafId, undefined, historyComplete);
     return next;
   };
 
+  const backfill = (historyRevision: string, complete?: () => void) => {
+    const sid = options.sessionId();
+    const scope = options.scope();
+    const version = revision;
+    const initial = context;
+    if (!sid || scope === null || !initial?.entryIds.length) return;
+    const first = initial.entryIds[0];
+    paging = (async () => {
+      let before = first;
+      const olderPages: SessionContext[] = [];
+      const seen = new Set(initial.entryIds);
+      const current = () =>
+        options.sessionId() === sid && options.scope() === scope &&
+        revision === version && !view.leafId && !view.includePreCompaction;
+      try {
+        while (current()) {
+          const params = new URLSearchParams({
+            tail: "30", before, historyRevision, deferThinking: "1", deferMedia: "1",
+          });
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 30_000);
+          let res: Response;
+          try {
+            res = await fetch(`/api/sessions/${encodeURIComponent(sid)}?${params}`, { signal: controller.signal });
+          } finally {
+            clearTimeout(timeout);
+          }
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const page = (await res.json()) as {
+            context: SessionContext; historyHasMore: boolean; historyRevision: string;
+          };
+          if (!current()) return;
+          if (page.historyRevision !== historyRevision ||
+              page.context.messages.length !== page.context.entryIds.length ||
+              page.context.entryIds.some((id) => seen.has(id)) ||
+              (page.historyHasMore && page.context.entryIds.length === 0))
+            throw new Error("Invalid history page");
+          for (const id of page.context.entryIds) seen.add(id);
+          olderPages.push(page.context);
+          if (!page.historyHasMore) {
+            // Catch-up can append while these pages are in flight. Only prepend
+            // to the same surviving prefix, never replace its newer state.
+            if (!context || context.entryIds[0] !== first) throw new Error("History changed");
+            const messages: SessionContext["messages"] = [];
+            const entryIds: string[] = [];
+            for (let i = olderPages.length - 1; i >= 0; i--) {
+              for (const message of olderPages[i].messages) messages.push(message);
+              for (const id of olderPages[i].entryIds) entryIds.push(id);
+            }
+            for (const message of context.messages) messages.push(message);
+            for (const id of context.entryIds) entryIds.push(id);
+            context = {
+              ...context,
+              messages,
+              entryIds,
+            };
+            cursor = historyCursor(context);
+            historyComplete = true;
+            options.history(context, view.leafId, undefined, true);
+            complete?.();
+            return;
+          }
+          before = page.context.entryIds[0];
+        }
+      } catch {
+        if (current()) {
+          // A changed generation or failed page cannot safely extend a tail.
+          // Existing sync performs an atomic replacement and catches up live state.
+          invalidate();
+          cursor = null;
+          void request();
+        }
+      }
+    })().finally(() => { paging = null; });
+  };
+
   const request = (): Promise<SessionContext | null> => {
+    if (paging) return paging.then(() => request());
     requested = true;
     if (pending) return pending;
     pending = Promise.resolve()
       .then(async () => {
         let loaded: SessionContext | null = null;
         while (requested) {
+          if (paging) await paging;
           requested = false;
           const sid = options.sessionId();
           const scope = options.scope();
@@ -118,6 +203,7 @@ export function createSessionCatchUp(options: {
           // replacement must not truncate the visible history or advance its cursor.
           let nextContext = context;
           let nextCursor = cursor;
+          let nextComplete = historyComplete;
           try {
             while (true) {
               const base = nextCursor;
@@ -171,6 +257,7 @@ export function createSessionCatchUp(options: {
                 page.baseEntryId !== (base?.lastEntryId ?? null)
               )
                 break;
+              if (page.mode === "replace") nextComplete = true;
               const unchanged =
                 page.mode === "append" &&
                 page.context.entryIds.length === 0 &&
@@ -209,11 +296,12 @@ export function createSessionCatchUp(options: {
               }
               context = nextContext;
               cursor = nextCursor;
+              historyComplete = nextComplete;
               loaded = context;
               options.history(context, page.leafId, {
                 version: metadataVersion,
                 hasLive: page.live !== null,
-              });
+              }, historyComplete);
               if (page.live) {
                 if (options.subscribe(false)) {
                   requested = false;
@@ -293,6 +381,7 @@ export function createSessionCatchUp(options: {
   return {
     request,
     requestMissingBase,
+    backfill,
     seed,
     invalidate,
     view: () => view,
@@ -301,6 +390,7 @@ export function createSessionCatchUp(options: {
     select(next: SessionView) {
       invalidate();
       view = next;
+      historyComplete = false;
       cursor = null;
     },
     disconnect() {

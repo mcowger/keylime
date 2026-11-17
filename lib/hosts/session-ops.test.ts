@@ -64,8 +64,32 @@ test("readSession returns the session's info and context", () =>
     const result = await sessionOps.readSession(SESSION_ID, options);
     assert.equal(result.ok, true);
     assert.ok(result.ok);
+    assert.ok("info" in result.value);
     assert.equal(result.value.info.id, SESSION_ID);
     assert.ok(result.value.context.messages.length > 0);
+  }));
+
+test("readSession tails the active history and rejects invalidated cursors locally", () =>
+  withAgentDir(async () => {
+    const first = await sessionOps.readSession(SESSION_ID, { ...options, tail: 1 });
+    assert.ok(first.ok);
+    assert.deepEqual(first.value.context.entryIds, ["a1"]);
+    assert.equal(first.value.historyHasMore, true);
+    assert.ok(first.value.historyRevision);
+    const previous = await sessionOps.readSession(SESSION_ID, { ...options, tail: 1, before: "a1", historyRevision: first.value.historyRevision });
+    assert.ok(previous.ok);
+    assert.deepEqual(previous.value.context.entryIds, ["u1"]);
+    assert.equal(previous.value.historyHasMore, false);
+    assert.deepEqual(Object.keys(previous.value).sort(), ["context", "historyHasMore", "historyRevision"]);
+    const wrongBranch = await sessionOps.readSession(SESSION_ID, { ...options, tail: 1, before: "missing", historyRevision: first.value.historyRevision });
+    assert.ok(!wrongBranch.ok);
+    assert.equal(wrongBranch.code, "session_history_changed");
+    const file = join(process.env.PI_CODING_AGENT_DIR!, "sessions", "-project", "2026-01-01_fixture.jsonl");
+    writeFileSync(file, `${JSON.stringify({ type: "session", version: 3, id: SESSION_ID, cwd: tmpdir(), timestamp: "2026-01-01T00:00:00.000Z" })}\n${JSON.stringify({ type: "message", id: "a1", parentId: null, timestamp: "2026-01-01T00:00:02.000Z", message: { role: "user", content: "replacement" } })}\n`);
+    const changed = await sessionOps.readSession(SESSION_ID, { ...options, tail: 1, before: "a1", historyRevision: first.value.historyRevision });
+    assert.ok(!changed.ok);
+    assert.equal(changed.status, 409);
+    assert.equal(changed.code, "session_history_changed");
   }));
 
 test("readSession of an unknown id is a 404", () =>

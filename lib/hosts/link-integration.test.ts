@@ -504,6 +504,7 @@ test("a 2 MB session read arrives in binary frames of one piece each", async () 
   });
   assert.equal(result.ok, true);
   assert.ok(result.ok);
+  assert.ok("info" in result.value);
   assert.equal(result.value.info.id, BIG_ID);
   assert.equal(result.value.context.messages.length, 200);
   // 256 KiB pieces: about eight frames.

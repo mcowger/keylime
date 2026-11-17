@@ -162,6 +162,129 @@ test("a held full response cannot resurrect truncated entries and fresh catch-up
   assert.equal(requests, 2);
 });
 
+test("backfill publishes older pages before deferred live catch-up", async (t) => {
+  const context = (ids: string[]): SessionContext => ({
+    messages: ids.map((id) => ({ role: "user", content: id })),
+    entryIds: ids, thinkingLevel: "off", model: null, todoPhases: [],
+  });
+  const page = Promise.withResolvers<Response>();
+  let displayed!: SessionContext;
+  let completed = false;
+  const requests: string[] = [];
+  t.mock.method(globalThis, "fetch", (input: Parameters<typeof fetch>[0]) => {
+    const url = new URL(input instanceof Request ? input.url : input, "http://localhost");
+    requests.push(url.pathname + url.search);
+    if (url.searchParams.has("before")) {
+      assert.equal(url.searchParams.get("historyRevision"), "rev");
+      return page.promise;
+    }
+    assert.deepEqual(JSON.parse(url.searchParams.get("cursor")!), { firstEntryId: "a", lastEntryId: "d" });
+    return Promise.resolve(Response.json({ sessionId: "s1", mode: "append", baseEntryId: "d", context: context(["e"]), cursor: { firstEntryId: "a", lastEntryId: "e" }, hasMore: false, leafId: null, live: null }));
+  });
+  const catchUp = createSessionCatchUp({
+    sessionId: () => "s1", scope: () => "scope", history(next) { displayed = next; },
+    live() {}, subscribe: () => false,
+  });
+  catchUp.seed(context(["c", "d"]));
+  catchUp.backfill("rev", () => { completed = true; });
+  const sync = catchUp.request();
+  assert.equal(requests.length, 1);
+  assert.deepEqual(displayed.entryIds, ["c", "d"]);
+  page.resolve(Response.json({ context: context(["a", "b"]), historyHasMore: false, historyRevision: "rev" }));
+  assert.equal(completed, false);
+  await sync;
+  assert.deepEqual(displayed.entryIds, ["a", "b", "c", "d", "e"]);
+  assert.equal(completed, true);
+});
+
+test("backfill assembles multiple older pages in chronological order", async (t) => {
+  const context = (ids: string[]): SessionContext => ({
+    messages: ids.map((id) => ({ role: "user", content: id })),
+    entryIds: ids, thinkingLevel: "off", model: null, todoPhases: [],
+  });
+  let displayed!: SessionContext;
+  const completed = Promise.withResolvers<void>();
+  t.mock.method(globalThis, "fetch", (input: Parameters<typeof fetch>[0]) => {
+    const url = new URL(input instanceof Request ? input.url : input, "http://localhost");
+    const before = url.searchParams.get("before");
+    const ids = before === "e" ? ["c", "d"] : ["a", "b"];
+    assert.ok(before === "e" || before === "c");
+    return Promise.resolve(Response.json({ context: context(ids), historyHasMore: before === "e", historyRevision: "rev" }));
+  });
+  const catchUp = createSessionCatchUp({
+    sessionId: () => "s1", scope: () => "scope", history(next) { displayed = next; },
+    live() {}, subscribe: () => false,
+  });
+  catchUp.seed(context(["e", "f"]), null, false);
+  catchUp.backfill("rev", completed.resolve);
+  await completed.promise;
+  assert.deepEqual(displayed.entryIds, ["a", "b", "c", "d", "e", "f"]);
+  assert.deepEqual(displayed.messages.map((message) => message.role === "user" ? message.content : null), ["a", "b", "c", "d", "e", "f"]);
+});
+test("failed backfill and failed replacement do not declare the tail complete", async (t) => {
+  const context: SessionContext = {
+    messages: [{ role: "user", content: "new" }], entryIds: ["new"],
+    thinkingLevel: "off", model: null, todoPhases: [],
+  };
+  let complete = true;
+  t.mock.method(globalThis, "fetch", () => Promise.resolve(new Response(null, { status: 503 })));
+  const catchUp = createSessionCatchUp({
+    sessionId: () => "s1", scope: () => "scope",
+    history(_context, _leaf, _metadata, ready) { complete = ready === true; },
+    live() {}, subscribe: () => false,
+  });
+  catchUp.seed(context, null, false);
+  catchUp.backfill("rev");
+  await catchUp.request();
+  assert.equal(complete, false);
+});
+
+
+test("changed history discards backfill and replaces the partial transcript", async (t) => {
+  const context = (ids: string[]): SessionContext => ({
+    messages: ids.map((id) => ({ role: "user", content: id })),
+    entryIds: ids, thinkingLevel: "off", model: null, todoPhases: [],
+  });
+  let displayed!: SessionContext;
+  const started = Promise.withResolvers<void>();
+  t.mock.method(globalThis, "fetch", (input: Parameters<typeof fetch>[0]) => {
+    const url = new URL(input instanceof Request ? input.url : input, "http://localhost");
+    if (url.searchParams.has("before")) return Promise.resolve(new Response(null, { status: 409 }));
+    assert.equal(url.searchParams.has("cursor"), false);
+    started.resolve();
+    return Promise.resolve(Response.json({ sessionId: "s1", mode: "replace", baseEntryId: null, context: context(["x"]), cursor: { firstEntryId: "x", lastEntryId: "x" }, hasMore: false, leafId: null, live: null }));
+  });
+  const catchUp = createSessionCatchUp({
+    sessionId: () => "s1", scope: () => "scope", history(next) { displayed = next; },
+    live() {}, subscribe: () => false,
+  });
+  catchUp.seed(context(["c", "d"]));
+  catchUp.backfill("rev");
+  await started.promise;
+  await catchUp.request();
+  assert.deepEqual(displayed.entryIds, ["x"]);
+});
+
+test("backfill cannot publish after selecting another branch", async (t) => {
+  const context = (ids: string[]): SessionContext => ({
+    messages: ids.map((id) => ({ role: "user", content: id })),
+    entryIds: ids, thinkingLevel: "off", model: null, todoPhases: [],
+  });
+  const page = Promise.withResolvers<Response>();
+  t.mock.method(globalThis, "fetch", () => page.promise);
+  let displayed!: SessionContext;
+  const catchUp = createSessionCatchUp({
+    sessionId: () => "s1", scope: () => "scope", history(next) { displayed = next; },
+    live() {}, subscribe: () => false,
+  });
+  catchUp.seed(context(["c"]));
+  catchUp.backfill("rev");
+  catchUp.select({ leafId: "branch", includePreCompaction: false });
+  page.resolve(Response.json({ context: context(["a", "b"]), historyHasMore: false, historyRevision: "rev" }));
+  await new Promise<void>(setImmediate);
+  assert.deepEqual(displayed.entryIds, ["c"]);
+});
+
 // omp's delta updates through catch-up and the coalescer, wired as useAgentSession wires them.
 const { createMessageUpdateCoalescer } =
   await import("../lib/message-update-coalescer.ts");

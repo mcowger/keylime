@@ -573,6 +573,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const confirmedMessagesRef = useRef(confirmedMessages);
   confirmedMessagesRef.current = confirmedMessages;
   const [entryIds, setEntryIds] = useState<string[]>([]);
+  const [historyComplete, setHistoryComplete] = useState(false);
   const [showPreCompactionHistory, setShowPreCompactionHistory] =
     useState(false);
   const [streamState, dispatch] = useReducer(streamReducer, {
@@ -1195,7 +1196,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           ? `${sessionIdRef.current}:${promptRunIdRef.current}:${contextRequestSeqRef.current}`
           : null,
       metadataVersion: () => authoritativeModelSeqRef.current,
-      history: (context, leafId, metadata) => {
+      history: (context, leafId, metadata, complete) => {
+        setHistoryComplete(complete === true);
         const pending = unconfirmedErrorNoticeRef.current;
         if (
           pending &&
@@ -1827,6 +1829,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           deferThinking: "1",
           deferMedia: "1",
         });
+        if (isInitialHydration) params.set("tail", "30");
         const res = await fetch(
           `/api/sessions/${encodeURIComponent(sid)}?${params}`,
         );
@@ -1847,7 +1850,10 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           return null;
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const d = (await res.json()) as SessionData;
+        const d = (await res.json()) as SessionData & {
+          historyHasMore?: boolean;
+          historyRevision?: string;
+        };
         if (
           !hookAliveRef.current ||
           contextRequestSeqRef.current !== requestSeq ||
@@ -1873,8 +1879,41 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           setShowPreCompactionHistory(catchUp.view().includePreCompaction);
         } else {
           const fullContext = d.context;
-          d.context = catchUp.seed(fullContext, position);
+          d.context = catchUp.seed(fullContext, position, !d.historyHasMore);
           if (d.context === fullContext) setActiveLeafId(d.leafId);
+          if (d.context === fullContext && isInitialHydration && d.historyRevision) {
+            const restoreTree = () => {
+              // The projected pages have the complete tree structure, but their
+              // compressed branch previews cannot be merged reliably by node ID.
+              // Defer the full read until after the initial page has painted.
+              requestAnimationFrame(() => requestAnimationFrame(() => {
+                if (!hookAliveRef.current || sessionIdRef.current !== sid ||
+                    contextRequestSeqRef.current !== requestSeq ||
+                    promptRunIdRef.current !== requestRun || catchUp.view().leafId ||
+                    catchUp.view().includePreCompaction) return;
+                const treePosition = catchUp.position();
+                void fetch(`/api/sessions/${encodeURIComponent(sid)}?deferThinking=1&deferMedia=1`)
+                  .then(async (response) => response.ok ? (await response.json()) as SessionData : null)
+                  .then((full) => {
+                    if (!full || !hookAliveRef.current || sessionIdRef.current !== sid ||
+                        contextRequestSeqRef.current !== requestSeq ||
+                        promptRunIdRef.current !== requestRun || catchUp.position() !== treePosition ||
+                        catchUp.view().leafId || catchUp.view().includePreCompaction ||
+                        full.sessionId !== sid || full.filePath !== d.filePath || full.leafId !== d.leafId)
+                      return;
+                    const history = catchUp.history();
+                    if (!history || history.entryIds.length !== full.context.entryIds.length ||
+                        history.entryIds.some((id, index) => id !== full.context.entryIds[index])) return;
+                    setData((current) => current && current.sessionId === sid && current.filePath === full.filePath
+                      ? { ...current, tree: full.tree, info: full.info }
+                      : current);
+                  })
+                  .catch(() => {});
+              }));
+            };
+            if (d.historyHasMore) catchUp.backfill(d.historyRevision, restoreTree);
+            else restoreTree();
+          }
           setShowPreCompactionHistory(false);
         }
         setData(d);
@@ -2010,6 +2049,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       const seq = ++contextRequestSeqRef.current;
       const runId = promptRunIdRef.current;
       catchUp.select({ leafId, includePreCompaction });
+      setHistoryComplete(false);
       setEchoedUserMessage(null);
       setShowCorrelatedMessages(!leafId);
       const position = catchUp.position();
@@ -2050,6 +2090,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const reloadActiveSessionHistory = useCallback(
     (sid: string) => {
       catchUp.select({ leafId: null, includePreCompaction: false });
+      setHistoryComplete(false);
       setShowPreCompactionHistory(false);
       setOptimisticUserMessage(null);
       setEchoedUserMessage(null);
@@ -7303,6 +7344,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       runErrorAssistantRef.current = null;
       independentRunErrorRef.current = null;
       catchUp.select({ leafId: null, includePreCompaction: false });
+      setHistoryComplete(false);
       const compactionGen = compactionGenRef.current;
       mountLoadingRef.current = session.id;
       loadSession(session.id, true, true).then((loaded) => {
@@ -7557,6 +7599,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     activeLeafId,
     messages,
     entryIds,
+    historyComplete,
+    selectedHistoryView: `${catchUp.view().leafId ?? ""}:${catchUp.view().includePreCompaction}`,
     showPreCompactionHistory,
     streamState,
     agentRunning,

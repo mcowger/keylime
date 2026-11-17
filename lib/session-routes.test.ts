@@ -2253,6 +2253,71 @@ test("POST /api/sessions/import rejects unauthorized workspaces and malformed fi
   });
 });
 
+test("session tail pages stay on one generation and active branch through the host link", async () => {
+  await withAgentDir(async (dir) => {
+    const id = "0a000000-0000-4000-8000-000000000098";
+    const header = { id, cwd: dir, timestamp: "2026-01-01T00:00:00.000Z" };
+    const entries = Array.from({ length: 65 }, (_, i) => ({
+      type: "message", id: `e${i}`, parentId: i ? `e${i - 1}` : null,
+      timestamp: "2026-01-01T00:00:00.000Z",
+      message: { role: "user", content: i === 0 ? "old-secret-" + "x".repeat(10000) : `message ${i}` },
+    }));
+    entries.splice(64, 0, { type: "message", id: "abandoned", parentId: "e10", timestamp: "2026-01-01T00:00:00.000Z", message: { role: "user", content: "abandoned branch" } });
+    const file = writeSessionFile(dir, "tail.jsonl", header, entries);
+    const get = (query = "") => sessionRoute.GET(new Request(`http://localhost/api/sessions/${id}${query ? `?${query}` : ""}`), { params: Promise.resolve({ id }) });
+    const firstResponse = await get("tail=30");
+    assert.equal(firstResponse.status, 200);
+    const first = await firstResponse.json();
+    assert.deepEqual(first.context.entryIds, Array.from({ length: 30 }, (_, i) => `e${i + 35}`));
+    assert.equal(first.historyHasMore, true);
+    assert.equal(first.info.messageCount, 65);
+    assert.ok(first.tree.length);
+    assert.ok(!JSON.stringify(first).includes("x".repeat(1000)), "navigation does not contain old message bodies");
+    const query = (before: string, revision: string) => new URLSearchParams({ tail: "30", before, historyRevision: revision }).toString();
+    const second = await (await get(query("e35", first.historyRevision))).json();
+    assert.deepEqual(second.context.entryIds, Array.from({ length: 30 }, (_, i) => `e${i + 5}`));
+    assert.equal(second.historyRevision, first.historyRevision);
+    const third = await (await get(query("e5", first.historyRevision))).json();
+    assert.deepEqual(third.context.entryIds, ["e0", "e1", "e2", "e3", "e4"]);
+    assert.equal(third.historyHasMore, false);
+    assert.equal((await get(query("abandoned", first.historyRevision))).status, 409);
+    assert.equal((await get("before=e5&tail=30")).status, 400);
+    assert.equal((await get("tail=0")).status, 400);
+    const full = await (await get()).json();
+    assert.equal(full.context.entryIds.length, 65);
+    assert.equal("historyHasMore" in full, false);
+    writeFileSync(file, readFileSync(file, "utf8") + JSON.stringify({ type: "message", id: "new", parentId: "e64", timestamp: "2026-01-01T00:00:01.000Z", message: { role: "user", content: "new" } }) + "\n");
+    const stale = await get(query("e35", first.historyRevision));
+    assert.equal(stale.status, 409);
+    assert.equal((await stale.json()).code, "session_history_changed");
+  });
+});
+
+test("tail pages honor compaction order and reject replaced files", async () => {
+  await withAgentDir(async (dir) => {
+    const id = "0a000000-0000-4000-8000-000000000099";
+    const header = { id, cwd: dir, timestamp: "2026-01-01T00:00:00.000Z" };
+    const entries = [
+      { type: "message", id: "old", parentId: null, timestamp: header.timestamp, message: { role: "user", content: "old" } },
+      { type: "message", id: "kept", parentId: "old", timestamp: header.timestamp, message: { role: "user", content: "kept" } },
+      { type: "compaction", id: "cmp", parentId: "kept", timestamp: header.timestamp, firstKeptEntryId: "kept", summary: "summary", tokensBefore: 10 },
+      { type: "message", id: "last", parentId: "cmp", timestamp: header.timestamp, message: { role: "user", content: "last" } },
+    ];
+    const file = writeSessionFile(dir, "compacted.jsonl", header, entries);
+    const get = (query: string) => sessionRoute.GET(new Request(`http://localhost/api/sessions/${id}?${query}`), { params: Promise.resolve({ id }) });
+    const first = await (await get("tail=1")).json();
+    assert.deepEqual(first.context.entryIds, ["last"]);
+    const query = new URLSearchParams({ tail: "2", before: "last", historyRevision: first.historyRevision }).toString();
+    const previous = await (await get(query)).json();
+    assert.deepEqual(previous.context.entryIds, ["cmp", "kept"]);
+    assert.equal(previous.historyHasMore, false);
+    writeFileSync(file, readFileSync(file, "utf8").replace("summary", "changed"));
+    const stale = await get(query);
+    assert.equal(stale.status, 409);
+    assert.equal((await stale.json()).code, "session_history_changed");
+  });
+});
+
 test("sync serves paged file-only history and preserves the legacy context shape", async () => {
   await withAgentDir(async (dir) => {
     const id = "0a000000-0000-4000-8000-000000000009";

@@ -1394,7 +1394,9 @@ function validResult(
         typeof value.fileName === "string"
       );
     case "readSession":
-      return isRecord(value) && isRecord(value.info) && isRecord(value.context);
+      return isRecord(value) && isRecord(value.context) &&
+        (isRecord(value.info) ||
+          (typeof value.historyHasMore === "boolean" && typeof value.historyRevision === "string"));
     case "readContext": {
       // The context route reads a different shape per mode.
       const options = isRecord(args[2]) ? args[2] : {};

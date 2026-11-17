@@ -45,6 +45,9 @@ export const SessionReadOptionsSchema = Type.Object(
       description: "Defer loading assistant thinking blocks.",
     }),
     deferMedia: Type.Boolean({ description: "Defer loading embedded media." }),
+    tail: Type.Optional(Type.Integer({ minimum: 1, maximum: 200, description: "Maximum number of newest display entries to return." })),
+    before: Type.Optional(Type.String({ minLength: 1, maxLength: 256, description: "Exclusive oldest entry ID of the previously received page." })),
+    historyRevision: Type.Optional(Type.String({ minLength: 1, maxLength: 256, description: "Opaque revision returned by the first tail page; required with before." })),
   },
   { description: "Controls deferred content in a file-only session snapshot." },
 );
@@ -55,7 +58,8 @@ const cursor = Type.Object({
 });
 export const ContextReadOptionsSchema = Type.Object(
   {
-    ...SessionReadOptionsSchema.properties,
+    deferThinking: SessionReadOptionsSchema.properties.deferThinking,
+    deferMedia: SessionReadOptionsSchema.properties.deferMedia,
     includePreCompaction: Type.Boolean({
       description: "Include entries omitted from the active agent context.",
     }),
@@ -71,6 +75,16 @@ export const ContextReadOptionsSchema = Type.Object(
       "Select active context, boundary IDs, or a cursor-based history page.",
   },
 );
+// Tree entries are navigation projections: their bodies are deliberately absent.
+const SessionNavigationTreeSchema = Type.Unsafe<Static<typeof SessionTreeNodeSchema>>(
+  Type.Recursive((This) => Type.Object({
+    entry: Type.Object({ id: str(), type: str(), parentId: Type.Optional(nullable(str())), timestamp: Type.Optional(str()) }, { additionalProperties: true }),
+    children: Type.Array(This),
+    label: Type.Optional(str()),
+    compressedEntryIds: Type.Optional(Type.Array(str())),
+    branchPreview: Type.Optional(Type.Object({ role: Type.Optional(Type.Union([Type.Literal("user"), Type.Literal("assistant")])), text: str() })),
+  })),
+);
 export const SessionReadValueSchema = Type.Object(
   {
     filePath: str(),
@@ -81,13 +95,27 @@ export const SessionReadValueSchema = Type.Object(
       "worktreeBranch",
     ]),
     leafId: nullable(str()),
-    tree: Type.Array(SessionTreeNodeSchema),
+    tree: Type.Array(Type.Union([SessionTreeNodeSchema, SessionNavigationTreeSchema])),
     context: SessionContextSchema,
+    historyHasMore: Type.Optional(Type.Boolean({ description: "Whether older display entries precede this tail page." })),
+    historyRevision: Type.Optional(Type.String({ description: "Opaque file generation; supply with before to prevent mixed histories." })),
   },
   {
     description:
       "File-only session metadata, navigation tree and current display context snapshot.",
   },
+);
+export const SessionHistoryContinuationSchema = Type.Object(
+  {
+    context: SessionContextSchema,
+    historyHasMore: Type.Boolean({ description: "Whether older display entries precede this page." }),
+    historyRevision: Type.String({ description: "Opaque file generation used to fence continuation pages." }),
+  },
+  { description: "An older history page without session metadata or the navigation tree." },
+);
+export const SessionReadResultSchema = Type.Union(
+  [SessionReadValueSchema, SessionHistoryContinuationSchema],
+  { description: "A session snapshot or an older history-only continuation page." },
 );
 export const ProjectUpdateSchema = Type.Object(
   {
@@ -223,9 +251,9 @@ export const hostSessionOperations: readonly OperationContract[] = [
   ),
   wrapped(
     "readSession",
-    "Usage: Read session metadata, tree and display context.\nInputs: Supply session ID and thinking/media deferral options.\nInvariants: This is a file snapshot, not a live runner; malformed, missing or oversized files fail.\nEffects: Reads session data without starting a process.\nRecovery: Correct the file or ID and retry; inspect the logical operation result as well as the outer response.",
+    "Usage: Read session metadata, navigation tree and display context.\nInputs: Supply session ID, deferred-content options, and optionally tail; before requires the previous historyRevision.\nInvariants: Tail pages are chronological and exclusive on the active branch; continuation pages omit metadata and tree. Changed file generations or invalid branch cursors fail with session_history_changed. Without tail the full history is returned. This is not a live runner.\nEffects: Reads session data without starting a process.\nRecovery: Discard partial pages and synchronize after session_history_changed; inspect the logical operation result as well as the outer response.",
     args({ ...id(), options: SessionReadOptionsSchema }),
-    SessionReadValueSchema,
+    SessionReadResultSchema,
   ),
   wrapped(
     "readContext",

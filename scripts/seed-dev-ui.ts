@@ -87,6 +87,12 @@ const sessions = [
     id: "33333333-3333-4333-8333-333333333333",
     title: "Organize field notes",
   },
+  {
+    cwd: notes,
+    id: "44444444-4444-4444-8444-444444444444",
+    title: "Long conversation for paging",
+    longHistory: true,
+  },
 ];
 for (const session of sessions) {
   const dir = path.join(getSessionsDir(), getSessionDirNameForCwd(session.cwd));
@@ -167,6 +173,21 @@ for (const session of sessions) {
           { type: "message", id: "0000000d", parentId: "0000000c", timestamp, message: { role: "toolResult", toolCallId: "agent-seed", toolName: "write", content: [{ type: "text", text: "Delivered to SearchReview." }], timestamp: 1767225611000 } },
         ]
       : []),
+    ...("longHistory" in session && session.longHistory
+      ? Array.from({ length: 80 }, (_, i) => ({
+          type: "message",
+          id: (i + 3).toString(16).padStart(8, "0"),
+          parentId: (i + 2).toString(16).padStart(8, "0"),
+          timestamp,
+          message: {
+            role: i % 2 === 0 ? "user" : "assistant",
+            content: i % 2 === 0
+              ? `Paging fixture message ${i + 1}`
+              : [{ type: "text", text: `Paging fixture reply ${i + 1}` }],
+            timestamp: 1767225602000 + i * 1000,
+          },
+        }))
+      : []),
   ];
   writeFileSync(
     path.join(dir, `2026-01-01_${session.id}.jsonl`),
@@ -200,5 +221,5 @@ for (const session of sessions) {
 }
 saveWebServerSettings({ uploadRetentionDays: 14, agentToolsEnabled: true });
 console.log(
-  "[dev] UI fixtures seeded: atlas, atlas-feature, field-notes (3 saved conversations)",
+  "[dev] UI fixtures seeded: atlas, atlas-feature, field-notes (4 saved conversations)",
 );

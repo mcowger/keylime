@@ -32,6 +32,7 @@ import type { ChatDraft } from "@/lib/draft-store";
 export interface SessionData {
   sessionId: string;
   filePath: string;
+  info?: unknown;
   tree: SessionTreeNode[];
   leafId: string | null;
   context: {

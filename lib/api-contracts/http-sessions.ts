@@ -8,6 +8,7 @@ import {
 } from "./domain";
 import {
   SessionReadValueSchema,
+  SessionHistoryContinuationSchema,
   SubagentHistoryValueSchema,
   SubagentTranscriptValueSchema,
   ThinkingReadValueSchema,
@@ -328,15 +329,28 @@ export const sessionHttpOperations: readonly HttpOperation[] = [
       q("includeState", "Include live agent state if available."),
       q("deferThinking"),
       q("deferMedia"),
+      q("tail", "Return at most this many newest active-branch display entries (1–200)."),
+      q("before", "Exclusive oldest entry ID from a preceding tail response; requires tail and historyRevision."),
+      q("historyRevision", "Opaque revision from the first page; required with before."),
     ],
-    responses: responses(
-      Type.Object({
-        ...SessionReadValueSchema.properties,
-        sessionId: str(),
-        hostId: str(),
-        agent: Type.Optional(agentState),
-      }),
-    ),
+    responses: {
+      ...responses(Type.Union([
+        Type.Object({
+          ...SessionReadValueSchema.properties,
+          sessionId: str(),
+          hostId: str(),
+          agent: Type.Optional(agentState),
+        }),
+        Type.Object({
+          ...SessionHistoryContinuationSchema.properties,
+          sessionId: str(),
+          hostId: str(),
+          agent: Type.Optional(agentState),
+        }),
+      ])),
+      400: err("Invalid tail, before or historyRevision parameters."),
+      409: err("session_history_changed: discard partial pages and synchronize again."),
+    },
   }),
   op(sid, "patch", "renameSession", "Rename a session", {
     parameters: [id],

@@ -8,6 +8,11 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ### Added
 - Question forms have larger action targets, show validation and submission status, prevent duplicate answers, and allow retry after a send failure.
+- Opening a saved session paints recent messages first and loads earlier history in the background.
+- Search jumps to older messages wait for history backfill instead of being discarded during the initial page load.
+- Earlier-history pages omit repeated navigation trees, reducing transfer and processing for long sessions.
+- Earlier-history backfill assembles pages in linear time instead of repeatedly copying accumulated messages.
+- Seeded development sessions include a long conversation for checking transcript loading.
 - The composer highlights file mentions, slash commands and inline code while keeping draft text editable and copyable.
 - Ship shows commit-planning stages as progress steps, with live agent activity, and hides skipped execution steps.
 - Non-image attachments are uploaded as files instead of being inserted into the model's prompt, regardless of type or size.
@@ -87,6 +92,11 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Browser input uses bounded ordered batches, keeping sustained canvas typing responsive without dropping key, text or release events. Failed batches are never replayed
 - Documented the shared-session and native terminal attachment proof, including how to try it and remaining testing work
 - Ship shows commit-planning stages as progress steps, with live agent activity, and hides skipped execution steps
+- Opening a saved session paints recent messages first and loads earlier history in the background
+- Search jumps to older messages wait for history backfill instead of being discarded during the initial page load
+- Earlier-history pages omit repeated navigation trees, reducing transfer and processing for long sessions
+- Earlier-history backfill assembles pages in linear time instead of repeatedly copying accumulated messages
+- Seeded development sessions include a long conversation for checking transcript loading
 
 ### Changed
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.
@@ -125,6 +135,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Browser video progress diagnostics now break down dropped packets by reason and report observed frame size, timestamp and capture generation
 - Session lifecycle treats an attached terminal as active, preventing idle shutdown while someone is attached
 - Question form buttons use larger tap targets with a minimum width
+- Session reads request a tail page with a history revision and return 409 session_history_changed when the file or active cursor moves
 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen

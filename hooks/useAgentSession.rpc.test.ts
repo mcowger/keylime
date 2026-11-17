@@ -1385,7 +1385,7 @@ for (const [preference, mode] of [
   });
 }
 
-test("a `!` message with an inline text attachment is held as a prompt, never run as a shell command", async (t) => {
+test("a `!` message with an uploaded text attachment is held as a prompt, never run as a shell command", async (t) => {
   resetWorld();
   const { setDraft, getDraft, clearDraft } = await import("@/lib/draft-store");
   const sid = "bang-text-attachment";
@@ -1395,14 +1395,8 @@ test("a `!` message with an inline text attachment is held as a prompt, never ru
   setDraft(sid, {
     value: "!touch /tmp/keylime-never-run",
     images: [],
-    files: [
-      {
-        name: "notes.txt",
-        mimeType: "text/plain",
-        content: "rm -rf /",
-        size: 8,
-      },
-    ],
+    files: [],
+    uploads: [{ id: "notes-upload", name: "notes.txt", size: 8, hostId: "local", proof: "notes-proof" }],
   });
   const view = ownRoot(
     render(
@@ -1422,10 +1416,9 @@ test("a `!` message with an inline text attachment is held as a prompt, never ru
     "the composed prompt must reach worker storage",
   );
   assert.equal(world.outbox[0].mode, "prompt");
-  assert.equal(
-    world.outbox[0].message,
-    "!touch /tmp/keylime-never-run\n\nAttached file: notes.txt\n```text\nrm -rf /\n```",
-  );
+  assert.equal(world.outbox[0].message, "!touch /tmp/keylime-never-run");
+  assert.deepEqual(world.outbox[0].uploads, ["notes-upload"]);
+  assert.deepEqual(world.outbox[0].uploadProofs, { "notes-upload": "notes-proof" });
   assert.deepEqual(
     world.calls.filter((call) => call.body?.type === "bash"),
     [],
@@ -8133,15 +8126,8 @@ for (const order of [
       clearDraft(target);
     });
     const images = [{ data: "AAAA", mimeType: "image/png" }];
-    const files = [
-      {
-        name: "context.txt",
-        mimeType: "text/plain",
-        content: "keep attached context",
-        size: 21,
-      },
-    ];
-    setDraft(sid, { value: "", images, files });
+    const uploads = [{ id: "context-upload", name: "context.txt", size: 21, hostId: "local" }];
+    setDraft(sid, { value: "", images, files: [], uploads });
     const native = primeEditableHistory(sid);
     native.moveTo = target;
     const original = structuredClone(world.sessions.get(sid));
@@ -8225,7 +8211,8 @@ for (const order of [
     assert.deepEqual(getDraft(target), {
       value: "U2-original",
       images,
-      files,
+      files: [],
+      uploads,
       promptOnly: true,
     });
     assert.equal(
@@ -8300,7 +8287,7 @@ for (const order of [
     const promptContent = native.prompts[0].messages.at(-1)?.content;
     assert.ok(typeof promptContent === "string");
     assert.match(promptContent, /U2-modified/);
-    assert.match(promptContent, /keep attached context/);
+    assert.doesNotMatch(promptContent, /keep attached context/);
     assert.equal(
       native.prompts[0].messages.some(
         (message) => message.content === "U3-original",
@@ -8312,6 +8299,7 @@ for (const order of [
     );
     assert.ok(promptCall?.body?.images);
     assert.equal(promptCall.url, `/api/agent/${target}`);
+    assert.deepEqual(promptCall.body.uploads, ["context-upload"]);
     assert.deepEqual(
       promptCall.body.images.map(({ data, mimeType }) => ({ data, mimeType })),
       images,
@@ -8365,27 +8353,19 @@ test("relocation merges existing target attachments and preserves typing added w
   });
   const sourceImage = { data: "AAAA", mimeType: "image/png" };
   const targetImage = { data: "BBBB", mimeType: "image/webp" };
-  const sourceFile = {
-    name: "source.txt",
-    mimeType: "text/plain",
-    content: "source",
-    size: 6,
-  };
-  const targetFile = {
-    name: "target.txt",
-    mimeType: "text/plain",
-    content: "target",
-    size: 6,
-  };
+  const sourceUpload = { id: "source-upload", name: "source.txt", size: 6, hostId: "local" };
+  const targetUpload = { id: "target-upload", name: "target.txt", size: 6, hostId: "local" };
   setDraft(sid, {
     value: "initial source draft",
     images: [sourceImage],
-    files: [sourceFile],
+    files: [],
+    uploads: [sourceUpload],
   });
   setDraft(target, {
     value: "existing target draft",
     images: [targetImage],
-    files: [targetFile],
+    files: [],
+    uploads: [targetUpload],
   });
   const native = primeEditableHistory(sid);
   native.moveTo = target;
@@ -8415,6 +8395,10 @@ test("relocation merges existing target attachments and preserves typing added w
     () => release,
     "confirmed target history must be awaiting its load",
   );
+  world.holds.push(
+    { match: (method, url) => method === "POST" && url === "/api/uploads", produce: async () => ({ value: { received: 0 } }) },
+    { match: (method, url) => method === "PUT" && url.startsWith("/api/uploads/"), produce: async () => ({ value: { received: 22, done: true, proof: "new-proof" } }) },
+  );
   await act(async () => {
     fireEvent.change(w.view.getByRole("textbox"), {
       target: { value: "new source typing" },
@@ -8427,8 +8411,8 @@ test("relocation merges existing target attachments and preserves typing added w
     ]);
   });
   await until(
-    () => getDraft(sid)?.files.length === 2,
-    "attachment reads completed during the reload must join the moved draft",
+    () => getDraft(sid)?.uploads?.length === 2,
+    "upload completion during the reload must join the moved draft",
   );
   await act(async () => {
     release();
@@ -8437,23 +8421,12 @@ test("relocation merges existing target attachments and preserves typing added w
     () => w.selectedId === target,
     "the confirmed move must transition its composer",
   );
-  // Bun appends ";charset=utf-8" to a text File's type, so the type is pinned by its prefix.
-  const mimeType = getDraft(target)?.files[1]?.mimeType ?? "";
-  assert.ok(mimeType.startsWith("text/plain"), mimeType);
-  assert.deepEqual(getDraft(target), {
-    value: "new source typing\n\nexisting target draft",
-    images: [sourceImage, targetImage],
-    files: [
-      sourceFile,
-      {
-        name: "new.txt",
-        mimeType,
-        content: "new file while waiting",
-        size: 22,
-      },
-      targetFile,
-    ],
-  });
+  const draft = getDraft(target);
+  assert.equal(draft?.value, "new source typing\n\nexisting target draft");
+  assert.deepEqual(draft?.images, [sourceImage, targetImage]);
+  assert.deepEqual(draft?.files, []);
+  assert.deepEqual(draft?.uploads?.map((upload) => upload.name).sort(), ["new.txt", "source.txt", "target.txt"]);
+  assert.equal(draft?.uploads?.find((upload) => upload.name === "new.txt")?.proof, "new-proof");
   assert.equal(
     (w.view.getByRole("textbox") as HTMLTextAreaElement).value,
     "new source typing\n\nexisting target draft",
@@ -15759,6 +15732,10 @@ for (const changed of [false, true]) {
       "the uncommitted submission remains recoverable",
     );
     if (changed) {
+      world.holds.push(
+        { match: (method, url) => method === "POST" && url === "/api/uploads", produce: async () => ({ value: { received: 0 } }) },
+        { match: (method, url) => method === "PUT" && url.startsWith("/api/uploads/"), produce: async () => ({ value: { received: 11, done: true, proof: "remount-proof" } }) },
+      );
       await act(() => {
         fireEvent.change(second.getByRole("textbox"), {
           target: { value: "newer unsent draft" },
@@ -15768,8 +15745,8 @@ for (const changed of [false, true]) {
         ]);
       });
       await until(
-        () => getDraft(sid)?.files.length === 1,
-        "the remounted composer's new attachment must finish reading",
+        () => getDraft(sid)?.uploads?.length === 1,
+        "the remounted composer's new attachment must finish uploading",
       );
     }
     await act(async () => {
@@ -15796,7 +15773,8 @@ for (const changed of [false, true]) {
     );
     if (changed) {
       assert.equal(getDraft(sid)?.value, "newer unsent draft");
-      assert.equal(getDraft(sid)?.files[0]?.name, "new-context.txt");
+      assert.equal(getDraft(sid)?.uploads?.[0]?.name, "new-context.txt");
+      assert.equal(getDraft(sid)?.uploads?.[0]?.proof, "remount-proof");
       assert.ok(second.getByText("new-context.txt"));
     } else {
       assert.equal(getDraft(sid), null);

@@ -860,6 +860,15 @@ test("export, session and context results must have the fields the routes read",
     (await answer(() => ops.readSession("s1", options), session)).value,
     session,
   );
+  const continuation = { context: { messages: [], entryIds: [] }, historyHasMore: false, historyRevision: "revision" };
+  assert.deepEqual(
+    (await answer(() => ops.readSession("s1", { ...options, tail: 30, before: "e1", historyRevision: "revision" }), continuation)).value,
+    continuation,
+  );
+  await assert.rejects(
+    answer(() => ops.readSession("s1", options), { context: {}, historyHasMore: false }),
+    badResult,
+  );
   const page = { history: { messages: [] }, leafId: "e1", tipId: "e1" };
   assert.deepEqual(
     (
