@@ -40,3 +40,19 @@ test("host loss and unavailable attach close transiently so clients reconnect", 
   expect(JSON.parse(frames.at(-1)!).data).toBe("restored");
   terminalAttachSocket.close(ws);
 });
+
+test("a buffered snapshot stays connected and later output follows it", () => {
+  const frames: string[] = [];
+  const closes: number[] = [];
+  const ws = {
+    data: { kind: "terminal-attach", hostId: "local", sessionId: "3aa8ab15-162b-4bee-97c8-2b35a65a7b32", id: "buffered", started: false },
+    send: (value: string) => { frames.push(value); return frames.length === 1 ? -1 : 1; },
+    close: (code: number) => { closes.push(code); },
+  } as unknown as Bun.ServerWebSocket<TerminalAttachData>;
+  terminalAttachSocket.message(ws, JSON.stringify({ type: "hello", version: 1, cols: 80, rows: 24 }));
+  listener?.({ type: "snapshot", data: "screen", cols: 80, rows: 24, cursor: 0 });
+  listener?.({ type: "output", data: "next", cursor: 1 });
+  expect(frames.map(frame => JSON.parse(frame).type)).toEqual(["snapshot", "output"]);
+  expect(closes).toEqual([]);
+  terminalAttachSocket.close(ws);
+});

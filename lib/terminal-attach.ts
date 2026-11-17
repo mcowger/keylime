@@ -40,7 +40,8 @@ export const terminalAttachSocket = {
       clearTimeout(state.timer);
       state.unsubscribe = onPtyEvent(state.hostId, state.id, (event) => {
         if (!event) { ws.close(1013, "host connection lost"); return; }
-        if (ws.send(JSON.stringify(event)) <= 0) { ws.close(1013, "terminal client too slow"); return; }
+        // Bun returns -1 when the frame was queued under backpressure; only 0 means it was dropped.
+        if (ws.send(JSON.stringify(event)) === 0) { ws.close(1013, "terminal client too slow"); return; }
         if (event.type === "exit" || event.type === "error") ws.close(1000, "terminal ended");
       });
     } else if (message.type === "hello") { ws.close(1008, "duplicate hello"); return; }
