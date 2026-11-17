@@ -631,11 +631,11 @@ Recovery: Re-list accounts after an uncertain response rather than assuming remo
   op(
     "commit_plan",
     `Usage: Propose commits for the workspace while the session is settled.
-Inputs: Optional context guides the proposal; changelog false disables changelog detection.
-Invariants: Returns null if no staged changes remain after staging the workspace.
+Inputs: Optional context guides the proposal; changelog false disables changelog detection. Optional requestId correlates unsolicited commit_plan_progress frames.
+Invariants: Returns null if no staged changes remain after staging the workspace; progress is emitted only when requestId is supplied.
 Effects: Stages all workspace changes, including partially staged files; may invoke a model.
 Recovery: Inspect the Git index after errors or lost responses; staging is not rolled back.`,
-    Type.Object({ context: opt(s()), changelog: opt(b()) }),
+    Type.Object({ context: opt(s()), changelog: opt(b()), requestId: opt(s()) }),
     Type.Object({ plan: Type.Union([CommitPlanSchema, Type.Null()]) }),
   ),
   op(
@@ -749,6 +749,14 @@ const progress = Type.Object({
 });
 const agentEvent = Type.Union([...runnerEventSchemas]);
 export const toolsRunnerEvents: readonly TSchema[] = [
+  frame(
+    "commit_plan_progress",
+    { requestId: s(), message: s() },
+    {
+      title: "RunnerCommitPlanProgress",
+      description: "Bounded, terminal-control-free commit planning activity correlated with the supplied requestId.",
+    },
+  ),
   frame("host_tool_call", {
     id: s(),
     toolCallId: s(),

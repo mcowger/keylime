@@ -1760,12 +1760,15 @@
                           },
                           "context": {
                             "type": "string"
+                          },
+                          "requestId": {
+                            "type": "string"
                           }
                         },
                         "type": "object"
                       }
                     ],
-                    "description": "Usage: Propose commits for the workspace while the session is settled.\nInputs: Optional context guides the proposal; changelog false disables changelog detection.\nInvariants: Returns null if no staged changes remain after staging the workspace.\nEffects: Stages all workspace changes, including partially staged files; may invoke a model.\nRecovery: Inspect the Git index after errors or lost responses; staging is not rolled back.",
+                    "description": "Usage: Propose commits for the workspace while the session is settled.\nInputs: Optional context guides the proposal; changelog false disables changelog detection. Optional requestId correlates unsolicited commit_plan_progress frames.\nInvariants: Returns null if no staged changes remain after staging the workspace; progress is emitted only when requestId is supplied.\nEffects: Stages all workspace changes, including partially staged files; may invoke a model.\nRecovery: Inspect the Git index after errors or lost responses; staging is not rolled back.",
                     "title": "AgentCommand_commit_plan",
                     "type": "object"
                   },
@@ -15750,12 +15753,15 @@
                                   },
                                   "context": {
                                     "type": "string"
+                                  },
+                                  "requestId": {
+                                    "type": "string"
                                   }
                                 },
                                 "type": "object"
                               }
                             ],
-                            "description": "Usage: Propose commits for the workspace while the session is settled.\nInputs: Optional context guides the proposal; changelog false disables changelog detection.\nInvariants: Returns null if no staged changes remain after staging the workspace.\nEffects: Stages all workspace changes, including partially staged files; may invoke a model.\nRecovery: Inspect the Git index after errors or lost responses; staging is not rolled back.",
+                            "description": "Usage: Propose commits for the workspace while the session is settled.\nInputs: Optional context guides the proposal; changelog false disables changelog detection. Optional requestId correlates unsolicited commit_plan_progress frames.\nInvariants: Returns null if no staged changes remain after staging the workspace; progress is emitted only when requestId is supplied.\nEffects: Stages all workspace changes, including partially staged files; may invoke a model.\nRecovery: Inspect the Git index after errors or lost responses; staging is not rolled back.",
                             "title": "AgentCommand_commit_plan",
                             "type": "object"
                           },
@@ -34746,6 +34752,19 @@
                                 "properties": {
                                   "kind": {
                                     "const": "session",
+                                    "type": "string"
+                                  },
+                                  "sessionId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["kind", "sessionId"],
+                                "type": "object"
+                              },
+                              {
+                                "properties": {
+                                  "kind": {
+                                    "const": "commit-plan-progress",
                                     "type": "string"
                                   },
                                   "sessionId": {

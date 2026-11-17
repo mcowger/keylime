@@ -6769,7 +6769,7 @@
                   "type": "object"
                 },
                 {
-                  "description": "Usage: Propose commits for the workspace while the session is settled.\nInputs: Optional context guides the proposal; changelog false disables changelog detection.\nInvariants: Returns null if no staged changes remain after staging the workspace.\nEffects: Stages all workspace changes, including partially staged files; may invoke a model.\nRecovery: Inspect the Git index after errors or lost responses; staging is not rolled back.",
+                  "description": "Usage: Propose commits for the workspace while the session is settled.\nInputs: Optional context guides the proposal; changelog false disables changelog detection. Optional requestId correlates unsolicited commit_plan_progress frames.\nInvariants: Returns null if no staged changes remain after staging the workspace; progress is emitted only when requestId is supplied.\nEffects: Stages all workspace changes, including partially staged files; may invoke a model.\nRecovery: Inspect the Git index after errors or lost responses; staging is not rolled back.",
                   "properties": {
                     "args": {
                       "properties": {
@@ -6777,6 +6777,9 @@
                           "type": "boolean"
                         },
                         "context": {
+                          "type": "string"
+                        },
+                        "requestId": {
                           "type": "string"
                         }
                       },
@@ -24867,6 +24870,24 @@
                   },
                   "required": ["t", "error"],
                   "title": "RunnerExtensionError",
+                  "type": "object"
+                },
+                {
+                  "description": "Bounded, terminal-control-free commit planning activity correlated with the supplied requestId.",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "t": {
+                      "const": "commit_plan_progress",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["t", "requestId", "message"],
+                  "title": "RunnerCommitPlanProgress",
                   "type": "object"
                 },
                 {

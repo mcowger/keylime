@@ -1,6 +1,7 @@
 // Dev entry (`bun run dev`): API plus the SPA from Bun's HTML import with HMR, bundled in memory; never reads dist/.
 import html from "../app/index.html";
 import advisorFixture from "../app/advisor-fixture.html";
+import shipProgressFixture from "../app/ship-progress-fixture.html";
 import {
   buildEventStreamWorker,
   buildServiceWorker,
@@ -41,6 +42,7 @@ const server = startServer({
   root,
   html,
   advisorFixture,
+  shipProgressFixture,
   worker,
   serviceWorker,
 });

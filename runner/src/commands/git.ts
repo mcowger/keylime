@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { StringDecoder } from "node:string_decoder";
 import { completeSimple } from "@oh-my-pi/pi-ai";
 import path from "node:path";
 import type { VcsHunkSelection } from "@oh-my-pi/pi-natives";
@@ -151,12 +152,11 @@ function parsePlan(value: unknown): Plan {
   return value as unknown as Plan;
 }
 
-// Omp's commit agent renders progress unconditionally. Filter only its async context, leaving concurrent runner
-// NDJSON writes untouched. Restore whatever was installed before (headless already points stdout at stderr).
-const quiet = new AsyncLocalStorage<boolean>();
+// OMP writes directly to stdout. Capture only its async context so concurrent NDJSON stays intact.
+const quiet = new AsyncLocalStorage<((chunk: unknown) => void) | undefined>();
 let quietUsers = 0;
 let previousWrite: typeof process.stdout.write | undefined;
-async function quietAgent<T>(fn: () => Promise<T>): Promise<T> {
+async function quietAgent<T>(onOutput: (chunk: unknown) => void, fn: () => Promise<T>): Promise<T> {
   if (quietUsers++ === 0) {
     const write = process.stdout.write.bind(process.stdout);
     previousWrite = process.stdout.write;
@@ -165,25 +165,85 @@ async function quietAgent<T>(fn: () => Promise<T>): Promise<T> {
       encoding?: unknown,
       callback?: unknown,
     ) => {
-      if (!quiet.getStore())
+      const capture = quiet.getStore();
+      if (!capture)
         return write(
           chunk as string,
           encoding as BufferEncoding,
           callback as (error?: Error | null) => void,
         );
+      capture(chunk);
       const done = typeof encoding === "function" ? encoding : callback;
       if (typeof done === "function") queueMicrotask(() => done());
       return true;
     }) as typeof process.stdout.write;
   }
   try {
-    return await quiet.run(true, fn);
+    return await quiet.run(onOutput, fn);
   } finally {
     if (--quietUsers === 0 && previousWrite) {
       process.stdout.write = previousWrite;
       previousWrite = undefined;
     }
   }
+}
+
+// OMP renders complete lines, but writes can split UTF-8 and terminal escape sequences.
+// Bound both each message and the total per plan; never forward terminal controls to the client.
+function agentProgress(send: (message: string) => void) {
+  const decoder = new StringDecoder("utf8");
+  let line = "";
+  let state: "text" | "escape" | "escapeIntermediate" | "csi" | "osc" | "oscEscape" = "text";
+  let remaining = 20_000;
+  const flush = () => {
+    const message = line.trim();
+    line = "";
+    if (!message || remaining <= 0) return;
+    const bounded = message.slice(0, remaining);
+    remaining -= bounded.length;
+    // Sending may itself write NDJSON to stdout; it must not be captured as agent output.
+    quiet.run(undefined, () => send(bounded));
+  };
+  const consume = (text: string) => {
+    for (const char of text) {
+      const code = char.charCodeAt(0);
+      if (state === "escape") {
+        state = char === "[" ? "csi" : char === "]" ? "osc" : code >= 0x20 && code <= 0x2f ? "escapeIntermediate" : "text";
+      } else if (state === "escapeIntermediate") {
+        if (code >= 0x30 && code <= 0x7e) state = "text";
+      } else if (state === "csi") {
+        if (code >= 0x40 && code <= 0x7e) state = "text";
+      } else if (state === "osc") {
+        if (char === "\x07" || char === "\x9c") state = "text";
+        else if (char === "\x1b") state = "oscEscape";
+      } else if (state === "oscEscape") {
+        state = char === "\\" ? "text" : "osc";
+      } else if (char === "\x1b") {
+        state = "escape";
+      } else if (char === "\x9b") {
+        state = "csi";
+      } else if (char === "\x9d") {
+        state = "osc";
+      } else if (char === "\n" || char === "\r") {
+        flush();
+      } else if (char === "\t") {
+        if (line.length < 500) line += " ";
+      } else if (code >= 0x20 && !(code >= 0x7f && code <= 0x9f)) {
+        if (line.length < 500) line += char;
+      }
+    }
+  };
+  return {
+    write(chunk: unknown) {
+      if (typeof chunk === "string") consume(chunk);
+      else if (Buffer.isBuffer(chunk) || chunk instanceof Uint8Array)
+        consume(decoder.write(Buffer.from(chunk)));
+    },
+    finish() {
+      consume(decoder.end());
+      flush();
+    },
+  };
 }
 
 async function existingEntries(
@@ -208,15 +268,22 @@ async function existingEntries(
 async function planCommit(ctx: CommandContext, args: Record<string, unknown>) {
   settled(ctx);
   const context = optionalString(args.context, "context");
+  const requestId = optionalString(args.requestId, "requestId");
+  const progress = (message: string) => {
+    if (requestId !== undefined)
+      ctx.send({ t: "commit_plan_progress", requestId, message });
+  };
   if (args.changelog !== undefined && typeof args.changelog !== "boolean")
     throw new Error("changelog must be a boolean");
   const { session } = ctx;
   const cwd = session.sessionManager.getCwd();
   const repo = vcs.requireGit(cwd);
+  progress("Staging workspace changes");
   // Ship commits the whole workspace: stage everything, partially staged or not.
   await repo.stageFiles([]);
   const files = await repo.changedFiles({ cached: true });
   if (!files.length) return { plan: null };
+  progress("Inspecting staged changes");
   const [boundaries, contextFiles, stats, diff] = await Promise.all([
     args.changelog === false ? [] : detectChangelogBoundaries(cwd, files),
     discoverContextFiles(cwd),
@@ -234,47 +301,58 @@ async function planCommit(ctx: CommandContext, args: Record<string, unknown>) {
   let usedFallback = false;
   const trivial = detectTrivialChange(diff);
   if (process.env.PI_COMMIT_TEST_FALLBACK?.toLowerCase() === "true") {
+    progress("Preparing fallback proposal");
     state.proposal = generateFallbackProposal(numstat);
     usedFallback = true;
   } else if (trivial) {
+    progress("Preparing commit proposal");
     state.proposal = {
       analysis: { type: trivial.type, scope: null, details: [], issueRefs: [] },
       summary: trivial.summary,
       warnings: [],
     };
   } else {
+    progress("Resolving commit model");
     try {
       const { model, thinkingLevel } = await resolvePrimaryModel(
         undefined,
         session.settings,
         session.modelRegistry,
       );
-      state = await quietAgent(() =>
-        runCommitAgentSession({
-          cwd,
-          model,
-          thinkingLevel,
-          settings: session.settings,
-          modelRegistry: session.modelRegistry,
-          authStorage: session.modelRegistry.authStorage,
-          userContext: context,
-          contextFiles,
-          changelogTargets: targets,
-          requireChangelog: targets.length > 0,
-          diffText: diff,
-          existingChangelogEntries: targets.length ? existing : undefined,
-        }),
-      );
+      progress("Running commit agent");
+      const output = agentProgress(progress);
+      try {
+        state = await quietAgent(output.write, () =>
+          runCommitAgentSession({
+            cwd,
+            model,
+            thinkingLevel,
+            settings: session.settings,
+            modelRegistry: session.modelRegistry,
+            authStorage: session.modelRegistry.authStorage,
+            userContext: context,
+            contextFiles,
+            changelogTargets: targets,
+            requireChangelog: targets.length > 0,
+            diffText: diff,
+            existingChangelogEntries: targets.length ? existing : undefined,
+          }),
+        );
+      } finally {
+        output.finish();
+      }
     } catch {
       state = {};
     }
     if (!state.proposal && !state.splitProposal) {
+      progress("Preparing fallback proposal");
       state.proposal = generateFallbackProposal(numstat);
       usedFallback = true;
     }
     if (!usedFallback && targets.length && !state.changelogProposal)
       throw new Error("Commit agent did not provide changelog entries");
   }
+  progress("Finalizing commit plan");
   const changelog = state.changelogProposal?.entries ?? [];
   if (state.proposal)
     return {

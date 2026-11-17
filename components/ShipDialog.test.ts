@@ -2,7 +2,40 @@ import "../tests/setup-dom.ts";
 import assert from "node:assert/strict";
 import React from "react";
 import test from "node:test";
-const { render, cleanup, fireEvent, waitFor } =
+import { mock } from "bun:test";
+import type { EventStream, EventStreamChannel } from "@/lib/event-stream";
+const transport = await import("@/lib/event-stream");
+const streams: EventStream[] = [];
+let autoOpenStream = true;
+mock.module("@/lib/event-stream", () => ({
+  ...transport,
+  openEventStream(channel: EventStreamChannel) {
+    const stream: EventStream = {
+      channel,
+      readyState: 0,
+      onopen: null,
+      onmessage: null,
+      onerror: null,
+      close() { Object.assign(this, { readyState: 2 }); },
+    };
+    streams.push(stream);
+    if (autoOpenStream) queueMicrotask(() => {
+      if (stream.readyState !== 0) return;
+      Object.assign(stream, { readyState: 1 });
+      stream.onopen?.();
+    });
+    return stream;
+  },
+}));
+// Load the real client before replacing the module so other commands use its transport.
+const agentClient = await import("@/lib/agent-client");
+const sendAgentCommand = agentClient.sendAgentCommand;
+mock.module("@/lib/agent-client", () => ({
+  ...agentClient,
+  sendAgentCommand: (sessionId: string, command: Record<string, unknown>) =>
+    command.type === "get_state" ? Promise.resolve({}) : sendAgentCommand(sessionId, command),
+}));
+const { render, cleanup, fireEvent, waitFor, act } =
   await import("@testing-library/react/pure.js");
 const { ShipDialog } = await import("./ShipDialog.tsx");
 type Command = {
@@ -622,6 +655,113 @@ test("ship job polling continues while hidden and restores progress", async () =
     assert.ok(view.getByRole("button", { name: "Ask agent to resolve" }));
   } finally {
     cleanup();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("commit planning waits for its session stream and displays only matching progress", async () => {
+  const originalFetch = globalThis.fetch;
+  const plans: { requestId: string; finish: (response: Response) => void }[] = [];
+  autoOpenStream = false;
+  globalThis.fetch = Object.assign(
+    async (url: Parameters<typeof fetch>[0], init: RequestInit = {}) => {
+      if (String(url).startsWith("/api/ship?")) return Response.json({
+        branch: "work", base: "main", ahead: 0, behind: 0, dirty: true,
+        baseDirty: false, issues: [], github: { repo: null, gh: "missing" },
+      });
+      const command = JSON.parse(String(init.body));
+      assert.equal(command.type, "commit_plan");
+      const { promise, resolve } = Promise.withResolvers<Response>();
+      plans.push({ requestId: command.requestId, finish: resolve });
+      return promise;
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+  const props = { open: true, onOpenChange() {}, host: "local", projectPath: "/repo", path: "/work", sessionId: "session", onAskAgentToResolve: async () => {} };
+  try {
+    const first = streams.length;
+    const view = render(React.createElement(ShipDialog, props));
+    await waitFor(() => assert.equal(streams.length, first + 1));
+    const stream = streams[first];
+    assert.deepEqual(stream.channel, { kind: "commit-plan-progress", sessionId: "session" });
+    assert.equal(plans.length, 0);
+    await act(async () => { Object.assign(stream, { readyState: 1 }); stream.onopen?.(); });
+    await waitFor(() => assert.equal(plans.length, 1));
+    const emit = (requestId: string, message: string) => stream.onmessage?.({ data: JSON.stringify({ type: "commit_plan_progress", requestId, message }) });
+    await act(async () => {
+      emit("unrelated", "Other plan");
+      emit(plans[0].requestId, "\u001b[31mReading diff\u001b[0m");
+    });
+    assert.equal(view.queryByText("Other plan"), null);
+    assert.equal(view.getByRole("status").textContent, "Reading diff");
+    view.rerender(React.createElement(ShipDialog, { ...props, visible: false }));
+    await act(async () => emit(plans[0].requestId, "Preparing message"));
+    view.rerender(React.createElement(ShipDialog, props));
+    assert.equal(view.getByRole("status").textContent, "Preparing message");
+    await act(async () => {
+      for (let index = 0; index < 7; index++) emit(plans[0].requestId, `Step ${index}`);
+      emit(plans[0].requestId, "x".repeat(500));
+    });
+    assert.equal(view.queryByText("Step 0"), null);
+    assert.equal(view.getByRole("status").textContent?.length, 300);
+    view.rerender(React.createElement(ShipDialog, { ...props, open: false }));
+    assert.equal(stream.readyState, 2);
+    view.rerender(React.createElement(ShipDialog, props));
+    await waitFor(() => assert.equal(streams.length, first + 2));
+    const next = streams[first + 1];
+    await act(async () => { Object.assign(next, { readyState: 1 }); next.onopen?.(); });
+    await waitFor(() => assert.equal(plans.length, 2));
+    assert.notEqual(plans[0].requestId, plans[1].requestId);
+    assert.equal(view.queryByText("Preparing message"), null);
+    await act(async () => {
+      plans[0].finish(Response.json({ success: true, data: { plan: null } }));
+      next.onmessage?.({ data: JSON.stringify({ type: "commit_plan_progress", requestId: plans[0].requestId, message: "Old plan" }) });
+    });
+    assert.equal(view.queryByText("Old plan"), null);
+    await act(async () => plans[1].finish(Response.json({ success: true, data: { plan: null } })));
+    await view.findByText("Nothing to ship.");
+    assert.equal(next.readyState, 2);
+  } finally {
+    cleanup();
+    autoOpenStream = true;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("planning continues when the session stream cannot connect", async () => {
+  const originalFetch = globalThis.fetch;
+  const { promise: pendingPlan, resolve: finishPlan } = Promise.withResolvers<Response>();
+  let commands = 0;
+  autoOpenStream = false;
+  globalThis.fetch = Object.assign(
+    async (url: Parameters<typeof fetch>[0]) => {
+      if (String(url).startsWith("/api/ship?")) return Response.json({
+        branch: "work", base: "main", ahead: 0, behind: 0, dirty: true,
+        baseDirty: false, issues: [], github: { repo: null, gh: "missing" },
+      });
+      commands++;
+      return pendingPlan;
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+  try {
+    const first = streams.length;
+    const view = render(React.createElement(ShipDialog, {
+      open: true, onOpenChange() {}, host: "local", projectPath: "/repo", path: "/work",
+      sessionId: "session", onAskAgentToResolve: async () => {},
+    }));
+    await waitFor(() => assert.equal(streams.length, first + 1));
+    await act(async () => {
+      Object.assign(streams[first], { readyState: 2 });
+      streams[first].onerror?.();
+    });
+    await waitFor(() => assert.equal(commands, 1));
+    assert.equal(view.getByRole("status").textContent, "Live progress is unavailable.");
+    await act(async () => finishPlan(Response.json({ success: true, data: { plan: null } })));
+    await view.findByText("Nothing to ship.");
+  } finally {
+    cleanup();
+    autoOpenStream = true;
     globalThis.fetch = originalFetch;
   }
 });

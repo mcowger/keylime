@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
 import { sendAgentCommand } from "@/lib/agent-client";
+import { browserUUID } from "@/lib/browser-uuid";
+import { EVENT_STREAM_CLOSED, EVENT_STREAM_OPEN, openEventStream } from "@/lib/event-stream";
 import type {
   CommitPlan,
   PrDescription,
@@ -68,6 +70,24 @@ const secondaryButtonStyle: CSSProperties = {
   fontSize: 13,
 };
 
+const PROGRESS_LIMIT = 5;
+
+export function ShipPlanProgress({ elapsed, messages }: { elapsed: number; messages: string[] }) {
+  return (
+    <div style={{ color: "var(--text-muted)", fontSize: 12, minWidth: 0 }}>
+      <p style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Loader2 size={16} aria-hidden="true" /> Generating commit plan ({elapsed}s)
+      </p>
+      {messages.length > 0 && (
+        <div style={{ display: "grid", gap: 4, overflowWrap: "anywhere" }}>
+          {messages.slice(0, -1).map((message, index) => <div key={index}>{message}</div>)}
+          <div role="status" aria-live="polite">{messages.at(-1)}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ShipDialog({
   open,
   visible = true,
@@ -82,6 +102,7 @@ export function ShipDialog({
   const [preview, setPreview] = useState<ShipPreview | null>(null);
   const [plan, setPlan] = useState<CommitPlan | null | undefined>(undefined);
   const [elapsed, setElapsed] = useState(0);
+  const [progress, setProgress] = useState<string[]>([]);
   const [mode, setMode] = useState<ShipMode>("local");
   const [rebase, setRebase] = useState(false);
   const [cleanup, setCleanup] = useState(true);
@@ -103,6 +124,7 @@ export function ShipDialog({
     controller.current = abort;
     setPreview(null);
     setPlan(undefined);
+    setProgress([]);
     setElapsed(0);
     setMode("local");
     setCleanup(true);
@@ -117,18 +139,94 @@ export function ShipDialog({
     const timer = setInterval(() => setElapsed((n) => n + 1), 1000);
     const query = new URLSearchParams({ host, projectPath, path });
     void json<ShipPreview>(`/api/ship?${query}`, { signal: abort.signal })
-      .then((value) => {
+      .then(async (value) => {
         if (generation.current !== current) return;
         setPreview(value);
         setRebase(value.behind > 0);
         if (value.baseDirty && value.github.gh === "ok" && value.github.repo)
           setMode(value.pr?.state === "open" ? "pr-auto" : "pr");
         if (value.issues.length) return;
-        return sendAgentCommand<{ plan: CommitPlan | null }>(sessionId, {
-          type: "commit_plan",
-        }).then((result) => {
+        // The session stream observes an existing wrapper; it does not start one.
+        await sendAgentCommand(sessionId, { type: "get_state" });
+        if (generation.current !== current || abort.signal.aborted) return;
+        const requestId = browserUUID();
+        let stream;
+        try {
+          stream = openEventStream({ kind: "commit-plan-progress", sessionId });
+        } catch {
+          setProgress(["Live progress is unavailable."]);
+          const result = await sendAgentCommand<{ plan: CommitPlan | null }>(sessionId, {
+            type: "commit_plan",
+            requestId,
+          });
           if (generation.current === current) setPlan(result.plan);
-        });
+          return;
+        }
+        let settled = false;
+        let started = false;
+        let timeout: number;
+        const { promise, resolve, reject } = Promise.withResolvers<void>();
+        const close = () => {
+          clearTimeout(timeout);
+          abort.signal.removeEventListener("abort", cancel);
+          stream.close();
+        };
+        const cancel = () => {
+          settled = true;
+          close();
+          resolve();
+        };
+        abort.signal.addEventListener("abort", cancel, { once: true });
+        stream.onmessage = (event) => {
+          if (settled || generation.current !== current) return;
+          try {
+            const frame = JSON.parse(event.data);
+            if (frame.type !== "commit_plan_progress" || frame.requestId !== requestId || typeof frame.message !== "string") return;
+            const message = frame.message
+              .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\|$)/g, "")
+              .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
+              .replace(/[\x00-\x1f\x7f-\x9f]/g, " ")
+              .trim()
+              .slice(0, 300);
+            if (message) setProgress((items) => [...items, message].slice(-PROGRESS_LIMIT));
+          } catch {
+            // Ignore malformed and unrelated frames.
+          }
+        };
+        const unavailable = () => {
+          if (settled || started) return;
+          setProgress(["Live progress is unavailable."]);
+          start();
+        };
+        const start = () => {
+          if (started || settled || abort.signal.aborted) return;
+          started = true;
+          clearTimeout(timeout);
+          void sendAgentCommand<{ plan: CommitPlan | null }>(sessionId, {
+            type: "commit_plan",
+            requestId,
+          }).then((result) => {
+            if (!settled && generation.current === current) setPlan(result.plan);
+            settled = true;
+            close();
+            resolve();
+          }, (error: unknown) => {
+            settled = true;
+            close();
+            reject(error);
+          });
+        };
+        stream.onopen = start;
+        stream.onerror = () => {
+          if (stream.readyState === EVENT_STREAM_CLOSED) {
+            if (started && !settled) setProgress(["Live progress is unavailable."]);
+            else unavailable();
+          }
+        };
+        timeout = window.setTimeout(unavailable, 3000);
+        if (stream.readyState === EVENT_STREAM_OPEN) start();
+        else if (stream.readyState === EVENT_STREAM_CLOSED) unavailable();
+        return promise;
       })
       .catch((e: unknown) => {
         if (!abort.signal.aborted && generation.current === current)
@@ -327,19 +425,7 @@ export function ShipDialog({
           />
         )}
         {plan === undefined && !error && !preview?.issues.length && (
-          <p
-            role="status"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              color: "var(--text-muted)",
-              fontSize: 12,
-            }}
-          >
-            <Loader2 size={16} aria-hidden="true" /> Generating commit plan (
-            {elapsed}s)
-          </p>
+          <ShipPlanProgress elapsed={elapsed} messages={progress} />
         )}
         {!preview && !error && (
           <p style={{ color: "var(--text-muted)", fontSize: 12 }}>

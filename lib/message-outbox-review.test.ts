@@ -518,6 +518,30 @@ async function ambiguousSession(
   return fixture;
 }
 
+test("commit plan progress observers do not intercept cross-session host tools", async (t) => {
+  const sid = "commit-progress-host-routing";
+  const { session, transport } = await liveSession(sid);
+  await session.send({ type: "set_host_tools", tools: [{ name: "open_url" }] });
+  const frames: { type: string }[] = [];
+  const connection = new EventStreamConnection(undefined, {
+    heartbeatMs: 60_000,
+    write(name, _at, data) { if (name === "s1") frames.push(JSON.parse(data)); return true; },
+    backpressured: () => false,
+    heartbeat: () => true,
+    close() {},
+  });
+  t.after(() => connection.close());
+  assert.deepEqual(await connection.subscribe("s1", { kind: "commit-plan-progress", sessionId: sid }), { ok: true });
+  const calls: Parameters<Parameters<typeof subscribeHostToolCalls>[0]>[0][] = [];
+  const leave = subscribeHostToolCalls((call) => calls.push(call));
+  t.after(leave);
+  transport.emit({ type: "commit_plan_progress", requestId: "plan", message: "Inspecting" });
+  transport.emit({ type: "host_tool_call", id: "background-call", toolName: "open_url", arguments: { url: "https://example.test" } });
+  assert.ok(frames.some((frame) => frame.type === "commit_plan_progress"));
+  assert.equal(frames.some((frame) => frame.type === "host_tool_call"), false);
+  assert.ok(calls[0] && "id" in calls[0] && calls[0].id === "background-call");
+});
+
 test("a held handoff observer leaves registered browser tools to another app tab", async (t) => {
   const sid = "handoff-browser-routing";
   const { session, transport } = await liveSession(sid);

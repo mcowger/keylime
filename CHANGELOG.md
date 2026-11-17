@@ -7,6 +7,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ## [Unreleased]
 
 ### Added
+- Ship shows live commit-planning stages and agent activity while generating a proposal.
 - Non-image attachments are uploaded as files instead of being inserted into the model's prompt, regardless of type or size.
 - New local chats offer global skills in slash completion before a session or workspace starts.
 - Seeded development sessions include an agent chat exchange for checking incoming and outgoing Markdown.
@@ -83,6 +84,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Browser control coalesces queued pointer and touch motion so clicks and typing do not wait behind obsolete movement. Video pulls return as soon as encoded frames arrive
 - Browser input uses bounded ordered batches, keeping sustained canvas typing responsive without dropping key, text or release events. Failed batches are never replayed
 - Documented the shared-session and native terminal attachment proof, including how to try it and remaining testing work
+- Ship shows live commit-planning stages and agent activity while generating a proposal
 
 ### Changed
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.
@@ -240,6 +242,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Skill autocomplete matches new-session skill entries by their unprefixed name
 - Browser video frames are now correlated with capture timestamps using separate encoder timestamps, preventing blank video from Chromium timestamp rewrites
 - Attached terminals no longer keep a session from going idle; attachment is tracked separately for shutdown protection
+- Commit plan progress no longer stalls rendering when the change set spans multiple staged files
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

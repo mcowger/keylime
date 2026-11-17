@@ -173,6 +173,10 @@ export function parseEventStreamChannel(
       return isBoundedString(channel.sessionId, MAX_ID_LENGTH)
         ? { kind: "session", sessionId: channel.sessionId }
         : null;
+    case "commit-plan-progress":
+      return isBoundedString(channel.sessionId, MAX_ID_LENGTH)
+        ? { kind: "commit-plan-progress", sessionId: channel.sessionId }
+        : null;
     case "file": {
       if (!isBoundedString(channel.path, MAX_PATH_LENGTH)) return null;
       const sessionId = channel.sessionId ?? null;

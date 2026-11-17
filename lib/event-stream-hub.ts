@@ -472,6 +472,8 @@ async function openChannel(
       return openNotificationsChannel(channel.clientId, handle);
     case "session":
       return openSessionChannel(channel.sessionId, handle);
+    case "commit-plan-progress":
+      return openSessionChannel(channel.sessionId, handle, true);
     case "file":
       return openFileChannel(
         channel.path,
@@ -612,6 +614,7 @@ function openHostsChannel(handle: SubscriptionHandle): SubscribeResult {
 function openSessionChannel(
   sessionId: string,
   handle: SubscriptionHandle,
+  progressOnly = false,
 ): SubscribeResult {
   // Observer-only: opening a saved session must not create another omp
   // process for a terminal-owned session. Explicit commands use
@@ -633,7 +636,9 @@ function openSessionChannel(
   const attach = (live: AgentSessionWrapper) => {
     // onEvent can synchronously replay pending UI requests. Subscribe before
     // sampling the cursor/announcing readiness so catch-up has no event gap.
-    detachSession = live.onEvent((event) => handle.send(event));
+    detachSession = live.onEvent((event) => {
+      if (!progressOnly || event.type === "commit_plan_progress") handle.send(event);
+    }, { internal: progressOnly });
     handle.send({
       type: "connected",
       sessionId,

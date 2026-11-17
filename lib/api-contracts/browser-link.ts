@@ -25,6 +25,7 @@ export const EventStreamChannelSchema = Type.Union(
       clientId: Type.String(),
     }),
     Type.Object({ kind: Type.Literal("session"), sessionId: Type.String() }),
+    Type.Object({ kind: Type.Literal("commit-plan-progress"), sessionId: Type.String() }),
     Type.Object({
       kind: Type.Literal("file"),
       path: Type.String(),
@@ -37,7 +38,7 @@ export const EventStreamChannelSchema = Type.Union(
   {
     title: "EventStreamChannel",
     description:
-      "Selector for a shared subscription consumed by browser tabs: running sessions, open chats, terminal, notifications, session events, file watches, host tools or hosts. The parser additionally validates identifiers and paths. A file's null sessionId selects no session; an omitted hostId uses the default resolution.",
+      "Selector for a shared subscription consumed by browser tabs: running sessions, open chats, terminal, notifications, session events, noninteractive commit-plan progress, file watches, host tools or hosts. The parser additionally validates identifiers and paths. A file's null sessionId selects no session; an omitted hostId uses the default resolution.",
   },
 );
 export type EventStreamChannel = Static<typeof EventStreamChannelSchema>;

@@ -1478,7 +1478,7 @@
         "correlationId": {
           "location": "$message.payload#/rid"
         },
-        "description": "Usage: Propose commits for the workspace while the session is settled.\nInputs: Optional context guides the proposal; changelog false disables changelog detection.\nInvariants: Returns null if no staged changes remain after staging the workspace.\nEffects: Stages all workspace changes, including partially staged files; may invoke a model.\nRecovery: Inspect the Git index after errors or lost responses; staging is not rolled back.",
+        "description": "Usage: Propose commits for the workspace while the session is settled.\nInputs: Optional context guides the proposal; changelog false disables changelog detection. Optional requestId correlates unsolicited commit_plan_progress frames.\nInvariants: Returns null if no staged changes remain after staging the workspace; progress is emitted only when requestId is supplied.\nEffects: Stages all workspace changes, including partially staged files; may invoke a model.\nRecovery: Inspect the Git index after errors or lost responses; staging is not rolled back.",
         "name": "BrowserRequest_commit_plan",
         "payload": {
           "$ref": "#/components/schemas/BrowserRequest_commit_plan"
@@ -3024,12 +3024,15 @@
                       },
                       "context": {
                         "type": "string"
+                      },
+                      "requestId": {
+                        "type": "string"
                       }
                     },
                     "type": "object"
                   }
                 ],
-                "description": "Usage: Propose commits for the workspace while the session is settled.\nInputs: Optional context guides the proposal; changelog false disables changelog detection.\nInvariants: Returns null if no staged changes remain after staging the workspace.\nEffects: Stages all workspace changes, including partially staged files; may invoke a model.\nRecovery: Inspect the Git index after errors or lost responses; staging is not rolled back.",
+                "description": "Usage: Propose commits for the workspace while the session is settled.\nInputs: Optional context guides the proposal; changelog false disables changelog detection. Optional requestId correlates unsolicited commit_plan_progress frames.\nInvariants: Returns null if no staged changes remain after staging the workspace; progress is emitted only when requestId is supplied.\nEffects: Stages all workspace changes, including partially staged files; may invoke a model.\nRecovery: Inspect the Git index after errors or lost responses; staging is not rolled back.",
                 "title": "AgentCommand_commit_plan",
                 "type": "object"
               },
@@ -23130,6 +23133,63 @@
                             "properties": {
                               "type": {
                                 "const": "extension_error",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["type"],
+                            "type": "object"
+                          }
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "web": {
+                            "description": "Browser-assigned ordering cursor; a different streamId starts a distinct sequence.",
+                            "properties": {
+                              "first": {
+                                "description": "First sequence included in a merged delta; sequence is the last, and the range is inclusive. Within the same streamId, a snapshot at S where first <= S < sequence already includes only part of the delta: never replay the whole delta on it. Buffer and reconcile with a covering snapshot.",
+                                "type": "number"
+                              },
+                              "sequence": {
+                                "description": "Ordering sequence within this stream; compare only cursors with the same streamId.",
+                                "type": "number"
+                              },
+                              "streamId": {
+                                "description": "Identifies the browser event stream whose sequence is being counted.",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["streamId", "sequence"],
+                            "type": "object"
+                          }
+                        },
+                        "required": ["web"],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  {
+                    "allOf": [
+                      {
+                        "allOf": [
+                          {
+                            "description": "Bounded, terminal-control-free commit planning activity correlated with the supplied requestId.",
+                            "properties": {
+                              "message": {
+                                "type": "string"
+                              },
+                              "requestId": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["requestId", "message"],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "type": {
+                                "const": "commit_plan_progress",
                                 "type": "string"
                               }
                             },
@@ -71787,7 +71847,7 @@
         "type": "object"
       },
       "BrowserRequest_commit_plan": {
-        "description": "Usage: Propose commits for the workspace while the session is settled.\nInputs: Optional context guides the proposal; changelog false disables changelog detection.\nInvariants: Returns null if no staged changes remain after staging the workspace.\nEffects: Stages all workspace changes, including partially staged files; may invoke a model.\nRecovery: Inspect the Git index after errors or lost responses; staging is not rolled back.",
+        "description": "Usage: Propose commits for the workspace while the session is settled.\nInputs: Optional context guides the proposal; changelog false disables changelog detection. Optional requestId correlates unsolicited commit_plan_progress frames.\nInvariants: Returns null if no staged changes remain after staging the workspace; progress is emitted only when requestId is supplied.\nEffects: Stages all workspace changes, including partially staged files; may invoke a model.\nRecovery: Inspect the Git index after errors or lost responses; staging is not rolled back.",
         "properties": {
           "advisor": {
             "type": "boolean"
@@ -71810,6 +71870,9 @@
                     "type": "boolean"
                   },
                   "context": {
+                    "type": "string"
+                  },
+                  "requestId": {
                     "type": "string"
                   }
                 },
@@ -75210,6 +75273,19 @@
               },
               {
                 "properties": {
+                  "kind": {
+                    "const": "commit-plan-progress",
+                    "type": "string"
+                  },
+                  "sessionId": {
+                    "type": "string"
+                  }
+                },
+                "required": ["kind", "sessionId"],
+                "type": "object"
+              },
+              {
+                "properties": {
                   "hostId": {
                     "type": "string"
                   },
@@ -75255,7 +75331,7 @@
                 "type": "object"
               }
             ],
-            "description": "Selector for a shared subscription consumed by browser tabs: running sessions, open chats, terminal, notifications, session events, file watches, host tools or hosts. The parser additionally validates identifiers and paths. A file's null sessionId selects no session; an omitted hostId uses the default resolution.",
+            "description": "Selector for a shared subscription consumed by browser tabs: running sessions, open chats, terminal, notifications, session events, noninteractive commit-plan progress, file watches, host tools or hosts. The parser additionally validates identifiers and paths. A file's null sessionId selects no session; an omitted hostId uses the default resolution.",
             "title": "EventStreamChannel"
           },
           "id": {
@@ -75743,7 +75819,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: Propose commits for the workspace while the session is settled.\nInputs: Optional context guides the proposal; changelog false disables changelog detection.\nInvariants: Returns null if no staged changes remain after staging the workspace.\nEffects: Stages all workspace changes, including partially staged files; may invoke a model.\nRecovery: Inspect the Git index after errors or lost responses; staging is not rolled back.",
+      "description": "Usage: Propose commits for the workspace while the session is settled.\nInputs: Optional context guides the proposal; changelog false disables changelog detection. Optional requestId correlates unsolicited commit_plan_progress frames.\nInvariants: Returns null if no staged changes remain after staging the workspace; progress is emitted only when requestId is supplied.\nEffects: Stages all workspace changes, including partially staged files; may invoke a model.\nRecovery: Inspect the Git index after errors or lost responses; staging is not rolled back.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/BrowserRequest_commit_plan"

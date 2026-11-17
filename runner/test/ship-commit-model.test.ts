@@ -6,12 +6,22 @@ import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import type { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 
 const calls: Array<{ model: unknown; thinkingLevel: unknown }> = [];
+let emitProgress = false;
 mock.module("@oh-my-pi/pi-coding-agent/commit/agentic/agent", () => ({
   runCommitAgentSession: async (input: {
     model: unknown;
     thinkingLevel: unknown;
   }) => {
     calls.push(input);
+    if (emitProgress) {
+      process.stdout.write("\x1b[");
+      process.stdout.write("32mInspecting\x1b[0m ");
+      const utf8 = Buffer.from("café\n");
+      process.stdout.write(utf8.subarray(0, utf8.length - 2));
+      process.stdout.write(utf8.subarray(utf8.length - 2));
+      process.stdout.write("\x1b]0;hidden");
+      process.stdout.write("\x07" + "x".repeat(700) + "\n");
+    }
     return {
       proposal: {
         analysis: { type: "feat", scope: null, details: [], issueRefs: [] },
@@ -59,15 +69,27 @@ test("commit plan uses the configured commit model and thinking level", async ()
         authStorage: {},
       },
     } as unknown as AgentSession;
+    const frames: Array<{ t: string } & Record<string, unknown>> = [];
+    emitProgress = true;
     const result = (await gitCommands.commit_plan(
-      { session, send: () => {} },
-      { changelog: false },
+      { session, send: (frame) => frames.push(frame) },
+      { changelog: false, requestId: "plan-1" },
     )) as { plan: { usedFallback: boolean } };
     expect(result.plan.usedFallback).toBe(false);
     expect(calls).toHaveLength(1);
     expect(calls[0].model).toBe(commitModel);
     expect(calls[0].thinkingLevel).toBe("high");
+    const messages = frames.map((frame) => frame.message);
+    expect(frames.every((frame) => frame.t === "commit_plan_progress" && frame.requestId === "plan-1")).toBe(true);
+    expect(messages).toContain("Inspecting café");
+    expect(messages).toContain("x".repeat(500));
+    expect(messages.every((message) => typeof message === "string" && !/[\x00-\x1f\x7f-\x9f]/.test(message))).toBe(true);
+    frames.length = 0;
+    await gitCommands.commit_plan({ session, send: (frame) => frames.push(frame) }, { changelog: false });
+    expect(frames).toHaveLength(0);
+    await expect(gitCommands.commit_plan({ session, send: () => {} }, { requestId: 42 })).rejects.toThrow("requestId must be a string");
   } finally {
+    emitProgress = false;
     if (previousFallback === undefined)
       delete process.env.PI_COMMIT_TEST_FALLBACK;
     else process.env.PI_COMMIT_TEST_FALLBACK = previousFallback;
