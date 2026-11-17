@@ -238,6 +238,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Agent chat Markdown uses the same compact text and styles as tool output
 - Skill autocomplete matches new-session skill entries by their unprefixed name
 - Browser video frames are now correlated with capture timestamps using separate encoder timestamps, preventing blank video from Chromium timestamp rewrites
+- Attached terminals no longer keep a session from going idle; attachment is tracked separately for shutdown protection
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

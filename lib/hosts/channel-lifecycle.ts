@@ -80,7 +80,6 @@ export class ChannelLifecycle {
     if (
       this.disposed ||
       this.startup ||
-      this.terminalAttached ||
       this.isRunning ||
       this.compacting ||
       this.commands.size > 0 ||
@@ -277,7 +276,7 @@ export class ChannelLifecycle {
     if (this.timer !== undefined) this.cancel(this.timer);
     this.timer = undefined;
     const now = this.clock();
-    const protectedWork = !this.isIdle;
+    const protectedWork = !this.isIdle || this.terminalAttached;
     if (protectedWork) {
       this.wasProtected = true;
       this.idleSince = now;
