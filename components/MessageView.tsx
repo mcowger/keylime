@@ -2221,6 +2221,15 @@ const ToolCallBlock = memo(
                     <pre>{safeJson(block.input)}</pre>
                   ))}
               </div>
+              {agentMessage && typeof block.input?.content === "string" && (
+                <div className="tool-call-output">
+                  <div className="tool-call-output-text" data-tool-output="true">
+                    {result && !isRunning && !isError && /^Delivered to .+\.$/.test((resultText ?? "").trim()) && (
+                      <Check size={14} aria-label="Delivered" style={{ display: "inline", verticalAlign: "text-bottom", marginRight: 6 }} />
+                    )}{block.input.content}
+                  </div>
+                </div>
+              )}
               {todoSummary && (
                 <div className="tool-call-todo-badge">
                   <span className={`todo-op-tag todo-op-${todoSummary.op}`}>
@@ -2281,6 +2290,7 @@ const ToolCallBlock = memo(
                       </div>
                     )}
                     {!(hubJobs || (hubSend && !isError)) &&
+                      !(agentMessage && typeof block.input?.content === "string" && !isError && /^Delivered to .+\.$/.test((resultText ?? "").trim())) &&
                       !(resultIsEmpty && resultImages.length > 0) &&
                       (block.toolName === "wait" && !resultIsEmpty ? (
                         <div

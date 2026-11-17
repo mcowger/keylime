@@ -250,6 +250,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Commit plan progress no longer stalls rendering when the change set spans multiple staged files
 - Question forms show required-field validation and sending or failed status, ignore repeated submits and allow retry after a send failure
 - The sidebar no longer highlights the base workspace while composing a new workspace's first prompt
+- Agent message cards show the message content they delivered instead of only the raw tool input, with a delivered indicator when the send succeeds
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
