@@ -129,6 +129,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- The Explorer shows the base project while a new workspace awaits its first prompt.
 - Agent chat Markdown uses the same compact text and heading styles as tool output.
 - Shipping a workspace returns to its project even if the workspace disappears from the sidebar before Ship finishes.
 - Open workspace chats refresh generated titles without a page reload, including chats opened on another tab.

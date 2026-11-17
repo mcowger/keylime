@@ -216,6 +216,19 @@ globalThis.fetch = (async (url: Parameters<typeof fetch>[0]) =>
   )) as typeof fetch;
 const { AppShell } = await import("./AppShell.tsx");
 
+test("pending workspace explorer shows the base project until the session starts", async () => {
+  sessionStorage.clear();
+  window.history.replaceState(null, "", "/?cwd=%2Frepo");
+  const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+  await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
+  fireEvent.click(view.getByRole("button", { name: "New workspace" }));
+  fireEvent.click(view.getByRole("button", { name: "Show file panel" }));
+  await waitFor(() => assert.ok(view.getByTitle("/repo")));
+  fireEvent.click(view.getByRole("button", { name: "Create session" }));
+  await waitFor(() => assert.ok(view.getByTitle("/repo/worktrees/B")));
+  cleanup();
+});
+
 test("Ship survives workspace navigation and background completion preserves the current terminal", async () => {
   sessionStorage.clear();
   shipDialogs.clear();

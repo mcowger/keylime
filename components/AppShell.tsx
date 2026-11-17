@@ -2469,7 +2469,7 @@ export function AppShell({ appName }: { appName: string }) {
   const sidebarCwd =
     (activeHostId ?? LOCAL_HOST_ID) === workspaceHostId ? activeCwd : null;
   const explorerCwd = pendingWorkspace
-    ? null
+    ? pendingWorkspace
     : selectedSession
       ? sessionWorktreeRemoved
         ? sidebarCwd
@@ -2587,6 +2587,7 @@ export function AppShell({ appName }: { appName: string }) {
   const terminalWorkspace = workspaceOptions.projects
     .filter((workspace) => {
       if (
+        pendingWorkspace ||
         (workspace.hostId ?? LOCAL_HOST_ID) !== workspaceHostId ||
         !explorerCwd
       )
