@@ -204,7 +204,10 @@ export async function inventory(api: Api): Promise<Inventory> {
 export const terminalCleanup = '\x1b[0m\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1005l\x1b[?1006l\x1b[?1007l\x1b[?1015l\x1b[?1016l\x1b[?1004l\x1b[?2004l\x1b[?1l\x1b[?6l\x1b[4l\x1b[?7h\x1b[r\x1b>\x1b[?25h\x1b[?1049l';
 
 export function terminalFrameOutput(frame: { type: string; data?: string }, ready: boolean): string | undefined {
-  if (frame.type === 'snapshot') return '\x1bc\x1b[?1049h\x1b[2J\x1b[H' + (frame.data || '');
+  // The snapshot serializes the daemon's normal buffer, including scrollback.
+  // Leave the picker's alternate screen before replaying it so subsequent TUI
+  // history and alternate-screen transitions have the same buffer semantics.
+  if (frame.type === 'snapshot') return terminalCleanup + '\x1b[2J\x1b[H' + (frame.data || '');
   if (frame.type === 'output' && ready) return frame.data || '';
   return undefined;
 }

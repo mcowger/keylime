@@ -63,7 +63,7 @@ A failed or timed-out launch terminates its child. The daemon owns managed PTY p
 
 The emulator consumes output continuously, even with no native terminal attached. On attach, the manager drains queued screen writes, resizes, serializes the current screen, and sends a snapshot before adding the socket to live output delivery. A reconnect takes a fresh snapshot rather than replaying uncertain input.
 
-`runner/src/klc.ts` provides the picker and terminal client. It restores local terminal state on detach or exit.
+`runner/src/klc.ts` provides the picker and terminal client. It replays the daemon's normal buffer into the local normal buffer, including scrollback, and restores terminal input modes on detach or exit. The attached session remains in local terminal scrollback after detaching.
 
 ### Terminal queries and capabilities
 

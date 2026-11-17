@@ -21,6 +21,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - `klc` defaults to registered sessions and explains its running, registered, archived and all filters.
 - `klc` uses `KEYLIME_PASSWORD` for password authentication when set.
 - `klc` no longer reconnects repeatedly when a large terminal snapshot is buffered.
+- `klc` restores session history into terminal scrollback instead of the alternate screen.
 - Ship shows live commit-planning stages and agent activity while generating a proposal.
 - Non-image attachments are uploaded as files instead of being inserted into the model's prompt, regardless of type or size.
 - New local chats offer global skills in slash completion before a session or workspace starts.

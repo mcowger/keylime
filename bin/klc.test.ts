@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { Api, inventory, isPickerExit, matches, serverUrl, terminalCleanup, terminalFrameOutput, terminalStatus } from '../runner/src/klc';
+import { Terminal } from '@xterm/headless';
+import { SerializeAddon } from '@xterm/addon-serialize';
 
 describe('klc', () => {
   test('requires explicit opt-in for remote plaintext and rejects credential-bearing origins', () => {
@@ -34,6 +36,23 @@ describe('klc', () => {
     expect(terminalFrameOutput({ type: 'output', data: 'partial' }, false)).toBeUndefined();
     expect(terminalFrameOutput({ type: 'snapshot', data: 'screen' }, false)).toEndWith('screen');
     expect(terminalFrameOutput({ type: 'output', data: 'update' }, true)).toBe('update');
+  });
+
+  test('replays normal-buffer history into scrollback rather than the alternate screen', async () => {
+    const source = new Terminal({ cols: 40, rows: 5, scrollback: 100, allowProposedApi: true });
+    const serializer = new SerializeAddon(); source.loadAddon(serializer);
+    const first = Promise.withResolvers<void>();
+    source.write(Array.from({ length: 20 }, (_, i) => `history-${i}\r\n`).join(''), first.resolve); await first.promise;
+    const client = new Terminal({ cols: 40, rows: 5, scrollback: 100, allowProposedApi: true });
+    const alternate = Promise.withResolvers<void>(); client.write('\x1b[?1049h\x1b[?6h\x1b[4h\x1b[2;4r\x1b[?7l', alternate.resolve); await alternate.promise;
+    const snapshot = Promise.withResolvers<void>(); client.write(terminalFrameOutput({ type: 'snapshot', data: serializer.serialize() }, false)!, snapshot.resolve); await snapshot.promise;
+    expect(client.buffer.active.type).toBe('normal');
+    expect(client.modes.originMode).toBe(false);
+    expect(client.modes.insertMode).toBe(false);
+    expect(client.modes.wraparoundMode).toBe(true);
+    expect(client.buffer.normal.length).toBeGreaterThan(5);
+    expect(client.buffer.normal.getLine(0)?.translateToString(true)).toContain('history-0');
+    client.dispose(); source.dispose();
   });
 
   test('restores terminal input modes before leaving the alternate screen', () => {
