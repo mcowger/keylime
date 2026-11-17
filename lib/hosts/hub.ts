@@ -324,9 +324,10 @@ export function onPtyEvent(hostId: string, id: string, listener: (event: Termina
 export function sendPtyFrame(hostId: string, id: string, sessionId: string, payload: string): boolean {
   const link = hub().links.get(hostId);
   if (!link?.socket || !isLinkUp(link.status) || hub().frozen) return false;
-  if (link.awaitingDrain) { link.socket.terminate(); return false; }
+  if (link.awaitingDrain) return false;
   const sent = link.socket.send(encodeLine({ type: "pty_attach", id, sessionId, payload }));
-  if (sent <= 0) { link.socket.terminate(); return false; }
+  if (sent === 0) return false;
+  if (sent < 0) link.awaitingDrain = true;
   return true;
 }
 export async function hostPtySessions(hostId: string): Promise<string[]> {

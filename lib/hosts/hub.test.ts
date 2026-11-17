@@ -1865,6 +1865,19 @@ test("the downlink is paced from the outbox: after a send Bun queued under backp
   await link.down.cancel();
 });
 
+test("buffered terminal input keeps the host link and pauses until drain", async () => {
+  const link = await linkedHost("Terminal backpressure");
+  const { socket } = link.down;
+  const send = socket.send.bind(socket);
+  socket.send = (data) => { send(data); return -1; };
+  assert.equal(hub.sendPtyFrame(link.id, "attachment", "session", "hello"), true);
+  assert.equal(hub.sendPtyFrame(link.id, "attachment", "session", "input"), false);
+  socket.send = send;
+  hub.hostLinkSocket.drain(socket);
+  assert.equal(hub.sendPtyFrame(link.id, "attachment", "session", "resize"), true);
+  await link.down.cancel();
+});
+
 test("the hub answers each uplink frame with one ack; an ack line from the daemon trims the downlink outbox", async () => {
   const link = await linkedHost("Acker");
   const { req, ch, spawning, result } = await spawnOverLink(link);
