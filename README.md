@@ -13,6 +13,7 @@ Thanks to [omercnet](https://github.com/omercnet) and the [Paseo shared browser 
 - Chat with OMP agents, steer or queue messages, edit conversation history, fork sessions, and ask side questions with `/btw`. Existing-session messages are held in an outbox until delivery is confirmed; uncertain delivery remains visible rather than being silently retried.
 - Organize work by host, project, and workspace. Register projects explicitly, import existing worktrees and sessions selectively, and use multiple chats and terminals in a workspace. Git workspaces support prompt-first creation, configurable setup commands, and Paseo recipes. See [projects and workspaces](docs/worktrees.md).
 - Run persistent terminal shells on the workspace's host. Switching tabs or restarting the web server does not stop them; restarting the host daemon does.
+- Attach to the same live OMP session from the browser and the native terminal with `klc`, including across linked hosts. Multiple terminal clients share the host-owned screen and input. See [terminal attachment](#terminal-attachment-with-klc).
 - Inspect files, upload attachments, search sessions, view tool output and subagent activity, and follow todo progress. Ship changes from a workspace using the Git and pull request workflow.
 - Link remote hosts and run sessions on the machine that owns the project. A trusted cluster can share provider credentials and OMP configuration; it does not move projects or automatically place sessions.
 - Configure models, provider logins, MCP servers, skills, plugins, and agent settings. Get browser notifications for completed runs, requests for input, and failures.
@@ -73,6 +74,26 @@ mise exec -- bun run start
 The default address is `http://127.0.0.1:30177`. Start the host daemon separately for live sessions. The web server and daemon are separate processes: restarting the web server leaves agent runs on the daemon running; restarting the daemon stops them.
 
 The package and compiled binary use the `keylime` command. For a foreground installation, start `keylime` first and then `keylime host` in another terminal. `keylime systemd install` and `keylime launchd install` install both services on Linux and macOS respectively. `keylime --help` lists server options; `keylime hash-password` creates a password hash.
+
+## Terminal attachment with `klc`
+
+`klc` connects your terminal to a live key lime session, including one running on a remote host. The browser and terminal use the same OMP agent session: messages and activity appear in both. The terminal runs the native OMP TUI on the host, while the browser uses the structured session channel; it doesn't scrape the terminal screen. No separate terminal multiplexer is required.
+
+Multiple `klc` clients can attach to the same session. They share one screen, input stream, and terminal size; the most recent resize applies to everyone. The host daemon keeps the session running when clients detach or the web server restarts. Restarting the host daemon stops it.
+
+Build the standalone client from source, then connect to a server:
+
+```bash
+mise exec -- bun scripts/build-klc-binary.ts
+./release/klc-<os>-<arch>/klc --url https://keylime.example.com
+./release/klc-<os>-<arch>/klc --url https://keylime.example.com --host HOST SESSION_ID
+```
+
+`KEYLIME_URL` sets the server URL when `--url` is omitted; the default is `http://127.0.0.1:30177`. The client prompts for the server password when needed. Remote HTTP requires `--insecure` and sends credentials and terminal traffic without encryption, so use a trusted HTTPS endpoint.
+
+The picker searches sessions across linked hosts. Press Tab to cycle through running, archived, and all sessions, or Ctrl-N to create a session in a registered workspace. Press Ctrl-] to detach back to the picker, then Ctrl-] again to exit. `/quit` ends the shared runtime for everyone. Ctrl-D and a rapid second Ctrl-C are blocked to prevent accidental termination.
+
+On reconnect, `klc` restores a fresh screen snapshot rather than replaying input whose delivery is uncertain. Terminal protocol support is intentionally limited; see [the terminal design](docs/terminal.md) for architecture and fidelity limitations.
 
 ## Security and remote hosts
 
