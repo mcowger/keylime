@@ -82,6 +82,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Attached terminals suppress device and color queries so replies from the physical terminal cannot leak into the agent session
 - Browser control coalesces queued pointer and touch motion so clicks and typing do not wait behind obsolete movement. Video pulls return as soon as encoded frames arrive
 - Browser input uses bounded ordered batches, keeping sustained canvas typing responsive without dropping key, text or release events. Failed batches are never replayed
+- Documented the shared-session and native terminal attachment proof, including how to try it and remaining testing work
 
 ### Changed
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.
