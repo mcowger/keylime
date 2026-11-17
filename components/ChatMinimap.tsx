@@ -396,8 +396,13 @@ export const ChatMinimap = memo(function ChatMinimap({
       const activeRow = rail.querySelector(
         `[data-index="${activeIndex}"]`,
       ) as HTMLElement | null;
-      activeRow?.scrollIntoView({
-        block: "nearest",
+      if (!activeRow) return;
+      const row = activeRow.getBoundingClientRect();
+      const bounds = rail.getBoundingClientRect();
+      const delta = row.top < bounds.top ? row.top - bounds.top :
+        row.bottom > bounds.bottom ? row.bottom - bounds.bottom : 0;
+      if (delta) rail.scrollTo({
+        top: rail.scrollTop + delta,
         behavior: smooth && !reducedMotion ? "smooth" : "instant",
       });
     };

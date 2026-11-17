@@ -9,6 +9,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ### Added
 - Question forms have larger action targets, show validation and submission status, prevent duplicate answers, and allow retry after a send failure.
 - Opening a saved session paints recent messages first and loads earlier history in the background.
+- Loading earlier session history no longer animates the scroll to the bottom.
 - Search jumps to older messages wait for history backfill instead of being discarded during the initial page load.
 - Earlier-history pages omit repeated navigation trees, reducing transfer and processing for long sessions.
 - Earlier-history backfill assembles pages in linear time instead of repeatedly copying accumulated messages.
@@ -104,6 +105,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - `klc` resumes sessions on the selected host, preserves the terminal screen when showing notices, and restores input modes on exit. Client archives include native third-party notices
 - Host daemons expose their PTY sessions over the link and serve a connection-scoped terminal attach stream for native clients
 - Attached terminals block Ctrl-D, repeated Ctrl-C and interrupts inside pasted text so they cannot end the agent session
+- Loading earlier session history no longer animates the scroll to the bottom
 
 ### Changed
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.

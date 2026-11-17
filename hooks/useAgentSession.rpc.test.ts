@@ -16262,6 +16262,57 @@ test("dismissing an uncertain bridge deletes the browser copy the worker still h
   );
 });
 
+test("paged history backfill follows without smooth scrolling", async () => {
+  resetWorld();
+  const sid = "paged-scroll";
+  const older = userMsg("older", "older message");
+  const recent = userMsg("recent", "recent message");
+  primeSession(sid, [older, recent]);
+  const context = (messages: AgentMessage[], entryIds: string[]) => ({
+    messages, entryIds, leafId: "e1", todoPhases: [], thinkingLevel: "off", model: null,
+  });
+  const page = Promise.withResolvers<HeldResponse>();
+  world.holds.push({
+    match: (method, url) => method === "GET" && url.includes(`/${sid}?`) && url.includes("before="),
+    produce: () => page.promise,
+  });
+  world.respond = (method, raw) => {
+    const url = new URL(raw, "http://localhost");
+    if (method !== "GET" || url.pathname !== `/api/sessions/${sid}` || !url.searchParams.has("tail")) return null;
+    return jsonResponse(200, {
+      sessionId: sid, filePath: "/fixture/session.jsonl", tree: [], leafId: "e1",
+      context: context([recent], ["e1"]), historyHasMore: true, historyRevision: "revision",
+    });
+  };
+  const container = document.createElement("div");
+  const end = document.createElement("div");
+  const behaviors: (ScrollBehavior | undefined)[] = [];
+  Object.defineProperty(end, "scrollIntoView", {
+    configurable: true,
+    value: (options?: ScrollIntoViewOptions | boolean) => {
+      behaviors.push(typeof options === "object" ? options.behavior : undefined);
+    },
+  });
+  const w = await mountSession(sid, undefined, {}, false, (state) => {
+    const scrollState = state as typeof state & {
+      scrollContainerRef: React.RefObject<HTMLDivElement | null>;
+      messagesEndRef: React.RefObject<HTMLDivElement | null>;
+    };
+    scrollState.scrollContainerRef.current = container;
+    scrollState.messagesEndRef.current = end;
+  });
+  assert.deepEqual(w.latest.entryIds, ["e1"]);
+  const initialScrolls = behaviors.length;
+  await act(async () => {
+    page.resolve({ value: { context: context([older], ["e0"]), historyHasMore: false, historyRevision: "revision" } });
+    await sleep(100);
+  });
+  await act(async () => { await sleep(100); });
+  assert.deepEqual(w.latest.entryIds, ["e0", "e1"]);
+  assert.ok(behaviors.length > initialScrolls, "backfill triggers a follow scroll");
+  assert.ok(behaviors.every((behavior) => behavior === "instant"), `unexpected scroll behaviors: ${behaviors}`);
+});
+
 test("an offline send follows its held bubble when the worker list arrives before the commit ACK", async () => {
   resetWorld();
   const sid = "held-scroll";

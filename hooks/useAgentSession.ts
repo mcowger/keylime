@@ -7042,9 +7042,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         Date.now() + PROGRAMMATIC_SCROLL_IGNORE_MS;
       // `behavior: "auto"` falls back to the container's computed
       // `scroll-behavior` (which inherits `html { scroll-behavior: smooth }`),
-      // so a per-frame live follow would restart an eased scroll animation
-      // every frame — an endless chase that lags the growing content. Callers
-      // pass "instant" for live follow; "smooth" stays for idle scrolls.
+      // so repeated follow calls would restart an eased animation and lag the
+      // growing content. Automatic following uses instant; explicit sends may
+      // still request smooth scrolling.
       end.scrollIntoView({
         block: "nearest",
         behavior: reducedMotion ? "instant" : behavior,
@@ -7480,11 +7480,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         followScrollFrameRef.current = requestAnimationFrame(() => {
           followScrollFrameRef.current = null;
           if (!completionScrollAllowedRef.current) return;
-          scrollToBottom(
-            agentRunningRef.current || streamState.isStreaming
-              ? "instant"
-              : "smooth",
-          );
+          scrollToBottom("instant");
         });
       }
     }
