@@ -9,7 +9,7 @@ type Session = Static<typeof SessionInfoSchema>;
 type Archive = Static<typeof ArchivedSessionInfoSchema>;
 type Target = { id: string; hostId: string; live?: boolean };
 type Entry = { target: Target; title: string; detail: string; search: string; preview?: string; archive?: Archive; workspace?: HierarchyWorkspace };
-type Tab = "running" | "archived" | "all" | "workspaces";
+type Tab = "running" | "registered" | "archived" | "all" | "workspaces";
 
 export function serverUrl(value: string, insecure: boolean): URL {
   const url = new URL(value);
@@ -56,17 +56,17 @@ export function isPickerExit(data: string): boolean {
 class Picker implements Component {
   readonly input = new Input();
   selected = 0;
-  tab: Tab = 'running';
+  tab: Tab = 'registered';
   constructor(readonly entries: Record<Tab, Entry[]>, readonly notice: string, readonly done: (entry: Entry | null) => void) { this.input.prompt = 'Search: '; }
   invalidate() {}
   filtered() { return this.entries[this.tab].filter(entry => matches(entry, this.input.getValue())); }
   handleInput(data: string) {
     if (isPickerExit(data)) return this.done(null);
     if (matchesKey(data, 'ctrl+n')) {
-      this.tab = this.tab === 'workspaces' ? 'running' : 'workspaces'; this.selected = 0; return;
+      this.tab = this.tab === 'workspaces' ? 'registered' : 'workspaces'; this.selected = 0; return;
     }
     if (matchesKey(data, 'tab')) {
-      const tabs: Tab[] = ['running', 'archived', 'all'];
+      const tabs: Tab[] = ['running', 'registered', 'archived', 'all'];
       this.tab = tabs[(tabs.indexOf(this.tab) + 1) % tabs.length]!; this.selected = 0; return;
     }
     const list = this.filtered();
@@ -80,12 +80,13 @@ class Picker implements Component {
     this.selected = Math.max(0, Math.min(this.selected, list.length - 1));
     const rows = process.stdout.rows || 24;
     const inner = Math.max(1, width - 4);
-    const count = Math.max(1, Math.floor((rows - 10) / 3));
+    const count = Math.max(1, Math.floor((rows - 11) / 3));
     const start = Math.max(0, Math.min(this.selected - count + 1, list.length - count));
-    const tabs: Tab[] = ['running', 'archived', 'all'];
+    const tabs: Tab[] = ['running', 'registered', 'archived', 'all'];
     const contents = [
       `\x1b[1mKeylime · ${this.tab}\x1b[0m`,
       tabs.map(t => t === this.tab ? `\x1b[1;36m[${t}]\x1b[0m` : ` ${t} `).join(' '),
+      ({ running: 'Live terminal sessions', registered: 'Unarchived sessions registered to a workspace', archived: 'All archived sessions, including removed workspaces', all: 'All discovered sessions and live terminals', workspaces: 'Registered workspaces' })[this.tab],
       ...this.input.render(inner),
       '',
     ];
@@ -185,6 +186,8 @@ export async function inventory(api: Api): Promise<Inventory> {
       return { target: { id: '', hostId: host.id }, title, detail, search: `${title} ${detail} ${project.path} ${workspace.id}`, workspace };
     }),
   ));
+  const registeredIds = new Set(hierarchies.flatMap(({ host, snapshot }) => (snapshot?.projects ?? []).flatMap(project => project.workspaces.flatMap(workspace => workspace.sessionIds.map(id => `${host.id}\0${id}`)))));
+  const registered = all.filter(entry => registeredIds.has(`${entry.target.hostId}\0${entry.target.id}`));
   const running = all.filter(entry => entry.target.live);
   for (const { host, ids } of inventories) for (const id of ids) {
     if (!running.some(entry => entry.target.hostId === host.id && entry.target.id === id)) {
@@ -195,7 +198,7 @@ export async function inventory(api: Api): Promise<Inventory> {
   const unavailable = inventories.filter(item => item.unavailable).map(item => item.host.label);
   const unavailableHierarchies = hierarchies.filter(item => item.unavailable).map(item => hostName(item.host.id));
   const notices = [unavailable.length ? `Terminal inventory unavailable: ${unavailable.join(', ')}` : '', archives.unavailableHosts.length ? `Archives unavailable: ${archives.unavailableHosts.map(h => h.label).join(', ')}` : '', unavailableHierarchies.length ? `Workspaces unavailable: ${unavailableHierarchies.join(', ')}` : ''].filter(Boolean);
-  return { entries: { running, archived, all: [...all, ...running.filter(entry => !all.some(item => item.target.id === entry.target.id && item.target.hostId === entry.target.hostId)), ...archived], workspaces }, notice: notices.join(' · ') };
+  return { entries: { running, registered, archived, all: [...all, ...running.filter(entry => !all.some(item => item.target.id === entry.target.id && item.target.hostId === entry.target.hostId)), ...archived], workspaces }, notice: notices.join(' · ') };
 }
 
 export const terminalCleanup = '\x1b[0m\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1005l\x1b[?1006l\x1b[?1007l\x1b[?1015l\x1b[?1016l\x1b[?1004l\x1b[?2004l\x1b[?1l\x1b[?6l\x1b[4l\x1b[?7h\x1b[r\x1b>\x1b[?25h\x1b[?1049l';
