@@ -1,8 +1,9 @@
 /**
  * `prompt_result` reporting: every accepted `prompt`/`abort_and_prompt` not answered with `agentInvoked: false`
  * gets exactly one `{t:"prompt_result", id, agentInvoked, status, sessionSettled, error?}` once the work it caused
- * has yielded: at once for local-only slash commands and failures, else after the terminal `agent_end` of the run
- * the prompt started or joined. The host correlates on the cmd `id` instead of guessing who owns an `agent_end`.
+ * has yielded: at once for local-only slash commands and failures, else at a yielded `agent_pause` or the
+ * `agent_end` of the run the prompt started or joined. The host correlates on the cmd `id` instead of guessing
+ * who owns a lifecycle event.
  */
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
@@ -101,6 +102,7 @@ export class PromptResults {
       this.#report(ticket, true, open.ownOutcome);
     } else if (
       this.#session.isStreaming ||
+      this.#session.isRunActive ||
       this.#agentStarts > open.startsAtBegin
     ) {
       // Queued into a live run, or its own run paused for agent-owned follow-up work (e.g. a retry).
@@ -142,16 +144,18 @@ export class PromptResults {
     }
   }
 
-  /** Track run boundaries; call after the event was sent so `prompt_result` follows its `agent_end`. */
+  /** Track run boundaries; call after the event was sent so `prompt_result` follows its yield event. */
   observe(event: AgentSessionEvent): void {
     if (event.type === "agent_start") {
       this.#agentStarts++;
       this.#refusalAtRunStart = this.#session.costCapRefusal;
       return;
     }
-    if (event.type !== "agent_end" || this.#open.size === 0) return;
-    // Older sessions omit `yielded`; only their terminal ends were yields.
-    if (!(event.yielded ?? event.isTerminal !== false)) return;
+    if (this.#open.size === 0) return;
+    if (
+      event.type !== "agent_end" &&
+      !(event.type === "agent_pause" && event.yielded)
+    ) return;
     // A request the cost gate refused during this run is its outcome, whatever message ended it.
     const outcome =
       this.#costCapOutcome(this.#refusalAtRunStart) ??

@@ -6,6 +6,7 @@
  * `bun scripts/use-omp-build.ts`: fetch the pinned release's packages (then `bun install --frozen-lockfile`).
  * `bun scripts/use-omp-build.ts <tag>`: re-pin to that release: fetch it, point `omp-build.json`, the `@oh-my-pi/*`
  * dependencies and an override for every package and native leaf at it, and `bun install` (updates `bun.lock`).
+ * Pass `--latest` instead of a tag to select GitHub's latest published integration release.
  * `OMP_BUILD_RELEASES` replaces `https://github.com` as the download host, e.g. a local mirror for testing.
  */
 import * as fs from "node:fs/promises";
@@ -85,7 +86,26 @@ async function fetchBuild(
   return index;
 }
 
-const tag = process.argv[2];
+let tag = process.argv[2];
+if (tag === "--latest") {
+  const response = await fetch(
+    "https://api.github.com/repos/ompweb-dev/oh-my-pi/releases/latest",
+    { headers: { Accept: "application/vnd.github+json" } },
+  );
+  if (!response.ok) throw new Error(`GitHub releases: HTTP ${response.status}`);
+  const release: unknown = await response.json();
+  if (
+    !release ||
+    typeof release !== "object" ||
+    !("tag_name" in release) ||
+    typeof release.tag_name !== "string" ||
+    !TAG.test(release.tag_name)
+  ) {
+    throw new Error("Latest GitHub release is not an OMP integration release");
+  }
+  tag = release.tag_name;
+  console.log(`Updating OMP to ${tag}`);
+}
 if (!tag) {
   const pin: Pin = await Bun.file(pinPath)
     .json()

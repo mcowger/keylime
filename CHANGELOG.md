@@ -7,6 +7,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ## [Unreleased]
 
 ### Added
+- The OMP integration importer can select the latest published build with `--latest`.
+- The bundled runner uses OMP integration build 18.22.0.
 - Question forms have larger action targets, show validation and submission status, prevent duplicate answers, and allow retry after a send failure.
 - Opening a saved session paints recent messages first and loads earlier history in the background.
 - Loading earlier session history no longer animates the scroll to the bottom.
@@ -110,6 +112,9 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Host daemons expose their PTY sessions over the link and serve a connection-scoped terminal attach stream for native clients
 - Attached terminals block Ctrl-D, repeated Ctrl-C and interrupts inside pasted text so they cannot end the agent session
 - Loading earlier session history no longer animates the scroll to the bottom
+- The OMP integration importer can select the latest published build with `--latest` and import its package references
+- The bundled runner uses OMP integration build 18.22.0, with prompt results reported at yielded pauses
+- Contributor instructions document updating the runner's OMP integration build and verifying it
 
 ### Changed
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.

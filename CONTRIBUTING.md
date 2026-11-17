@@ -25,6 +25,23 @@ A stock `omp` does not speak key lime's channel.
 
 Worktrees created with the repository's Paseo setup copy ignored `runner/vendor/` packages from the source checkout before setup. If those packages are missing or do not match the worktree's pin, run `bun runner/scripts/use-omp-build.ts` and then install the runner dependencies. The runner binary is not built during worktree setup; `bun run smoke` builds it before running the smoke checks.
 
+To update the runner's OMP integration build:
+
+```bash
+mise exec -- bun runner/scripts/use-omp-build.ts --latest
+# Or select a specific integration release tag:
+mise exec -- bun runner/scripts/use-omp-build.ts v<version>-int.<stamp>.g<sha7>
+mise exec -- bun run typecheck
+mise exec -- bun run test
+mise exec -- bun run smoke
+```
+
+The importer updates `runner/omp-build.json`, package references and `runner/bun.lock`.
+Review and adapt runner code for upstream API or behavior changes; a successful
+import alone does not prove compatibility. Smoke builds and exercises the runner
+without a model call; also verify a live session with a configured model before release.
+Updating a separately installed `omp` does not update Keylime's runner.
+
 Install the Git hook once per checkout with `bunx --no-install lefthook install`.
 It runs typechecking and `bun run test:basic` before each commit. Both must pass;
 the focused tests don't replace the full suite below. Git hooks check the working

@@ -27,10 +27,8 @@ import type {
   AgentSession,
   AgentSessionEvent,
 } from "@oh-my-pi/pi-coding-agent/session/agent-session";
-import {
-  isSessionSettled,
-  waitForSessionSettlement,
-} from "@oh-my-pi/pi-coding-agent/session/session-settle";
+import { toWireEvent } from "@oh-my-pi/pi-coding-agent/session/loop-end-wire";
+import { isSessionSettled } from "@oh-my-pi/pi-coding-agent/session/session-settle";
 import { buildAvailableSlashCommands } from "@oh-my-pi/pi-coding-agent/slash-commands/available-commands";
 import { logger } from "@oh-my-pi/pi-utils";
 import type { CommandContext, CommandTable } from "./commands/types";
@@ -139,7 +137,8 @@ class SessionEventForwarder {
     return this.#filter ? Array.from(this.#filter) : null;
   }
 
-  forward(event: AgentSessionEvent): void {
+  forward(sessionEvent: AgentSessionEvent): void {
+    const event = toWireEvent(sessionEvent);
     const messageId = this.#stamp(event);
     if (this.#filter && !this.#filter.has(event.type)) return;
     if (event.type === "message_update" && this.#messageUpdates === "delta") {
@@ -172,7 +171,7 @@ class SessionEventForwarder {
       case "message_end":
         return this.#openMessageIds.pop() ?? this.#mintMessageId();
       case "agent_end":
-        // A run never leaves a message open; drop anything a dropped frame stranded.
+        // A loop never leaves a message open; drop anything a dropped frame stranded.
         this.#openMessageIds.length = 0;
         return undefined;
       default:
@@ -192,9 +191,8 @@ async function nextMacrotask(): Promise<void> {
 }
 
 /**
- * Emits `session_settled` once per stretch of agent activity, after the final run yields and background work
- * that could wake the session has drained. A terminal `agent_end` alone is not settlement: scheduled turns
- * and background work can continue. Two macrotask hops let prompt results precede the settled event.
+ * Emits `session_settled` once per stretch of agent activity, after the run ends and no work is queued or
+ * scheduled. Two macrotask hops let prompt results precede the settled event.
  */
 class SessionSettleWatcher {
   /** Agent activity since the last `session_settled`. */
@@ -217,8 +215,7 @@ class SessionSettleWatcher {
 
   observe(event: AgentSessionEvent): void {
     if (event.type === "agent_start") this.#active = true;
-    else if (event.type === "agent_end" && event.isTerminal !== false)
-      void this.check();
+    else if (event.type === "agent_end") void this.check();
   }
 
   /** Record activity no `agent_start` announces (a reported pending goal turn), so its stretch still settles. */
@@ -227,8 +224,8 @@ class SessionSettleWatcher {
   }
 
   /**
-   * Settle the current stretch of activity if the session is quiet, waiting out background work that will wake
-   * it. A live run is left alone: its own terminal `agent_end` triggers the next check.
+   * Settle the current stretch of activity if the session is quiet. An open run is left alone: its own
+   * `agent_end` triggers the next check.
    */
   async check(): Promise<void> {
     if (this.#checking) {
@@ -243,12 +240,6 @@ class SessionSettleWatcher {
         // session_settled must follow them.
         await nextMacrotask();
         await nextMacrotask();
-        if (this.#active) {
-          await waitForSessionSettlement(this.#session, {
-            isCurrent: () => this.#active,
-            scheduledTurn: this.#scheduledTurn,
-          });
-        }
       } while (this.#recheck);
       if (
         !this.#active ||
