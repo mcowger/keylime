@@ -7,6 +7,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ## [Unreleased]
 
 ### Added
+- The composer highlights file mentions, slash commands and inline code while keeping draft text editable and copyable.
 - Ship shows live commit-planning stages and agent activity while generating a proposal.
 - Non-image attachments are uploaded as files instead of being inserted into the model's prompt, regardless of type or size.
 - New local chats offer global skills in slash completion before a session or workspace starts.

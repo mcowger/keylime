@@ -38,13 +38,75 @@ interface Props {
   value: string;
 }
 
-/**
- * Inline ghost text for a textarea: an invisible copy of the draft, laid out
- * identically underneath the (transparent-background) textarea, with the
- * dimmed suggestion spliced in at the caret. The text after the caret must be
- * mirrored too: without it the mirror is shorter than the textarea, the
- * browser clamps its scrollTop, and the ghost paints below the caret.
- */
+// The textarea remains the editable, selectable source of truth. This mirror
+// paints only backgrounds and ghost text, without changing character metrics.
+const TOKENS =
+  /`{3,}[\s\S]*?`{3,}|`[^`\n]+`|(?<!\S)@(?:"[^"\n]+"(?::\d+(?:-\d+)?)?|[^\s`]+)|(?<!\S)\/[a-zA-Z][\w:-]*/g;
+
+function highlightedText(text: string, cursor: number | null, suffix: string) {
+  const nodes: React.ReactNode[] = [];
+  let offset = 0;
+  let ghostInserted = false;
+  const append = (start: number, end: number, kind?: "mention" | "code") => {
+    const render = (from: number, to: number) => {
+      if (from === to) return;
+      const content = text.slice(from, to);
+      nodes.push(
+        kind ? (
+          <span
+            key={`${from}-${to}`}
+            style={{
+              background:
+                kind === "code" ? "var(--bg-hover)" : "var(--bg-selected)",
+              borderRadius: 4,
+              boxDecorationBreak: "clone",
+            }}
+          >
+            {content}
+          </span>
+        ) : (
+          content
+        ),
+      );
+    };
+    if (!ghostInserted && cursor !== null && cursor >= start && cursor <= end) {
+      render(start, cursor);
+      nodes.push(
+        <span key="ghost" style={{ color: "var(--text-dim)" }}>
+          {suffix}
+        </span>,
+      );
+      ghostInserted = true;
+      render(cursor, end);
+    } else render(start, end);
+  };
+  for (const match of text.matchAll(TOKENS)) {
+    const start = match.index;
+    append(offset, start);
+    const token = match[0];
+    append(
+      start,
+      start + token.length,
+      token.startsWith("```")
+        ? undefined
+        : token.startsWith("`")
+          ? "code"
+          : "mention",
+    );
+    offset = start + token.length;
+  }
+  append(offset, text.length);
+  if (!ghostInserted && cursor === text.length)
+    nodes.push(
+      <span key="ghost" style={{ color: "var(--text-dim)" }}>
+        {suffix}
+      </span>,
+    );
+  nodes.push("\u200b");
+  return nodes;
+}
+
+/** Paint draft highlights and prediction behind the native textarea. */
 export const GhostMirror = forwardRef<HTMLDivElement, Props>(
   function GhostMirror({ textareaRef, prediction, value }, ref) {
     const localRef = useRef<HTMLDivElement | null>(null);
@@ -59,15 +121,22 @@ export const GhostMirror = forwardRef<HTMLDivElement, Props>(
       const mirror = localRef.current;
       const textarea = textareaRef.current;
       if (!mirror || !textarea) return;
-      const computed = getComputedStyle(textarea);
-      for (const prop of LAYOUT_PROPS) mirror.style[prop] = computed[prop];
-      // clientWidth excludes the scrollbar, so wrapping matches the textarea's.
-      mirror.style.width = `${textarea.clientWidth}px`;
-      mirror.style.height = `${textarea.clientHeight}px`;
-      mirror.scrollTop = textarea.scrollTop;
+      const sync = () => {
+        const computed = getComputedStyle(textarea);
+        for (const prop of LAYOUT_PROPS) mirror.style[prop] = computed[prop];
+        // clientWidth excludes the scrollbar, so wrapping matches the textarea's.
+        mirror.style.width = `${textarea.clientWidth}px`;
+        mirror.style.height = `${textarea.clientHeight}px`;
+        mirror.scrollTop = textarea.scrollTop;
+        mirror.scrollLeft = textarea.scrollLeft;
+      };
+      sync();
+      const observer = new ResizeObserver(sync);
+      observer.observe(textarea);
+      return () => observer.disconnect();
     });
 
-    if (!visible) return null;
+    if (!value && !visible) return null;
     return (
       <div
         ref={(el) => {
@@ -87,10 +156,11 @@ export const GhostMirror = forwardRef<HTMLDivElement, Props>(
           color: "transparent",
         }}
       >
-        {ghost.text.slice(0, ghost.cursor)}
-        <span style={{ color: "var(--text-dim)" }}>{ghost.suffix}</span>
-        {/* The zero-width space gives a trailing newline its own line, as the textarea does. */}
-        {`${ghost.text.slice(ghost.cursor)}\u200b`}
+        {highlightedText(
+          value,
+          visible ? ghost.cursor : null,
+          visible ? ghost.suffix : "",
+        )}
       </div>
     );
   },

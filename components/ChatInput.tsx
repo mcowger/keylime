@@ -1145,7 +1145,6 @@ export const ChatInput = memo(
       [attachAsFiles, fitsInline, markInputEdited, t],
     );
 
-
     const processFiles = useCallback(
       (files: File[]) => {
         const imageFiles = files.filter((file) =>
@@ -1243,9 +1242,12 @@ export const ChatInput = memo(
         markInputEdited();
         const handle = uploadHandlesRef.current.get(id);
         uploadHandlesRef.current.delete(id);
-        const upload = attachedUploadsRef.current.find((item) => item.id === id);
+        const upload = attachedUploadsRef.current.find(
+          (item) => item.id === id,
+        );
         const hostId = upload?.hostId;
-        const original = upload?.file && legacyUploadsRef.current.get(upload.file);
+        const original =
+          upload?.file && legacyUploadsRef.current.get(upload.file);
         if (original && upload?.file) {
           legacyUploadsRef.current.delete(upload.file);
           setAttachedTextFiles((current) => {
@@ -1796,8 +1798,7 @@ export const ChatInput = memo(
           if (await runBuiltinCommand(msg, overrideText)) return;
         }
         if (submissionBlockedRef.current) return;
-        if (rejectsOversizedPrompt(msg, attachedImagesRef.current))
-          return;
+        if (rejectsOversizedPrompt(msg, attachedImagesRef.current)) return;
         const key = draftKeyRef.current;
         const images = attachedImagesRef.current.length
           ? attachedImagesRef.current
@@ -1816,8 +1817,7 @@ export const ChatInput = memo(
           proofs?: Record<string, string>,
           options?: PromptSendOptions,
         ] = uploadArgs(attachedUploadsRef.current);
-        if (promptOnlyRef.current)
-          sendTail[2] = { promptOnly: true };
+        if (promptOnlyRef.current) sendTail[2] = { promptOnly: true };
         let pending: Promise<PromptSubmissionResult>;
         try {
           pending = onSend(msg, images, ...sendTail);
@@ -3006,7 +3006,9 @@ export const ChatInput = memo(
       (e: React.ClipboardEvent) => {
         const items = Array.from(e.clipboardData?.items ?? []);
         const files = items
-          .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+          .filter(
+            (item) => item.kind === "file" && item.type.startsWith("image/"),
+          )
           .map((item) => item.getAsFile())
           .filter((file): file is File => file !== null);
         if (files.length) {
@@ -3020,15 +3022,21 @@ export const ChatInput = memo(
         if (!html) return;
         const template = document.createElement("template");
         template.innerHTML = html;
-        const sources = Array.from(template.content.querySelectorAll("img[src]"))
+        const sources = Array.from(
+          template.content.querySelectorAll("img[src]"),
+        )
           .map((image) => image.getAttribute("src") ?? "")
-          .filter((src) => /^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(src));
+          .filter((src) =>
+            /^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(src),
+          );
         if (!sources.length) return;
         const embedded = sources.flatMap((src) => {
           try {
             const comma = src.indexOf(",");
             const mimeType = src.slice(5, src.indexOf(";"));
-            const bytes = Uint8Array.from(atob(src.slice(comma + 1)), (char) => char.charCodeAt(0));
+            const bytes = Uint8Array.from(atob(src.slice(comma + 1)), (char) =>
+              char.charCodeAt(0),
+            );
             return [new File([bytes], "clipboard-image", { type: mimeType })];
           } catch {
             return [];
@@ -3624,113 +3632,116 @@ export const ChatInput = memo(
                 flexWrap: "wrap",
               }}
             >
-              {attachedTextFiles.map((file, i) => !migratingFiles.has(file) && (
-                <div
-                  key={i}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 7,
-                    maxWidth: 260,
-                    height: 30,
-                    padding: "0 6px 0 9px",
-                    border: "1px solid var(--border)",
-                    borderRadius: 6,
-                    background: "var(--bg-panel)",
-                    fontSize: 12,
-                    color: "var(--text)",
-                  }}
-                >
-                  <span
-                    style={{
-                      flexShrink: 0,
-                      display: "flex",
-                      color: "var(--text-muted)",
-                    }}
-                  >
-                    <svg
-                      width="13"
-                      height="13"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+              {attachedTextFiles.map(
+                (file, i) =>
+                  !migratingFiles.has(file) && (
+                    <div
+                      key={i}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 7,
+                        maxWidth: 260,
+                        height: 30,
+                        padding: "0 6px 0 9px",
+                        border: "1px solid var(--border)",
+                        borderRadius: 6,
+                        background: "var(--bg-panel)",
+                        fontSize: 12,
+                        color: "var(--text)",
+                      }}
                     >
-                      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-                      <polyline points="14 2 14 8 20 8" />
-                    </svg>
-                  </span>
-                  <span
-                    title={file.name}
-                    style={{
-                      minWidth: 0,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      fontFamily: "var(--font-mono)",
-                      fontSize: 11.5,
-                    }}
-                  >
-                    {file.name}
-                  </span>
-                  <span
-                    style={{
-                      flexShrink: 0,
-                      fontSize: 10,
-                      color: "var(--text-dim)",
-                    }}
-                  >
-                    {file.size < 1024
-                      ? `${file.size} B`
-                      : `${Math.round(file.size / 1024)} KB`}
-                  </span>
-                  <button
-                    className="attachment-remove-button"
-                    onClick={() => removeTextFile(i)}
-                    title={t("chatInput.removeFile")}
-                    aria-label={t("chatInput.removeFile")}
-                    style={{
-                      flexShrink: 0,
-                      width: 18,
-                      height: 18,
-                      borderRadius: "50%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      background: "transparent",
-                      border: "none",
-                      cursor: "pointer",
-                      padding: 0,
-                      color: "var(--text-muted)",
-                      transition:
-                        "color var(--dur-fast) var(--ease-out-warm), background var(--dur-fast) var(--ease-out-warm)",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.color = "var(--text)";
-                      e.currentTarget.style.background = "var(--bg-hover)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.color = "var(--text-muted)";
-                      e.currentTarget.style.background = "transparent";
-                    }}
-                  >
-                    <svg
-                      width="9"
-                      height="9"
-                      viewBox="0 0 8 8"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    >
-                      <line x1="1" y1="1" x2="7" y2="7" />
-                      <line x1="7" y1="1" x2="1" y2="7" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
+                      <span
+                        style={{
+                          flexShrink: 0,
+                          display: "flex",
+                          color: "var(--text-muted)",
+                        }}
+                      >
+                        <svg
+                          width="13"
+                          height="13"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                          <polyline points="14 2 14 8 20 8" />
+                        </svg>
+                      </span>
+                      <span
+                        title={file.name}
+                        style={{
+                          minWidth: 0,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          fontFamily: "var(--font-mono)",
+                          fontSize: 11.5,
+                        }}
+                      >
+                        {file.name}
+                      </span>
+                      <span
+                        style={{
+                          flexShrink: 0,
+                          fontSize: 10,
+                          color: "var(--text-dim)",
+                        }}
+                      >
+                        {file.size < 1024
+                          ? `${file.size} B`
+                          : `${Math.round(file.size / 1024)} KB`}
+                      </span>
+                      <button
+                        className="attachment-remove-button"
+                        onClick={() => removeTextFile(i)}
+                        title={t("chatInput.removeFile")}
+                        aria-label={t("chatInput.removeFile")}
+                        style={{
+                          flexShrink: 0,
+                          width: 18,
+                          height: 18,
+                          borderRadius: "50%",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          background: "transparent",
+                          border: "none",
+                          cursor: "pointer",
+                          padding: 0,
+                          color: "var(--text-muted)",
+                          transition:
+                            "color var(--dur-fast) var(--ease-out-warm), background var(--dur-fast) var(--ease-out-warm)",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.color = "var(--text)";
+                          e.currentTarget.style.background = "var(--bg-hover)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.color = "var(--text-muted)";
+                          e.currentTarget.style.background = "transparent";
+                        }}
+                      >
+                        <svg
+                          width="9"
+                          height="9"
+                          viewBox="0 0 8 8"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                        >
+                          <line x1="1" y1="1" x2="7" y2="7" />
+                          <line x1="7" y1="1" x2="1" y2="7" />
+                        </svg>
+                      </button>
+                    </div>
+                  ),
+              )}
               {fileUploads.map((upload) => (
                 <UploadChip
                   key={upload.id}
@@ -4255,7 +4266,9 @@ export const ChatInput = memo(
                 style={{
                   border: "1px solid var(--border)",
                   borderBottom: "none",
-                  borderRadius: advisorReviewPending ? 0 : "var(--radius-card) var(--radius-card) 0 0",
+                  borderRadius: advisorReviewPending
+                    ? 0
+                    : "var(--radius-card) var(--radius-card) 0 0",
                   background: "var(--bg-panel)",
                   overflow: "hidden",
                 }}
@@ -4630,9 +4643,12 @@ export const ChatInput = memo(
                         );
                     }}
                     onScroll={(e) => {
-                      if (ghostMirrorRef.current)
+                      if (ghostMirrorRef.current) {
                         ghostMirrorRef.current.scrollTop =
                           e.currentTarget.scrollTop;
+                        ghostMirrorRef.current.scrollLeft =
+                          e.currentTarget.scrollLeft;
+                      }
                     }}
                     onKeyDown={handleKeyDown}
                     onCompositionStart={() => {
@@ -5702,7 +5718,15 @@ export const ChatInput = memo(
                   <button
                     type="button"
                     className="composer-primary-action"
-                    aria-label={primaryActionRunsShell ? t("chatInput.runShell") : t(primaryActionMode === "steer" ? "chatInput.steer" : "chatInput.queue")}
+                    aria-label={
+                      primaryActionRunsShell
+                        ? t("chatInput.runShell")
+                        : t(
+                            primaryActionMode === "steer"
+                              ? "chatInput.steer"
+                              : "chatInput.queue",
+                          )
+                    }
                     onClick={() => {
                       if (dictationCapturing)
                         stopAndFinishDictation(primaryActionMode);
@@ -5749,7 +5773,13 @@ export const ChatInput = memo(
                       />
                     )}
                     <span className="composer-action-label">
-                      {t(primaryActionRunsShell ? "chatInput.runShell" : primaryActionMode === "steer" ? "chatInput.steer" : "chatInput.queue")}
+                      {t(
+                        primaryActionRunsShell
+                          ? "chatInput.runShell"
+                          : primaryActionMode === "steer"
+                            ? "chatInput.steer"
+                            : "chatInput.queue",
+                      )}
                     </span>
                   </button>
                 ) : isStreaming && !btwMode ? (
@@ -5790,7 +5820,9 @@ export const ChatInput = memo(
                         fill="currentColor"
                       />
                     </svg>
-                    <span className="composer-action-label">{t("chatInput.stop")}</span>
+                    <span className="composer-action-label">
+                      {t("chatInput.stop")}
+                    </span>
                   </button>
                 ) : (
                   <button
@@ -5903,7 +5935,9 @@ export const ChatInput = memo(
                     )}
                     <span className="composer-action-label">
                       {!btwMode && uploadingCount > 0
-                        ? t("chatInput.uploadsPending", { count: uploadingCount })
+                        ? t("chatInput.uploadsPending", {
+                            count: uploadingCount,
+                          })
                         : t("chatInput.send")}
                     </span>
                   </button>
