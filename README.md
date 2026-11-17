@@ -89,6 +89,15 @@ mise exec -- bun scripts/build-klc-binary.ts
 ./release/klc-<os>-<arch>/klc --url https://keylime.example.com --host HOST SESSION_ID
 ```
 
+To make `klc` available on your PATH, link the built binary from the checkout. For example, on macOS arm64:
+
+```bash
+mkdir -p "$HOME/.local/bin"
+ln -s "$(pwd)/release/klc-darwin-arm64/klc" "$HOME/.local/bin/klc"
+```
+
+Replace `darwin-arm64` with your build target (`darwin` or `linux`, and `arm64` or `x64`). Add `$HOME/.local/bin` to your PATH if needed. The link depends on the checkout staying in place; rebuilding updates the linked binary. If `klc` already exists there, `ln` refuses to replace it.
+
 `KEYLIME_URL` sets the server URL when `--url` is omitted; the default is `http://127.0.0.1:30177`. The client prompts for the server password when needed. Remote HTTP requires `--insecure` and sends credentials and terminal traffic without encryption, so use a trusted HTTPS endpoint.
 
 The picker searches sessions across linked hosts. Press Tab to cycle through running, archived, and all sessions, or Ctrl-N to create a session in a registered workspace. Press Ctrl-] to detach back to the picker, then Ctrl-] again to exit. `/quit` ends the shared runtime for everyone. Ctrl-D and a rapid second Ctrl-C are blocked to prevent accidental termination.
