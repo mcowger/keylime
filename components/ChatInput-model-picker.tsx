@@ -1,16 +1,51 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, {
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   RefreshCw,
   Search,
+  Star,
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { providerInitials } from "./ModelsConfig-types";
 import type { ModelOption } from "./ChatInput-model-options";
+import {
+  Collapsible,
+  CollapsiblePanel,
+  CollapsibleTrigger,
+} from "./ui/primitives";
+
+const FAVORITE_MODELS_KEY = "keylime:favorite-models";
+
+function readFavoriteModels(): Set<string> {
+  try {
+    const value: unknown = JSON.parse(
+      window.localStorage.getItem(FAVORITE_MODELS_KEY) ?? "null",
+    );
+    if (Array.isArray(value)) {
+      return new Set(
+        value.filter((key): key is string => typeof key === "string"),
+      );
+    }
+  } catch {
+    // The picker still works when storage is unavailable.
+  }
+  return new Set();
+}
+
+function modelKey({ provider, modelId }: ModelOption): string {
+  return `${provider}:${modelId}`;
+}
 
 export interface ProviderModelGroup {
   provider: string;
@@ -97,10 +132,7 @@ export interface ModelPickerPanelProps {
   onClose?: () => void;
 }
 
-/**
- * Codex-style nested model picker: providers on the right rail, that
- * provider's models on the left. Search flattens across providers.
- */
+/** Favorites are always shown first. The remaining models retain provider navigation. */
 export function ModelPickerPanel({
   modelOptions,
   filteredModelOptions,
@@ -119,22 +151,54 @@ export function ModelPickerPanel({
 }: ModelPickerPanelProps) {
   const { t } = useI18n();
   const searching = modelSearchQuery.trim().length > 0;
+  const [favoriteModels, setFavoriteModels] = useState(readFavoriteModels);
+  const [otherModelsOpen, setOtherModelsOpen] = useState(false);
+  const [collapsedSearch, setCollapsedSearch] = useState<string | null>(null);
+  const panelId = useId();
+  const otherModelsTriggerRef = useRef<HTMLButtonElement>(null);
+  const restoreFavoriteFocus = useRef<string | null>(null);
+  const open = searching
+    ? collapsedSearch !== modelSearchQuery
+    : otherModelsOpen;
+  const [favorites, otherModels] = useMemo(() => {
+    const favorites: ModelOption[] = [];
+    const otherModels: ModelOption[] = [];
+    for (const option of searching ? filteredModelOptions : modelOptions) {
+      (favoriteModels.has(modelKey(option)) ? favorites : otherModels).push(
+        option,
+      );
+    }
+    return [favorites, otherModels];
+  }, [favoriteModels, filteredModelOptions, modelOptions, searching]);
   const groups = useMemo(
     () =>
       orderProviderGroups(
-        groupModelOptionsByProvider(modelOptions),
+        groupModelOptionsByProvider(otherModels),
         currentModel?.provider,
       ),
-    [modelOptions, currentModel?.provider],
+    [otherModels, currentModel?.provider],
   );
-  const filteredGroups = useMemo(
-    () =>
-      orderProviderGroups(
-        groupModelOptionsByProvider(filteredModelOptions),
-        currentModel?.provider,
-      ),
-    [filteredModelOptions, currentModel?.provider],
-  );
+
+  useLayoutEffect(() => {
+    const id = restoreFavoriteFocus.current;
+    if (id === null) return;
+    restoreFavoriteFocus.current = null;
+    (document.getElementById(id) ?? otherModelsTriggerRef.current)?.focus();
+  }, [favoriteModels]);
+
+  const toggleFavorite = (key: string) => {
+    const next = new Set(favoriteModels);
+    if (!next.delete(key)) next.add(key);
+    setFavoriteModels(next);
+    try {
+      window.localStorage.setItem(
+        FAVORITE_MODELS_KEY,
+        JSON.stringify([...next]),
+      );
+    } catch {
+      // Keep the change in the open picker even if storage is unavailable.
+    }
+  };
 
   // Provider selection is explicit. Hover-driven pane changes make the list
   // flicker while the pointer crosses the picker.
@@ -151,57 +215,73 @@ export function ModelPickerPanel({
       ? (currentModel?.provider ?? null)
       : (groups[0]?.provider ?? null);
 
-  const leftModels = searching
-    ? filteredModelOptions
-    : (groups.find((group) => group.provider === activeProvider)?.options ??
-      []);
-
-  const leftGroups = searching ? filteredGroups : null;
+  const leftModels =
+    groups.find((group) => group.provider === activeProvider)?.options ?? [];
   const multipleProviders = groups.length > 1;
   const showProviderRail =
-    multipleProviders && !searching && (!isMobile || selectedProvider === null);
+    multipleProviders &&
+    !searching &&
+    (!isMobile || !selectedProviderAvailable);
   const showModelPane = !showProviderRail || !isMobile;
 
-  const selectModel = (opt: ModelOption) => {
-    onSelectModel(opt.provider, opt.modelId);
-  };
-
-  const renderModelRow = (
-    opt: ModelOption,
-    opts?: { showProvider?: boolean },
-  ) => {
+  const renderModelRow = (opt: ModelOption, showProvider = false) => {
+    const key = modelKey(opt);
+    const favorite = favoriteModels.has(key);
+    const name = opt.name || opt.modelId;
+    const favoriteId = `${panelId}-favorite-${encodeURIComponent(key)}`;
     const isActive =
       Boolean(currentModel) &&
       opt.modelId === currentModel?.modelId &&
       opt.provider === currentModel?.provider;
     return (
-      <button
-        className="picker-row"
-        data-active={isActive}
-        type="button"
-        key={`${opt.provider}:${opt.modelId}`}
-        role="menuitemradio"
-        aria-checked={isActive}
-        disabled={selectionDisabled}
-        onClick={() => selectModel(opt)}
-      >
-        <span className="picker-check">
-          {isActive && <Check size={11} strokeWidth={2.4} aria-hidden="true" />}
-        </span>
-        <span
-          style={{
-            minWidth: 0,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
+      <div className="picker-model-row" key={key}>
+        <button
+          className="picker-row"
+          data-active={isActive}
+          type="button"
+          role="menuitemradio"
+          aria-checked={isActive}
+          disabled={selectionDisabled}
+          onClick={() => onSelectModel(opt.provider, opt.modelId)}
+        >
+          <span className="picker-check">
+            {isActive && (
+              <Check size={11} strokeWidth={2.4} aria-hidden="true" />
+            )}
+          </span>
+          <span className="picker-model-name">{name}</span>
+          {showProvider && (
+            <span className="picker-row-meta">{opt.provider}</span>
+          )}
+        </button>
+        <button
+          id={favoriteId}
+          className="picker-model-star"
+          type="button"
+          aria-pressed={favorite}
+          aria-label={t("chatInput.favoriteModel", {
+            name,
+            provider: opt.provider,
+          })}
+          title={t(
+            favorite
+              ? "chatInput.removeFavoriteModel"
+              : "chatInput.addFavoriteModel",
+          )}
+          onClick={(event) => {
+            if (document.activeElement === event.currentTarget) {
+              restoreFavoriteFocus.current = favoriteId;
+            }
+            toggleFavorite(key);
           }}
         >
-          {opt.name || opt.modelId}
-        </span>
-        {opts?.showProvider && (
-          <span className="picker-row-meta">{opt.provider}</span>
-        )}
-      </button>
+          <Star
+            size={14}
+            fill={favorite ? "currentColor" : "none"}
+            aria-hidden="true"
+          />
+        </button>
+      </div>
     );
   };
 
@@ -220,7 +300,10 @@ export function ModelPickerPanel({
           autoComplete="off"
           spellCheck={false}
           value={modelSearchQuery}
-          onChange={(e) => onSearchQueryChange(e.target.value)}
+          onChange={(e) => {
+            setCollapsedSearch(null);
+            onSearchQueryChange(e.target.value);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
               e.preventDefault();
@@ -259,110 +342,111 @@ export function ModelPickerPanel({
         </div>
       )}
 
-      <div
-        className="picker-nested"
-        data-searching={searching ? "true" : "false"}
-        data-provider-rail={showProviderRail ? "true" : "false"}
-      >
-        {showProviderRail && (
-          <div
-            className="picker-nested-providers"
-            role="group"
-            aria-label={t("chatInput.providersLabel")}
-          >
-            {groups.length === 0 ? (
-              <div className="picker-empty">
-                {showModelsLoading
-                  ? t("chatInput.loadingModels")
-                  : t("chatInput.noAvailableModels")}
-              </div>
-            ) : (
-              groups.map((group) => {
-                const isCurrent = currentModel?.provider === group.provider;
-                const isActive = activeProvider === group.provider;
-                return (
-                  <button
-                    key={group.provider}
-                    type="button"
-                    className="picker-row picker-provider-row"
-                    data-active={isActive}
-                    data-current={isCurrent}
-                    onClick={() => setSelectedProvider(group.provider)}
-                    aria-current={isCurrent ? "true" : undefined}
-                    aria-controls="model-picker-options"
-                  >
-                    <ProviderBadge id={group.provider} size={15} />
-                    <span
-                      style={{
-                        minWidth: 0,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {group.provider}
-                    </span>
-                    <ChevronRight
-                      size={12}
-                      strokeWidth={1.8}
-                      style={{
-                        marginLeft: "auto",
-                        flexShrink: 0,
-                        opacity: 0.55,
-                      }}
-                      aria-hidden="true"
-                    />
-                  </button>
-                );
-              })
-            )}
+      <div className="picker-model-list">
+        {favorites.length > 0 && (
+          <div role="group" aria-label={t("chatInput.favoriteModels")}>
+            <div className="picker-group-label">
+              {t("chatInput.favoriteModels")}
+            </div>
+            {favorites.map((opt) => renderModelRow(opt, true))}
           </div>
         )}
-        {showModelPane && (
-          <div
-            id="model-picker-options"
-            className="picker-nested-models"
-            role="group"
-            aria-label={t("chatInput.modelsLabel")}
+        {otherModels.length > 0 && (
+          <Collapsible
+            open={open}
+            onOpenChange={(next) => {
+              if (searching) setCollapsedSearch(next ? null : modelSearchQuery);
+              else setOtherModelsOpen(next);
+            }}
           >
-            {multipleProviders &&
-              isMobile &&
-              !searching &&
-              selectedProvider !== null && (
-                <button
-                  type="button"
-                  className="picker-row"
-                  onClick={() => setSelectedProvider(null)}
-                  style={{ color: "var(--text-muted)" }}
+            <CollapsibleTrigger
+              ref={otherModelsTriggerRef}
+              className="picker-row picker-other-models"
+            >
+              <ChevronDown size={13} aria-hidden="true" />
+              {t("chatInput.otherModels")}
+            </CollapsibleTrigger>
+            <CollapsiblePanel
+              className="picker-nested"
+              data-split-pane={showProviderRail && showModelPane}
+            >
+              {showProviderRail && (
+                <div
+                  className="picker-nested-providers"
+                  role="group"
+                  aria-label={t("chatInput.providersLabel")}
                 >
-                  <ChevronLeft size={13} strokeWidth={1.8} aria-hidden="true" />
-                  <span>{activeProvider}</span>
-                </button>
-              )}
-            {searching ? (
-              leftGroups && leftGroups.length > 0 ? (
-                leftGroups.map((group) => (
-                  <div key={group.provider}>
-                    <div className="picker-group-label">{group.provider}</div>
-                    {group.options.map((opt) => renderModelRow(opt))}
-                  </div>
-                ))
-              ) : (
-                <div className="picker-empty">
-                  {showModelsLoading
-                    ? t("chatInput.loadingModels")
-                    : t("chatInput.noMatchingModels")}
+                  {groups.map((group) => {
+                    const isCurrent = currentModel?.provider === group.provider;
+                    const isActive = activeProvider === group.provider;
+                    return (
+                      <button
+                        key={group.provider}
+                        type="button"
+                        className="picker-row picker-provider-row"
+                        data-active={isActive}
+                        data-current={isCurrent}
+                        onClick={() => setSelectedProvider(group.provider)}
+                        aria-current={isCurrent ? "true" : undefined}
+                        aria-controls={`${panelId}-options`}
+                      >
+                        <ProviderBadge id={group.provider} size={15} />
+                        <span className="picker-model-name">
+                          {group.provider}
+                        </span>
+                        <ChevronRight
+                          size={12}
+                          strokeWidth={1.8}
+                          aria-hidden="true"
+                        />
+                      </button>
+                    );
+                  })}
                 </div>
-              )
-            ) : leftModels.length === 0 ? (
-              <div className="picker-empty">
-                {showModelsLoading
-                  ? t("chatInput.loadingModels")
-                  : t("chatInput.noAvailableModels")}
-              </div>
-            ) : (
-              leftModels.map((opt) => renderModelRow(opt))
-            )}
+              )}
+              {showModelPane && (
+                <div
+                  id={`${panelId}-options`}
+                  className="picker-nested-models"
+                  role="group"
+                  aria-label={t("chatInput.modelsLabel")}
+                >
+                  {multipleProviders && isMobile && !searching && (
+                    <button
+                      type="button"
+                      className="picker-row"
+                      onClick={() => setSelectedProvider(null)}
+                    >
+                      <ChevronLeft
+                        size={13}
+                        strokeWidth={1.8}
+                        aria-hidden="true"
+                      />
+                      <span>{activeProvider}</span>
+                    </button>
+                  )}
+                  {searching
+                    ? groups.map((group) => (
+                        <div key={group.provider}>
+                          <div className="picker-group-label">
+                            {group.provider}
+                          </div>
+                          {group.options.map((opt) => renderModelRow(opt))}
+                        </div>
+                      ))
+                    : leftModels.map((opt) => renderModelRow(opt))}
+                </div>
+              )}
+            </CollapsiblePanel>
+          </Collapsible>
+        )}
+        {favorites.length === 0 && otherModels.length === 0 && (
+          <div className="picker-empty">
+            {showModelsLoading
+              ? t("chatInput.loadingModels")
+              : searching
+                ? t("chatInput.noMatchingModels")
+                : t("chatInput.noAvailableModels")}
           </div>
         )}
       </div>

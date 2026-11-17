@@ -292,3 +292,4 @@ export function Collapsible({
 }
 
 export const CollapsibleTrigger = BaseCollapsible.Trigger;
+export const CollapsiblePanel = BaseCollapsible.Panel;

@@ -3137,8 +3137,6 @@ export const ChatInput = memo(
       [locale, modelOptions, modelSearchQuery],
     );
 
-    // Grouping for the nested picker lives in ChatInput-model-picker (providers rail + models pane).
-
     const displayModelName = model
       ? (modelOptions.find(
           (o) => o.modelId === model.modelId && o.provider === model.provider,
@@ -5211,12 +5209,9 @@ export const ChatInput = memo(
                             zIndex: 500,
                             display: "flex",
                             flexDirection: "column",
-                            height: isMobile
-                              ? undefined
-                              : "min(360px, calc(100dvh - 32px))",
                             maxHeight: isMobile
                               ? "calc(100dvh - 32px)"
-                              : undefined,
+                              : "min(360px, calc(100dvh - 32px))",
                           }}
                         >
                           <div className="picker-panel-header">

@@ -438,60 +438,6 @@ test("nested model picker groups by provider and pins the current provider first
   );
 });
 
-test("model picker retains provider navigation when multiple providers are available", async () => {
-  const { ModelPickerPanel } = await import("./ChatInput-model-picker.tsx");
-  const html = renderToStaticMarkup(
-    React.createElement(ModelPickerPanel, {
-      modelOptions: [
-        { provider: "codex", modelId: "gpt-5.6-sol", name: "GPT-5.6 Sol" },
-        { provider: "codex", modelId: "gpt-5.6-terra", name: "GPT-5.6 Terra" },
-        { provider: "pi", modelId: "pi-1", name: "Pi One" },
-      ],
-      filteredModelOptions: [
-        { provider: "codex", modelId: "gpt-5.6-sol", name: "GPT-5.6 Sol" },
-        { provider: "codex", modelId: "gpt-5.6-terra", name: "GPT-5.6 Terra" },
-        { provider: "pi", modelId: "pi-1", name: "Pi One" },
-      ],
-      currentModel: { provider: "codex", modelId: "gpt-5.6-sol" },
-      modelSearchQuery: "",
-      onSearchQueryChange() {},
-      isMobile: false,
-      onSelectModel() {},
-    }),
-  );
-
-  assert.match(html, /picker-nested-providers/);
-  assert.match(html, /picker-nested-models/);
-  assert.match(html, /GPT-5\.6 Sol/);
-  assert.match(html, /GPT-5\.6 Terra/);
-  assert.match(html, />codex</);
-  assert.match(html, />pi</);
-});
-
-test("single-provider picker shows models directly on desktop and mobile without provider actions", async () => {
-  const { ModelPickerPanel } = await import("./ChatInput-model-picker.tsx");
-  const options = [
-    { provider: "only", modelId: "model-one", name: "Model One" },
-  ];
-  for (const isMobile of [false, true]) {
-    const html = renderToStaticMarkup(
-      React.createElement(ModelPickerPanel, {
-        modelOptions: options,
-        filteredModelOptions: options,
-        modelSearchQuery: "",
-        onSearchQueryChange() {},
-        onSelectModel() {},
-        isMobile,
-      }),
-    );
-    assert.match(html, /role="menuitemradio"[^>]*>[\s\S]*Model One/);
-    assert.doesNotMatch(
-      html,
-      /picker-provider-row|picker-nested-providers|Add Providers/,
-    );
-  }
-});
-
 test("exposes tool presets through the plus menu when a handler is provided", () => {
   const html = renderToStaticMarkup(
     React.createElement(ChatInput, {

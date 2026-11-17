@@ -3295,34 +3295,92 @@ span.token.table {
   border-top: 1px solid var(--border);
 }
 
-/* Nested model picker: provider rail + models pane */
+.picker-model-list {
+  min-height: 0;
+  padding: 0 4px 4px;
+  overflow-y: auto;
+  overflow-anchor: none;
+}
+.picker-model-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.picker-model-row .picker-row {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.picker-model-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.picker-model-star {
+  display: grid;
+  flex: 0 0 32px;
+  min-height: 32px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+.picker-model-star:hover,
+.picker-model-star:focus-visible {
+  background: var(--bg-hover);
+}
+.picker-model-star[aria-pressed="true"] {
+  color: var(--accent);
+}
+.picker-other-models {
+  font-weight: 650;
+}
+.picker-other-models svg {
+  flex-shrink: 0;
+  transform: rotate(-90deg);
+}
+.picker-other-models[aria-expanded="true"] svg {
+  transform: none;
+}
+
+/* Two independently scrollable panes when provider navigation is side by side. */
 .picker-nested {
   display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
+}
+.picker-nested[hidden] {
+  display: none;
 }
 .picker-nested-models {
   flex: 1 1 auto;
   min-width: 0;
-  min-height: 0;
-  padding: 2px 4px 6px;
-  overflow-y: scroll;
-  border-left: 1px solid var(--border);
-}
-.picker-nested[data-provider-rail="false"] .picker-nested-models {
-  border-left: none;
 }
 .picker-nested-providers {
-  flex: 0 0 140px;
+  flex: 0 0 128px;
   min-width: 0;
-  min-height: 0;
-  padding: 2px 4px 6px;
-  overflow-y: scroll;
+  padding-right: 4px;
   background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
+.picker-nested[data-split-pane="true"] > div {
+  max-height: min(200px, 32dvh);
+  overflow-y: auto;
+}
+.picker-nested[data-split-pane="true"] .picker-nested-models {
+  border-left: 1px solid var(--border);
+  padding-left: 4px;
+}
+.picker-nested[data-split-pane="false"] .picker-nested-providers {
+  flex: 1 1 auto;
 }
 .picker-provider-row {
   gap: 7px;
+}
+.picker-provider-row > svg {
+  margin-left: auto;
+  flex-shrink: 0;
+  opacity: 0.55;
 }
 .picker-empty {
   padding: 10px 8px;
@@ -3330,11 +3388,9 @@ span.token.table {
   font-size: 12px;
 }
 @media (max-width: 640px) {
-  .picker-nested[data-searching="false"] .picker-nested-models {
-    border-left: none;
-  }
-  .picker-nested-providers {
-    flex: 1 1 auto;
+  .picker-model-star {
+    flex-basis: 44px;
+    min-height: 44px;
   }
 }
 @media (max-width: 640px) {

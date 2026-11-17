@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import test, { afterEach } from "node:test";
 import React from "react";
 import { ChatInput } from "./ChatInput";
+import { ModelPickerPanel } from "./ChatInput-model-picker";
 
 // Testing Library binds its queries to the document installed by setup-dom.
 const { cleanup, fireEvent, render, screen } =
@@ -30,6 +31,7 @@ test("the model picker can refresh during a run and displays the updated catalog
   };
   const view = render(React.createElement(ChatInput, props));
   fireEvent.click(screen.getByRole("button", { name: /Change model/ }));
+  fireEvent.click(screen.getByRole("button", { name: "More…" }));
   assert.equal(revalidations, 1);
   assert.ok(
     (screen.getByRole("menuitemradio", { name: "Old" }) as HTMLButtonElement)
@@ -46,8 +48,11 @@ test("the model picker can refresh during a run and displays the updated catalog
     }),
   );
   assert.ok(
-    (screen.getByRole("button", { name: "Refreshing models..." }) as HTMLButtonElement)
-      .disabled,
+    (
+      screen.getByRole("button", {
+        name: "Refreshing models...",
+      }) as HTMLButtonElement
+    ).disabled,
   );
   view.rerender(
     React.createElement(ChatInput, {
@@ -77,4 +82,37 @@ test("the model picker remains available when no models are returned", () => {
   render(React.createElement(ChatInput, props));
   fireEvent.click(screen.getByRole("button", { name: /Change model/ }));
   assert.ok(screen.getByRole("button", { name: "Refresh models" }));
+});
+
+test("other models retain provider navigation on desktop and mobile", () => {
+  const options = [
+    { provider: "codex", modelId: "sol", name: "Sol" },
+    { provider: "pi", modelId: "one", name: "Pi One" },
+  ];
+
+  for (const isMobile of [false, true]) {
+    const { unmount } = render(
+      React.createElement(ModelPickerPanel, {
+        modelOptions: options,
+        filteredModelOptions: options,
+        currentModel: options[0],
+        modelSearchQuery: "",
+        onSearchQueryChange() {},
+        onSelectModel() {},
+        isMobile,
+      }),
+    );
+    assert.equal(screen.queryByRole("menuitemradio", { name: "Sol" }), null);
+    fireEvent.click(screen.getByRole("button", { name: "More…" }));
+    if (!isMobile)
+      assert.ok(screen.getByRole("menuitemradio", { name: "Sol" }));
+    fireEvent.click(screen.getByRole("button", { name: "pi" }));
+    assert.ok(screen.getByRole("menuitemradio", { name: "Pi One" }));
+    assert.equal(screen.queryByRole("menuitemradio", { name: "Sol" }), null);
+    if (isMobile) {
+      fireEvent.click(screen.getByRole("button", { name: "pi" }));
+      assert.ok(screen.getByRole("button", { name: "codex" }));
+    }
+    unmount();
+  }
 });
