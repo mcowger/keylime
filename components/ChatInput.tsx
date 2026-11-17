@@ -316,6 +316,9 @@ interface Props {
   }[];
   modelError?: string | null;
   modelsLoading?: boolean;
+  modelsRefreshing?: boolean;
+  onRefreshModels?: () => void;
+  onRevalidateModels?: () => void;
   onModelChange?: (provider: string, modelId: string) => void;
   fastModeEnabled?: boolean;
   fastModeActive?: boolean;
@@ -510,6 +513,9 @@ export const ChatInput = memo(
       modelList,
       modelError,
       modelsLoading,
+      modelsRefreshing,
+      onRefreshModels,
+      onRevalidateModels,
       onModelChange,
       fastModeEnabled,
       fastModeActive,
@@ -3142,11 +3148,7 @@ export const ChatInput = memo(
         model.modelId)
       : null;
     const currentName = displayModelName;
-    // A failed load surfaces modelError; only an in-flight load shows the
-    // loading chip, so "no models" can only appear after the fetch settled.
-    const showModelsLoading = Boolean(modelsLoading) && !modelError;
-    const modelSelectorDisabled =
-      isStreaming || (showModelsLoading && modelOptions.length === 0);
+    const showModelsLoading = Boolean(modelsLoading);
 
     const compactSavedTokens = compactResult
       ? Math.max(
@@ -3210,11 +3212,12 @@ export const ChatInput = memo(
         });
         return;
       }
+      onRevalidateModels?.();
       modelWasOpenRef.current = true;
       requestAnimationFrame(() => {
         if (!matchMobileViewport()) modelSearchInputRef.current?.focus();
       });
-    }, [modelDropdownOpen]);
+    }, [modelDropdownOpen, onRevalidateModels]);
     useEffect(() => {
       if (!plusMenuOpen) return;
       requestAnimationFrame(() =>
@@ -5075,11 +5078,7 @@ export const ChatInput = memo(
                   )}
                 </div>
                 {/* Model selector — compact text button with dropdown */}
-                {(modelOptions.length > 0 ||
-                  currentName ||
-                  modelError ||
-                  showModelsLoading) &&
-                  onModelChange && (
+                {onModelChange && (
                     <div
                       ref={dropdownRef}
                       className="composer-model-control"
@@ -5088,7 +5087,6 @@ export const ChatInput = memo(
                       <button
                         ref={modelTriggerRef}
                         onClick={() => setModelDropdownOpen((v) => !v)}
-                        disabled={modelSelectorDisabled}
                         aria-label={`${t("chatInput.changeModel")}: ${
                           currentName ??
                           (modelOptions.length > 0
@@ -5112,11 +5110,9 @@ export const ChatInput = memo(
                           border: "none",
                           borderRadius: 7,
                           color: "var(--text-muted)",
-                          cursor: modelSelectorDisabled
-                            ? "not-allowed"
-                            : "pointer",
+                          cursor: "pointer",
                           fontSize: "var(--text-sm)",
-                          opacity: modelSelectorDisabled ? 0.5 : 1,
+                          opacity: 1,
                           transition:
                             "background var(--dur-fast) var(--ease-out-warm), color var(--dur-fast) var(--ease-out-warm)",
                         }}
@@ -5254,6 +5250,10 @@ export const ChatInput = memo(
                             onSearchQueryChange={setModelSearchQuery}
                             searchInputRef={modelSearchInputRef}
                             showModelsLoading={showModelsLoading}
+                            modelsRefreshing={modelsRefreshing}
+                            modelError={modelError}
+                            onRefreshModels={onRefreshModels}
+                            selectionDisabled={isStreaming}
                             isMobile={isMobile}
                             onSelectModel={(provider, modelId) => {
                               setModelDropdownOpen(false);

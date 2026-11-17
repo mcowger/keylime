@@ -5202,7 +5202,7 @@
                   "type": "object"
                 },
                 {
-                  "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background model discovery before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.",
+                  "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.",
                   "properties": {
                     "args": {
                       "properties": {
@@ -5276,6 +5276,29 @@
                   },
                   "required": ["t", "id", "op", "args"],
                   "title": "RunnerRequest_get_available_models",
+                  "type": "object"
+                },
+                {
+                  "description": "Usage: Refresh and list available models from configured providers.\nInputs: No arguments.\nInvariants: Waits for background discovery and serializes explicit registry refreshes; the session and active run remain alive. Discovery and configuration failures reject the command.\nEffects: Bypasses discovery caches, refreshes command-backed credentials and updates the live registry and model scope.\nRecovery: Check provider configuration and retry after a failure.",
+                  "properties": {
+                    "args": {
+                      "properties": {},
+                      "type": "object"
+                    },
+                    "id": {
+                      "type": "number"
+                    },
+                    "op": {
+                      "const": "refresh_available_models",
+                      "type": "string"
+                    },
+                    "t": {
+                      "const": "cmd",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["t", "id", "op", "args"],
+                  "title": "RunnerRequest_refresh_available_models",
                   "type": "object"
                 },
                 {

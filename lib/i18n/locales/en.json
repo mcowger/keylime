@@ -397,6 +397,8 @@
   "chatInput.settings": "Settings",
   "chatInput.changeModel": "Change model",
   "chatInput.modelsLabel": "Models",
+  "chatInput.refreshModels": "Refresh models",
+  "chatInput.refreshingModels": "Refreshing models...",
   "chatInput.providersLabel": "Providers",
   "chatInput.changeReasoning": "Change reasoning level",
   "chatInput.reasoningLabel": "Reasoning",

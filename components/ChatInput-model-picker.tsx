@@ -1,7 +1,13 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  Search,
+} from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { providerInitials } from "./ModelsConfig-types";
 import type { ModelOption } from "./ChatInput-model-options";
@@ -82,6 +88,10 @@ export interface ModelPickerPanelProps {
   onSearchQueryChange: (query: string) => void;
   searchInputRef?: React.RefObject<HTMLInputElement | null>;
   showModelsLoading?: boolean;
+  modelsRefreshing?: boolean;
+  modelError?: string | null;
+  onRefreshModels?: () => void;
+  selectionDisabled?: boolean;
   isMobile?: boolean;
   onSelectModel: (provider: string, modelId: string) => void;
   onClose?: () => void;
@@ -99,6 +109,10 @@ export function ModelPickerPanel({
   onSearchQueryChange,
   searchInputRef,
   showModelsLoading,
+  modelsRefreshing,
+  modelError,
+  onRefreshModels,
+  selectionDisabled,
   isMobile,
   onSelectModel,
   onClose,
@@ -168,6 +182,7 @@ export function ModelPickerPanel({
         key={`${opt.provider}:${opt.modelId}`}
         role="menuitemradio"
         aria-checked={isActive}
+        disabled={selectionDisabled}
         onClick={() => selectModel(opt)}
       >
         <span className="picker-check">
@@ -216,6 +231,33 @@ export function ModelPickerPanel({
           aria-label={t("chatInput.searchModels")}
         />
       </label>
+      {onRefreshModels && (
+        <button
+          type="button"
+          className="picker-row"
+          onClick={onRefreshModels}
+          disabled={showModelsLoading}
+        >
+          <RefreshCw size={13} aria-hidden="true" />
+          {modelsRefreshing
+            ? t("chatInput.refreshingModels")
+            : showModelsLoading
+              ? t("chatInput.loadingModels")
+              : t("chatInput.refreshModels")}
+        </button>
+      )}
+      {modelError && (
+        <div
+          role="alert"
+          style={{
+            color: "var(--status-error)",
+            padding: "4px 12px",
+            overflowWrap: "anywhere",
+          }}
+        >
+          {modelError}
+        </div>
+      )}
 
       <div
         className="picker-nested"

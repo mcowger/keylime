@@ -324,6 +324,9 @@ export const ModelsDataSchema = Type.Object(
         id: Type.String(),
         name: Type.String(),
         provider: Type.String(),
+        thinkingLevels: Type.Optional(Type.Array(Type.String())),
+        contextWindow: Type.Optional(Type.Number()),
+        maxTokens: Type.Optional(Type.Number()),
         supportsFastMode: Type.Optional(Type.Boolean()),
         supportsSlowMode: Type.Optional(Type.Boolean()),
       }),
@@ -349,7 +352,7 @@ export const ModelsDataSchema = Type.Object(
   },
   {
     description:
-      "Shared model-cache projection from omp, including resolved default and optional runtime error. The HTTP route adds anthropicSlowMode and may return additional model-list capability fields beyond this projection.",
+      "Shared model-cache projection from omp, including resolved default and optional runtime error. The HTTP route adds anthropicSlowMode.",
   },
 );
 

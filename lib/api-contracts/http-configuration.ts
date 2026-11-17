@@ -458,6 +458,14 @@ export const configurationHttpOperations: readonly HttpOperation[] = [
     Type.Intersect([ModelsData, Type.Object({ anthropicSlowMode: B })]),
   ),
   op(
+    "/api/models",
+    "post",
+    "refreshModels",
+    "Refresh available models",
+    Type.Intersect([ModelsData, Type.Object({ anthropicSlowMode: B })]),
+    { responses: { 503: error("Model discovery or refresh failed.") } },
+  ),
+  op(
     "/api/models-config",
     "get",
     "getModelsConfig",

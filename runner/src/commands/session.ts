@@ -21,6 +21,7 @@ import {
 import { probeSessionLeases } from "@oh-my-pi/pi-coding-agent/session/session-storage";
 import { isRecord } from "@oh-my-pi/pi-utils";
 import { afterSessionChange } from "../events";
+import { findModel } from "./model";
 import { prompting } from "./prompting";
 import { settleToolsBeforeSessionChange } from "./tools";
 import {
@@ -70,16 +71,7 @@ async function requestedModel(
   if (provider === undefined && modelId === undefined) return undefined;
   if (provider === undefined || modelId === undefined)
     throw new Error("provider and modelId must be given together");
-  const find = () =>
-    session
-      .getAvailableModels()
-      .find((m) => m.provider === provider && m.id === modelId);
-  // Discovery-backed providers populate after startup; only a miss waits for them.
-  let model = find();
-  if (!model) {
-    await session.modelRegistry.awaitBackgroundRefresh();
-    model = find();
-  }
+  const model = await findModel(session, provider, modelId);
   if (!model) throw new Error(`Model not found: ${provider}/${modelId}`);
   return model;
 }

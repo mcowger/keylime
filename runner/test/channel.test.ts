@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import type { ExtensionUIContext } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
 import type { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import {
@@ -141,6 +141,24 @@ describe("keylime channel", () => {
     expect(JSON.stringify(end.event)).toContain("from host");
     await host.waitFor((frame) => eventType(frame) === "agent_end");
     expect(host.frames.some((frame) => frame.t === "ui_end")).toBe(false);
+  });
+
+  it("refreshes models without interrupting a running session", async () => {
+    host = await startHost();
+    test = await askSession();
+    await host.connected;
+    await host.command("prompt", { message: "ask me" });
+    const request = await host.waitFor((frame) => frame.t === "ui_request");
+    const refresh = spyOn(test.session.modelRegistry, "refresh").mockResolvedValue(undefined);
+    try {
+      expect(await host.command("refresh_available_models")).toMatchObject({ ok: true });
+      expect(refresh).toHaveBeenCalledWith("online", { refreshCommandCredentials: true });
+      expect(host.frames.some((frame) => eventType(frame) === "agent_end")).toBe(false);
+      host.send({ t: "ui_response", id: request.id, value: { data: { q: "answered" } } });
+      await host.waitFor((frame) => eventType(frame) === "agent_end");
+    } finally {
+      refresh.mockRestore();
+    }
   });
 
   it("closes the TUI's dialog when the host answers", async () => {

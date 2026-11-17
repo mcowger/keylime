@@ -13141,7 +13141,7 @@
       "description": "A custom model definition in models.yml; unspecified settings inherit provider or runtime defaults and extra YAML keys are preserved."
     },
     "configuration_ModelsData": {
-      "description": "Shared model-cache projection from omp, including resolved default and optional runtime error. The HTTP route adds anthropicSlowMode and may return additional model-list capability fields beyond this projection.",
+      "description": "Shared model-cache projection from omp, including resolved default and optional runtime error. The HTTP route adds anthropicSlowMode.",
       "properties": {
         "connectedProviders": {
           "items": {
@@ -13186,8 +13186,14 @@
         "modelList": {
           "items": {
             "properties": {
+              "contextWindow": {
+                "type": "number"
+              },
               "id": {
                 "type": "string"
+              },
+              "maxTokens": {
+                "type": "number"
               },
               "name": {
                 "type": "string"
@@ -13200,6 +13206,12 @@
               },
               "supportsSlowMode": {
                 "type": "boolean"
+              },
+              "thinkingLevels": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               }
             },
             "required": ["id", "name", "provider"],
@@ -48331,7 +48343,7 @@
               "type": "object"
             }
           ],
-          "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background model discovery before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
+          "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
           "title": "AgentCommand_set_model",
           "type": "object"
         },
@@ -125535,7 +125547,7 @@
                   "type": "object"
                 }
               ],
-              "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background model discovery before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
+              "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
               "title": "AgentCommand_set_model",
               "type": "object"
             },
@@ -126643,6 +126655,76 @@
           "type": "object"
         }
       ]
+    },
+    "runner_refresh_available_models_args": {
+      "properties": {},
+      "type": "object"
+    },
+    "runner_refresh_available_models_result": {
+      "properties": {
+        "models": {
+          "items": {
+            "additionalProperties": {
+              "description": "Extensible JSON data supplied by the provider, tool, or extension."
+            },
+            "description": "Subset of omp's Model (pi-ai) that the web UI reads; extra fields pass through.",
+            "properties": {
+              "api": {
+                "type": "string"
+              },
+              "contextWindow": {
+                "type": "number"
+              },
+              "id": {
+                "type": "string"
+              },
+              "input": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "maxTokens": {
+                "type": "number"
+              },
+              "name": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "reasoning": {
+                "type": "boolean"
+              },
+              "thinking": {
+                "properties": {
+                  "defaultLevel": {
+                    "type": "string"
+                  },
+                  "efforts": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "mode": {
+                    "type": "string"
+                  },
+                  "requiresEffort": {
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": ["id", "provider"],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": ["models"],
+      "type": "object"
     },
     "runner_remove_queued_message_args": {
       "properties": {

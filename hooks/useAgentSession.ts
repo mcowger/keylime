@@ -711,7 +711,13 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const [modelNames, setModelNames] = useState<Record<string, string>>({});
   const [modelList, setModelList] = useState<ModelEntry[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsRefreshing, setModelsRefreshing] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
+  const modelsRequestRef = useRef<{
+    controller: AbortController;
+    refresh: boolean;
+  } | null>(null);
+  const modelsLastRequestedAtRef = useRef(0);
   const [liveModelMeta, setLiveModelMeta] = useState<ThinkingModelMeta | null>(
     null,
   );
@@ -6476,8 +6482,20 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     ? remoteHostId(session.hostId) !== undefined
     : newSessionHostId !== undefined;
   const loadModels = useCallback(
-    async (signal?: AbortSignal) => {
+    async (refresh = false, signal?: AbortSignal) => {
+      // A background GET must never supersede a user-requested refresh.
+      if (modelsRequestRef.current?.refresh) return;
+      modelsRequestRef.current?.controller.abort();
+      const controller = new AbortController();
+      const request = { controller, refresh };
+      modelsRequestRef.current = request;
+      modelsLastRequestedAtRef.current = Date.now();
+      const abort = () => controller.abort();
+      signal?.addEventListener("abort", abort, { once: true });
+      if (signal?.aborted) controller.abort();
       setModelsLoading(true);
+      setModelsRefreshing(refresh);
+      if (refresh) setModelError(null);
       try {
         const modelCwd = remoteWorkspace
           ? ""
@@ -6486,11 +6504,22 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           ? `/api/models?cwd=${encodeURIComponent(modelCwd)}`
           : "/api/models";
         const res = await fetch(modelsUrl, {
+          method: refresh ? "POST" : "GET",
           cache: "no-store",
-          ...(signal ? { signal } : {}),
+          signal: controller.signal,
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const d = (await res.json()) as ModelsResponse;
+        const d = (await res.json().catch(() => null)) as
+          | (ModelsResponse & { error?: string })
+          | null;
+        if (!res.ok) throw new Error(d?.error || `HTTP ${res.status}`);
+        if (!d) throw new Error("Invalid models response");
+        if (refresh && d.modelError) throw new Error(d.modelError);
+        if (
+          controller.signal.aborted ||
+          modelsRequestRef.current !== request ||
+          !hookAliveRef.current
+        )
+          return;
         setModelNames(d.models);
         setModelError(d.modelError ?? null);
         setModelThinkingLevels(d.thinkingLevels ?? {});
@@ -6514,16 +6543,34 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           );
         }
       } catch (e) {
-        // Surface fetch/parse failures instead of silently rendering an empty
-        // model list with no error state.
-        if (!signal?.aborted)
+        if (
+          !controller.signal.aborted &&
+          modelsRequestRef.current === request &&
+          hookAliveRef.current
+        )
           setModelError(e instanceof Error ? e.message : String(e));
       } finally {
-        setModelsLoading(false);
+        signal?.removeEventListener("abort", abort);
+        if (modelsRequestRef.current === request) {
+          modelsRequestRef.current = null;
+          if (hookAliveRef.current) {
+            setModelsLoading(false);
+            setModelsRefreshing(false);
+          }
+        }
       }
     },
     [isNew, newSessionCwd, remoteWorkspace, session?.cwd],
   );
+
+  const refreshModels = useCallback(() => loadModels(true), [loadModels]);
+  const revalidateModels = useCallback(() => {
+    if (
+      !modelsRequestRef.current &&
+      Date.now() - modelsLastRequestedAtRef.current >= 60_000
+    )
+      void loadModels();
+  }, [loadModels]);
 
   /** Ask a side question, or a follow-up in `recordId`'s topic. It runs beside
    * any main turn and never enters the transcript. False = refused (toasted),
@@ -7507,6 +7554,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     const pendingHostTools = pendingHostToolControllersRef.current;
     return () => {
       hookAliveRef.current = false;
+      modelsRequestRef.current?.controller.abort();
       for (const controller of pendingHostTools.values()) controller.abort();
       clearTerminalReconcileTimer();
       bashRecoveryIdRef.current += 1;
@@ -7535,11 +7583,18 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   // Load model list
   useEffect(() => {
     const controller = new AbortController();
-    loadModels(controller.signal).catch((e) => {
-      if (e instanceof DOMException && e.name === "AbortError") return;
-    });
+    void loadModels(false, controller.signal);
     return () => controller.abort();
   }, [loadModels, modelsRefreshKey]);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") revalidateModels();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [revalidateModels]);
 
   // Compact error auto-dismiss
   useEffect(() => {
@@ -7604,7 +7659,10 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     modelNames,
     modelList,
     modelsLoading,
+    modelsRefreshing,
     modelError,
+    refreshModels,
+    revalidateModels,
     modelThinkingLevels,
     modelThinkingLevelMaps,
     newSessionModel,

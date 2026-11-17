@@ -60,7 +60,25 @@ export function sessionState(session: AgentSession) {
   };
 }
 
-/** Exact provider/id match; a miss waits for background discovery (proxy/ollama models land after startup). */
+// Channel commands can overlap; serialize discovery mutations per live registry.
+const registryRefreshes = new WeakMap<AgentSession["modelRegistry"], Promise<void>>();
+
+async function withRegistryRefresh(
+  session: AgentSession,
+  refresh: () => Promise<void>,
+): Promise<void> {
+  const registry = session.modelRegistry;
+  const previous = registryRefreshes.get(registry) ?? Promise.resolve();
+  const current = previous.catch(() => {}).then(refresh);
+  registryRefreshes.set(registry, current);
+  try {
+    await current;
+  } finally {
+    if (registryRefreshes.get(registry) === current) registryRefreshes.delete(registry);
+  }
+}
+
+/** Resolve against this session's registry, including newly discovered models on its host. */
 export async function findModel(
   session: AgentSession,
   provider: string,
@@ -70,9 +88,22 @@ export async function findModel(
     session
       .getAvailableModels()
       .find((m) => m.provider === provider && m.id === modelId);
-  const model = find();
+  let model = find();
   if (model) return model;
-  await session.modelRegistry.awaitBackgroundRefresh();
+  const registry = session.modelRegistry;
+  await registry.awaitBackgroundRefresh();
+  model = find();
+  if (model) return model;
+  // The web utility may be on another host, so refresh the owning registry.
+  await withRegistryRefresh(session, async () => {
+    if (find()) return;
+    await registry.refreshProvider(provider, "online");
+    const discoveryId = registry.getDiscoveryProviderId(provider) ?? provider;
+    if (registry.getProviderDiscoveryState(discoveryId)?.error) {
+      throw new Error(`Model discovery failed for provider ${provider}`);
+    }
+    await session.refreshScopedModels();
+  });
   return find();
 }
 
@@ -103,6 +134,27 @@ export const modelCommands: CommandTable = {
   /** @apiCommand get_available_models */
   async get_available_models({ session }) {
     await session.modelRegistry.awaitBackgroundRefresh();
+    return { models: session.getAvailableModels() };
+  },
+  /** @apiCommand refresh_available_models */
+  async refresh_available_models({ session }) {
+    const registry = session.modelRegistry;
+    await withRegistryRefresh(session, async () => {
+      await registry.awaitBackgroundRefresh();
+      await registry.refresh("online", { refreshCommandCredentials: true });
+      if (registry.getError()) throw new Error("Model configuration could not be loaded");
+      const providers = new Set([
+        ...registry.getDiscoverableProviders(),
+        ...registry.getAll().map((model) => model.provider),
+      ]);
+      const failed = [...providers].some(
+        (provider) => registry.getProviderDiscoveryState(provider)?.error,
+      );
+      if (failed || registry.getRuntimeDiscoveryFailures().length > 0) {
+        throw new Error("Model discovery failed for one or more providers");
+      }
+      await session.refreshScopedModels();
+    });
     return { models: session.getAvailableModels() };
   },
   /** @apiCommand set_thinking_level */

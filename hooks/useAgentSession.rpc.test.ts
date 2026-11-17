@@ -807,6 +807,120 @@ async function mountSession(
     },
   };
 }
+
+test("model refresh replaces the catalog and ignores an older GET", async () => {
+  resetWorld();
+  primeSession("models-refresh", [userMsg("u0", "q")]);
+  const oldResponse = Promise.withResolvers<HeldResponse>();
+  world.holds.push({
+    match: (method, url) => method === "GET" && url.startsWith("/api/models"),
+    produce: () => oldResponse.promise,
+  });
+  const w = await mountSession("models-refresh");
+  world.models = {
+    models: { "example:new": "New" },
+    modelList: [{ id: "new", provider: "example", name: "New" }],
+    defaultModel: null,
+  };
+  await act(async () => {
+    await w.latest.refreshModels();
+  });
+  assert.equal(callsTo("POST", "/api/models").length, 1);
+  assert.deepEqual(w.latest.modelList.map((model) => model.id), ["new"]);
+  await act(async () => {
+    oldResponse.resolve({
+      value: {
+        models: { "example:old": "Old" },
+        modelList: [{ id: "old", provider: "example", name: "Old" }],
+        defaultModel: null,
+      },
+    });
+    await oldResponse.promise;
+  });
+  assert.deepEqual(w.latest.modelList.map((model) => model.id), ["new"]);
+  assert.equal(w.latest.modelsLoading, false);
+});
+
+test("model refresh reports failures and keeps the previous snapshot for retry", async () => {
+  resetWorld();
+  primeSession("models-error", [userMsg("u0", "q")]);
+  world.models = {
+    models: { "example:old": "Old" },
+    modelList: [{ id: "old", provider: "example", name: "Old" }],
+    defaultModel: null,
+  };
+  const w = await mountSession("models-error");
+  world.holds.push({
+    match: (method, url) => method === "POST" && url.startsWith("/api/models"),
+    produce: () => ({ status: 503, value: { error: "Catalog unavailable" } }),
+  });
+  await act(async () => {
+    await w.latest.refreshModels();
+  });
+  assert.equal(w.latest.modelError, "Catalog unavailable");
+  assert.deepEqual(w.latest.modelList.map((model) => model.id), ["old"]);
+  await act(async () => {
+    await w.latest.refreshModels();
+  });
+  assert.equal(w.latest.modelError, null);
+});
+
+test("model revalidation is bounded and runs on visibility after the interval", async () => {
+  resetWorld();
+  primeSession("models-visible", [userMsg("u0", "q")]);
+  const w = await mountSession("models-visible");
+  const initialCount = callsTo("GET", "/api/models").length;
+  await act(async () => {
+    w.latest.revalidateModels();
+  });
+  assert.equal(callsTo("GET", "/api/models").length, initialCount);
+  const originalNow = Date.now;
+  try {
+    Date.now = () => originalNow() + 61_000;
+    await act(async () => {
+      visibilityState = "visible";
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    assert.equal(callsTo("GET", "/api/models").length, initialCount + 1);
+    await act(async () => {
+      w.latest.revalidateModels();
+    });
+    assert.equal(callsTo("GET", "/api/models").length, initialCount + 1);
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+test("model refresh stays in flight across revalidation and ignores completion after unmount", async () => {
+  resetWorld();
+  primeSession("models-inflight", [userMsg("u0", "q")]);
+  const w = await mountSession("models-inflight");
+  const response = Promise.withResolvers<HeldResponse>();
+  world.holds.push({
+    match: (method, url) => method === "POST" && url.startsWith("/api/models"),
+    produce: () => response.promise,
+  });
+  let pending: Promise<void> | undefined;
+  await act(async () => {
+    pending = w.latest.refreshModels();
+  });
+  assert.equal(w.latest.modelsRefreshing, true);
+  const initialGets = callsTo("GET", "/api/models").length;
+  await act(async () => {
+    w.latest.revalidateModels();
+    void w.latest.refreshModels();
+  });
+  assert.equal(callsTo("GET", "/api/models").length, initialGets);
+  assert.equal(callsTo("POST", "/api/models").length, 1);
+  w.unmount();
+  await act(async () => {
+    response.resolve({
+      value: { models: {}, modelList: [], defaultModel: null },
+    });
+    await pending;
+  });
+});
+
 test("model activity resets on completion and crash without reviving stale snapshots", async () => {
   resetWorld();
   primeSession("activity-terminal", [userMsg("u0", "q")]);

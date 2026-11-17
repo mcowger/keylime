@@ -223,6 +223,9 @@
         "RunnerReply_prompt": {
           "$ref": "#/components/messages/RunnerReply_prompt"
         },
+        "RunnerReply_refresh_available_models": {
+          "$ref": "#/components/messages/RunnerReply_refresh_available_models"
+        },
         "RunnerReply_remove_queued_message": {
           "$ref": "#/components/messages/RunnerReply_remove_queued_message"
         },
@@ -486,6 +489,9 @@
         },
         "RunnerRequest_prompt": {
           "$ref": "#/components/messages/RunnerRequest_prompt"
+        },
+        "RunnerRequest_refresh_available_models": {
+          "$ref": "#/components/messages/RunnerRequest_refresh_available_models"
         },
         "RunnerRequest_remove_queued_message": {
           "$ref": "#/components/messages/RunnerRequest_remove_queued_message"
@@ -1418,6 +1424,18 @@
           "$ref": "#/components/schemas/RunnerReply_prompt"
         },
         "title": "RunnerReply_prompt"
+      },
+      "RunnerReply_refresh_available_models": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
+        "name": "RunnerReply_refresh_available_models",
+        "payload": {
+          "$ref": "#/components/schemas/RunnerReply_refresh_available_models"
+        },
+        "title": "RunnerReply_refresh_available_models"
       },
       "RunnerReply_remove_queued_message": {
         "contentType": "application/json",
@@ -2475,6 +2493,18 @@
         },
         "title": "RunnerRequest_prompt"
       },
+      "RunnerRequest_refresh_available_models": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Refresh and list available models from configured providers.\nInputs: No arguments.\nInvariants: Waits for background discovery and serializes explicit registry refreshes; the session and active run remain alive. Discovery and configuration failures reject the command.\nEffects: Bypasses discovery caches, refreshes command-backed credentials and updates the live registry and model scope.\nRecovery: Check provider configuration and retry after a failure.",
+        "name": "RunnerRequest_refresh_available_models",
+        "payload": {
+          "$ref": "#/components/schemas/RunnerRequest_refresh_available_models"
+        },
+        "title": "RunnerRequest_refresh_available_models"
+      },
       "RunnerRequest_remove_queued_message": {
         "contentType": "application/json",
         "correlationId": {
@@ -2612,7 +2642,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background model discovery before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.",
+        "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.",
         "name": "RunnerRequest_set_model",
         "payload": {
           "$ref": "#/components/schemas/RunnerRequest_set_model"
@@ -55839,6 +55869,118 @@
         "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
         "title": "RunnerReply_prompt"
       },
+      "RunnerReply_refresh_available_models": {
+        "anyOf": [
+          {
+            "properties": {
+              "data": {
+                "properties": {
+                  "models": {
+                    "items": {
+                      "additionalProperties": {
+                        "description": "Extensible JSON data supplied by the provider, tool, or extension."
+                      },
+                      "description": "Subset of omp's Model (pi-ai) that the web UI reads; extra fields pass through.",
+                      "properties": {
+                        "api": {
+                          "type": "string"
+                        },
+                        "contextWindow": {
+                          "type": "number"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "input": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "maxTokens": {
+                          "type": "number"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "reasoning": {
+                          "type": "boolean"
+                        },
+                        "thinking": {
+                          "properties": {
+                            "defaultLevel": {
+                              "type": "string"
+                            },
+                            "efforts": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "mode": {
+                              "type": "string"
+                            },
+                            "requiresEffort": {
+                              "type": "boolean"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "required": ["id", "provider"],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": ["models"],
+                "type": "object"
+              },
+              "id": {
+                "type": "number"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "t": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["t", "id", "ok", "data"],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "id": {
+                "type": "number"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "t": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["t", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
+        "title": "RunnerReply_refresh_available_models"
+      },
       "RunnerReply_remove_queued_message": {
         "anyOf": [
           {
@@ -59612,6 +59754,29 @@
         "title": "RunnerRequest_prompt",
         "type": "object"
       },
+      "RunnerRequest_refresh_available_models": {
+        "description": "Usage: Refresh and list available models from configured providers.\nInputs: No arguments.\nInvariants: Waits for background discovery and serializes explicit registry refreshes; the session and active run remain alive. Discovery and configuration failures reject the command.\nEffects: Bypasses discovery caches, refreshes command-backed credentials and updates the live registry and model scope.\nRecovery: Check provider configuration and retry after a failure.",
+        "properties": {
+          "args": {
+            "properties": {},
+            "type": "object"
+          },
+          "id": {
+            "type": "number"
+          },
+          "op": {
+            "const": "refresh_available_models",
+            "type": "string"
+          },
+          "t": {
+            "const": "cmd",
+            "type": "string"
+          }
+        },
+        "required": ["t", "id", "op", "args"],
+        "title": "RunnerRequest_refresh_available_models",
+        "type": "object"
+      },
       "RunnerRequest_remove_queued_message": {
         "description": "Usage: Remove a matching queued message.\nInputs: Supply message text and steering or followUp queue.\nInvariants: The result says whether a match was found and includes its images when present.\nEffects: Removes the matching queued input.\nRecovery: Inspect the queue after an uncertain response before removing again.",
         "properties": {
@@ -60054,7 +60219,7 @@
         "type": "object"
       },
       "RunnerRequest_set_model": {
-        "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background model discovery before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.",
+        "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.",
         "properties": {
           "args": {
             "properties": {
@@ -62161,6 +62326,29 @@
       },
       "summary": "prompt"
     },
+    "operation_refresh_available_models": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Refresh and list available models from configured providers.\nInputs: No arguments.\nInvariants: Waits for background discovery and serializes explicit registry refreshes; the session and active run remain alive. Discovery and configuration failures reject the command.\nEffects: Bypasses discovery caches, refreshes command-backed credentials and updates the live registry and model scope.\nRecovery: Check provider configuration and retry after a failure.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/RunnerRequest_refresh_available_models"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/RunnerReply_refresh_available_models"
+          }
+        ]
+      },
+      "summary": "refresh_available_models"
+    },
     "operation_remove_queued_message": {
       "action": "send",
       "channel": {
@@ -62419,7 +62607,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background model discovery before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.",
+      "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/RunnerRequest_set_model"

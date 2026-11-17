@@ -2018,7 +2018,7 @@
         "correlationId": {
           "location": "$message.payload#/rid"
         },
-        "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background model discovery before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
+        "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
         "name": "BrowserRequest_set_model",
         "payload": {
           "$ref": "#/components/schemas/BrowserRequest_set_model"
@@ -3945,7 +3945,7 @@
                     "type": "object"
                   }
                 ],
-                "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background model discovery before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
+                "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
                 "title": "AgentCommand_set_model",
                 "type": "object"
               },
@@ -74390,7 +74390,7 @@
         "type": "object"
       },
       "BrowserRequest_set_model": {
-        "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background model discovery before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
+        "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
         "properties": {
           "advisor": {
             "type": "boolean"
@@ -76866,7 +76866,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background model discovery before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
+      "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/BrowserRequest_set_model"

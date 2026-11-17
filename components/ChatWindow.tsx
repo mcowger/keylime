@@ -664,7 +664,10 @@ export function ChatWindow({
     modelNames,
     modelList,
     modelsLoading,
+    modelsRefreshing,
     modelError,
+    refreshModels,
+    revalidateModels,
     modelThinkingLevels,
     modelThinkingLevelMaps,
     thinkingLevel,
@@ -1509,7 +1512,10 @@ export function ChatWindow({
       modelNames={modelNames}
       modelList={modelList}
       modelsLoading={modelsLoading}
+      modelsRefreshing={modelsRefreshing}
       modelError={modelError}
+      onRefreshModels={refreshModels}
+      onRevalidateModels={revalidateModels}
       onModelChange={handleModelChange}
       onAbortCompaction={handleAbortCompaction}
       isCompacting={isCompacting}

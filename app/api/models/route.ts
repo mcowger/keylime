@@ -90,11 +90,14 @@ const SLOW_MODE_PROVIDERS: Record<string, true> = {
   "google-vertex": true,
 };
 
-async function loadModels(): Promise<ModelsData> {
+async function loadModels(refresh = false): Promise<ModelsData> {
   const availableResponse = await runUtilityCommand<{ models?: unknown }>(
-    { type: "get_available_models" },
+    { type: refresh ? "refresh_available_models" : "get_available_models" },
     120_000,
   );
+  if (!Array.isArray(availableResponse.models)) {
+    throw new Error("Invalid model registry response");
+  }
   const available = Array.isArray(availableResponse.models)
     ? availableResponse.models
         .filter(
@@ -219,5 +222,27 @@ export async function GET() {
       ...withSafeModelLoadFailure(EMPTY_MODELS),
       anthropicSlowMode,
     });
+  }
+}
+
+/**
+ * @apiContract refreshModels
+ * @apiUsage Refresh the global model selector snapshot from configured providers.
+ * @apiInputs No request body is required; the legacy cwd query does not affect the result.
+ * @apiInvariants Bypasses both the web cache and omp discovery cache; successful responses have the same shape as GET. Concurrent GET requests join the refresh. Active sessions are not stopped.
+ * @apiEffects Runs online discovery, refreshes command-backed credentials, and replaces the cached snapshot on success.
+ * @apiRecovery A 503 indicates discovery or loading failed; inspect provider configuration and retry.
+ */
+export async function POST() {
+  refreshModelsIfConfigChanged();
+  invalidateModelsCache();
+  try {
+    const data = await loadModelsWithCache(MODELS_CACHE_KEY, () => loadModels(true));
+    return Response.json({ ...data, anthropicSlowMode: readAnthropicSlowMode() });
+  } catch {
+    return Response.json(
+      { error: "Model refresh failed. Check your configuration and try again." },
+      { status: 503 },
+    );
   }
 }

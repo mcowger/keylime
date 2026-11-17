@@ -2690,7 +2690,7 @@
                         "type": "object"
                       }
                     ],
-                    "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background model discovery before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
+                    "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
                     "title": "AgentCommand_set_model",
                     "type": "object"
                   },
@@ -16714,7 +16714,7 @@
                                 "type": "object"
                               }
                             ],
-                            "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background model discovery before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
+                            "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
                             "title": "AgentCommand_set_model",
                             "type": "object"
                           },
@@ -50992,7 +50992,7 @@
                 "schema": {
                   "allOf": [
                     {
-                      "description": "Shared model-cache projection from omp, including resolved default and optional runtime error. The HTTP route adds anthropicSlowMode and may return additional model-list capability fields beyond this projection.",
+                      "description": "Shared model-cache projection from omp, including resolved default and optional runtime error. The HTTP route adds anthropicSlowMode.",
                       "properties": {
                         "connectedProviders": {
                           "items": {
@@ -51037,8 +51037,14 @@
                         "modelList": {
                           "items": {
                             "properties": {
+                              "contextWindow": {
+                                "type": "number"
+                              },
                               "id": {
                                 "type": "string"
+                              },
+                              "maxTokens": {
+                                "type": "number"
                               },
                               "name": {
                                 "type": "string"
@@ -51051,6 +51057,12 @@
                               },
                               "supportsSlowMode": {
                                 "type": "boolean"
+                              },
+                              "thinkingLevels": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
                               }
                             },
                             "required": ["id", "name", "provider"],
@@ -51347,6 +51359,366 @@
           "Invariants": "Model data is cached globally for 60 seconds; models.yml changes invalidate the cache and restart the utility process. Slow mode is read separately on every request. The HTTP response adds anthropicSlowMode, and each modelList entry includes thinkingLevels plus contextWindow and maxTokens when supplied by omp, in tokens.",
           "Recovery": "Inspect the error marker and configuration before retrying.",
           "Usage": "Read the global model selector snapshot and current Anthropic slow-mode setting."
+        }
+      },
+      "post": {
+        "description": "### Usage\n\nRefresh the global model selector snapshot from configured providers.\n\n### Inputs\n\nNo request body is required; the legacy cwd query does not affect the result.\n\n### Invariants\n\nBypasses both the web cache and omp discovery cache; successful responses have the same shape as GET. Concurrent GET requests join the refresh. Active sessions are not stopped.\n\n### Effects\n\nRuns online discovery, refreshes command-backed credentials, and replaces the cached snapshot on success.\n\n### Recovery\n\nA 503 indicates discovery or loading failed; inspect provider configuration and retry.",
+        "operationId": "refreshModels",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "description": "Shared model-cache projection from omp, including resolved default and optional runtime error. The HTTP route adds anthropicSlowMode.",
+                      "properties": {
+                        "connectedProviders": {
+                          "items": {
+                            "properties": {
+                              "disabled": {
+                                "type": "boolean"
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "name", "disabled"],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "defaultModel": {
+                          "anyOf": [
+                            {
+                              "properties": {
+                                "modelId": {
+                                  "type": "string"
+                                },
+                                "provider": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["provider", "modelId"],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "modelError": {
+                          "type": "string"
+                        },
+                        "modelList": {
+                          "items": {
+                            "properties": {
+                              "contextWindow": {
+                                "type": "number"
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "maxTokens": {
+                                "type": "number"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "provider": {
+                                "type": "string"
+                              },
+                              "supportsFastMode": {
+                                "type": "boolean"
+                              },
+                              "supportsSlowMode": {
+                                "type": "boolean"
+                              },
+                              "thinkingLevels": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "required": ["id", "name", "provider"],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "models": {
+                          "patternProperties": {
+                            "^(.*)$": {
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "thinkingLevels": {
+                          "patternProperties": {
+                            "^(.*)$": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "models",
+                        "modelList",
+                        "defaultModel",
+                        "thinkingLevels"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "anthropicSlowMode": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["anthropicSlowMode"],
+                      "type": "object"
+                    }
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request or rejected operation."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authentication is required when configured."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Origin, ownership or authorization policy refused this request."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The requested resource does not exist."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The operation failed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Model discovery or refresh failed."
+          }
+        },
+        "security": [
+          {
+            "webSession": []
+          },
+          {
+            "trustedProxy": []
+          },
+          {}
+        ],
+        "summary": "Refresh available models",
+        "x-client-semantics": {
+          "Effects": "Runs online discovery, refreshes command-backed credentials, and replaces the cached snapshot on success.",
+          "Inputs": "No request body is required; the legacy cwd query does not affect the result.",
+          "Invariants": "Bypasses both the web cache and omp discovery cache; successful responses have the same shape as GET. Concurrent GET requests join the refresh. Active sessions are not stopped.",
+          "Recovery": "A 503 indicates discovery or loading failed; inspect provider configuration and retry.",
+          "Usage": "Refresh the global model selector snapshot from configured providers."
         }
       }
     },

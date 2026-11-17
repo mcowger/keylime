@@ -562,7 +562,7 @@ Recovery: Refresh after reconnecting or when state changes.`,
     "set_model",
     `Usage: Select an exact provider and model for this session.
 Inputs: Supply both provider and modelId.
-Invariants: A miss waits for background model discovery before failing.
+Invariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.
 Effects: Changes the active session model.
 Recovery: Read state or available models after an uncertain response before selecting again.`,
     Type.Object({ provider: s(), modelId: s() }),
@@ -591,6 +591,16 @@ Inputs: No arguments.
 Invariants: Waits for background discovery; results reflect the current registry.
 Effects: Reads model availability without selecting a model.
 Recovery: Refresh after discovery or provider configuration changes.`,
+    empty,
+    Type.Object({ models: Type.Array(OmpModelSchema) }),
+  ),
+  command(
+    "refresh_available_models",
+    `Usage: Refresh and list available models from configured providers.
+Inputs: No arguments.
+Invariants: Waits for background discovery and serializes explicit registry refreshes; the session and active run remain alive. Discovery and configuration failures reject the command.
+Effects: Bypasses discovery caches, refreshes command-backed credentials and updates the live registry and model scope.
+Recovery: Check provider configuration and retry after a failure.`,
     empty,
     Type.Object({ models: Type.Array(OmpModelSchema) }),
   ),
