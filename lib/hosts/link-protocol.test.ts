@@ -18,6 +18,18 @@ async function load() {
 const MB = 1024 * 1024;
 const ATTEMPT = "3aa8ab15-162b-4bee-97c8-2b35a65a7b32";
 
+test("terminal frames are unsequenced and reject malformed identities and oversized input", async () => {
+  const { decodeDown, decodeUp, encodeLine, LinkProtocolError, isHostOp } = await load();
+  const down = { type: "pty_attach" as const, id: ATTEMPT, sessionId: ATTEMPT, payload: JSON.stringify({ type: "input", data: "hello" }) };
+  const up = { type: "pty_event" as const, id: ATTEMPT, payload: JSON.stringify({ type: "output", data: "hello", cursor: 1 }) };
+  assert.deepEqual(decodeDown(encodeLine(down)), down);
+  assert.deepEqual(decodeUp(encodeLine(up)), up);
+  assert.equal(isHostOp("ptySessions"), true);
+  assert.throws(() => decodeDown(JSON.stringify({ ...down, id: "bad" })), LinkProtocolError);
+  assert.throws(() => decodeDown(JSON.stringify({ ...down, payload: "x".repeat(131073) })), LinkProtocolError);
+  assert.throws(() => decodeUp(JSON.stringify({ ...up, id: "bad" })), LinkProtocolError);
+});
+
 const DOWN = [
   { type: "welcome", v: LINK_PROTOCOL_VERSION, hostId: "h1" },
   { type: "stdin", seq: 1, ch: "c1", line: '{"type":"prompt"}' },

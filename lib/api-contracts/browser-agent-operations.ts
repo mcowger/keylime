@@ -269,8 +269,9 @@ Recovery: Inspect the outbox and delivery status after an uncertain response.`,
   override("abort", "Abort the current turn.", nil),
   override(
     "get_state",
-    "Read browser state, including wrapper activity and extension UI state.",
+    "Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner.",
     WebSessionStateSchema,
+    Type.Object({ hostId: Type.Optional(Type.String({ minLength: 1, description: "Host holding the session to resume." })) }),
   ),
   override(
     "set_model",

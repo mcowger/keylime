@@ -270,6 +270,7 @@ export const DownMessageSchema = Type.Union(
         ],
       },
     ),
+    Type.Object({ type: Type.Literal("pty_attach"), id: Type.String(), sessionId: Type.String(), payload: Type.String() }, { title: "HostLinkPtyAttach", description: "Connection-scoped terminal frame, sent once and never replayed." }),
     ping,
     pong,
     ack,
@@ -318,6 +319,7 @@ export const UpMessageSchema = Type.Union(
         ],
       },
     ),
+    Type.Object({ type: Type.Literal("pty_event"), id: Type.String(), payload: Type.String() }, { title: "HostLinkPtyEvent", description: "Connection-scoped terminal event, sent once and never replayed." }),
     Type.Object(
       {
         type: Type.Literal("stdout"),

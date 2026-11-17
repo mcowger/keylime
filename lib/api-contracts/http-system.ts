@@ -333,6 +333,12 @@ add(
     masterConfigError: Type.Optional(obj({ code: S, message: S })),
   }),
 );
+add("/api/hosts/[id]/terminal-sessions", "get", "getHostsIdTerminalSessions", "List live session terminals", obj({ sessionIds: Type.Array(S) }), { parameters: [id] });
+add("/api/terminal/attach", "get", "getTerminalAttach", "Attach to a session terminal", null, {
+  parameters: [queryParameter("hostId", S, true), queryParameter("sessionId", S, true)],
+  status: 101,
+  responses: { 426: fail("WebSocket upgrade required.") },
+});
 add("/api/hosts", "put", "putHosts", "Replace pools", poolResult, {
   body: poolResult,
 });

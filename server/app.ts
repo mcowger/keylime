@@ -4,6 +4,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { browserLink, type BrowserLinkData } from "@/lib/browser-link";
 import { hostLinkSocket, type LinkSocketData } from "@/lib/hosts/hub";
+import { terminalAttachSocket, type TerminalAttachData } from "@/lib/terminal-attach";
 import { proxy } from "@/proxy";
 import { ensureOmpRunner } from "@/lib/omp/runner-fetch";
 import { register } from "../instrumentation.node";
@@ -52,6 +53,9 @@ function isBrowserSocket(
   ws: ServerSocket,
 ): ws is Bun.ServerWebSocket<BrowserLinkData> {
   return "kind" in ws.data && ws.data.kind === "browser";
+}
+function isTerminalSocket(ws: ServerSocket): ws is Bun.ServerWebSocket<TerminalAttachData> {
+  return "kind" in ws.data && ws.data.kind === "terminal-attach";
 }
 // Not a browser link: a host link (the only other upgrade).
 const asLink = (ws: ServerSocket) => ws as Bun.ServerWebSocket<LinkSocketData>;
@@ -243,19 +247,22 @@ export function startServer(options: {
       ...hostLinkSocket,
       open: (ws: ServerSocket) => {
         if (isBrowserSocket(ws)) browserLink.open(ws);
+        else if (isTerminalSocket(ws)) terminalAttachSocket.open(ws);
       },
-      message: (ws: ServerSocket, data: string | Uint8Array) =>
-        isBrowserSocket(ws)
-          ? browserLink.message(ws, data)
-          : hostLinkSocket.message(asLink(ws), data),
-      drain: (ws: ServerSocket) =>
-        isBrowserSocket(ws)
-          ? browserLink.drain(ws)
-          : hostLinkSocket.drain(asLink(ws)),
-      close: (ws: ServerSocket, code: number) =>
-        isBrowserSocket(ws)
-          ? browserLink.close(ws, code)
-          : hostLinkSocket.close(asLink(ws)),
+      message: (ws: ServerSocket, data: string | Uint8Array) => {
+        if (isBrowserSocket(ws)) browserLink.message(ws, data);
+        else if (isTerminalSocket(ws)) terminalAttachSocket.message(ws, data);
+        else hostLinkSocket.message(asLink(ws), data);
+      },
+      drain: (ws: ServerSocket) => {
+        if (isBrowserSocket(ws)) browserLink.drain(ws);
+        else if (!isTerminalSocket(ws)) hostLinkSocket.drain(asLink(ws));
+      },
+      close: (ws: ServerSocket, code: number) => {
+        if (isBrowserSocket(ws)) browserLink.close(ws, code);
+        else if (isTerminalSocket(ws)) terminalAttachSocket.close(ws);
+        else hostLinkSocket.close(asLink(ws));
+      },
     },
     fetch: async (request, server) => {
       const response = await handle(request, server, async ({ gate }) => {

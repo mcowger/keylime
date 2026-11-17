@@ -18,6 +18,12 @@ export const BrowserFrameSchema = Type.Object(BrowserCaptureResultSchema.propert
 /** Lifecycle and upload operations in addition to session and workspace operations. */
 export const hostControlOperations: readonly OperationContract[] = [
   {
+    name: "ptySessions",
+    description: "Usage: List live session terminals on this host.\nInputs: No arguments.\nInvariants: Includes idle PTYs, not just active turns.\nEffects: None.\nRecovery: Retry after the host reconnects.",
+    args: empty,
+    result: Type.Array(Type.String()),
+  },
+  {
     name: "browserList",
     description: "Usage: Discover browser tabs belonging to an already-live session.\nInputs: Supply its exact session ID.\nInvariants: Never starts or attaches a runner or browser.\nEffects: Queries the session's runner.\nRecovery: Rediscover after reconnect or session changes.",
     args: Type.Object({ sessionId: Type.String() }),

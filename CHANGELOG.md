@@ -15,6 +15,9 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Seeded development sessions include a long conversation for checking transcript loading.
 - The composer highlights file mentions, slash commands and inline code while keeping draft text editable and copyable.
 - Ship shows commit-planning stages as progress steps, with live agent activity, and hides skipped execution steps.
+- `klc` connects a native terminal to shared Keylime sessions, with a searchable session picker and remote host access.
+- `klc` resumes sessions on the selected host, preserves the terminal screen when showing notices, and restores input modes on exit. Client archives include native third-party notices.
+- Ship shows live commit-planning stages and agent activity while generating a proposal.
 - Non-image attachments are uploaded as files instead of being inserted into the model's prompt, regardless of type or size.
 - New local chats offer global skills in slash completion before a session or workspace starts.
 - Seeded development sessions include an agent chat exchange for checking incoming and outgoing Markdown.
@@ -97,6 +100,10 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Earlier-history pages omit repeated navigation trees, reducing transfer and processing for long sessions
 - Earlier-history backfill assembles pages in linear time instead of repeatedly copying accumulated messages
 - Seeded development sessions include a long conversation for checking transcript loading
+- `klc` connects a native terminal to shared Keylime sessions, with a searchable session picker and remote host access
+- `klc` resumes sessions on the selected host, preserves the terminal screen when showing notices, and restores input modes on exit. Client archives include native third-party notices
+- Host daemons expose their PTY sessions over the link and serve a connection-scoped terminal attach stream for native clients
+- Attached terminals block Ctrl-D, repeated Ctrl-C and interrupts inside pasted text so they cannot end the agent session
 
 ### Changed
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.
@@ -136,6 +143,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Session lifecycle treats an attached terminal as active, preventing idle shutdown while someone is attached
 - Question form buttons use larger tap targets with a minimum width
 - Session reads request a tail page with a history revision and return 409 session_history_changed when the file or active cursor moves
+- `keylime attach` was replaced by the standalone `klc` client; session binding is scoped to each host connection
 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen

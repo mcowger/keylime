@@ -9,9 +9,10 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 // to the predicate, so a query can never leak to an attached physical terminal.
 class ControlFilter {
   private pending = "";
-  constructor(private drop: (sequence: string) => boolean) {}
+  private inPaste = false;
+  constructor(private drop: (sequence: string) => boolean, private preservePaste = false, private onPasteControl?: (char: string) => boolean) {}
   flushEscape(): string {
-    if (this.pending !== "\x1b") return "";
+    if (this.inPaste || this.pending !== "\x1b") return "";
     this.pending = "";
     return "\x1b";
   }
@@ -20,6 +21,15 @@ class ControlFilter {
     this.pending = "";
     let result = "";
     for (let i = 0; i < text.length;) {
+      if (this.inPaste) {
+        const end = "\x1b[201~";
+        const remaining = text.slice(i);
+        if (remaining.length < end.length && end.startsWith(remaining)) { this.pending = remaining; break; }
+        if (text.startsWith(end, i)) { result += end; i += end.length; this.inPaste = false; continue; }
+        if (!this.onPasteControl?.(text[i])) result += text[i];
+        i++;
+        continue;
+      }
       if (text[i] !== "\x1b") { result += text[i++]; continue; }
       const start = i++;
       if (i === text.length) { this.pending = text.slice(start); break; }
@@ -42,6 +52,7 @@ class ControlFilter {
         i++;
       }
       const sequence = text.slice(start, i);
+      if (this.preservePaste && sequence === "\x1b[200~") this.inPaste = true;
       if (!this.drop(sequence)) result += sequence;
     }
     return result;
@@ -116,6 +127,7 @@ function installColorReplies(screen: Terminal, reply: (data: string) => void): v
 type Entry = {
   runtimeId: string; process: Bun.Subprocess; screen: Terminal; serializer: SerializeAddon;
   decoder: TextDecoder; filter: ControlFilter; clients: Set<Socket>; ready: Set<Socket>; cursor: number; closed: boolean;
+  lastInterrupt?: number;
 };
 const send = (socket: Socket, message: object) => { if (socket.writable) socket.write(JSON.stringify(message) + "\n"); };
 
@@ -125,7 +137,7 @@ export class SessionPtyManager {
   private sessions = new Map<string, string>();
   private sockets = new Set<Socket>();
   private closed = false;
-  constructor(private socketPath: string, private onAttachmentChange: (runtimeId: string, attached: boolean) => void) {}
+  constructor(private socketPath: string, private onAttachmentChange: (runtimeId: string, attached: boolean) => void, private now: () => number = () => performance.now()) {}
 
   async start(): Promise<void> {
     if (this.closed || this.server) throw new Error("PTY manager is closed or already started");
@@ -194,11 +206,23 @@ export class SessionPtyManager {
     this.sessions.set(sessionId, runtimeId);
   }
 
+  listSessions(): string[] {
+    return [...this.sessions].filter(([, runtime]) => {
+      const entry = this.entries.get(runtime);
+      return entry !== undefined && !entry.closed;
+    }).map(([session]) => session);
+  }
+
   private connect(socket: Socket): void {
     this.sockets.add(socket);
     const lines = createInterface({ input: socket });
     let entry: Entry | undefined;
-    const inputFilter = new ControlFilter(inputReply);
+    let blockedPasteEof = false, blockedPasteInterrupt = false;
+    const inputFilter = new ControlFilter(inputReply, true, (char) => {
+      if (char === "\x04") { blockedPasteEof = true; return true; }
+      if (char === "\x03") { blockedPasteInterrupt = true; return true; }
+      return false;
+    });
     let escapeTimer: NodeJS.Timeout | undefined;
     const timer = setTimeout(() => socket.destroy(), 10000);
     socket.on("error", () => {});
@@ -232,7 +256,23 @@ export class SessionPtyManager {
           });
         } else if (message.type === "input" && typeof message.data === "string") {
           clearTimeout(escapeTimer);
-          const data = inputFilter.push(message.data); if (data) entry.process.terminal?.write(data);
+          blockedPasteEof = false; blockedPasteInterrupt = false;
+          const filtered = inputFilter.push(message.data);
+          let data = "", blockedEof = false, blockedInterrupt = false;
+          for (const char of filtered) {
+            if (char === "\x04") { blockedEof = true; continue; }
+            if (char === "\x03") {
+              const now = this.now();
+              const repeated = entry.lastInterrupt !== undefined && now - entry.lastInterrupt <= 500;
+              entry.lastInterrupt = now;
+              if (repeated) { blockedInterrupt = true; continue; }
+            }
+            data += char;
+          }
+          if (data) entry.process.terminal?.write(data);
+          if (blockedEof || blockedPasteEof) send(socket, { type: "notice", message: "Ctrl-D is blocked. Press Ctrl-] to detach or use /quit to end the session." });
+          if (blockedInterrupt) send(socket, { type: "notice", message: "Repeated Ctrl-C is blocked. Press Ctrl-] to detach or use /quit to end the session." });
+          if (blockedPasteInterrupt) send(socket, { type: "notice", message: "Ctrl-C in pasted text is blocked. Press Ctrl-] to detach or use /quit to end the session." });
           const target = entry;
           escapeTimer = setTimeout(() => { const escape = inputFilter.flushEscape(); if (escape && !target.closed) target.process.terminal?.write(escape); }, 50);
         } else if (message.type === "resize" && Number.isInteger(message.cols) && Number.isInteger(message.rows) && message.cols >= 2 && message.cols <= 1000 && message.rows >= 2 && message.rows <= 1000) {

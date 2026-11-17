@@ -52,6 +52,12 @@
         "HostLinkPong": {
           "$ref": "#/components/messages/HostLinkPong"
         },
+        "HostLinkPtyAttach": {
+          "$ref": "#/components/messages/HostLinkPtyAttach"
+        },
+        "HostLinkPtyEvent": {
+          "$ref": "#/components/messages/HostLinkPtyEvent"
+        },
         "HostLinkRequest": {
           "$ref": "#/components/messages/HostLinkRequest"
         },
@@ -210,6 +216,9 @@
         },
         "HostReply_openFile": {
           "$ref": "#/components/messages/HostReply_openFile"
+        },
+        "HostReply_ptySessions": {
+          "$ref": "#/components/messages/HostReply_ptySessions"
         },
         "HostReply_publishUpload": {
           "$ref": "#/components/messages/HostReply_publishUpload"
@@ -435,6 +444,9 @@
         },
         "HostRequest_openFile": {
           "$ref": "#/components/messages/HostRequest_openFile"
+        },
+        "HostRequest_ptySessions": {
+          "$ref": "#/components/messages/HostRequest_ptySessions"
         },
         "HostRequest_publishUpload": {
           "$ref": "#/components/messages/HostRequest_publishUpload"
@@ -674,6 +686,24 @@
           "$ref": "#/components/schemas/HostLinkPong"
         },
         "title": "HostLinkPong"
+      },
+      "HostLinkPtyAttach": {
+        "contentType": "application/json",
+        "description": "Connection-scoped terminal frame, sent once and never replayed.",
+        "name": "HostLinkPtyAttach",
+        "payload": {
+          "$ref": "#/components/schemas/HostLinkPtyAttach"
+        },
+        "title": "HostLinkPtyAttach"
+      },
+      "HostLinkPtyEvent": {
+        "contentType": "application/json",
+        "description": "Connection-scoped terminal event, sent once and never replayed.",
+        "name": "HostLinkPtyEvent",
+        "payload": {
+          "$ref": "#/components/schemas/HostLinkPtyEvent"
+        },
+        "title": "HostLinkPtyEvent"
       },
       "HostLinkRequest": {
         "contentType": "application/json",
@@ -1268,6 +1298,18 @@
           "$ref": "#/components/schemas/HostReply_openFile"
         },
         "title": "HostReply_openFile"
+      },
+      "HostReply_ptySessions": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Reply to ptySessions; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: List live session terminals on this host.\nInputs: No arguments.\nInvariants: Includes idle PTYs, not just active turns.\nEffects: None.\nRecovery: Retry after the host reconnects.",
+        "name": "HostReply_ptySessions",
+        "payload": {
+          "$ref": "#/components/schemas/HostReply_ptySessions"
+        },
+        "title": "HostReply_ptySessions"
       },
       "HostReply_publishUpload": {
         "contentType": "application/json",
@@ -2168,6 +2210,18 @@
           "$ref": "#/components/schemas/HostRequest_openFile"
         },
         "title": "HostRequest_openFile"
+      },
+      "HostRequest_ptySessions": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: List live session terminals on this host.\nInputs: No arguments.\nInvariants: Includes idle PTYs, not just active turns.\nEffects: None.\nRecovery: Retry after the host reconnects.",
+        "name": "HostRequest_ptySessions",
+        "payload": {
+          "$ref": "#/components/schemas/HostRequest_ptySessions"
+        },
+        "title": "HostRequest_ptySessions"
       },
       "HostRequest_publishUpload": {
         "contentType": "application/json",
@@ -3207,6 +3261,45 @@
         },
         "required": ["type"],
         "title": "HostLinkPong",
+        "type": "object"
+      },
+      "HostLinkPtyAttach": {
+        "description": "Connection-scoped terminal frame, sent once and never replayed.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "payload": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "type": {
+            "const": "pty_attach",
+            "type": "string"
+          }
+        },
+        "required": ["type", "id", "sessionId", "payload"],
+        "title": "HostLinkPtyAttach",
+        "type": "object"
+      },
+      "HostLinkPtyEvent": {
+        "description": "Connection-scoped terminal event, sent once and never replayed.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "payload": {
+            "type": "string"
+          },
+          "type": {
+            "const": "pty_event",
+            "type": "string"
+          }
+        },
+        "required": ["type", "id", "payload"],
+        "title": "HostLinkPtyEvent",
         "type": "object"
       },
       "HostLinkRequest": {
@@ -51897,6 +51990,116 @@
         "description": "Reply to openFile; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Open a workspace file for chunked reading.\nInputs: File request identifies the host file and optional owner.\nInvariants: The target must be a file; changes can invalidate the reader.\nEffects: Allocates a host reader handle and returns its metadata.\nRecovery: On file_changed, close and reopen instead of combining chunks from different versions.",
         "title": "HostReply_openFile"
       },
+      "HostReply_ptySessions": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "result": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "result"],
+            "type": "object"
+          },
+          {
+            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
+            "properties": {
+              "blob": {
+                "properties": {
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["bytes"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "blob"],
+            "type": "object",
+            "x-decoded-result": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "properties": {
+              "error": {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number"
+                  }
+                },
+                "required": ["status", "code", "message"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Reply to ptySessions; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: List live session terminals on this host.\nInputs: No arguments.\nInvariants: Includes idle PTYs, not just active turns.\nEffects: None.\nRecovery: Retry after the host reconnects.",
+        "title": "HostReply_ptySessions"
+      },
       "HostReply_publishUpload": {
         "anyOf": [
           {
@@ -77194,6 +77397,34 @@
         "title": "HostRequest_openFile",
         "type": "object"
       },
+      "HostRequest_ptySessions": {
+        "description": "Usage: List live session terminals on this host.\nInputs: No arguments.\nInvariants: Includes idle PTYs, not just active turns.\nEffects: None.\nRecovery: Retry after the host reconnects.",
+        "properties": {
+          "args": {
+            "properties": {},
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "const": "ptySessions",
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "const": "req",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "id", "op", "args"],
+        "title": "HostRequest_ptySessions",
+        "type": "object"
+      },
       "HostRequest_publishUpload": {
         "description": "Usage: Publish a staged upload into a host directory.\nInputs: id identifies the staged upload; name, conflict strategy and optional owner select the destination.\nInvariants: Protected targets are rejected and overwrite cannot replace directories or symbolic links.\nEffects: Publishes, overwrites, or skips the target according to conflict strategy.\nRecovery: upload_publish_uncertain means the outcome is indeterminate; inspect the target rather than blindly replaying.",
         "properties": {
@@ -79217,9 +79448,9 @@
   "defaultContentType": "application/json",
   "id": "urn:keylime:host-link",
   "info": {
-    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 11, minimum 11; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 75 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 12, minimum 12; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 76 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
     "title": "Host daemon link",
-    "version": "11"
+    "version": "12"
   },
   "operations": {
     "operation_addProject": {
@@ -80119,6 +80350,29 @@
       },
       "summary": "openFile"
     },
+    "operation_ptySessions": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: List live session terminals on this host.\nInputs: No arguments.\nInvariants: Includes idle PTYs, not just active turns.\nEffects: None.\nRecovery: Retry after the host reconnects.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/HostRequest_ptySessions"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/HostReply_ptySessions"
+          }
+        ]
+      },
+      "summary": "ptySessions"
+    },
     "operation_publishUpload": {
       "action": "send",
       "channel": {
@@ -80957,6 +81211,9 @@
           "$ref": "#/channels/link/messages/HostLinkHello"
         },
         {
+          "$ref": "#/channels/link/messages/HostLinkPtyEvent"
+        },
+        {
           "$ref": "#/channels/link/messages/HostLinkStdout"
         },
         {
@@ -81042,6 +81299,9 @@
         },
         {
           "$ref": "#/channels/link/messages/HostLinkRequest"
+        },
+        {
+          "$ref": "#/channels/link/messages/HostLinkPtyAttach"
         },
         {
           "$ref": "#/channels/link/messages/HostLinkPing"

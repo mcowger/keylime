@@ -152,6 +152,10 @@ export class DaemonLink {
   ): void {
     this.runtime.report(message);
   }
+  terminalEvent(id: string, payload: string): boolean {
+    return this.runtime.sendTerminal({ type: "pty_event", id, payload });
+  }
+  abortTerminalLink(): void { this.runtime.abortTerminalLink(); }
   queue(
     body: Unsequenced<UpMessage>,
     key: string,
@@ -271,6 +275,16 @@ function linkRuntime(owner: DaemonLink, deps: LinkDeps) {
     inFlightBytes += bytes;
     ackOwed = false;
     appliedSince = 0;
+    return true;
+  }
+  function sendTerminal(message: Extract<UpMessage, { type: "pty_event" }>): boolean {
+    const ws = linked;
+    if (stopped || !ws || ws.readyState !== 1 || ws.bufferedAmount >= SEND_BUFFER_BYTES || inFlightBytes >= LINK_LIMITS.unackedBytes) return false;
+    const data = encodeLine({ type: "ack", ack: down.acked }) + encodeLine(message);
+    const bytes = Buffer.byteLength(data);
+    if (bytes > LINK_LIMITS.maxLineBytes) return false;
+    ws.send(data);
+    inFlight.push(bytes); inFlightBytes += bytes; ackOwed = false; appliedSince = 0;
     return true;
   }
 
@@ -562,6 +576,9 @@ function linkRuntime(owner: DaemonLink, deps: LinkDeps) {
         acked(message.ack);
         flush();
         return;
+      case "pty_attach":
+        deps.handleDown(owner, message);
+        return;
       case "unknown":
         if (message.seq !== null) down.applied(message.seq);
         {
@@ -827,6 +844,8 @@ function linkRuntime(owner: DaemonLink, deps: LinkDeps) {
     discard,
     result,
     report,
+    sendTerminal,
+    abortTerminalLink: () => linked?.close(1011, "terminal backpressure"),
     busy: () => reliablePending > 0,
     ackedDown: () => down.acked,
     isUp: () => linked !== null && !stopped,

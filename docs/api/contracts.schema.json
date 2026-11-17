@@ -5619,7 +5619,13 @@
       "type": "object"
     },
     "agent_get_state_args": {
-      "properties": {},
+      "properties": {
+        "hostId": {
+          "description": "Host holding the session to resume.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
       "type": "object"
     },
     "agent_get_state_result": {
@@ -31360,6 +31366,27 @@
           "type": "object"
         },
         {
+          "description": "Connection-scoped terminal frame, sent once and never replayed.",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "payload": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "type": {
+              "const": "pty_attach",
+              "type": "string"
+            }
+          },
+          "required": ["type", "id", "sessionId", "payload"],
+          "title": "HostLinkPtyAttach",
+          "type": "object"
+        },
+        {
           "description": "Unsequenced liveness ping.",
           "properties": {
             "type": {
@@ -34256,6 +34283,16 @@
       "required": ["type", "seq", "at", "end", "data"],
       "title": "HostLinkPart",
       "type": "object"
+    },
+    "host_ptySessions_args": {
+      "properties": {},
+      "type": "object"
+    },
+    "host_ptySessions_result": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
     },
     "host_publishUpload_args": {
       "properties": {
@@ -44297,6 +44334,24 @@
           "type": "object"
         },
         {
+          "description": "Connection-scoped terminal event, sent once and never replayed.",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "payload": {
+              "type": "string"
+            },
+            "type": {
+              "const": "pty_event",
+              "type": "string"
+            }
+          },
+          "required": ["type", "id", "payload"],
+          "title": "HostLinkPtyEvent",
+          "type": "object"
+        },
+        {
           "description": "Opaque runner stdout line for a child channel.",
           "properties": {
             "ch": {
@@ -48237,11 +48292,17 @@
               "type": "object"
             },
             {
-              "properties": {},
+              "properties": {
+                "hostId": {
+                  "description": "Host holding the session to resume.",
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
               "type": "object"
             }
           ],
-          "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Where the native operation returns undefined, the browser wrapper returns null.",
+          "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
           "title": "AgentCommand_get_state",
           "type": "object"
         },
@@ -125435,11 +125496,17 @@
                   "type": "object"
                 },
                 {
-                  "properties": {},
+                  "properties": {
+                    "hostId": {
+                      "description": "Host holding the session to resume.",
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
                   "type": "object"
                 }
               ],
-              "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Where the native operation returns undefined, the browser wrapper returns null.",
+              "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
               "title": "AgentCommand_get_state",
               "type": "object"
             },

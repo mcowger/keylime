@@ -15,6 +15,7 @@ import * as path from "node:path";
 import { USER_AGENT } from "@oh-my-pi/pi-utils/dirs";
 import { createJsonParsePlugin } from "../node_modules/@oh-my-pi/pi-coding-agent/scripts/json-parse-plugin";
 import { createLegacyPiVirtualModulePlugin } from "../node_modules/@oh-my-pi/pi-coding-agent/scripts/legacy-pi-virtual-module";
+import { embeddedAddonFiles } from "./embed-native";
 
 interface Target {
   /** Native addon platform tag (`process.platform`). */
@@ -54,7 +55,6 @@ const TARGETS: Record<string, Target> = {
 
 /** Never bundled: omp installs them on demand at runtime (upstream `COMPILED_EXTERNAL_DEPENDENCIES`). */
 const EXTERNAL = ["@huggingface/transformers", "fastembed", "onnxruntime-node"];
-const ADDON_ZSTD_LEVEL = 19;
 
 const runnerDir = path.resolve(import.meta.dir, "..");
 
@@ -64,105 +64,10 @@ function packageDir(name: string, from: string): string {
 }
 
 const codingAgentDir = packageDir("@oh-my-pi/pi-coding-agent", runnerDir);
-const nativesDir = await fs.realpath(
-  path.join(packageDir("@oh-my-pi/pi-natives", runnerDir), "native"),
-);
 const statsDir = await fs.realpath(
   packageDir("@oh-my-pi/omp-stats", codingAgentDir),
 );
 
-async function readVersion(manifestPath: string): Promise<string> {
-  const manifest: unknown = await Bun.file(manifestPath).json();
-  if (
-    typeof manifest !== "object" ||
-    manifest === null ||
-    !("version" in manifest)
-  ) {
-    throw new Error(`${manifestPath} has no version`);
-  }
-  return String(manifest.version);
-}
-
-/**
- * Replaces pi-natives' null `embedded-addon.js` with a manifest pointing at one zstd frame per addon
- * variant, which the loader extracts on first run (upstream `natives/scripts/embed-native.ts`).
- */
-async function embeddedAddonFiles(
-  target: Target,
-): Promise<Record<string, string | Uint8Array>> {
-  const platformTag = `${target.platform}-${target.arch}`;
-  const leafPackage = `@oh-my-pi/pi-natives-${platformTag}`;
-  let leafManifest: string;
-  try {
-    leafManifest = Bun.resolveSync(`${leafPackage}/package.json`, nativesDir);
-  } catch (error) {
-    throw new Error(
-      `${leafPackage} is not installed; run \`bun install --os=${target.platform} --cpu=${target.arch}\``,
-      { cause: error },
-    );
-  }
-  const version = await readVersion(
-    path.join(nativesDir, "..", "package.json"),
-  );
-  const leafVersion = await readVersion(leafManifest);
-  if (leafVersion !== version)
-    throw new Error(
-      `${leafPackage}@${leafVersion} does not match pi-natives@${version}`,
-    );
-
-  const leafDir = path.dirname(leafManifest);
-  const candidates =
-    target.arch === "x64"
-      ? [
-          {
-            variant: "modern",
-            filename: `pi_natives.${platformTag}-modern.node`,
-          },
-          {
-            variant: "baseline",
-            filename: `pi_natives.${platformTag}-baseline.node`,
-          },
-        ]
-      : [{ variant: "default", filename: `pi_natives.${platformTag}.node` }];
-  const present = new Set(await fs.readdir(leafDir));
-  const available = await Promise.all(
-    candidates
-      .filter((candidate) => present.has(candidate.filename))
-      .map(async (candidate) => ({
-        ...candidate,
-        bytes: await Bun.file(path.join(leafDir, candidate.filename)).bytes(),
-      })),
-  );
-  if (available.length === 0)
-    throw new Error(`${leafPackage} has no pi_natives addon in ${leafDir}`);
-
-  const frames = await Promise.all(
-    available.map(({ bytes }) =>
-      Bun.zstdCompress(bytes, { level: ADDON_ZSTD_LEVEL }),
-    ),
-  );
-  const imports = available.map(
-    ({ filename }, index) =>
-      `import zstdPath${index} from ${JSON.stringify(`./${filename}.zst`)} with { type: "file" };`,
-  );
-  const files = available.map(
-    ({ variant, filename, bytes }, index) =>
-      `{ variant: ${JSON.stringify(variant)}, filename: ${JSON.stringify(filename)}, size: ${bytes.length}, zstdPath: zstdPath${index} }`,
-  );
-  const overrides: Record<string, string | Uint8Array> = {
-    [path.join(nativesDir, "embedded-addon.js")]: `${imports.join("\n")}
-export const embeddedAddon = {
-	platformTag: ${JSON.stringify(platformTag)},
-	version: ${JSON.stringify(version)},
-	files: [${files.join(", ")}],
-};
-`,
-  };
-  available.forEach(({ filename }, index) => {
-    overrides[path.join(nativesDir, `${filename}.zst`)] = frames[index];
-  });
-  return overrides;
-}
 
 /** The `omp stats` dashboard as the base64 gzip tar omp-stats serves when compiled (upstream `gen:stats`). */
 async function embeddedStatsClient(): Promise<Record<string, string>> {

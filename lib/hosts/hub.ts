@@ -1,4 +1,5 @@
 import type { TerminalEvent } from "../terminal-types";
+import { TerminalAttachServerSchema, type TerminalAttachServer } from "../api-contracts/terminal-attach";
 // Main-server end of the host link (spec "Link protocol"): accepts `keylime
 // host` daemons on /api/hosts/link and exposes each linked machine as a
 // `RemoteHost`. Everything a daemon sends is untrusted input.
@@ -231,6 +232,7 @@ interface HubState {
   uploadListeners: Set<(hostId: string, ack: UploadAck | null) => void>;
   fileListeners: Map<string, (event: WorkspaceFileEvent) => void>;
   terminalListeners: Map<string, Set<(event: TerminalEvent) => void>>;
+  ptyListeners: Map<string, (event: TerminalAttachServer | null) => void>;
   /** The master's configuration version as last computed (null after a failure), and that failure. */
   masterConfig: { version: string | null; error: MasterConfigError | null };
   /** startClusterConfigSync's 30 s timer. */
@@ -253,6 +255,7 @@ function hub(): HubState {
     uploadListeners: new Set(),
     fileListeners: new Map(),
     terminalListeners: new Map(),
+    ptyListeners: new Map(),
     masterConfig: { version: null, error: null },
     configSync: undefined,
   };
@@ -264,6 +267,7 @@ function hub(): HubState {
   };
   globalThis.__ompHostHub.uploadListeners ??= new Set();
   globalThis.__ompHostHub.fileListeners ??= new Map();
+  globalThis.__ompHostHub.ptyListeners ??= new Map();
   globalThis.__ompHostHub.terminalListeners ??= new Map();
   globalThis.__ompHostHub.sessionChangeListeners ??= new Set();
   globalThis.__ompHostHub.masterConfig ??= { version: null, error: null };
@@ -311,8 +315,31 @@ export function onWorkspaceFile(
   };
 }
 
+/** Attachments are tied to one host-link incarnation and never resumed. */
+export function onPtyEvent(hostId: string, id: string, listener: (event: TerminalAttachServer | null) => void): () => void {
+  const key = JSON.stringify([hostId, id]);
+  hub().ptyListeners.set(key, listener);
+  return () => { if (hub().ptyListeners.get(key) === listener) hub().ptyListeners.delete(key); };
+}
+export function sendPtyFrame(hostId: string, id: string, sessionId: string, payload: string): boolean {
+  const link = hub().links.get(hostId);
+  if (!link?.socket || !isLinkUp(link.status) || hub().frozen) return false;
+  if (link.awaitingDrain) { link.socket.terminate(); return false; }
+  const sent = link.socket.send(encodeLine({ type: "pty_attach", id, sessionId, payload }));
+  if (sent <= 0) { link.socket.terminate(); return false; }
+  return true;
+}
+export async function hostPtySessions(hostId: string): Promise<string[]> {
+  const result = await request(hostId, "ptySessions", {});
+  if (!Array.isArray(result) || !result.every((id) => typeof id === "string" && isValidSessionId(id))) throw new HostOpError(502, "invalid_pty_sessions", "Invalid terminal session inventory from host");
+  return result;
+}
+
 function endWorkspaceWatches(hostId: string): void {
   const terminalPrefix = `${JSON.stringify([hostId]).slice(0, -1)},`;
+  for (const [key, listener] of hub().ptyListeners) {
+    if (key.startsWith(terminalPrefix)) { hub().ptyListeners.delete(key); listener(null); }
+  }
   for (const [key, listeners] of hub().terminalListeners) {
     if (!key.startsWith(terminalPrefix)) continue;
     hub().terminalListeners.delete(key);
@@ -1165,6 +1192,16 @@ function applyUp(
   if (message.type === "config_state") {
     link.configReported = true;
     noteConfigState(link, message.state, message.owned);
+    return;
+  }
+  if (message.type === "pty_event") {
+    const listener = hub().ptyListeners.get(JSON.stringify([link.id, message.id]));
+    if (!listener) return;
+    try {
+      const event: unknown = JSON.parse(message.payload);
+      if (!Value.Check(TerminalAttachServerSchema, event)) throw new Error("Invalid terminal event");
+      listener(event);
+    } catch { listener(null); }
     return;
   }
   if (message.type === "unknown") {

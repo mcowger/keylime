@@ -23,7 +23,7 @@ export function bundledPackageDirs(
   return [...dirs].sort();
 }
 
-const LICENSE_FILE = /^(licen[cs]e|copying|notice)([.-]|$)/i;
+const LICENSE_FILE = /^(licen[cs]e|copying|notice|third-party-notices)([.-]|$)/i;
 
 /**
  * `<out>/licenses/`: Bun's license as bun/LICENSE.md, each package's license files under `<name>@<version>/`, and a
@@ -33,11 +33,12 @@ export function writeLicenses(
   out: string,
   packageDirs: string[],
   bunLicense: string,
+  binary: "keylime" | "klc" = "keylime",
 ): void {
   const dir = path.join(out, "licenses");
   cpSync(bunLicense, path.join(dir, "bun", "LICENSE.md"));
   const rows = [
-    `| Bun (the runtime in \`keylime\`) | ${Bun.version} | MIT; JavaScriptCore and WebKit LGPL-2; see the file for the rest | bun/LICENSE.md |`,
+    `| Bun (the runtime in \`${binary}\`) | ${Bun.version} | MIT; JavaScriptCore and WebKit LGPL-2; see the file for the rest | bun/LICENSE.md |`,
   ];
   const seen = new Set<string>();
   for (const packageDir of packageDirs) {
@@ -67,9 +68,15 @@ export function writeLicenses(
     [
       "# Third-party licenses",
       "",
-      "keylime itself is MIT-licensed (`../LICENSE`). The `keylime` program embeds the Bun runtime and the npm packages below,",
-      "and `dist/` carries the ones the browser app bundles. Each directory here holds the license files its package ships.",
-      "The fonts' licenses are in `../app/fonts/`, and KaTeX's (for its CSS and fonts) is also in `../node_modules/katex/`.",
+      binary === "keylime"
+        ? "keylime itself is MIT-licensed (`../LICENSE`). The `keylime` program embeds the Bun runtime and the npm packages below,"
+        : "klc is MIT-licensed (`../LICENSE`). The `klc` program embeds the Bun runtime and the npm packages below.",
+      ...(binary === "keylime"
+        ? [
+            "and `dist/` carries the ones the browser app bundles. Each directory here holds the license files its package ships.",
+            "The fonts' licenses are in `../app/fonts/`, and KaTeX's (for its CSS and fonts) is also in `../node_modules/katex/`.",
+          ]
+        : ["Each directory here holds the license files its package ships."]),
       "",
       "| Package | Version | License | Files |",
       "|---|---|---|---|",

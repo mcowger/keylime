@@ -10,6 +10,7 @@ import type { SocketContract } from "../lib/api-contracts/types";
 import { hostLinkContract } from "../lib/api-contracts/host-link";
 import { completeBrowserLinkContract } from "../lib/api-contracts/browser-complete";
 import { runnerLinkContract } from "../lib/api-contracts/runner-link";
+import { terminalAttachContract } from "../lib/api-contracts/terminal-attach";
 import { hostHttpOperations } from "../lib/api-contracts/host-http";
 import { httpOperations } from "../lib/api-contracts/http";
 import { hostOperations } from "../lib/api-contracts/host-operations";
@@ -347,6 +348,9 @@ async function checkMessageCoverage(): Promise<void> {
   const declared: string[] = [];
   const emitted = new Set<string>();
   for await (const filename of new Bun.Glob("runner/src/**/*.ts").scan(root)) {
+    // klc is a separate terminal client packaged alongside the runner; its
+    // WebSocket frames belong to terminalAttachContract, not runnerLinkContract.
+    if (filename.replaceAll("\\", "/") === "runner/src/klc.ts") continue;
     const source = sourceFile(
       filename,
       await Bun.file(path.join(root, filename)).text(),
@@ -673,6 +677,7 @@ export async function generateApiDocs(check: boolean): Promise<void> {
     "web-http.openapi.json": httpDocument(semantics),
     "host-link.asyncapi.json": socketDocument(hostLinkContract),
     "browser-link.asyncapi.json": socketDocument(completeBrowserLinkContract),
+    "terminal-attach.asyncapi.json": socketDocument(terminalAttachContract),
     "runner-channel.asyncapi.json": socketDocument(runnerLinkContract),
     "contracts.schema.json": schemaDocument(),
   };

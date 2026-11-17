@@ -1,3 +1,5 @@
+import { createConnection, type Socket } from "node:net";
+import { TerminalAttachClientSchema, TerminalAttachServerSchema } from "../api-contracts/terminal-attach";
 import { lstatSync, realpathSync, mkdirSync, watch } from "node:fs";
 import { randomUUID } from "node:crypto";
 import type { SpawnResult } from "./host";
@@ -228,6 +230,47 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     channels.setTerminalAttached(runtimeId, on);
   });
   const ptyStarted = ptys.start();
+  const ptyAttachments = new Map<string, { link: DaemonLink; sessionId: string; socket: Socket }>();
+  function closePtyAttachments(link: DaemonLink): void {
+    for (const [id, attachment] of ptyAttachments) if (attachment.link === link) { ptyAttachments.delete(id); attachment.socket.destroy(); }
+  }
+  function ptyFrame(link: DaemonLink, id: string, sessionId: string, payload: string): void {
+    let message: unknown;
+    try { message = JSON.parse(payload); } catch { return; }
+    if (!Value.Check(TerminalAttachClientSchema, message)) return;
+    let attachment = ptyAttachments.get(id);
+    if (!attachment) {
+      if (message.type !== "hello") return;
+      const socket = createConnection(socketPath + ".attach");
+      attachment = { link, sessionId, socket };
+      ptyAttachments.set(id, attachment);
+      let buffer = "";
+      socket.setEncoding("utf8");
+      socket.on("data", (chunk: string) => {
+        buffer += chunk;
+        if (buffer.length > 8000000) { socket.destroy(); link.abortTerminalLink(); return; }
+        let end: number;
+        while ((end = buffer.indexOf("\n")) !== -1) {
+          const line = buffer.slice(0, end); buffer = buffer.slice(end + 1);
+          try {
+            const event: unknown = JSON.parse(line);
+            if (!Value.Check(TerminalAttachServerSchema, event) || !link.terminalEvent(id, line)) { socket.destroy(); link.abortTerminalLink(); return; }
+          } catch { socket.destroy(); link.abortTerminalLink(); return; }
+        }
+      });
+      socket.on("error", () => {});
+      socket.on("close", () => {
+        if (ptyAttachments.get(id)?.socket !== socket) return;
+        ptyAttachments.delete(id);
+        if (!link.terminalEvent(id, JSON.stringify({ type: "error", message: "Terminal attachment closed" }))) link.abortTerminalLink();
+      });
+      socket.write(JSON.stringify({ type: "hello", sessionId, cols: message.cols, rows: message.rows }) + "\n");
+      return;
+    }
+    if (attachment.link !== link || attachment.sessionId !== sessionId || message.type === "hello") return;
+    if (attachment.socket.writableLength + Buffer.byteLength(payload) > 262144) { attachment.socket.destroy(); link.abortTerminalLink(); return; }
+    attachment.socket.write(payload + "\n");
+  }
   const pendingPtys = new Map<number, { resolve(spawned: SpawnResult): void; reject(error: Error): void; kill(): void }>();
   const channels = new ChannelTable({
     spawn: async (launch) => {
@@ -646,6 +689,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
             "channels",
           );
         } else {
+          closePtyAttachments(link);
           services.get(link.id)?.onDisconnect();
           channels.linkDown(link);
         }
@@ -769,6 +813,9 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   ): void {
     try {
       switch (message.type) {
+        case "pty_attach":
+          ptyFrame(link, message.id, message.sessionId, message.payload);
+          return;
         case "stdin":
           channels.stdin(link, message.ch, message.line, drained);
           return;
@@ -865,7 +912,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     // Putting this host's own configuration back is not new work: a drained member can still leave its cluster.
     if (
       drained &&
-      !["closeFile", "unwatchFile", "cancelClone", "close"].includes(op) &&
+      !["closeFile", "unwatchFile", "cancelClone", "close", "ptySessions"].includes(op) &&
       !(op === "clusterConfig" && args.action === "restore")
     ) {
       throw new HostOpError(
@@ -960,6 +1007,8 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       return run(...WORKSPACE_OP_PARAMS[op].map((name) => args[name]));
     }
     switch (op) {
+      case "ptySessions":
+        return ptys.listSessions();
       case "browserList":
       case "browserCapture": {
         if (typeof args.sessionId !== "string" || !isValidSessionId(args.sessionId) ||

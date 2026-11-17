@@ -4901,6 +4901,8 @@ export async function startRpcSession(
   preparingCommand = false,
   /** Stable independent creation; never set for ordinary standalone starts or resumes. */
   creationId?: string,
+  /** Require reuse to stay on the requested host, including concurrent starts. */
+  requireHost = false,
 ): Promise<{ session: AgentSessionWrapper; realSessionId: string }> {
   const registry = getRegistry();
   const locks = getLocks();
@@ -4923,6 +4925,11 @@ export async function startRpcSession(
     await orphanExit(host.id, sessionId);
 
   const existing = registry.get(sessionId);
+  const checkHost = (session: AgentSessionWrapper) => {
+    if (requireHost && session.host.id !== host.id)
+      throw new WebRpcError("Session is active on another host", "session_host_conflict", "refused");
+  };
+  if (existing?.isAlive()) checkHost(existing);
   // Union semantics, matching the spawn below and the wrapper identity:
   // workspace advisor=true forces the flag on. The gate must compare this
   // same effective value — comparing the raw toggle would destroy+respawn a
@@ -4974,6 +4981,7 @@ export async function startRpcSession(
         candidate.sessionFile &&
         samePath(candidate.sessionFile, sessionFile)
       ) {
+        checkHost(candidate);
         registry.set(sessionId, candidate);
         notifyRunningChange({ refreshSessionList: true });
         return { session: candidate, realSessionId: candidate.sessionId };
@@ -4982,7 +4990,11 @@ export async function startRpcSession(
   }
 
   const inflight = locks.get(sessionId);
-  if (inflight) return inflight;
+  if (inflight) {
+    const result = await inflight;
+    checkHost(result.session);
+    return result;
+  }
 
   const starting = (async () => {
     // The wrapper needs the process and the process's onExit needs the wrapper;

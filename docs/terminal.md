@@ -2,30 +2,42 @@
 
 ## Status
 
-This is a proof of concept in the Keylime working tree, not a finished or deployed feature. It was implemented directly on `main`; move the changes to a feature branch before continuing. No automated tests, compatibility work, or release documentation were added as part of the proof.
+Keylime starts the native OMP TUI in a host-owned PTY. `klc` attaches through the web server, including when the terminal runs on another machine.
 
 The goal is one live OMP session that can be used from Keylime, the native OMP TUI, and eventually other clients at the same time. The proof starts the real OMP TUI in a PTY and exposes the same session through Keylime's existing structured channel. It does not modify upstream OMP, implement a new TUI, or require a terminal multiplexer.
 
+## Completion plan
+
+The implementation follows this design:
+
+- Ship `klc` as a standalone compiled client for macOS and glibc Linux on x64 and arm64. It connects to the Keylime web server, not directly to a host socket. A command-line URL overrides the environment; the default is `http://127.0.0.1:30177`. Remote plaintext requires an explicit insecure option.
+- Use the server's existing password login with an in-memory session cookie. The server authenticates the connection and routes terminal traffic to the owning host. Reconnect with a fresh screen snapshot and never replay input whose delivery is uncertain.
+- Use a terminal UI library for a searchable picker modeled on OMP's resume screen. Show running sessions by default; Tab cycles through archived and all sessions. Search title, project, workspace, host and ID. Identify unavailable hosts rather than hiding the incomplete inventory.
+- Resume inactive sessions and restore archived sessions through Keylime's existing safety checks. Create new blank sessions in registered workspaces with normal launch defaults, register them in the hierarchy and attach to their OMP composer.
+- Keep one PTY per session and share its screen, input and dimensions between terminal clients; the latest resize wins. `Ctrl-]` detaches to the picker and exits from the picker. `/quit` ends the shared runtime.
+- Block `Ctrl-D` and a rapid second `Ctrl-C` at the daemon's shared PTY input gate, including across clients and reconnects. Tell the user to detach with `Ctrl-]` or end the runtime with `/quit`. Blocking `Ctrl-D` also prevents its forward-delete behavior.
+- Cover creation, discovery, authentication, host routing, lifecycle, reconnect, concurrent clients, terminal control sequences, backpressure and failure paths with automated tests. Update API contracts and generated documents, release packaging and user documentation; verify the compiled client and the actual terminal interface.
+
 ## How to try it
 
-Start the updated Keylime host from this checkout and start or resume a session in Keylime. On the same host, in a terminal or an SSH session, run:
+Build the standalone client with `bun scripts/build-klc-binary.ts`, then run `klc` in a terminal:
 
 ```sh
-cd /Users/matt.cowger/workspace/keylime
-bun bin/keylime.ts attach <session-id>
+klc --url https://keylime.example.com
+klc --url https://keylime.example.com --host HOST SESSION_ID
 ```
 
-`Ctrl-]` detaches without intentionally ending the session. Quitting OMP itself ends that runtime for all attached clients. An installed Keylime binary must be rebuilt before it can contain these changes; the proof used the checkout and the existing compiled `keylime-omp` runner.
+`KEYLIME_URL` supplies the server URL when `--url` is absent; the default is `http://127.0.0.1:30177`. Remote HTTP requires `--insecure`. When password authentication is enabled, the client prompts without echo and keeps the session cookie only in memory. Use a trusted TLS endpoint: the insecure option sends terminal traffic and credentials without encryption.
 
-The attach command requires a TTY and access to the host daemon's local Unix socket. It is not a TCP/WebSocket remote terminal client. A session must have been started by the updated daemon's PTY launch path; this command does not attach the TUI to an already-running headless process, a stock OMP process, or an arbitrary session file.
+The picker searches sessions across linked hosts. Tab changes the session view; Ctrl-N lists registered workspaces, including non-default worktrees, for creating a blank session. `Ctrl-]` detaches to the picker, then exits from the picker. `/quit` ends the shared runtime for every client. `Ctrl-D` and a rapid second `Ctrl-C` are blocked at the host PTY input gate.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    Web[Keylime web] --> Broker[Keylime host daemon]
-    VSCode[Future VS Code client] -. structured API .-> Broker
-    Attach[Native attach client] -->|Unix socket: terminal data| Broker
+    Attach[klc] -->|authenticated WebSocket| Web[Keylime web]
+    Web -->|host link| Broker[Keylime host daemon]
+    VSCode[Future VS Code client] -. structured API .-> Web
     Broker -->|HostChannel: commands and events| Runner[keylime-omp: one AgentSession and TUI]
     Broker -->|PTY input and resize| Runner
     Runner -->|PTY output| Broker
@@ -49,9 +61,9 @@ A failed or timed-out launch terminates its child. The daemon owns managed PTY p
 
 `lib/hosts/session-pty.ts` owns each PTY, an `@xterm/headless` screen, a serializer, and its attached sockets. It starts at 80 columns by 24 rows with `TERM=xterm-256color` and `COLORTERM=truecolor`. The first attach supplies the client dimensions and resizes both the screen and PTY.
 
-The emulator consumes output continuously, even with no native terminal attached. On attach, the manager drains queued screen writes, resizes, serializes the current screen, and sends a snapshot before adding the socket to live output delivery. Output messages and snapshots include a cursor. The current client writes frames in order; it does not implement cursor-based replay or recovery.
+The emulator consumes output continuously, even with no native terminal attached. On attach, the manager drains queued screen writes, resizes, serializes the current screen, and sends a snapshot before adding the socket to live output delivery. A reconnect takes a fresh snapshot rather than replaying uncertain input.
 
-`bin/keylime-attach.ts` switches the local TTY to raw mode, enters the alternate screen, writes the snapshot and later output, forwards input and resize events, and restores terminal state on detach or exit. `bin/keylime.ts` dispatches the `attach` subcommand.
+`runner/src/klc.ts` provides the picker and terminal client. It restores local terminal state on detach or exit.
 
 ### Terminal queries and capabilities
 
@@ -67,7 +79,7 @@ This proof reuses Keylime's runner-to-host NDJSON protocol; it does **not** add 
 
 The important change is transport topology: daemon-spawned sessions now have a PTY for the TUI and use the runner's Unix-socket `HostChannel`, rather than the headless runner's stdio channel. `runner/src/channel.ts` documents the existing frames.
 
-### New local attachment protocol
+### Host-local attachment protocol
 
 The daemon listens at the OMP host socket path plus `.attach`. The normal host socket is `KEYLIME_HOST_SOCKET` when set, otherwise `<XDG_RUNTIME_DIR or OS temp dir>/keylime/host.sock`. The attachment socket and its directory are restricted to the host user; this is local filesystem access control, not a network authentication protocol.
 
@@ -83,13 +95,13 @@ The attachment connection is newline-delimited JSON. The current messages are:
 | Client → daemon | `{ "type": "detach" }` | Close this attachment, not the OMP process. |
 | Daemon → client | `{ "type": "exit", "code": 0 }` or `{ "type": "error", "message": "…" }` | Report process exit or an attachment error. |
 
-This protocol is internal to the proof: there is no version negotiation, network listener, reconnect protocol, or public client SDK. A separate remote client would need an authenticated transport and a way to resolve the correct host and runtime; merely forwarding this local socket to a network is not a complete security design.
+The local protocol is private to the daemon. The web server bridges authenticated `klc` WebSockets at `/api/terminal/attach` to the owning host through host link v12. The network protocol has a versioned hello and is documented in `docs/api/terminal-attach.asyncapi.json`. Each reconnection starts a new attachment and snapshot; input is not replayed.
 
 ## Other clients
 
 A VS Code extension should normally use the **structured Keylime interface**, not the terminal attachment protocol. It can submit session commands through `POST /api/agent/[id]` and consume the existing event-stream subscription machinery. `GET /api/events` opens an SSE connection, and `POST /api/events` attaches subscriptions to that connection; subscribing alone observes an existing managed session and does not start one. See `app/api/agent/[id]/route.ts`, `app/api/events/route.ts`, and `lib/event-stream-protocol.ts` for the actual contracts.
 
-A future client needs session discovery, authentication, snapshots/reconnect, command correlation, and handling for interactive UI requests. These are client-integration tasks, not reasons to start another OMP process. The current proof has **not** implemented or tested a VS Code client. A terminal-style remote client could instead speak the attachment protocol over a suitably secured transport, but would inherit its shared-screen and terminal-fidelity limits.
+The VS Code client has not been implemented or tested. A terminal-style client can use the attachment protocol, with its shared-screen and terminal-fidelity limits.
 
 ## Lifecycle
 
@@ -107,14 +119,5 @@ An isolated Keylime web server and host were started from the checkout, using th
 - Resizing, `Ctrl-]` detach, continued browser use, and reattachment to the current screen.
 - Idle and abandoned lifecycle protection with shortened timers, followed by normal reaping after detach.
 
-The native attachment was exercised in a PTY with a headless terminal emulator, not across a matrix of physical terminals. The first isolated run encountered provider setup and an unrelated provider credit error; the successful exchange used a configured real provider. No automated test suite, production binary build, network attachment, VS Code client, or full terminal-capability matrix was run.
+This was proof-of-concept verification using a headless terminal emulator, not a physical-terminal compatibility matrix.
 
-## Next steps
-
-1. Move the uncommitted proof off `main` to a feature branch, then review the implementation and decide whether PTY-backed launch should be the default or an explicit mode.
-2. Add focused integration coverage for browser-first and terminal-first flows, one runtime per session, launch/hello races, session switches, duplicate launches, failures, shutdown, and reattachment. Exercise terminal input and structured commands concurrently.
-3. Test lifecycle with real attachment/disconnection, multiple clients, idle and abandoned deadlines, explicit shutdown, and host/runner crashes. Verify that first-answer-wins dialogs dismiss correctly on every interface.
-4. Test the terminal protocol across real terminal emulators and fragmented control sequences. Cover resize, snapshots and mode restoration, keyboard shortcuts, paste, mouse, clipboard, images, output backpressure, slow clients, and reconnect. Decide how to handle multiple terminals with different sizes.
-5. Define the attachment protocol's versioning, limits, authentication, session discovery, and remote transport before exposing it outside the local host. Preserve the single query responder and verify that filtered sequences cannot cause duplicate replies or lost input.
-6. Verify structured-client behavior for VS Code, including history, live updates, command responses, dialogs, disconnect/reconnect, and session changes. Publish a stable client-facing API only after those contracts are settled.
-7. Update user and developer documentation, CLI help, API/protocol documentation, and changelog; build and smoke-test source and packaged installations before deployment. No release artifacts were built for this proof.

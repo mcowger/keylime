@@ -56,6 +56,12 @@ fetches the pinned runner packages and installs native dependencies for all
 targets. Passing `--no-runner` omits the runner from each archive, so it must be
 available from the matching release when fetched.
 
+Build the standalone terminal client for the current platform with
+`bun scripts/build-klc-binary.ts`. It writes `release/klc-<os>-<arch>.tar.gz`;
+the archive contains `klc` and its licenses, not the server or browser assets.
+The executable embeds Bun, so users don't need Bun installed. The four-target
+release script builds these client archives alongside the web archives.
+
 ## Runtime and upgrades
 
 Keylime runs on Bun, not Next.js. The web server defaults to `127.0.0.1:30177`;

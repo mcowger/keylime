@@ -516,6 +516,47 @@ for (const originalPresent of [true, false]) {
   });
 }
 
+test("get_state resumes on the explicitly selected host and strips the routing hint", async (t) => {
+  useRegistry(t);
+  const remote = await linkHost("Selected session host");
+  t.after(() => hub.closeHostLink(remote.id));
+  const remoteSpawns: Launch[] = [];
+  const remoteSession = { ...listedSession(SAVED_ID), path: `/remote/selected/${SAVED_ID}.jsonl` };
+  remote.serve(
+    {
+      open: openOp(remoteSpawns),
+      listSessions: () => [remoteSession],
+      sessionFileExists: () => true,
+      invalidateSessionLists: () => null,
+    },
+    (message) => message.type === "kill"
+      ? remote.post({ type: "exit", ch: message.ch, code: null, signal: "SIGTERM" })
+      : respond(message, remote),
+  );
+  await jsonOf(await post(SAVED_ID, { type: "get_state", hostId: remote.id }));
+  assert.equal(spawns.length, 0);
+  assert.equal(remoteSpawns.length, 1);
+  assert.equal(remoteSpawns[0].sessionFile, remoteSession.path);
+  assert.equal(getRpcSession(SAVED_ID)?.host.id, remote.id);
+  assert.ok(stdin.some((command) => command.type === "get_state"));
+  assert.ok(stdin.every((command) => !("hostId" in command)));
+  const conflict = await jsonOf(await post(SAVED_ID, { type: "get_state", hostId: "local" }), 409);
+  assert.equal(conflict.code, "session_host_conflict");
+  assert.equal(spawns.length, 0);
+  assert.equal(remoteSpawns.length, 1);
+});
+
+test("get_state refuses unknown hosts and sessions absent on the selected host", async (t) => {
+  useRegistry(t);
+  const unknown = await jsonOf(await post(SAVED_ID, { type: "get_state", hostId: "missing-host" }), 404);
+  assert.equal(unknown.code, "host_not_found");
+  child.sessions = [];
+  invalidateHostSessionList("local");
+  const missing = await jsonOf(await post(SAVED_ID, { type: "get_state", hostId: "local" }), 404);
+  assert.equal(missing.code, "session_not_found");
+  assert.equal(spawns.length, 0);
+});
+
 test("an Advisor replacement through a remote startup alias stays on its host when the moved ID also exists locally", async (t) => {
   useRegistry(t);
   const movedId = "01a0e6b0-d916-7610-8343-f4a766ba0053";

@@ -954,7 +954,7 @@
         }
       },
       "post": {
-        "description": "### Usage\n\nSend an RPC command or manage held messages for an existing session.\n\n### Inputs\n\nThe bounded JSON body needs a nonempty type; advisor=1 selects the advisor spawn flag. Upload proofs belong to the caller's web session and are attached before sending.\n\n### Invariants\n\nOutbox commands are handled by the web outbox, not directly by omp: acceptance is not delivery. Status reconciliation accepts 1 to 32 unique client message IDs. Some background commands do not spawn a process.\n\n### Effects\n\nCommands may start or replace an idle RPC process, mutate session state, attach files, or queue and dispatch messages; response timing headers are milliseconds since epoch.\n\n### Recovery\n\nOn uncertain delivery reconcile client message IDs and inspect session/outbox state before resending; a transport failure does not prove the command was not executed.\n\n### Additional protocol details\n\nCommands are forwarded to the agent, except web-owned outbox and status commands. Timing headers report request receipt and response time.",
+        "description": "### Usage\n\nSend an RPC command or manage held messages for an existing session.\n\n### Inputs\n\nThe bounded JSON body needs a nonempty type; advisor=1 selects the advisor spawn flag. For get_state only, optional hostId selects the session host and is not forwarded to omp. Upload proofs belong to the caller's web session and are attached before sending.\n\n### Invariants\n\nOutbox commands are handled by the web outbox, not directly by omp: acceptance is not delivery. Status reconciliation accepts 1 to 32 unique client message IDs. Some background commands do not spawn a process. An explicit get_state host conflicts with a live wrapper on another host and is refused.\n\n### Effects\n\nCommands may start or replace an idle RPC process, mutate session state, attach files, or queue and dispatch messages; response timing headers are milliseconds since epoch.\n\n### Recovery\n\nOn uncertain delivery reconcile client message IDs and inspect session/outbox state before resending; a transport failure does not prove the command was not executed.\n\n### Additional protocol details\n\nCommands are forwarded to the agent, except web-owned outbox and status commands. Timing headers report request receipt and response time.",
         "operationId": "sendAgentCommand",
         "parameters": [
           {
@@ -2651,11 +2651,17 @@
                         "type": "object"
                       },
                       {
-                        "properties": {},
+                        "properties": {
+                          "hostId": {
+                            "description": "Host holding the session to resume.",
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
                         "type": "object"
                       }
                     ],
-                    "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Where the native operation returns undefined, the browser wrapper returns null.",
+                    "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
                     "title": "AgentCommand_get_state",
                     "type": "object"
                   },
@@ -14469,8 +14475,8 @@
         "summary": "Send an agent command",
         "x-client-semantics": {
           "Effects": "Commands may start or replace an idle RPC process, mutate session state, attach files, or queue and dispatch messages; response timing headers are milliseconds since epoch.",
-          "Inputs": "The bounded JSON body needs a nonempty type; advisor=1 selects the advisor spawn flag. Upload proofs belong to the caller's web session and are attached before sending.",
-          "Invariants": "Outbox commands are handled by the web outbox, not directly by omp: acceptance is not delivery. Status reconciliation accepts 1 to 32 unique client message IDs. Some background commands do not spawn a process.",
+          "Inputs": "The bounded JSON body needs a nonempty type; advisor=1 selects the advisor spawn flag. For get_state only, optional hostId selects the session host and is not forwarded to omp. Upload proofs belong to the caller's web session and are attached before sending.",
+          "Invariants": "Outbox commands are handled by the web outbox, not directly by omp: acceptance is not delivery. Status reconciliation accepts 1 to 32 unique client message IDs. Some background commands do not spawn a process. An explicit get_state host conflicts with a live wrapper on another host and is refused.",
           "Recovery": "On uncertain delivery reconcile client message IDs and inspect session/outbox state before resending; a transport failure does not prove the command was not executed.",
           "Usage": "Send an RPC command or manage held messages for an existing session."
         }
@@ -16669,11 +16675,17 @@
                                 "type": "object"
                               },
                               {
-                                "properties": {},
+                                "properties": {
+                                  "hostId": {
+                                    "description": "Host holding the session to resume.",
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
                                 "type": "object"
                               }
                             ],
-                            "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Where the native operation returns undefined, the browser wrapper returns null.",
+                            "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
                             "title": "AgentCommand_get_state",
                             "type": "object"
                           },
@@ -44798,6 +44810,402 @@
           "Invariants": "Joining hosts must be ready and cannot hold another server's cluster configuration; the local master is added automatically when needed.",
           "Recovery": "Resolve readiness or ownership conflicts, retry a concurrent cluster change, or repair pool storage; daemon synchronization can apply a missed configuration later.",
           "Usage": "Join a linked remote host to this server's cluster."
+        }
+      }
+    },
+    "/api/hosts/{id}/terminal-sessions": {
+      "get": {
+        "description": "### Usage\n\nList live session terminals on a connected host, including idle sessions.\n\n### Inputs\n\nThe path identifies the owning host.\n\n### Invariants\n\nOnly sessions with a live bound PTY are returned.\n\n### Effects\n\nThis read does not start or attach to a session.\n\n### Recovery\n\nAn offline host returns an error; retry after it reconnects.",
+        "operationId": "getHostsIdTerminalSessions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "sessionIds": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": ["sessionIds"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request or rejected operation."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authentication is required when configured."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Origin, ownership or authorization policy refused this request."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The requested resource does not exist."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Conflict with current state or host capabilities."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request exceeds the endpoint's size limit."
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Content-Type must be application/json."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Too many active transcription jobs."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The operation failed."
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Speech transcription is not configured."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Upstream push or host request failed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The owning host or required service is unavailable."
+          }
+        },
+        "security": [
+          {
+            "webSession": []
+          },
+          {
+            "trustedProxy": []
+          },
+          {}
+        ],
+        "summary": "List live session terminals",
+        "x-client-semantics": {
+          "Effects": "This read does not start or attach to a session.",
+          "Inputs": "The path identifies the owning host.",
+          "Invariants": "Only sessions with a live bound PTY are returned.",
+          "Recovery": "An offline host returns an error; retry after it reconnects.",
+          "Usage": "List live session terminals on a connected host, including idle sessions."
         }
       }
     },
@@ -90589,6 +90997,413 @@
           "Invariants": "Audio is process-local and unavailable after claim, discard, expiry or restart; content type is restricted to bare audio types or octet-stream.",
           "Recovery": "Missing audio or job returns 404; recording browsers may retain local audio for recovery.",
           "Usage": "Play back retained audio for a live transcription job."
+        }
+      }
+    },
+    "/api/terminal/attach": {
+      "get": {
+        "description": "### Usage\n\nAttach an authenticated client to an existing session terminal.\n\n### Inputs\n\nhostId and sessionId identify the owning host and live session; the first frame is a version 1 hello.\n\n### Invariants\n\nInput belongs only to this socket and is never replayed. Reconnection starts with a fresh snapshot.\n\n### Effects\n\nInput and resize frames are forwarded to the host-owned PTY; detach closes only the attachment.\n\n### Recovery\n\nA disconnected or slow client reconnects and receives a new snapshot.",
+        "operationId": "getTerminalAttach",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "hostId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "No content."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request or rejected operation."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authentication is required when configured."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Origin, ownership or authorization policy refused this request."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The requested resource does not exist."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Conflict with current state or host capabilities."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request exceeds the endpoint's size limit."
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Content-Type must be application/json."
+          },
+          "426": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "WebSocket upgrade required."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Too many active transcription jobs."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The operation failed."
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Speech transcription is not configured."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Upstream push or host request failed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The owning host or required service is unavailable."
+          }
+        },
+        "security": [
+          {
+            "webSession": []
+          },
+          {
+            "trustedProxy": []
+          },
+          {}
+        ],
+        "summary": "Attach to a session terminal",
+        "x-client-semantics": {
+          "Effects": "Input and resize frames are forwarded to the host-owned PTY; detach closes only the attachment.",
+          "Inputs": "hostId and sessionId identify the owning host and live session; the first frame is a version 1 hello.",
+          "Invariants": "Input belongs only to this socket and is never replayed. Reconnection starts with a fresh snapshot.",
+          "Recovery": "A disconnected or slow client reconnects and receives a new snapshot.",
+          "Usage": "Attach an authenticated client to an existing session terminal."
         }
       }
     },

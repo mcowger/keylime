@@ -23,6 +23,7 @@ import type {
 } from "../api-contracts/host-control-models";
 import { isWorkspaceOp, WORKSPACE_OP_PARAMS } from "../workspace-types";
 
+/** Version 12 adds connection-scoped, non-replayable session PTY attachment frames. */
 /** 11: the same wire as 10, renumbered: prerelease daemons already sent 10 with omp RPC channel lines, which this
  * server cannot read. 10: channel stdin/stdout lines are the runner's `{t}` frames (`cmd`/`res`/`hello`/…), no longer omp RPC frames;
  * `open.launch.configVersion`, the `config_state` report and the `clusterConfig` op.
@@ -33,10 +34,10 @@ import { isWorkspaceOp, WORKSPACE_OP_PARAMS } from "../workspace-types";
  * (docs/specs/2026-10-31-websocket-link-design.md, D7). 4: the link is one WebSocket: text frames carry the messages,
  * binary frames large results, `ack` messages replace the ack header and the POST answer.
  * Rules for changing it: docs/specs/2026-10-28-remote-hosts-design.md, "Protocol versions and compatibility". */
-export const LINK_PROTOCOL_VERSION = 11;
+export const LINK_PROTOCOL_VERSION = 12;
 /** The oldest daemon protocol the server still links (older ones get close 4426). Dropping one is an explicit decision:
  * 11 dropped all older ones, whose channel lines mean (or, for prerelease 10, may mean) omp RPC frames. */
-export const MIN_LINK_PROTOCOL_VERSION = 11;
+export const MIN_LINK_PROTOCOL_VERSION = 12;
 /** A configuration version: the manifest's SHA-256, in lowercase hex. */
 export const CONFIG_VERSION_RE = /^[0-9a-f]{64}$/;
 // CREATION_ID_RE is shared with the host-link schema.
@@ -178,6 +179,7 @@ export const HOST_OP_NAMES = [
   "uploadAbort",
   "uploadAttach",
   "setUploadRetention",
+  "ptySessions",
   "clusterConfig",
 ] as const;
 
@@ -334,6 +336,7 @@ const DOWN_TYPES: readonly string[] = [
   "interest",
   "host_tools",
   "req",
+  "pty_attach",
   "ping",
   "pong",
   "ack",
@@ -353,6 +356,7 @@ const UP_TYPES: readonly string[] = [
   "res",
   "upload_ack",
   "terminal_event",
+  "pty_event",
   "workspace_file",
   "ping",
   "pong",
@@ -427,6 +431,11 @@ function parseLine(line: string): Obj {
 export function decodeDown(line: string): DownMessage | UnknownMessage {
   const o = parseLine(line);
   switch (o.type) {
+    case "pty_attach": {
+      const id = str(o, "id"), sessionId = str(o, "sessionId"), payload = str(o, "payload");
+      if (!/^[0-9a-f-]{36}$/i.test(id) || !isValidSessionId(sessionId) || payload.length > 131072) fail("invalid terminal attachment frame");
+      return { type: "pty_attach", id, sessionId, payload };
+    }
     case "welcome":
       return { type: "welcome", v: int(o, "v"), hostId: str(o, "hostId") };
     case "stdin":
@@ -654,6 +663,11 @@ function helloLink(value: unknown): { id: string; notifier: boolean } {
 export function decodeUp(line: string): UpMessage | UnknownMessage {
   const o = parseLine(line);
   switch (o.type) {
+    case "pty_event": {
+      const id = str(o, "id"), payload = str(o, "payload");
+      if (!/^[0-9a-f-]{36}$/i.test(id) || payload.length > 8000000) fail("invalid terminal event frame");
+      return { type: "pty_event", id, payload };
+    }
     case "hello":
       return {
         type: "hello",

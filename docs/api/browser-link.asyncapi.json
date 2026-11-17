@@ -1730,7 +1730,7 @@
         "correlationId": {
           "location": "$message.payload#/rid"
         },
-        "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Where the native operation returns undefined, the browser wrapper returns null.",
+        "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
         "name": "BrowserRequest_get_state",
         "payload": {
           "$ref": "#/components/schemas/BrowserRequest_get_state"
@@ -3906,11 +3906,17 @@
                     "type": "object"
                   },
                   {
-                    "properties": {},
+                    "properties": {
+                      "hostId": {
+                        "description": "Host holding the session to resume.",
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
                     "type": "object"
                   }
                 ],
-                "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Where the native operation returns undefined, the browser wrapper returns null.",
+                "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
                 "title": "AgentCommand_get_state",
                 "type": "object"
               },
@@ -72937,7 +72943,7 @@
         "type": "object"
       },
       "BrowserRequest_get_state": {
-        "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Where the native operation returns undefined, the browser wrapper returns null.",
+        "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
         "properties": {
           "advisor": {
             "type": "boolean"
@@ -72955,7 +72961,13 @@
                 "type": "object"
               },
               {
-                "properties": {},
+                "properties": {
+                  "hostId": {
+                    "description": "Host holding the session to resume.",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
                 "type": "object"
               }
             ],
@@ -76302,7 +76314,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Where the native operation returns undefined, the browser wrapper returns null.",
+      "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/BrowserRequest_get_state"

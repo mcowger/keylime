@@ -1,0 +1,389 @@
+{
+  "asyncapi": "3.0.0",
+  "channels": {
+    "link": {
+      "address": "/api/terminal/attach",
+      "bindings": {
+        "ws": {
+          "bindingVersion": "0.1.0",
+          "method": "GET"
+        }
+      },
+      "messages": {
+        "TerminalAttachDetach": {
+          "$ref": "#/components/messages/TerminalAttachDetach"
+        },
+        "TerminalAttachError": {
+          "$ref": "#/components/messages/TerminalAttachError"
+        },
+        "TerminalAttachExit": {
+          "$ref": "#/components/messages/TerminalAttachExit"
+        },
+        "TerminalAttachHello": {
+          "$ref": "#/components/messages/TerminalAttachHello"
+        },
+        "TerminalAttachInput": {
+          "$ref": "#/components/messages/TerminalAttachInput"
+        },
+        "TerminalAttachNotice": {
+          "$ref": "#/components/messages/TerminalAttachNotice"
+        },
+        "TerminalAttachOutput": {
+          "$ref": "#/components/messages/TerminalAttachOutput"
+        },
+        "TerminalAttachResize": {
+          "$ref": "#/components/messages/TerminalAttachResize"
+        },
+        "TerminalAttachSnapshot": {
+          "$ref": "#/components/messages/TerminalAttachSnapshot"
+        }
+      }
+    }
+  },
+  "components": {
+    "messages": {
+      "TerminalAttachDetach": {
+        "contentType": "application/json",
+        "description": "Close this attachment without ending the session.",
+        "name": "TerminalAttachDetach",
+        "payload": {
+          "$ref": "#/components/schemas/TerminalAttachDetach"
+        },
+        "title": "TerminalAttachDetach"
+      },
+      "TerminalAttachError": {
+        "contentType": "application/json",
+        "description": "The attachment failed and cannot continue.",
+        "name": "TerminalAttachError",
+        "payload": {
+          "$ref": "#/components/schemas/TerminalAttachError"
+        },
+        "title": "TerminalAttachError"
+      },
+      "TerminalAttachExit": {
+        "contentType": "application/json",
+        "description": "The attached terminal process exited.",
+        "name": "TerminalAttachExit",
+        "payload": {
+          "$ref": "#/components/schemas/TerminalAttachExit"
+        },
+        "title": "TerminalAttachExit"
+      },
+      "TerminalAttachHello": {
+        "contentType": "application/json",
+        "description": "Start an attachment with the protocol version and terminal dimensions.",
+        "name": "TerminalAttachHello",
+        "payload": {
+          "$ref": "#/components/schemas/TerminalAttachHello"
+        },
+        "title": "TerminalAttachHello"
+      },
+      "TerminalAttachInput": {
+        "contentType": "application/json",
+        "description": "Send terminal input once on this connection; it is never replayed.",
+        "name": "TerminalAttachInput",
+        "payload": {
+          "$ref": "#/components/schemas/TerminalAttachInput"
+        },
+        "title": "TerminalAttachInput"
+      },
+      "TerminalAttachNotice": {
+        "contentType": "application/json",
+        "description": "An attachment-specific informational notice.",
+        "name": "TerminalAttachNotice",
+        "payload": {
+          "$ref": "#/components/schemas/TerminalAttachNotice"
+        },
+        "title": "TerminalAttachNotice"
+      },
+      "TerminalAttachOutput": {
+        "contentType": "application/json",
+        "description": "Terminal output after the snapshot boundary.",
+        "name": "TerminalAttachOutput",
+        "payload": {
+          "$ref": "#/components/schemas/TerminalAttachOutput"
+        },
+        "title": "TerminalAttachOutput"
+      },
+      "TerminalAttachResize": {
+        "contentType": "application/json",
+        "description": "Resize the attached terminal.",
+        "name": "TerminalAttachResize",
+        "payload": {
+          "$ref": "#/components/schemas/TerminalAttachResize"
+        },
+        "title": "TerminalAttachResize"
+      },
+      "TerminalAttachSnapshot": {
+        "contentType": "application/json",
+        "description": "Initial serialized terminal screen and output cursor.",
+        "name": "TerminalAttachSnapshot",
+        "payload": {
+          "$ref": "#/components/schemas/TerminalAttachSnapshot"
+        },
+        "title": "TerminalAttachSnapshot"
+      }
+    },
+    "schemas": {
+      "TerminalAttachDetach": {
+        "description": "Close this attachment without ending the session.",
+        "properties": {
+          "type": {
+            "const": "detach",
+            "type": "string"
+          }
+        },
+        "required": ["type"],
+        "title": "TerminalAttachDetach",
+        "type": "object"
+      },
+      "TerminalAttachError": {
+        "description": "The attachment failed and cannot continue.",
+        "properties": {
+          "message": {
+            "maxLength": 4096,
+            "type": "string"
+          },
+          "type": {
+            "const": "error",
+            "type": "string"
+          }
+        },
+        "required": ["type", "message"],
+        "title": "TerminalAttachError",
+        "type": "object"
+      },
+      "TerminalAttachExit": {
+        "description": "The attached terminal process exited.",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": {
+            "const": "exit",
+            "type": "string"
+          }
+        },
+        "required": ["type", "code"],
+        "title": "TerminalAttachExit",
+        "type": "object"
+      },
+      "TerminalAttachHello": {
+        "description": "Start an attachment with the protocol version and terminal dimensions.",
+        "properties": {
+          "cols": {
+            "maximum": 1000,
+            "minimum": 2,
+            "type": "integer"
+          },
+          "rows": {
+            "maximum": 1000,
+            "minimum": 2,
+            "type": "integer"
+          },
+          "type": {
+            "const": "hello",
+            "type": "string"
+          },
+          "version": {
+            "const": 1,
+            "type": "number"
+          }
+        },
+        "required": ["type", "version", "cols", "rows"],
+        "title": "TerminalAttachHello",
+        "type": "object"
+      },
+      "TerminalAttachInput": {
+        "description": "Send terminal input once on this connection; it is never replayed.",
+        "properties": {
+          "data": {
+            "maxLength": 65536,
+            "type": "string"
+          },
+          "type": {
+            "const": "input",
+            "type": "string"
+          }
+        },
+        "required": ["type", "data"],
+        "title": "TerminalAttachInput",
+        "type": "object"
+      },
+      "TerminalAttachNotice": {
+        "description": "An attachment-specific informational notice.",
+        "properties": {
+          "message": {
+            "maxLength": 4096,
+            "type": "string"
+          },
+          "type": {
+            "const": "notice",
+            "type": "string"
+          }
+        },
+        "required": ["type", "message"],
+        "title": "TerminalAttachNotice",
+        "type": "object"
+      },
+      "TerminalAttachOutput": {
+        "description": "Terminal output after the snapshot boundary.",
+        "properties": {
+          "cursor": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "data": {
+            "maxLength": 262144,
+            "type": "string"
+          },
+          "type": {
+            "const": "output",
+            "type": "string"
+          }
+        },
+        "required": ["type", "data", "cursor"],
+        "title": "TerminalAttachOutput",
+        "type": "object"
+      },
+      "TerminalAttachResize": {
+        "description": "Resize the attached terminal.",
+        "properties": {
+          "cols": {
+            "maximum": 1000,
+            "minimum": 2,
+            "type": "integer"
+          },
+          "rows": {
+            "maximum": 1000,
+            "minimum": 2,
+            "type": "integer"
+          },
+          "type": {
+            "const": "resize",
+            "type": "string"
+          }
+        },
+        "required": ["type", "cols", "rows"],
+        "title": "TerminalAttachResize",
+        "type": "object"
+      },
+      "TerminalAttachSnapshot": {
+        "description": "Initial serialized terminal screen and output cursor.",
+        "properties": {
+          "cols": {
+            "maximum": 1000,
+            "minimum": 2,
+            "type": "integer"
+          },
+          "cursor": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "data": {
+            "maxLength": 4000000,
+            "type": "string"
+          },
+          "rows": {
+            "maximum": 1000,
+            "minimum": 2,
+            "type": "integer"
+          },
+          "type": {
+            "const": "snapshot",
+            "type": "string"
+          }
+        },
+        "required": ["type", "data", "cols", "rows", "cursor"],
+        "title": "TerminalAttachSnapshot",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "webSession": {
+        "description": "Optional configured web authentication. Open deployments require no cookie; trusted proxies can authenticate the upgrade. Origin checks still apply.",
+        "in": "cookie",
+        "name": "keylime_session",
+        "type": "httpApiKey"
+      }
+    }
+  },
+  "defaultContentType": "application/json",
+  "id": "urn:keylime:terminal-attach",
+  "info": {
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated WebSocket with hostId and sessionId query parameters. The client sends hello first. A snapshot precedes output; input and resize are connection-scoped and never replayed. A new connection obtains a fresh snapshot. Slow clients or disconnected host links are closed.",
+    "title": "Session terminal attachment",
+    "version": "1"
+  },
+  "operations": {
+    "receive": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/TerminalAttachHello"
+        },
+        {
+          "$ref": "#/channels/link/messages/TerminalAttachInput"
+        },
+        {
+          "$ref": "#/channels/link/messages/TerminalAttachResize"
+        },
+        {
+          "$ref": "#/channels/link/messages/TerminalAttachDetach"
+        }
+      ],
+      "summary": "Application receives Session terminal attachment messages"
+    },
+    "send": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/TerminalAttachSnapshot"
+        },
+        {
+          "$ref": "#/channels/link/messages/TerminalAttachOutput"
+        },
+        {
+          "$ref": "#/channels/link/messages/TerminalAttachExit"
+        },
+        {
+          "$ref": "#/channels/link/messages/TerminalAttachError"
+        },
+        {
+          "$ref": "#/channels/link/messages/TerminalAttachNotice"
+        }
+      ],
+      "summary": "Application sends Session terminal attachment messages"
+    }
+  },
+  "servers": {
+    "server": {
+      "host": "{hostname}",
+      "protocol": "wss",
+      "security": [
+        {
+          "$ref": "#/components/securitySchemes/webSession"
+        }
+      ],
+      "variables": {
+        "hostname": {
+          "default": "localhost:30177",
+          "description": "Web-server authority; ws is available only for an explicitly allowed plaintext deployment."
+        }
+      }
+    }
+  }
+}
