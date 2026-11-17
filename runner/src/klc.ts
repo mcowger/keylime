@@ -275,9 +275,13 @@ async function main() {
   let snapshot: Inventory;
   try { snapshot = await inventory(api); } catch (error) {
     if (!(error instanceof Error) || error.message !== 'Authentication required') throw error;
-    for (;;) {
-      try { await api.login(await password()); break; }
-      catch (loginError) { if (!(loginError instanceof Error) || loginError.message !== 'Incorrect password') throw loginError; console.error(loginError.message); }
+    if (process.env.KEYLIME_PASSWORD !== undefined) {
+      await api.login(process.env.KEYLIME_PASSWORD);
+    } else {
+      for (;;) {
+        try { await api.login(await password()); break; }
+        catch (loginError) { if (!(loginError instanceof Error) || loginError.message !== 'Incorrect password') throw loginError; console.error(loginError.message); }
+      }
     }
     snapshot = await inventory(api);
   }

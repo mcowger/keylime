@@ -19,6 +19,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - `klc` connects a native terminal to shared Keylime sessions, with a searchable session picker and remote host access.
 - `klc` resumes sessions on the selected host, preserves the terminal screen when showing notices, and restores input modes on exit. Client archives include native third-party notices.
 - `klc` defaults to registered sessions and explains its running, registered, archived and all filters.
+- `klc` uses `KEYLIME_PASSWORD` for password authentication when set.
 - Ship shows live commit-planning stages and agent activity while generating a proposal.
 - Non-image attachments are uploaded as files instead of being inserted into the model's prompt, regardless of type or size.
 - New local chats offer global skills in slash completion before a session or workspace starts.

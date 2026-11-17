@@ -27,7 +27,7 @@ klc --url https://keylime.example.com
 klc --url https://keylime.example.com --host HOST SESSION_ID
 ```
 
-`KEYLIME_URL` supplies the server URL when `--url` is absent; the default is `http://127.0.0.1:30177`. Remote HTTP requires `--insecure`. When password authentication is enabled, the client prompts without echo and keeps the session cookie only in memory. Use a trusted TLS endpoint: the insecure option sends terminal traffic and credentials without encryption.
+`KEYLIME_URL` supplies the server URL when `--url` is absent; the default is `http://127.0.0.1:30177`. Remote HTTP requires `--insecure`. When password authentication is enabled, `KEYLIME_PASSWORD` supplies the password if set; otherwise the client prompts without echo. An incorrect environment password fails rather than prompting. The session cookie stays in memory. Use a trusted TLS endpoint: the insecure option sends terminal traffic and credentials without encryption.
 
 The picker searches sessions across linked hosts. Tab changes the session view; Ctrl-N lists registered workspaces, including non-default worktrees, for creating a blank session. `Ctrl-]` detaches to the picker, then exits from the picker. `/quit` ends the shared runtime for every client. `Ctrl-D` and a rapid second `Ctrl-C` are blocked at the host PTY input gate.
 
