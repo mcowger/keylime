@@ -140,6 +140,7 @@ interface Props {
   onWorkspaceRemoved?: (path: string, host: string) => void;
   onShip?: (target: ShipTarget) => void;
   selectedCwd?: string | null;
+  pendingWorkspace?: boolean;
   /** Host `selectedCwd` lives on (this machine when absent). */
   selectedHostId?: string | null;
   selectedLogicalProjectKey?: string | null;
@@ -231,6 +232,7 @@ export const SessionSidebar = memo(function SessionSidebar({
   onWorkspaceRemoved,
   onShip,
   selectedCwd: selectedCwdProp,
+  pendingWorkspace = false,
   selectedHostId: selectedHostIdProp,
   onCwdChange,
   onWorkspaceOptionsChange,
@@ -2049,7 +2051,7 @@ export const SessionSidebar = memo(function SessionSidebar({
           refreshKey={(refreshKey ?? 0) + hierarchyRefresh}
           sessions={allSessions}
           selectedSessionId={selectedSessionId}
-          selectedCwd={selectedCwd}
+          selectedCwd={pendingWorkspace ? null : selectedCwd}
           selectedHostId={selectedHostId}
           onShip={onShip}
           onSelectWorkspace={(path, host, latestSession) => {

@@ -132,6 +132,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- The sidebar no longer highlights the base workspace while composing a new workspace's first prompt.
 - The Explorer shows the base project while a new workspace awaits its first prompt.
 - Agent chat Markdown uses the same compact text and heading styles as tool output.
 - Shipping a workspace returns to its project even if the workspace disappears from the sidebar before Ship finishes.
@@ -248,6 +249,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Attached terminals no longer keep a session from going idle; attachment is tracked separately for shutdown protection
 - Commit plan progress no longer stalls rendering when the change set spans multiple staged files
 - Question forms show required-field validation and sending or failed status, ignore repeated submits and allow retry after a send failure
+- The sidebar no longer highlights the base workspace while composing a new workspace's first prompt
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

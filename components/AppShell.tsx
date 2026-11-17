@@ -2813,6 +2813,7 @@ export function AppShell({ appName }: { appName: string }) {
         }
       }}
       selectedCwd={selectedSession?.cwd ?? newSessionCwd ?? null}
+      pendingWorkspace={Boolean(pendingWorkspace)}
       selectedHostId={
         selectedSession
           ? (selectedSession.hostId ?? LOCAL_HOST_ID)

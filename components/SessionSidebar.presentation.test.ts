@@ -111,6 +111,31 @@ test("registered hierarchy workspaces can be selected without a single-host head
     restore();
   }
 });
+
+test("pending workspace does not select its base workspace", async () => {
+  const restore = setup(() => Response.json(snapshot));
+  try {
+    const props = { selectedCwd: "/workspace", selectedHostId: "local" };
+    const view = renderSidebar(props);
+    const workspace = await screen.findByRole("button", { name: "Workspace" });
+    await waitFor(() => assert.equal(workspace.getAttribute("aria-pressed"), "true"));
+    view.rerender(React.createElement(SessionSidebar, {
+      selectedSessionId: null, onSelectSession() {}, skipInitialProjectSelection: true,
+      addProjectOpen: false, setAddProjectOpen() {}, usageVisible: false,
+      ...props, pendingWorkspace: true,
+    }));
+    assert.equal(workspace.getAttribute("aria-pressed"), "false");
+    fireEvent.click(workspace);
+    assert.equal(workspace.getAttribute("aria-pressed"), "false");
+    view.rerender(React.createElement(SessionSidebar, {
+      selectedSessionId: null, onSelectSession() {}, skipInitialProjectSelection: true,
+      addProjectOpen: false, setAddProjectOpen() {}, usageVisible: false, ...props,
+    }));
+    assert.equal(workspace.getAttribute("aria-pressed"), "true");
+  } finally {
+    restore();
+  }
+});
 test("workspace click reconciles after its registered sessions load", async () => {
   const { promise: sessions, resolve: resolveSessions } = Promise.withResolvers<Response>();
   const restore = setup(() => Response.json({ projects: [{ ...snapshot.projects[0], workspaces: [{ ...snapshot.projects[0].workspaces[0], sessionIds: ["saved"] }] }] }));
