@@ -707,6 +707,15 @@ export function ExtensionDialog({
     null,
   );
   const awaitingNext = request.method === "select" && answeredId === request.id;
+  const [questionSubmission, setQuestionSubmission] = useState<{
+    id: UiDialogRequest["id"];
+    state: "sending" | "failed";
+  } | null>(null);
+  const questionSubmissionRef = useRef<UiDialogRequest["id"] | null>(null);
+  const [formInvalid, setFormInvalid] = useState(false);
+  const questionBusy =
+    questionSubmission?.id === request.id &&
+    questionSubmission.state !== "failed";
   const [askDrafts, setAskDrafts] = useState(() => initialAskDrafts(request));
   const viewportMaxHeight = useViewportMaxHeight();
   const formRef = useRef<HTMLFormElement>(null);
@@ -737,6 +746,9 @@ export function ExtensionDialog({
     setShowPassword(false);
     setSelectedOption(null);
     setAskDrafts(initialAskDrafts(request));
+    questionSubmissionRef.current = null;
+    setQuestionSubmission(null);
+    setFormInvalid(false);
   }, [request]);
 
   const askDraftAt = (index: number) => askDrafts[index] ?? EMPTY_ASK_DRAFT;
@@ -766,6 +778,12 @@ export function ExtensionDialog({
   // task, so the phone keyboard closes once instead of flashing as the
   // focused field disappears from under it.
   const respond = (response: UiDialogValue | undefined) => {
+    const question = request.method === "askDialog" || request.method === "formDialog";
+    if (question) {
+      if (questionSubmissionRef.current === request.id) return;
+      questionSubmissionRef.current = request.id;
+      setQuestionSubmission({ id: request.id, state: "sending" });
+    }
     if (request.method === "select") {
       if (awaitingNext) return;
       setAnsweredId(request.id);
@@ -774,10 +792,17 @@ export function ExtensionDialog({
     if (active instanceof HTMLElement && panelRef.current?.contains(active))
       active.blur();
     const id = request.id;
-    void Promise.resolve(onRespond(request, response)).then((sent) => {
-      if (sent === false)
-        setAnsweredId((current) => (current === id ? null : current));
-    });
+    const finish = (sent: boolean) => {
+      if (question && !sent && questionSubmissionRef.current === id) {
+        questionSubmissionRef.current = null;
+        setQuestionSubmission({ id, state: "failed" });
+      }
+      if (!sent) setAnsweredId((current) => (current === id ? null : current));
+    };
+    void Promise.resolve(onRespond(request, response)).then(
+      (sent) => finish(sent !== false),
+      () => finish(false),
+    );
   };
   const cancel = () => respond(undefined);
 
@@ -847,8 +872,11 @@ export function ExtensionDialog({
     } else if (request.method === "formDialog") {
       const form = formRef.current;
       if (form) syncOtherValidity(form);
-      if (form && Object.getPrototypeOf(form).reportValidity.call(form))
-        respond({ data: readFormData(form) });
+      if (form) {
+        const valid = Object.getPrototypeOf(form).reportValidity.call(form);
+        setFormInvalid(!valid);
+        if (valid) respond({ data: readFormData(form) });
+      }
     } else if (request.method !== "approve") {
       respond(value);
     }
@@ -1424,7 +1452,11 @@ export function ExtensionDialog({
               <form
                 key={request.id}
                 ref={formRef}
-                onChange={(event) => syncOtherValidity(event.currentTarget)}
+                onChange={(event) => {
+                  syncOtherValidity(event.currentTarget);
+                  setFormInvalid(false);
+                }}
+                onInvalidCapture={() => setFormInvalid(true)}
                 onSubmit={(event) => {
                   event.preventDefault();
                   submitValue();
@@ -1443,13 +1475,24 @@ export function ExtensionDialog({
             display: "flex",
             flexShrink: 0,
             justifyContent: "flex-end",
+            flexWrap: "wrap",
             gap: 8,
             padding: "10px 16px",
             borderTop: "1px solid var(--border)",
             background: "var(--bg-panel)",
           }}
         >
-          <button className="extension-dialog-button" onClick={cancel}>
+          {request.method === "formDialog" && formInvalid && (
+            <span role="alert" className="extension-dialog-feedback">
+              {t("chatWindow.formRequired")}
+            </span>
+          )}
+          {questionSubmission?.id === request.id && (
+            <span role={questionSubmission.state === "failed" ? "alert" : "status"} className="extension-dialog-feedback">
+              {t(questionSubmission.state === "failed" ? "chatWindow.answerFailed" : "chatWindow.answerSending")}
+            </span>
+          )}
+          <button className="extension-dialog-button" onClick={cancel} disabled={questionBusy}>
             {t("chatWindow.cancel")}
           </button>
           {request.method === "confirm" ? (
@@ -1464,7 +1507,7 @@ export function ExtensionDialog({
             <button
               className="extension-dialog-button extension-dialog-button-primary"
               onClick={submitValue}
-              disabled={!canSubmit || awaitingNext}
+              disabled={!canSubmit || awaitingNext || questionBusy}
             >
               {request.method === "askDialog"
                 ? t("chatWindow.submit")
@@ -1474,6 +1517,7 @@ export function ExtensionDialog({
             <button
               className="extension-dialog-button extension-dialog-button-primary"
               onClick={submitValue}
+              disabled={questionBusy}
             >
               {t("chatWindow.submit")}
             </button>

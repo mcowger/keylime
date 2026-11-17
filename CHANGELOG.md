@@ -7,6 +7,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ## [Unreleased]
 
 ### Added
+- Question forms have larger action targets, show validation and submission status, prevent duplicate answers, and allow retry after a send failure.
 - The composer highlights file mentions, slash commands and inline code while keeping draft text editable and copyable.
 - Ship shows commit-planning stages as progress steps, with live agent activity, and hides skipped execution steps.
 - Non-image attachments are uploaded as files instead of being inserted into the model's prompt, regardless of type or size.
@@ -123,6 +124,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - `bun run dev --browser-fixture` starts its Chromium fixture session through the host daemon instead of a separate script
 - Browser video progress diagnostics now break down dropped packets by reason and report observed frame size, timestamp and capture generation
 - Session lifecycle treats an attached terminal as active, preventing idle shutdown while someone is attached
+- Question form buttons use larger tap targets with a minimum width
 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen
@@ -245,6 +247,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Browser video frames are now correlated with capture timestamps using separate encoder timestamps, preventing blank video from Chromium timestamp rewrites
 - Attached terminals no longer keep a session from going idle; attachment is tracked separately for shutdown protection
 - Commit plan progress no longer stalls rendering when the change set spans multiple staged files
+- Question forms show required-field validation and sending or failed status, ignore repeated submits and allow retry after a send failure
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

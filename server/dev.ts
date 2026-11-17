@@ -2,6 +2,7 @@
 import html from "../app/index.html";
 import advisorFixture from "../app/advisor-fixture.html";
 import shipProgressFixture from "../app/ship-progress-fixture.html";
+import questionFixture from "../app/question-fixture.html";
 import {
   buildEventStreamWorker,
   buildServiceWorker,
@@ -43,6 +44,7 @@ const server = startServer({
   html,
   advisorFixture,
   shipProgressFixture,
+  questionFixture,
   worker,
   serviceWorker,
 });

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import test, { afterEach } from "node:test";
 import React from "react";
 import type { UiDialogValue } from "../lib/types";
-const { cleanup, render, screen } =
+const { act, cleanup, render, screen, waitFor } =
   await import("@testing-library/react/pure.js");
 const { default: userEvent } = await import("@testing-library/user-event");
 
@@ -11,7 +11,7 @@ const { ExtensionDialog } = await import("./ExtensionDialog.tsx");
 
 afterEach(cleanup);
 
-function renderForm(html: string) {
+function renderForm(html: string, failSend = false) {
   const responses: (UiDialogValue | undefined)[] = [];
   render(
     React.createElement(ExtensionDialog, {
@@ -23,6 +23,7 @@ function renderForm(html: string) {
       },
       onRespond: (_request, value) => {
         responses.push(value);
+        if (failSend) return Promise.resolve(false);
       },
       attached: true,
     }),
@@ -115,6 +116,7 @@ test("a radio group's Other text is its value, and picking an option afterwards 
   const user = userEvent.setup();
   const responses = renderForm(
     `<form><label><input type="radio" name="c" value="r"> Red</label><label><input type="radio" name="c" value="b"> Blue</label></form>`,
+    true,
   );
   const other = screen.getByRole("textbox", { name: /Other/ });
   await user.click(screen.getByRole("radio", { name: /Red/ }));
@@ -134,7 +136,7 @@ test("a radio group's Other text is its value, and picking an option afterwards 
 test("a checkbox group's Other text is appended to its array; blank adds nothing", async () => {
   const user = userEvent.setup();
   const responses = renderForm(
-    `<form><label><input type="checkbox" name="x" value="a" checked> A</label><label><input type="checkbox" name="x" value="b"> B</label></form>`,
+    `<form><label><input type="checkbox" name="x" value="a" checked> A</label><label><input type="checkbox" name="x" value="b"> B</label></form>`, true,
   );
   await user.click(screen.getByRole("button", { name: "Submit" }));
   await user.type(screen.getByRole("textbox", { name: /Other/ }), "mine");
@@ -159,6 +161,7 @@ test("a required group is satisfied by its Other text", async () => {
   );
   await user.click(screen.getByRole("button", { name: "Submit" }));
   assert.deepEqual(responses, [], "nothing answered yet");
+  assert.match(screen.getByRole("alert").textContent!, /required fields/i);
   await user.type(screen.getByRole("textbox", { name: /Other/ }), "Green");
   await user.click(screen.getByRole("button", { name: "Submit" }));
   assert.deepEqual(responses, [{ data: { c: "Green" } }]);
@@ -181,6 +184,29 @@ test("controls named like HTMLFormElement members still submit", async () => {
       },
     },
   ]);
+});
+
+test("a pending answer cannot be sent twice and a failed send can be retried", async () => {
+  const user = userEvent.setup();
+  const first = Promise.withResolvers<boolean>();
+  const responses: (UiDialogValue | undefined)[] = [];
+  render(React.createElement(ExtensionDialog, {
+    request: { type: "ui_request", id: 1, method: "formDialog", args: ['<form><input name="note" value="hello"></form>'] },
+    attached: true,
+    onRespond: (_request, value) => {
+      responses.push(value);
+      return responses.length === 1 ? first.promise : Promise.resolve(true);
+    },
+  }));
+  await user.click(screen.getByRole("button", { name: "Submit" }));
+  assert.match(screen.getByRole("status").textContent!, /sending/i);
+  assert.equal((screen.getByRole("button", { name: "Submit" }) as HTMLButtonElement).disabled, true);
+  assert.equal((screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled, true);
+  await act(async () => first.resolve(false));
+  assert.match(screen.getByRole("alert").textContent!, /try again/i);
+  await user.click(screen.getByRole("button", { name: "Submit" }));
+  await waitFor(() => assert.equal(responses.length, 2));
+  assert.deepEqual(responses, [{ data: { note: "hello" } }, { data: { note: "hello" } }]);
 });
 
 test("a choice's label keeps its text and inline markup in one block beside the control", () => {

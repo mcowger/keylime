@@ -179,6 +179,7 @@ export function startServer(options: {
   html?: Bun.HTMLBundle;
   advisorFixture?: Bun.HTMLBundle;
   shipProgressFixture?: Bun.HTMLBundle;
+  questionFixture?: Bun.HTMLBundle;
   worker?: string;
   serviceWorker?: string;
 }): Bun.Server<ServerSocketData> {
@@ -227,6 +228,7 @@ export function startServer(options: {
   if (html) routes[DEV_INDEX] = html;
   if (dev && options.advisorFixture) routes["/dev/advisor-composer"] = options.advisorFixture;
   if (dev && options.shipProgressFixture) routes["/dev/ship-progress"] = options.shipProgressFixture;
+  if (dev && options.questionFixture) routes["/dev/questions"] = options.questionFixture;
 
   return Bun.serve({
     port: options.port,

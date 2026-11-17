@@ -55,7 +55,7 @@ function result(
   };
 }
 
-function renderAsk(questions: Question[]) {
+function renderAsk(questions: Question[], failSend = false) {
   const responses: (UiDialogValue | undefined)[] = [];
   render(
     React.createElement(ExtensionDialog, {
@@ -67,6 +67,7 @@ function renderAsk(questions: Question[]) {
       },
       onRespond: (_request, value) => {
         responses.push(value);
+        if (failSend) return Promise.resolve(false);
       },
       attached: true,
     }),
@@ -211,7 +212,7 @@ test("typing in Other chooses it and replaces the radio choice", async () => {
 
 test("the Other text stays when another option is chosen and counts again when Other is", async () => {
   const user = userEvent.setup();
-  const responses = renderAsk([color]);
+  const responses = renderAsk([color], true);
   const field = screen
     .getByRole("group", { name: /Pick a color/ })
     .querySelector("textarea")!;
