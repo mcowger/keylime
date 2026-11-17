@@ -70,20 +70,33 @@ const secondaryButtonStyle: CSSProperties = {
   fontSize: 13,
 };
 
-const PROGRESS_LIMIT = 5;
+const PLAN_STAGES: Record<string, true> = {
+  "Staging workspace changes": true,
+  "Inspecting staged changes": true,
+  "Resolving commit model": true,
+  "Running commit agent": true,
+  "Preparing commit proposal": true,
+  "Preparing fallback proposal": true,
+  "Finalizing commit plan": true,
+};
 
 export function ShipPlanProgress({ elapsed, messages }: { elapsed: number; messages: string[] }) {
+  const stages = messages.filter((message) => Object.hasOwn(PLAN_STAGES, message));
+  const detail = messages.at(-1);
   return (
     <div style={{ color: "var(--text-muted)", fontSize: 12, minWidth: 0 }}>
-      <p style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <Loader2 size={16} aria-hidden="true" /> Generating commit plan ({elapsed}s)
-      </p>
-      {messages.length > 0 && (
-        <div style={{ display: "grid", gap: 4, overflowWrap: "anywhere" }}>
-          {messages.slice(0, -1).map((message, index) => <div key={index}>{message}</div>)}
-          <div role="status" aria-live="polite">{messages.at(-1)}</div>
-        </div>
-      )}
+      <p>Generating commit plan ({elapsed}s)</p>
+      <ul style={{ display: "grid", gap: 8, margin: 0, padding: 0, listStyle: "none" }}>
+        {stages.map((stage, index) => (
+          <li key={`${stage}-${index}`} style={{ display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.5 }}>
+            <span aria-hidden="true" style={{ display: "flex", flexShrink: 0, marginTop: 2, color: index === stages.length - 1 ? "var(--text-dim)" : "var(--status-success)" }}>
+              {index === stages.length - 1 ? <Loader2 size={14} /> : <CheckCircle2 size={14} />}
+            </span>
+            <strong style={{ color: "var(--text)", overflowWrap: "anywhere" }}>{stage}</strong>
+          </li>
+        ))}
+      </ul>
+      {detail && !Object.hasOwn(PLAN_STAGES, detail) && <div role="status" aria-live="polite" style={{ marginTop: 4, overflowWrap: "anywhere" }}>{detail}</div>}
     </div>
   );
 }
@@ -188,7 +201,7 @@ export function ShipDialog({
               .replace(/[\x00-\x1f\x7f-\x9f]/g, " ")
               .trim()
               .slice(0, 300);
-            if (message) setProgress((items) => [...items, message].slice(-PROGRESS_LIMIT));
+            if (message) setProgress((items) => [...items.filter((item) => Object.hasOwn(PLAN_STAGES, item)), message]);
           } catch {
             // Ignore malformed and unrelated frames.
           }
@@ -657,7 +670,7 @@ export function ShipDialog({
                 listStyle: "none",
               }}
             >
-              {job.steps.map((step) => (
+              {job.steps.filter((step) => step.status !== "skipped").map((step) => (
                 <li
                   key={step.name}
                   style={{

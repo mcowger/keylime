@@ -629,7 +629,7 @@ test("ship job polling continues while hidden and restores progress", async () =
       if (path.startsWith("/api/agent/"))
         return Response.json({ success: true, data: { plan: null } });
       if (path === "/api/ship")
-        return Response.json({ id: "job", status: "running", steps: [{ name: "push", status: "running" }] });
+        return Response.json({ id: "job", status: "running", steps: [{ name: "push", status: "running" }, { name: "autoMerge", status: "skipped" }] });
       if (path.startsWith("/api/ship/job?")) {
         polls++;
         return Response.json({ id: "job", status: "conflict", steps: [{ name: "push", status: "done" }], conflictFiles: ["file.ts"] });
@@ -647,6 +647,7 @@ test("ship job polling continues while hidden and restores progress", async () =
     await waitFor(() => assert.equal((view.getByRole("button", { name: "Ship" }) as HTMLButtonElement).disabled, false));
     fireEvent.click(view.getByRole("button", { name: "Ship" }));
     await view.findByText(/push/);
+    assert.equal(view.queryByText("autoMerge"), null);
     view.rerender(React.createElement(ShipDialog, { ...props, visible: false }));
     assert.equal(view.queryByRole("dialog"), null);
     await waitFor(() => assert.equal(polls, 1), { timeout: 3000 });
@@ -690,9 +691,15 @@ test("commit planning waits for its session stream and displays only matching pr
     const emit = (requestId: string, message: string) => stream.onmessage?.({ data: JSON.stringify({ type: "commit_plan_progress", requestId, message }) });
     await act(async () => {
       emit("unrelated", "Other plan");
+      emit(plans[0].requestId, "Staging workspace changes");
+      emit(plans[0].requestId, "Inspecting staged changes");
       emit(plans[0].requestId, "\u001b[31mReading diff\u001b[0m");
     });
     assert.equal(view.queryByText("Other plan"), null);
+    assert.ok(view.getByText("Staging workspace changes"));
+    assert.ok(view.getByText("Inspecting staged changes"));
+    assert.equal(view.container.querySelectorAll(".lucide-circle-check").length, 1);
+    assert.equal(view.container.querySelectorAll(".lucide-loader-circle").length, 1);
     assert.equal(view.getByRole("status").textContent, "Reading diff");
     view.rerender(React.createElement(ShipDialog, { ...props, visible: false }));
     await act(async () => emit(plans[0].requestId, "Preparing message"));
