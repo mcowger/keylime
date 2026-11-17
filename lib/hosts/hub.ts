@@ -233,6 +233,7 @@ interface HubState {
   fileListeners: Map<string, (event: WorkspaceFileEvent) => void>;
   terminalListeners: Map<string, Set<(event: TerminalEvent) => void>>;
   ptyListeners: Map<string, (event: TerminalAttachServer | null) => void>;
+  pendingPtyDetaches: WeakMap<LinkSocket, Map<string, string>>;
   /** The master's configuration version as last computed (null after a failure), and that failure. */
   masterConfig: { version: string | null; error: MasterConfigError | null };
   /** startClusterConfigSync's 30 s timer. */
@@ -256,6 +257,7 @@ function hub(): HubState {
     fileListeners: new Map(),
     terminalListeners: new Map(),
     ptyListeners: new Map(),
+    pendingPtyDetaches: new WeakMap(),
     masterConfig: { version: null, error: null },
     configSync: undefined,
   };
@@ -268,6 +270,7 @@ function hub(): HubState {
   globalThis.__ompHostHub.uploadListeners ??= new Set();
   globalThis.__ompHostHub.fileListeners ??= new Map();
   globalThis.__ompHostHub.ptyListeners ??= new Map();
+  globalThis.__ompHostHub.pendingPtyDetaches ??= new WeakMap();
   globalThis.__ompHostHub.terminalListeners ??= new Map();
   globalThis.__ompHostHub.sessionChangeListeners ??= new Set();
   globalThis.__ompHostHub.masterConfig ??= { version: null, error: null };
@@ -324,7 +327,15 @@ export function onPtyEvent(hostId: string, id: string, listener: (event: Termina
 export function sendPtyFrame(hostId: string, id: string, sessionId: string, payload: string): boolean {
   const link = hub().links.get(hostId);
   if (!link?.socket || !isLinkUp(link.status) || hub().frozen) return false;
-  if (link.awaitingDrain) return false;
+  if (link.awaitingDrain) {
+    if (payload === '{"type":"detach"}') {
+      let pending = hub().pendingPtyDetaches.get(link.socket);
+      if (!pending) hub().pendingPtyDetaches.set(link.socket, pending = new Map());
+      pending.set(id, encodeLine({ type: "pty_attach", id, sessionId, payload }));
+      return true;
+    }
+    return false;
+  }
   const sent = link.socket.send(encodeLine({ type: "pty_attach", id, sessionId, payload }));
   if (sent === 0) return false;
   if (sent < 0) link.awaitingDrain = true;
@@ -836,6 +847,16 @@ export const hostLinkSocket = {
     guarded(ws, () => {
       const link = hub().links.get(ws.data.hostId);
       if (link?.socket !== ws) return;
+      const detaches = hub().pendingPtyDetaches.get(ws);
+      if (detaches) {
+        for (const [id, line] of detaches) {
+          const sent = ws.send(line);
+          if (sent === 0) { ws.terminate(); return; }
+          detaches.delete(id);
+          if (sent < 0) { link.awaitingDrain = true; return; }
+        }
+        hub().pendingPtyDetaches.delete(ws);
+      }
       link.awaitingDrain = false;
       flush(link);
     });

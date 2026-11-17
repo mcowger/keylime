@@ -1872,8 +1872,13 @@ test("buffered terminal input keeps the host link and pauses until drain", async
   socket.send = (data) => { send(data); return -1; };
   assert.equal(hub.sendPtyFrame(link.id, "attachment", "session", "hello"), true);
   assert.equal(hub.sendPtyFrame(link.id, "attachment", "session", "input"), false);
+  assert.equal(hub.sendPtyFrame(link.id, "attachment", "session", '{"type":"detach"}'), true);
+  const beforeDrain = socket.frames.length;
   socket.send = send;
   hub.hostLinkSocket.drain(socket);
+  const detached = JSON.parse(String(socket.frames[beforeDrain]));
+  assert.equal(detached.type, "pty_attach");
+  assert.equal(JSON.parse(detached.payload).type, "detach");
   assert.equal(hub.sendPtyFrame(link.id, "attachment", "session", "resize"), true);
   await link.down.cancel();
 });
