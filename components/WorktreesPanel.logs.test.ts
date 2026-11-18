@@ -11,23 +11,6 @@ test("View logs displays setup output and errors without opening creation", asyn
   globalThis.fetch = Object.assign(
     async (url: RequestInfo | URL) => {
       const path = String(url);
-      if (path.startsWith("/api/hierarchy"))
-        return Response.json({
-          projects: [
-            {
-              path: "/repo",
-              kind: "git",
-              workspaces: [
-                {
-                  id: "w",
-                  name: "Feature",
-                  path: "/repo/feature",
-                  setup: { status: "failed", jobId: "j", error: "exit 1" },
-                },
-              ],
-            },
-          ],
-        });
       if (path.includes("action=branches"))
         return Response.json({ local: [], remote: [], defaultRef: "main" });
       if (path.includes("action=status"))
@@ -45,14 +28,27 @@ test("View logs displays setup output and errors without opening creation", asyn
   try {
     const view = render(
       React.createElement(WorktreesPanel, {
-        ctx: {
-          hostId: "local",
-          projectRoot: "/repo",
-          currentPath: "/repo",
-          worktrees: [],
-          refresh() {},
-          select() {},
+        hostId: "local",
+        project: {
+          id: "p",
+          path: "/repo",
+          name: "Repo",
+          kind: "git",
+          addedAt: "",
+          workspaces: [{
+            id: "w",
+            projectId: "p",
+            name: "Feature",
+            path: "/repo/feature",
+            isDefault: false,
+            sessionIds: [],
+            setup: { status: "failed", jobId: "j", error: "exit 1" },
+          }],
         },
+        currentPath: "/repo",
+        onSelect() {},
+        onCreate() {},
+        onRemove() {},
       }),
     );
     fireEvent.click(await view.findByRole("button", { name: "View logs" }));

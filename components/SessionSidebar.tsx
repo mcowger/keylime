@@ -132,6 +132,7 @@ interface Props {
     project?: ManagedProject,
   ) => void;
   onNewWorkspace?: (project: ManagedProject) => void;
+  buildingWorkspaceProjects?: ReadonlySet<string>;
   initialSessionId?: string | null;
   skipInitialProjectSelection?: boolean;
   onInitialRestoreDone?: () => void;
@@ -224,6 +225,7 @@ export const SessionSidebar = memo(function SessionSidebar({
   onSelectSession,
   onNewSession,
   onNewWorkspace,
+  buildingWorkspaceProjects,
   initialSessionId,
   skipInitialProjectSelection,
   onInitialRestoreDone,
@@ -2070,6 +2072,7 @@ export const SessionSidebar = memo(function SessionSidebar({
           }}
           onSelectSession={handleSelectSessionFromList}
           onNewWorkspace={(project) => onNewWorkspace?.(project)}
+          buildingWorkspaceProjects={buildingWorkspaceProjects}
           hostUnavailableReason={hostUnavailableReason}
           onAddProject={(host) => {
             setAddProjectOpen(true, host);

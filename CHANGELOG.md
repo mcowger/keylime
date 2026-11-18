@@ -7,6 +7,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ## [Unreleased]
 
 ### Added
+- The sidebar shows worktree setup and cleanup progress even after you close Manage workspaces.
+- New chats show when Keylime is building the workspace, starting OMP, and sending the first prompt.
 - The workspace base branch picker uses the composer model picker's layout: a search box, a checkmark next to the selected branch, and separate expandable sections for pull requests and other branches. The local default is preselected, and `origin`'s default appears only when ahead.
 - Opening the workspace base branch picker on mobile no longer focuses search or brings up the keyboard.
 - The OMP integration importer can select the latest published build with `--latest`.
@@ -125,6 +127,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Star a model to move it from **More…** to **Favorites**. Each model appears once, and favorites are saved in the browser
 - The workspace base branch picker uses the composer model picker's layout: a search box, a checkmark next to the selected branch, and separate expandable sections for pull requests and other branches. The local default is preselected, and `origin`'s default appears only when ahead
 - Opening the workspace base branch picker on mobile no longer focuses search or brings up the keyboard
+- The sidebar shows worktree setup and cleanup progress even after you close Manage workspaces
+- New chats show when Keylime is building the workspace, starting OMP, and sending the first prompt
 
 ### Changed
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.

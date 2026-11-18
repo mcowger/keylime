@@ -16,6 +16,8 @@ import type { ModelActivity } from "@/lib/model-activity";
 import { ModelActivityIndicator } from "./ModelActivityIndicator";
 import { ComposerActivityIndicators } from "./ComposerActivityIndicators";
 import { AdvisorReviewStatus } from "./AdvisorReviewStatus";
+import { PendingOperation } from "./PendingOperation";
+import type { ChatStartupStage } from "@/hooks/useAgentSession";
 import { ReasoningEffortSlider } from "./ReasoningEffortSlider";
 import {
   ChevronDown,
@@ -393,6 +395,7 @@ interface Props {
   activePlan?: ActivePlan | null;
   advisorEnabled?: boolean;
   advisorReviewPending?: boolean;
+  startupStage?: ChatStartupStage;
   /** Toggle the per-chat advisor (composer icon + /advisor command). */
   onAdvisorChange?: (enabled: boolean) => void;
   /** Collapse the entire composer into a minimized bar. */
@@ -545,6 +548,7 @@ export const ChatInput = memo(
       submissionBlocked = false,
       advisorModel,
       advisorReviewPending = false,
+      startupStage,
       onCompact,
       contextUsage,
       modelActivity,
@@ -4258,7 +4262,23 @@ export const ChatInput = memo(
                   </div>
                 );
               })()}
-            <AdvisorReviewStatus pending={advisorReviewPending} />
+            {startupStage ? (
+              <div
+                style={{
+                  border: "1px solid var(--border)",
+                  borderBottom: "none",
+                  borderRadius: "var(--radius-card) var(--radius-card) 0 0",
+                  background: "var(--bg-panel)",
+                  color: "var(--text-muted)",
+                  padding: "5px 8px 5px 12px",
+                  fontSize: 12,
+                }}
+              >
+                <PendingOperation label={t(`chatInput.${startupStage}`)} />
+              </div>
+            ) : (
+              <AdvisorReviewStatus pending={advisorReviewPending} />
+            )}
             {/* Queued prompts panel / bar — attached to composer's top edge.
             When 1 item: compact single row. When multiple items: compact row with expand toggle, or full list when expanded. */}
             {queuedCount > 0 && (
@@ -4267,7 +4287,7 @@ export const ChatInput = memo(
                 style={{
                   border: "1px solid var(--border)",
                   borderBottom: "none",
-                  borderRadius: advisorReviewPending
+                  borderRadius: advisorReviewPending || startupStage
                     ? 0
                     : "var(--radius-card) var(--radius-card) 0 0",
                   background: "var(--bg-panel)",
@@ -4572,7 +4592,7 @@ export const ChatInput = memo(
                     ? "1px solid var(--accent)"
                     : "1px solid var(--shell-border, color-mix(in srgb, var(--border) 70%, transparent))",
                   borderRadius:
-                    queuedCount > 0 || advisorReviewPending
+                    queuedCount > 0 || advisorReviewPending || startupStage
                       ? "0 0 var(--radius-card) var(--radius-card)"
                       : "var(--radius-card)",
                   padding: "12px 12px 10px",

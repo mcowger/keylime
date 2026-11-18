@@ -21,8 +21,10 @@ import type {
   HierarchyRequest,
 } from "@/lib/project-hierarchy-types";
 import type { ManagedProject, SessionInfo } from "@/lib/types";
-import type { WorkspaceDeleteResult } from "@/lib/workspace-creation-types";
-import { WorktreesPanel } from "./WorktreesPanel";
+import { hostProjectKey } from "@/lib/project-ordering";
+import type { WorkspaceCreateRequest, WorkspaceCreationJob, WorkspaceDeleteResult } from "@/lib/workspace-creation-types";
+import { readWorkspaceSetupJob, WorktreesPanel } from "./WorktreesPanel";
+import { PendingOperation } from "./PendingOperation";
 import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
 import type { ShipTarget } from "./ShipDialog";
 import { useShipAvailability } from "@/hooks/useShipAvailability";
@@ -76,6 +78,7 @@ type Props = {
   onSelectSession: (session: SessionInfo) => void;
   onAddProject: (host: string) => void;
   onNewWorkspace: (project: ManagedProject) => void;
+  buildingWorkspaceProjects?: ReadonlySet<string>;
   hostUnavailableReason?: (hostId: string) => string | null;
   onChanged: () => void;
 };
@@ -112,6 +115,7 @@ export function HierarchySidebar({
   onSelectSession,
   onAddProject,
   onNewWorkspace,
+  buildingWorkspaceProjects,
   hostUnavailableReason,
   onProjects,
   onSnapshots,
@@ -153,6 +157,15 @@ export function HierarchySidebar({
     host: string;
     project: HierarchyProject;
   } | null>(null);
+  const [managerCreations, setManagerCreations] = useState<Partial<Record<string, WorkspaceCreationJob | "starting">>>({});
+  const setupObservers = useRef(new Map<string, { controller: AbortController; blocking: boolean }>());
+  useEffect(() => {
+    const observers = setupObservers.current;
+    return () => {
+      for (const { controller } of observers.values()) controller.abort();
+      observers.clear();
+    };
+  }, []);
   const [settingsProject, setSettingsProject] = useState<{
     host: string;
     project: HierarchyProject;
@@ -164,6 +177,8 @@ export function HierarchySidebar({
     projectPath: string;
     path: string;
   } | null>(null);
+  const [finishingWorkspace, setFinishingWorkspace] = useState<string | null>(null);
+  const [deletingWorkspace, setDeletingWorkspace] = useState<string | null>(null);
   const finishAbort = useRef<AbortController | null>(null);
   useEffect(() => () => finishAbort.current?.abort(), []);
   const [confirmation, setConfirmation] = useState<{
@@ -210,9 +225,11 @@ export function HierarchySidebar({
     branchChoice.resolve(choice);
   };
   const finishShip = async () => {
-    if (!finishTarget) return;
+    if (!finishTarget || finishAbort.current) return;
     const abort = new AbortController();
     finishAbort.current = abort;
+    setFinishingWorkspace(hostProjectKey(finishTarget.host, finishTarget.path));
+    setFinishTarget(null);
     try {
       const response = await fetch("/api/ship/finish", {
         method: "POST",
@@ -222,7 +239,7 @@ export function HierarchySidebar({
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Cleanup failed");
-      setFinishTarget(null);
+      await load();
       onChanged();
     } catch (error) {
       if (!abort.signal.aborted)
@@ -230,6 +247,9 @@ export function HierarchySidebar({
           "Cleanup failed",
           error instanceof Error ? error.message : String(error),
         );
+    } finally {
+      finishAbort.current = null;
+      setFinishingWorkspace(null);
     }
   };
   useEffect(() => {
@@ -306,6 +326,56 @@ export function HierarchySidebar({
       window.removeEventListener("focus", refresh);
     };
   }, [load]);
+  async function createWorkspace(hostId: string, input: WorkspaceCreateRequest) {
+    const key = hostProjectKey(hostId, input.projectPath);
+    const previous = setupObservers.current.get(key);
+    if (previous?.blocking) return;
+    previous?.controller.abort();
+    const controller = new AbortController();
+    const { signal } = controller;
+    const observer = { controller, blocking: true };
+    setupObservers.current.set(key, observer);
+    setManagerCreations((jobs) => ({ ...jobs, [key]: "starting" }));
+    try {
+      const response = await fetch("/api/worktrees", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hostId, action: "create", input }),
+        signal,
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
+      let job: WorkspaceCreationJob = data;
+      let registered = false;
+      while (!signal.aborted) {
+        observer.blocking = job.status === "running" && job.stage !== "postNonBlocking";
+        const snapshot = job;
+        setManagerCreations((jobs) => ({ ...jobs, [key]: snapshot }));
+        if (job.status !== "running") {
+          void load();
+          if (job.workspaceId) onChanged();
+          if (job.error) toast.error("Workspace setup failed", job.error);
+          break;
+        }
+        if (job.workspaceId && !registered) {
+          registered = true;
+          void load();
+        }
+        const { promise, resolve } = Promise.withResolvers<void>();
+        setTimeout(resolve, 1000);
+        await promise;
+        if (signal.aborted) break;
+        job = await readWorkspaceSetupJob(hostId, job.id, signal);
+      }
+    } catch (error) {
+      if (!signal.aborted) {
+        setManagerCreations((jobs) => ({ ...jobs, [key]: undefined }));
+        toast.error("Couldn't track workspace setup", error instanceof Error ? error.message : String(error));
+      }
+    } finally {
+      if (setupObservers.current.get(key) === observer) setupObservers.current.delete(key);
+    }
+  }
   const operate = async (host: string, input: HierarchyRequest) => {
     setBusy(true);
     setError(null);
@@ -374,6 +444,7 @@ export function HierarchySidebar({
     let cancel = false;
     try {
       while (true) {
+        setDeletingWorkspace(hostProjectKey(hostId, path));
         const response = await fetch("/api/worktrees", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -394,6 +465,8 @@ export function HierarchySidebar({
           await response.json();
         if (!response.ok)
           throw new Error(result.error ?? `HTTP ${response.status}`);
+        if (result.status === "processes" || result.status === "dirty" || result.status === "branch")
+          setDeletingWorkspace(null);
         if (result.status === "processes") {
           const processes =
             result.processes
@@ -437,6 +510,7 @@ export function HierarchySidebar({
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
+      setDeletingWorkspace(null);
       setBusy(false);
     }
   };
@@ -486,6 +560,102 @@ export function HierarchySidebar({
     textOverflow: "ellipsis",
     flex: 1,
   } as const;
+  const currentManagedProject = managedProject && (
+    snapshots[managedProject.host]?.projects.find((project) => project.id === managedProject.project.id) ?? managedProject.project
+  );
+  const workspaceConfirmations = (
+    <>
+      <ConfirmDialog
+        open={confirmation !== null}
+        onOpenChange={(open) => {
+          if (!open) finishConfirmation(false);
+        }}
+        title={confirmation?.title ?? ""}
+        description={confirmation?.description}
+        confirmLabel={confirmation?.confirmLabel ?? "Confirm"}
+        danger
+        onConfirm={() => finishConfirmation(true)}
+      />
+      <Dialog
+        open={branchChoice !== null}
+        onOpenChange={(open) => {
+          if (!open) finishBranchChoice(null);
+        }}
+      >
+        <DialogContent
+          style={{ width: 420, maxWidth: "min(92vw, 420px)", padding: 22 }}
+        >
+          <DialogTitle>Keep or delete branch?</DialogTitle>
+          <p
+            style={{
+              color: "var(--text-muted)",
+              fontSize: 13,
+              lineHeight: 1.55,
+            }}
+          >
+            Branch {branchChoice?.branch ?? "for this workspace"} is not
+            confirmed merged. Choose whether to keep it or delete it along with
+            the workspace.
+          </p>
+          <div
+            className="dialog-actions"
+            style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
+          >
+            <button
+              type="button"
+              className="dialog-action"
+              style={{
+                padding: "6px 14px",
+                background: "none",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-control)",
+                color: "var(--text-muted)",
+                cursor: "pointer",
+                fontSize: 13,
+              }}
+              onClick={() => finishBranchChoice(null)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="dialog-action"
+              style={{
+                padding: "6px 14px",
+                background: "var(--accent-strong)",
+                border: "none",
+                borderRadius: "var(--radius-control)",
+                color: "var(--on-accent)",
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+              onClick={() => finishBranchChoice(true)}
+            >
+              Keep branch
+            </button>
+            <button
+              type="button"
+              className="dialog-action"
+              style={{
+                padding: "6px 14px",
+                background: "var(--status-error)",
+                border: "none",
+                borderRadius: "var(--radius-control)",
+                color: "var(--on-accent)",
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+              onClick={() => finishBranchChoice(false)}
+            >
+              Delete branch
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
   return (
     <div ref={sidebarRef} style={{ fontSize: 12, color: "var(--text)" }}>
       <ConfirmDialog
@@ -581,6 +751,12 @@ export function HierarchySidebar({
               );
               const unavailableReason =
                 hostUnavailableReason?.(host.id) ?? null;
+              const projectKey = hostProjectKey(host.id, project.path);
+              const creation = managerCreations[projectKey];
+              const buildingFromManager = creation === "starting" || (
+                creation?.status === "running" &&
+                !project.workspaces.some((workspace) => workspace.id === creation.workspaceId)
+              );
               return (
                 <div key={project.id} style={{ marginBottom: 4 }}>
                   <div
@@ -602,6 +778,9 @@ export function HierarchySidebar({
                     >
                       {project.alias || project.name}
                     </span>
+                    {(buildingFromManager || buildingWorkspaceProjects?.has(projectKey)) && (
+                      <PendingOperation compact label="Building workspace…" />
+                    )}
                     <button
                       type="button"
                       aria-label={`New ${project.kind === "git" ? "workspace" : "session"} in ${project.alias || project.name}`}
@@ -737,6 +916,13 @@ export function HierarchySidebar({
                         unreadSessionIds.has(id) ||
                         exitedIds.has(id),
                     );
+                    const workspaceKey = hostProjectKey(host.id, workspace.path);
+                    const deleting = deletingWorkspace === workspaceKey;
+                    const cleaningUp = finishingWorkspace === workspaceKey ||
+                      (workspace.ship?.job?.status === "running" && workspace.ship.job.kind === "finish");
+                    const setup = creation && creation !== "starting" &&
+                      (creation.id === workspace.setup?.jobId || (!workspace.setup && creation.workspaceId === workspace.id))
+                      ? creation : workspace.setup;
                     return (
                       <div key={workspace.id} style={{ marginLeft: 12 }}>
                         <div
@@ -769,7 +955,11 @@ export function HierarchySidebar({
                             {workspace.name}
                             {workspace.unavailable ? " (unavailable)" : ""}
                           </button>
-                          {workspace.ship?.job?.status === "running" ? (
+                          {deleting ? (
+                            <PendingOperation label="Deleting…" />
+                          ) : cleaningUp ? (
+                            <PendingOperation label="Cleaning up…" />
+                          ) : workspace.ship?.job?.status === "running" ? (
                             <span
                               title="Shipping"
                               style={{
@@ -816,6 +1006,7 @@ export function HierarchySidebar({
                               Merged{" "}
                               <button
                                 type="button"
+                                disabled={busy || finishingWorkspace !== null}
                                 onClick={() =>
                                   setFinishTarget({
                                     host: host.id,
@@ -861,22 +1052,13 @@ export function HierarchySidebar({
                               <AlertCircle size={14} aria-hidden="true" />
                             </span>
                           )}
-                          {workspace.setup &&
-                            workspace.setup.status !== "complete" && (
-                              <span
-                                title={
-                                  workspace.setup.error ||
-                                  `Setup ${workspace.setup.status}`
-                                }
-                                aria-label={`Setup ${workspace.setup.status}`}
-                              >
-                                {workspace.setup.status === "running" ? (
-                                  <Loader2 size={14} aria-hidden="true" />
-                                ) : (
-                                  <Wrench size={14} aria-hidden="true" />
-                                )}
-                              </span>
-                            )}
+                          {setup?.status === "running" ? (
+                            <PendingOperation compact label="Setting up workspace…" />
+                          ) : setup && setup.status !== "complete" ? (
+                            <span title={setup.error || `Setup ${setup.status}`} aria-label={`Setup ${setup.status}`}>
+                              <Wrench size={14} aria-hidden="true" />
+                            </span>
+                          ) : null}
                           <details style={{ position: "relative" }} onToggle={(e) => setOpenWorkspaceMenu(e.currentTarget.open ? `${host.id}:${workspace.path}` : null)}>
                             <summary
                               aria-label={`Actions for workspace ${workspace.name}`}
@@ -928,7 +1110,7 @@ export function HierarchySidebar({
                                   type="button"
                                   aria-label="Unregister workspace"
                                   title="Unregister workspace"
-                                  disabled={busy}
+                                  disabled={busy || cleaningUp || setup?.status === "running"}
                                   onClick={(e) => {
                                     e.currentTarget
                                       .closest("details")
@@ -1043,95 +1225,6 @@ export function HierarchySidebar({
             })}
         </section>
       ))}
-      <ConfirmDialog
-        open={confirmation !== null}
-        onOpenChange={(open) => {
-          if (!open) finishConfirmation(false);
-        }}
-        title={confirmation?.title ?? ""}
-        description={confirmation?.description}
-        confirmLabel={confirmation?.confirmLabel ?? "Confirm"}
-        danger
-        onConfirm={() => finishConfirmation(true)}
-      />
-      <Dialog
-        open={branchChoice !== null}
-        onOpenChange={(open) => {
-          if (!open) finishBranchChoice(null);
-        }}
-      >
-        <DialogContent
-          style={{ width: 420, maxWidth: "min(92vw, 420px)", padding: 22 }}
-        >
-          <DialogTitle>Keep or delete branch?</DialogTitle>
-          <p
-            style={{
-              color: "var(--text-muted)",
-              fontSize: 13,
-              lineHeight: 1.55,
-            }}
-          >
-            Branch {branchChoice?.branch ?? "for this workspace"} is not
-            confirmed merged. Choose whether to keep it or delete it along with
-            the workspace.
-          </p>
-          <div
-            className="dialog-actions"
-            style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
-          >
-            <button
-              type="button"
-              className="dialog-action"
-              style={{
-                padding: "6px 14px",
-                background: "none",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--radius-control)",
-                color: "var(--text-muted)",
-                cursor: "pointer",
-                fontSize: 13,
-              }}
-              onClick={() => finishBranchChoice(null)}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="dialog-action"
-              style={{
-                padding: "6px 14px",
-                background: "var(--accent-strong)",
-                border: "none",
-                borderRadius: "var(--radius-control)",
-                color: "var(--on-accent)",
-                cursor: "pointer",
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-              onClick={() => finishBranchChoice(true)}
-            >
-              Keep branch
-            </button>
-            <button
-              type="button"
-              className="dialog-action"
-              style={{
-                padding: "6px 14px",
-                background: "var(--status-error)",
-                border: "none",
-                borderRadius: "var(--radius-control)",
-                color: "var(--on-accent)",
-                cursor: "pointer",
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-              onClick={() => finishBranchChoice(false)}
-            >
-              Delete branch
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
       {settingsProject && (
         <Dialog
           open
@@ -1170,7 +1263,8 @@ export function HierarchySidebar({
           </DialogContent>
         </Dialog>
       )}
-      {managedProject && (
+      {!managedProject && workspaceConfirmations}
+      {managedProject && currentManagedProject && (
         <Dialog
           open
           onOpenChange={(open) => {
@@ -1180,21 +1274,21 @@ export function HierarchySidebar({
           <DialogContent>
             <DialogTitle>Manage workspaces</DialogTitle>
             <WorktreesPanel
-              ctx={{
-                hostId: managedProject.host,
-                projectRoot: managedProject.project.path,
-                currentPath: selectedCwd ?? "",
-                worktrees: [],
-                select: (path) => {
-                  onSelectWorkspace(path, managedProject.host);
-                  setManagedProject(null);
-                },
-                refresh: () => {
-                  void load();
-                  onChanged();
-                },
+              hostId={managedProject.host}
+              project={currentManagedProject}
+              currentPath={selectedHostId === managedProject.host ? selectedCwd : null}
+              creation={managerCreations[hostProjectKey(managedProject.host, currentManagedProject.path)]}
+              deletionDisabled={busy || finishingWorkspace !== null}
+              removingPath={currentManagedProject.workspaces.find((workspace) =>
+                hostProjectKey(managedProject.host, workspace.path) === deletingWorkspace)?.path}
+              onCreate={(input) => void createWorkspace(managedProject.host, input)}
+              onRemove={(path) => void unregisterWorkspace(managedProject.host, currentManagedProject.path, path)}
+              onSelect={(path) => {
+                onSelectWorkspace(path, managedProject.host);
+                setManagedProject(null);
               }}
             />
+            {workspaceConfirmations}
           </DialogContent>
         </Dialog>
       )}

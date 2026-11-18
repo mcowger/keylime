@@ -2,7 +2,7 @@ import "../tests/setup-dom.ts";
 import assert from "node:assert/strict";
 import React from "react";
 import test, { afterEach } from "node:test";
-const { render, cleanup, waitFor } =
+const { render, cleanup, waitFor, fireEvent } =
   await import("@testing-library/react/pure.js");
 const { GitChangesPanel } = await import("./GitChangesPanel");
 const { WorktreesPanel } = await import("./WorktreesPanel");
@@ -80,19 +80,15 @@ test("workspace creation shows an older daemon's upgrade explanation", async () 
   setup();
   const view = render(
     React.createElement(WorktreesPanel, {
-      ctx: {
-        hostId: "remote",
-        projectRoot: "/same",
-        currentPath: "/same",
-        worktrees: [],
-        select() {},
-        refresh() {},
-      },
-      createOnly: true,
-      createOpen: true,
-      onCreateOpenChange() {},
+      hostId: "remote",
+      project: { id: "remote-repo", path: "/same", name: "Repo", kind: "git", addedAt: "", workspaces: [] },
+      currentPath: "/same",
+      onSelect() {},
+      onCreate() {},
+      onRemove() {},
     }),
   );
+  fireEvent.click(view.getByRole("button", { name: "Create workspace" }));
   await waitFor(() =>
     assert.ok(view.baseElement.textContent?.includes(advice)),
   );

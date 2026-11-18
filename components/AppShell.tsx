@@ -120,6 +120,7 @@ import type {
 } from "@/lib/types";
 import type { HierarchySnapshot } from "@/lib/project-hierarchy-types";
 import { runHostTool } from "@/hooks/useAgentSession-stream";
+import type { ChatStartupStage } from "@/hooks/useAgentSession";
 import { getOutboxScope, sendAgentCommand } from "@/lib/agent-client";
 import { addToOutbox, newOutboxId, openEventStream, type EventStream } from "@/lib/event-stream";
 import type { ChatInputHandle } from "./ChatInput";
@@ -337,6 +338,26 @@ export function AppShell({ appName }: { appName: string }) {
   }, []);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const activeChatIdRef = useRef<string | null>(null);
+  const [chatStartup, setChatStartup] = useState<Partial<Record<string, ChatStartupStage>>>({});
+  const updateStartupStage = useCallback((stage: ChatStartupStage | undefined) => {
+    if (!activeChatId) return;
+    setChatStartup((previous) => {
+      if (previous[activeChatId] === stage) return previous;
+      const next = { ...previous };
+      if (stage) next[activeChatId] = stage;
+      else delete next[activeChatId];
+      return next;
+    });
+  }, [activeChatId]);
+  const buildingWorkspaceProjects = useMemo(() => {
+    const projects = new Set<string>();
+    for (const tab of chatTabs) {
+      if (tab.workspaceProject && chatStartup[tab.id] === "buildingWorkspace") {
+        projects.add(hostProjectKey(tab.hostId, tab.workspaceProject));
+      }
+    }
+    return projects;
+  }, [chatTabs, chatStartup]);
   const visitedWorkspaces = useRef(new Set<string>());
   const pendingSharedWorkspace = useRef<{ cwd: string; hostId: string; tabId: string } | null>(null);
   const pendingWorkspaceDraft = useRef<{ cwd: string; hostId: string; tabId: string; revision: number } | null>(null);
@@ -2853,6 +2874,7 @@ export function AppShell({ appName }: { appName: string }) {
       onSelectSession={handleSelectSession}
       onNewSession={handleNewSession}
       onNewWorkspace={handleNewWorkspace}
+      buildingWorkspaceProjects={buildingWorkspaceProjects}
       onShip={openShip}
       initialSessionId={null}
       skipInitialProjectSelection={initialNavigation.requestedCwd !== null}
@@ -3879,6 +3901,8 @@ export function AppShell({ appName }: { appName: string }) {
                       newSessionCwd={effectiveNewSessionCwd}
                       newSessionHostId={newSessionHost}
                       prepareNewWorkspace={prepareNewWorkspace}
+                      startupStage={activeChatId ? chatStartup[activeChatId] : undefined}
+                      onStartupStage={updateStartupStage}
                       workspaceSourceRequired={
                         !!workspaceDraft &&
                         !workspaceDraft.workspaceJob &&

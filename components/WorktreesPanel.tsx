@@ -1,28 +1,50 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { WorktreeContext } from "./SessionSidebar-helpers";
 import type {
   WorkspaceBranches,
   WorkspaceBranchMode,
   WorkspaceCreationJob,
-  WorkspaceDeleteResult,
+  WorkspaceCreateRequest,
 } from "@/lib/workspace-creation-types";
 import { sanitizeWorkspaceBranch } from "@/lib/workspace-branch";
-import type { HierarchySnapshot } from "@/lib/project-hierarchy-types";
-import { Alert, ConfirmDialog, Field, Select, TextInput } from "./ui/field";
+import type { HierarchyProject } from "@/lib/project-hierarchy-types";
+import { Alert, Field, Select, TextInput } from "./ui/field";
+import { PendingOperation } from "./PendingOperation";
 import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
 
+export async function readWorkspaceSetupJob(
+  hostId: string,
+  id: string,
+  signal?: AbortSignal,
+): Promise<WorkspaceCreationJob> {
+  const params = new URLSearchParams({ hostId, action: "status", id });
+  const response = await fetch(`/api/worktrees?${params}`, { signal });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
+  return data;
+}
+
 export function WorktreesPanel({
-  ctx,
-  createOpen,
-  onCreateOpenChange,
-  createOnly = false,
+  hostId,
+  project,
+  currentPath,
+  onSelect,
+  onCreate,
+  onRemove,
+  creation,
+  removingPath,
+  deletionDisabled,
 }: {
-  ctx: WorktreeContext | null;
-  createOpen?: boolean;
-  onCreateOpenChange?: (open: boolean) => void;
-  createOnly?: boolean;
+  hostId: string;
+  project: HierarchyProject;
+  currentPath: string | null;
+  onSelect: (path: string) => void;
+  onCreate: (input: WorkspaceCreateRequest) => void;
+  onRemove: (path: string) => void;
+  creation?: WorkspaceCreationJob | "starting";
+  removingPath?: string;
+  deletionDisabled?: boolean;
 }) {
   const [branches, setBranches] = useState<WorkspaceBranches>({
     local: [],
@@ -36,307 +58,96 @@ export function WorktreesPanel({
   const [branch, setBranch] = useState("");
   const [baseRef, setBaseRef] = useState("");
   const [name, setName] = useState("");
-  const [job, setJob] = useState<WorkspaceCreationJob | null>(null);
-  const [snapshot, setSnapshot] = useState<HierarchySnapshot | null>(null);
-  const [pending, setPending] = useState<{
-    path: string;
-    status: "processes" | "dirty" | "branch";
-    processes?: Array<{ id: string; cwd: string }>;
-    branch?: string;
-    stopProcesses: boolean;
-    discardChanges: boolean;
-    keepBranch?: boolean;
-  } | null>(null);
+  const [viewedJob, setViewedJob] = useState<WorkspaceCreationJob | null>(null);
+  const [showCreationLogs, setShowCreationLogs] = useState(true);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-  const [localCreateOpen, setLocalCreateOpen] = useState(false);
-  const modalOpen = createOpen ?? localCreateOpen;
-  const setModalOpen = onCreateOpenChange ?? setLocalCreateOpen;
-  const hostId = ctx?.hostId;
-  const projectPath = ctx?.projectRoot;
-  async function api(action: string, input?: unknown) {
-    const params = new URLSearchParams({
-      hostId: hostId ?? "",
-      projectPath: projectPath ?? "",
-      action,
-    });
-    const response =
-      input === undefined
-        ? await fetch(`/api/worktrees?${params}`)
-        : await fetch("/api/worktrees", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ hostId, action, input }),
-          });
-    const value = await response.json();
-    if (!response.ok) throw new Error(value.error ?? "Request failed");
-    return value;
-  }
-  async function refresh() {
-    const response = await fetch(
-      `/api/hierarchy?${new URLSearchParams({ host: hostId ?? "" })}`,
-    );
-    const value = await response.json();
-    if (!response.ok) throw new Error(value.error ?? "Request failed");
-    setSnapshot(value);
-    ctx?.refresh();
-  }
+  const [modalOpen, setModalOpen] = useState(false);
+  const projectPath = project.path;
+  const creationJob = creation === "starting" ? undefined : creation;
+  const building = creation === "starting" ||
+    (creationJob?.status === "running" && creationJob.stage !== "postNonBlocking");
+  const job = viewedJob ?? (showCreationLogs ? creationJob : undefined);
+  const creationBranch = mode === "local" ? branch : sanitizeWorkspaceBranch(branch);
   useEffect(() => {
-    if (!hostId || !projectPath) return;
-    let current = true;
-    setBranch("");
-    setName("");
-    setBaseRef("");
-    void refresh().catch((e) => {
-      if (current) setError(String(e));
-    });
-    void api("branches")
-      .then((next: WorkspaceBranches) => {
-        if (!current) return;
+    const controller = new AbortController();
+    const params = new URLSearchParams({ hostId, projectPath, action: "branches" });
+    void fetch(`/api/worktrees?${params}`, { signal: controller.signal })
+      .then(async (response) => {
+        const next = await response.json();
+        if (!response.ok) throw new Error(next.error ?? `HTTP ${response.status}`);
+        if (controller.signal.aborted) return;
         setBranches(next);
         setBaseRef(next.defaultRef.replace(/^refs\/(heads|remotes)\//, ""));
       })
       .catch((e) => {
-        if (current) setError(String(e));
+        if (!controller.signal.aborted) setError(String(e));
       });
-    return () => {
-      current = false;
-    };
+    return () => controller.abort();
   }, [hostId, projectPath]);
   useEffect(() => {
-    if (!job || job.status !== "running") return;
-    const timer = setInterval(() => {
-      const params = new URLSearchParams({
-        hostId: hostId ?? "",
-        action: "status",
-        id: job.id,
-      });
-      void fetch(`/api/worktrees?${params}`)
-        .then((r) => r.json())
-        .then((next: WorkspaceCreationJob) => {
-          setJob(next);
-          if (next.workspaceId) void refresh();
+    if (!viewedJob || viewedJob.status !== "running") return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      void readWorkspaceSetupJob(hostId, viewedJob.id, controller.signal)
+        .then((next) => {
+          if (!controller.signal.aborted) setViewedJob(next);
         })
-        .catch((e) => setError(String(e)));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [job?.id, job?.status, hostId]);
-  if (!ctx || ctx.error)
-    return <div>{ctx?.error ?? "Select a project to manage workspaces."}</div>;
-  const project = snapshot?.projects.find((p) => p.path === projectPath);
-  const creationBranch =
-    mode === "local" ? branch : sanitizeWorkspaceBranch(branch);
-  async function create() {
-    setBusy(true);
-    setError("");
-    try {
-      const selected = mode === "local" ? branch : baseRef;
-      const next = await api("create", {
-        projectPath,
-        branch: creationBranch,
-        mode,
-        baseRef: selected,
-        name,
-      });
-      setJob(next);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function remove(
-    path: string,
-    stopProcesses: boolean,
-    discardChanges: boolean,
-    cancel = false,
-    keepBranch?: boolean,
-  ) {
-    setBusy(true);
-    setError("");
-    try {
-      const result: WorkspaceDeleteResult = await api("delete", {
-        projectPath,
-        path,
-        stopProcesses,
-        discardChanges,
-        cancel,
-        keepBranch,
-      });
-      if (
-        result.status === "processes" ||
-        result.status === "dirty" ||
-        result.status === "branch"
-      )
-        setPending({
-          path,
-          status: result.status,
-          processes: result.processes,
-          branch: result.branch,
-          stopProcesses,
-          discardChanges,
-          keepBranch,
+        .catch((e) => {
+          if (!controller.signal.aborted) setError(String(e));
         });
-      else {
-        setPending(null);
-        await refresh();
-      }
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
+    }, 1000);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [hostId, viewedJob]);
+
+  function viewLogs(id: string) {
+    if (id === creationJob?.id) {
+      setViewedJob(null);
+      setShowCreationLogs(true);
+    } else {
+      void readWorkspaceSetupJob(hostId, id).then(setViewedJob).catch((e) => setError(String(e)));
     }
   }
+
   return (
     <div
       className="workspace-manager"
-      style={
-        createOnly
-          ? undefined
-          : { padding: 12, overflowY: "auto", height: "100%" }
-      }
+      style={{ padding: 12, overflowY: "auto", height: "100%" }}
     >
-      {!createOnly && <h3>Workspaces</h3>}
-      {!createOnly &&
-        project?.workspaces.map((w) => (
+      <h3>Workspaces</h3>
+      {project.workspaces.map((w) => (
           <div key={w.id} style={{ marginBottom: 8 }}>
             {w.setup && (
               <span>
                 {" "}
                 Setup: {w.setup.status}
                 {w.setup.error ? ` — ${w.setup.error}` : ""}{" "}
-                <button
-                  onClick={() => {
-                    const params = new URLSearchParams({
-                      hostId: hostId ?? "",
-                      action: "status",
-                      id: w.setup!.jobId,
-                    });
-                    void fetch(`/api/worktrees?${params}`)
-                      .then(async (r) => {
-                        const value = await r.json();
-                        if (!r.ok)
-                          throw new Error(value.error ?? "Request failed");
-                        setJob(value);
-                      })
-                      .catch((e) => setError(String(e)));
-                  }}
-                >
+                <button onClick={() => viewLogs(w.setup!.jobId)}>
                   View logs
                 </button>
               </span>
             )}
             <button
-              onClick={() => ctx.select(w.path)}
-              aria-pressed={ctx.currentPath === w.path}
+              onClick={() => onSelect(w.path)}
+              aria-pressed={currentPath === w.path}
             >
               {w.name}
               {w.isDefault ? " (default)" : ""}
             </button>
             {!w.isDefault && (
               <button
-                disabled={busy || w.setup?.status === "running"}
-                onClick={() => setDeleteTarget(w.path)}
+                disabled={deletionDisabled || w.setup?.status === "running"}
+                onClick={() => onRemove(w.path)}
               >
                 Delete
               </button>
             )}
-            {pending?.path === w.path && (
-              <div>
-                {pending.status === "processes" ? (
-                  <>
-                    <p>Stop these running processes before deletion?</p>
-                    <ul>
-                      {pending.processes?.map((p) => (
-                        <li key={p.id}>
-                          {p.id} — {p.cwd}
-                        </li>
-                      ))}
-                    </ul>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        void remove(
-                          w.path,
-                          true,
-                          pending.discardChanges,
-                          false,
-                          pending.keepBranch,
-                        )
-                      }
-                    >
-                      Stop and continue
-                    </button>
-                  </>
-                ) : pending.status === "dirty" ? (
-                  <>
-                    <p>
-                      Discard uncommitted changes? Previously stopped sessions
-                      remain stopped if you cancel.
-                    </p>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        void remove(
-                          w.path,
-                          pending.stopProcesses,
-                          true,
-                          false,
-                          pending.keepBranch,
-                        )
-                      }
-                    >
-                      Discard and continue
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <p>
-                      Branch {pending.branch ?? "for this workspace"} is not
-                      merged. Keep or delete it?
-                    </p>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        void remove(
-                          w.path,
-                          pending.stopProcesses,
-                          pending.discardChanges,
-                          false,
-                          true,
-                        )
-                      }
-                    >
-                      Keep branch
-                    </button>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        void remove(
-                          w.path,
-                          pending.stopProcesses,
-                          pending.discardChanges,
-                          false,
-                          false,
-                        )
-                      }
-                    >
-                      Delete branch
-                    </button>
-                  </>
-                )}{" "}
-                <button
-                  disabled={busy}
-                  onClick={() => void remove(w.path, false, false, true)}
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
+            {removingPath === w.path && <PendingOperation label="Deleting workspace…" />}
           </div>
         ))}
-      {!createOnly && !modalOpen && job && (
+      {!modalOpen && job && (
         <section aria-label="Workspace setup logs">
           <p>
             Setup: {job.status} / {job.stage}
@@ -345,13 +156,17 @@ export function WorktreesPanel({
           <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
             {job.logs}
           </pre>
-          <button type="button" onClick={() => setJob(null)}>
+          <button type="button" onClick={() => {
+            setViewedJob(null);
+            setShowCreationLogs(false);
+          }}>
             Close logs
           </button>
         </section>
       )}
-      {!createOnly && project?.kind === "git" && (
-        <button onClick={() => setModalOpen(true)}>Create workspace</button>
+      {!modalOpen && building && <PendingOperation label="Building workspace…" />}
+      {project.kind === "git" && (
+        <button disabled={building} onClick={() => setModalOpen(true)}>Create workspace</button>
       )}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent
@@ -367,10 +182,10 @@ export function WorktreesPanel({
               overflowWrap: "anywhere",
             }}
           >
-            Project: {project?.alias ?? project?.name ?? projectPath}
+            Project: {project.alias ?? project.name}
             {projectPath && <div>{projectPath}</div>}
           </div>
-          {project?.kind === "git" && (
+          {project.kind === "git" && (
             <div
               style={{
                 display: "flex",
@@ -493,18 +308,28 @@ export function WorktreesPanel({
                     fontSize: 13,
                   }}
                 >
-                  Cancel
+                  {building ? "Close" : "Cancel"}
                 </button>
                 <button
                   type="button"
                   className="dialog-action"
                   disabled={
-                    busy ||
+                    building ||
                     !creationBranch ||
                     !name.trim() ||
                     (mode !== "local" && !baseRef)
                   }
-                  onClick={() => void create()}
+                  onClick={() => {
+                    setViewedJob(null);
+                    setShowCreationLogs(true);
+                    onCreate({
+                      projectPath,
+                      branch: creationBranch,
+                      mode,
+                      baseRef: mode === "local" ? branch : baseRef,
+                      name,
+                    });
+                  }}
                   style={{
                     padding: "6px 14px",
                     background: "var(--accent-strong)",
@@ -515,7 +340,7 @@ export function WorktreesPanel({
                     fontSize: 13,
                     fontWeight: 600,
                     opacity:
-                      busy ||
+                      building ||
                       !creationBranch ||
                       !name.trim() ||
                       (mode !== "local" && !baseRef)
@@ -523,7 +348,7 @@ export function WorktreesPanel({
                         : 1,
                   }}
                 >
-                  Create
+                  {building ? <PendingOperation label="Building workspace…" /> : "Create"}
                 </button>
               </div>
               {job && (
@@ -547,21 +372,6 @@ export function WorktreesPanel({
         </DialogContent>
       </Dialog>
       {!modalOpen && error && <p role="alert">{error}</p>}
-      <ConfirmDialog
-        open={deleteTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
-        }}
-        title="Delete workspace?"
-        description="Remove this worktree and its registrations. Merged branches are deleted; unmerged branches require a choice. Session history is kept. Running processes and uncommitted changes require separate approval."
-        confirmLabel="Delete workspace"
-        danger
-        onConfirm={() => {
-          const target = deleteTarget;
-          setDeleteTarget(null);
-          if (target) void remove(target, false, false);
-        }}
-      />
     </div>
   );
 }

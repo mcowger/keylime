@@ -62,6 +62,7 @@ import { WorkspaceState } from "./AppShell-layout";
 import {
   useAgentSession,
   type AgentPhase,
+  type ChatStartupStage,
   type NoticeItem,
   type SubagentInfo,
 } from "@/hooks/useAgentSession";
@@ -105,6 +106,8 @@ interface Props {
   prepareNewWorkspace?: (
     prompt: string,
   ) => Promise<{ cwd: string; name: string }>;
+  startupStage?: ChatStartupStage;
+  onStartupStage?: (stage: ChatStartupStage | undefined) => void;
   workspaceSourceRequired?: boolean;
   /** Host a fresh chat starts on (this machine when absent). */
   newSessionHostId?: string;
@@ -543,6 +546,8 @@ export function ChatWindow({
   newSessionCwd,
   newSessionDraftKey,
   prepareNewWorkspace,
+  startupStage,
+  onStartupStage,
   workspaceSourceRequired,
   newSessionHostId,
   onBackgroundSessionCreated,
@@ -752,6 +757,7 @@ export function ChatWindow({
     newSessionCwd,
     newSessionDraftKey,
     prepareNewWorkspace,
+    onStartupStage,
     newSessionHostId,
     onBackgroundSessionCreated,
     newSessionCreationId,
@@ -1508,7 +1514,7 @@ export function ChatWindow({
       onFollowUp={agentRunning ? handleFollowUp : undefined}
       outbox={!isNew}
       isStreaming={sessionBusy}
-      submissionBlocked={editingEntryId !== null || workspaceSourceRequired}
+      submissionBlocked={editingEntryId !== null || workspaceSourceRequired || !!startupStage}
       model={displayModelValue}
       isAutoModelSelection={isAutoModelSelection}
       modelNames={modelNames}
@@ -1550,6 +1556,7 @@ export function ChatWindow({
       activePlan={activePlan}
       advisorEnabled={advisorEnabled}
       advisorReviewPending={advisorReviewPending}
+      startupStage={startupStage}
       onAdvisorChange={handleAdvisorChange}
       advisorModel={advisorModelMeta}
       queuedMessages={queuedMessages}

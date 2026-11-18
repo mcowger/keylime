@@ -325,6 +325,11 @@ function currentRunAssistant(
   return null;
 }
 
+export type ChatStartupStage =
+  | "buildingWorkspace"
+  | "startingOmp"
+  | "sendingFirstPrompt";
+
 export interface UseAgentSessionOptions {
   session: SessionInfo | null;
   newSessionCwd: string | null;
@@ -332,6 +337,7 @@ export interface UseAgentSessionOptions {
   prepareNewWorkspace?: (
     prompt: string,
   ) => Promise<{ cwd: string; name: string }>;
+  onStartupStage?: (stage: ChatStartupStage | undefined) => void;
   /** Host a fresh chat is created on; a started session carries its own `hostId`. This machine when absent. */
   newSessionHostId?: string;
   onBackgroundSessionCreated?: (session: SessionInfo) => void;
@@ -502,6 +508,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     newSessionCwd,
     newSessionDraftKey,
     prepareNewWorkspace,
+    onStartupStage,
     newSessionHostId,
     onBackgroundSessionCreated,
     newSessionCreationId,
@@ -2191,6 +2198,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         const workspace = prepareNewWorkspace
           ? await prepareNewWorkspace(firstPrompt!)
           : undefined;
+        if (firstPrompt) onStartupStage?.("startingOmp");
         const targetCwd = workspace?.cwd ?? newSessionCwd;
         const selectedModel = newSessionModel ?? newSessionDefaultModel;
         if (selectedModel) setPendingModel(selectedModel);
@@ -2347,6 +2355,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       pooled,
       newSessionCwd,
       prepareNewWorkspace,
+      onStartupStage,
       newSessionHostId,
       newSessionCreationId,
       newSessionPoolId,
@@ -5364,6 +5373,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         let queuedBehindShell = false;
         if (isNew) {
           const selectedModel = newSessionModel;
+          if (!sessionIdRef.current) {
+            onStartupStage?.(prepareNewWorkspace ? "buildingWorkspace" : "startingOmp");
+          }
           const existingSid =
             sessionIdRef.current ?? (await ensuringNewSessionRef.current);
           const sid = existingSid ?? (await ensureNewSession(message));
@@ -5372,6 +5384,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           const ownerGone = !hookAliveRef.current;
 
           if (sid) {
+            onStartupStage?.("sendingFirstPrompt");
             sentSessionId = sid;
             // omp assigns the real id before the first prompt finishes. Promote
             // now so the sidebar can show this active session during streaming.
@@ -5490,6 +5503,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
                 ? recoveryKey
                 : (sessionIdRef.current ?? recoveryKey),
             };
+      } finally {
+        if (isNew) onStartupStage?.(undefined);
       }
     },
     [
@@ -5505,6 +5520,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       newSessionModel,
       session,
       ensureNewSession,
+      onStartupStage,
+      prepareNewWorkspace,
       ensureEventsConnected,
       promoteNewSession,
       onSessionCreated,

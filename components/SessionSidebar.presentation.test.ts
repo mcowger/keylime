@@ -619,3 +619,75 @@ test("session unregister cancellation leaves the registration unchanged", async 
     restore();
   }
 });
+
+test("manager setup and teardown stay visible in the sidebar after dismissal", async () => {
+  const project = { ...snapshot.projects[0], kind: "git" };
+  const feature = {
+    ...project.workspaces[0],
+    id: "feature",
+    path: "/workspace-feature",
+    name: "Feature",
+    isDefault: false,
+  };
+  const hierarchy = { projects: [project] };
+  const restore = setup(() => Response.json(hierarchy));
+  const createReply = Promise.withResolvers<Response>();
+  const deleteReply = Promise.withResolvers<Response>();
+  const statusReply = Promise.withResolvers<Response>();
+  const baseFetch = globalThis.fetch;
+  globalThis.fetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input), "http://localhost");
+    if (url.pathname !== "/api/worktrees") return baseFetch(input, init);
+    if (url.searchParams.get("action") === "branches") {
+      return Response.json({ local: ["main"], remote: [], defaultRef: "main" });
+    }
+    if (url.searchParams.get("action") === "status") return statusReply.promise;
+    const request = JSON.parse(String(init?.body));
+    if (request.action === "create") return createReply.promise;
+    if (request.action === "delete") return deleteReply.promise;
+    throw new Error(`Unexpected action: ${request.action}`);
+  }, { preconnect: baseFetch.preconnect });
+  const dismiss = () => fireEvent.keyDown(document.activeElement ?? document.body, {
+    key: "Escape", code: "Escape",
+  });
+  const openManager = async () => {
+    fireEvent.click(await screen.findByLabelText("Actions for project Project"));
+    fireEvent.click(screen.getByRole("button", { name: "Manage workspaces" }));
+    return screen.findByRole("dialog", { name: "Manage workspaces" });
+  };
+  try {
+    renderSidebar();
+    await openManager();
+    fireEvent.click(screen.getByRole("button", { name: "Create workspace" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Branch name" }), { target: { value: "feature" } });
+    await waitFor(() => assert.equal((screen.getByRole("button", { name: "Create" }) as HTMLButtonElement).disabled, false));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    dismiss();
+    await waitFor(() => assert.ok(!screen.queryByRole("dialog", { name: "Create workspace" })));
+    dismiss();
+    await waitFor(() => assert.ok(!screen.queryByRole("dialog", { name: "Manage workspaces" })));
+    assert.ok(screen.getByTitle("Building workspace…"));
+
+    hierarchy.projects = [{ ...project, workspaces: [...project.workspaces, feature] }];
+    const job = { id: "setup-job", workspaceId: feature.id, status: "running", stage: "postBlocking" };
+    createReply.resolve(Response.json(job));
+    await screen.findByRole("button", { name: "Feature" });
+    assert.ok(screen.getByTitle("Setting up workspace…").parentElement?.textContent?.includes("Feature"));
+    statusReply.resolve(Response.json({ ...job, status: "complete" }));
+    await waitFor(() => assert.ok(!screen.queryByTitle("Setting up workspace…")), { timeout: 3000 });
+
+    await openManager();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete workspace" }));
+    await screen.findByText("Deleting workspace…");
+    dismiss();
+    await waitFor(() => assert.ok(!screen.queryByRole("dialog", { name: "Manage workspaces" })));
+    assert.ok(screen.getByText("Deleting…").parentElement?.textContent?.includes("Feature"));
+    hierarchy.projects = [project];
+    deleteReply.resolve(Response.json({ status: "deleted" }));
+    await waitFor(() => assert.ok(!screen.queryByRole("button", { name: "Feature" })));
+    assert.equal(screen.queryByText("Deleting…"), null);
+  } finally {
+    restore();
+  }
+});
