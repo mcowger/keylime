@@ -50,6 +50,25 @@ test("an inline-code path opens the cleaned path in the file panel", () => {
   ]);
 });
 
+test("an inline screenshot and its link resolve from the chat cwd, including parent directories", () => {
+  const opened: string[] = [];
+  const { container } = renderChat(
+    '<img src="../../../var/tmp/omp-sshots-1.webp" alt="Branch picker">\n\n' +
+      "[Open screenshot](../../../var/tmp/omp-sshots-1.webp)",
+    opened,
+  );
+
+  assert.equal(
+    container.querySelector('img[alt="Branch picker"]')?.getAttribute("src"),
+    "/api/files/var/tmp/omp-sshots-1.webp?type=read&hostId=local",
+  );
+  assert.equal(
+    fireEvent.click(container.querySelector("a")!, { button: 0 }),
+    false,
+  );
+  assert.deepEqual(opened, ["/var/tmp/omp-sshots-1.webp"]);
+});
+
 test("ordinary code, scheme handles, fenced blocks and escaping paths stay unlinked", () => {
   const opened: string[] = [];
   const { container } = renderChat(

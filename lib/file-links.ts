@@ -62,10 +62,11 @@ function fileUrlToPath(href: string): string | null {
   }
 }
 
+/** Pass null for chat references: the session host authorizes the resolved absolute path. */
 export function resolveLocalFileHref(
   href: string | undefined,
   baseDir?: string,
-  relativeRoot = baseDir,
+  relativeRoot: string | null = baseDir ?? null,
 ): string | null {
   if (!href) return null;
 
@@ -97,7 +98,10 @@ export function resolveLocalFileHref(
     // Kept as `~/…`: the file API expands it to the server user's home.
     candidate = normalizedHref;
     candidateKind = "absolute";
-  } else if (baseDir && looksLikeRelativeFileHref(normalizedHref)) {
+  } else if (
+    baseDir?.startsWith("/") &&
+    looksLikeRelativeFileHref(normalizedHref)
+  ) {
     candidate = `${baseDir.replace(/\/+$/, "")}/${normalizedHref}`;
     candidateKind = "relative";
   }

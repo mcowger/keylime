@@ -148,8 +148,9 @@ export function useMarkdownBodyRendering({
       // `node` is react-markdown metadata, not a DOM attribute.
       delete (imgProps as { node?: unknown }).node;
       if (suppressImages) return alt ?? null;
-      const filePath =
-        typeof src === "string" ? resolveLocalFileHref(src, cwd) : null;
+      // Chat paths are relative to the agent's cwd, not the browser URL. The
+      // session host still checks whether the resolved file can be served.
+      const filePath = resolveLocalFileHref(src, cwd, null);
       const imageSrc = filePath
         ? getFileApiUrl(
             filePath,
@@ -281,7 +282,7 @@ export function useMarkdownBodyRendering({
             anchor
           );
         }
-        const filePath = resolveLocalFileHref(href, cwd);
+        const filePath = resolveLocalFileHref(href, cwd, null);
         if (filePath) {
           // Without a file panel (a remote host's session, a dialog) a path link has nowhere to go: show its text.
           if (!onOpenFile)
