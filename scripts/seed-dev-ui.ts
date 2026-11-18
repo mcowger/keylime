@@ -84,6 +84,14 @@ writeFileSync(
   "# Field notes\n\nA non-Git workspace.\n",
 );
 
+// Keep this checkout out of Repos so the System directory picker exercises both sources.
+const serviceRepo = path.join(projects, "atlas-service");
+mkdirSync(serviceRepo);
+execFileSync("git", ["-C", serviceRepo, "init", "-b", "main"], { stdio: "pipe" });
+writeFileSync(path.join(serviceRepo, "README.md"), "# Atlas service\n");
+execFileSync("git", ["-C", serviceRepo, "add", "README.md"], { stdio: "pipe" });
+execFileSync("git", ["-C", serviceRepo, "-c", "user.name=UI Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "Initial fixture"], { stdio: "pipe" });
+
 const sessions = [
   {
     cwd: repo,

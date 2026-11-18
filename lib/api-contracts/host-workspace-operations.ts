@@ -1,6 +1,7 @@
 import { Type, type TSchema } from "@sinclair/typebox";
 import type { OperationContract } from "./operations";
 import * as M from "./workspace-models";
+import { SystemsRequestSchema, SystemsResultSchema } from "./systems";
 
 const str = Type.String(),
   num = Type.Number(),
@@ -91,7 +92,7 @@ export const hostWorkspaceOperations: readonly OperationContract[] = [
     "terminals",
     `Usage: Manage host-daemon terminals for a workspace.
 Inputs: The action selects cwd, terminal id, dimensions, input text, or viewer focus state.
-Invariants: IDs and snapshots belong to the host terminal process; cursor positions order output, not filesystem bytes.
+Invariants: IDs and snapshots belong to the daemon; cursors order output, not filesystem bytes. A service terminal can retain output after its process exits.
 Effects: Create, input, resize, focus and close change terminal state; list and snapshot observe it.
 Recovery: Re-list or snapshot after disconnection; a restarted daemon does not preserve terminal processes.`,
     terminalArgs,
@@ -472,5 +473,15 @@ Effects: Inspects Git configuration without changing it.
 Recovery: Re-query after remote or worktree changes.`,
     obj({ paths: Type.Array(str, { maxItems: 500 }) }),
     obj({ origins: Type.Array(M.GitOriginSchema) }),
+  ),
+  op(
+    "systems",
+    `Usage: Manage Systems and Efforts on one host daemon.
+Inputs: Select an action with its host paths, IDs, settings, or preview confirmation. Service controls identify a saved service and never take a command or environment override.
+Invariants: Creation captures resolved commits and the System definition. Paths and branches remain stable on rename. A running service is not a readiness check.
+Effects: Actions can change definitions, admit durable setup, control daemon-owned service PTYs, or clean up Efforts. Cleanup does not remove branches, push commits, or close PRs.
+Recovery: List host state after uncertain delivery. Retry incomplete setup explicitly and refresh a cleanup preview before resuming removal. A daemon restart does not restart services.`,
+    obj({ input: SystemsRequestSchema }),
+    SystemsResultSchema,
   ),
 ];

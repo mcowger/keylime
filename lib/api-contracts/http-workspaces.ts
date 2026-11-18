@@ -37,6 +37,7 @@ import {
   CloneFrameSchema,
   CloneProgressSchema,
 } from "./workspace-models";
+import { SystemsHttpPostSchema, SystemsResultSchema } from "./systems";
 
 const s = Type.String();
 const opt = Type.Optional;
@@ -406,6 +407,28 @@ export const workspaceHttpOperations: readonly HttpOperation[] = [
       responses: responses(HierarchySnapshotSchema),
     },
   ),
+  ops("/api/systems", "get", "workspaceSystemsGet", "List Systems and Efforts", {
+    parameters: [host],
+    responses: {
+      ...webErrors,
+      200: jsonResponse(SystemsResultSchema),
+      409: error("The host daemon is drained for maintenance."),
+      501: error("The host daemon does not support Systems."),
+      504: error("The host did not answer in time."),
+    },
+  }),
+  ops("/api/systems", "post", "workspaceSystemsPost", "Manage Systems and Efforts", {
+    requestBody: jsonBody(SystemsHttpPostSchema, "At most 384 KiB of JSON."),
+    responses: {
+      ...responses(SystemsResultSchema),
+      409: error(
+        "The host rejected the action due to current state or a stale confirmation.",
+      ),
+      413: error("The request body exceeds 384 KiB."),
+      501: error("The host daemon does not support Systems."),
+      504: error("The host did not answer in time; the action may have run."),
+    },
+  }),
   ops(
     "/api/projects",
     "get",

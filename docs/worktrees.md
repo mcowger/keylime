@@ -10,6 +10,18 @@ Importing sessions finds sessions whose working directory is inside the selected
 
 Unregistering a project forgets its child registrations without stopping processes or deleting files. Unregistering a linked workspace removes its worktree as described below. The default workspace cannot be unregistered separately from its project. Duplicate imports of the same canonical resource are idempotent, and each resource has one parent.
 
+## Systems and Efforts
+
+Use **Systems → New System** under a host to group existing Git checkouts. Pick registered Repos or browse for a checkout on that host. A System-only checkout doesn't appear under standalone **Repos**. Add named foreground service commands and the content for `AGENTS.md` in System settings.
+
+Use **New Effort** to preview the member paths, bases, and branch. Each member gets a worktree under `~/workspace/keylime-worktrees/<system>/<effort>/<repo>` on that host, with branch `<system>/<effort>`. The **Configure Effort worktrees root** control changes the root for new Efforts. Keylime uses Git for fixed-path creation and keeps the other configured setup hooks. A setup failure leaves the existing worktrees in place; open **Manage** to inspect each member and retry incomplete setup.
+
+The root contains `AGENTS.md` and a generated `repomap.md` with relative checkout paths. Start a chat at the root to work across repos, or open a member in Explorer. System edits apply to new Efforts only. Once blocking setup passes, each service starts in its own terminal. Open, stop, or restart it from the Effort details. Running means the command is still active, not that the app is ready. Start services manually after a daemon restart.
+
+Use **Preview cleanup** to review running processes, dirty files, and available branch and PR information. Stop-only keeps the worktrees and chats. Removing worktrees archives chats and keeps branches and PRs. Force removal discards dirty files in the reviewed worktrees. Edited root documents and unexpected root files are kept. Ship is not available on Effort members; standalone Repos keep their existing Ship behavior.
+
+See the [Systems and Efforts design](specs/2026-11-18-systems-and-efforts-design.md) for details.
+
 ## Chat tabs
 
 Each workspace can have multiple chat tabs alongside its terminals. Desktop shows open tabs and a **Chats** picker for saved conversations. Mobile uses a compact workspace/tab-count button in the header; tap it for open chats and terminals, creation actions and searchable saved chats. Selecting a saved conversation opens its existing tab or adds one. Unsent chats keep separate drafts, including when several belong to the same workspace.

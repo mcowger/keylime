@@ -20,10 +20,7 @@ import path from "node:path";
 import { getAgentDir } from "../omp/paths";
 import { listAllSessions } from "../session-reader";
 import { applyProjectPresentation } from "../project-registry";
-import {
-  grantWorkspaceRoot,
-  invalidateWorkspaceRoots,
-} from "./workspace-roots";
+import { invalidateWorkspaceRoots } from "./workspace-roots";
 import type {
   HierarchyProject,
   HierarchyRequest,
@@ -34,6 +31,13 @@ import type { OpResult } from "./session-ops";
 import type { SessionInfo } from "../types";
 import { isValidSessionId } from "../session-file-references-core";
 import { workspaceShipState } from "./workspace-ship";
+import { isEffortPath, isEffortRepo } from "./systems";
+
+// Daemon-only metadata. Public hierarchy responses never contain these rows.
+type RegistryProject = HierarchyProject & { hidden?: true; effortRoot?: true };
+type RegistrySnapshot = Omit<HierarchySnapshot, "projects"> & {
+  projects: RegistryProject[];
+};
 
 function file(): string {
   return path.join(getAgentDir(), "hierarchy.json");
@@ -159,13 +163,10 @@ function worktrees(
   project: HierarchyProject,
 ): { path: string; name: string; branch?: string; isDefault: boolean }[] {
   if (project.kind !== "git") return [];
-  const output = git(project.path, "worktree", "list", "--porcelain");
-  return output
-    .split(/\n\n+/)
-    .map((block) => {
-      const lines = block.split("\n");
+  return gitWorktrees(project.path)
+    .map((lines) => {
       const raw = lines.find((line) => line.startsWith("worktree "))?.slice(9);
-      if (!raw) return null;
+      if (!raw || isEffortPath(raw)) return null;
       const p = canonical(raw);
       const branch = lines
         .find((line) => line.startsWith("branch refs/heads/"))
@@ -179,7 +180,43 @@ function worktrees(
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
 }
-export function readHierarchy(): HierarchySnapshot {
+
+function gitWorktrees(cwd: string, limit?: number): string[][] {
+  return git(cwd, "worktree", "list", "--porcelain", "-z")
+    .split("\0\0", limit)
+    .map((block) => block.split("\0"));
+}
+
+function primaryCheckout(cwd: string): string | undefined {
+  const [primary] = gitWorktrees(cwd, 1);
+  const location = primary?.[0];
+  if (!location?.startsWith("worktree ") || primary.includes("bare"))
+    return undefined;
+  return location.slice(9);
+}
+
+function assertStandalonePath(value: string): void {
+  if (isEffortPath(value))
+    throw new Error("Effort paths cannot be registered in standalone Repos");
+}
+
+/** Resolve a System member selection without changing the registry. */
+export function canonicalRepoPath(value: string): string {
+  assertStandalonePath(value);
+  const requested = directory(value);
+  let primary: string | undefined;
+  try {
+    primary = primaryCheckout(requested);
+  } catch {
+    // A non-Git directory cannot be a System member.
+  }
+  if (!primary)
+    throw new Error("A Git checkout with a primary worktree is required");
+  assertStandalonePath(primary);
+  return directory(primary);
+}
+
+export function readHierarchy(): RegistrySnapshot {
   try {
     const data = JSON.parse(readFileSync(file(), "utf8"));
     if (!data || !Array.isArray(data.projects))
@@ -191,7 +228,7 @@ export function readHierarchy(): HierarchySnapshot {
     throw error;
   }
 }
-function save(snapshot: HierarchySnapshot): void {
+function save(snapshot: RegistrySnapshot): void {
   const target = file();
   mkdirSync(path.dirname(target), { recursive: true });
   const temporary = `${target}.${process.pid}.${randomUUID()}.tmp`;
@@ -205,22 +242,120 @@ function save(snapshot: HierarchySnapshot): void {
   }
   invalidateWorkspaceRoots();
 }
+
+function isStandaloneProject(project: RegistryProject): boolean {
+  return !project.hidden && !isEffortPath(project.path);
+}
+
+function addProject(
+  snapshot: RegistrySnapshot,
+  root: string,
+  kind: HierarchyProject["kind"],
+  name = path.basename(root),
+): RegistryProject {
+  if (snapshot.projects.some((p) => p.workspaces.some((w) => w.path === root)))
+    throw new Error("Path is already registered as a workspace");
+  const id = randomUUID();
+  const project: RegistryProject = {
+    id,
+    path: root,
+    name,
+    kind,
+    addedAt: new Date().toISOString(),
+    workspaces: [
+      {
+        id: randomUUID(),
+        projectId: id,
+        path: root,
+        name,
+        isDefault: true,
+        sessionIds: [],
+      },
+    ],
+  };
+  snapshot.projects.push(project);
+  return project;
+}
+
+export function registerSystemRepo(value: string): HierarchyProject {
+  const root = canonicalRepoPath(value);
+  const snapshot = readHierarchy();
+  const existing = snapshot.projects.find((project) => project.path === root);
+  if (existing) {
+    if (existing.effortRoot)
+      throw new Error("Path is registered as an Effort root");
+    if (existing.kind !== "git") {
+      existing.kind = "git";
+      save(snapshot);
+    }
+    return existing;
+  }
+  const project = addProject(snapshot, root, "git");
+  project.hidden = true;
+  save(snapshot);
+  return project;
+}
+
+export function registerEffortRoot(
+  value: string,
+  name: string,
+): HierarchyWorkspace {
+  const root = directory(value);
+  const snapshot = readHierarchy();
+  const existing = snapshot.projects.find((project) => project.path === root);
+  if (existing) {
+    if (!existing.effortRoot)
+      throw new Error("Path is already registered as a Repo");
+    const workspace = existing.workspaces[0];
+    if (existing.name !== name || workspace.name !== name) {
+      existing.name = name;
+      workspace.name = name;
+      save(snapshot);
+    }
+    return workspace;
+  }
+  const project = addProject(snapshot, root, "directory", name);
+  project.hidden = true;
+  project.effortRoot = true;
+  save(snapshot);
+  return project.workspaces[0];
+}
+
+export function unregisterEffortRoot(value: string): void {
+  const root = canonical(value);
+  const snapshot = readHierarchy();
+  const index = snapshot.projects.findIndex(
+    (project) => project.effortRoot && project.path === root,
+  );
+  if (index === -1) return;
+  snapshot.projects.splice(index, 1);
+  save(snapshot);
+}
+
 function projectById(
-  snapshot: HierarchySnapshot,
+  snapshot: RegistrySnapshot,
   id?: string,
-): HierarchyProject {
+): RegistryProject {
   const project = snapshot.projects.find((p) => p.id === id);
-  if (!project) throw new Error("Project not registered");
+  if (!project || !isStandaloneProject(project))
+    throw new Error("Project not registered");
   return project;
 }
 function workspaceById(
-  snapshot: HierarchySnapshot,
+  snapshot: RegistrySnapshot,
   id?: string,
 ): HierarchyWorkspace {
-  const workspace = snapshot.projects
-    .flatMap((p) => p.workspaces)
-    .find((w) => w.id === id);
-  if (!workspace) throw new Error("Workspace not registered");
+  const project = snapshot.projects.find((p) =>
+    p.workspaces.some((w) => w.id === id),
+  );
+  const workspace = project?.workspaces.find((w) => w.id === id);
+  if (
+    !project ||
+    !isStandaloneProject(project) ||
+    !workspace ||
+    isEffortPath(workspace.path)
+  )
+    throw new Error("Workspace not registered");
   return workspace;
 }
 function matchingWorkspace(
@@ -274,7 +409,6 @@ function addWorkspace(
     setup,
   };
   project.workspaces.push(workspace);
-  grantWorkspaceRoot(p);
   return workspace;
 }
 export function registerCreatedWorkspace(
@@ -363,65 +497,46 @@ export async function hierarchyOperation(
     const snapshot = readHierarchy();
     switch (input.action) {
       case "list":
-        for (const project of snapshot.projects)
-          for (const workspace of project.workspaces) {
-            const ship = workspaceShipState(workspace.path);
-            if (ship) workspace.ship = ship;
-          }
+        // Add Ship status to the public projection below.
         break;
       case "registerProject": {
-        const requested = directory(input.path ?? input.cwd);
+        const value = input.path ?? input.cwd;
+        if (value) assertStandalonePath(value);
+        const requested = directory(value);
         let root = requested;
         let kind: HierarchyProject["kind"] = "directory";
         try {
-          const common = git(
-            requested,
-            "rev-parse",
-            "--path-format=absolute",
-            "--git-common-dir",
-          );
-          root = canonical(path.dirname(common));
-          kind = "git";
+          const primary = primaryCheckout(requested);
+          if (primary) {
+            root = primary;
+            kind = "git";
+          }
         } catch {
           /* not a git checkout */
         }
+        assertStandalonePath(root);
+        root = canonical(root);
         const existing = snapshot.projects.find((p) => p.path === root);
         if (existing) {
+          if (existing.effortRoot)
+            throw new Error("Path is registered as an Effort root");
+          if (existing.hidden || (kind === "git" && existing.kind !== "git")) {
+            delete existing.hidden;
+            if (kind === "git") existing.kind = kind;
+            save(snapshot);
+          }
           snapshot.selectedProjectId = existing.id;
           break;
         }
-        if (
-          snapshot.projects.some((p) =>
-            p.workspaces.some((w) => w.path === root),
-          )
-        )
-          throw new Error("Path is already registered as a workspace");
-        const id = randomUUID();
-        const project: HierarchyProject = {
-          id,
-          path: root,
-          name: path.basename(root),
-          kind,
-          addedAt: new Date().toISOString(),
-          workspaces: [],
-        };
-        project.workspaces.push({
-          id: randomUUID(),
-          projectId: id,
-          path: root,
-          name: path.basename(root),
-          isDefault: true,
-          sessionIds: [],
-        });
-        snapshot.selectedProjectId = id;
-        snapshot.projects.push(project);
-        grantWorkspaceRoot(root);
+        const project = addProject(snapshot, root, kind);
+        snapshot.selectedProjectId = project.id;
         save(snapshot);
         break;
       }
       case "unregisterProject": {
         const project = projectById(snapshot, input.projectId);
-        snapshot.projects = snapshot.projects.filter((p) => p !== project);
+        if (isEffortRepo(project.path)) project.hidden = true;
+        else snapshot.projects = snapshot.projects.filter((p) => p !== project);
         save(snapshot);
         break;
       }
@@ -465,6 +580,7 @@ export async function hierarchyOperation(
         if (!Array.isArray(input.paths))
           throw new Error("Workspace paths required");
         for (const value of input.paths) {
+          assertStandalonePath(value);
           const p = directory(value);
           const candidate = candidates.find((w) => w.path === p);
           if (!candidate)
@@ -484,6 +600,7 @@ export async function hierarchyOperation(
         snapshot.sessionCandidates = sessions.filter(
           (s) =>
             !registered.has(s.id) &&
+            !isEffortPath(s.cwd) &&
             matchingWorkspace(snapshot, s.cwd)?.id === workspace.id,
         );
         break;
@@ -500,6 +617,7 @@ export async function hierarchyOperation(
           const session = sessions.find((s) => s.id === id);
           if (
             !session ||
+            isEffortPath(session.cwd) ||
             matchingWorkspace(snapshot, session.cwd)?.id !== workspace.id
           )
             throw new Error("Session cwd does not belong to workspace");
@@ -522,9 +640,11 @@ export async function hierarchyOperation(
           .flatMap((p) => p.workspaces)
           .find((w) => w.sessionIds.includes(input.from!));
         if (!workspace) throw new Error("Session not registered");
+        workspaceById(snapshot, workspace.id);
         const session = sessions.find((s) => s.id === input.to);
         if (
           !session ||
+          isEffortPath(session.cwd) ||
           matchingWorkspace(snapshot, session.cwd)?.id !== workspace.id
         )
           throw new Error("Session cwd does not belong to workspace");
@@ -540,8 +660,14 @@ export async function hierarchyOperation(
       default:
         throw new Error("Unknown hierarchy action");
     }
-    for (const project of snapshot.projects)
+    snapshot.projects = snapshot.projects.filter(isStandaloneProject);
+    for (const project of snapshot.projects) {
+      project.workspaces = project.workspaces.filter((w) => !isEffortPath(w.path));
       for (const workspace of project.workspaces) {
+        if (input.action === "list") {
+          const ship = workspaceShipState(workspace.path);
+          if (ship) workspace.ship = ship;
+        }
         if (project.kind === "directory" && workspace.isDefault)
           workspace.name = "default";
         try {
@@ -555,6 +681,7 @@ export async function hierarchyOperation(
           workspace.unavailable = true;
         }
       }
+    }
     return { ok: true, value: snapshot };
   } catch (error) {
     return {

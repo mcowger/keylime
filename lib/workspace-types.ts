@@ -1,5 +1,6 @@
 import type { Static } from "@sinclair/typebox";
 import type * as M from "./api-contracts/workspace-models";
+import type { SystemsRequest, SystemsResult } from "./api-contracts/systems";
 import type { WorkspaceFileEvent as SchemaWorkspaceFileEvent } from "./api-contracts/host-schemas";
 import type {
   UploadConflictStrategy,
@@ -68,6 +69,8 @@ export interface WorkspaceOps {
       cursor?: number;
     }>
   >;
+  /** Read or mutate Systems and Efforts owned by this daemon. */
+  systems(input: SystemsRequest): Promise<OpResult<SystemsResult>>;
   hierarchy(input: HierarchyRequest): Promise<OpResult<HierarchySnapshot>>;
   shipPreview(input: {
     projectPath: string;
@@ -218,6 +221,7 @@ export const WORKSPACE_OP_PARAMS: {
   startShip: ["input"],
   shipStatus: ["id"],
   shipFinish: ["input"],
+  systems: ["input"],
 };
 
 export function isWorkspaceOp(value: string): value is keyof WorkspaceOps {

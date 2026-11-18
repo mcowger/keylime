@@ -1,0 +1,5 @@
+/* The reused source picker portals outside the dialog popup. */
+body:has(.systems-dialog .workspace-source-trigger[aria-expanded="true"])
+  .workspace-source-positioner {
+  z-index: 1002;
+}

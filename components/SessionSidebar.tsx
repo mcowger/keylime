@@ -104,6 +104,8 @@ import {
   SidebarPortalMenu,
 } from "./SessionSidebar-chrome";
 import { HierarchySidebar } from "./HierarchySidebar";
+import type { EffortRecord } from "@/lib/api-contracts/systems";
+import type { SystemsHosts } from "./SystemsHost";
 import type { ShipTarget } from "./ShipDialog";
 
 /** Deadline for one /api/sessions fetch. A wedged-but-listening server never
@@ -138,6 +140,8 @@ interface Props {
   onInitialRestoreDone?: () => void;
   refreshKey?: number;
   onSessionDeleted?: (sessionId: string) => void;
+  systemsHosts: SystemsHosts;
+  onOpenEffort: (host: string, effort: EffortRecord, navigate: boolean, latestSession?: SessionInfo) => void;
   onWorkspaceRemoved?: (path: string, host: string) => void;
   onShip?: (target: ShipTarget) => void;
   selectedCwd?: string | null;
@@ -230,6 +234,8 @@ export const SessionSidebar = memo(function SessionSidebar({
   skipInitialProjectSelection,
   onInitialRestoreDone,
   refreshKey,
+  systemsHosts,
+  onOpenEffort,
   onSessionDeleted,
   onWorkspaceRemoved,
   onShip,
@@ -1411,17 +1417,23 @@ export const SessionSidebar = memo(function SessionSidebar({
       (selectedCwd === workspace.path || selectedCwd.startsWith(workspace.path === "/" ? "/" : `${workspace.path}/`)),
     )
     .sort((a, b) => b.path.length - a.path.length)[0];
+  const selectedEffort = selectedCwd && systemsHosts.byHost[selectedHostId]?.data?.efforts.find((effort) =>
+    effort.status !== "cleaned" && (selectedCwd === effort.root || selectedCwd.startsWith(`${effort.root}/`)),
+  );
+  const newSessionPath = selectedEffort ? selectedEffort.root : newSessionWorkspace?.path;
+  const newSessionBlockedReason = selectedEffort && selectedEffort.status !== "ready"
+    ? "This Effort isn't ready for a new chat."
+    : newSessionPath ? hostUnavailableReason(selectedHostId) : null;
   const handleNewSession = useCallback(() => {
-    if (!newSessionWorkspace) {
+    if (newSessionBlockedReason) return;
+    if (!newSessionPath) {
       newSessionAfterProjectRef.current = true;
       setAddProjectError(null);
       setAddProjectOpen(true, selectedHostId);
       return;
     }
-    if (hostUnavailableReason(selectedHostId)) return;
-    onNewSession?.(browserUUID(), newSessionWorkspace.path, selectedHostId);
-  }, [newSessionWorkspace, selectedHostId, onNewSession, hostUnavailableReason, setAddProjectOpen]);
-  const newSessionBlockedReason = newSessionWorkspace ? hostUnavailableReason(selectedHostId) : null;
+    onNewSession?.(browserUUID(), newSessionPath, selectedHostId);
+  }, [newSessionPath, newSessionBlockedReason, selectedHostId, onNewSession, setAddProjectOpen]);
   const newSessionEnabled = newSessionBlockedReason === null;
 
   const [importing, setImporting] = useState(false);
@@ -1704,8 +1716,8 @@ export const SessionSidebar = memo(function SessionSidebar({
           className="sidebar-new-session"
           title={
             newSessionBlockedReason ??
-            (newSessionWorkspace
-              ? t("sessionSidebar.newSessionIn", { cwd: newSessionWorkspace.path })
+            (newSessionPath
+              ? t("sessionSidebar.newSessionIn", { cwd: newSessionPath })
               : t("appShell.openWorkspaces"))
           }
           style={{
@@ -2038,6 +2050,17 @@ export const SessionSidebar = memo(function SessionSidebar({
           )}
 
         <HierarchySidebar
+          systemsHosts={systemsHosts}
+          onOpenEffort={(host, effort, navigate, latestSession) => {
+            if (navigate) {
+              pendingWorkspaceDiscovery.current = null;
+              lastNotifiedCwdRef.current = hostProjectKey(host, effort.root);
+              setSelectedCwd(effort.root);
+              setSelectedHostId(host);
+            }
+            onOpenEffort(host, effort, navigate, latestSession);
+            onClose?.();
+          }}
           hosts={hostList}
           onProjects={setRegisteredWorkspaces}
           collapsedHosts={collapsedHosts}

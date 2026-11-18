@@ -8,26 +8,33 @@ import {
   realpathSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test, { type TestContext } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import type { ShipJob } from "../workspace-ship-types";
 import {
   hierarchyOperation,
+  readHierarchy,
+  registerCreatedSession,
   registerCreatedWorkspace,
+  registerEffortRoot,
+  registerSystemRepo,
+  unregisterEffortRoot,
 } from "./project-hierarchy.ts";
 import { setWorkspaceDeletionAdapter } from "./workspace-creation.ts";
 import {
+  shipFinish,
   shipPreview,
   startShip,
   shipStatus,
   refreshShipPrs,
 } from "./workspace-ship.ts";
 
-async function fixture(t: TestContext) {
+async function fixture(t: TestContext, effortMember = false) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "ship-test-")));
   const oldDir = process.env.PI_CODING_AGENT_DIR,
     oldPath = process.env.PATH;
@@ -49,9 +56,12 @@ async function fixture(t: TestContext) {
     rmSync(root, { recursive: true, force: true });
   });
   const project = join(root, "project"),
-    workspace = join(root, "workspace"),
+    workspace = effortMember
+      ? join(root, "effort", "member")
+      : join(root, "workspace"),
     remote = join(root, "remote.git");
   mkdirSync(project);
+  if (effortMember) mkdirSync(dirname(workspace));
   execFileSync("git", ["init", "--bare", "-q", remote]);
   const git = (cwd: string, ...args: string[]) =>
     execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
@@ -64,11 +74,14 @@ async function fixture(t: TestContext) {
   git(project, "remote", "add", "origin", remote);
   git(project, "push", "-u", "origin", "HEAD");
   git(project, "remote", "add", "github", "https://github.com/test/repo.git");
-  const result = await hierarchyOperation({
-    action: "registerProject",
-    path: project,
-  });
-  assert.equal(result.ok, true);
+  if (effortMember) registerSystemRepo(project);
+  else {
+    const result = await hierarchyOperation({
+      action: "registerProject",
+      path: project,
+    });
+    assert.equal(result.ok, true);
+  }
   git(project, "worktree", "add", "-qb", "feature", workspace);
   registerCreatedWorkspace(project, workspace, "feature");
   setWorkspaceDeletionAdapter({
@@ -238,6 +251,119 @@ test("merged PR watcher finishes and removes workspace", async (t) => {
   const deadline = Date.now() + 15000;
   while (existsSync(f.workspace) && Date.now() < deadline) await delay(25);
   assert.equal(existsSync(f.workspace), false);
+});
+
+test("Effort ownership hides worktrees and fences standalone Ship, including old PR records", async (t) => {
+  const f = await fixture(t, true);
+  const effortRoot = dirname(f.workspace);
+  const canonical = registerSystemRepo(f.workspace);
+  const initial = await hierarchyOperation({ action: "list" });
+  assert.ok(initial.ok);
+  assert.deepEqual(initial.value.projects, []);
+  const visible = await hierarchyOperation({
+    action: "registerProject",
+    path: f.project,
+  });
+  assert.ok(visible.ok);
+  assert.equal(visible.value.selectedProjectId, canonical.id);
+
+  const effort = registerEffortRoot(effortRoot, "Launch");
+  const chat = "11111111-1111-4111-8111-111111111111";
+  registerCreatedSession(effortRoot, chat);
+  const renamed = registerEffortRoot(effortRoot, "Launch again");
+  assert.equal(renamed.id, effort.id);
+  assert.equal(renamed.name, "Launch again");
+  assert.deepEqual(renamed.sessionIds, [chat]);
+  const persisted = readHierarchy().projects.find((p) => p.id === effort.projectId);
+  assert.equal(persisted?.name, "Launch again");
+  assert.equal(persisted?.workspaces[0].name, "Launch again");
+
+  // Include a worktree that Git knows about but Effort setup hasn't registered.
+  const partial = join(effortRoot, "partial");
+  const standalone = join(f.root, "effort-standalone");
+  f.git(f.project, "worktree", "add", "-qb", "partial", partial);
+  f.git(f.project, "worktree", "add", "-qb", "standalone", standalone);
+  const alias = join(f.root, "alias");
+  symlinkSync(partial, alias);
+  const keylime = join(f.root, "agent", "keylime");
+  mkdirSync(join(keylime, "ship"), { recursive: true });
+  writeFileSync(
+    join(keylime, "systems.json"),
+    JSON.stringify({
+      version: 1,
+      systems: [],
+      efforts: [
+        {
+          root: effortRoot,
+          status: "ready",
+          members: [
+            { path: f.workspace, repoPath: f.project },
+            { path: partial, repoPath: f.project },
+          ],
+        },
+      ],
+    }),
+  );
+  const discovered = await hierarchyOperation({
+    action: "discoverWorkspaces",
+    projectId: canonical.id,
+  });
+  assert.ok(discovered.ok);
+  assert.deepEqual(discovered.value.projects.map((p) => p.id), [canonical.id]);
+  assert.deepEqual(
+    discovered.value.projects[0].workspaces.map((w) => w.path),
+    [f.project],
+  );
+  assert.deepEqual(discovered.value.workspaceCandidates?.map((w) => w.path), [
+    standalone,
+  ]);
+  for (const rejected of [
+    await hierarchyOperation({ action: "registerProject", path: alias }),
+    await hierarchyOperation({ action: "registerProject", path: effort.path }),
+    await hierarchyOperation({
+      action: "importWorkspaces",
+      projectId: canonical.id,
+      paths: [alias],
+    }),
+  ])
+    assert.equal(rejected.ok, false);
+
+  const prFile = join(keylime, "ship", "prs.json");
+  const oldRecords = JSON.stringify({
+    [f.workspace]: {
+      ...f.input,
+      base: f.git(f.project, "branch", "--show-current"),
+      pr: { number: 42, state: "open", cleanup: true },
+    },
+  });
+  writeFileSync(prFile, oldRecords);
+  await assert.rejects(shipPreview(f.input), { code: "effort_workspace" });
+  await assert.rejects(
+    startShip({ ...f.input, mode: "local", rebase: false, cleanup: false }),
+    { code: "effort_workspace" },
+  );
+  await assert.rejects(shipFinish(f.input), { code: "effort_workspace" });
+  await refreshShipPrs();
+  assert.equal(readFileSync(prFile, "utf8"), oldRecords);
+  assert.equal(existsSync(join(f.root, "gh.log")), false);
+  assert.equal(existsSync(f.workspace), true);
+
+  const hidden = await hierarchyOperation({
+    action: "unregisterProject",
+    projectId: canonical.id,
+  });
+  assert.ok(hidden.ok);
+  assert.deepEqual(hidden.value.projects, []);
+  const retained = readHierarchy().projects.find((p) => p.id === canonical.id);
+  assert.ok(retained?.workspaces.some((w) => w.path === f.workspace));
+  const restored = await hierarchyOperation({
+    action: "registerProject",
+    path: standalone,
+  });
+  assert.ok(restored.ok);
+  assert.equal(restored.value.selectedProjectId, canonical.id);
+  unregisterEffortRoot(effortRoot);
+  assert.ok(!readHierarchy().projects.some((p) => p.id === effort.projectId));
 });
 
 test("preview discovers an existing PR and auto-merge adopts it", async (t) => {

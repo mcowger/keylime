@@ -151,15 +151,36 @@ function installColorHandlers(
   });
 }
 /** A PTY shell owns its session; foreground jobs use different process groups within it. */
-function signalSession(pid: number, signal: NodeJS.Signals): void {
-  const rows = execFileSync("ps", ["-A", "-o", "pid=", "-o", "sess="], {
-    encoding: "utf8",
-    timeout: 3000,
-  });
-  for (const row of rows.split("\n")) {
-    const [child, session] = row.trim().split(/\s+/).map(Number);
+function signalSession(
+  leader: Bun.Subprocess,
+  signal: NodeJS.Signals,
+  tty?: string,
+): string | undefined {
+  const { pid } = leader;
+  const leaderRunning = running(leader);
+  // Darwin's sess column is a kernel pointer, not the session leader's PID.
+  const darwin = globalThis.process.platform === "darwin";
+  const table = execFileSync(
+    "ps",
+    ["-A", "-o", "pid=", "-o", "pgid=", "-o", darwin ? "tty=" : "sess="],
+    { encoding: "utf8", timeout: 3000 },
+  );
+  const rows = table.trim().split("\n").map((row) => row.trim().split(/\s+/));
+  if (darwin && leaderRunning) {
+    tty ??= rows.find(([child]) => Number(child) === pid)?.[2];
+    // ?? means no controlling terminal; never match other non-terminal processes.
+    if (tty === "??") tty = undefined;
+  }
+  for (const [childPid, group, session] of rows) {
+    const child = Number(childPid);
+    const owned =
+      child === pid
+        ? leaderRunning
+        : darwin
+          ? Number(group) === pid || (tty !== undefined && session === tty)
+          : Number(session) === pid;
     if (
-      session !== pid ||
+      !owned ||
       !Number.isSafeInteger(child) ||
       child <= 1 ||
       child === globalThis.process.pid
@@ -171,6 +192,7 @@ function signalSession(pid: number, signal: NodeJS.Signals): void {
       if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
     }
   }
+  return tty;
 }
 
 type Entry = {
@@ -179,18 +201,33 @@ type Entry = {
   serializer: SerializeAddon;
   process: Bun.Subprocess;
   cursor: number;
-  decoder: TextDecoder;
+  stopping?: Promise<void>;
   closed: boolean;
   pending: number;
   viewers: Map<string, NodeJS.Timeout>;
   focusReported: boolean | null;
 };
 
+function running(process: Bun.Subprocess): boolean {
+  return process.exitCode === null && process.signalCode === null;
+}
+
+function activePty(entry: Entry): Bun.Terminal | undefined {
+  const pty = entry.process.terminal;
+  return !entry.closed && pty && !pty.closed && running(entry.process)
+    ? pty
+    : undefined;
+}
+
 /** Processes and screen state belong to the daemon, not to a web link. */
 export class TerminalManager {
   private entries = new Map<string, Entry>();
   private fences = new Set<string>();
-  constructor(private emit: (id: string, event: TerminalEvent) => void) {}
+  private stopped = false;
+  constructor(
+    private emit: (id: string, event: TerminalEvent) => void,
+    private workspaceDeleting: (cwd: string) => boolean = () => false,
+  ) {}
   private registered(cwd: string): string {
     if (typeof cwd !== "string" || !isAbsolute(cwd)) throw invalid();
     let canonical: string;
@@ -221,8 +258,18 @@ export class TerminalManager {
       throw invalid();
     const entry = this.entries.get(id);
     if (!entry) throw missing();
-    this.registered(entry.terminal.cwd);
+    if (this.registered(entry.terminal.cwd) !== entry.terminal.cwd)
+      throw missing();
     return entry;
+  }
+  /** Retained output has a terminal ID even after the process exits. */
+  has(id: string): boolean {
+    return this.entries.has(id);
+  }
+  /** Whether the terminal's foreground process is still running, not whether it is ready. */
+  isRunning(id: string): boolean {
+    const entry = this.entries.get(id);
+    return entry !== undefined && running(entry.process);
   }
   list(cwd: string): WorkspaceTerminal[] {
     const directory = this.registered(cwd);
@@ -231,9 +278,40 @@ export class TerminalManager {
       .map((e) => ({ ...e.terminal }));
   }
   create(cwd: string, cols: number, rows: number): WorkspaceTerminal {
+    return this.launch(cwd, cols, rows, [
+      globalThis.process.env.SHELL || "/bin/sh",
+      "-i",
+    ]);
+  }
+  /** Run a saved service in the foreground; keep its screen after the command exits. */
+  async startService(input: {
+    cwd: string;
+    command: string;
+    env: Record<string, string>;
+  }): Promise<WorkspaceTerminal> {
+    return this.launch(
+      input.cwd,
+      80,
+      24,
+      ["/bin/sh", "-c", input.command],
+      input.env,
+    );
+  }
+  private launch(
+    cwd: string,
+    cols: number,
+    rows: number,
+    argv: string[],
+    serviceEnv?: Record<string, string>,
+  ): WorkspaceTerminal {
+    if (this.stopped)
+      throw new HostOpError(503, "host_stopping", "This host is stopping");
     dimensions(cols, rows);
     const directory = this.registered(cwd);
-    if ([...this.fences].some((root) => contains(root, directory)))
+    if (
+      this.workspaceDeleting(directory) ||
+      [...this.fences].some((root) => contains(root, directory))
+    )
       throw new HostOpError(
         409,
         "workspace_deleting",
@@ -263,58 +341,65 @@ export class TerminalManager {
     const serializer = new SerializeAddon();
     screen.loadAddon(serializer);
     const decoder = new TextDecoder();
-    let entry: Entry;
-    const process = Bun.spawn(
-      [globalThis.process.env.SHELL || "/bin/sh", "-i"],
-      {
+    let entry: Entry | undefined;
+    const output = (data: string) => {
+      const target = entry;
+      if (!data || !target || target.closed) return;
+      if (target.pending + data.length > 16 * 1024 * 1024) {
+        if (running(target.process)) signalSession(target.process, "SIGKILL");
+        target.process.terminal?.close();
+        return;
+      }
+      target.pending += data.length;
+      screen.write(data, () => {
+        target.pending -= data.length;
+        if (target.closed) return;
+        this.syncFocus(target);
+        this.emit(id, { type: "output", data, cursor: ++target.cursor });
+      });
+    };
+    let process: Bun.Subprocess;
+    try {
+      process = Bun.spawn(argv, {
         detached: true,
         cwd: directory,
         env: createChildProcessEnvironment({
+          ...serviceEnv,
           TERM: "xterm-256color",
           COLORTERM: "truecolor",
         }),
         terminal: {
           cols,
           rows,
-          data: (_pty, bytes) => {
-            const data = decoder.decode(bytes, { stream: true });
-            if (!data || !entry || entry.closed) return;
-            entry.pending += data.length;
-            if (entry.pending > 16 * 1024 * 1024) {
-              signalSession(entry.process.pid, "SIGKILL");
-              entry.process.terminal?.close();
-              return;
-            }
-            screen.write(data, () => {
-              entry.pending -= data.length;
-              if (!entry.closed) this.syncFocus(entry);
-              if (!entry.closed)
-                this.emit(id, { type: "output", data, cursor: ++entry.cursor });
-            });
-          },
+          data: (_pty, bytes) => output(decoder.decode(bytes, { stream: true })),
+          exit: () => output(decoder.decode()),
         },
-      },
-    );
-    entry = {
+      });
+    } catch (error) {
+      screen.dispose();
+      throw error;
+    }
+    const created: Entry = {
       terminal,
       screen,
       serializer,
       process,
       cursor: 0,
-      decoder,
       closed: false,
       pending: 0,
       viewers: new Map(),
       focusReported: null,
     };
-    this.entries.set(id, entry);
-    installColorHandlers(screen, (data) => {
-      if (!entry.closed) entry.process.terminal?.write(data);
+    entry = created;
+    this.entries.set(id, created);
+    const reply = (data: string) => activePty(created)?.write(data);
+    installColorHandlers(screen, reply);
+    screen.onData(reply);
+    void process.exited.then(() => {
+      if (created.stopping) return;
+      if (serviceEnv) this.clearViewers(created);
+      else this.remove(created);
     });
-    screen.onData((data) => {
-      if (!entry.closed) entry.process.terminal?.write(data);
-    });
-    void process.exited.then(() => this.remove(entry));
     return { ...terminal };
   }
   async snapshot(id: string): Promise<TerminalSnapshot> {
@@ -330,6 +415,8 @@ export class TerminalManager {
     };
   }
   private syncFocus(entry: Entry): void {
+    const pty = activePty(entry);
+    if (!pty) return;
     if (!entry.screen.modes.sendFocusMode) {
       entry.focusReported = null;
       return;
@@ -337,7 +424,7 @@ export class TerminalManager {
     const focused = entry.viewers.size > 0;
     if (focused !== entry.focusReported) {
       entry.focusReported = focused;
-      entry.process.terminal?.write(focused ? "\x1b[I" : "\x1b[O");
+      pty.write(focused ? "\x1b[I" : "\x1b[O");
     }
   }
   focus(id: string, viewer: string, focused: boolean): void {
@@ -349,6 +436,7 @@ export class TerminalManager {
     )
       throw invalid();
     const entry = this.get(id);
+    if (!activePty(entry)) return;
     if (focused && !entry.viewers.has(viewer) && entry.viewers.size >= 128)
       throw new HostOpError(
         409,
@@ -369,7 +457,7 @@ export class TerminalManager {
   }
   input(id: string, data: string): void {
     if (typeof data !== "string" || data.length > 65536) throw invalid();
-    this.get(id).process.terminal!.write(data);
+    activePty(this.get(id))?.write(data);
   }
   async resize(id: string, cols: number, rows: number): Promise<void> {
     dimensions(cols, rows);
@@ -379,7 +467,7 @@ export class TerminalManager {
     await promise;
     if (entry.closed) throw missing();
     entry.screen.resize(cols, rows);
-    entry.process.terminal!.resize(cols, rows);
+    activePty(entry)?.resize(cols, rows);
     entry.terminal.cols = cols;
     entry.terminal.rows = rows;
     this.emit(id, { type: "resize", cols, rows, cursor: ++entry.cursor });
@@ -387,10 +475,22 @@ export class TerminalManager {
   async close(id: string): Promise<void> {
     const entry = this.entries.get(id);
     if (!entry) throw missing();
-    signalSession(entry.process.pid, "SIGTERM");
+    entry.stopping ??= this.terminate(entry).finally(() => {
+      delete entry.stopping;
+    });
+    return entry.stopping;
+  }
+  private async terminate(entry: Entry): Promise<void> {
+    const pty = entry.process.terminal;
+    if (!running(entry.process)) {
+      pty?.close();
+      this.remove(entry);
+      return;
+    }
+    const tty = signalSession(entry.process, "SIGTERM");
     await Bun.sleep(100);
-    signalSession(entry.process.pid, "SIGKILL");
-    entry.process.terminal?.close();
+    signalSession(entry.process, "SIGKILL", pty && !pty.closed ? tty : undefined);
+    pty?.close();
     const result = await Promise.race([
       entry.process.exited.then(() => true),
       Bun.sleep(5000).then(() => false),
@@ -403,13 +503,17 @@ export class TerminalManager {
       );
     this.remove(entry);
   }
+  private clearViewers(entry: Entry): void {
+    for (const timer of entry.viewers.values()) clearTimeout(timer);
+    entry.viewers.clear();
+  }
   private remove(entry: Entry): void {
     if (entry.closed) return;
     entry.closed = true;
-    for (const timer of entry.viewers.values()) clearTimeout(timer);
-    entry.viewers.clear();
+    this.clearViewers(entry);
     this.entries.delete(entry.terminal.id);
-    entry.screen.dispose();
+    // Let any queued snapshot/resize barriers settle before disposing the screen.
+    entry.screen.write("", () => entry.screen.dispose());
     this.emit(entry.terminal.id, { type: "closed" });
   }
   fence(directory: string): () => void {
@@ -418,13 +522,18 @@ export class TerminalManager {
   }
   inspect(directory: string): Array<{ id: string; cwd: string }> {
     return [...this.entries.values()]
-      .filter((e) => contains(directory, e.terminal.cwd))
+      .filter((e) => running(e.process) && contains(directory, e.terminal.cwd))
       .map((e) => ({ id: e.terminal.id, cwd: e.terminal.cwd }));
   }
   async stopWorkspace(directory: string): Promise<void> {
-    await Promise.all(this.inspect(directory).map((e) => this.close(e.id)));
+    await Promise.all(
+      [...this.entries.values()]
+        .filter((entry) => contains(directory, entry.terminal.cwd))
+        .map((entry) => this.close(entry.terminal.id)),
+    );
   }
   async stop(): Promise<void> {
+    this.stopped = true;
     await Promise.all([...this.entries.keys()].map((id) => this.close(id)));
   }
 }

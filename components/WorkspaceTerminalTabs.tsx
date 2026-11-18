@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
 import { WorkspaceChatPicker } from "./WorkspaceChatPicker";
 import type { SessionInfo } from "@/lib/types";
+import type { EffortRecord } from "@/lib/api-contracts/systems";
+import { EffortSavedChats } from "./EffortDetails";
 import { openEventStream } from "@/lib/event-stream";
 import { Globe, MessageSquarePlus, Terminal as TerminalIcon, X } from "lucide-react";
 import {
@@ -21,6 +23,7 @@ type Entry = { hostId: string; terminal: TerminalInfo };
 export function WorkspaceTerminalTabs({
   hostId,
   cwd,
+  effort,
   activeId,
   onSelect,
   enabled,
@@ -42,6 +45,7 @@ export function WorkspaceTerminalTabs({
 }: {
   hostId: string;
   cwd: string | null;
+  effort?: EffortRecord;
   activeId: string | null;
   onSelect: (id: string | null) => void;
   enabled: boolean;
@@ -81,6 +85,15 @@ export function WorkspaceTerminalTabs({
     enabled && Boolean(cwd),
   );
   const browserTabs = chatTabs.filter((tab) => tab.sessionId && browsers[tab.sessionId]?.length);
+  const serviceTabs = effort && effort.root === cwd ? effort.services.filter((service) => !!service.terminalId) : [];
+  const serviceRevision = serviceTabs.map(({ terminalId }) => terminalId).join("\n");
+  const previousServiceTabs = useRef<{ hostId: string; cwd: string | null; ids: string[] }>({ hostId, cwd, ids: [] });
+  useEffect(() => {
+    const ids = serviceRevision ? serviceRevision.split("\n") : [];
+    const previous = previousServiceTabs.current;
+    if (previous.hostId === hostId && previous.cwd === cwd && activeId && previous.ids.includes(activeId) && !ids.includes(activeId)) onSelect(null);
+    previousServiceTabs.current = { hostId, cwd, ids };
+  }, [hostId, cwd, serviceRevision, activeId, onSelect]);
   const browserId = (sessionId: string) => `browser:${sessionId}`;
   useEffect(() => {
     if (!activeId?.startsWith("browser:")) return;
@@ -146,10 +159,15 @@ export function WorkspaceTerminalTabs({
     return () => {
       cancelled = true;
     };
-  }, [hostId, cwd, revision]);
+  }, [hostId, cwd, revision, serviceRevision]);
   const visible = entries.filter(
     (entry) => entry.hostId === hostId && entry.terminal.cwd === cwd,
   );
+  const managedTerminalIds = new Set(serviceTabs.map(({ terminalId }) => terminalId));
+  const tabs = visible.map((entry) => {
+    const service = serviceTabs.find(({ terminalId }) => terminalId === entry.terminal.id);
+    return service ? { ...entry, terminal: { ...entry.terminal, title: service.name } } : entry;
+  });
   const create = async () => {
     if (!cwd || busy) return;
     setBusy(true);
@@ -216,7 +234,7 @@ export function WorkspaceTerminalTabs({
           <button onClick={onNewChat} title="New chat" aria-label="New chat">
             <MessageSquarePlus size={16} />
           </button>
-          {visible.map((entry) => (
+          {tabs.map((entry) => (
             <div
               key={`${entry.hostId}:${entry.terminal.id}`}
               className="workspace-terminal-tab"
@@ -229,13 +247,13 @@ export function WorkspaceTerminalTabs({
               >
                 <TerminalIcon size={14} /> {entry.terminal.title}
               </button>
-              <button
+              {!managedTerminalIds.has(entry.terminal.id) && <button
                 aria-label={`Close ${entry.terminal.title}`}
                 title="Close terminal"
                 onClick={() => void close(entry)}
               >
                 <X size={14} />
-              </button>
+              </button>}
             </div>
           ))}
           {browserTabs.map((tab) => (
@@ -270,14 +288,14 @@ export function WorkspaceTerminalTabs({
             ref={triggerRef}
             className="workspace-switcher-trigger"
             onClick={() => setPickerOpen(true)}
-            aria-label={`Workspace tabs, ${chatTabs.length + visible.length + browserTabs.length} open`}
+            aria-label={`Workspace tabs, ${chatTabs.length + tabs.length + browserTabs.length} open`}
           >
             {(activeId === null
               ? chatTabs.find((tab) => tab.id === activeChatId)?.title
               : browserTabs.find((tab) => browserId(tab.sessionId!) === activeId)
                 ? "Browser"
-                : visible.find((entry) => entry.terminal.id === activeId)?.terminal.title) || "Workspace"}{" "}
-            · {chatTabs.length + visible.length + browserTabs.length} tabs
+                : tabs.find((entry) => entry.terminal.id === activeId)?.terminal.title) || "Workspace"}{" "}
+            · {chatTabs.length + tabs.length + browserTabs.length} tabs
           </button>,
           headerTarget,
         )}
@@ -376,7 +394,7 @@ export function WorkspaceTerminalTabs({
                     </button>
                   </div>
                 ))}
-                {visible.map((entry) => (
+                {tabs.map((entry) => (
                   <div
                     className="workspace-switcher-row"
                     key={entry.terminal.id}
@@ -390,12 +408,12 @@ export function WorkspaceTerminalTabs({
                       {entry.terminal.title}
                       {activeId === entry.terminal.id ? " · Active" : ""}
                     </button>
-                    <button
+                    {!managedTerminalIds.has(entry.terminal.id) && <button
                       aria-label={`Close ${entry.terminal.title}`}
                       onClick={() => void close(entry)}
                     >
                       <X size={16} />
-                    </button>
+                    </button>}
                   </div>
                 ))}
                 {browserTabs.map((tab) => (
@@ -454,7 +472,18 @@ export function WorkspaceTerminalTabs({
                 </button>
               </form>
             )}
-            {pickerOpen && (
+            {pickerOpen && (effort ? (
+              <EffortSavedChats
+                host={hostId}
+                effort={effort}
+                cwd={cwd}
+                openSessionIds={openSessionIds}
+                onSelect={(session) => {
+                  setPickerOpen(false);
+                  onSelectSaved(session);
+                }}
+              />
+            ) : (
               <WorkspaceChatPicker
                 hostId={hostId}
                 cwd={cwd}
@@ -464,7 +493,7 @@ export function WorkspaceTerminalTabs({
                   onSelectSaved(session);
                 }}
               />
-            )}
+            ))}
           </DialogContent>
         </Dialog>
       )}

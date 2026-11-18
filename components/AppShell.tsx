@@ -46,6 +46,10 @@ import {
 import { ShipDialog, type ShipTarget } from "./ShipDialog";
 import { type Tab } from "./TabBar";
 import { WorkspaceTerminalTabs } from "./WorkspaceTerminalTabs";
+import { isLinkUp } from "@/lib/hosts/host";
+import { EffortDetails, type EffortTarget } from "./EffortDetails";
+import { SystemsButton, systemsMuted, systemsRow } from "./SystemsForms";
+import { systemsRequest, useSystemsHosts } from "./SystemsHost";
 import { type FileExplorerHandle } from "./FileExplorer";
 import type { RightPanelView } from "./RightPanel";
 import { useConnectionDiagnosticsEnabled } from "@/lib/connection-diagnostics-prefs";
@@ -171,7 +175,7 @@ function tabInWorkspace(
   tab: ChatTab,
   cwd: string,
   hostId: string | undefined,
-  projects: ManagedProject[],
+  projects: Pick<ManagedProject, "hostId" | "path">[],
 ) {
   if (tab.workspaceProject && !tab.session) return false;
   if (remoteHostId(tab.hostId) !== remoteHostId(hostId)) return false;
@@ -440,6 +444,24 @@ export function AppShell({ appName }: { appName: string }) {
     [],
   );
   const { hosts, pools } = useHostRows();
+  const systemsHosts = useSystemsHosts(hosts);
+  const [effortDetails, setEffortDetails] = useState<EffortTarget | null>(null);
+  const effortsByHost = useMemo(() => Object.entries(systemsHosts.byHost).flatMap(([host, state]) =>
+    (state.data?.efforts ?? []).map((effort) => ({ host, effort })),
+  ), [systemsHosts.byHost]);
+  const effortForPath = useCallback((hostId: string, cwd: string) => {
+    const path = comparableProjectPath(cwd);
+    return effortsByHost.filter(({ host, effort }) => {
+      const root = comparableProjectPath(effort.root);
+      return host === hostId && (path === root || path.startsWith(`${root}/`));
+    }).sort((a, b) => Number(a.effort.status === "cleaned") - Number(b.effort.status === "cleaned") || b.effort.root.length - a.effort.root.length)[0]?.effort;
+  }, [effortsByHost]);
+  const navigationProjects = useMemo(() => [
+    ...workspaceOptions.projects,
+    ...effortsByHost.flatMap(({ host, effort }) => effort.status === "ready"
+      ? [effort.root, ...effort.members.filter((member) => member.status === "complete").map((member) => member.path)].map((path) => ({ path, hostId: host }))
+      : []),
+  ], [workspaceOptions.projects, effortsByHost]);
   const handleWorkspaceOptionsChange = useCallback(
     (
       projects: ManagedProject[],
@@ -1265,7 +1287,7 @@ export function AppShell({ appName }: { appName: string }) {
             tab,
             data.cwd!,
             initialNavigation.hostId,
-            workspaceOptions.projects,
+            navigationProjects,
           ),
         );
         const tab: ChatTab = existing ?? {
@@ -1300,6 +1322,7 @@ export function AppShell({ appName }: { appName: string }) {
       synchronized = false,
       latestSession?: SessionInfo,
       discovery?: "pending" | "resolved",
+      allowDraft = true,
     ) => {
       if (discovery === "resolved") {
         const pending = pendingWorkspaceDraft.current;
@@ -1315,7 +1338,7 @@ export function AppShell({ appName }: { appName: string }) {
         return;
       }
       if (!synchronized && !(discovery === "pending" && pendingWorkspaceDraft.current?.cwd === cwd && pendingWorkspaceDraft.current.hostId === hostId)) pendingWorkspaceDraft.current = null;
-      setActiveTerminalId(null);
+      if (!synchronized || !cwd || effortForPath(hostId, cwd)?.status !== "ready") setActiveTerminalId(null);
       setActiveCwd(cwd);
       setActiveHostId(remoteHostId(hostId));
       if (initialSessionId && !initialSessionRestored) return;
@@ -1333,7 +1356,7 @@ export function AppShell({ appName }: { appName: string }) {
       if (
         synchronized &&
         currentTab &&
-        tabInWorkspace(currentTab, cwd, hostId, workspaceOptions.projects)
+        tabInWorkspace(currentTab, cwd, hostId, navigationProjects)
       )
         return;
       pendingSharedWorkspace.current = null;
@@ -1348,11 +1371,11 @@ export function AppShell({ appName }: { appName: string }) {
         /* Storage may be unavailable. */
       }
       const candidates = chatTabsRef.current.filter((tab) =>
-        tabInWorkspace(tab, cwd, hostId, workspaceOptions.projects),
+        tabInWorkspace(tab, cwd, hostId, navigationProjects),
       );
       const shared = sharedSessions.find((session) =>
         openSessionIds.includes(session.id) && !hiddenSharedIds.has(session.id) &&
-        tabInWorkspace({ id: session.id, cwd: session.cwd, hostId: remoteHostId(session.hostId), session, creation: {} }, cwd, hostId, workspaceOptions.projects),
+        tabInWorkspace({ id: session.id, cwd: session.cwd, hostId: remoteHostId(session.hostId), session, creation: {} }, cwd, hostId, navigationProjects),
       );
       const existing = shared
         ? candidates.find((tab) => tab.session?.id === shared.id) ?? {
@@ -1369,7 +1392,7 @@ export function AppShell({ appName }: { appName: string }) {
         }
         if (!candidates.includes(existing)) updateChatTabs((tabs) => [...tabs, existing]);
         activateChat(existing);
-      } else if (!alreadyVisited && preferredId !== "") {
+      } else if (allowDraft && !alreadyVisited && preferredId !== "") {
         const tab: ChatTab = {
           id: browserUUID(),
           cwd,
@@ -1406,7 +1429,8 @@ export function AppShell({ appName }: { appName: string }) {
       sharedSessions,
       openSessionIds,
       hiddenSharedIds,
-      workspaceOptions.projects,
+      navigationProjects,
+      effortForPath,
       initialSessionId,
       initialSessionRestored,
     ],
@@ -1417,7 +1441,7 @@ export function AppShell({ appName }: { appName: string }) {
     if (!pending || activeChatIdRef.current !== pending.tabId) return;
     const session = sharedSessions.find((item) =>
       openSessionIds.includes(item.id) && !hiddenSharedIds.has(item.id) &&
-      tabInWorkspace({ id: item.id, cwd: item.cwd, hostId: remoteHostId(item.hostId), session: item, creation: {} }, pending.cwd, pending.hostId, workspaceOptions.projects),
+      tabInWorkspace({ id: item.id, cwd: item.cwd, hostId: remoteHostId(item.hostId), session: item, creation: {} }, pending.cwd, pending.hostId, navigationProjects),
     );
     if (!session) {
       if (sharedDiscoveryComplete.current) pendingSharedWorkspace.current = null;
@@ -1429,7 +1453,7 @@ export function AppShell({ appName }: { appName: string }) {
     if (!existing) updateChatTabs((tabs) => [...tabs, tab]);
     activateChat(tab);
     router.replace(`?session=${encodeURIComponent(session.id)}`);
-  }, [sharedSessions, openSessionIds, hiddenSharedIds, workspaceOptions.projects, updateChatTabs, activateChat, router]);
+  }, [sharedSessions, openSessionIds, hiddenSharedIds, navigationProjects, updateChatTabs, activateChat, router]);
 
   const sessionLookupVersion = useRef(0);
   const handleSelectSession = useCallback(
@@ -1500,6 +1524,8 @@ export function AppShell({ appName }: { appName: string }) {
       sessionLookupVersion.current += 1;
       setSettingsTab(null);
       if (!cwd) return;
+      const effort = effortForPath(hostId ?? LOCAL_HOST_ID, cwd);
+      if (effort && effort.status !== "ready") return;
       const existing = creationId
         ? chatTabsRef.current.find(
             (item) => item.creation.id === creationId && !item.session,
@@ -1507,11 +1533,11 @@ export function AppShell({ appName }: { appName: string }) {
         : undefined;
       const tab: ChatTab = existing ?? {
         id: browserUUID(),
-        cwd,
+        cwd: effort?.root ?? cwd,
         hostId: remoteHostId(hostId),
         session: null,
         creation: { id: creationId || browserUUID(), initialization },
-        workspaceFixed,
+        workspaceFixed: workspaceFixed || !!effort,
       };
       if (!existing) updateChatTabs((tabs) => [...tabs, tab]);
       activateChat(tab);
@@ -1524,7 +1550,7 @@ export function AppShell({ appName }: { appName: string }) {
       }
       router.replace("/");
     },
-    [router, isMobile, activateChat, updateChatTabs],
+    [router, isMobile, activateChat, updateChatTabs, effortForPath],
   );
 
   const handleNewWorkspace = useCallback(
@@ -1719,6 +1745,14 @@ export function AppShell({ appName }: { appName: string }) {
             );
           })
           .sort((a, b) => b.path.length - a.path.length)[0];
+        if (!workspace?.sessionIds.includes(id)) {
+          const systems = await systemsRequest(detail.hostId).catch(() => null);
+          if (version !== sessionLookupVersion.current) return;
+          if (systems?.efforts.some((effort) => effort.status === "ready" && effort.sessionIds.includes(id))) {
+            handleSelectSession({ ...detail.info, hostId: detail.hostId }, restore);
+            return;
+          }
+        }
         if (!workspace)
           throw new Error("No registered workspace contains this session");
         const session = { ...detail.info, hostId: detail.hostId };
@@ -2660,7 +2694,7 @@ export function AppShell({ appName }: { appName: string }) {
   const newSessionHost =
     newSessionCwd !== null ? newSessionHostId : activeHostId;
   const newSessionHostKey = newSessionHost ?? LOCAL_HOST_ID;
-  const effectiveNewSessionCwd = workspaceOptions.projects.some(
+  const effectiveNewSessionCwd = navigationProjects.some(
     (workspace) =>
       (workspace.hostId ?? LOCAL_HOST_ID) === newSessionHostKey &&
       comparableProjectPath(workspace.path) ===
@@ -2668,7 +2702,7 @@ export function AppShell({ appName }: { appName: string }) {
   )
     ? candidateCwd
     : null;
-  const terminalWorkspace = workspaceOptions.projects
+  const terminalWorkspace = navigationProjects
     .filter((workspace) => {
       if (
         pendingWorkspace ||
@@ -2681,7 +2715,30 @@ export function AppShell({ appName }: { appName: string }) {
       return path === root || path.startsWith(root === "/" ? "/" : `${root}/`);
     })
     .sort((a, b) => b.path.length - a.path.length)[0];
-  const visibleShipKey = !settingsTab && terminalWorkspace
+  const activeEffort = !pendingWorkspace && explorerCwd ? effortForPath(workspaceHostId, explorerCwd) : undefined;
+  const detailEffort = effortDetails && effortsByHost.find(({ host, effort }) => host === effortDetails.host && effort.id === effortDetails.id)?.effort;
+  const detailHost = effortDetails && hosts?.find((host) => host.id === effortDetails.host);
+  const openEffortPath = (host: string, path: string, latestSession?: SessionInfo, allowDraft = true) => {
+    setSettingsTab(null);
+    setEffortDetails(null);
+    handleCwdChange(path, path, host, undefined, false, latestSession, undefined, allowDraft);
+    if (isMobile) setSidebarOpen(false);
+  };
+  useEffect(() => {
+    if (!activeEffort || !["cleaning", "cleanup_failed", "cleaned"].includes(activeEffort.status)) return;
+    const root = comparableProjectPath(activeEffort.root);
+    const belongs = (tab: ChatTab) => {
+      const path = comparableProjectPath(tab.cwd);
+      return (tab.hostId ?? LOCAL_HOST_ID) === workspaceHostId && (path === root || path.startsWith(`${root}/`));
+    };
+    if (chatTabsRef.current.some(belongs)) updateChatTabs((tabs) => tabs.filter((tab) => !belongs(tab)));
+    setActiveTerminalId(null);
+    if (activeChatIdRef.current) {
+      activateChat(null);
+      router.replace("/");
+    }
+  }, [activeEffort, workspaceHostId, activateChat, updateChatTabs, router]);
+  const visibleShipKey = !settingsTab && terminalWorkspace && !activeEffort
     ? hostProjectKey(workspaceHostId, terminalWorkspace.path)
     : null;
   const shipVisible = shipFlows.some((flow) => hostProjectKey(flow.host, flow.path) === visibleShipKey);
@@ -2873,6 +2930,11 @@ export function AppShell({ appName }: { appName: string }) {
       optimisticSession={selectedSession?.path === "" ? selectedSession : null}
       onSelectSession={handleSelectSession}
       onNewSession={handleNewSession}
+      systemsHosts={systemsHosts}
+      onOpenEffort={(host, effort, navigate, latestSession) => {
+        if (navigate) openEffortPath(host, effort.root, latestSession);
+        else setEffortDetails({ host, id: effort.id });
+      }}
       onNewWorkspace={handleNewWorkspace}
       buildingWorkspaceProjects={buildingWorkspaceProjects}
       onShip={openShip}
@@ -2897,12 +2959,12 @@ export function AppShell({ appName }: { appName: string }) {
           router.replace("/");
         }
       }}
-      selectedCwd={selectedSession?.cwd ?? newSessionCwd ?? null}
+      selectedCwd={selectedSession?.cwd ?? newSessionCwd ?? (activeEffort ? activeCwd : null)}
       pendingWorkspace={Boolean(pendingWorkspace)}
       selectedHostId={
         selectedSession
           ? (selectedSession.hostId ?? LOCAL_HOST_ID)
-          : (newSessionHostId ?? LOCAL_HOST_ID)
+          : (newSessionHostId ?? (activeEffort ? activeHostId : undefined) ?? LOCAL_HOST_ID)
       }
       selectedLogicalProjectKey={null}
       onCwdChange={handleCwdChange}
@@ -2926,6 +2988,36 @@ export function AppShell({ appName }: { appName: string }) {
   return (
     <>
       <ToastProvider>
+        {detailEffort && effortDetails && (
+          <EffortDetails
+            key={`${effortDetails.host}:${detailEffort.id}`}
+            host={effortDetails.host}
+            effort={detailEffort}
+            action={async (input) => {
+              const result = await systemsHosts.run(effortDetails.host, input);
+              if (input.action === "cleanup" && input.mode !== "stop") setRefreshKey((key) => key + 1);
+              return result;
+            }}
+            unavailable={detailHost && !isLinkUp(detailHost.status) ? "This host is unavailable." : systemsHosts.byHost[effortDetails.host]?.error}
+            onClose={() => setEffortDetails(null)}
+            onOpenWorkspace={(path) => {
+              openEffortPath(effortDetails.host, path, undefined, path === detailEffort.root);
+              if (path !== detailEffort.root) {
+                setRightView("explorer");
+                setRightPanelOpen(true);
+              }
+            }}
+            onNewChat={() => {
+              setEffortDetails(null);
+              handleNewSession(browserUUID(), detailEffort.root, effortDetails.host, undefined, undefined, false, true);
+            }}
+            onOpenSession={(session) => { setEffortDetails(null); handleSelectSession(session); }}
+            onOpenTerminal={(id) => {
+              openEffortPath(effortDetails.host, detailEffort.root);
+              setActiveTerminalId(id);
+            }}
+          />
+        )}
         <ConfirmDialog
           open={sidebarHistory.exitConfirmationOpen}
           onOpenChange={(open) => {
@@ -3157,10 +3249,17 @@ export function AppShell({ appName }: { appName: string }) {
               overflow: "hidden",
             }}
           >
+            {!settingsTab && activeEffort && (
+              <div style={{ ...systemsRow, borderBottom: "1px solid var(--border)", padding: "4px 8px" }}>
+                <SystemsButton onClick={() => setEffortDetails({ host: workspaceHostId, id: activeEffort.id })}>{activeEffort.name} · Effort details</SystemsButton>
+                {terminalWorkspace && terminalWorkspace.path !== activeEffort.root && <span style={{ ...systemsMuted, overflowWrap: "anywhere", fontSize: 12 }}>{projectLabel(terminalWorkspace.path)}</span>}
+              </div>
+            )}
             <WorkspaceTerminalTabs
               contentInert={shipVisible}
               hostId={workspaceHostId}
               cwd={terminalWorkspace?.path ?? null}
+              effort={activeEffort?.status === "ready" ? activeEffort : undefined}
               activeId={activeTerminalId}
               onSelect={setActiveTerminalId}
               enabled={!settingsTab}
@@ -3209,7 +3308,7 @@ export function AppShell({ appName }: { appName: string }) {
                       tab,
                       terminalWorkspace.path,
                       workspaceHostId,
-                      workspaceOptions.projects,
+                      navigationProjects,
                     ),
                 )
                 .map((tab, index, tabs) => ({
@@ -3263,7 +3362,7 @@ export function AppShell({ appName }: { appName: string }) {
                       tab,
                       terminalWorkspace.path,
                       workspaceHostId,
-                      workspaceOptions.projects,
+                      navigationProjects,
                     ),
                 );
                 const index = visible.findIndex((tab) => tab.id === id);
@@ -3295,7 +3394,7 @@ export function AppShell({ appName }: { appName: string }) {
               onNewChat={() =>
                 handleNewSession(
                   browserUUID(),
-                  terminalWorkspace?.path ?? null,
+                  activeEffort?.root ?? terminalWorkspace?.path ?? null,
                   workspaceHostId,
                   undefined,
                   undefined,
@@ -3954,7 +4053,7 @@ export function AppShell({ appName }: { appName: string }) {
                               />
                             )}
                           </div>
-                        ) : !chatTabs.find((tab) => tab.id === activeChatId)?.workspaceFixed && (
+                        ) : !activeEffort && !chatTabs.find((tab) => tab.id === activeChatId)?.workspaceFixed && (
                           effectiveNewSessionCwd && (
                             <div className="new-session-workspace">
                               {creationTargets.length > 1 && (

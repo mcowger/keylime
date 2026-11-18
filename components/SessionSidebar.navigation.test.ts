@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { noSystemsSidebar } from "../tests/systems-sidebar-fixture";
 
 // The navigate back/forward buttons live in the sidebar header, first in the
 // quiet-utilities group (before Archived Sessions) and disabled per the
@@ -13,6 +14,7 @@ const { SessionSidebar } = await import("./SessionSidebar");
 
 const noop = () => {};
 const baseProps = {
+  ...noSystemsSidebar,
   selectedSessionId: null,
   onSelectSession: noop,
   addProjectOpen: false,

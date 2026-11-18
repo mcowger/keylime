@@ -79,6 +79,7 @@ import * as shipFinish from "@/app/api/ship/finish/route";
 import * as sttJobIdAudio from "@/app/api/stt/[jobId]/audio/route";
 import * as sttJobId from "@/app/api/stt/[jobId]/route";
 import * as stt from "@/app/api/stt/route";
+import * as systems from "@/app/api/systems/route";
 import * as terminals from "@/app/api/terminals/route";
 import * as terminalId from "@/app/api/terminals/[id]/route";
 import * as transportMetrics from "@/app/api/transport-metrics/route";
@@ -192,6 +193,7 @@ export const ROUTE_MODULES: Record<string, RouteModule> = {
   "stt/[jobId]/audio": sttJobIdAudio,
   "stt/[jobId]": sttJobId,
   stt: stt,
+  systems,
   terminals: terminals,
   "terminals/[id]": terminalId,
   "transport-metrics": transportMetrics,

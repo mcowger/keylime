@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import test, { afterEach, beforeEach } from "node:test";
 import type { TestContext } from "node:test";
 import { captureExpectedConsole } from "../tests/expected-console";
+import { noSystemsSidebar } from "../tests/systems-sidebar-fixture";
 import React from "react";
 import { existsSync, readFileSync } from "node:fs";
 import { mock } from "bun:test";
@@ -13067,6 +13068,7 @@ test("registered remote sessions remain searchable alongside other hosts' projec
   const view = ownRoot(
     render(
       React.createElement(SessionSidebar, {
+        ...noSystemsSidebar,
         selectedSessionId: null,
         onSelectSession: (session) => selected.push(session),
         addProjectOpen: false,
@@ -13346,6 +13348,7 @@ test("a registered local session remains accessible alongside remote projects", 
   const view = ownRoot(
     render(
       React.createElement(SessionSidebar, {
+        ...noSystemsSidebar,
         selectedSessionId: null,
         onSelectSession: (session) => selected.push(session),
         addProjectOpen: false,

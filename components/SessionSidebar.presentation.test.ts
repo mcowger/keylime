@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import React from "react";
 import test from "node:test";
 import type { SessionInfo } from "../lib/types";
+import { noSystemsSidebar } from "../tests/systems-sidebar-fixture";
 const { render, cleanup, fireEvent, screen, waitFor } =
   await import("@testing-library/react/pure.js");
 const { SessionSidebar } = await import("./SessionSidebar.tsx");
@@ -80,6 +81,7 @@ function renderSidebar(
 ) {
   return render(
     React.createElement(SessionSidebar, {
+      ...noSystemsSidebar,
       selectedSessionId: null,
       onSelectSession() {},
       skipInitialProjectSelection: true,
@@ -120,6 +122,7 @@ test("pending workspace does not select its base workspace", async () => {
     const workspace = await screen.findByRole("button", { name: "Workspace" });
     await waitFor(() => assert.equal(workspace.getAttribute("aria-pressed"), "true"));
     view.rerender(React.createElement(SessionSidebar, {
+      ...noSystemsSidebar,
       selectedSessionId: null, onSelectSession() {}, skipInitialProjectSelection: true,
       addProjectOpen: false, setAddProjectOpen() {}, usageVisible: false,
       ...props, pendingWorkspace: true,
@@ -128,6 +131,7 @@ test("pending workspace does not select its base workspace", async () => {
     fireEvent.click(workspace);
     assert.equal(workspace.getAttribute("aria-pressed"), "false");
     view.rerender(React.createElement(SessionSidebar, {
+      ...noSystemsSidebar,
       selectedSessionId: null, onSelectSession() {}, skipInitialProjectSelection: true,
       addProjectOpen: false, setAddProjectOpen() {}, usageVisible: false, ...props,
     }));
@@ -161,6 +165,7 @@ test("one connected host is ungrouped while offline host projects remain visible
   });
   try {
     render(React.createElement(HierarchySidebar, {
+      ...noSystemsSidebar,
       hosts: [{ id: "local", label: "Local", status: "omp-missing" }, { id: "remote", label: "Remote", status: "offline" }],
       sessions: [], selectedSessionId: null, selectedCwd: null, selectedHostId: "local",
       onSelectWorkspace() {}, onWorkspaceRemoved() {}, onNewWorkspace() {}, onProjects() {}, onSnapshots() {},
@@ -319,6 +324,7 @@ test("registered chats appear only as search results and remain selectable", asy
     modified: "2026-01-01T00:00:00.000Z",
   };
   const props = {
+    ...noSystemsSidebar,
     hosts: [{ id: "local", label: "" }],
     sessions: [session],
     selectedSessionId: null,
@@ -401,6 +407,7 @@ test("workspace branch choice sends keep, delete, or cancel without typing", asy
     try {
       render(
         React.createElement(HierarchySidebar, {
+          ...noSystemsSidebar,
           hosts: [{ id: "local", label: "This machine" }],
           sessions: [],
           selectedSessionId: null,
@@ -492,6 +499,7 @@ test("workspace deletion confirms processes and preserves cancellation after sto
   try {
     render(
       React.createElement(HierarchySidebar, {
+        ...noSystemsSidebar,
         hosts: [{ id: "local", label: "This machine" }],
         sessions: [
           {
@@ -573,6 +581,7 @@ test("session unregister cancellation leaves the registration unchanged", async 
   try {
     render(
       React.createElement(HierarchySidebar, {
+        ...noSystemsSidebar,
         hosts: [{ id: "local", label: "This machine" }],
         sessions: [
           {

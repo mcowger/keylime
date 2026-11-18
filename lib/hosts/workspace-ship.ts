@@ -18,6 +18,7 @@ import { HostOpError } from "./link-protocol";
 import { readHierarchy } from "./project-hierarchy";
 import { removeRegisteredWorktree } from "./workspace-creation";
 import { sessionOps } from "./session-ops";
+import { isEffortPath } from "./systems";
 
 interface RecordPr {
   projectPath: string;
@@ -54,6 +55,16 @@ function read<T>(file: string, fallback: T): T {
 const records = () => read<Record<string, RecordPr>>(prFile(), {});
 const persist = (job: ShipJob) =>
   save(path.join(jobsDir(), `${job.id}.json`), job);
+
+function assertShipAllowed(workspacePath: string): void {
+  if (isEffortPath(workspacePath))
+    throw new HostOpError(
+      409,
+      "effort_workspace",
+      "Standalone Ship is not available for Effort workspaces",
+    );
+}
+
 function registered(input: { projectPath: string; path: string }) {
   if (
     !input ||
@@ -61,8 +72,9 @@ function registered(input: { projectPath: string; path: string }) {
     typeof input.path !== "string"
   )
     throw new HostOpError(400, "invalid_request", "Invalid workspace request");
+  assertShipAllowed(input.path);
   const project = readHierarchy().projects.find(
-    (p) => p.path === input.projectPath && p.kind === "git",
+    (p) => p.path === input.projectPath && p.kind === "git" && !p.hidden,
   );
   const workspace = project?.workspaces.find(
     (w) => w.path === input.path && !w.isDefault,
@@ -429,8 +441,8 @@ function createJob(
   kind: ShipJob["kind"],
   mode?: ShipJob["mode"],
 ) {
-  recover();
   registered(input);
+  recover();
   if (active.has(input.path))
     throw new HostOpError(
       409,
@@ -590,6 +602,7 @@ export async function startShip(input: ShipRequest): Promise<ShipJob> {
       );
     if (input.rebase)
       await step(job, "rebase", async () => {
+        assertShipAllowed(input.path);
         try {
           await git(input.path, ["rebase", `refs/heads/${preview.base}`], job);
         } catch (error) {
@@ -615,6 +628,7 @@ export async function startShip(input: ShipRequest): Promise<ShipJob> {
           throw new Error(
             "Default workspace is dirty or no longer on the base branch",
           );
+        assertShipAllowed(input.path);
         await git(
           preview.baseCheckout,
           ["merge", "--ff-only", `refs/heads/${preview.branch}`],
@@ -631,6 +645,7 @@ export async function startShip(input: ShipRequest): Promise<ShipJob> {
           "--symbolic-full-name",
           "@{upstream}",
         ]).catch(() => "");
+        assertShipAllowed(input.path);
         await git(
           input.path,
           [
@@ -662,6 +677,7 @@ export async function startShip(input: ShipRequest): Promise<ShipJob> {
             throw new Error(
               "A pull request title and body are required when no open pull request exists",
             );
+          assertShipAllowed(input.path);
           try {
             const url = await command(
               input.path,
@@ -702,6 +718,7 @@ export async function startShip(input: ShipRequest): Promise<ShipJob> {
             if (!existing) throw error;
           }
         }
+        assertShipAllowed(input.path);
         const pr: ShipPr = { ...existing, cleanup: input.cleanup };
         const all = records();
         all[input.path] = {
@@ -715,6 +732,7 @@ export async function startShip(input: ShipRequest): Promise<ShipJob> {
       });
       if (input.mode === "pr-auto")
         await step(job, "autoMerge", async () => {
+          assertShipAllowed(input.path);
           if (!job.pr!.autoMerge)
             await command(
               input.path,
@@ -832,6 +850,7 @@ export async function shipFinish(input: {
       persist(job);
     } else
       await step(job, "pullBase", async () => {
+        assertShipAllowed(input.path);
         await git(base.path, ["pull", "--ff-only"], job);
       });
     await cleanup(job);
@@ -852,9 +871,15 @@ export async function refreshShipPrs() {
       )
         continue;
       try {
+        if (isEffortPath(record.path)) continue;
         const pr = await refresh(record);
         changed();
-        if (pr.state === "merged" && pr.cleanup && !record.autoFinished) {
+        if (
+          pr.state === "merged" &&
+          pr.cleanup &&
+          !record.autoFinished &&
+          !isEffortPath(record.path)
+        ) {
           const all = records();
           if (all[record.path]) {
             all[record.path].autoFinished = true;

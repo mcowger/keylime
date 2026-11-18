@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import type { SpawnResult } from "./host";
 import { SessionPtyManager } from "./session-pty";
 import { Value } from "@sinclair/typebox/value";
+import { SystemsRequestSchema } from "../api-contracts/systems";
 import { BrowserListSchema, BrowserFrameSchema } from "../api-contracts/host-control-operations";
 import { BrowserControlArgsSchema, BrowserControlResultSchema } from "../api-contracts/runner-lifecycle";
 import { BrowserVideoStartArgsSchema, BrowserVideoStreamArgsSchema, BrowserVideoStartResultSchema, BrowserVideoNextResultSchema, BrowserVideoStopResultSchema } from "../api-contracts/runner-lifecycle";
@@ -39,7 +40,14 @@ import {
   setWorkspaceDeletionAdapter,
   workspaceCreationBusy,
   stopWorkspaceCreation,
+  type WorkspaceDeletionAdapter,
 } from "./workspace-creation";
+import {
+  isEffortCleaningPath,
+  stopSystems,
+  systemsBusy,
+  systemsOperation,
+} from "./systems";
 import {
   credentialsEnv,
   serverFetch,
@@ -367,6 +375,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     },
     bindTerminal: (runtimeId, sessionId) => ptys.bind(runtimeId, sessionId),
     terminalAttached: (runtimeId) => attached.has(runtimeId),
+    workspaceDeleting: isEffortCleaningPath,
     prepareLaunch: (launch) => {
       if (
         !isRecord(launch) ||
@@ -453,8 +462,8 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
           }
         } else terminalOverflow.delete(key);
       }
-  });
-  setWorkspaceDeletionAdapter({
+  }, isEffortCleaningPath);
+  const processes: WorkspaceDeletionAdapter = {
     fence: (directory) => {
       const releaseChannels = channels.fenceWorkspace(directory);
       const releaseTerminals = terminals.fence(directory);
@@ -473,7 +482,8 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         terminals.stopWorkspace(directory),
       ]);
     },
-  });
+  };
+  setWorkspaceDeletionAdapter(processes);
   const hostSocket: Promise<HostSocket | undefined> =
     listenHostSocket(socketPath, {
           adopt: async (spawned, launch, sessionId) => {
@@ -530,6 +540,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   function busyReason(allowIdleChannels = false): string | null {
     if (workspaceCreationBusy())
       return "Wait for workspace creation/setup to finish.";
+    if (systemsBusy()) return "Wait for Effort setup or cleanup to finish.";
     if (
       allowIdleChannels
         ? channels.hasBusyChannels
@@ -922,9 +933,23 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       );
     }
     if (isWorkspaceOp(op)) {
-      if (op === "terminals") {
+      if (op === "terminals" || op === "systems") {
         try {
           const input = args.input;
+          if (op === "systems") {
+            if (!Value.Check(SystemsRequestSchema, input))
+              throw new HostOpError(
+                400,
+                "invalid_request",
+                "Invalid Systems request",
+              );
+            const value = await systemsOperation(input, {
+              terminals,
+              processes,
+              sessionsChanged,
+            });
+            return { ok: true, value };
+          }
           if (!isRecord(input) || typeof args.action !== "string")
             throw new HostOpError(
               400,
@@ -1190,7 +1215,13 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     const configStopped = config.stop();
     stopping = (async () => {
       stopShipWatcher();
-      await stopWorkspaceCreation();
+      const shutdownWork = await Promise.allSettled([
+        stopSystems(),
+        stopWorkspaceCreation(),
+      ]);
+      for (const result of shutdownWork)
+        if (result.status === "rejected")
+          log("could not stop workspace jobs: " + reason(result.reason));
       await terminals.stop();
       await Promise.all([...links.values()].map((link) => link.stop()));
       await Promise.all([

@@ -21,7 +21,7 @@ import type {
   HierarchyRequest,
 } from "@/lib/project-hierarchy-types";
 import type { ManagedProject, SessionInfo } from "@/lib/types";
-import { hostProjectKey } from "@/lib/project-ordering";
+import { hostProjectKey, LOCAL_HOST_ID } from "@/lib/project-ordering";
 import type { WorkspaceCreateRequest, WorkspaceCreationJob, WorkspaceDeleteResult } from "@/lib/workspace-creation-types";
 import { readWorkspaceSetupJob, WorktreesPanel } from "./WorktreesPanel";
 import { PendingOperation } from "./PendingOperation";
@@ -31,6 +31,9 @@ import { useShipAvailability } from "@/hooks/useShipAvailability";
 import { ConfirmDialog } from "./ui/field";
 import { ProjectSettings } from "./ReposConfig";
 import { toast } from "./ui/toast";
+import type { EffortRecord } from "@/lib/api-contracts/systems";
+import { SystemsSidebar } from "./SystemsSidebar";
+import type { SystemsHosts } from "./SystemsHost";
 
 function ProjectIcon({ project }: { project: HierarchyProject }) {
   const name = project.alias || project.name;
@@ -61,6 +64,8 @@ type Props = {
   selectedCwd: string | null;
   selectedHostId: string;
   refreshKey?: number;
+  systemsHosts: SystemsHosts;
+  onOpenEffort: (host: string, effort: EffortRecord, navigate: boolean, latestSession?: SessionInfo) => void;
   onSelectWorkspace: (path: string, host: string, latestSession?: SessionInfo) => void;
   onWorkspaceRemoved: (path: string, host: string) => void;
   onShip?: (target: ShipTarget) => void;
@@ -109,6 +114,8 @@ export function HierarchySidebar({
   selectedCwd,
   selectedHostId,
   refreshKey,
+  systemsHosts,
+  onOpenEffort,
   onSelectWorkspace,
   onWorkspaceRemoved,
   onShip,
@@ -136,7 +143,7 @@ export function HierarchySidebar({
   useEffect(() => {
     const dismissMenus = (event: PointerEvent) => {
       sidebarRef.current
-        ?.querySelectorAll<HTMLDetailsElement>("details[open]")
+        ?.querySelectorAll<HTMLDetailsElement>("details[open]:not([data-persistent])")
         .forEach((menu) => {
           if (event.target instanceof Node && !menu.contains(event.target))
             menu.open = false;
@@ -721,6 +728,9 @@ export function HierarchySidebar({
               </button>
             </div>
           )}
+          {(host.id === ungroupedHostId || !collapsedHosts.has(host.id)) && (
+            <div style={{ color: "var(--text)", padding: "5px 4px", fontWeight: 600 }}>Repos</div>
+          )}
           {(host.id === ungroupedHostId || !collapsedHosts.has(host.id)) &&
             (snapshots[host.id]?.projects ?? []).map((project) => {
               const projectMatch =
@@ -1222,6 +1232,27 @@ export function HierarchySidebar({
                 </div>
               );
             })}
+          {(host.id === ungroupedHostId || !collapsedHosts.has(host.id)) && (
+            <SystemsSidebar
+              host={host.id}
+              state={systemsHosts.byHost[host.id]}
+              action={(input) => systemsHosts.run(host.id, input)}
+              repos={(snapshots[host.id]?.projects ?? []).filter((project) => project.kind === "git").map((project) => ({ path: project.path, name: project.alias ?? project.name }))}
+              selectedPath={selectedHostId === host.id ? selectedCwd : null}
+              query={query}
+              runningOnly={runningOnly}
+              runningIds={runningSessionIds}
+              matchedIds={matchedSessionIds}
+              unavailable={hostUnavailableReason?.(host.id)}
+              onOpenEffort={(effort, navigate) => {
+                const latest = navigate ? sessions.filter((session) =>
+                  (session.hostId ?? LOCAL_HOST_ID) === host.id && effort.sessionIds.includes(session.id) && session.cwd === effort.root,
+                ).sort((a, b) => (b.lastMessageAt ?? b.modified).localeCompare(a.lastMessageAt ?? a.modified))[0] : undefined;
+                onOpenEffort(host.id, effort, navigate, latest);
+              }}
+              onChanged={onChanged}
+            />
+          )}
         </section>
       ))}
       {settingsProject && (

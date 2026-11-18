@@ -1,3 +1,5 @@
+import { Value } from "@sinclair/typebox/value";
+import { SystemsResultSchema } from "../api-contracts/systems";
 import { isRecord } from "../type-guards";
 import type { WorkspaceOps } from "../workspace-types";
 import { LINK_LIMITS } from "./link-protocol";
@@ -81,6 +83,8 @@ export function validWorkspaceResult(
     );
   if (!isRecord(value)) return false;
   switch (op) {
+    case "systems":
+      return Value.Check(SystemsResultSchema, value);
     case "terminals":
       return (
         (value.terminals === undefined ||

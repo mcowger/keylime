@@ -101,6 +101,7 @@ type ChannelDeps = {
   spawn(launch: SpawnRequest): Promise<SpawnResult>;
   bindTerminal?(runtimeId: string, sessionId: string): void;
   terminalAttached?(runtimeId: string): boolean;
+  workspaceDeleting?(cwd: string): boolean;
   prepareLaunch(launch: SpawnRequest): SpawnRequest;
   sessionId?(file: string): string | null;
   autoApproveExtension?(): boolean;
@@ -359,11 +360,17 @@ export class ChannelTable {
     );
   }
 
-  private assertWorkspaceAvailable(cwd: string): void {
+  private workspaceDeleting(cwd: string): boolean {
+    return (
+      [...this.workspaceFences].some((root) => this.workspaceContains(root, cwd)) ||
+      (this.deps.workspaceDeleting?.(cwd) ?? false)
+    );
+  }
+
+  private assertWorkspaceAvailable(cwd: string, recordedCwd?: string | null): void {
     if (
-      [...this.workspaceFences].some((root) =>
-        this.workspaceContains(root, cwd),
-      )
+      this.workspaceDeleting(cwd) ||
+      (recordedCwd && recordedCwd !== cwd && this.workspaceDeleting(recordedCwd))
     )
       throw new HostOpError(
         409,
@@ -740,7 +747,12 @@ export class ChannelTable {
     preparingLinkId?: string,
     adopted?: SpawnResult,
   ): Promise<Channel> {
-    this.assertWorkspaceAvailable(launch.cwd);
+    try {
+      this.assertWorkspaceAvailable(launch.cwd, launch.recordedCwd);
+    } catch (error) {
+      adopted?.transport.killTree(true);
+      throw error;
+    }
     this.spawningCount++;
     try {
       if (this.stopped) {

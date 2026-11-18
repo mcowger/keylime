@@ -91372,6 +91372,2199 @@
         }
       }
     },
+    "/api/systems": {
+      "get": {
+        "description": "### Usage\n\nList Systems and Efforts on one daemon.\n\n### Inputs\n\nOptional host selects a daemon; omit it for the local host.\n\n### Invariants\n\nAll returned paths and live terminal IDs belong to that daemon.\n\n### Effects\n\nReturns a no-store snapshot without changing definitions or starting jobs.\n\n### Recovery\n\nRefresh after updates, during setup, or after reconnecting to the host.",
+        "operationId": "workspaceSystemsGet",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "host",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Current host state and the requested preview or admitted Effort ID, where applicable.",
+                  "properties": {
+                    "cleanup": {
+                      "description": "Cleanup review. File paths and running processes are host-owned; publication and PR evidence can be unavailable.",
+                      "properties": {
+                        "confirmation": {
+                          "type": "string"
+                        },
+                        "processes": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "repos": {
+                          "items": {
+                            "properties": {
+                              "dirty": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "openPrs": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "publication": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "dirty",
+                              "publication",
+                              "openPrs"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": ["confirmation", "processes", "repos"],
+                      "type": "object"
+                    },
+                    "effortId": {
+                      "type": "string"
+                    },
+                    "efforts": {
+                      "items": {
+                        "description": "Persisted Effort identity and member progress with current daemon terminal and chat ownership.",
+                        "properties": {
+                          "branch": {
+                            "type": "string"
+                          },
+                          "error": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "members": {
+                            "items": {
+                              "properties": {
+                                "baseCommit": {
+                                  "type": "string"
+                                },
+                                "baseRef": {
+                                  "type": "string"
+                                },
+                                "branches": {
+                                  "description": "Point-in-time local and remote branch choices and default base ref for a host project.",
+                                  "properties": {
+                                    "defaultRef": {
+                                      "description": "Full Git ref for the default base, or an empty string if no default is available.",
+                                      "type": "string"
+                                    },
+                                    "local": {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "originAheadRef": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ],
+                                      "description": "Full origin default ref if it contains commits missing from its local counterpart, otherwise null."
+                                    },
+                                    "otherRefs": {
+                                      "description": "Full local and remote-tracking refs not checked out in a worktree, excluding the primary choices. Local refs appear first.",
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "pullRequests": {
+                                      "anyOf": [
+                                        {
+                                          "items": {
+                                            "properties": {
+                                              "isDraft": {
+                                                "type": "boolean"
+                                              },
+                                              "number": {
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              },
+                                              "title": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "number",
+                                              "title",
+                                              "isDraft"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "type": "array"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ],
+                                      "description": "Open GitHub pull requests, including drafts. Null if GitHub is configured but the host couldn't load the list."
+                                    },
+                                    "remote": {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    }
+                                  },
+                                  "required": [
+                                    "local",
+                                    "remote",
+                                    "defaultRef",
+                                    "originAheadRef",
+                                    "otherRefs",
+                                    "pullRequests"
+                                  ],
+                                  "type": "object"
+                                },
+                                "error": {
+                                  "type": "string"
+                                },
+                                "jobId": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "path": {
+                                  "type": "string"
+                                },
+                                "repoPath": {
+                                  "type": "string"
+                                },
+                                "skipsCustomCreate": {
+                                  "type": "boolean"
+                                },
+                                "stage": {
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "anyOf": [
+                                    {
+                                      "const": "pending",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "running",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "complete",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "failed",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "interrupted",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "removed",
+                                      "type": "string"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "repoPath",
+                                "name",
+                                "path",
+                                "baseRef",
+                                "baseCommit",
+                                "skipsCustomCreate",
+                                "status"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "retainedPaths": {
+                            "items": {
+                              "description": "Files deliberately preserved at the Effort root after cleanup.",
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "root": {
+                            "type": "string"
+                          },
+                          "services": {
+                            "items": {
+                              "properties": {
+                                "command": {
+                                  "description": "Foreground shell command run as the host daemon user.",
+                                  "type": "string"
+                                },
+                                "error": {
+                                  "type": "string"
+                                },
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "anyOf": [
+                                    {
+                                      "const": "stopped",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "running",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "exited",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "terminalId": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["id", "name", "command", "status"],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "sessionIds": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "const": "creating",
+                                "type": "string"
+                              },
+                              {
+                                "const": "failed",
+                                "type": "string"
+                              },
+                              {
+                                "const": "ready",
+                                "type": "string"
+                              },
+                              {
+                                "const": "cleaning",
+                                "type": "string"
+                              },
+                              {
+                                "const": "cleanup_failed",
+                                "type": "string"
+                              },
+                              {
+                                "const": "cleaned",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "systemId": {
+                            "type": "string"
+                          },
+                          "systemName": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "systemId",
+                          "name",
+                          "slug",
+                          "root",
+                          "branch",
+                          "id",
+                          "systemName",
+                          "status",
+                          "members",
+                          "services",
+                          "sessionIds"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "preview": {
+                      "description": "Non-mutating preview for creating one branch and worktree in each System member.",
+                      "properties": {
+                        "branch": {
+                          "type": "string"
+                        },
+                        "confirmation": {
+                          "description": "Opaque fingerprint of the previewed definition, paths, and resolved Git commits.",
+                          "type": "string"
+                        },
+                        "members": {
+                          "items": {
+                            "properties": {
+                              "baseCommit": {
+                                "type": "string"
+                              },
+                              "baseRef": {
+                                "type": "string"
+                              },
+                              "branches": {
+                                "description": "Point-in-time local and remote branch choices and default base ref for a host project.",
+                                "properties": {
+                                  "defaultRef": {
+                                    "description": "Full Git ref for the default base, or an empty string if no default is available.",
+                                    "type": "string"
+                                  },
+                                  "local": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "originAheadRef": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ],
+                                    "description": "Full origin default ref if it contains commits missing from its local counterpart, otherwise null."
+                                  },
+                                  "otherRefs": {
+                                    "description": "Full local and remote-tracking refs not checked out in a worktree, excluding the primary choices. Local refs appear first.",
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "pullRequests": {
+                                    "anyOf": [
+                                      {
+                                        "items": {
+                                          "properties": {
+                                            "isDraft": {
+                                              "type": "boolean"
+                                            },
+                                            "number": {
+                                              "minimum": 1,
+                                              "type": "integer"
+                                            },
+                                            "title": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "number",
+                                            "title",
+                                            "isDraft"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "type": "array"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ],
+                                    "description": "Open GitHub pull requests, including drafts. Null if GitHub is configured but the host couldn't load the list."
+                                  },
+                                  "remote": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  }
+                                },
+                                "required": [
+                                  "local",
+                                  "remote",
+                                  "defaultRef",
+                                  "originAheadRef",
+                                  "otherRefs",
+                                  "pullRequests"
+                                ],
+                                "type": "object"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "repoPath": {
+                                "type": "string"
+                              },
+                              "skipsCustomCreate": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "repoPath",
+                              "name",
+                              "path",
+                              "baseRef",
+                              "baseCommit",
+                              "skipsCustomCreate"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "root": {
+                          "type": "string"
+                        },
+                        "slug": {
+                          "type": "string"
+                        },
+                        "systemId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "systemId",
+                        "name",
+                        "slug",
+                        "root",
+                        "branch",
+                        "members",
+                        "confirmation"
+                      ],
+                      "type": "object"
+                    },
+                    "root": {
+                      "type": "string"
+                    },
+                    "systems": {
+                      "items": {
+                        "description": "A host-owned, reusable multi-repo definition.",
+                        "properties": {
+                          "archived": {
+                            "type": "boolean"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "instructions": {
+                            "description": "User-written AGENTS.md body, copied at Effort creation.",
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "repoPaths": {
+                            "items": {
+                              "description": "Existing Git checkout path on the selected daemon; stored Systems use canonical Repo paths.",
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "services": {
+                            "items": {
+                              "properties": {
+                                "command": {
+                                  "description": "Foreground shell command run as the host daemon user.",
+                                  "type": "string"
+                                },
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["id", "name", "command"],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "slug": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "repoPaths",
+                          "services",
+                          "instructions",
+                          "id",
+                          "slug",
+                          "archived"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": ["root", "systems", "efforts"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request or rejected operation."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authentication is required when configured."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Origin, ownership or authorization policy refused this request."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The requested resource does not exist."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host daemon is drained for maintenance."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The operation failed."
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host daemon does not support Systems."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The owning host or required service is unavailable."
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host did not answer in time."
+          }
+        },
+        "security": [
+          {
+            "webSession": []
+          },
+          {
+            "trustedProxy": []
+          },
+          {}
+        ],
+        "summary": "List Systems and Efforts",
+        "x-client-semantics": {
+          "Effects": "Returns a no-store snapshot without changing definitions or starting jobs.",
+          "Inputs": "Optional host selects a daemon; omit it for the local host.",
+          "Invariants": "All returned paths and live terminal IDs belong to that daemon.",
+          "Recovery": "Refresh after updates, during setup, or after reconnecting to the host.",
+          "Usage": "List Systems and Efforts on one daemon."
+        }
+      },
+      "post": {
+        "description": "### Usage\n\nPreview, create, update, or clean up Systems and Efforts, or control a saved service.\n\n### Inputs\n\nSend optional host and action-specific input as JSON, at most 384 KiB. Creation and cleanup require preview confirmation.\n\n### Invariants\n\nAn Effort keeps its captured definitions and paths. Service controls select a saved service by ID; they do not take a command or environment override.\n\n### Effects\n\nActions may persist definitions, admit setup jobs, start or stop service PTYs, or clean up registered worktrees. Service output uses the existing terminal channel.\n\n### Recovery\n\nList host state after uncertain delivery rather than repeating mutations. Retry setup explicitly and refresh the cleanup preview before resuming removal.",
+        "operationId": "workspaceSystemsPost",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "Send a Systems operation to the selected daemon. Omit host for this machine.",
+                "properties": {
+                  "host": {
+                    "type": "string"
+                  },
+                  "input": {
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "action": {
+                            "const": "list",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action"],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "action": {
+                            "const": "setRoot",
+                            "type": "string"
+                          },
+                          "root": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action", "root"],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "action": {
+                            "const": "saveSystem",
+                            "type": "string"
+                          },
+                          "definition": {
+                            "properties": {
+                              "instructions": {
+                                "description": "User-written AGENTS.md body, copied at Effort creation.",
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "repoPaths": {
+                                "items": {
+                                  "description": "Existing Git checkout path on the selected daemon; stored Systems use canonical Repo paths.",
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "services": {
+                                "items": {
+                                  "properties": {
+                                    "command": {
+                                      "description": "Foreground shell command run as the host daemon user.",
+                                      "type": "string"
+                                    },
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["id", "name", "command"],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "repoPaths",
+                              "services",
+                              "instructions"
+                            ],
+                            "type": "object"
+                          },
+                          "id": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action", "definition"],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "action": {
+                            "const": "archiveSystem",
+                            "type": "string"
+                          },
+                          "archived": {
+                            "type": "boolean"
+                          },
+                          "id": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action", "id", "archived"],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "action": {
+                            "const": "preview",
+                            "type": "string"
+                          },
+                          "bases": {
+                            "items": {
+                              "properties": {
+                                "ref": {
+                                  "type": "string"
+                                },
+                                "repoPath": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["repoPath", "ref"],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "systemId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action", "systemId", "name"],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "action": {
+                            "const": "create",
+                            "type": "string"
+                          },
+                          "bases": {
+                            "items": {
+                              "properties": {
+                                "ref": {
+                                  "type": "string"
+                                },
+                                "repoPath": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["repoPath", "ref"],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "confirmation": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "systemId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "action",
+                          "systemId",
+                          "name",
+                          "confirmation"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "action": {
+                            "const": "retry",
+                            "type": "string"
+                          },
+                          "effortId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action", "effortId"],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "action": {
+                            "const": "renameEffort",
+                            "type": "string"
+                          },
+                          "effortId": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action", "effortId", "name"],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "action": {
+                            "const": "service",
+                            "type": "string"
+                          },
+                          "effortId": {
+                            "type": "string"
+                          },
+                          "operation": {
+                            "anyOf": [
+                              {
+                                "const": "start",
+                                "type": "string"
+                              },
+                              {
+                                "const": "stop",
+                                "type": "string"
+                              },
+                              {
+                                "const": "restart",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "serviceId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "action",
+                          "effortId",
+                          "serviceId",
+                          "operation"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "action": {
+                            "const": "cleanupPreview",
+                            "type": "string"
+                          },
+                          "effortId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action", "effortId"],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "action": {
+                            "const": "cleanup",
+                            "type": "string"
+                          },
+                          "confirmation": {
+                            "type": "string"
+                          },
+                          "effortId": {
+                            "type": "string"
+                          },
+                          "mode": {
+                            "anyOf": [
+                              {
+                                "const": "stop",
+                                "type": "string"
+                              },
+                              {
+                                "const": "remove",
+                                "type": "string"
+                              },
+                              {
+                                "const": "force",
+                                "type": "string"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "action",
+                          "effortId",
+                          "mode",
+                          "confirmation"
+                        ],
+                        "type": "object"
+                      }
+                    ],
+                    "description": "Read or mutate Systems and Efforts on a single daemon. Creation and removal require matching previews."
+                  }
+                },
+                "required": ["input"],
+                "type": "object"
+              }
+            }
+          },
+          "description": "At most 384 KiB of JSON.",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Current host state and the requested preview or admitted Effort ID, where applicable.",
+                  "properties": {
+                    "cleanup": {
+                      "description": "Cleanup review. File paths and running processes are host-owned; publication and PR evidence can be unavailable.",
+                      "properties": {
+                        "confirmation": {
+                          "type": "string"
+                        },
+                        "processes": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "repos": {
+                          "items": {
+                            "properties": {
+                              "dirty": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "openPrs": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "publication": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "dirty",
+                              "publication",
+                              "openPrs"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": ["confirmation", "processes", "repos"],
+                      "type": "object"
+                    },
+                    "effortId": {
+                      "type": "string"
+                    },
+                    "efforts": {
+                      "items": {
+                        "description": "Persisted Effort identity and member progress with current daemon terminal and chat ownership.",
+                        "properties": {
+                          "branch": {
+                            "type": "string"
+                          },
+                          "error": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "members": {
+                            "items": {
+                              "properties": {
+                                "baseCommit": {
+                                  "type": "string"
+                                },
+                                "baseRef": {
+                                  "type": "string"
+                                },
+                                "branches": {
+                                  "description": "Point-in-time local and remote branch choices and default base ref for a host project.",
+                                  "properties": {
+                                    "defaultRef": {
+                                      "description": "Full Git ref for the default base, or an empty string if no default is available.",
+                                      "type": "string"
+                                    },
+                                    "local": {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "originAheadRef": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ],
+                                      "description": "Full origin default ref if it contains commits missing from its local counterpart, otherwise null."
+                                    },
+                                    "otherRefs": {
+                                      "description": "Full local and remote-tracking refs not checked out in a worktree, excluding the primary choices. Local refs appear first.",
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "pullRequests": {
+                                      "anyOf": [
+                                        {
+                                          "items": {
+                                            "properties": {
+                                              "isDraft": {
+                                                "type": "boolean"
+                                              },
+                                              "number": {
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              },
+                                              "title": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "number",
+                                              "title",
+                                              "isDraft"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "type": "array"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ],
+                                      "description": "Open GitHub pull requests, including drafts. Null if GitHub is configured but the host couldn't load the list."
+                                    },
+                                    "remote": {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    }
+                                  },
+                                  "required": [
+                                    "local",
+                                    "remote",
+                                    "defaultRef",
+                                    "originAheadRef",
+                                    "otherRefs",
+                                    "pullRequests"
+                                  ],
+                                  "type": "object"
+                                },
+                                "error": {
+                                  "type": "string"
+                                },
+                                "jobId": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "path": {
+                                  "type": "string"
+                                },
+                                "repoPath": {
+                                  "type": "string"
+                                },
+                                "skipsCustomCreate": {
+                                  "type": "boolean"
+                                },
+                                "stage": {
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "anyOf": [
+                                    {
+                                      "const": "pending",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "running",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "complete",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "failed",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "interrupted",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "removed",
+                                      "type": "string"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "repoPath",
+                                "name",
+                                "path",
+                                "baseRef",
+                                "baseCommit",
+                                "skipsCustomCreate",
+                                "status"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "retainedPaths": {
+                            "items": {
+                              "description": "Files deliberately preserved at the Effort root after cleanup.",
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "root": {
+                            "type": "string"
+                          },
+                          "services": {
+                            "items": {
+                              "properties": {
+                                "command": {
+                                  "description": "Foreground shell command run as the host daemon user.",
+                                  "type": "string"
+                                },
+                                "error": {
+                                  "type": "string"
+                                },
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "anyOf": [
+                                    {
+                                      "const": "stopped",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "running",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "exited",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "terminalId": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["id", "name", "command", "status"],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "sessionIds": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "const": "creating",
+                                "type": "string"
+                              },
+                              {
+                                "const": "failed",
+                                "type": "string"
+                              },
+                              {
+                                "const": "ready",
+                                "type": "string"
+                              },
+                              {
+                                "const": "cleaning",
+                                "type": "string"
+                              },
+                              {
+                                "const": "cleanup_failed",
+                                "type": "string"
+                              },
+                              {
+                                "const": "cleaned",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "systemId": {
+                            "type": "string"
+                          },
+                          "systemName": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "systemId",
+                          "name",
+                          "slug",
+                          "root",
+                          "branch",
+                          "id",
+                          "systemName",
+                          "status",
+                          "members",
+                          "services",
+                          "sessionIds"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "preview": {
+                      "description": "Non-mutating preview for creating one branch and worktree in each System member.",
+                      "properties": {
+                        "branch": {
+                          "type": "string"
+                        },
+                        "confirmation": {
+                          "description": "Opaque fingerprint of the previewed definition, paths, and resolved Git commits.",
+                          "type": "string"
+                        },
+                        "members": {
+                          "items": {
+                            "properties": {
+                              "baseCommit": {
+                                "type": "string"
+                              },
+                              "baseRef": {
+                                "type": "string"
+                              },
+                              "branches": {
+                                "description": "Point-in-time local and remote branch choices and default base ref for a host project.",
+                                "properties": {
+                                  "defaultRef": {
+                                    "description": "Full Git ref for the default base, or an empty string if no default is available.",
+                                    "type": "string"
+                                  },
+                                  "local": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "originAheadRef": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ],
+                                    "description": "Full origin default ref if it contains commits missing from its local counterpart, otherwise null."
+                                  },
+                                  "otherRefs": {
+                                    "description": "Full local and remote-tracking refs not checked out in a worktree, excluding the primary choices. Local refs appear first.",
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "pullRequests": {
+                                    "anyOf": [
+                                      {
+                                        "items": {
+                                          "properties": {
+                                            "isDraft": {
+                                              "type": "boolean"
+                                            },
+                                            "number": {
+                                              "minimum": 1,
+                                              "type": "integer"
+                                            },
+                                            "title": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "number",
+                                            "title",
+                                            "isDraft"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "type": "array"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ],
+                                    "description": "Open GitHub pull requests, including drafts. Null if GitHub is configured but the host couldn't load the list."
+                                  },
+                                  "remote": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  }
+                                },
+                                "required": [
+                                  "local",
+                                  "remote",
+                                  "defaultRef",
+                                  "originAheadRef",
+                                  "otherRefs",
+                                  "pullRequests"
+                                ],
+                                "type": "object"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "repoPath": {
+                                "type": "string"
+                              },
+                              "skipsCustomCreate": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "repoPath",
+                              "name",
+                              "path",
+                              "baseRef",
+                              "baseCommit",
+                              "skipsCustomCreate"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "root": {
+                          "type": "string"
+                        },
+                        "slug": {
+                          "type": "string"
+                        },
+                        "systemId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "systemId",
+                        "name",
+                        "slug",
+                        "root",
+                        "branch",
+                        "members",
+                        "confirmation"
+                      ],
+                      "type": "object"
+                    },
+                    "root": {
+                      "type": "string"
+                    },
+                    "systems": {
+                      "items": {
+                        "description": "A host-owned, reusable multi-repo definition.",
+                        "properties": {
+                          "archived": {
+                            "type": "boolean"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "instructions": {
+                            "description": "User-written AGENTS.md body, copied at Effort creation.",
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "repoPaths": {
+                            "items": {
+                              "description": "Existing Git checkout path on the selected daemon; stored Systems use canonical Repo paths.",
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "services": {
+                            "items": {
+                              "properties": {
+                                "command": {
+                                  "description": "Foreground shell command run as the host daemon user.",
+                                  "type": "string"
+                                },
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["id", "name", "command"],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "slug": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "repoPaths",
+                          "services",
+                          "instructions",
+                          "id",
+                          "slug",
+                          "archived"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": ["root", "systems", "efforts"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request or rejected operation."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authentication is required when configured."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Origin, ownership or authorization policy refused this request."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The requested resource does not exist."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host rejected the action due to current state or a stale confirmation."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The request body exceeds 384 KiB."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The operation failed."
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host daemon does not support Systems."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The owning host or required service is unavailable."
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host did not answer in time; the action may have run."
+          }
+        },
+        "security": [
+          {
+            "webSession": []
+          },
+          {
+            "trustedProxy": []
+          },
+          {}
+        ],
+        "summary": "Manage Systems and Efforts",
+        "x-client-semantics": {
+          "Effects": "Actions may persist definitions, admit setup jobs, start or stop service PTYs, or clean up registered worktrees. Service output uses the existing terminal channel.",
+          "Inputs": "Send optional host and action-specific input as JSON, at most 384 KiB. Creation and cleanup require preview confirmation.",
+          "Invariants": "An Effort keeps its captured definitions and paths. Service controls select a saved service by ID; they do not take a command or environment override.",
+          "Recovery": "List host state after uncertain delivery rather than repeating mutations. Retry setup explicitly and refresh the cleanup preview before resuming removal.",
+          "Usage": "Preview, create, update, or clean up Systems and Efforts, or control a saved service."
+        }
+      }
+    },
     "/api/terminal/attach": {
       "get": {
         "description": "### Usage\n\nAttach an authenticated client to an existing session terminal.\n\n### Inputs\n\nhostId and sessionId identify the owning host and live session; the first frame is a version 1 hello.\n\n### Invariants\n\nInput belongs only to this socket and is never replayed. Reconnection starts with a fresh snapshot.\n\n### Effects\n\nInput and resize frames are forwarded to the host-owned PTY; detach closes only the attachment.\n\n### Recovery\n\nA disconnected or slow client reconnects and receives a new snapshot.",

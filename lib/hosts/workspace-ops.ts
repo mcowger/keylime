@@ -69,6 +69,7 @@ import { parseLocalUri } from "../local-uri";
 import { resolveSessionLocalFile } from "../session-local-files";
 import { filePathApiSegments } from "../file-paths";
 import { hierarchyOperation } from "./project-hierarchy";
+import { isEffortPath } from "./systems";
 import {
   shipPreview,
   startShip,
@@ -283,7 +284,7 @@ async function bashPath(sessionId: string, requested: string): Promise<string> {
   return resolved;
 }
 export interface WorkspaceService {
-  ops: WorkspaceOps;
+  ops: Omit<WorkspaceOps, "terminals" | "systems">;
   busy(): boolean;
   onDisconnect(): void;
   stop(): Promise<void>;
@@ -301,14 +302,7 @@ export function createWorkspaceService(
     const checked = await access(input, true);
     return fileInfo(checked.filePath, checked.stat);
   }, emit);
-  const ops: WorkspaceOps = {
-    terminals: async () => {
-      throw new HostOpError(
-        501,
-        "workspace_unsupported",
-        "Terminals require a host daemon",
-      );
-    },
+  const ops: WorkspaceService["ops"] = {
     hierarchy: hierarchyOperation,
     shipPreview: (input) => result(() => shipPreview(input)),
     startShip: (input) => result(() => startShip(input)),
@@ -458,7 +452,8 @@ export function createWorkspaceService(
           isGit = false;
         }
         worktrees = worktrees.filter(
-          (tree) => !fs.lstatSync(tree.path).isSymbolicLink(),
+          (tree) =>
+            !isEffortPath(tree.path) && !fs.lstatSync(tree.path).isSymbolicLink(),
         );
         for (const tree of worktrees) grantWorkspaceRoot(tree.path);
         return {

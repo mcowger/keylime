@@ -43533,6 +43533,854 @@
         }
       ]
     },
+    "host_systems_args": {
+      "properties": {
+        "input": {
+          "anyOf": [
+            {
+              "properties": {
+                "action": {
+                  "const": "list",
+                  "type": "string"
+                }
+              },
+              "required": ["action"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "setRoot",
+                  "type": "string"
+                },
+                "root": {
+                  "type": "string"
+                }
+              },
+              "required": ["action", "root"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "saveSystem",
+                  "type": "string"
+                },
+                "definition": {
+                  "properties": {
+                    "instructions": {
+                      "description": "User-written AGENTS.md body, copied at Effort creation.",
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "repoPaths": {
+                      "items": {
+                        "description": "Existing Git checkout path on the selected daemon; stored Systems use canonical Repo paths.",
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "services": {
+                      "items": {
+                        "properties": {
+                          "command": {
+                            "description": "Foreground shell command run as the host daemon user.",
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "name", "command"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": ["name", "repoPaths", "services", "instructions"],
+                  "type": "object"
+                },
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": ["action", "definition"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "archiveSystem",
+                  "type": "string"
+                },
+                "archived": {
+                  "type": "boolean"
+                },
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": ["action", "id", "archived"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "preview",
+                  "type": "string"
+                },
+                "bases": {
+                  "items": {
+                    "properties": {
+                      "ref": {
+                        "type": "string"
+                      },
+                      "repoPath": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["repoPath", "ref"],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "systemId": {
+                  "type": "string"
+                }
+              },
+              "required": ["action", "systemId", "name"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "create",
+                  "type": "string"
+                },
+                "bases": {
+                  "items": {
+                    "properties": {
+                      "ref": {
+                        "type": "string"
+                      },
+                      "repoPath": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["repoPath", "ref"],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "confirmation": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "systemId": {
+                  "type": "string"
+                }
+              },
+              "required": ["action", "systemId", "name", "confirmation"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "retry",
+                  "type": "string"
+                },
+                "effortId": {
+                  "type": "string"
+                }
+              },
+              "required": ["action", "effortId"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "renameEffort",
+                  "type": "string"
+                },
+                "effortId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": ["action", "effortId", "name"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "service",
+                  "type": "string"
+                },
+                "effortId": {
+                  "type": "string"
+                },
+                "operation": {
+                  "anyOf": [
+                    {
+                      "const": "start",
+                      "type": "string"
+                    },
+                    {
+                      "const": "stop",
+                      "type": "string"
+                    },
+                    {
+                      "const": "restart",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "serviceId": {
+                  "type": "string"
+                }
+              },
+              "required": ["action", "effortId", "serviceId", "operation"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "cleanupPreview",
+                  "type": "string"
+                },
+                "effortId": {
+                  "type": "string"
+                }
+              },
+              "required": ["action", "effortId"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "cleanup",
+                  "type": "string"
+                },
+                "confirmation": {
+                  "type": "string"
+                },
+                "effortId": {
+                  "type": "string"
+                },
+                "mode": {
+                  "anyOf": [
+                    {
+                      "const": "stop",
+                      "type": "string"
+                    },
+                    {
+                      "const": "remove",
+                      "type": "string"
+                    },
+                    {
+                      "const": "force",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "required": ["action", "effortId", "mode", "confirmation"],
+              "type": "object"
+            }
+          ],
+          "description": "Read or mutate Systems and Efforts on a single daemon. Creation and removal require matching previews."
+        }
+      },
+      "required": ["input"],
+      "type": "object"
+    },
+    "host_systems_result": {
+      "anyOf": [
+        {
+          "properties": {
+            "ok": {
+              "const": true,
+              "type": "boolean"
+            },
+            "value": {
+              "description": "Current host state and the requested preview or admitted Effort ID, where applicable.",
+              "properties": {
+                "cleanup": {
+                  "description": "Cleanup review. File paths and running processes are host-owned; publication and PR evidence can be unavailable.",
+                  "properties": {
+                    "confirmation": {
+                      "type": "string"
+                    },
+                    "processes": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "repos": {
+                      "items": {
+                        "properties": {
+                          "dirty": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "openPrs": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "publication": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "dirty", "publication", "openPrs"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": ["confirmation", "processes", "repos"],
+                  "type": "object"
+                },
+                "effortId": {
+                  "type": "string"
+                },
+                "efforts": {
+                  "items": {
+                    "description": "Persisted Effort identity and member progress with current daemon terminal and chat ownership.",
+                    "properties": {
+                      "branch": {
+                        "type": "string"
+                      },
+                      "error": {
+                        "type": "string"
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "members": {
+                        "items": {
+                          "properties": {
+                            "baseCommit": {
+                              "type": "string"
+                            },
+                            "baseRef": {
+                              "type": "string"
+                            },
+                            "branches": {
+                              "description": "Point-in-time local and remote branch choices and default base ref for a host project.",
+                              "properties": {
+                                "defaultRef": {
+                                  "description": "Full Git ref for the default base, or an empty string if no default is available.",
+                                  "type": "string"
+                                },
+                                "local": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                },
+                                "originAheadRef": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "description": "Full origin default ref if it contains commits missing from its local counterpart, otherwise null."
+                                },
+                                "otherRefs": {
+                                  "description": "Full local and remote-tracking refs not checked out in a worktree, excluding the primary choices. Local refs appear first.",
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                },
+                                "pullRequests": {
+                                  "anyOf": [
+                                    {
+                                      "items": {
+                                        "properties": {
+                                          "isDraft": {
+                                            "type": "boolean"
+                                          },
+                                          "number": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "title": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "number",
+                                          "title",
+                                          "isDraft"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "type": "array"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "description": "Open GitHub pull requests, including drafts. Null if GitHub is configured but the host couldn't load the list."
+                                },
+                                "remote": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "local",
+                                "remote",
+                                "defaultRef",
+                                "originAheadRef",
+                                "otherRefs",
+                                "pullRequests"
+                              ],
+                              "type": "object"
+                            },
+                            "error": {
+                              "type": "string"
+                            },
+                            "jobId": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "path": {
+                              "type": "string"
+                            },
+                            "repoPath": {
+                              "type": "string"
+                            },
+                            "skipsCustomCreate": {
+                              "type": "boolean"
+                            },
+                            "stage": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "const": "pending",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "running",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "complete",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "failed",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "interrupted",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "removed",
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "repoPath",
+                            "name",
+                            "path",
+                            "baseRef",
+                            "baseCommit",
+                            "skipsCustomCreate",
+                            "status"
+                          ],
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "retainedPaths": {
+                        "items": {
+                          "description": "Files deliberately preserved at the Effort root after cleanup.",
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "root": {
+                        "type": "string"
+                      },
+                      "services": {
+                        "items": {
+                          "properties": {
+                            "command": {
+                              "description": "Foreground shell command run as the host daemon user.",
+                              "type": "string"
+                            },
+                            "error": {
+                              "type": "string"
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "const": "stopped",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "running",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "exited",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "terminalId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["id", "name", "command", "status"],
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "sessionIds": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "slug": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "anyOf": [
+                          {
+                            "const": "creating",
+                            "type": "string"
+                          },
+                          {
+                            "const": "failed",
+                            "type": "string"
+                          },
+                          {
+                            "const": "ready",
+                            "type": "string"
+                          },
+                          {
+                            "const": "cleaning",
+                            "type": "string"
+                          },
+                          {
+                            "const": "cleanup_failed",
+                            "type": "string"
+                          },
+                          {
+                            "const": "cleaned",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "systemId": {
+                        "type": "string"
+                      },
+                      "systemName": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "systemId",
+                      "name",
+                      "slug",
+                      "root",
+                      "branch",
+                      "id",
+                      "systemName",
+                      "status",
+                      "members",
+                      "services",
+                      "sessionIds"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "preview": {
+                  "description": "Non-mutating preview for creating one branch and worktree in each System member.",
+                  "properties": {
+                    "branch": {
+                      "type": "string"
+                    },
+                    "confirmation": {
+                      "description": "Opaque fingerprint of the previewed definition, paths, and resolved Git commits.",
+                      "type": "string"
+                    },
+                    "members": {
+                      "items": {
+                        "properties": {
+                          "baseCommit": {
+                            "type": "string"
+                          },
+                          "baseRef": {
+                            "type": "string"
+                          },
+                          "branches": {
+                            "description": "Point-in-time local and remote branch choices and default base ref for a host project.",
+                            "properties": {
+                              "defaultRef": {
+                                "description": "Full Git ref for the default base, or an empty string if no default is available.",
+                                "type": "string"
+                              },
+                              "local": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "originAheadRef": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "Full origin default ref if it contains commits missing from its local counterpart, otherwise null."
+                              },
+                              "otherRefs": {
+                                "description": "Full local and remote-tracking refs not checked out in a worktree, excluding the primary choices. Local refs appear first.",
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "pullRequests": {
+                                "anyOf": [
+                                  {
+                                    "items": {
+                                      "properties": {
+                                        "isDraft": {
+                                          "type": "boolean"
+                                        },
+                                        "number": {
+                                          "minimum": 1,
+                                          "type": "integer"
+                                        },
+                                        "title": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "number",
+                                        "title",
+                                        "isDraft"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "type": "array"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "Open GitHub pull requests, including drafts. Null if GitHub is configured but the host couldn't load the list."
+                              },
+                              "remote": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "local",
+                              "remote",
+                              "defaultRef",
+                              "originAheadRef",
+                              "otherRefs",
+                              "pullRequests"
+                            ],
+                            "type": "object"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "repoPath": {
+                            "type": "string"
+                          },
+                          "skipsCustomCreate": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "repoPath",
+                          "name",
+                          "path",
+                          "baseRef",
+                          "baseCommit",
+                          "skipsCustomCreate"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "root": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "systemId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "systemId",
+                    "name",
+                    "slug",
+                    "root",
+                    "branch",
+                    "members",
+                    "confirmation"
+                  ],
+                  "type": "object"
+                },
+                "root": {
+                  "type": "string"
+                },
+                "systems": {
+                  "items": {
+                    "description": "A host-owned, reusable multi-repo definition.",
+                    "properties": {
+                      "archived": {
+                        "type": "boolean"
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "instructions": {
+                        "description": "User-written AGENTS.md body, copied at Effort creation.",
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "repoPaths": {
+                        "items": {
+                          "description": "Existing Git checkout path on the selected daemon; stored Systems use canonical Repo paths.",
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "services": {
+                        "items": {
+                          "properties": {
+                            "command": {
+                              "description": "Foreground shell command run as the host daemon user.",
+                              "type": "string"
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["id", "name", "command"],
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "slug": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "repoPaths",
+                      "services",
+                      "instructions",
+                      "id",
+                      "slug",
+                      "archived"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": ["root", "systems", "efforts"],
+              "type": "object"
+            }
+          },
+          "required": ["ok", "value"],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string"
+            },
+            "ok": {
+              "const": false,
+              "type": "boolean"
+            },
+            "status": {
+              "type": "number"
+            }
+          },
+          "required": ["ok", "status", "code", "error"],
+          "type": "object"
+        }
+      ]
+    },
     "host_TerminalEvent": {
       "anyOf": [
         {
