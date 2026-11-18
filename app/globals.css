@@ -3350,9 +3350,6 @@ span.token.table {
 .picker-nested {
   display: flex;
 }
-.picker-nested[hidden] {
-  display: none;
-}
 .picker-nested-models {
   flex: 1 1 auto;
   min-width: 0;

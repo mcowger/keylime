@@ -9,8 +9,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ### Added
 - The OMP integration importer can select the latest published build with `--latest`.
 - The bundled runner uses OMP integration build 18.22.0.
-- The composer model picker can refresh available models without restarting a session.
-- Star models in the composer picker to keep them at the top. The **More…** section is collapsed by default, and favorites are saved in the browser.
+- Open **More…** in the composer model picker to refresh available models without restarting a session.
+- Star a model to move it from **More…** to **Favorites**. Each model appears once, and favorites are saved in the browser.
 - Question forms have larger action targets, show validation and submission status, prevent duplicate answers, and allow retry after a send failure.
 - Opening a saved session paints recent messages first and loads earlier history in the background.
 - Loading earlier session history no longer animates the scroll to the bottom.
@@ -119,6 +119,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Contributor instructions document updating the runner's OMP integration build and verifying it
 - The composer model picker can refresh available models without restarting a session
 - Star models in the composer picker to keep them at the top. The **More…** section is collapsed by default, and favorites are saved in the browser
+- Open **More…** in the composer model picker to refresh available models without restarting a session
+- Star a model to move it from **More…** to **Favorites**. Each model appears once, and favorites are saved in the browser
 
 ### Changed
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.

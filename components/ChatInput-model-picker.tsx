@@ -163,10 +163,12 @@ export function ModelPickerPanel({
   const [favorites, otherModels] = useMemo(() => {
     const favorites: ModelOption[] = [];
     const otherModels: ModelOption[] = [];
+    const seen = new Set<string>();
     for (const option of searching ? filteredModelOptions : modelOptions) {
-      (favoriteModels.has(modelKey(option)) ? favorites : otherModels).push(
-        option,
-      );
+      const key = modelKey(option);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      (favoriteModels.has(key) ? favorites : otherModels).push(option);
     }
     return [favorites, otherModels];
   }, [favoriteModels, filteredModelOptions, modelOptions, searching]);
@@ -314,21 +316,6 @@ export function ModelPickerPanel({
           aria-label={t("chatInput.searchModels")}
         />
       </label>
-      {onRefreshModels && (
-        <button
-          type="button"
-          className="picker-row"
-          onClick={onRefreshModels}
-          disabled={showModelsLoading}
-        >
-          <RefreshCw size={13} aria-hidden="true" />
-          {modelsRefreshing
-            ? t("chatInput.refreshingModels")
-            : showModelsLoading
-              ? t("chatInput.loadingModels")
-              : t("chatInput.refreshModels")}
-        </button>
-      )}
       {modelError && (
         <div
           role="alert"
@@ -351,7 +338,7 @@ export function ModelPickerPanel({
             {favorites.map((opt) => renderModelRow(opt, true))}
           </div>
         )}
-        {otherModels.length > 0 && (
+        {(otherModels.length > 0 || onRefreshModels) && (
           <Collapsible
             open={open}
             onOpenChange={(next) => {
@@ -366,75 +353,95 @@ export function ModelPickerPanel({
               <ChevronDown size={13} aria-hidden="true" />
               {t("chatInput.otherModels")}
             </CollapsibleTrigger>
-            <CollapsiblePanel
-              className="picker-nested"
-              data-split-pane={showProviderRail && showModelPane}
-            >
-              {showProviderRail && (
-                <div
-                  className="picker-nested-providers"
-                  role="group"
-                  aria-label={t("chatInput.providersLabel")}
+            <CollapsiblePanel>
+              {onRefreshModels && (
+                <button
+                  type="button"
+                  className="picker-row"
+                  onClick={onRefreshModels}
+                  disabled={showModelsLoading}
                 >
-                  {groups.map((group) => {
-                    const isCurrent = currentModel?.provider === group.provider;
-                    const isActive = activeProvider === group.provider;
-                    return (
-                      <button
-                        key={group.provider}
-                        type="button"
-                        className="picker-row picker-provider-row"
-                        data-active={isActive}
-                        data-current={isCurrent}
-                        onClick={() => setSelectedProvider(group.provider)}
-                        aria-current={isCurrent ? "true" : undefined}
-                        aria-controls={`${panelId}-options`}
-                      >
-                        <ProviderBadge id={group.provider} size={15} />
-                        <span className="picker-model-name">
-                          {group.provider}
-                        </span>
-                        <ChevronRight
-                          size={12}
-                          strokeWidth={1.8}
-                          aria-hidden="true"
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
+                  <RefreshCw size={13} aria-hidden="true" />
+                  {modelsRefreshing
+                    ? t("chatInput.refreshingModels")
+                    : showModelsLoading
+                      ? t("chatInput.loadingModels")
+                      : t("chatInput.refreshModels")}
+                </button>
               )}
-              {showModelPane && (
+              {otherModels.length > 0 && (
                 <div
-                  id={`${panelId}-options`}
-                  className="picker-nested-models"
-                  role="group"
-                  aria-label={t("chatInput.modelsLabel")}
+                  className="picker-nested"
+                  data-split-pane={showProviderRail && showModelPane}
                 >
-                  {multipleProviders && isMobile && !searching && (
-                    <button
-                      type="button"
-                      className="picker-row"
-                      onClick={() => setSelectedProvider(null)}
+                  {showProviderRail && (
+                    <div
+                      className="picker-nested-providers"
+                      role="group"
+                      aria-label={t("chatInput.providersLabel")}
                     >
-                      <ChevronLeft
-                        size={13}
-                        strokeWidth={1.8}
-                        aria-hidden="true"
-                      />
-                      <span>{activeProvider}</span>
-                    </button>
+                      {groups.map((group) => {
+                        const isCurrent =
+                          currentModel?.provider === group.provider;
+                        const isActive = activeProvider === group.provider;
+                        return (
+                          <button
+                            key={group.provider}
+                            type="button"
+                            className="picker-row picker-provider-row"
+                            data-active={isActive}
+                            data-current={isCurrent}
+                            onClick={() => setSelectedProvider(group.provider)}
+                            aria-current={isCurrent ? "true" : undefined}
+                            aria-controls={`${panelId}-options`}
+                          >
+                            <ProviderBadge id={group.provider} size={15} />
+                            <span className="picker-model-name">
+                              {group.provider}
+                            </span>
+                            <ChevronRight
+                              size={12}
+                              strokeWidth={1.8}
+                              aria-hidden="true"
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
                   )}
-                  {searching
-                    ? groups.map((group) => (
-                        <div key={group.provider}>
-                          <div className="picker-group-label">
-                            {group.provider}
-                          </div>
-                          {group.options.map((opt) => renderModelRow(opt))}
-                        </div>
-                      ))
-                    : leftModels.map((opt) => renderModelRow(opt))}
+                  {showModelPane && (
+                    <div
+                      id={`${panelId}-options`}
+                      className="picker-nested-models"
+                      role="group"
+                      aria-label={t("chatInput.modelsLabel")}
+                    >
+                      {multipleProviders && isMobile && !searching && (
+                        <button
+                          type="button"
+                          className="picker-row"
+                          onClick={() => setSelectedProvider(null)}
+                        >
+                          <ChevronLeft
+                            size={13}
+                            strokeWidth={1.8}
+                            aria-hidden="true"
+                          />
+                          <span>{activeProvider}</span>
+                        </button>
+                      )}
+                      {searching
+                        ? groups.map((group) => (
+                            <div key={group.provider}>
+                              <div className="picker-group-label">
+                                {group.provider}
+                              </div>
+                              {group.options.map((opt) => renderModelRow(opt))}
+                            </div>
+                          ))
+                        : leftModels.map((opt) => renderModelRow(opt))}
+                    </div>
+                  )}
                 </div>
               )}
             </CollapsiblePanel>

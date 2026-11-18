@@ -6,7 +6,7 @@ import { ChatInput } from "./ChatInput";
 import { ModelPickerPanel } from "./ChatInput-model-picker";
 
 // Testing Library binds its queries to the document installed by setup-dom.
-const { cleanup, fireEvent, render, screen } =
+const { cleanup, fireEvent, render, screen, within } =
   await import("@testing-library/react/pure.js");
 
 window.matchMedia = globalThis.matchMedia;
@@ -81,6 +81,8 @@ test("the model picker remains available when no models are returned", () => {
   };
   render(React.createElement(ChatInput, props));
   fireEvent.click(screen.getByRole("button", { name: /Change model/ }));
+  assert.equal(screen.queryByRole("button", { name: "Refresh models" }), null);
+  fireEvent.click(screen.getByRole("button", { name: "More…" }));
   assert.ok(screen.getByRole("button", { name: "Refresh models" }));
 });
 
@@ -114,5 +116,41 @@ test("other models retain provider navigation on desktop and mobile", () => {
       assert.ok(screen.getByRole("button", { name: "codex" }));
     }
     unmount();
+  }
+});
+
+test("starring a model moves its only row out of More, and unstarring moves it back", () => {
+  const sol = { provider: "codex", modelId: "sol", name: "Sol" };
+  const options = [sol, { ...sol }];
+  render(
+    React.createElement(ModelPickerPanel, {
+      modelOptions: options,
+      filteredModelOptions: options,
+      modelSearchQuery: "",
+      onSearchQueryChange() {},
+      onSelectModel() {},
+      onRefreshModels() {},
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "More…" }));
+  assert.ok(screen.getByRole("menuitemradio", { name: "Sol" }));
+  try {
+    fireEvent.click(
+      screen.getByRole("button", { name: "Favorite Sol (codex)" }),
+    );
+    const favorites = screen.getByRole("group", { name: "Favorites" });
+    assert.equal(
+      screen.getByRole("menuitemradio"),
+      within(favorites).getByRole("menuitemradio"),
+    );
+    assert.ok(screen.getByRole("button", { name: "Refresh models" }));
+
+    fireEvent.click(
+      within(favorites).getByRole("button", { name: "Favorite Sol (codex)" }),
+    );
+    assert.equal(screen.queryByRole("group", { name: "Favorites" }), null);
+    assert.ok(screen.getByRole("menuitemradio", { name: "Sol" }));
+  } finally {
+    window.localStorage.removeItem("keylime:favorite-models");
   }
 });
