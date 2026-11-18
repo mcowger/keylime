@@ -72174,6 +72174,7 @@
                                 "items": {
                                   "properties": {
                                     "dirty": {
+                                      "description": "Worktree-relative paths requiring force removal, including Git-ignored files or grouped ignored directories.",
                                       "items": {
                                         "type": "string"
                                       },
@@ -72804,6 +72805,7 @@
                               "items": {
                                 "properties": {
                                   "dirty": {
+                                    "description": "Worktree-relative paths requiring force removal, including Git-ignored files or grouped ignored directories.",
                                     "items": {
                                       "type": "string"
                                     },

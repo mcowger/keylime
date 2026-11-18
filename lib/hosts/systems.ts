@@ -982,6 +982,8 @@ async function dirtyPaths(cwd: string) {
       "--porcelain=v1",
       "-z",
       "--untracked-files=all",
+      // Git's clean worktree removal can still delete ignored local data.
+      "--ignored=matching",
     ])
   )
     .split("\0")
@@ -1190,6 +1192,11 @@ async function removeMember(
         processes: runtime.processes,
         verify: async () => {
           await verifyWorktree(effort, member);
+          if (!force && (await dirtyPaths(member.path)).paths.length)
+            throw conflict(
+              "effort_dirty",
+              `Worktree has changes or local files: ${member.path}`,
+            );
         },
       },
     );
@@ -1248,7 +1255,10 @@ async function cleanup(
       input.mode === "remove" &&
       preview.repos.find((repo) => repo.dirty.length);
     if (dirty)
-      throw conflict("effort_dirty", `Worktree has changes: ${dirty.path}`);
+      throw conflict(
+        "effort_dirty",
+        `Worktree has changes or local files: ${dirty.path}`,
+      );
     if (removal) {
       effort.status = "cleaning";
       delete effort.error;
@@ -1301,7 +1311,10 @@ async function cleanup(
         input.mode === "remove" &&
         (await dirtyPaths(member.path)).paths.length
       )
-        throw conflict("effort_dirty", `Worktree has changes: ${member.path}`);
+        throw conflict(
+          "effort_dirty",
+          `Worktree has changes or local files: ${member.path}`,
+        );
     }
     await archiveEffortSessions(effort, runtime);
     for (const member of effort.members) {

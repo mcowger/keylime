@@ -128,7 +128,10 @@ export const EffortCleanupPreviewSchema = Type.Object(
     repos: Type.Array(
       Type.Object({
         path: text,
-        dirty: Type.Array(text),
+        dirty: Type.Array(text, {
+          description:
+            "Worktree-relative paths requiring force removal, including Git-ignored files or grouped ignored directories.",
+        }),
         publication: text,
         openPrs: Type.Array(text),
       }),

@@ -18,7 +18,7 @@ Use **New Effort** to preview the member paths, bases, and branch. Each member g
 
 The root contains `AGENTS.md` and a generated `repomap.md` with relative checkout paths. Start a chat at the root to work across repos, or open a member in Explorer. System edits apply to new Efforts only. Once blocking setup passes, each service starts in its own terminal. Open, stop, or restart it from the Effort details. Running means the command is still active, not that the app is ready. Start services manually after a daemon restart.
 
-Use **Preview cleanup** to review running processes, dirty files, and available branch and PR information. Stop-only keeps the worktrees and chats. Removing worktrees archives chats and keeps branches and PRs. Force removal discards dirty files in the reviewed worktrees. Edited root documents and unexpected root files are kept. Ship is not available on Effort members; standalone Repos keep their existing Ship behavior.
+Use **Preview cleanup** to review running processes, changed and local files (including Git-ignored files or directories), and available branch and PR information. Stop-only keeps the worktrees and chats. Removing worktrees archives chats and keeps branches and PRs. Worktrees with changed, untracked, or ignored files require **Force remove worktrees**; that action deletes those files. Edited root documents and unexpected root files are kept. Ship is not available on Effort members; standalone Repos keep their existing Ship behavior.
 
 See the [Systems and Efforts design](specs/2026-11-18-systems-and-efforts-design.md) for details.
 

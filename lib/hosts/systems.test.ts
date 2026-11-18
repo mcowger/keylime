@@ -74,7 +74,9 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
       git(repo, "config", "user.email", "test@example.invalid");
       git(repo, "config", "commit.gpgsign", "false");
       git(repo, "config", "core.hooksPath", path.join(dir, "no-hooks"));
-      git(repo, "commit", "--allow-empty", "-qm", "base");
+      fs.writeFileSync(path.join(repo, ".gitignore"), ".env\n/dev-data/\n");
+      git(repo, "add", "--force", ".gitignore");
+      git(repo, "commit", "-qm", "base");
       return repo;
     });
     const [app, worker] = repos;
@@ -196,6 +198,35 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
     );
     const artifact = path.join(effort.root, "server.log");
     fs.writeFileSync(artifact, "data\n");
+    const checkout = effort.members[0].path;
+    const ignored = path.join(checkout, ".env");
+    fs.writeFileSync(ignored, "LOCAL_ONLY=keep-me\n");
+    fs.mkdirSync(path.join(checkout, "dev-data"));
+    fs.writeFileSync(path.join(checkout, "dev-data", "db.sqlite"), "local db");
+    assert.equal(git(checkout, "status", "--porcelain"), "");
+    const { cleanup: ignoredPreview } = await systemsOperation(
+      { action: "cleanupPreview", effortId },
+      runtime,
+    );
+    assert.ok(ignoredPreview);
+    assert.deepEqual(ignoredPreview.repos[0].dirty, [".env", "dev-data/"]);
+    await assert.rejects(
+      systemsOperation(
+        {
+          action: "cleanup",
+          effortId,
+          mode: "remove",
+          confirmation: ignoredPreview.confirmation,
+        },
+        runtime,
+      ),
+      { code: "effort_dirty" },
+    );
+    assert.equal(fs.readFileSync(ignored, "utf8"), "LOCAL_ONLY=keep-me\n");
+    assert.equal(
+      fs.readFileSync(path.join(checkout, "dev-data", "db.sqlite"), "utf8"),
+      "local db",
+    );
     const dirty = path.join(effort.members[0].path, "unsaved.txt");
     fs.writeFileSync(dirty, "dirty\n");
     const { cleanup } = await systemsOperation(
@@ -203,7 +234,7 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
       runtime,
     );
     assert.ok(cleanup);
-    assert.deepEqual(cleanup.repos[0].dirty, ["unsaved.txt"]);
+    assert.deepEqual(cleanup.repos[0].dirty, [".env", "dev-data/", "unsaved.txt"]);
     const {
       efforts: [cleaned],
     } = await systemsOperation(
@@ -216,6 +247,7 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
       runtime,
     );
     assert.equal(fs.existsSync(dirty), false);
+    assert.equal(fs.existsSync(ignored), false);
     assert.equal(cleaned.status, "cleaned", JSON.stringify(cleaned));
     assert.deepEqual(cleaned.retainedPaths, [generated, artifact]);
     assert.equal(fs.existsSync(path.join(cleaned.root, "repomap.md")), false);

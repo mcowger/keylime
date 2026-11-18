@@ -8,6 +8,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ### Changed
 - The sidebar and Settings call projects repos, including in add, remove, and settings controls.
+- Effort cleanup lists Git-ignored files and directories, like `.env` and local database folders. Removing them requires force confirmation.
 
 ### Added
 - Subagent previews show the model and effort as `model-slug:effort` when effort is reported.

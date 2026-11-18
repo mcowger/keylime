@@ -127,7 +127,7 @@ const cleanupOptions: { mode: CleanupMode; label: string; detail: string }[] = [
     mode: "force",
     label: "Force remove worktrees",
     detail:
-      "Stop processes, archive chats, and discard dirty, staged, and untracked files in these worktrees.",
+      "Stop processes, archive chats, and discard all uncommitted, untracked, and Git-ignored files in these worktrees.",
   },
 ];
 
@@ -170,7 +170,7 @@ function CleanupReview({
           </span>
           {repo.dirty.length > 0 ? (
             <div>
-              Dirty files
+              Files requiring force removal (including Git-ignored files)
               <ul style={{ margin: 0 }}>
                 {repo.dirty.map((file, index) => (
                   <li key={`${index}:${file}`}>
@@ -180,7 +180,7 @@ function CleanupReview({
               </ul>
             </div>
           ) : (
-            <span>No dirty files reported.</span>
+            <span>No changes or local files reported.</span>
           )}
         </div>
       ))}

@@ -35,7 +35,7 @@ Run each named service command in its own PTY at the Effort root. Commands run a
 
 ## Cleanup and Ship
 
-Preview running processes, dirty files, branch publication status, and open PRs before cleanup. Stop-only leaves worktrees and chats intact. A force confirmation may discard dirty, staged, and untracked files in the identified member worktrees. It never removes branches, pushes anything, closes PRs, or recursively removes unexpected files from the Effort root. Clean removal also keeps branches and PRs. Fence new starts and archive chats before deleting their checkout. If cleanup fails midway, show what remains and let the user resume cleanup.
+Preview running processes, changed and local files (including Git-ignored files or directories), branch publication status, and open PRs before cleanup. Stop-only leaves worktrees and chats intact. A force confirmation is required to discard uncommitted, untracked, or ignored files in member worktrees. It never removes branches, pushes anything, closes PRs, or recursively removes unexpected files from the Effort root. Clean removal also keeps branches and PRs. Fence new starts and archive chats before deleting their checkout. If cleanup fails midway, show what remains and let the user resume cleanup.
 
 The daemon refuses standalone deletion and standalone Ship of member worktrees, including local land and manual/automatic PR finish. Only Effort cleanup may remove them. Both member Ship and the planned coordinated PR batch are out of scope for this release. Standalone Repos retain their existing Ship behavior.
 
