@@ -47,16 +47,20 @@ export interface SessionData {
 export interface StreamingState {
   isStreaming: boolean;
   streamingMessage: Partial<AgentMessage> | null;
+  pendingToolMessages: ReadonlyMap<string, AgentMessage>;
 }
 
 export type StreamAction =
   | { type: "start" }
+  | { type: "run-start" }
   | { type: "update"; message: Partial<AgentMessage> }
   /** A finished reply stays on screen until the saved transcript shows it:
    * dropping it first empties that space for a moment, so the chat jumps up
    * and back down. `release`, a new stream (`start`, `update`) or `reset`
    * takes it away; `end` and `idle` leave it. */
   | { type: "hold"; message: Partial<AgentMessage> }
+  /** Tool calls stay visible even after the next reply starts streaming. */
+  | { type: "hold-tools"; toolCallId: string; message: AgentMessage }
   | { type: "release"; committed: readonly AgentMessage[] }
   /** No message is streaming now (a message ended, a live snapshot has none). */
   | { type: "idle"; streaming: boolean }
@@ -69,35 +73,76 @@ export function streamReducer(
 ): StreamingState {
   switch (action.type) {
     case "start":
-      return { isStreaming: true, streamingMessage: null };
+      return { ...state, isStreaming: true, streamingMessage: null };
+    case "run-start":
+      return {
+        isStreaming: true,
+        streamingMessage: null,
+        pendingToolMessages: state.pendingToolMessages.size
+          ? new Map()
+          : state.pendingToolMessages,
+      };
     case "update":
-      return { isStreaming: true, streamingMessage: action.message };
+      return { ...state, isStreaming: true, streamingMessage: action.message };
     case "hold":
-      return { isStreaming: false, streamingMessage: action.message };
+      return { ...state, isStreaming: false, streamingMessage: action.message };
+    case "hold-tools": {
+      const pendingToolMessages = new Map(state.pendingToolMessages);
+      pendingToolMessages.set(action.toolCallId, action.message);
+      return { isStreaming: false, streamingMessage: null, pendingToolMessages };
+    }
     case "release": {
       const held = state.isStreaming ? null : state.streamingMessage;
-      if (!held) return state;
       // No timestamp to match: drop it now, as before holding existed.
       const saved =
-        held.timestamp === undefined ||
-        action.committed.some(
-          (message) =>
-            message.role === "assistant" &&
-            message.timestamp === held.timestamp,
-        );
-      return saved ? { isStreaming: false, streamingMessage: null } : state;
+        held &&
+        (held.timestamp === undefined ||
+          action.committed.some(
+            (message) =>
+              message.role === "assistant" &&
+              message.timestamp === held.timestamp,
+          ));
+      let pendingToolMessages: Map<string, AgentMessage> | undefined;
+      if (state.pendingToolMessages.size > 0) {
+        // Pending calls are recent. Stop once history accounts for all of them.
+        for (let i = action.committed.length - 1; i >= 0; i--) {
+          const message = action.committed[i];
+          if (message.role !== "assistant" || !Array.isArray(message.content))
+            continue;
+          for (const block of message.content) {
+            if (
+              block?.type !== "toolCall" ||
+              !state.pendingToolMessages.has(block.toolCallId)
+            ) continue;
+            pendingToolMessages ??= new Map(state.pendingToolMessages);
+            pendingToolMessages.delete(block.toolCallId);
+          }
+          if (pendingToolMessages?.size === 0) break;
+        }
+      }
+      if (!saved && !pendingToolMessages) return state;
+      return {
+        ...state,
+        streamingMessage: saved ? null : state.streamingMessage,
+        pendingToolMessages: pendingToolMessages ?? state.pendingToolMessages,
+      };
     }
     case "idle":
     case "end": {
       const held = !state.isStreaming && state.streamingMessage;
       if (held) return state;
       return {
+        ...state,
         isStreaming: action.type === "idle" && action.streaming,
         streamingMessage: null,
       };
     }
     case "reset":
-      return { isStreaming: false, streamingMessage: null };
+      return {
+        isStreaming: false,
+        streamingMessage: null,
+        pendingToolMessages: new Map(),
+      };
     default:
       return state;
   }

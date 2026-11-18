@@ -21,6 +21,7 @@ function renderTail(isStreaming: boolean) {
     React.createElement(ChatLiveTail, {
       streamingMessage: reply,
       isStreaming,
+      pendingToolMessages: new Map(),
       pendingToolHeaders: [],
       deferredBash: [],
       pendingBash: null,

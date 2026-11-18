@@ -14,6 +14,8 @@ export interface ChatLiveTailProps {
   streamingMessage: Partial<AgentMessage> | null;
   /** True while omp is still generating `streamingMessage`; false for a finished reply held until its saved row appears. */
   isStreaming: boolean;
+  /** Finished assistant tool messages waiting for their saved rows. */
+  pendingToolMessages: ReadonlyMap<string, AgentMessage>;
   /** Running tools no message renders yet, shown as status rows while tool calls are collapsed. */
   pendingToolHeaders: { id: string; name: string }[];
   /** `!command` results omp holds back until a later prompt records them. */
@@ -35,6 +37,7 @@ export interface ChatLiveTailProps {
 export function ChatLiveTail({
   streamingMessage,
   isStreaming,
+  pendingToolMessages,
   pendingToolHeaders,
   deferredBash,
   pendingBash,
@@ -51,8 +54,20 @@ export function ChatLiveTail({
   const { t } = useI18n();
   return (
     <>
-      {/* Also while held: a finished reply stays until its saved row
-          replaces it in the same render (useAgentSession-stream). */}
+      {Array.from(pendingToolMessages, ([id, message]) => (
+        <MessageView
+          key={`tool-${id}`}
+          message={message}
+          modelNames={modelNames}
+          cwd={cwd}
+          onOpenFile={onOpenFile}
+          toolResults={toolResults}
+          toolCallsDefaultCollapsed={toolCallsDefaultCollapsed}
+          expandThinkingByDefault={expandThinkingByDefault}
+          sessionId={sessionId}
+          hideThinking={hideThinking}
+        />
+      ))}
       {streamingMessage && (
         <MessageView
           key={streamingMessage.timestamp ?? "stream"}
@@ -64,6 +79,7 @@ export function ChatLiveTail({
           toolResults={toolResults}
           toolCallsDefaultCollapsed={toolCallsDefaultCollapsed}
           expandThinkingByDefault={expandThinkingByDefault}
+          sessionId={sessionId}
           latestThinkingBlockIndex={latestThinkingBlockIndex}
           hideThinking={hideThinking}
         />

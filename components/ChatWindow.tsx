@@ -1278,18 +1278,26 @@ export function ChatWindow({
     }
     return renderedIds;
   }, [messages]);
+  const { pendingToolMessages, streamingMessage } = streamState;
   const pendingToolHeaders = useMemo(() => {
     if (agentPhase?.kind !== "running_tools") return [];
-    const renderedIds = new Set(committedToolCallIds);
-    const streaming = streamState.streamingMessage;
-    if (streaming?.role === "assistant") {
-      for (const block of (streaming as Partial<AssistantMessage>).content ??
-        []) {
-        if (block.type === "toolCall") renderedIds.add(block.toolCallId);
+    const pending = new Set<string>();
+    for (const message of pendingToolMessages.values()) {
+      if (message.role !== "assistant") continue;
+      for (const block of message.content) {
+        if (block.type === "toolCall") pending.add(block.toolCallId);
       }
     }
-    return agentPhase.tools.filter((tool) => !renderedIds.has(tool.id));
-  }, [agentPhase, committedToolCallIds, streamState.streamingMessage]);
+    return agentPhase.tools.filter(
+      ({ id }) =>
+        !committedToolCallIds.has(id) &&
+        !pending.has(id) &&
+        !(streamingMessage?.role === "assistant" &&
+          streamingMessage.content?.some(
+            (block) => block.type === "toolCall" && block.toolCallId === id,
+          )),
+    );
+  }, [agentPhase, committedToolCallIds, pendingToolMessages, streamingMessage]);
 
   // Reset minimized state on session switch (session-scoped)
   useEffect(() => {
@@ -2053,6 +2061,7 @@ export function ChatWindow({
                           <ChatLiveTail
                             streamingMessage={streamState.streamingMessage}
                             isStreaming={streamState.isStreaming}
+                            pendingToolMessages={pendingToolMessages}
                             pendingToolHeaders={pendingToolHeaders}
                             deferredBash={deferredBash}
                             pendingBash={pendingBash}

@@ -4036,13 +4036,14 @@ test("tool activity and turn_end errors do not count as a successful answer", as
   assert.equal(w.latest.agentRunning, false);
 });
 
-test("tool output streams live before the toolResult message lands", async () => {
+test("a tool row keeps its live output and status until the saved transcript arrives", async () => {
   resetWorld();
   primeSession("s1", [userMsg("u0", "q")]);
   const { w, es } = await startRun("s1", "q1");
 
   const toolCallAssistant = {
     ...assistantMsg("a1", ""),
+    timestamp: 42,
     content: [
       {
         type: "toolCall",
@@ -4055,7 +4056,8 @@ test("tool output streams live before the toolResult message lands", async () =>
   await act(async () => {
     es.emit({ type: "agent_start" });
     es.emit({ type: "message_end", message: userMsg("u1", "q1") });
-    es.emit({ type: "message_end", message: toolCallAssistant });
+    es.emit({ type: "message_start", message: toolCallAssistant });
+    es.emit({ type: "message_end", message: toolCallAssistant }, { persist: false });
     await Promise.resolve();
   });
   assert.equal(
@@ -4105,6 +4107,15 @@ test("tool output streams live before the toolResult message lands", async () =>
     "line-1\nline-2\n",
     "latest accumulated snapshot wins",
   );
+  const heldToolContent = () => {
+    const message = w.latest.streamState.pendingToolMessages.get("tc1");
+    return message?.role === "assistant" ? message.content : undefined;
+  };
+  assert.deepEqual(heldToolContent(), toolCallAssistant.content);
+  assert.equal(
+    w.latest.messages.some((message) => message.timestamp === 42),
+    false,
+  );
 
   // The tool finishes, then omp commits the toolResult message. The committed
   // result supersedes the live snapshot.
@@ -4122,17 +4133,31 @@ test("tool output streams live before the toolResult message lands", async () =>
     undefined,
     "a finished tool is no longer partial",
   );
+  assert.deepEqual(heldToolContent(), toolCallAssistant.content);
+  const result = {
+    role: "toolResult",
+    toolCallId: "tc1",
+    toolName: "bash",
+    content: [{ type: "text", text: "line-1\nline-2\n" }],
+  };
+  appendEntry("s1", toolCallAssistant);
+  appendEntry("s1", result);
+  const releaseSync = holdNextSync("s1", syncSnapshot("s1"));
   await act(async () => {
-    es.emit({
-      type: "message_end",
-      message: {
-        role: "toolResult",
-        toolCallId: "tc1",
-        toolName: "bash",
-        content: [{ type: "text", text: "line-1\nline-2\n" }],
-      },
-    });
+    es.emit({ type: "message_end", message: result }, { persist: false });
     await Promise.resolve();
+  });
+  const nextReply = { ...assistantMsg("a2", "Here is the result"), timestamp: 43 };
+  await act(async () => {
+    es.emit({ type: "message_start", message: nextReply });
+  });
+  assert.equal(w.latest.streamState.streamingMessage?.timestamp, 43);
+  assert.deepEqual(heldToolContent(), toolCallAssistant.content);
+  assert.deepEqual(w.latest.liveToolResults.get("tc1")?.content, result.content);
+  assert.ok(!w.latest.messages.some((message) => message.timestamp === 42));
+
+  await act(async () => {
+    releaseSync();
   });
   assert.equal(
     w.latest.liveToolResults.size,
@@ -4140,6 +4165,12 @@ test("tool output streams live before the toolResult message lands", async () =>
     "the committed result replaces the live entry",
   );
   assert.equal(w.latest.messages.at(-1)?.role, "toolResult");
+  assert.equal(w.latest.streamState.streamingMessage?.timestamp, 43);
+  assert.equal(w.latest.streamState.pendingToolMessages.size, 0);
+  assert.equal(
+    w.latest.messages.filter((message) => message.timestamp === 42).length,
+    1,
+  );
 
   // Terminal frames clear anything still in flight.
   await act(async () => {
@@ -4165,6 +4196,55 @@ test("tool output streams live before the toolResult message lands", async () =>
     0,
     "a finished run leaves no live tool state",
   );
+});
+
+test("a new agent run drops unsaved tool rows from the previous run", async () => {
+  resetWorld();
+  primeSession("s1", [userMsg("u0", "q")]);
+  const { w, es } = await startRun("s1", "q1");
+  const unsaved = {
+    ...assistantMsg("a1", ""),
+    timestamp: 42,
+    content: [
+      {
+        type: "toolCall",
+        toolCallId: "unsaved-tool",
+        toolName: "bash",
+        input: { command: "echo previous run" },
+      },
+    ],
+  };
+  await act(async () => {
+    es.emit({ type: "message_end", message: userMsg("u1", "q1") });
+    es.emit({ type: "message_end", message: unsaved }, { persist: false });
+    es.emit({
+      type: "tool_execution_start",
+      toolCallId: "unsaved-tool",
+      toolName: "bash",
+    });
+    es.emit({
+      type: "tool_execution_end",
+      toolCallId: "unsaved-tool",
+      toolName: "bash",
+      result: { content: [{ type: "text", text: "previous run" }] },
+    });
+  });
+  world.agents.set("s1", { running: false, state: { isStreaming: false } });
+  await act(async () => {
+    es.emit({ type: "agent_end", isTerminal: true });
+  });
+  await settle();
+  assert.equal(w.latest.agentRunning, false);
+  assert.ok(w.latest.streamState.pendingToolMessages.has("unsaved-tool"));
+  assert.ok(!w.latest.messages.some((message) => message.timestamp === 42));
+
+  await act(async () => {
+    es.emit({ type: "agent_start" });
+    es.emit({ type: "message_end", message: userMsg("u2", "q2") });
+  });
+  assert.equal(w.latest.agentRunning, true);
+  assert.equal(w.latest.streamState.pendingToolMessages.size, 0);
+  assert.equal(w.latest.liveToolResults.size, 0);
 });
 
 test("late frames after the run finished are ignored (no ghost bubble, no double completion)", async () => {

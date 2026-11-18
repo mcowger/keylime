@@ -176,6 +176,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- Tool call rows stay visible without flashing while the transcript catches up, even if the next reply has already started.
+- Unsaved tool rows from a finished run no longer appear under the next prompt.
 - Chat images and file links resolve relative to the session's working directory, including screenshots in the host's temporary directory.
 - The sidebar no longer highlights the base workspace while composing a new workspace's first prompt.
 - The Explorer shows the base project while a new workspace awaits its first prompt.
@@ -297,6 +299,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The sidebar no longer highlights the base workspace while composing a new workspace's first prompt
 - Agent message cards show the message content they delivered instead of only the raw tool input, with a delivered indicator when the send succeeds
 - Chat images and file links resolve relative to the session's working directory, including screenshots in the host's temporary directory
+- Tool call rows stay visible without flashing while the transcript catches up, even if the next reply has already started
+- Unsaved tool rows from a finished run no longer appear under the next prompt
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

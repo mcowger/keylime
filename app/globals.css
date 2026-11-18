@@ -4097,9 +4097,9 @@ html[data-touch-targets="accessible"] .chat-scroll-bottom {
   transform: none;
 }
 
-/* Unboxed assistant messages use the same entrance animation as other chat
-   content. */
-.chat-message {
+/* Tool messages remount when the live row hands off to history. Don't fade
+   the tool rows back in; the status icon already shows what's changed. */
+.chat-message:not(:has([data-activity-operation])) {
   animation: chat-message-in var(--dur-med) var(--ease-out-warm) both;
 }
 

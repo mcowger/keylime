@@ -586,6 +586,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const [streamState, dispatch] = useReducer(streamReducer, {
     isStreaming: false,
     streamingMessage: null,
+    pendingToolMessages: new Map(),
   });
   // Latest streaming snapshot for event handlers that must not close over a
   // stale streamState (quota error stamping onto the live assistant bubble).
@@ -1272,7 +1273,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
             metadata.hasLive,
           );
         if (!agentRunningRef.current) setTodoPhases(context.todoPhases ?? []);
-        // Hand a held reply over to its saved copy in the same render.
+        // Hand pending messages over to their saved copies in the same render.
         dispatch({ type: "release", committed: context.messages });
         setActiveLeafId(leafId);
         const previous =
@@ -4132,7 +4133,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           setAgentPhase({ kind: "waiting_model" });
           clearLiveToolResults();
           promptDispatchPendingRef.current = false;
-          dispatch({ type: catchUp.view().leafId ? "reset" : "start" });
+          // Only the native run boundary expires tool rows still awaiting history.
+          dispatch({ type: catchUp.view().leafId ? "reset" : "run-start" });
           runHadContentRef.current = false;
           lastQuotaErrorRef.current = null;
           lastRunErrorRef.current = null;
@@ -4590,23 +4592,35 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
               }, 1000);
             }
           }
-          // A finished reply stays until the catch-up above commits its saved
-          // copy (history callback). Tool-call turns still clear at once: their
-          // rows and status line come from the live tool state instead. A
-          // past-branch view never receives the saved copy, so it never holds.
-          const finishedReply =
-            completed?.role === "assistant" &&
-            !catchUp.view().leafId &&
-            hasVisibleAssistantContent(completed) &&
-            !(
-              Array.isArray(completed.content) &&
-              completed.content.some((block) => block?.type === "toolCall")
-            );
-          dispatch(
-            finishedReply
-              ? { type: "hold", message: normalizeToolCalls(completed) }
-              : { type: "idle", streaming: false },
-          );
+          // Keep the full tool row (including its arguments and live output)
+          // until the saved copy arrives, rather than flashing a status-only
+          // placeholder. A past branch never receives the saved copy.
+          const assistant =
+            completed?.role === "assistant" && !catchUp.view().leafId
+              ? normalizeToolCalls(completed)
+              : null;
+          const tool =
+            assistant?.role === "assistant" && Array.isArray(assistant.content)
+              ? assistant.content.find((block) => block?.type === "toolCall")
+              : undefined;
+          if (assistant && tool) {
+            dispatch({
+              type: "hold-tools",
+              toolCallId: tool.toolCallId,
+              message: assistant,
+            });
+          } else if (assistant && hasVisibleAssistantContent(assistant)) {
+            dispatch({ type: "hold", message: assistant });
+          } else {
+            dispatch({ type: "idle", streaming: false });
+          }
+          if (assistant) {
+            // A history read may have already published this message.
+            dispatch({
+              type: "release",
+              committed: catchUp.history()?.messages ?? [],
+            });
+          }
           setAgentPhase({ kind: "waiting_model" });
           break;
         }
@@ -5132,9 +5146,14 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       );
       if (fields.tools) {
         const preserve = fields.tools;
-        setLiveToolResults(
-          (current) => new Map([...current].filter(([id]) => preserve.has(id))),
-        );
+        // The live snapshot only lists running tools. Keep final results until
+        // history takes over, even if the next assistant is already streaming.
+        setLiveToolResults((current) => {
+          const retained = [...current].filter(([id, result]) =>
+            !result.partial || preserve.has(id),
+          );
+          return retained.length === current.size ? current : new Map(retained);
+        });
         setAgentPhase((current) => {
           const tools =
             current?.kind === "running_tools"
