@@ -1189,6 +1189,46 @@ test("skill prompts start collapsed and can be expanded and collapsed", () => {
   assert.doesNotMatch(view.container.textContent!, /Full skill instructions/);
 });
 
+test("a saved skill invocation shows the submitted prompt outside process details", () => {
+  const timestamp = "2026-01-01T00:00:00.000Z";
+  const prompt = "Please review the search plan.\n\nStart with **empty queries**.";
+  const { messages, entryIds } = buildSessionContext([
+    {
+      type: "message", id: "u1", parentId: null, timestamp,
+      message: { role: "user", content: "Earlier question" },
+    },
+    {
+      type: "custom_message", id: "eval", parentId: "u1", timestamp,
+      customType: "eval-state-context", display: false, content: "Eval context",
+    },
+    {
+      type: "custom_message", id: "skill", parentId: "eval", timestamp,
+      customType: "skill-prompt", display: true,
+      content: `Skill invoked\n\nFull skill instructions\n\nUser:\n${prompt}`,
+      details: { prompt },
+    },
+    {
+      type: "message", id: "a1", parentId: "skill", timestamp,
+      message: { role: "assistant", provider: "p", model: "m", content: [
+        { type: "toolCall", toolCallId: "call", toolName: "read", input: { path: "plan.md" } },
+        { type: "text", text: "Let's start with empty queries." },
+      ] },
+    },
+  ]);
+  const [, turn] = planTranscriptRows(messages);
+  assert.equal(turn.kind, "group");
+  const view = render(React.createElement(MessageView, {
+    message: messages[turn.userIndex],
+    entryId: entryIds[turn.userIndex],
+  }));
+  const bubble = view.container.querySelector(".markdown-user-message");
+  assert.match(bubble?.textContent ?? "", /Please review the search plan/);
+  assert.equal(bubble?.querySelector("strong")?.textContent, "empty queries");
+  assert.doesNotMatch(view.container.textContent!, /Full skill instructions/);
+  fireEvent.click(view.getByRole("button", { name: /skill-prompt/, expanded: false }));
+  assert.match(view.container.textContent!, /Full skill instructions/);
+});
+
 test("async-result notices preserve lines and wrap when expanded", () => {
   const view = render(
     React.createElement(MessageView, {

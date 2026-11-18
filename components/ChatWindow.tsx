@@ -39,7 +39,7 @@ import {
   planTranscriptRows,
   type TranscriptRow,
 } from "@/lib/chat-transcript-plan";
-import { isReplyBlock } from "@/lib/message-display";
+import { getSkillPromptText, isReplyBlock } from "@/lib/message-display";
 import { resolveForkTargets } from "@/lib/chat-fork";
 import {
   renderTranscriptGroupRow,
@@ -197,7 +197,7 @@ const CHAT_COLUMN_MAX_WIDTH_DESKTOP = `min(${CHAT_COLUMN_MAX_WIDTH}, calc(100% -
 const LOAD_MORE_ROOT_MARGIN = "400px 0px 0px 0px";
 
 function getUserInputText(message: AgentMessage): string | null {
-  if (message.role !== "user") return null;
+  if (message.role !== "user") return getSkillPromptText(message)?.trim() ?? null;
   if (typeof message.content === "string") {
     const text = message.content.trim();
     return text.length > 0 ? text : null;
@@ -352,7 +352,10 @@ export const CommittedTranscript = memo(function CommittedTranscript({
 
   const renderMessage: RenderMessage = (idx, options = {}) => {
     const msg = options.messageOverride ?? messages[idx];
-    const isVisible = msg.role === "user" || msg.role === "assistant";
+    const isVisible =
+      msg.role === "user" ||
+      msg.role === "assistant" ||
+      getSkillPromptText(msg) !== undefined;
     const currentRefIdx = visibleRefIndexByMessage.get(idx);
     const keyPrefix = options.keyPrefix ?? "message";
     let showTimestamp = false;
@@ -360,12 +363,12 @@ export const CommittedTranscript = memo(function CommittedTranscript({
       showTimestamp = true;
       let followedByUser = false;
       for (let j = idx + 1; j < messages.length; j++) {
-        const r = messages[j].role;
-        if (r === "user") {
+        const next = messages[j];
+        if (next.role === "user" || getSkillPromptText(next) !== undefined) {
           followedByUser = true;
           break;
         }
-        if (r === "assistant") {
+        if (next.role === "assistant") {
           showTimestamp = false;
           break;
         }
@@ -1230,7 +1233,11 @@ export function ChatWindow({
       if (message.role === "custom" && message.customType === "compaction")
         hasCompaction = true;
       if (isGroupAnchor(message)) lastAnchorIdx = index;
-      if (message.role === "user" || message.role === "assistant")
+      if (
+        message.role === "user" ||
+        message.role === "assistant" ||
+        getSkillPromptText(message) !== undefined
+      )
         visibleRefIndexByMessage.set(index, refIdx++);
     });
     return {
@@ -1259,8 +1266,7 @@ export function ChatWindow({
         : { ...conversationMeta, toolResultsMap: toolResultsWithLive },
     [conversationMeta, toolResultsWithLive],
   );
-  // The ref array is sized by the count of user/assistant messages — exactly
-  // what conversationMeta's visibleRefIndexByMessage already tallies, so no
+  // The ref array is sized from conversationMeta's visibleRefIndexByMessage, so no
   // separate filter pass (which would re-run on every streaming frame).
   const messageRefs = useMessageRefs(
     conversationMeta.visibleRefIndexByMessage.size,

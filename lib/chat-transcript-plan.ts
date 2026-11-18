@@ -1,5 +1,9 @@
 import { stripAnsi } from "./ansi";
-import { getDisplayableAssistantBlocks, isReplyBlock } from "./message-display";
+import {
+  getDisplayableAssistantBlocks,
+  getSkillPromptText,
+  isReplyBlock,
+} from "./message-display";
 import type {
   AgentMessage,
   AssistantContentBlock,
@@ -101,7 +105,8 @@ export function findLatestThinking(
 // Treat a compaction summary as an anchor too, otherwise every
 // post-compaction message renders standalone and never folds.
 export function isGroupAnchor(message: AgentMessage): boolean {
-  if (message.role === "user") return true;
+  if (message.role === "user" || getSkillPromptText(message) !== undefined)
+    return true;
   return (
     message.role === "custom" &&
     (message as CustomMessage).customType === "compaction"

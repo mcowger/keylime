@@ -10,7 +10,7 @@ const MAX_QUERY_LENGTH = 500;
  * @apiContract searchSessions
  * @apiUsage Stream session content search scores as newline-delimited JSON batches.
  * @apiInputs q defaults to empty and is limited to 500 characters; each line contains a scores object keyed by session ID.
- * @apiInvariants The allowed session IDs are captured from the cross-host list before scanning; even empty batches are emitted. This is a pull-driven scan, not a resumable cursor or an atomic snapshot.
+ * @apiInvariants The allowed session IDs are captured from the cross-host list before scanning; even empty batches are emitted. Local transcript scoring includes submitted skill prompts, not expanded instructions. This is a pull-driven scan, not a resumable cursor or an atomic snapshot.
  * @apiEffects Scans session content as the client reads; response is no-store and proxy buffering is disabled.
  * @apiRecovery Closing the stream stops after the current batch; restart the search from the beginning after disconnect and replace accumulated results as appropriate.
  */

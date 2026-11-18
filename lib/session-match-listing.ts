@@ -9,6 +9,7 @@ import remarkMath from "./remark-pandoc-math";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { containsMathSyntax, normalizeDisplayMath } from "./markdown";
+import { getSkillPromptText } from "./message-display";
 import {
   compileSearchQuery,
   findSearchMatches,
@@ -52,6 +53,8 @@ function textBlocks(content: unknown): string[] {
  * one per assistant text block.
  */
 function messageTextBlocks(message: AgentMessage): string[] {
+  const prompt = getSkillPromptText(message);
+  if (prompt !== undefined) return [prompt];
   if (message.role === "user") {
     const texts = textBlocks(message.content);
     return texts.length > 0 ? [texts.join("\n")] : [];

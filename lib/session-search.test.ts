@@ -115,6 +115,13 @@ test("transcriptField extracts user/assistant text and bounds cache with LRU evi
             content: [{ type: "text", text: "beta reply" }],
           },
         }),
+        JSON.stringify({
+          type: "custom_message",
+          customType: "skill-prompt",
+          display: true,
+          content: "Compare default retention.",
+          details: { prompt: "Check expired upload receipts first." },
+        }),
       ].join("\n") + "\n",
     );
     await fs.writeFile(
@@ -131,6 +138,14 @@ test("transcriptField extracts user/assistant text and bounds cache with LRU evi
     assert.equal(fieldA.text.includes("alpha needle"), true);
     assert.equal(fieldA.text.includes("beta reply"), true);
     assert.equal(fieldA.text.includes("ignored_tool_output"), false);
+    assert.notEqual(
+      scoreSearchFields([fieldA], compileSearchQuery('"expired upload receipts"')!),
+      null,
+    );
+    assert.equal(
+      scoreSearchFields([fieldA], compileSearchQuery('"default retention"')!),
+      null,
+    );
 
     for (let i = 0; i < MAX_CONTENT_CACHE_ENTRIES - 1; i++) {
       cache.set(path.join(tmpDir, `filler-${i}.jsonl`), {

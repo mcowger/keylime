@@ -1,3 +1,4 @@
+import { isRecord } from "./type-guards";
 import type {
   AssistantContentBlock,
   AssistantMessage,
@@ -35,4 +36,17 @@ export function getDisplayableAssistantBlocks(
   return (message.content ?? []).filter(
     (block) => !isEmptyThinkingBlock(block, options),
   );
+}
+
+/** OMP stores the submitted text separately from its expanded skill instructions. */
+export function getSkillPromptText(message: unknown): string | undefined {
+  if (
+    !isRecord(message) ||
+    message.role !== "custom" ||
+    message.customType !== "skill-prompt" ||
+    message.display === false
+  )
+    return;
+  const prompt = isRecord(message.details) ? message.details.prompt : undefined;
+  return typeof prompt === "string" && prompt.trim() ? prompt : undefined;
 }

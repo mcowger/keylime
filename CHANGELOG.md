@@ -178,6 +178,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ### Fixed
 - Tool call rows stay visible without flashing while the transcript catches up, even if the next reply has already started.
 - Unsaved tool rows from a finished run no longer appear under the next prompt.
+- Chat shows the text you submitted with a skill invocation as a normal message, including in saved sessions. Session search finds what you typed, not the expanded skill instructions.
 - Chat images and file links resolve relative to the session's working directory, including screenshots in the host's temporary directory.
 - The sidebar no longer highlights the base workspace while composing a new workspace's first prompt.
 - The Explorer shows the base project while a new workspace awaits its first prompt.
@@ -301,6 +302,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Chat images and file links resolve relative to the session's working directory, including screenshots in the host's temporary directory
 - Tool call rows stay visible without flashing while the transcript catches up, even if the next reply has already started
 - Unsaved tool rows from a finished run no longer appear under the next prompt
+- Chat shows the text submitted with a skill invocation as a normal message, including in saved sessions; search indexes the submitted prompt instead of expanded skill instructions
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

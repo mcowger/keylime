@@ -53,7 +53,11 @@ import { useSpeechContext } from "@/hooks/useSpeechSynthesis";
 import { ClickableImage } from "./ImageLightbox";
 import { translate, useI18n, type Locale } from "@/lib/i18n";
 import { parseCompactionSummary } from "@/lib/compaction-summary";
-import { isEmptyThinkingBlock, isReplyBlock } from "@/lib/message-display";
+import {
+  getSkillPromptText,
+  isEmptyThinkingBlock,
+  isReplyBlock,
+} from "@/lib/message-display";
 import { isPassiveToolContext } from "@/lib/chat-transcript-plan";
 import { Tooltip, Collapsible, CollapsibleTrigger } from "./ui/primitives";
 import { ConfirmDialog } from "./ui/field";
@@ -519,7 +523,30 @@ export const MessageView = memo(function MessageView({
     if (custom.customType === "advisor" && custom.display !== false) {
       return <AdvisorMessageView message={custom} />;
     }
-    return <CustomActivityRow message={custom} cwd={cwd} onOpenFile={onOpenFile} sessionId={sessionId} defaultCollapsed={custom.customType === "async-result" || IRC_CUSTOM_TYPES.has(custom.customType) ? toolCallsDefaultCollapsed : true} />;
+    const activity = (
+      <CustomActivityRow
+        message={custom}
+        cwd={cwd}
+        onOpenFile={onOpenFile}
+        sessionId={sessionId}
+        defaultCollapsed={custom.customType === "async-result" || IRC_CUSTOM_TYPES.has(custom.customType) ? toolCallsDefaultCollapsed : true}
+      />
+    );
+    const prompt = getSkillPromptText(custom);
+    if (prompt === undefined) return activity;
+    // The saved entry is still a custom message, not a native edit/fork target.
+    return (
+      <>
+        <UserMessageView
+          message={{ role: "user", content: prompt, timestamp: custom.timestamp }}
+          cwd={cwd}
+          onOpenFile={onOpenFile}
+          sessionId={sessionId}
+          entryId={entryId}
+        />
+        {activity}
+      </>
+    );
   }
   if (message.role === "bashExecution") {
     return (

@@ -21,7 +21,7 @@ const MAX_QUERY_LENGTH = 500;
  * @apiContract getSessionMatches
  * @apiUsage Find the best-ranked matches in the active conversation of one session.
  * @apiInputs q defaults to empty and is limited to 500 characters; limit is a positive bounded decimal and defaults to the search page size.
- * @apiInvariants Every request rereads and reranks the active context; results are a best-first prefix, not an offset page, and may change as the session changes. Pre-compaction entries are excluded.
+ * @apiInvariants Every request rereads and reranks the active context; results are a best-first prefix, not an offset page, and may change as the session changes. Matches include submitted skill prompts, not expanded instructions. Pre-compaction entries are excluded.
  * @apiEffects Reads host history with thinking and media deferred; no-store response and no agent spawn.
  * @apiRecovery To load more request a larger prefix and replace the old results rather than concatenating offset pages; refresh after history changes.
  */

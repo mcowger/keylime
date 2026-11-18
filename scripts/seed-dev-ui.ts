@@ -108,6 +108,7 @@ const sessions = [
     cwd: notes,
     id: "33333333-3333-4333-8333-333333333333",
     title: "Organize field notes",
+    skillTurn: true,
   },
   {
     cwd: notes,
@@ -155,6 +156,19 @@ for (const session of sessions) {
         timestamp: 1767225601000,
       },
     },
+    ...("skillTurn" in session && session.skillTurn
+      ? (() => {
+          const prompt = "Please review the Atlas search plan with /skill:atlas-review.\n\nStart with **empty queries**, then check whether the plan covers long paths and failed lookups. Keep the review focused on behavior that a reader can verify.";
+          return [
+            { type: "custom_message", id: "00000003", parentId: "00000002", timestamp, customType: "eval-state-context", display: false, content: "Eval runtime state" },
+            { type: "custom_message", id: "00000004", parentId: "00000003", timestamp, customType: "skill-prompt", display: true, attribution: "user", content: `[IMPORTANT: User invoked the "atlas-review" skill; follow its instructions. Full skill below.]\n\nReview the workspace changes.\n\nUser:\n${prompt}`, details: { name: "atlas-review", prompt } },
+            { type: "message", id: "00000005", parentId: "00000004", timestamp, message: { role: "assistant", content: [
+              { type: "toolCall", id: "skill-turn-read", name: "read", arguments: { path: "ideas.md" } },
+              { type: "text", text: "Start by checking what the search returns for an empty query." },
+            ], timestamp: 1767225604000 } },
+          ];
+        })()
+      : []),
     ...("tasks" in session && session.tasks
       ? [{
           type: "custom",

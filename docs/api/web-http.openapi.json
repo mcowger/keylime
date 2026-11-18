@@ -78701,7 +78701,7 @@
     },
     "/api/sessions/{id}/matches": {
       "get": {
-        "description": "### Usage\n\nFind the best-ranked matches in the active conversation of one session.\n\n### Inputs\n\nq defaults to empty and is limited to 500 characters; limit is a positive bounded decimal and defaults to the search page size.\n\n### Invariants\n\nEvery request rereads and reranks the active context; results are a best-first prefix, not an offset page, and may change as the session changes. Pre-compaction entries are excluded.\n\n### Effects\n\nReads host history with thinking and media deferred; no-store response and no agent spawn.\n\n### Recovery\n\nTo load more request a larger prefix and replace the old results rather than concatenating offset pages; refresh after history changes.\n\n### Additional protocol details\n\nReturns the best prefix, not an offset page; results may be reranked as the session changes.",
+        "description": "### Usage\n\nFind the best-ranked matches in the active conversation of one session.\n\n### Inputs\n\nq defaults to empty and is limited to 500 characters; limit is a positive bounded decimal and defaults to the search page size.\n\n### Invariants\n\nEvery request rereads and reranks the active context; results are a best-first prefix, not an offset page, and may change as the session changes. Matches include submitted skill prompts, not expanded instructions. Pre-compaction entries are excluded.\n\n### Effects\n\nReads host history with thinking and media deferred; no-store response and no agent spawn.\n\n### Recovery\n\nTo load more request a larger prefix and replace the old results rather than concatenating offset pages; refresh after history changes.\n\n### Additional protocol details\n\nReturns the best prefix, not an offset page; results may be reranked as the session changes.",
         "operationId": "getSessionMatches",
         "parameters": [
           {
@@ -79211,7 +79211,7 @@
         "x-client-semantics": {
           "Effects": "Reads host history with thinking and media deferred; no-store response and no agent spawn.",
           "Inputs": "q defaults to empty and is limited to 500 characters; limit is a positive bounded decimal and defaults to the search page size.",
-          "Invariants": "Every request rereads and reranks the active context; results are a best-first prefix, not an offset page, and may change as the session changes. Pre-compaction entries are excluded.",
+          "Invariants": "Every request rereads and reranks the active context; results are a best-first prefix, not an offset page, and may change as the session changes. Matches include submitted skill prompts, not expanded instructions. Pre-compaction entries are excluded.",
           "Recovery": "To load more request a larger prefix and replace the old results rather than concatenating offset pages; refresh after history changes.",
           "Usage": "Find the best-ranked matches in the active conversation of one session."
         }
@@ -84455,7 +84455,7 @@
     },
     "/api/sessions/search": {
       "get": {
-        "description": "### Usage\n\nStream session content search scores as newline-delimited JSON batches.\n\n### Inputs\n\nq defaults to empty and is limited to 500 characters; each line contains a scores object keyed by session ID.\n\n### Invariants\n\nThe allowed session IDs are captured from the cross-host list before scanning; even empty batches are emitted. This is a pull-driven scan, not a resumable cursor or an atomic snapshot.\n\n### Effects\n\nScans session content as the client reads; response is no-store and proxy buffering is disabled.\n\n### Recovery\n\nClosing the stream stops after the current batch; restart the search from the beginning after disconnect and replace accumulated results as appropriate.\n\n### Additional protocol details\n\nPull-driven NDJSON; each line is a batch of session ID to score mappings, including empty batches. Cancellation stops the scan.",
+        "description": "### Usage\n\nStream session content search scores as newline-delimited JSON batches.\n\n### Inputs\n\nq defaults to empty and is limited to 500 characters; each line contains a scores object keyed by session ID.\n\n### Invariants\n\nThe allowed session IDs are captured from the cross-host list before scanning; even empty batches are emitted. Local transcript scoring includes submitted skill prompts, not expanded instructions. This is a pull-driven scan, not a resumable cursor or an atomic snapshot.\n\n### Effects\n\nScans session content as the client reads; response is no-store and proxy buffering is disabled.\n\n### Recovery\n\nClosing the stream stops after the current batch; restart the search from the beginning after disconnect and replace accumulated results as appropriate.\n\n### Additional protocol details\n\nPull-driven NDJSON; each line is a batch of session ID to score mappings, including empty batches. Cancellation stops the scan.",
         "operationId": "searchSessions",
         "parameters": [
           {
@@ -84732,7 +84732,7 @@
         "x-client-semantics": {
           "Effects": "Scans session content as the client reads; response is no-store and proxy buffering is disabled.",
           "Inputs": "q defaults to empty and is limited to 500 characters; each line contains a scores object keyed by session ID.",
-          "Invariants": "The allowed session IDs are captured from the cross-host list before scanning; even empty batches are emitted. This is a pull-driven scan, not a resumable cursor or an atomic snapshot.",
+          "Invariants": "The allowed session IDs are captured from the cross-host list before scanning; even empty batches are emitted. Local transcript scoring includes submitted skill prompts, not expanded instructions. This is a pull-driven scan, not a resumable cursor or an atomic snapshot.",
           "Recovery": "Closing the stream stops after the current batch; restart the search from the beginning after disconnect and replace accumulated results as appropriate.",
           "Usage": "Stream session content search scores as newline-delimited JSON batches."
         }

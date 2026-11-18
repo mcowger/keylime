@@ -1,6 +1,9 @@
 import "../tests/setup-dom.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { MessageView } from "../components/MessageView";
 import type { AgentMessage } from "./types";
 
 // setup-dom leaves these out; jsdom has no CSS.escape (entry ids are hex here).
@@ -141,6 +144,35 @@ test("returns the best prefix of the ranking and skips malformed messages", () =
       ["u2", 10],
       ["a2", 0],
     ],
+  );
+});
+
+test("a sidebar phrase match jumps to submitted skill text, not the instructions", () => {
+  const message: AgentMessage = {
+    role: "custom",
+    customType: "skill-prompt",
+    display: true,
+    content: "Compare default retention.",
+    details: { prompt: "Check **expired upload receipts** first." },
+  };
+  const entryId = "a1";
+  const query = '"expired upload receipts"';
+  const { matches, total } = listSessionMatches([message], [entryId], query);
+  assert.equal(total, 1);
+  assert.equal(matches[0]?.match, "expired upload receipts");
+  const container = document.createElement("div");
+  container.innerHTML = renderToStaticMarkup(
+    React.createElement(MessageView, { message, entryId }),
+  );
+  const { range } = findTarget(container, compiled(query), {
+    sessionId: "s",
+    entryId: matches[0].entryId,
+    ordinal: matches[0].ordinal,
+  });
+  assert.equal(range?.toString(), "expired upload receipts");
+  assert.equal(
+    listSessionMatches([message], [entryId], '"default retention"').total,
+    0,
   );
 });
 

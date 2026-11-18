@@ -1,5 +1,6 @@
 import { createReadStream, promises as fs } from "fs";
 import { createInterface } from "readline";
+import { getSkillPromptText } from "./message-display";
 import { listAllSessions } from "./session-reader";
 import {
   compileSearchQuery,
@@ -10,6 +11,7 @@ import {
   TITLE_WEIGHT,
   type SearchField,
 } from "./session-search";
+import { isRecord } from "./type-guards";
 export const MAX_CONTENT_CACHE_ENTRIES = 200;
 
 interface ContentCacheEntry {
@@ -24,26 +26,47 @@ declare global {
 
 const PARSE_CONCURRENCY = 4;
 
-/** User and assistant text only: tool output and thinking would drown real matches. */
+/** Index submitted prompts and assistant text, not skill instructions, tools, or thinking. */
 async function extractTranscriptText(filePath: string): Promise<string> {
   const parts: string[] = [];
   const stream = createReadStream(filePath, { encoding: "utf8" });
   const lines = createInterface({ input: stream, crlfDelay: Infinity });
   try {
     for await (const line of lines) {
-      // The role sits near the line start; skip tool results (often MBs) unparsed.
+      // The role and custom type sit near the line start; skip tool results unparsed.
       const head = line.slice(0, 400);
+      const isSkill = head.includes('"customType":"skill-prompt"');
       if (
-        !head.includes('"type":"message"') ||
-        !(head.includes('"role":"user"') || head.includes('"role":"assistant"'))
+        !isSkill &&
+        (!head.includes('"type":"message"') ||
+          !(head.includes('"role":"user"') || head.includes('"role":"assistant"')))
       )
         continue;
-      let content: unknown;
+      let entry: unknown;
       try {
-        content = JSON.parse(line)?.message?.content;
+        entry = JSON.parse(line);
       } catch {
         continue;
       }
+      if (!isRecord(entry)) continue;
+      if (entry.type === "custom_message") {
+        const prompt = getSkillPromptText({
+          role: "custom",
+          customType: entry.customType,
+          display: entry.display,
+          details: entry.details,
+        });
+        if (prompt !== undefined) parts.push(prompt);
+        continue;
+      }
+      if (entry.type !== "message" || !isRecord(entry.message)) continue;
+      const message = entry.message;
+      if (message.role !== "user" && message.role !== "assistant") {
+        const prompt = getSkillPromptText(message);
+        if (prompt !== undefined) parts.push(prompt);
+        continue;
+      }
+      const { content } = message;
       if (typeof content === "string") parts.push(content);
       else if (Array.isArray(content)) {
         for (const block of content)
