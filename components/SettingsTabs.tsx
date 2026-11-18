@@ -104,8 +104,8 @@ export const SETTINGS_CATEGORIES: TabItem[] = [
   },
   {
     id: "projects",
-    label: "Projects",
-    description: "Project names and workspace creation commands",
+    label: "Repos",
+    description: "Repo names and workspace creation commands",
     Icon: FolderGit2,
   },
   {

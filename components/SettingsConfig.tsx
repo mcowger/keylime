@@ -133,7 +133,7 @@ const HostsConfig = dynamic(
   { loading: SettingsTabLoading },
 );
 const ProjectsConfig = dynamic(
-  () => import("./ProjectsConfig").then((module) => module.ProjectsConfig),
+  () => import("./ReposConfig").then((module) => module.ProjectsConfig),
   { loading: SettingsTabLoading },
 );
 const UsageConfig = dynamic(
@@ -4273,7 +4273,7 @@ export function SettingsConfig({
                           letterSpacing: "-0.01em",
                         }}
                       >
-                        Projects
+                        Repos
                       </h2>
                       <ProjectsConfig />
                     </div>

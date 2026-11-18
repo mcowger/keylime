@@ -6,6 +6,9 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ## [Unreleased]
 
+### Changed
+- The sidebar and Settings call projects repos, including in add, remove, and settings controls.
+
 ### Added
 - Subagent previews show the model and effort as `model-slug:effort` when effort is reported.
 - The sidebar shows worktree setup and cleanup progress even after you close Manage workspaces.

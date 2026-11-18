@@ -297,7 +297,7 @@ export function CreationPipelineEditor({
           <p style={descriptionStyle}>
             Stored workspace commands are invalid and cannot be displayed. Enter
             replacement{" "}
-            {projectPath === undefined ? "host defaults" : "project commands"}{" "}
+            {projectPath === undefined ? "host defaults" : "repo commands"}{" "}
             below. Saving replaces the stored commands; it does not run them.
             {projectPath !== undefined &&
               " If host defaults are also invalid, replace them first in Settings → Hosts."}
@@ -344,7 +344,7 @@ export function CreationPipelineEditor({
           <label className="settings-card" style={choiceStyle}>
             <span className="settings-card-text">
               <span className="settings-card-title">Manual</span>
-              <span className="settings-card-desc" style={{ display: "block" }}>Use project commands or inherit host defaults.</span>
+              <span className="settings-card-desc" style={{ display: "block" }}>Use repo commands or inherit host defaults.</span>
             </span>
             <input
               type="radio"
@@ -360,7 +360,7 @@ export function CreationPipelineEditor({
             <label className="settings-card" style={choiceStyle}>
               <span className="settings-card-text">
                 <span className="settings-card-title">Follow Paseo workspace setup</span>
-                <span className="settings-card-desc" style={{ display: "block" }}>Use the project's on-disk Paseo recipe instead of manual commands.</span>
+                <span className="settings-card-desc" style={{ display: "block" }}>Use the repo's on-disk Paseo recipe instead of manual commands.</span>
               </span>
               <input
                 type="radio"
@@ -378,10 +378,10 @@ export function CreationPipelineEditor({
       {gitProject && settings?.source === "paseo" && (
         <div style={{ display: "grid", gap: 12, minWidth: 0 }}>
           <p className="settings-card-desc" style={{ margin: 0 }}>
-            Paseo uses the current project file, including uncommitted changes,
+            Paseo uses the current repo file, including uncommitted changes,
             instead of manual commands. Recipe commands execute as your user
             when workspaces are created or deleted; only enable this for a trusted
-            project. Saving settings does not run the recipe.
+            repo. Saving settings does not run the recipe.
           </p>
           <p className="settings-card-desc" style={{ margin: 0 }}>
             Refresh after editing the recipe. Changed or moved blocking commands
@@ -396,7 +396,7 @@ export function CreationPipelineEditor({
           </p>
           <p style={descriptionStyle}>
             Setup and teardown commands receive PASEO_SOURCE_CHECKOUT_PATH (the
-            project checkout), PASEO_WORKTREE_PATH, and PASEO_BRANCH_NAME.
+            repo checkout), PASEO_WORKTREE_PATH, and PASEO_BRANCH_NAME.
             Workspace commands also receive PASEO_PROJECT_PATH,
             PASEO_WORKSPACE_PATH, PASEO_BRANCH, PASEO_BASE_REF,
             PASEO_BRANCH_MODE, and PASEO_CREATE_RESULT as available; the
@@ -429,7 +429,7 @@ export function CreationPipelineEditor({
           )}
           {settings.paseo ? (
             <div style={{ display: "grid", gap: 12, minWidth: 0, fontSize: 13, lineHeight: 1.5 }}>
-              <div>Project file: {settings.paseo.path}</div>
+              <div>Repo file: {settings.paseo.path}</div>
               {settings.paseo.fingerprint && (
                 <div>Fingerprint: {settings.paseo.fingerprint}</div>
               )}

@@ -270,9 +270,9 @@ test("failed project unregistration reports the error and keeps the hierarchy", 
   try {
     renderSidebar();
     fireEvent.click(
-      await screen.findByLabelText("Actions for project Project"),
+      await screen.findByLabelText("Actions for repo Project"),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Unregister project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unregister repo" }));
     fireEvent.click(await screen.findByRole("button", { name: "Unregister" }));
     assert.equal(
       (await screen.findByRole("alert")).textContent,
@@ -651,7 +651,7 @@ test("manager setup and teardown stay visible in the sidebar after dismissal", a
     key: "Escape", code: "Escape",
   });
   const openManager = async () => {
-    fireEvent.click(await screen.findByLabelText("Actions for project Project"));
+    fireEvent.click(await screen.findByLabelText("Actions for repo Project"));
     fireEvent.click(screen.getByRole("button", { name: "Manage workspaces" }));
     return screen.findByRole("dialog", { name: "Manage workspaces" });
   };

@@ -29,7 +29,7 @@ import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
 import type { ShipTarget } from "./ShipDialog";
 import { useShipAvailability } from "@/hooks/useShipAvailability";
 import { ConfirmDialog } from "./ui/field";
-import { ProjectSettings } from "./ProjectsConfig";
+import { ProjectSettings } from "./ReposConfig";
 import { toast } from "./ui/toast";
 
 function ProjectIcon({ project }: { project: HierarchyProject }) {
@@ -716,7 +716,7 @@ export function HierarchySidebar({
                 <Server size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{host.label || "This machine"}</span>
               </button>
-              <button style={{ ...button, padding: "3px 6px" }} type="button" aria-label={`Add project on ${host.label || "This machine"}`} title="Add project" onClick={() => onAddProject(host.id)}>
+              <button style={{ ...button, padding: "3px 6px" }} type="button" aria-label={`Add repo on ${host.label || "This machine"}`} title="Add repo" onClick={() => onAddProject(host.id)}>
                 <Plus size={14} />
               </button>
             </div>
@@ -811,7 +811,7 @@ export function HierarchySidebar({
                     </button>
                     <details style={{ position: "relative" }}>
                       <summary
-                        aria-label={`Actions for project ${project.alias || project.name}`}
+                        aria-label={`Actions for repo ${project.alias || project.name}`}
                         style={{
                           cursor: "pointer",
                           listStyle: "none",
@@ -824,8 +824,8 @@ export function HierarchySidebar({
                         <button
                           style={menuButton}
                           type="button"
-                          aria-label="Project settings"
-                          title="Project settings"
+                          aria-label="Repo settings"
+                          title="Repo settings"
                           onClick={(e) => {
                             e.currentTarget
                               .closest("details")
@@ -872,15 +872,15 @@ export function HierarchySidebar({
                         <button
                           style={menuButton}
                           type="button"
-                          aria-label="Unregister project"
-                          title="Unregister project"
+                          aria-label="Unregister repo"
+                          title="Unregister repo"
                           disabled={busy}
                           onClick={(e) => {
                             e.currentTarget
                               .closest("details")
                               ?.removeAttribute("open");
                             void confirmForget(
-                              "this project and its registrations",
+                              "this repo and its registrations",
                             ).then((confirmed) => {
                               if (confirmed)
                                 void operate(host.id, {
@@ -1234,7 +1234,7 @@ export function HierarchySidebar({
         >
           <DialogContent style={{ width: 850, maxWidth: "calc(100vw - 24px)", maxHeight: "calc(100dvh - 24px)", overflowY: "auto", boxSizing: "border-box" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, paddingBottom: 16, marginBottom: 16, borderBottom: "1px solid var(--border)" }}>
-              <DialogTitle style={{ margin: 0 }}>Project settings</DialogTitle>
+              <DialogTitle style={{ margin: 0 }}>Repo settings</DialogTitle>
               <button type="button" className="dialog-action" disabled={projectSettingsPending} onClick={() => setSettingsProject(null)} style={{ padding: "6px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", color: "var(--text)", background: "var(--bg-panel)", cursor: projectSettingsPending ? "not-allowed" : "pointer", opacity: projectSettingsPending ? 0.5 : 1, fontSize: 13 }}>Close</button>
             </div>
             <ProjectSettings

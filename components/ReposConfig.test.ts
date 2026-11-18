@@ -5,7 +5,7 @@ import test, { afterEach } from "node:test";
 
 const { render, cleanup, fireEvent, waitFor, act } =
   await import("@testing-library/react/pure.js");
-const { ProjectSettings } = await import("./ProjectsConfig");
+const { ProjectSettings } = await import("./ReposConfig");
 const originalFetch = globalThis.fetch;
 afterEach(() => {
   cleanup();

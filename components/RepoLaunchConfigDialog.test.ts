@@ -6,7 +6,7 @@ import type { ProjectLaunchConfig } from "../lib/types";
 const { render, cleanup, fireEvent, waitFor } =
   await import("@testing-library/react/pure.js");
 const { ProjectLaunchConfigDialog } =
-  await import("./ProjectLaunchConfigDialog.tsx");
+  await import("./RepoLaunchConfigDialog.tsx");
 const { translate } = await import("../lib/i18n/index.tsx");
 afterEach(cleanup);
 

@@ -20,7 +20,7 @@ import type { HierarchySnapshot } from "@/lib/project-hierarchy-types";
 import { useI18n } from "@/lib/i18n";
 import { formatApiError } from "@/lib/i18n/api-error";
 import { DirectoryPicker } from "./DirectoryPicker";
-import { ProjectLaunchConfigDialog } from "./ProjectLaunchConfigDialog";
+import { ProjectLaunchConfigDialog } from "./RepoLaunchConfigDialog";
 import { ProviderUsageBar } from "./ProviderUsageBar";
 import { Tooltip } from "./ui/primitives";
 import { toast } from "./ui/toast";

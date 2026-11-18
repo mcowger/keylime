@@ -49,7 +49,7 @@ export function ProjectsConfig() {
       <div className="settings-card">
         <div className="settings-card-text">
           <label htmlFor="project-settings-host" className="settings-card-title">Host</label>
-          <div className="settings-card-desc">Choose the host whose projects you want to configure.</div>
+          <div className="settings-card-desc">Choose the host whose repos you want to configure.</div>
         </div>
         {hosts && (
           <span className="settings-card-control">
@@ -74,7 +74,7 @@ export function ProjectsConfig() {
       {hosts && !host && <div>Select a host.</div>}
       {host && !isLinkUp(host.status) && (
         <div role="status">
-          {hostName(t, host)}: {hostStatusText(t, host)}. Projects are
+          {hostName(t, host)}: {hostStatusText(t, host)}. Repos are
           unavailable.
         </div>
       )}
@@ -87,10 +87,10 @@ export function ProjectsConfig() {
         </div>
       )}
       {host && isLinkUp(host.status) && !snapshot && !error && (
-        <div role="status">Loading projects...</div>
+        <div role="status">Loading repos...</div>
       )}
       {snapshot && snapshot.projects.length === 0 && (
-        <p>No registered projects on this host.</p>
+        <p>No registered repos on this host.</p>
       )}
       {snapshot?.projects.map((project) => (
         <ProjectSettings
@@ -256,7 +256,7 @@ export function ProjectSettings({
         <div style={{ marginTop: 4, color: "var(--text-dim)", fontSize: 12 }}>{project.path}</div>
       </div>
       <div style={{ display: "flex", flexDirection: mobile ? "column" : "row", minWidth: 0 }}>
-        <nav role="tablist" aria-label="Project settings" aria-orientation={mobile ? "horizontal" : "vertical"} className={mobile ? "settings-nav-horizontal" : "settings-nav"} style={mobile ? { display: "flex", gap: 3, padding: "7px 0", borderBottom: "1px solid var(--border)", overflowX: "auto" } : { width: 190, padding: "0 10px 0 0", background: "transparent" }}>
+        <nav role="tablist" aria-label="Repo settings" aria-orientation={mobile ? "horizontal" : "vertical"} className={mobile ? "settings-nav-horizontal" : "settings-nav"} style={mobile ? { display: "flex", gap: 3, padding: "7px 0", borderBottom: "1px solid var(--border)", overflowX: "auto" } : { width: 190, padding: "0 10px 0 0", background: "transparent" }}>
           {tabs.map((item, index) => {
             const selected = tab === item.id;
             return (
@@ -296,11 +296,11 @@ export function ProjectSettings({
         <div style={{ flex: 1, minWidth: 0, padding: mobile ? "20px 0 0" : "0 0 0 20px" }}>
           <div role="tabpanel" id={`${id}-panel-general`} aria-labelledby={`${id}-tab-general`} hidden={tab !== "general"}>
             <h2 style={{ margin: "0 0 6px", fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600 }}>General</h2>
-            <p className="settings-content-subtitle" style={{ margin: "0 0 24px" }}>Set how this project appears in the sidebar.</p>
+            <p className="settings-content-subtitle" style={{ margin: "0 0 24px" }}>Set how this repo appears in the sidebar.</p>
             <div className="settings-card" style={mobile ? { flexDirection: "column", alignItems: "stretch", gap: 10 } : undefined}>
               <div className="settings-card-text">
                 <label htmlFor={`${id}-name`} className="settings-card-title">Display name</label>
-                <div id={`${id}-name-desc`} className="settings-card-desc">Choose the name shown for this project. Clear it to use the directory name.</div>
+                <div id={`${id}-name-desc`} className="settings-card-desc">Choose the name shown for this repo. Clear it to use the directory name.</div>
               </div>
               <span className="settings-card-control" style={mobile ? { width: "100%" } : { flexShrink: 1 }}>
                 <input id={`${id}-name`} aria-describedby={`${id}-name-desc`} style={{ width: "100%", minWidth: 0, boxSizing: "border-box", padding: "7px 9px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", background: "var(--bg)", color: "var(--text)", fontSize: 13 }} value={save.name} onFocus={() => { nameFocused.current = true; }} onBlur={() => { nameFocused.current = false; }} onChange={(e) => changeName(e.target.value)} />
@@ -312,7 +312,7 @@ export function ProjectSettings({
           </div>
           <div role="tabpanel" id={`${id}-panel-workspace`} aria-labelledby={`${id}-tab-workspace`} hidden={tab !== "workspace"}>
             <h2 style={{ margin: "0 0 6px", fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600 }}>Workspace setup</h2>
-            <p className="settings-content-subtitle" style={{ margin: "0 0 24px" }}>Configure workspace creation for this project.</p>
+            <p className="settings-content-subtitle" style={{ margin: "0 0 24px" }}>Configure workspace creation for this repo.</p>
             <CreationPipelineEditor key={`${hostId}:${project.path}`} hostId={hostId} projectPath={project.path} gitProject={project.kind === "git"} />
           </div>
         </div>
@@ -420,10 +420,10 @@ function ProjectIconSettings({
 
   return (
     <div className="settings-card" style={{ display: "block", minWidth: 0 }}>
-      <div className="settings-card-title">Project icon</div>
+      <div className="settings-card-title">Repo icon</div>
       <div className="settings-card-desc" style={{ marginBottom: 12 }}>Choose an image or find an icon in the repository. Uploaded images are center-cropped to a square.</div>
       {project.icon && (
-        <img src={project.icon} alt="Current project icon" width={48} height={48} style={{ objectFit: "cover", borderRadius: "var(--radius-control)", border: "1px solid var(--border)", marginBottom: 10 }} />
+        <img src={project.icon} alt="Current repo icon" width={48} height={48} style={{ objectFit: "cover", borderRadius: "var(--radius-control)", border: "1px solid var(--border)", marginBottom: 10 }} />
       )}
       <label style={{ display: "grid", gap: 6, minWidth: 0, color: "var(--text-muted)", fontSize: 12, marginBottom: 10 }}>
         Upload image (center-cropped to a square)
