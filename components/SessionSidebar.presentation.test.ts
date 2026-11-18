@@ -272,6 +272,10 @@ test("failed project unregistration reports the error and keeps the hierarchy", 
     fireEvent.click(
       await screen.findByLabelText("Actions for repo Project"),
     );
+    assert.equal(
+      screen.getByRole("button", { name: "Repo settings" }).textContent?.trim(),
+      "Repo settings",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Unregister repo" }));
     fireEvent.click(await screen.findByRole("button", { name: "Unregister" }));
     assert.equal(

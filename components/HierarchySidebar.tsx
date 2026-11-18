@@ -833,8 +833,7 @@ export function HierarchySidebar({
                             setSettingsProject({ host: host.id, project });
                           }}
                         >
-                          <Wrench size={16} aria-hidden="true" /> Project
-                          settings
+                          <Wrench size={16} aria-hidden="true" /> Repo settings
                         </button>
                         {project.kind === "git" && (
                           <button
