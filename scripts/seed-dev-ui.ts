@@ -53,6 +53,28 @@ writeFileSync(
 git("add", ".");
 git("commit", "-m", "Initial fixture");
 git("worktree", "add", "-b", "feature/search", worktree);
+// The workspace picker has a local default, origin ahead, and unused local/remote branches.
+const origin = path.join(projects, "atlas-origin.git");
+git("init", "--bare", "-b", "main", origin);
+git("remote", "add", "origin", origin);
+git("branch", "feature/filters");
+const ahead = git(
+  "commit-tree",
+  "-p",
+  "HEAD",
+  "-m",
+  "Prepare the next release",
+  "HEAD^{tree}",
+)
+  .toString()
+  .trim();
+git(
+  "push",
+  "origin",
+  `${ahead}:refs/heads/main`,
+  "HEAD:refs/heads/docs/remote",
+  "feature/search",
+);
 writeFileSync(
   path.join(worktree, "notes.md"),
   "# Search\n\nUntracked work in progress.\n",

@@ -97383,7 +97383,7 @@
     },
     "/api/worktrees": {
       "get": {
-        "description": "### Usage\n\nList worktrees or inspect branches, creation settings or creation status.\n\n### Inputs\n\naction selects branches, settings or status; otherwise cwd lists worktrees. hostId selects the daemon.\n\n### Invariants\n\nprojectPath and cwd are host-machine paths; status uses the job id.\n\n### Effects\n\nReturns host snapshots without creating a worktree.\n\n### Recovery\n\nPoll status or refresh the listing as creation progresses.",
+        "description": "### Usage\n\nList worktrees or inspect branches, creation settings or creation status.\n\n### Inputs\n\naction selects branches, settings or status; otherwise cwd lists worktrees. hostId selects the daemon.\n\n### Invariants\n\nprojectPath and cwd are host-machine paths; status uses the job id.\n\n### Effects\n\nBranch discovery refreshes remote-tracking refs and queries GitHub if configured. No worktree is created.\n\n### Recovery\n\nPoll status or refresh the listing as creation progresses.",
         "operationId": "workspaceWorktreesGet",
         "parameters": [
           {
@@ -97513,6 +97513,7 @@
                       "description": "Point-in-time local and remote branch choices and default base ref for a host project.",
                       "properties": {
                         "defaultRef": {
+                          "description": "Full Git ref for the default base, or an empty string if no default is available.",
                           "type": "string"
                         },
                         "local": {
@@ -97521,6 +97522,51 @@
                           },
                           "type": "array"
                         },
+                        "originAheadRef": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Full origin default ref if it contains commits missing from its local counterpart, otherwise null."
+                        },
+                        "otherRefs": {
+                          "description": "Full local and remote-tracking refs not checked out in a worktree, excluding the primary choices. Local refs appear first.",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "pullRequests": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "properties": {
+                                  "isDraft": {
+                                    "type": "boolean"
+                                  },
+                                  "number": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "title": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["number", "title", "isDraft"],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Open GitHub pull requests, including drafts. Null if GitHub is configured but the host couldn't load the list."
+                        },
                         "remote": {
                           "items": {
                             "type": "string"
@@ -97528,7 +97574,14 @@
                           "type": "array"
                         }
                       },
-                      "required": ["local", "remote", "defaultRef"],
+                      "required": [
+                        "local",
+                        "remote",
+                        "defaultRef",
+                        "originAheadRef",
+                        "otherRefs",
+                        "pullRequests"
+                      ],
                       "type": "object"
                     },
                     {
@@ -98169,7 +98222,7 @@
         ],
         "summary": "List worktrees or inspect creation",
         "x-client-semantics": {
-          "Effects": "Returns host snapshots without creating a worktree.",
+          "Effects": "Branch discovery refreshes remote-tracking refs and queries GitHub if configured. No worktree is created.",
           "Inputs": "action selects branches, settings or status; otherwise cwd lists worktrees. hostId selects the daemon.",
           "Invariants": "projectPath and cwd are host-machine paths; status uses the job id.",
           "Recovery": "Poll status or refresh the listing as creation progresses.",
@@ -98177,7 +98230,7 @@
         }
       },
       "post": {
-        "description": "### Usage\n\nPrepare, create, configure or delete a registered workspace.\n\n### Inputs\n\nSend action, action-specific input and optional hostId; prepare requires projectPath and nonblank prompt.\n\n### Invariants\n\nPrepare requires a registered Git project and default base ref; if naming fails or exceeds 10 seconds it uses a generic name and random branch. Cancellation before creation prevents it from starting.\n\n### Effects\n\nPrepare and create start creation; settings can change configuration; delete removes a registered worktree and invalidates session lists.\n\n### Recovery\n\nAfter an uncertain result inspect job status and worktree state before retrying; deletion is not assumed rolled back.",
+        "description": "### Usage\n\nPrepare, create, configure or delete a registered workspace.\n\n### Inputs\n\nSend action, action-specific input and optional hostId; prepare requires projectPath, nonblank prompt and the selected baseRef.\n\n### Invariants\n\nPrepare requires a registered Git project; if naming fails or exceeds 10 seconds it uses a generic name and random branch. Cancellation before creation prevents it from starting.\n\n### Effects\n\nPrepare and create start creation; settings can change configuration; delete removes a registered worktree and invalidates session lists.\n\n### Recovery\n\nAfter an uncertain result inspect job status and worktree state before retrying; deletion is not assumed rolled back.",
         "operationId": "workspaceWorktreesPost",
         "requestBody": {
           "content": {
@@ -98249,15 +98302,23 @@
                         "type": "string"
                       },
                       "input": {
+                        "description": "Start a new chat workspace from a selected Git source on the owning host.",
                         "properties": {
+                          "baseRef": {
+                            "description": "Selected full local or remote-tracking ref, or refs/pull/<number>/head for a GitHub pull request.",
+                            "pattern": "^(?:refs\\/(?:heads|remotes)\\/[^\\s]+|refs\\/pull\\/[1-9]\\d*\\/head)$",
+                            "type": "string"
+                          },
                           "projectPath": {
+                            "description": "Registered project path on the owning host.",
                             "type": "string"
                           },
                           "prompt": {
+                            "description": "First chat prompt, used to name the workspace and its branch.",
                             "type": "string"
                           }
                         },
-                        "required": ["projectPath", "prompt"],
+                        "required": ["projectPath", "prompt", "baseRef"],
                         "type": "object"
                       }
                     },
@@ -99177,8 +99238,8 @@
         "summary": "Create or remove a workspace",
         "x-client-semantics": {
           "Effects": "Prepare and create start creation; settings can change configuration; delete removes a registered worktree and invalidates session lists.",
-          "Inputs": "Send action, action-specific input and optional hostId; prepare requires projectPath and nonblank prompt.",
-          "Invariants": "Prepare requires a registered Git project and default base ref; if naming fails or exceeds 10 seconds it uses a generic name and random branch. Cancellation before creation prevents it from starting.",
+          "Inputs": "Send action, action-specific input and optional hostId; prepare requires projectPath, nonblank prompt and the selected baseRef.",
+          "Invariants": "Prepare requires a registered Git project; if naming fails or exceeds 10 seconds it uses a generic name and random branch. Cancellation before creation prevents it from starting.",
           "Recovery": "After an uncertain result inspect job status and worktree state before retrying; deletion is not assumed rolled back.",
           "Usage": "Prepare, create, configure or delete a registered workspace."
         }

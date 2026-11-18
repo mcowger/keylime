@@ -24,7 +24,8 @@ import type {
 import { isWorkspaceOp, WORKSPACE_OP_PARAMS } from "../workspace-types";
 
 /** Version 12 adds connection-scoped, non-replayable session PTY attachment frames. */
-/** 11: the same wire as 10, renumbered: prerelease daemons already sent 10 with omp RPC channel lines, which this
+/** 13: workspaceBranches returns base source choices; createWorkspace accepts a GitHub PR ref.
+ * 11: the same wire as 10, renumbered: prerelease daemons already sent 10 with omp RPC channel lines, which this
  * server cannot read. 10: channel stdin/stdout lines are the runner's `{t}` frames (`cmd`/`res`/`hello`/…), no longer omp RPC frames;
  * `open.launch.configVersion`, the `config_state` report and the `clusterConfig` op.
  * 9: `open.launch.shareCredentials`. 8: pool capacity reports, creation identity and project preparation. 7: shared host-owned channels, lifecycle,
@@ -34,10 +35,10 @@ import { isWorkspaceOp, WORKSPACE_OP_PARAMS } from "../workspace-types";
  * (docs/specs/2026-10-31-websocket-link-design.md, D7). 4: the link is one WebSocket: text frames carry the messages,
  * binary frames large results, `ack` messages replace the ack header and the POST answer.
  * Rules for changing it: docs/specs/2026-10-28-remote-hosts-design.md, "Protocol versions and compatibility". */
-export const LINK_PROTOCOL_VERSION = 12;
+export const LINK_PROTOCOL_VERSION = 13;
 /** The oldest daemon protocol the server still links (older ones get close 4426). Dropping one is an explicit decision:
  * 11 dropped all older ones, whose channel lines mean (or, for prerelease 10, may mean) omp RPC frames. */
-export const MIN_LINK_PROTOCOL_VERSION = 12;
+export const MIN_LINK_PROTOCOL_VERSION = 13;
 /** A configuration version: the manifest's SHA-256, in lowercase hex. */
 export const CONFIG_VERSION_RE = /^[0-9a-f]{64}$/;
 // CREATION_ID_RE is shared with the host-link schema.

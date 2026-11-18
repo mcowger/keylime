@@ -105,6 +105,7 @@ interface Props {
   prepareNewWorkspace?: (
     prompt: string,
   ) => Promise<{ cwd: string; name: string }>;
+  workspaceSourceRequired?: boolean;
   /** Host a fresh chat starts on (this machine when absent). */
   newSessionHostId?: string;
   onBackgroundSessionCreated?: (session: SessionInfo) => void;
@@ -542,6 +543,7 @@ export function ChatWindow({
   newSessionCwd,
   newSessionDraftKey,
   prepareNewWorkspace,
+  workspaceSourceRequired,
   newSessionHostId,
   onBackgroundSessionCreated,
   newSessionCreationId,
@@ -1506,7 +1508,7 @@ export function ChatWindow({
       onFollowUp={agentRunning ? handleFollowUp : undefined}
       outbox={!isNew}
       isStreaming={sessionBusy}
-      submissionBlocked={editingEntryId !== null}
+      submissionBlocked={editingEntryId !== null || workspaceSourceRequired}
       model={displayModelValue}
       isAutoModelSelection={isAutoModelSelection}
       modelNames={modelNames}

@@ -20,6 +20,9 @@ export type WorkspaceSettingsRequest = Static<
 export type WorkspaceCreateRequest = Static<
   typeof M.WorkspaceCreateRequestSchema
 >;
+export type WorkspacePrepareRequest = Static<
+  typeof M.WorkspacePrepareRequestSchema
+>;
 /** Persisted creation progress; stage and status are separate, and restart can interrupt a job. */
 export type WorkspaceCreationJob = Static<typeof M.WorkspaceCreationJobSchema>;
 /** Snapshot of local and remote Git refs and the suggested default base ref. */

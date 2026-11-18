@@ -98,9 +98,11 @@ mock.module("./SessionSidebar", () => ({
 let prepareWorkspace: NonNullable<
   React.ComponentProps<typeof ChatWindow>["prepareNewWorkspace"]
 >;
+let sourceRequired: boolean | undefined;
 mock.module("./ChatWindow", () => ({
   ChatWindow: (props: React.ComponentProps<typeof ChatWindow>) => {
     prepareWorkspace = props.prepareNewWorkspace!;
+    sourceRequired = props.workspaceSourceRequired;
     return React.createElement(
       React.Fragment,
       null,
@@ -212,7 +214,18 @@ Object.defineProperty(document, "fonts", {
 });
 globalThis.fetch = (async (url: Parameters<typeof fetch>[0]) =>
   Response.json(
-    String(url).includes("cwd/validate") ? { cwd: "/repo" } : {},
+    String(url).includes("cwd/validate")
+      ? { cwd: "/repo" }
+      : String(url).includes("action=branches")
+        ? {
+            local: ["main"],
+            remote: [],
+            defaultRef: "refs/heads/main",
+            originAheadRef: null,
+            otherRefs: [],
+            pullRequests: [],
+          }
+        : {},
   )) as typeof fetch;
 const { AppShell } = await import("./AppShell.tsx");
 
@@ -637,7 +650,7 @@ test("new workspace chat proceeds while post setup is running or has failed", as
       assert.ok(view.getByRole("button", { name: "New workspace" })),
     );
     fireEvent.click(view.getByRole("button", { name: "New workspace" }));
-    await waitFor(() => assert.equal(typeof prepareWorkspace, "function"));
+    await waitFor(() => assert.equal(sourceRequired, false));
     await act(async () => {
       assert.deepEqual(await prepareWorkspace("first prompt"), {
         cwd: "/repo/worktrees/feature",
@@ -651,7 +664,7 @@ test("new workspace chat proceeds while post setup is running or has failed", as
       React.createElement(AppShell, { appName: "Keylime" }),
     );
     fireEvent.click(second.getByRole("button", { name: "New workspace" }));
-    await waitFor(() => assert.equal(typeof prepareWorkspace, "function"));
+    await waitFor(() => assert.equal(sourceRequired, false));
     await act(async () => {
       assert.deepEqual(await prepareWorkspace("first prompt"), {
         cwd: "/repo/worktrees/feature",
@@ -703,7 +716,7 @@ test("new workspace chat waits for blocking setup and rejects its failure", asyn
       ),
     );
     fireEvent.click(view.getByRole("button", { name: "New workspace" }));
-    await waitFor(() => assert.equal(typeof prepareWorkspace, "function"));
+    await waitFor(() => assert.equal(sourceRequired, false));
     let settled = false;
     let pending = Promise.resolve<unknown>(undefined);
     await act(async () => {
@@ -735,7 +748,7 @@ test("new workspace chat waits for blocking setup and rejects its failure", asyn
       ),
     );
     fireEvent.click(second.getByRole("button", { name: "New workspace" }));
-    await waitFor(() => assert.equal(typeof prepareWorkspace, "function"));
+    await waitFor(() => assert.equal(sourceRequired, false));
     await act(async () => {
       await assert.rejects(prepareWorkspace("prompt"), /blocking failed/);
     });

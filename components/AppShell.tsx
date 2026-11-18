@@ -25,7 +25,11 @@ import { useMobileSidebarGestures } from "@/hooks/useMobileSidebarGestures";
 import { SessionSidebar } from "./SessionSidebar";
 import type { SearchMatchTarget } from "./SessionSearchMatches";
 import type { WorktreeContext } from "./SessionSidebar-helpers";
-import type { WorkspaceCreationJob } from "@/lib/workspace-creation-types";
+import type {
+  WorkspaceBranches,
+  WorkspaceCreationJob,
+  WorkspacePrepareRequest,
+} from "@/lib/workspace-creation-types";
 import { ToastProvider } from "./ui/toast";
 import { toast } from "./ui/toast";
 import {
@@ -35,6 +39,10 @@ import {
 import { ConfirmDialog } from "./ui/field";
 import { ThemedSelect } from "./ui/primitives";
 import { ChatWindow } from "./ChatWindow";
+import {
+  WorkspaceSourcePicker,
+  selectedWorkspaceBase,
+} from "./WorkspaceSourcePicker";
 import { ShipDialog, type ShipTarget } from "./ShipDialog";
 import { type Tab } from "./TabBar";
 import { WorkspaceTerminalTabs } from "./WorkspaceTerminalTabs";
@@ -153,6 +161,7 @@ type ChatTab = {
   session: SessionInfo | null;
   creation: { id?: string; initialization?: string };
   workspaceProject?: string;
+  workspaceSource?: string;
   workspaceJob?: WorkspaceCreationJob;
   workspaceFixed?: boolean;
 };
@@ -1528,16 +1537,65 @@ export function AppShell({ appName }: { appName: string }) {
     [handleNewSession, updateChatTabs, activateChat, router, isMobile],
   );
 
-  const pendingWorkspace = chatTabs.find(
-    (tab) => tab.id === activeChatId && !tab.session,
-  )?.workspaceProject;
+  const workspaceDraft = chatTabs.find(
+    (tab) => tab.id === activeChatId && !tab.session && tab.workspaceProject,
+  );
+  const pendingWorkspace = workspaceDraft?.workspaceProject;
+  const sourceTabId = workspaceDraft?.workspaceJob
+    ? undefined
+    : workspaceDraft?.id;
+  const sourceHost = workspaceDraft?.hostId ?? "local";
+  const [workspaceSourceResult, setWorkspaceSourceResult] = useState<{
+    tabId: string;
+    branches?: WorkspaceBranches;
+    error?: string;
+  }>();
+  useEffect(() => {
+    if (!sourceTabId || !pendingWorkspace) return;
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      action: "branches",
+      hostId: sourceHost,
+      projectPath: pendingWorkspace,
+    });
+    void (async () => {
+      try {
+        const response = await fetch(`/api/worktrees?${params}`, {
+          signal: controller.signal,
+        });
+        const data = await response.json();
+        if (!response.ok)
+          throw new Error(data.error ?? "Couldn't load workspace sources");
+        if (!controller.signal.aborted)
+          setWorkspaceSourceResult({ tabId: sourceTabId, branches: data });
+      } catch (error) {
+        if (!controller.signal.aborted)
+          setWorkspaceSourceResult({
+            tabId: sourceTabId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+      }
+    })();
+    return () => controller.abort();
+  }, [sourceTabId, sourceHost, pendingWorkspace]);
+  const workspaceSources =
+    workspaceSourceResult?.tabId === sourceTabId
+      ? workspaceSourceResult
+      : undefined;
+  const workspaceBaseRef = selectedWorkspaceBase(
+    workspaceSources?.branches,
+    workspaceDraft?.workspaceSource,
+  );
   const prepareNewWorkspace = useMemo(() => {
-    const tab = chatTabsRef.current.find((tab) => tab.id === activeChatId);
-    if (!tab?.workspaceProject) return undefined;
+    if (!pendingWorkspace) return undefined;
     let pending: Promise<{ cwd: string; name: string }> | undefined;
     return (prompt: string) => {
       if (pending) return pending;
       pending = (async () => {
+        const tab = chatTabsRef.current.find(
+          (item) => item.id === activeChatId,
+        );
+        if (!tab) throw new Error("Workspace draft is closed");
         const save = (job: WorkspaceCreationJob) => {
           tab.workspaceJob = job;
           updateChatTabs((tabs) =>
@@ -1548,13 +1606,18 @@ export function AppShell({ appName }: { appName: string }) {
         };
         let job = tab.workspaceJob;
         if (!job) {
+          if (!workspaceBaseRef) throw new Error("Choose a base branch first");
           const response = await fetch("/api/worktrees", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               action: "prepare",
               hostId: tab.hostId ?? "local",
-              input: { projectPath: tab.workspaceProject, prompt },
+              input: {
+                projectPath: pendingWorkspace,
+                prompt,
+                baseRef: workspaceBaseRef,
+              } satisfies WorkspacePrepareRequest,
             }),
           });
           const data = await response.json();
@@ -1590,7 +1653,7 @@ export function AppShell({ appName }: { appName: string }) {
       });
       return pending;
     };
-  }, [activeChatId, pendingWorkspace, updateChatTabs]);
+  }, [activeChatId, pendingWorkspace, workspaceBaseRef, updateChatTabs]);
 
   // ---- In-app Navigate back / forward over visited chat views ----
 
@@ -3816,6 +3879,11 @@ export function AppShell({ appName }: { appName: string }) {
                       newSessionCwd={effectiveNewSessionCwd}
                       newSessionHostId={newSessionHost}
                       prepareNewWorkspace={prepareNewWorkspace}
+                      workspaceSourceRequired={
+                        !!workspaceDraft &&
+                        !workspaceDraft.workspaceJob &&
+                        !workspaceBaseRef
+                      }
                       newSessionCreationId={undefined}
                       newSessionDraftKey={
                         activeChatId ? `new:tab:${activeChatId}` : undefined
@@ -3844,6 +3912,22 @@ export function AppShell({ appName }: { appName: string }) {
                                 (project.projectPath ?? project.path) ===
                                 pendingWorkspace,
                             )?.projectName ?? projectLabel(pendingWorkspace)}
+                            {sourceTabId && (
+                              <WorkspaceSourcePicker
+                                branches={workspaceSources?.branches}
+                                error={workspaceSources?.error}
+                                selection={workspaceDraft?.workspaceSource}
+                                onChange={(workspaceSource) =>
+                                  updateChatTabs((tabs) =>
+                                    tabs.map((tab) =>
+                                      tab.id === sourceTabId
+                                        ? { ...tab, workspaceSource }
+                                        : tab,
+                                    ),
+                                  )
+                                }
+                              />
+                            )}
                           </div>
                         ) : !chatTabs.find((tab) => tab.id === activeChatId)?.workspaceFixed && (
                           effectiveNewSessionCwd && (

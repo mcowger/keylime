@@ -92,6 +92,28 @@ export const WorkspaceCreateRequestSchema = Type.Object(
       "Request to create a workspace under a host project using a branch mode, branch, base ref and name.",
   },
 );
+export const workspaceBaseRefPattern =
+  /^(?:refs\/(?:heads|remotes)\/[^\s]+|refs\/pull\/[1-9]\d*\/head)$/;
+export const WorkspacePrepareRequestSchema = Type.Object(
+  {
+    projectPath: Type.String({
+      description: "Registered project path on the owning host.",
+    }),
+    prompt: Type.String({
+      description:
+        "First chat prompt, used to name the workspace and its branch.",
+    }),
+    baseRef: Type.String({
+      pattern: workspaceBaseRefPattern.source,
+      description:
+        "Selected full local or remote-tracking ref, or refs/pull/<number>/head for a GitHub pull request.",
+    }),
+  },
+  {
+    description:
+      "Start a new chat workspace from a selected Git source on the owning host.",
+  },
+);
 export const WorkspaceCreationJobSchema = Type.Object(
   {
     id: Type.String(),
@@ -145,7 +167,34 @@ export const WorkspaceBranchesSchema = Type.Object(
   {
     local: strings(),
     remote: strings(),
-    defaultRef: Type.String(),
+    defaultRef: Type.String({
+      description:
+        "Full Git ref for the default base, or an empty string if no default is available.",
+    }),
+    originAheadRef: Type.Union([Type.String(), Type.Null()], {
+      description:
+        "Full origin default ref if it contains commits missing from its local counterpart, otherwise null.",
+    }),
+    otherRefs: Type.Array(Type.String(), {
+      description:
+        "Full local and remote-tracking refs not checked out in a worktree, excluding the primary choices. Local refs appear first.",
+    }),
+    pullRequests: Type.Union(
+      [
+        Type.Array(
+          Type.Object({
+            number: Type.Integer({ minimum: 1 }),
+            title: Type.String(),
+            isDraft: Type.Boolean(),
+          }),
+        ),
+        Type.Null(),
+      ],
+      {
+        description:
+          "Open GitHub pull requests, including drafts. Null if GitHub is configured but the host couldn't load the list.",
+      },
+    ),
   },
   {
     description:
@@ -563,7 +612,12 @@ export const HierarchyProjectSchema = Type.Object(
     kind: literals("git", "directory"),
     addedAt: Type.String(),
     launchConfig: Type.Optional(ProjectLaunchConfigSchema),
-    icon: Type.Optional(Type.String({ description: "Project icon as a base64 image data URL, including SVG; render as an image rather than inline markup." })),
+    icon: Type.Optional(
+      Type.String({
+        description:
+          "Project icon as a base64 image data URL, including SVG; render as an image rather than inline markup.",
+      }),
+    ),
     alias: Type.Optional(Type.String()),
     sortOrder: Type.Optional(Type.Number()),
     pinOrder: Type.Optional(Type.Number()),
@@ -633,7 +687,14 @@ export const HierarchyRequestSchema = Type.Object(
     cwd: Type.Optional(Type.String()),
     from: Type.Optional(Type.String()),
     to: Type.Optional(Type.String()),
-    icon: Type.Optional(nullable(Type.String({ description: "Base64 image data URL, including SVG, up to 256 KiB decoded; null clears the project icon." }))),
+    icon: Type.Optional(
+      nullable(
+        Type.String({
+          description:
+            "Base64 image data URL, including SVG, up to 256 KiB decoded; null clears the project icon.",
+        }),
+      ),
+    ),
     alias: Type.Optional(nullable(Type.String())),
     sortOrder: Type.Optional(nullable(Type.Number())),
     pinOrder: Type.Optional(nullable(Type.Number())),

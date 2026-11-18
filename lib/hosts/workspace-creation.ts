@@ -5,8 +5,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { getAgentDir } from "../omp/paths";
+import { parseGithubRemoteUrl, resolveGithubRepo } from "../github-repo";
 import { createGitEnvironment } from "../project-command-env";
 import { listWorktrees, removeWorktree } from "../worktree";
+import { isRecord } from "../type-guards";
 import type {
   WorkspaceBranches,
   WorkspaceCreateRequest,
@@ -223,67 +225,241 @@ export async function workspaceCreationSettings(
   };
 }
 const exec = promisify(execFile);
-async function git(cwd: string, args: string[]): Promise<string> {
+async function git(
+  cwd: string,
+  args: string[],
+  timeout?: number,
+): Promise<string> {
   return (
     await exec("git", ["-C", cwd, ...args], {
       env: createGitEnvironment({ LC_ALL: "C", GIT_TERMINAL_PROMPT: "0" }),
+      timeout,
       maxBuffer: 4 * 1024 * 1024,
     })
   ).stdout;
 }
-export async function workspaceBranches(
-  projectPath: string,
-): Promise<WorkspaceBranches> {
-  project(projectPath);
-  await git(projectPath, ["fetch", "--all", "--prune"]);
-  const refs = await git(projectPath, [
-    "for-each-ref",
-    "--format=%(refname)",
-    "refs/heads",
-    "refs/remotes",
-  ]);
-  const local: string[] = [],
-    remote: string[] = [];
-  for (const ref of refs.trim().split("\n")) {
-    if (ref.startsWith("refs/heads/")) local.push(ref.slice(11));
-    else if (ref.startsWith("refs/remotes/") && !ref.endsWith("/HEAD"))
-      remote.push(ref.slice(13));
+const remoteTimeout = 8_000;
+const localRef = "refs/heads/";
+const remoteRef = "refs/remotes/";
+
+async function listPullRequests(
+  cwd: string,
+): Promise<WorkspaceBranches["pullRequests"]> {
+  const repo = await resolveGithubRepo(cwd);
+  if (!repo) return [];
+  try {
+    const { stdout } = await exec(
+      "gh",
+      [
+        "api",
+        "--hostname",
+        "github.com",
+        "--paginate",
+        `repos/${repo}/pulls?state=open&per_page=100`,
+        "--jq",
+        ".[] | {number,title,isDraft:.draft}",
+      ],
+      {
+        cwd,
+        timeout: remoteTimeout,
+        maxBuffer: 4 * 1024 * 1024,
+        env: createGitEnvironment({ GH_PROMPT_DISABLED: "1" }),
+      },
+    );
+    return stdout
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const entry: unknown = JSON.parse(line);
+        if (
+          !isRecord(entry) ||
+          typeof entry.number !== "number" ||
+          !Number.isSafeInteger(entry.number) ||
+          entry.number <= 0 ||
+          typeof entry.title !== "string" ||
+          typeof entry.isDraft !== "boolean"
+        )
+          throw new Error("Invalid pull request data");
+        return {
+          number: entry.number,
+          title: entry.title,
+          isDraft: entry.isDraft,
+        };
+      });
+  } catch {
+    return null;
   }
-  let defaultRef = "";
-  const remotes = (await git(projectPath, ["remote"]))
+}
+
+export async function workspaceBranches(
+  cwd: string,
+): Promise<WorkspaceBranches> {
+  project(cwd);
+  const pullRequests = listPullRequests(cwd);
+  const remotes = (await git(cwd, ["remote"]))
     .trim()
     .split("\n")
     .filter(Boolean);
-  remotes.sort((a, b) =>
-    a === "origin" ? -1 : b === "origin" ? 1 : a.localeCompare(b),
-  );
-  for (const remoteName of remotes) {
-    const advertised = await git(projectPath, [
-      "ls-remote",
-      "--symref",
-      remoteName,
-      "HEAD",
-    ]);
-    const branch = /^ref: refs\/heads\/(.+)\s+HEAD$/m.exec(advertised)?.[1];
-    if (branch) {
-      defaultRef = local.includes(branch) ? branch : `${remoteName}/${branch}`;
-      break;
-    }
-  }
-  if (!defaultRef)
-    defaultRef = local.includes("main")
-      ? "main"
-      : local.includes("master")
-        ? "master"
+  const defaults = await Promise.all(
+    remotes.map(async (name) => {
+      const prefix = `${remoteRef}${name}/`;
+      const [fetched, advertised] = await Promise.all([
+        git(cwd, ["fetch", "--prune", "--", name], remoteTimeout).then(
+          () => true,
+          () => false,
+        ),
+        git(
+          cwd,
+          ["ls-remote", "--symref", "--", name, "HEAD"],
+          remoteTimeout,
+        ).catch(() => ""),
+      ]);
+      const branch = /^ref: refs\/heads\/(.+)\tHEAD$/m.exec(advertised)?.[1];
+      const cached = branch
+        ? ""
         : (
-            await git(projectPath, [
-              "symbolic-ref",
-              "--quiet",
-              "--short",
-              "HEAD",
-            ])
+            await git(cwd, ["symbolic-ref", "--quiet", `${prefix}HEAD`]).catch(
+              () => "",
+            )
           ).trim();
-  return { local, remote, defaultRef };
+      return {
+        name,
+        fetched,
+        ref: branch ? `${prefix}${branch}` : cached,
+        branch:
+          branch ||
+          (cached.startsWith(prefix) ? cached.slice(prefix.length) : ""),
+      };
+    }),
+  );
+
+  const refs = (
+    await git(cwd, [
+      "for-each-ref",
+      "--format=%(refname)%09%(symref)%09%(upstream)%09%(if)%(worktreepath)%(then)1%(end)",
+      "refs/heads",
+      "refs/remotes",
+    ])
+  )
+    .trimEnd()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => line.split("\t"));
+  const local = new Set<string>();
+  const remote = new Set<string>();
+  const checkedOut = new Set<string>();
+  for (const [ref, symref, upstream, inWorktree] of refs) {
+    if (ref.startsWith(localRef)) {
+      local.add(ref);
+      if (inWorktree) {
+        checkedOut.add(ref);
+        if (upstream) checkedOut.add(upstream);
+        for (const name of remotes)
+          checkedOut.add(`${remoteRef}${name}/${ref.slice(localRef.length)}`);
+      }
+    } else if (!symref) remote.add(ref);
+  }
+  const origin = defaults.find((item) => item.name === "origin");
+  let defaultRef = "";
+  for (const item of [origin, ...defaults.filter((item) => item !== origin)]) {
+    if (!item?.branch) continue;
+    const counterpart = `${localRef}${item.branch}`;
+    if (local.has(counterpart)) defaultRef = counterpart;
+    else if (remote.has(item.ref)) defaultRef = item.ref;
+    if (defaultRef) break;
+  }
+  if (!defaultRef) {
+    const [configured, head] = await Promise.all([
+      git(cwd, ["config", "--get", "init.defaultBranch"]).catch(() => ""),
+      git(cwd, ["symbolic-ref", "--quiet", "HEAD"]).catch(() => ""),
+    ]);
+    defaultRef =
+      [
+        `${localRef}${configured.trim()}`,
+        `${localRef}main`,
+        `${localRef}master`,
+        head.trim(),
+      ].find((ref) => local.has(ref)) ?? "";
+  }
+
+  let originAheadRef: string | null = null;
+  if (
+    origin?.fetched &&
+    origin.branch &&
+    remote.has(origin.ref) &&
+    defaultRef === `${localRef}${origin.branch}`
+  ) {
+    const ahead = await git(cwd, [
+      "rev-list",
+      "--count",
+      `${defaultRef}..${origin.ref}`,
+    ]);
+    if (Number(ahead) > 0) originAheadRef = origin.ref;
+  }
+  return {
+    local: Array.from(local, (ref) => ref.slice(localRef.length)),
+    remote: Array.from(remote, (ref) => ref.slice(remoteRef.length)),
+    defaultRef,
+    originAheadRef,
+    otherRefs: [...local, ...remote].filter(
+      (ref) =>
+        ref !== defaultRef && ref !== origin?.ref && !checkedOut.has(ref),
+    ),
+    pullRequests: await pullRequests,
+  };
+}
+
+async function resolvePullRequest(cwd: string, ref: string): Promise<string> {
+  const repo = await resolveGithubRepo(cwd);
+  if (!repo)
+    throw new HostOpError(
+      400,
+      "invalid_request",
+      "No GitHub repository is configured for this project",
+    );
+  const remotes = (await git(cwd, ["remote"]))
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+  const urls = await Promise.all(
+    remotes.map((name) =>
+      git(cwd, ["remote", "get-url", "--", name]).catch(() => ""),
+    ),
+  );
+  const remote =
+    remotes[
+      urls.findIndex(
+        (url) =>
+          parseGithubRemoteUrl(url)?.toLowerCase() === repo.toLowerCase(),
+      )
+    ] ?? `https://github.com/${repo}.git`;
+  const tempRef = `refs/keylime/pull/${randomUUID()}`;
+  try {
+    await git(
+      cwd,
+      [
+        "fetch",
+        "--no-tags",
+        "--no-write-fetch-head",
+        "--refmap=",
+        "--",
+        remote,
+        `${ref}:${tempRef}`,
+      ],
+      remoteTimeout,
+    );
+    return (
+      await git(cwd, ["rev-parse", "--verify", `${tempRef}^{commit}`])
+    ).trim();
+  } catch {
+    throw new HostOpError(
+      409,
+      "pull_request_unavailable",
+      "Couldn't fetch the pull request on this host. Check that it's still available and that the host has Git access.",
+    );
+  } finally {
+    await git(cwd, ["update-ref", "-d", tempRef]);
+  }
 }
 const active = new Map<string, WorkspaceCreationJob>();
 const running = new Map<string, Promise<void>>();
@@ -539,6 +715,14 @@ export async function createWorkspace(
       "Invalid workspace creation request",
     );
   await git(input.projectPath, ["check-ref-format", "--branch", input.branch]);
+  if (
+    input.mode === "new" &&
+    /^refs\/pull\/[1-9]\d*\/head$/.test(input.baseRef)
+  )
+    input = {
+      ...input,
+      baseRef: await resolvePullRequest(input.projectPath, input.baseRef),
+    };
   const directoryName = input.branch.replace(/[^a-zA-Z0-9._-]/g, "-");
   const requested = path.join(`${input.projectPath}-worktrees`, directoryName);
   if (fs.existsSync(requested))

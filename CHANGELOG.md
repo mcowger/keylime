@@ -7,6 +7,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ## [Unreleased]
 
 ### Added
+- A project's **+** opens a base-branch picker. It preselects the local default, shows `origin`'s default only when ahead, and groups open and draft GitHub PRs separately from branches without a local worktree.
 - The OMP integration importer can select the latest published build with `--latest`.
 - The bundled runner uses OMP integration build 18.22.0.
 - Open **More…** in the composer model picker to refresh available models without restarting a session.
@@ -121,6 +122,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Star models in the composer picker to keep them at the top. The **More…** section is collapsed by default, and favorites are saved in the browser
 - Open **More…** in the composer model picker to refresh available models without restarting a session
 - Star a model to move it from **More…** to **Favorites**. Each model appears once, and favorites are saved in the browser
+- A project's **+** opens a base-branch picker. It preselects the local default, shows `origin`'s default only when ahead, and groups open and draft GitHub PRs separately from branches without a local worktree
 
 ### Changed
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.

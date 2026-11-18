@@ -28,6 +28,9 @@ export function WorktreesPanel({
     local: [],
     remote: [],
     defaultRef: "",
+    originAheadRef: null,
+    otherRefs: [],
+    pullRequests: [],
   });
   const [mode, setMode] = useState<WorkspaceBranchMode>("new");
   const [branch, setBranch] = useState("");
@@ -92,7 +95,7 @@ export function WorktreesPanel({
       .then((next: WorkspaceBranches) => {
         if (!current) return;
         setBranches(next);
-        setBaseRef(next.defaultRef);
+        setBaseRef(next.defaultRef.replace(/^refs\/(heads|remotes)\//, ""));
       })
       .catch((e) => {
         if (current) setError(String(e));
@@ -400,7 +403,14 @@ export function WorktreesPanel({
                           : "new";
                     setMode(nextMode);
                     setBranch("");
-                    setBaseRef(nextMode === "new" ? branches.defaultRef : "");
+                    setBaseRef(
+                      nextMode === "new"
+                        ? branches.defaultRef.replace(
+                            /^refs\/(heads|remotes)\//,
+                            "",
+                          )
+                        : "",
+                    );
                   }}
                 />
               </Field>

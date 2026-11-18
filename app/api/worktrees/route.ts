@@ -8,6 +8,7 @@ import { invalidateHostSessionList } from "@/lib/hosts/session-index";
 import { parseJsonWithinLimit } from "@/lib/bounded-form-data";
 import { isRecord } from "@/lib/type-guards";
 import { workspacePromptNames } from "@/lib/workspace-prompt";
+import { workspaceBaseRefPattern } from "@/lib/api-contracts/workspace-models";
 import type {
   WorkspaceCreateRequest,
   WorkspaceDeleteRequest,
@@ -19,7 +20,7 @@ import type {
  * @apiUsage List worktrees or inspect branches, creation settings or creation status.
  * @apiInputs action selects branches, settings or status; otherwise cwd lists worktrees. hostId selects the daemon.
  * @apiInvariants projectPath and cwd are host-machine paths; status uses the job id.
- * @apiEffects Returns host snapshots without creating a worktree.
+ * @apiEffects Branch discovery refreshes remote-tracking refs and queries GitHub if configured. No worktree is created.
  * @apiRecovery Poll status or refresh the listing as creation progresses.
  */
 export async function GET(request: Request) {
@@ -57,8 +58,8 @@ export async function GET(request: Request) {
 /**
  * @apiContract workspaceWorktreesPost
  * @apiUsage Prepare, create, configure or delete a registered workspace.
- * @apiInputs Send action, action-specific input and optional hostId; prepare requires projectPath and nonblank prompt.
- * @apiInvariants Prepare requires a registered Git project and default base ref; if naming fails or exceeds 10 seconds it uses a generic name and random branch. Cancellation before creation prevents it from starting.
+ * @apiInputs Send action, action-specific input and optional hostId; prepare requires projectPath, nonblank prompt and the selected baseRef.
+ * @apiInvariants Prepare requires a registered Git project; if naming fails or exceeds 10 seconds it uses a generic name and random branch. Cancellation before creation prevents it from starting.
  * @apiEffects Prepare and create start creation; settings can change configuration; delete removes a registered worktree and invalidates session lists.
  * @apiRecovery After an uncertain result inspect job status and worktree state before retrying; deletion is not assumed rolled back.
  */
@@ -86,12 +87,14 @@ export async function POST(request: Request) {
       );
       if ("response" in resolved) return resolved.response;
       if (body.action === "prepare") {
-        const { projectPath, prompt } = body.input;
+        const { projectPath, prompt, baseRef } = body.input;
         if (
           typeof projectPath !== "string" ||
           !projectPath ||
           typeof prompt !== "string" ||
-          !prompt.trim()
+          !prompt.trim() ||
+          typeof baseRef !== "string" ||
+          !workspaceBaseRefPattern.test(baseRef)
         ) {
           return Response.json(
             { error: "Invalid request", code: "invalid_request" },
@@ -116,18 +119,6 @@ export async function POST(request: Request) {
             {
               error: "Workspace creation requires a Git project",
               code: "workspace_requires_git",
-            },
-            { status: 400 },
-          );
-        }
-        const branches =
-          await resolved.host.workspaceOps.workspaceBranches(projectPath);
-        if (!branches.ok) return opErrorResponse(branches);
-        if (!branches.value.defaultRef) {
-          return Response.json(
-            {
-              error: "No default base ref is available",
-              code: "invalid_request",
             },
             { status: 400 },
           );
@@ -164,7 +155,7 @@ export async function POST(request: Request) {
           projectPath,
           ...names,
           mode: "new",
-          baseRef: branches.value.defaultRef,
+          baseRef,
         });
         return created.ok
           ? Response.json(created.value)

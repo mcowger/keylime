@@ -24,6 +24,7 @@ import {
   WorkspaceCreationSettingsSchema,
   WorkspaceCreationJobSchema,
   WorkspaceCreateRequestSchema,
+  WorkspacePrepareRequestSchema,
   WorkspaceSettingsRequestSchema,
   WorkspaceDeleteRequestSchema,
   WorkspaceDeleteResultSchema,
@@ -555,7 +556,7 @@ export const workspaceHttpOperations: readonly HttpOperation[] = [
           obj({
             hostId: opt(s),
             action: Type.Literal("prepare"),
-            input: obj({ projectPath: s, prompt: s }),
+            input: WorkspacePrepareRequestSchema,
           }),
           obj({
             hostId: opt(s),

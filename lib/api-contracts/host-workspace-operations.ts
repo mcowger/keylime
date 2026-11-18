@@ -150,7 +150,7 @@ Recovery: Read job and checkout state before retrying an uncertain finish.`,
   op(
     "createWorkspace",
     `Usage: Start an asynchronous workspace creation job.
-Inputs: projectPath, branch, mode, baseRef and name select the host checkout and branch.
+Inputs: projectPath, branch, mode, baseRef and name select the host checkout and branch. New branches can use refs/pull/<number>/head for GitHub pull requests.
 Invariants: The job captures its pipeline and progresses through stages; failure can leave partial work.
 Effects: Runs configured commands and creates a worktree and registration.
 Recovery: Poll the job and inspect the checkout before retrying after an uncertain response.`,
@@ -180,10 +180,10 @@ Recovery: Re-read settings after an uncertain update before making another chang
   op(
     "workspaceBranches",
     `Usage: List branch choices for workspace creation.
-Inputs: projectPath is a host project path.
-Invariants: Local and remote refs and defaultRef reflect Git state at inspection time.
-Effects: Reads repository state without creating a branch.
-Recovery: Refresh when refs change before starting creation.`,
+Inputs: projectPath is a registered host project path.
+Invariants: The local default is preferred; origin's default is a second choice only when it has commits missing locally. Other choices exclude checked-out branches. GitHub pull requests include drafts.
+Effects: Refreshes remote-tracking refs and queries GitHub if configured, without creating a branch or checkout.
+Recovery: Reopen the picker to refresh refs; a remote that couldn't be refreshed uses cached refs.`,
     obj({ projectPath: str }),
     M.WorkspaceBranchesSchema,
   ),

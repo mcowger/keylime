@@ -992,7 +992,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Reply to createWorkspace; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Start an asynchronous workspace creation job.\nInputs: projectPath, branch, mode, baseRef and name select the host checkout and branch.\nInvariants: The job captures its pipeline and progresses through stages; failure can leave partial work.\nEffects: Runs configured commands and creates a worktree and registration.\nRecovery: Poll the job and inspect the checkout before retrying after an uncertain response.",
+        "description": "Reply to createWorkspace; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Start an asynchronous workspace creation job.\nInputs: projectPath, branch, mode, baseRef and name select the host checkout and branch. New branches can use refs/pull/<number>/head for GitHub pull requests.\nInvariants: The job captures its pipeline and progresses through stages; failure can leave partial work.\nEffects: Runs configured commands and creates a worktree and registration.\nRecovery: Poll the job and inspect the checkout before retrying after an uncertain response.",
         "name": "HostReply_createWorkspace",
         "payload": {
           "$ref": "#/components/schemas/HostReply_createWorkspace"
@@ -1712,7 +1712,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Reply to workspaceBranches; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: List branch choices for workspace creation.\nInputs: projectPath is a host project path.\nInvariants: Local and remote refs and defaultRef reflect Git state at inspection time.\nEffects: Reads repository state without creating a branch.\nRecovery: Refresh when refs change before starting creation.",
+        "description": "Reply to workspaceBranches; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: List branch choices for workspace creation.\nInputs: projectPath is a registered host project path.\nInvariants: The local default is preferred; origin's default is a second choice only when it has commits missing locally. Other choices exclude checked-out branches. GitHub pull requests include drafts.\nEffects: Refreshes remote-tracking refs and queries GitHub if configured, without creating a branch or checkout.\nRecovery: Reopen the picker to refresh refs; a remote that couldn't be refreshed uses cached refs.",
         "name": "HostReply_workspaceBranches",
         "payload": {
           "$ref": "#/components/schemas/HostReply_workspaceBranches"
@@ -1904,7 +1904,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Usage: Start an asynchronous workspace creation job.\nInputs: projectPath, branch, mode, baseRef and name select the host checkout and branch.\nInvariants: The job captures its pipeline and progresses through stages; failure can leave partial work.\nEffects: Runs configured commands and creates a worktree and registration.\nRecovery: Poll the job and inspect the checkout before retrying after an uncertain response.",
+        "description": "Usage: Start an asynchronous workspace creation job.\nInputs: projectPath, branch, mode, baseRef and name select the host checkout and branch. New branches can use refs/pull/<number>/head for GitHub pull requests.\nInvariants: The job captures its pipeline and progresses through stages; failure can leave partial work.\nEffects: Runs configured commands and creates a worktree and registration.\nRecovery: Poll the job and inspect the checkout before retrying after an uncertain response.",
         "name": "HostRequest_createWorkspace",
         "payload": {
           "$ref": "#/components/schemas/HostRequest_createWorkspace"
@@ -2624,7 +2624,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Usage: List branch choices for workspace creation.\nInputs: projectPath is a host project path.\nInvariants: Local and remote refs and defaultRef reflect Git state at inspection time.\nEffects: Reads repository state without creating a branch.\nRecovery: Refresh when refs change before starting creation.",
+        "description": "Usage: List branch choices for workspace creation.\nInputs: projectPath is a registered host project path.\nInvariants: The local default is preferred; origin's default is a second choice only when it has commits missing locally. Other choices exclude checked-out branches. GitHub pull requests include drafts.\nEffects: Refreshes remote-tracking refs and queries GitHub if configured, without creating a branch or checkout.\nRecovery: Reopen the picker to refresh refs; a remote that couldn't be refreshed uses cached refs.",
         "name": "HostRequest_workspaceBranches",
         "payload": {
           "$ref": "#/components/schemas/HostRequest_workspaceBranches"
@@ -45657,7 +45657,7 @@
             "type": "object"
           }
         ],
-        "description": "Reply to createWorkspace; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Start an asynchronous workspace creation job.\nInputs: projectPath, branch, mode, baseRef and name select the host checkout and branch.\nInvariants: The job captures its pipeline and progresses through stages; failure can leave partial work.\nEffects: Runs configured commands and creates a worktree and registration.\nRecovery: Poll the job and inspect the checkout before retrying after an uncertain response.",
+        "description": "Reply to createWorkspace; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Start an asynchronous workspace creation job.\nInputs: projectPath, branch, mode, baseRef and name select the host checkout and branch. New branches can use refs/pull/<number>/head for GitHub pull requests.\nInvariants: The job captures its pipeline and progresses through stages; failure can leave partial work.\nEffects: Runs configured commands and creates a worktree and registration.\nRecovery: Poll the job and inspect the checkout before retrying after an uncertain response.",
         "title": "HostReply_createWorkspace"
       },
       "HostReply_defaultCwd": {
@@ -73840,6 +73840,7 @@
                         "description": "Point-in-time local and remote branch choices and default base ref for a host project.",
                         "properties": {
                           "defaultRef": {
+                            "description": "Full Git ref for the default base, or an empty string if no default is available.",
                             "type": "string"
                           },
                           "local": {
@@ -73848,6 +73849,51 @@
                             },
                             "type": "array"
                           },
+                          "originAheadRef": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Full origin default ref if it contains commits missing from its local counterpart, otherwise null."
+                          },
+                          "otherRefs": {
+                            "description": "Full local and remote-tracking refs not checked out in a worktree, excluding the primary choices. Local refs appear first.",
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "pullRequests": {
+                            "anyOf": [
+                              {
+                                "items": {
+                                  "properties": {
+                                    "isDraft": {
+                                      "type": "boolean"
+                                    },
+                                    "number": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["number", "title", "isDraft"],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Open GitHub pull requests, including drafts. Null if GitHub is configured but the host couldn't load the list."
+                          },
                           "remote": {
                             "items": {
                               "type": "string"
@@ -73855,7 +73901,14 @@
                             "type": "array"
                           }
                         },
-                        "required": ["local", "remote", "defaultRef"],
+                        "required": [
+                          "local",
+                          "remote",
+                          "defaultRef",
+                          "originAheadRef",
+                          "otherRefs",
+                          "pullRequests"
+                        ],
                         "type": "object"
                       }
                     },
@@ -73940,6 +73993,7 @@
                       "description": "Point-in-time local and remote branch choices and default base ref for a host project.",
                       "properties": {
                         "defaultRef": {
+                          "description": "Full Git ref for the default base, or an empty string if no default is available.",
                           "type": "string"
                         },
                         "local": {
@@ -73948,6 +74002,51 @@
                           },
                           "type": "array"
                         },
+                        "originAheadRef": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Full origin default ref if it contains commits missing from its local counterpart, otherwise null."
+                        },
+                        "otherRefs": {
+                          "description": "Full local and remote-tracking refs not checked out in a worktree, excluding the primary choices. Local refs appear first.",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "pullRequests": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "properties": {
+                                  "isDraft": {
+                                    "type": "boolean"
+                                  },
+                                  "number": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "title": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["number", "title", "isDraft"],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Open GitHub pull requests, including drafts. Null if GitHub is configured but the host couldn't load the list."
+                        },
                         "remote": {
                           "items": {
                             "type": "string"
@@ -73955,7 +74054,14 @@
                           "type": "array"
                         }
                       },
-                      "required": ["local", "remote", "defaultRef"],
+                      "required": [
+                        "local",
+                        "remote",
+                        "defaultRef",
+                        "originAheadRef",
+                        "otherRefs",
+                        "pullRequests"
+                      ],
                       "type": "object"
                     }
                   },
@@ -74022,7 +74128,7 @@
             "type": "object"
           }
         ],
-        "description": "Reply to workspaceBranches; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: List branch choices for workspace creation.\nInputs: projectPath is a host project path.\nInvariants: Local and remote refs and defaultRef reflect Git state at inspection time.\nEffects: Reads repository state without creating a branch.\nRecovery: Refresh when refs change before starting creation.",
+        "description": "Reply to workspaceBranches; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: List branch choices for workspace creation.\nInputs: projectPath is a registered host project path.\nInvariants: The local default is preferred; origin's default is a second choice only when it has commits missing locally. Other choices exclude checked-out branches. GitHub pull requests include drafts.\nEffects: Refreshes remote-tracking refs and queries GitHub if configured, without creating a branch or checkout.\nRecovery: Reopen the picker to refresh refs; a remote that couldn't be refreshed uses cached refs.",
         "title": "HostReply_workspaceBranches"
       },
       "HostReply_workspaceCreationSettings": {
@@ -75925,7 +76031,7 @@
         "type": "object"
       },
       "HostRequest_createWorkspace": {
-        "description": "Usage: Start an asynchronous workspace creation job.\nInputs: projectPath, branch, mode, baseRef and name select the host checkout and branch.\nInvariants: The job captures its pipeline and progresses through stages; failure can leave partial work.\nEffects: Runs configured commands and creates a worktree and registration.\nRecovery: Poll the job and inspect the checkout before retrying after an uncertain response.",
+        "description": "Usage: Start an asynchronous workspace creation job.\nInputs: projectPath, branch, mode, baseRef and name select the host checkout and branch. New branches can use refs/pull/<number>/head for GitHub pull requests.\nInvariants: The job captures its pipeline and progresses through stages; failure can leave partial work.\nEffects: Runs configured commands and creates a worktree and registration.\nRecovery: Poll the job and inspect the checkout before retrying after an uncertain response.",
         "properties": {
           "args": {
             "properties": {
@@ -79248,7 +79354,7 @@
         "type": "object"
       },
       "HostRequest_workspaceBranches": {
-        "description": "Usage: List branch choices for workspace creation.\nInputs: projectPath is a host project path.\nInvariants: Local and remote refs and defaultRef reflect Git state at inspection time.\nEffects: Reads repository state without creating a branch.\nRecovery: Refresh when refs change before starting creation.",
+        "description": "Usage: List branch choices for workspace creation.\nInputs: projectPath is a registered host project path.\nInvariants: The local default is preferred; origin's default is a second choice only when it has commits missing locally. Other choices exclude checked-out branches. GitHub pull requests include drafts.\nEffects: Refreshes remote-tracking refs and queries GitHub if configured, without creating a branch or checkout.\nRecovery: Reopen the picker to refresh refs; a remote that couldn't be refreshed uses cached refs.",
         "properties": {
           "args": {
             "properties": {
@@ -79471,9 +79577,9 @@
   "defaultContentType": "application/json",
   "id": "urn:keylime:host-link",
   "info": {
-    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 12, minimum 12; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 76 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 13, minimum 13; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 76 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
     "title": "Host daemon link",
-    "version": "12"
+    "version": "13"
   },
   "operations": {
     "operation_addProject": {
@@ -79780,7 +79886,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: Start an asynchronous workspace creation job.\nInputs: projectPath, branch, mode, baseRef and name select the host checkout and branch.\nInvariants: The job captures its pipeline and progresses through stages; failure can leave partial work.\nEffects: Runs configured commands and creates a worktree and registration.\nRecovery: Poll the job and inspect the checkout before retrying after an uncertain response.",
+      "description": "Usage: Start an asynchronous workspace creation job.\nInputs: projectPath, branch, mode, baseRef and name select the host checkout and branch. New branches can use refs/pull/<number>/head for GitHub pull requests.\nInvariants: The job captures its pipeline and progresses through stages; failure can leave partial work.\nEffects: Runs configured commands and creates a worktree and registration.\nRecovery: Poll the job and inspect the checkout before retrying after an uncertain response.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/HostRequest_createWorkspace"
@@ -81160,7 +81266,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: List branch choices for workspace creation.\nInputs: projectPath is a host project path.\nInvariants: Local and remote refs and defaultRef reflect Git state at inspection time.\nEffects: Reads repository state without creating a branch.\nRecovery: Refresh when refs change before starting creation.",
+      "description": "Usage: List branch choices for workspace creation.\nInputs: projectPath is a registered host project path.\nInvariants: The local default is preferred; origin's default is a second choice only when it has commits missing locally. Other choices exclude checked-out branches. GitHub pull requests include drafts.\nEffects: Refreshes remote-tracking refs and queries GitHub if configured, without creating a branch or checkout.\nRecovery: Reopen the picker to refresh refs; a remote that couldn't be refreshed uses cached refs.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/HostRequest_workspaceBranches"

@@ -147,6 +147,7 @@ export async function workspaceHarness(): Promise<WorkspaceHarness> {
           HOME: home,
           PI_CONFIG_DIR: join(home, ".omp"),
           PI_CODING_AGENT_DIR: agentDir,
+          KEYLIME_HOST_SOCKET: join(root, `host-${children.length}.sock`),
           KEYLIME_OMP_BIN: join(home, "no-omp"),
         },
         stdio: ["ignore", "pipe", "pipe"],

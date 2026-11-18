@@ -7,7 +7,6 @@ const workspaceOps = {
     ok: true,
     value: { projects: [{ path: "/project", kind: "git" }] },
   }),
-  workspaceBranches: async () => ({ ok: true, value: { defaultRef: "main" } }),
   createWorkspace: async (input: unknown) => {
     created.push(input);
     return { ok: true, value: { id: "job" } };
@@ -27,14 +26,14 @@ mock.module("@/lib/workspace-prompt", () => ({
 // The route must load after its host and naming dependencies are mocked.
 const { POST } = await import("./route");
 
-function prepare(signal?: AbortSignal) {
+function prepare(signal?: AbortSignal, baseRef = "refs/heads/main") {
   return POST(
     new Request("http://localhost/api/worktrees", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         action: "prepare",
-        input: { projectPath: "/project", prompt: "Fix sidebar" },
+        input: { projectPath: "/project", prompt: "Fix sidebar", baseRef },
       }),
       signal,
     }),
@@ -47,7 +46,9 @@ test("a naming failure creates a workspace with a unique safe branch", async () 
     throw new Error("model unavailable");
   };
   expect((await prepare()).status).toBe(200);
-  expect((await prepare()).status).toBe(200);
+  expect((await prepare(undefined, "refs/remotes/origin/main")).status).toBe(
+    200,
+  );
   const [first, second] = created as Array<{
     name: string;
     branch: string;
@@ -58,17 +59,20 @@ test("a naming failure creates a workspace with a unique safe branch", async () 
   expect(first).toMatchObject({
     name: "Workspace",
     projectPath: "/project",
-    baseRef: "main",
+    baseRef: "refs/heads/main",
     mode: "new",
   });
   expect(first.branch).toMatch(/^workspace-[0-9a-f]{8}$/);
   expect(second.branch).not.toBe(first.branch);
+  expect(second.baseRef).toBe("refs/remotes/origin/main");
 });
 
 test("a hung naming request times out and creates a fallback workspace", async () => {
   created.length = 0;
   const deadline = new AbortController();
-  const timeout = spyOn(AbortSignal, "timeout").mockReturnValue(deadline.signal);
+  const timeout = spyOn(AbortSignal, "timeout").mockReturnValue(
+    deadline.signal,
+  );
   try {
     const { promise, resolve } = Promise.withResolvers<{
       name: string;

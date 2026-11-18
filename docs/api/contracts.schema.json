@@ -45361,6 +45361,7 @@
               "description": "Point-in-time local and remote branch choices and default base ref for a host project.",
               "properties": {
                 "defaultRef": {
+                  "description": "Full Git ref for the default base, or an empty string if no default is available.",
                   "type": "string"
                 },
                 "local": {
@@ -45369,6 +45370,51 @@
                   },
                   "type": "array"
                 },
+                "originAheadRef": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Full origin default ref if it contains commits missing from its local counterpart, otherwise null."
+                },
+                "otherRefs": {
+                  "description": "Full local and remote-tracking refs not checked out in a worktree, excluding the primary choices. Local refs appear first.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "pullRequests": {
+                  "anyOf": [
+                    {
+                      "items": {
+                        "properties": {
+                          "isDraft": {
+                            "type": "boolean"
+                          },
+                          "number": {
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["number", "title", "isDraft"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Open GitHub pull requests, including drafts. Null if GitHub is configured but the host couldn't load the list."
+                },
                 "remote": {
                   "items": {
                     "type": "string"
@@ -45376,7 +45422,14 @@
                   "type": "array"
                 }
               },
-              "required": ["local", "remote", "defaultRef"],
+              "required": [
+                "local",
+                "remote",
+                "defaultRef",
+                "originAheadRef",
+                "otherRefs",
+                "pullRequests"
+              ],
               "type": "object"
             }
           },
@@ -191584,6 +191637,7 @@
       "description": "Point-in-time local and remote branch choices and default base ref for a host project.",
       "properties": {
         "defaultRef": {
+          "description": "Full Git ref for the default base, or an empty string if no default is available.",
           "type": "string"
         },
         "local": {
@@ -191592,6 +191646,51 @@
           },
           "type": "array"
         },
+        "originAheadRef": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Full origin default ref if it contains commits missing from its local counterpart, otherwise null."
+        },
+        "otherRefs": {
+          "description": "Full local and remote-tracking refs not checked out in a worktree, excluding the primary choices. Local refs appear first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pullRequests": {
+          "anyOf": [
+            {
+              "items": {
+                "properties": {
+                  "isDraft": {
+                    "type": "boolean"
+                  },
+                  "number": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": ["number", "title", "isDraft"],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Open GitHub pull requests, including drafts. Null if GitHub is configured but the host couldn't load the list."
+        },
         "remote": {
           "items": {
             "type": "string"
@@ -191599,7 +191698,14 @@
           "type": "array"
         }
       },
-      "required": ["local", "remote", "defaultRef"],
+      "required": [
+        "local",
+        "remote",
+        "defaultRef",
+        "originAheadRef",
+        "otherRefs",
+        "pullRequests"
+      ],
       "type": "object"
     },
     "workspace_WorkspaceBranchMode": {
@@ -192475,6 +192581,26 @@
         }
       },
       "required": ["pre", "create", "postBlocking", "postNonBlocking"],
+      "type": "object"
+    },
+    "workspace_WorkspacePrepareRequest": {
+      "description": "Start a new chat workspace from a selected Git source on the owning host.",
+      "properties": {
+        "baseRef": {
+          "description": "Selected full local or remote-tracking ref, or refs/pull/<number>/head for a GitHub pull request.",
+          "pattern": "^(?:refs\\/(?:heads|remotes)\\/[^\\s]+|refs\\/pull\\/[1-9]\\d*\\/head)$",
+          "type": "string"
+        },
+        "projectPath": {
+          "description": "Registered project path on the owning host.",
+          "type": "string"
+        },
+        "prompt": {
+          "description": "First chat prompt, used to name the workspace and its branch.",
+          "type": "string"
+        }
+      },
+      "required": ["projectPath", "prompt", "baseRef"],
       "type": "object"
     },
     "workspace_WorkspaceRead": {

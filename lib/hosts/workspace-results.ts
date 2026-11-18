@@ -215,7 +215,20 @@ export function validWorkspaceResult(
         value.local.every(text) &&
         Array.isArray(value.remote) &&
         value.remote.every(text) &&
-        text(value.defaultRef)
+        text(value.defaultRef) &&
+        (value.originAheadRef === null || text(value.originAheadRef)) &&
+        Array.isArray(value.otherRefs) &&
+        value.otherRefs.every(text) &&
+        (value.pullRequests === null ||
+          (Array.isArray(value.pullRequests) &&
+            value.pullRequests.every(
+              (pr) =>
+                isRecord(pr) &&
+                count(pr.number) &&
+                pr.number > 0 &&
+                text(pr.title) &&
+                typeof pr.isDraft === "boolean",
+            )))
       );
     case "workspaceCreationSettings": {
       const pipeline = (input: unknown) =>
