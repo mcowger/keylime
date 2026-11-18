@@ -30,7 +30,6 @@ import {
   formatCost,
   formatDuration,
   formatTokens,
-  shortModel,
 } from "@/lib/subagent-format";
 import {
   formatCompactNumber,
@@ -153,7 +152,12 @@ export function SubagentActivityLine({ subagent }: { subagent: SubagentInfo }) {
     progress.contextWindow > 0
       ? formatPercent((progress.contextTokens / progress.contextWindow) * 100)
       : null;
-  const model = shortModel(progress?.resolvedModel);
+  // Strip OMP's @upstream selector before looking for the model's last slash.
+  const resolvedModel = progress?.resolvedModel?.replace(
+    /(?<=[^/])@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*(?=:|$)/i,
+    "",
+  );
+  const model = resolvedModel?.slice(resolvedModel.lastIndexOf("/") + 1);
   const duration =
     subagent.source === "history" ? formatDuration(progress?.durationMs) : null;
   const meta: ReactNode[] = [

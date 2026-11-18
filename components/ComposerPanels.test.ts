@@ -72,7 +72,7 @@ test("live chips show current tool, telemetry, and async marker", () => {
             cost: 0.0041,
             contextTokens: 8000,
             contextWindow: 32000,
-            resolvedModel: "provider/gpt-x:high",
+            resolvedModel: "openrouter/z-ai/glm-4.7@google-ai-studio/priority:high",
           },
         },
       ],
@@ -86,7 +86,8 @@ test("live chips show current tool, telemetry, and async marker", () => {
   assert.match(html, /data-subagent-metric="8k\/32k ctx"/);
   assert.match(html, />25\.0%</);
   assert.match(html, /Map the surface[\s\S]*data-subagent-metric="scout"/);
-  assert.match(html, /data-subagent-metric="gpt-x"/);
+  assert.match(html, /data-subagent-metric="glm-4\.7:high"/);
+  assert.match(html, />glm-4\.7:high</);
   assert.doesNotMatch(html, />2\.2k tok</);
   assert.doesNotMatch(html, />8k\/32k ctx</);
   assert.match(html, /⤴/);
