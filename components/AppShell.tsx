@@ -3914,6 +3914,7 @@ export function AppShell({ appName }: { appName: string }) {
                             )?.projectName ?? projectLabel(pendingWorkspace)}
                             {sourceTabId && (
                               <WorkspaceSourcePicker
+                                key={sourceTabId}
                                 branches={workspaceSources?.branches}
                                 error={workspaceSources?.error}
                                 selection={workspaceDraft?.workspaceSource}
