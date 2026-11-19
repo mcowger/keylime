@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, Layers, Plus, Settings2 } from "lucide-react";
+import { ChevronRight, Plus, Settings2 } from "lucide-react";
 import type { EffortRecord, SystemRecord } from "@/lib/api-contracts/systems";
 import { comparableProjectPath } from "@/lib/comparable-path";
 import { effortStatusLabels } from "./EffortDetails";
+import { SidebarIconButton, SidebarSectionHeader } from "./SessionSidebar-chrome";
 import type { SystemsHost, SystemsAction } from "./SystemsHost";
 import {
   EffortCreator,
@@ -269,6 +270,8 @@ export function SystemsSidebar({
     .filter((system) => system.archived)
     .map(renderSystem)
     .filter(Boolean);
+  const searching = Boolean(query);
+  const sectionExpanded = searching || !hidden;
   return (
     <section
       aria-label="Systems"
@@ -276,47 +279,34 @@ export function SystemsSidebar({
         ...systemsStack,
         gap: 5,
         borderTop: "1px solid var(--border)",
-        padding: "6px 0 4px",
+        paddingBottom: 4,
         marginTop: 5,
       }}
     >
-      <div style={systemsRow}>
-        <SystemsButton
-          aria-expanded={!hidden}
-          onClick={() => setHidden(!hidden)}
-          style={{
-            flex: 1,
-            textAlign: "left",
-            fontWeight: 600,
-            border: 0,
-            background: "transparent",
-          }}
-        >
-          <Layers
-            size={13}
-            style={{ verticalAlign: "middle", marginInlineEnd: 5 }}
-            aria-hidden="true"
-          />{" "}
-          Systems
-        </SystemsButton>
-        <SystemsButton
+      <SidebarSectionHeader
+        label="Systems"
+        disclosure={{
+          expanded: sectionExpanded,
+          onToggle: searching ? undefined : () => setHidden((value) => !value),
+        }}
+      >
+        <SidebarIconButton
           disabled={disabled}
-          aria-label="Configure Effort worktrees root"
+          label="Configure Effort worktrees root"
           title="Effort worktrees root"
           onClick={() => setEditor({ kind: "root" })}
         >
-          <Settings2 size={14} aria-hidden="true" />
-        </SystemsButton>
-        <SystemsButton
+          <Settings2 aria-hidden="true" />
+        </SidebarIconButton>
+        <SidebarIconButton
           disabled={disabled}
-          aria-label="New System"
-          title="New System"
+          label="New System"
           onClick={() => setEditor({ kind: "new" })}
         >
-          <Plus size={14} aria-hidden="true" />
-        </SystemsButton>
-      </div>
-      {!hidden && (
+          <Plus aria-hidden="true" />
+        </SidebarIconButton>
+      </SidebarSectionHeader>
+      {sectionExpanded && (
         <>
           <SystemsError message={unavailable ?? state?.error} />
           {!data && !unavailable && !state?.error && (

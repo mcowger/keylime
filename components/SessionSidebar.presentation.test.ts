@@ -114,6 +114,78 @@ test("registered hierarchy workspaces can be selected without a single-host head
   }
 });
 
+test("Repos and Systems collapse independently", async () => {
+  const restore = setup(() => Response.json(snapshot));
+  try {
+    renderSidebar();
+    await screen.findByRole("button", { name: "Workspace" });
+    const repos = screen.getByRole("button", { name: "Repos" });
+    const systems = screen.getByRole("button", { name: "Systems" });
+
+    fireEvent.click(repos);
+    assert.equal(screen.queryByRole("button", { name: "Workspace" }), null);
+    assert.ok(screen.getByText("Loading Systems…"));
+
+    fireEvent.click(repos);
+    fireEvent.click(systems);
+    assert.equal(screen.queryByText("Loading Systems…"), null);
+    assert.ok(screen.getByRole("button", { name: "Workspace" }));
+  } finally {
+    restore();
+  }
+});
+
+test("sidebar search reveals collapsed Repos and Systems until cleared", async () => {
+  const restore = setup(() => Response.json(snapshot));
+  try {
+    renderSidebar({
+      systemsHosts: {
+        ...noSystemsSidebar.systemsHosts,
+        byHost: {
+          local: {
+            data: {
+              root: "/efforts",
+              efforts: [],
+              systems: [{
+                id: "system-1",
+                slug: "workspace-system",
+                name: "Workspace System",
+                repoPaths: ["/workspace"],
+                services: [],
+                instructions: "",
+                archived: false,
+              }],
+            },
+          },
+        },
+      },
+    });
+    await screen.findByRole("button", { name: "Workspace" });
+    const repos = screen.getByRole("button", { name: "Repos" });
+    const systems = screen.getByRole("button", { name: "Systems" });
+    fireEvent.click(repos);
+    fireEvent.click(systems);
+    const search = screen.getByRole("button", { name: "Search sidebar" });
+    fireEvent.click(search);
+    fireEvent.change(screen.getByRole("textbox", { name: "Search sidebar" }), {
+      target: { value: "workspace" },
+    });
+    await screen.findByRole("button", { name: "Workspace" });
+    assert.ok(screen.getByRole("button", { name: "Workspace System" }));
+    fireEvent.click(repos);
+    fireEvent.click(systems);
+    fireEvent.click(search);
+    await waitFor(() => {
+      assert.equal(repos.getAttribute("aria-expanded"), "false");
+      assert.equal(systems.getAttribute("aria-expanded"), "false");
+      assert.equal(screen.queryByRole("button", { name: "Workspace" }), null);
+      assert.equal(screen.queryByRole("button", { name: "Workspace System" }), null);
+    });
+  } finally {
+    restore();
+  }
+});
+
 test("pending workspace does not select its base workspace", async () => {
   const restore = setup(() => Response.json(snapshot));
   try {

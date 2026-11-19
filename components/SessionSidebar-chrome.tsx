@@ -15,7 +15,7 @@ import { createPortal } from "react-dom";
 import { Popover } from "@base-ui/react/popover";
 import { useI18n } from "@/lib/i18n";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
-import { AlertTriangle, Check } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight } from "lucide-react";
 import KeylimeLogo from "./KeylimeLogo";
 /**
  * Path label that ellipsizes on the LEFT, keeping the (most relevant) trailing
@@ -55,7 +55,7 @@ function SidebarIconButton({
   label,
   title,
   onClick,
-  active = false,
+  active,
   menuExpanded,
   disabled = false,
   children,
@@ -110,6 +110,35 @@ function SidebarIconButton({
     </button>
   );
 }
+
+function SidebarSectionHeader({
+  label,
+  disclosure,
+  children,
+}: {
+  label: string;
+  disclosure: { expanded: boolean; onToggle?: () => void };
+  children?: ReactNode;
+}) {
+  return (
+    <div className="sidebar-section-header">
+      <h2 className="sidebar-section-heading">
+        <button
+          type="button"
+          className="ui-focus-ring"
+          aria-expanded={disclosure.expanded}
+          aria-disabled={!disclosure.onToggle || undefined}
+          onClick={disclosure.onToggle}
+        >
+          {label}
+          <ChevronRight size={12} aria-hidden="true" />
+        </button>
+      </h2>
+      {children}
+    </div>
+  );
+}
+
 const MENU_MARGIN = 5;
 const MENU_VIEWPORT_PAD = 8;
 
@@ -646,6 +675,7 @@ export {
   SIDEBAR_BUTTON_TRANSITION,
   SidebarIconButton,
   SidebarPortalMenu,
+  SidebarSectionHeader,
   UnreadSessionIndicator,
   useScramble,
 };

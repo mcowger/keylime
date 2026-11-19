@@ -189,6 +189,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- Repos and Systems use matching sidebar headings, collapse independently, and share one search control above both sections.
+- Sidebar search reveals matches in collapsed Repos and Systems sections. Clearing the query restores their previous collapse state.
 - Failed commits show their full output in a scrollable area inside the Ship dialog.
 - Tool call rows stay visible without flashing while the transcript catches up, even if the next reply has already started.
 - Unsaved tool rows from a finished run no longer appear under the next prompt.
@@ -318,6 +320,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Unsaved tool rows from a finished run no longer appear under the next prompt
 - Chat shows the text submitted with a skill invocation as a normal message, including in saved sessions; search indexes the submitted prompt instead of expanded skill instructions
 - Failed commits show their full output in a scrollable area inside the Ship dialog
+- Repos and Systems use matching sidebar headings, collapse independently, and share one search control above both sections
+- Sidebar search reveals matches in collapsed Repos and Systems sections. Clearing the query restores their previous collapse state
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

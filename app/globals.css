@@ -2171,6 +2171,79 @@ html[data-touch-targets="accessible"]
   width: 24px;
   height: 24px;
 }
+.sidebar-search-controls {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  gap: 2px;
+  padding: 4px 10px 2px;
+}
+.sidebar-search-toggle {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 6px;
+  padding-inline: 4px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.sidebar-search-toggle:hover,
+.sidebar-search-toggle[aria-expanded="true"] {
+  background: var(--bg-hover);
+  color: var(--accent);
+}
+
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 2px;
+  padding-block: 4px 2px;
+}
+.sidebar-section-header .sidebar-icon-button > svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.9;
+}
+.sidebar-section-heading {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  flex: 1;
+  min-height: 26px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.sidebar-section-heading > button {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  flex: 1;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+.sidebar-section-heading > button[aria-expanded="true"] > svg {
+  transform: rotate(90deg);
+}
+
 .sidebar-project-actions {
   /* Match the session status column after reserving timestamp + menu space;
      grows when the pin toggle sits beside the menu. */

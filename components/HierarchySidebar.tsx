@@ -15,6 +15,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { isLinkUp, type HostStatus } from "@/lib/hosts/host";
+import { useI18n } from "@/lib/i18n";
 import type {
   HierarchyProject,
   HierarchySnapshot,
@@ -32,6 +33,7 @@ import { ConfirmDialog } from "./ui/field";
 import { ProjectSettings } from "./ReposConfig";
 import { toast } from "./ui/toast";
 import type { EffortRecord } from "@/lib/api-contracts/systems";
+import { SidebarIconButton, SidebarSectionHeader } from "./SessionSidebar-chrome";
 import { SystemsSidebar } from "./SystemsSidebar";
 import type { SystemsHosts } from "./SystemsHost";
 
@@ -137,8 +139,10 @@ export function HierarchySidebar({
   collapsedHosts,
   onToggleHost,
 }: Props) {
+  const { t } = useI18n();
   const connectedHosts = hosts.filter((host) => host.status && isLinkUp(host.status));
   const ungroupedHostId = connectedHosts.length === 1 ? connectedHosts[0].id : hosts.length === 1 ? hosts[0].id : null;
+  const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(() => new Set());
   const sidebarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const dismissMenus = (event: PointerEvent) => {
@@ -529,6 +533,8 @@ export function HierarchySidebar({
     );
   const exitedIds = new Set(exitedSessionIds);
   const query = searchQuery.trim().toLowerCase();
+  const searching = Boolean(query);
+  const hostExpanded = (id: string) => searching || id === ungroupedHostId || !collapsedHosts.has(id);
   const button = {
     border: "1px solid var(--border)",
     borderRadius: "var(--radius-control)",
@@ -700,8 +706,9 @@ export function HierarchySidebar({
               <button
                 type="button"
                 className="ui-focus-ring"
-                aria-expanded={!collapsedHosts.has(host.id)}
-                onClick={() => onToggleHost(host.id)}
+                aria-expanded={hostExpanded(host.id)}
+                aria-disabled={searching || undefined}
+                onClick={searching ? undefined : () => onToggleHost(host.id)}
                 style={{
                   flex: 1,
                   minWidth: 0,
@@ -719,19 +726,36 @@ export function HierarchySidebar({
                   cursor: "pointer",
                 }}
               >
-                <ChevronRight size={12} aria-hidden="true" style={{ flexShrink: 0, transform: collapsedHosts.has(host.id) ? undefined : "rotate(90deg)" }} />
+                <ChevronRight size={12} aria-hidden="true" style={{ flexShrink: 0, transform: hostExpanded(host.id) ? "rotate(90deg)" : undefined }} />
                 <Server size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{host.label || "This machine"}</span>
               </button>
-              <button style={{ ...button, padding: "3px 6px" }} type="button" aria-label={`Add repo on ${host.label || "This machine"}`} title="Add repo" onClick={() => onAddProject(host.id)}>
-                <Plus size={14} />
-              </button>
             </div>
           )}
-          {(host.id === ungroupedHostId || !collapsedHosts.has(host.id)) && (
-            <div style={{ color: "var(--text)", padding: "5px 4px", fontWeight: 600 }}>Repos</div>
+          {hostExpanded(host.id) && (
+            <SidebarSectionHeader
+              label={t("projects.heading")}
+              disclosure={{
+                expanded: searching || !collapsedRepos.has(host.id),
+                onToggle: searching ? undefined : () => setCollapsedRepos((current) => {
+                  const next = new Set(current);
+                  if (next.has(host.id)) next.delete(host.id);
+                  else next.add(host.id);
+                  return next;
+                }),
+              }}
+            >
+              <SidebarIconButton
+                label={host.id === ungroupedHostId ? t("projects.add") : t("projects.addOnHost", { host: host.label || "This machine" })}
+                title={t("projects.addTitle")}
+                onClick={() => onAddProject(host.id)}
+              >
+                <Plus aria-hidden="true" />
+              </SidebarIconButton>
+            </SidebarSectionHeader>
           )}
-          {(host.id === ungroupedHostId || !collapsedHosts.has(host.id)) &&
+          {hostExpanded(host.id) &&
+            (searching || !collapsedRepos.has(host.id)) &&
             (snapshots[host.id]?.projects ?? []).map((project) => {
               const projectMatch =
                 !!query &&
@@ -1232,7 +1256,7 @@ export function HierarchySidebar({
                 </div>
               );
             })}
-          {(host.id === ungroupedHostId || !collapsedHosts.has(host.id)) && (
+          {hostExpanded(host.id) && (
             <SystemsSidebar
               host={host.id}
               state={systemsHosts.byHost[host.id]}

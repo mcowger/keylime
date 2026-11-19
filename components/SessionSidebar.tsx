@@ -1775,41 +1775,21 @@ export const SessionSidebar = memo(function SessionSidebar({
         </button>
       </div>
 
-      {/* Workspaces section header: label + search / sort / filter / add */}
-      <div
-        style={{
-          flexShrink: 0,
-          padding: "4px 10px 2px",
-          display: "flex",
-          alignItems: "center",
-          gap: 2,
-        }}
-      >
-        <span
-          style={{
-            flex: 1,
-            color: "var(--text-muted)",
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-          }}
-        >
-          {t("projects.heading")}
-        </span>
-        <SidebarIconButton
-          label={t("sessionSidebar.search")}
+      <div className="sidebar-search-controls">
+        <button
+          type="button"
+          className="sidebar-search-toggle ui-focus-ring"
+          aria-expanded={searchOpen}
           title={t("sessionSidebar.searchTitle")}
-          active={searchOpen}
           onClick={() => {
-            const nextOpen = !searchOpen;
-            setSearchOpen(nextOpen);
-            if (nextOpen) setTimeout(() => searchInputRef.current?.focus(), 0);
-            else setSearchQuery("");
+            if (searchOpen) setSearchQuery("");
+            else setTimeout(() => searchInputRef.current?.focus(), 0);
+            setSearchOpen(!searchOpen);
           }}
         >
           <Search size={15} strokeWidth={1.9} aria-hidden="true" />
-        </SidebarIconButton>
+          {t("sessionSidebar.search")}
+        </button>
         <SidebarIconButton
           label={t("sessionSidebar.filterRunning")}
           title={t("sessionSidebar.filterRunningTitle", {
@@ -1819,16 +1799,6 @@ export const SessionSidebar = memo(function SessionSidebar({
           onClick={() => setRunningOnly((v) => !v)}
         >
           <SlidersHorizontal size={15} strokeWidth={1.9} aria-hidden="true" />
-        </SidebarIconButton>
-        <SidebarIconButton
-          label={t("projects.add")}
-          title={t("projects.addTitle")}
-          onClick={() => {
-            setAddProjectOpen(true, selectedHostId);
-            setAddProjectError(null);
-          }}
-        >
-          <Plus size={15} strokeWidth={1.9} aria-hidden="true" />
         </SidebarIconButton>
       </div>
       {searchOpen && (
