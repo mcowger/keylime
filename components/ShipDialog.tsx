@@ -433,7 +433,21 @@ export function ShipDialog({
         {error && (
           <Alert
             variant="error"
-            description={error}
+            description={
+              <div
+                role="region"
+                aria-label="Ship error details"
+                tabIndex={0}
+                style={{
+                  maxHeight: "min(14rem, 30dvh)",
+                  overflowY: "auto",
+                  overscrollBehaviorY: "contain",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {error}
+              </div>
+            }
             style={{ marginTop: 16 }}
           />
         )}

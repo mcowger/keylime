@@ -129,15 +129,21 @@ test("PR lookup failure warns but leaves all paths available", async () => {
   }
 });
 
-test("ship loads a plan and submits edited commit messages", async () => {
+test("ship shows complete hook output and retries with the edited commit message", async () => {
   const originalFetch = globalThis.fetch;
   const commands: Command[] = [];
+  const hookError = `Pre-commit hook failed\n${"Checking staged changes\n".repeat(100)}Typecheck failed`;
+  let failCommit = true;
   globalThis.fetch = Object.assign(
     async (url: Parameters<typeof fetch>[0], init: RequestInit = {}) => {
       const path = String(url);
       if (path.startsWith("/api/agent/")) {
         const command = JSON.parse(String(init.body)) as Command;
         commands.push(command);
+        if (command.type === "commit_apply" && failCommit) {
+          failCommit = false;
+          return Response.json({ error: hookError }, { status: 500 });
+        }
         return Response.json({
           success: true,
           data:
@@ -197,13 +203,18 @@ test("ship loads a plan and submits edited commit messages", async () => {
     const message = await view.findByLabelText("Commit 1 message");
     fireEvent.change(message, { target: { value: "Edited" } });
     fireEvent.click(view.getByRole("button", { name: "Ship" }));
+    const details = await view.findByRole("region", { name: "Ship error details" });
+    assert.equal(details.textContent, hookError);
+    details.focus();
+    assert.equal(document.activeElement, details);
+    fireEvent.click(view.getByRole("button", { name: "Ship" }));
     await waitFor(() =>
       assert.ok(view.getByRole("button", { name: "Ask agent to resolve" })),
     );
-    assert.equal(
-      commands.find((command) => command.type === "commit_apply")!.plan
-        .commits[0].message,
-      "Edited",
+    assert.deepEqual(
+      commands.filter((command) => command.type === "commit_apply")
+        .map((command) => command.plan.commits[0].message),
+      ["Edited", "Edited"],
     );
   } finally {
     cleanup();

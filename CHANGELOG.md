@@ -187,6 +187,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- Failed commits show their full output in a scrollable area inside the Ship dialog.
 - Tool call rows stay visible without flashing while the transcript catches up, even if the next reply has already started.
 - Unsaved tool rows from a finished run no longer appear under the next prompt.
 - Chat shows the text you submitted with a skill invocation as a normal message, including in saved sessions. Session search finds what you typed, not the expanded skill instructions.
@@ -314,6 +315,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Tool call rows stay visible without flashing while the transcript catches up, even if the next reply has already started
 - Unsaved tool rows from a finished run no longer appear under the next prompt
 - Chat shows the text submitted with a skill invocation as a normal message, including in saved sessions; search indexes the submitted prompt instead of expanded skill instructions
+- Failed commits show their full output in a scrollable area inside the Ship dialog
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
