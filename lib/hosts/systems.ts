@@ -1219,14 +1219,20 @@ function cleanRoot(effort: Effort) {
   if (effort.docsWritten)
     for (const [name, expected] of generatedFiles(effort)) {
       const file = path.join(effort.root, name);
-      const stat = lstat(file);
       const bytes = Buffer.from(expected);
-      if (
-        stat?.isFile() &&
-        stat.size === BigInt(bytes.length) &&
-        fs.readFileSync(file).equals(bytes)
-      )
-        fs.unlinkSync(file);
+      try {
+        const stat = lstat(file);
+        if (
+          !stat?.isFile() ||
+          stat.size !== BigInt(bytes.length) ||
+          !fs.readFileSync(file).equals(bytes)
+        )
+          continue;
+      } catch {
+        // Without a verified match, leave the document in retainedPaths.
+        continue;
+      }
+      fs.unlinkSync(file);
     }
   effort.retainedPaths = fs
     .readdirSync(effort.root)

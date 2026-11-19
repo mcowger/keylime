@@ -6,10 +6,6 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ## [Unreleased]
 
-### Changed
-- The sidebar and Settings call projects repos, including in add, remove, and settings controls.
-- Effort cleanup lists Git-ignored files and directories, like `.env` and local database folders. Removing them requires force confirmation.
-
 ### Added
 - Subagent previews show the model and effort as `model-slug:effort` when effort is reported.
 - **Systems** group repos, service commands, and shared instructions on one host. Create an **Effort** to get a branch and worktree for each repo, a root chat, and one terminal per service. Preview cleanup before removing worktrees; branches and PRs stay put.
@@ -138,6 +134,10 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Subagent previews display the model slug and reported effort, stripping OMP upstream selectors
 
 ### Changed
+- The sidebar and Settings call projects repos, including in add, remove, and settings controls.
+- Effort cleanup lists Git-ignored files and directories, like `.env` and local database folders. Removing them requires force confirmation.
+- Effort cleanup keeps unreadable `AGENTS.md` and `repomap.md` files at the Effort root without failing worktree removal.
+- Dismiss exited Effort service output from the terminal tab or Effort details, even if setup failed. Opening a service terminal from a member worktree keeps it selected when the sidebar updates.
 - Headings, dialogs and notification titles use sans-serif fonts instead of serif fonts.
 - Project settings use tabbed sections and consistent controls on desktop and mobile.
 - Operational notices, task chat and compaction use expandable transcript rows; advisor responses render as conversation text.
@@ -176,6 +176,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Question form buttons use larger tap targets with a minimum width
 - Session reads request a tail page with a history revision and return 409 session_history_changed when the file or active cursor moves
 - `keylime attach` was replaced by the standalone `klc` client; session binding is scoped to each host connection
+- Effort cleanup keeps unreadable `AGENTS.md` and `repomap.md` files at the Effort root without failing worktree removal
+- Dismiss exited Effort service output from the terminal tab or Effort details, even if setup failed. Opening a service terminal from a member worktree keeps it selected when the sidebar updates
 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen

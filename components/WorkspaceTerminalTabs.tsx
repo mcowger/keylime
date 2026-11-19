@@ -69,8 +69,8 @@ export function WorkspaceTerminalTabs({
   const [error, setError] = useState<string | null>(null);
   const changes = useRef(0);
   const [revision, setRevision] = useState(0);
-  const workspace = useRef({ hostId, cwd });
-  workspace.current = { hostId, cwd };
+  const workspace = useRef({ hostId, cwd, activeId });
+  workspace.current = { hostId, cwd, activeId };
   const [busy, setBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -163,10 +163,13 @@ export function WorkspaceTerminalTabs({
   const visible = entries.filter(
     (entry) => entry.hostId === hostId && entry.terminal.cwd === cwd,
   );
-  const managedTerminalIds = new Set(serviceTabs.map(({ terminalId }) => terminalId));
   const tabs = visible.map((entry) => {
     const service = serviceTabs.find(({ terminalId }) => terminalId === entry.terminal.id);
-    return service ? { ...entry, terminal: { ...entry.terminal, title: service.name } } : entry;
+    return {
+      ...entry,
+      service,
+      terminal: service ? { ...entry.terminal, title: service.name } : entry.terminal,
+    };
   });
   const create = async () => {
     if (!cwd || busy) return;
@@ -197,7 +200,8 @@ export function WorkspaceTerminalTabs({
             item.terminal.id !== entry.terminal.id,
         ),
       );
-      if (activeId === entry.terminal.id) onSelect(null);
+      if (workspace.current.hostId === entry.hostId && workspace.current.activeId === entry.terminal.id)
+        onSelect(null);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -247,13 +251,15 @@ export function WorkspaceTerminalTabs({
               >
                 <TerminalIcon size={14} /> {entry.terminal.title}
               </button>
-              {!managedTerminalIds.has(entry.terminal.id) && <button
-                aria-label={`Close ${entry.terminal.title}`}
-                title="Close terminal"
-                onClick={() => void close(entry)}
-              >
-                <X size={14} />
-              </button>}
+              {(!entry.service || entry.service.status === "exited") && (
+                <button
+                  aria-label={entry.service ? `Dismiss ${entry.terminal.title} output` : `Close ${entry.terminal.title}`}
+                  title={entry.service ? "Dismiss service output" : "Close terminal"}
+                  onClick={() => void close(entry)}
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
           ))}
           {browserTabs.map((tab) => (
@@ -408,12 +414,15 @@ export function WorkspaceTerminalTabs({
                       {entry.terminal.title}
                       {activeId === entry.terminal.id ? " · Active" : ""}
                     </button>
-                    {!managedTerminalIds.has(entry.terminal.id) && <button
-                      aria-label={`Close ${entry.terminal.title}`}
-                      onClick={() => void close(entry)}
-                    >
-                      <X size={16} />
-                    </button>}
+                    {(!entry.service || entry.service.status === "exited") && (
+                      <button
+                        aria-label={entry.service ? `Dismiss ${entry.terminal.title} output` : `Close ${entry.terminal.title}`}
+                        title={entry.service ? "Dismiss service output" : "Close terminal"}
+                        onClick={() => void close(entry)}
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
                   </div>
                 ))}
                 {browserTabs.map((tab) => (

@@ -8,6 +8,7 @@ import type {
 } from "@/lib/api-contracts/systems";
 import { comparableProjectPath } from "@/lib/comparable-path";
 import { LOCAL_HOST_ID } from "@/lib/project-ordering";
+import { closeTerminal } from "@/lib/terminal-client";
 import type { SessionInfo } from "@/lib/types";
 import type { SystemsAction } from "./SystemsHost";
 import {
@@ -254,7 +255,9 @@ export function EffortDetails({
   onOpenSession: (session: SessionInfo) => void;
   onOpenTerminal: (id: string) => void;
 }) {
-  const { busy, error, run, setError } = useSystemsAction(action);
+  const { busy: systemsBusy, error, run, setError } = useSystemsAction(action);
+  const [dismissingOutput, setDismissingOutput] = useState(false);
+  const busy = systemsBusy || dismissingOutput;
   const [cleanup, setCleanup] = useState<EffortCleanupPreview>();
   const [rename, setRename] = useState<string>();
   const [retryAcknowledged, setRetryAcknowledged] = useState(false);
@@ -264,6 +267,18 @@ export function EffortDetails({
   );
   const disabled = busy || !!unavailable;
   const effortId = effort.id;
+  const dismissOutput = async (terminalId: string) => {
+    setDismissingOutput(true);
+    setError(undefined);
+    try {
+      await closeTerminal(terminalId, host);
+      await run({ action: "list" });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDismissingOutput(false);
+    }
+  };
   const review = async () => {
     const result = await run({ action: "cleanupPreview", effortId });
     if (result?.cleanup) setCleanup(result.cleanup);
@@ -496,6 +511,17 @@ export function EffortDetails({
                             Open {service.name} terminal
                           </SystemsButton>
                         )}
+                      </div>
+                    )}
+                    {service.status === "exited" && service.terminalId && (
+                      <div style={systemsRow}>
+                        <SystemsButton
+                          disabled={disabled}
+                          aria-label={`Dismiss output for ${service.name}`}
+                          onClick={dismissOutput.bind(null, service.terminalId)}
+                        >
+                          Dismiss output
+                        </SystemsButton>
                       </div>
                     )}
                   </div>

@@ -5,6 +5,7 @@ import React from "react";
 import type { SessionSidebar } from "./SessionSidebar";
 import type { ChatWindow } from "./ChatWindow";
 import type { WorkspaceTerminalTabs } from "./WorkspaceTerminalTabs";
+import type { EffortRecord } from "@/lib/api-contracts/systems";
 import type { EventStreamChannel } from "@/lib/event-stream";
 import type { ShipDialog } from "./ShipDialog";
 import { setDraft, clearDraft } from "@/lib/draft-store";
@@ -18,6 +19,14 @@ const projects = ["/repo", "/repo/worktrees/B", "/other"].map((path) => ({
   name: path,
 }));
 const empty = () => null;
+const effort: EffortRecord = {
+  id: "effort-test", systemId: "system-test", systemName: "Test system",
+  name: "Test effort", slug: "test-effort", status: "ready",
+  root: "/efforts/test", branch: "test-system/test-effort", sessionIds: [],
+  members: [{ repoPath: "/repo", name: "Member", path: "/efforts/test/member", baseRef: "main", baseCommit: "abc", skipsCustomCreate: false, status: "complete" }],
+  services: [{ id: "logs", name: "Build log", command: "echo done", status: "exited", terminalId: "terminal-logs" }],
+};
+let showEffort = false;
 let updateWorkspaceOptions: NonNullable<React.ComponentProps<typeof SessionSidebar>["onWorkspaceOptionsChange"]>;
 mock.module("./SessionSidebar", () => ({
   SessionSidebar: (props: React.ComponentProps<typeof SessionSidebar>) => {
@@ -92,6 +101,7 @@ mock.module("./SessionSidebar", () => ({
         props.onShip!({ host: "remote", projectPath: "/repo", path: "/repo/worktrees/B", sessionId: "remote-initiator" });
       } }, "Ship remote B"),
       React.createElement("button", { onClick: () => props.onOpenSettings!() }, "Open settings"),
+      showEffort && React.createElement("button", { onClick: () => props.onOpenEffort("local", effort, false) }, "Manage test Effort"),
     );
   },
 }));
@@ -180,7 +190,10 @@ mock.module("./WorkspaceTerminalTabs", () => ({
   },
 }));
 mock.module("@/hooks/useHostRows", () => ({
-  useHostRows: () => ({ hosts: [], pools: [] }),
+  useHostRows: () => ({
+    hosts: showEffort ? [{ id: "local", label: "This machine", status: "online" }] : [],
+    pools: [],
+  }),
 }));
 mock.module("@/hooks/useNotifications", () => ({
   useNotifications: () => ({}),
@@ -225,7 +238,9 @@ globalThis.fetch = (async (url: Parameters<typeof fetch>[0]) =>
             otherRefs: [],
             pullRequests: [],
           }
-        : {},
+        : showEffort && String(url).startsWith("/api/systems?")
+          ? { root: "/efforts", systems: [], efforts: [effort] }
+          : {},
   )) as typeof fetch;
 const { AppShell } = await import("./AppShell.tsx");
 
@@ -264,6 +279,32 @@ test("Ship survives workspace navigation and background completion preserves the
   fireEvent.click(view.getByRole("button", { name: "/repo/worktrees/B" }));
   await waitFor(() => assert.equal((view.getByLabelText("Ship draft") as HTMLInputElement).value, "keep this"));
   cleanup();
+});
+
+test("opening service output from a member keeps it selected after sidebar sync", async () => {
+  globalThis.CSS ??= { escape: (value: string) => value } as typeof CSS;
+  sessionStorage.clear();
+  window.history.replaceState(null, "", "/?cwd=%2Frepo");
+  showEffort = true;
+  try {
+    const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+    fireEvent.click(view.getByRole("button", { name: "Manage test Effort" }));
+    fireEvent.click(await view.findByRole("button", { name: "Open Effort root" }));
+    await waitFor(() => assert.equal(tabProps.cwd, effort.root));
+    const rootChat = tabProps.activeChatId;
+    assert.ok(rootChat);
+    await act(() => tabProps.onCloseChat(rootChat));
+    fireEvent.click(view.getByRole("button", { name: "Manage test Effort" }));
+    fireEvent.click(await view.findByRole("button", { name: "Open Member" }));
+    await waitFor(() => assert.equal(tabProps.cwd, effort.members[0].path));
+    fireEvent.click(view.getByRole("button", { name: "Manage test Effort" }));
+    fireEvent.click(await view.findByRole("button", { name: "Open Build log terminal" }));
+    assert.equal(tabProps.cwd, effort.root);
+    assert.equal(tabProps.activeId, "terminal-logs");
+  } finally {
+    cleanup();
+    showEffort = false;
+  }
 });
 test("Ship leaves the removed workspace after its hierarchy entry disappears", async () => {
   sessionStorage.clear();

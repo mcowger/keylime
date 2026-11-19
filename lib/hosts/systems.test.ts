@@ -234,7 +234,11 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
       runtime,
     );
     assert.ok(cleanup);
-    assert.deepEqual(cleanup.repos[0].dirty, [".env", "dev-data/", "unsaved.txt"]);
+    assert.deepEqual(cleanup.repos[0].dirty, [
+      ".env",
+      "dev-data/",
+      "unsaved.txt",
+    ]);
     const {
       efforts: [cleaned],
     } = await systemsOperation(
@@ -258,6 +262,73 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
       preview.members[1].baseCommit,
     );
     assert.equal(isEffortRepo(worker), true);
+
+    await workspaceCreationSettings({ projectPath: app, override: null });
+    // Root can read mode-000 files, so only exercise denial as a non-root user.
+    for (const unreadable of process.getuid?.() === 0
+      ? [false]
+      : [false, true]) {
+      const cleanInput = {
+        systemId: system.id,
+        name: unreadable ? "Unreadable instructions" : "Clean worktrees",
+      };
+      const { preview: cleanPlan } = await systemsOperation(
+        { action: "preview", ...cleanInput },
+        runtime,
+      );
+      assert.ok(cleanPlan);
+      const { effortId: cleanId } = await systemsOperation(
+        {
+          action: "create",
+          ...cleanInput,
+          confirmation: cleanPlan.confirmation,
+        },
+        runtime,
+      );
+      assert.ok(cleanId);
+      await waitForSystemsSetup();
+      for (const name of ["AGENTS.md", "repomap.md"])
+        assert.ok(fs.existsSync(path.join(cleanPlan.root, name)));
+      const instructionsPath = path.join(cleanPlan.root, "AGENTS.md");
+      const original = fs.readFileSync(instructionsPath);
+      if (unreadable) fs.chmodSync(instructionsPath, 0o000);
+      const { cleanup: cleanPreview } = await systemsOperation(
+        { action: "cleanupPreview", effortId: cleanId },
+        runtime,
+      );
+      assert.ok(cleanPreview);
+      assert.deepEqual(
+        cleanPreview.repos.map(({ dirty }) => dirty),
+        [[], []],
+      );
+      const { efforts } = await systemsOperation(
+        {
+          action: "cleanup",
+          effortId: cleanId,
+          mode: "remove",
+          confirmation: cleanPreview.confirmation,
+        },
+        runtime,
+      );
+      const cleanResult = efforts.find(({ id }) => id === cleanId);
+      assert.equal(cleanResult?.status, "cleaned", JSON.stringify(cleanResult));
+      assert.deepEqual(
+        cleanResult?.retainedPaths,
+        unreadable ? [instructionsPath] : [],
+      );
+      if (unreadable) {
+        for (const { path: checkoutPath } of cleanPlan.members)
+          assert.equal(fs.existsSync(checkoutPath), false);
+        assert.equal(
+          fs.existsSync(path.join(cleanPlan.root, "repomap.md")),
+          false,
+        );
+        fs.chmodSync(instructionsPath, 0o600);
+        assert.deepEqual(fs.readFileSync(instructionsPath), original);
+      } else {
+        assert.equal(fs.existsSync(cleanPlan.root), false);
+      }
+    }
   } finally {
     await Promise.allSettled([
       stopSystems(),

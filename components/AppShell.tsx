@@ -1338,10 +1338,19 @@ export function AppShell({ appName }: { appName: string }) {
         return;
       }
       if (!synchronized && !(discovery === "pending" && pendingWorkspaceDraft.current?.cwd === cwd && pendingWorkspaceDraft.current.hostId === hostId)) pendingWorkspaceDraft.current = null;
-      if (!synchronized || !cwd || effortForPath(hostId, cwd)?.status !== "ready") setActiveTerminalId(null);
+      const effort = synchronized && cwd ? effortForPath(hostId, cwd) : undefined;
+      if (effort?.status !== "ready") setActiveTerminalId(null);
       setActiveCwd(cwd);
       setActiveHostId(remoteHostId(hostId));
       if (initialSessionId && !initialSessionRestored) return;
+      // The sidebar is echoing a navigation we've already applied. Don't
+      // restore a chat over the selected terminal in this Effort root.
+      if (
+        effort?.status === "ready" &&
+        cwd && activeTerminalId &&
+        comparableProjectPath(cwd) === comparableProjectPath(effort.root) &&
+        effort.services.some((service) => service.terminalId === activeTerminalId)
+      ) return;
       if (
         synchronized &&
         chatTabsRef.current.find((tab) => tab.id === activeChatIdRef.current)
