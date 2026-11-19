@@ -4817,8 +4817,7 @@ html[data-touch-targets="accessible"] .right-panel-toolbar {
   color: var(--status-success);
   flex: 0 0 14px;
 }
-.activity-row-indicator-error,
-.activity-row-tool-error {
+.activity-row-indicator-error {
   color: var(--status-error);
 }
 .activity-row-spinner {

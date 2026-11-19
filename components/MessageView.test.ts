@@ -356,10 +356,11 @@ test("eval rows place language icons before the intent", () => {
       }),
     );
     const row = view.container.querySelector("button.activity-row-trigger")!;
-    const tool = row.querySelector(".activity-row-tool")!;
+    const tool = row.querySelector(".activity-tool-icon")!;
     const icon = row.querySelector('[role="img"]')!;
-    assert.equal(tool.textContent, toolName);
-    assert.equal(tool.nextElementSibling, icon);
+    assert.equal(tool.getAttribute("title"), toolName);
+    assert.equal(row.querySelector(".activity-row-tool"), null);
+    assert.equal(tool.nextElementSibling?.className, "sr-only");
     assert.equal(icon.getAttribute("aria-label"), label);
     assert.equal(icon.nextElementSibling?.textContent, "Inspecting settings");
     view.unmount();
@@ -368,13 +369,13 @@ test("eval rows place language icons before the intent", () => {
 
 test("tool rows distinguish agent messages and device calls from file access", () => {
   for (const [toolName, path, label, icon] of [
-    ["write", "agent://TempRoots", "agent", "lucide-message-circle"],
-    ["write", "xd://ast_grep", "ast_grep", "lucide-wrench"],
-    ["write", "xd://mcp__github_issue_read", "mcp__github_issue_read", "lucide-file-text"],
-    ["read", "xd://ast_grep", "read", "lucide-file-text"],
-    ["write", "xd://read/sources", "write", "lucide-file-pen"],
-    ["write", "notes.txt", "write", "lucide-file-pen"],
-  ]) {
+    ["write", "agent://TempRoots", undefined, "lucide-message-circle"],
+    ["write", "xd://ast_grep", undefined, "lucide-search"],
+    ["write", "xd://mcp__github_issue_read", "github_issue_read", "lucide-file-text"],
+    ["read", "xd://ast_grep", undefined, "lucide-file-text"],
+    ["write", "xd://read/sources", undefined, "lucide-file-pen"],
+    ["write", "notes.txt", undefined, "lucide-file-pen"],
+  ] as const) {
     const view = render(React.createElement(MessageView, {
       isStreaming: true,
       message: { role: "assistant", model: "test", provider: "test", content: [
@@ -820,7 +821,7 @@ test("tool operations render as compact timeline rows", () => {
   );
 
   assert.match(html, /data-activity-operation="true"/);
-  assert.match(html, /activity-row-indicator/);
+  assert.doesNotMatch(html, /activity-row-indicator/);
   assert.match(html, /activity-row-duration/);
   assert.doesNotMatch(html, /border-radius:7px/);
 });
@@ -1984,7 +1985,30 @@ test("a committed tool result replaces the running affordances", () => {
 
   assert.doesNotMatch(html, /activity-row-spinner/);
   assert.doesNotMatch(html, /data-tool-running="true"/);
-  assert.match(html, /lucide-check/);
+  assert.doesNotMatch(html, /lucide-check/);
+});
+
+test("failed tool rows tint the category icon and name the failure accessibly", () => {
+  const view = render(React.createElement(MessageView, {
+    message: { role: "assistant", model: "test", provider: "test", content: [
+      { type: "toolCall", toolCallId: "failed-read", toolName: "read", input: { path: "notes.txt" } },
+    ] },
+    toolResults: new Map<string, ToolResultMessage>([["failed-read", {
+      role: "toolResult",
+      toolCallId: "failed-read",
+      toolName: "read",
+      content: [{ type: "text", text: "File not found" }],
+      isError: true,
+      timestamp: 3000,
+    }]]),
+  }));
+  try {
+    const row = view.getByRole("button", { name: /\bTool call failed\b/ });
+    const icon = row.querySelector<SVGElement>(".activity-tool-icon svg.lucide-file-text");
+    assert.equal(icon?.style.color, "var(--status-error)");
+  } finally {
+    view.unmount();
+  }
 });
 
 test("expanded edit results with a patch render the split diff view", () => {

@@ -132,6 +132,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The sidebar shows worktree setup and cleanup progress even after you close Manage workspaces
 - New chats show when Keylime is building the workspace, starting OMP, and sending the first prompt
 - Subagent previews display the model slug and reported effort, stripping OMP upstream selectors
+- Tool call rows leave more room for intent: standard tools use icons, failures tint the icon red, and MCP names omit the `mcp__` prefix
+- Tool call rows use icons for standard tools to make more room for intent, tint failed-tool icons red, and omit the `mcp__` prefix from MCP names
 
 ### Changed
 - The sidebar and Settings call projects repos, including in add, remove, and settings controls.

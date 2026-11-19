@@ -27,6 +27,7 @@ export function getToolCategory(toolName: string): ToolCategory {
   if (
     name === "grep" ||
     name === "glob" ||
+    name === "ast_grep" ||
     name.includes("search") ||
     name.endsWith(".grep") ||
     name.endsWith(".glob")

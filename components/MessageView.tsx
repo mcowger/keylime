@@ -2005,7 +2005,9 @@ const ToolCallBlock = memo(
     const isWrite = block.toolName.toLowerCase() === "write";
     const agentMessage = isWrite && /^agent:\/\//i.test(path);
     const device = isWrite ? /^xd:\/\/([a-z][a-z0-9_]*)(?:[?#].*)?$/i.exec(path)?.[1] : undefined;
-    const displayName = agentMessage ? "agent" : device ?? block.toolName;
+    const toolName = agentMessage ? "agent" : device ?? block.toolName;
+    const displayName = toolName.replace(/^mcp__/i, "");
+    const iconOnly = /^(?:read|file_read|grep|glob|search|ast_grep|web_search|edit|write|ast_edit|bash|terminal|exec|shell|cmd|todo|task|agent|eval|browser|hub)(?:)$/i.test(toolName) || /^(?:functions|tools)\.(?:read|grep|glob|edit|write|todo|task|eval|agent)$/i.test(toolName);
     const displayCategory = agentMessage ? "agent-message" : device ? getToolCategory(device) : category;
     const semantic = getSemanticToolLabel(block);
     const todoSummary =
@@ -2072,36 +2074,28 @@ const ToolCallBlock = memo(
       <div className="activity-row" data-activity-operation="true">
         <Collapsible open={expanded} onOpenChange={setExpanded}>
           <CollapsibleTrigger className="activity-row-trigger">
-            <span
-              className={`activity-row-indicator${isError ? " activity-row-indicator-error" : ""}`}
-              aria-hidden
-            >
-              {isError ? (
-                <CircleAlert size={12} strokeWidth={1.8} />
-              ) : result && !isRunning ? (
-                <Check size={12} strokeWidth={2} />
-              ) : isRunning || isStreaming ? (
-                <LoaderCircle
-                  size={12}
-                  strokeWidth={1.8}
-                  className="activity-row-spinner"
-                />
-              ) : (
-                <CircleSlash
-                  size={12}
-                  strokeWidth={1.8}
-                  style={{ opacity: 0.5 }}
-                />
-              )}
+            {!isError && (isRunning || !result) && (
+              <span className="activity-row-indicator" aria-hidden>
+                {isRunning || isStreaming ? (
+                  <LoaderCircle size={12} strokeWidth={1.8} className="activity-row-spinner" />
+                ) : (
+                  <CircleSlash size={12} strokeWidth={1.8} style={{ opacity: 0.5 }} />
+                )}
+              </span>
+            )}
+            <span className="activity-tool-icon" title={displayName} aria-hidden>
+              <ToolCategoryIcon
+                category={displayCategory}
+                size={14}
+                style={isError ? { color: "var(--status-error)" } : undefined}
+              />
             </span>
-            <span className="activity-tool-icon" aria-hidden>
-              <ToolCategoryIcon category={displayCategory} size={12} />
-            </span>
-            <span
-              className={`activity-row-tool${isError ? " activity-row-tool-error" : ""}`}
-            >
-              {hubTool ?? displayName}
-            </span>
+            {hubTool || !iconOnly ? (
+              <span className="activity-row-tool">{hubTool ?? displayName}</span>
+            ) : (
+              <span className="sr-only">{displayName}</span>
+            )}
+            {isError && <span className="sr-only">{` (${t("messageView.toolFailed")}) `}</span>}
             {evalLanguage && (
               <span className="activity-row-language" role="img" aria-label={evalLanguage === "py" ? "Python" : evalLanguage === "js" ? "JavaScript" : evalLanguage} title={evalLanguage === "py" ? "Python" : evalLanguage === "js" ? "JavaScript" : evalLanguage}>
                 {evalLanguage === "py" ? <PythonIcon size={14} /> : evalLanguage === "js" ? <JavaScriptIcon size={14} /> : <Code2 size={14} />}

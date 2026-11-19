@@ -920,6 +920,7 @@
   "messageView.diffBefore": "Before",
   "messageView.downloadFullOutput": "download full output",
   "messageView.durationSeconds": "{seconds}s",
+  "messageView.toolFailed": "Tool call failed",
   "messageView.editFromHere": "Edit",
   "messageView.editFromHereTitle": "Jump back here and edit this message",
   "messageView.estimatedTokens": "Estimated output tokens",
