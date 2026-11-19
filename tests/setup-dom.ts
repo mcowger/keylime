@@ -29,6 +29,12 @@ const globals = {
   FocusEvent: dom.window.FocusEvent,
   InputEvent: dom.window.InputEvent,
   MutationObserver: dom.window.MutationObserver,
+  // jsdom has no layout engine to produce resize notifications.
+  ResizeObserver: class implements ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  },
   localStorage: dom.window.localStorage,
   sessionStorage: dom.window.sessionStorage,
   matchMedia: () => ({

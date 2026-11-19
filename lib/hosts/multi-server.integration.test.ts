@@ -6,11 +6,11 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import test from "node:test";
@@ -143,7 +143,10 @@ test(
   "two real web servers share one host process and one live conversation",
   { timeout: 90_000 },
   async (t) => {
-    const scratch = mkdtempSync(join(tmpdir(), "keylime-multi-server-"));
+    // Keep the daemon's runner and .attach socket paths short on Darwin.
+    const scratch = mkdtempSync(
+      join(realpathSync("/tmp"), "keylime-multi-server-"),
+    );
     const agentDir = join(scratch, "home", ".omp", "agent");
     const project = join(scratch, "project");
     const site = join(scratch, "site");
@@ -234,7 +237,9 @@ test(
     };
     const a = await server();
     const b = await server();
-    const daemon = launch([join(root, "bin", "keylime-host.ts")]);
+    const daemon = launch([join(root, "bin", "keylime-host.ts")], {
+      KEYLIME_HOST_SOCKET: join(scratch, "host.sock"),
+    });
     await until(
       async () => {
         const [ah, bh] = await Promise.all([
@@ -495,7 +500,7 @@ test(
     assert.equal(
       starts().find(
         (entry) =>
-          entry.type === "stdin" &&
+          entry.type === "command" &&
           entry.command.args?.message === "outbox from B",
       )?.command.args?.clientMessageId,
       "peer-delivered-message",

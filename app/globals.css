@@ -3386,6 +3386,46 @@ span.token.table {
   font-size: 12px;
 }
 
+.composer-startup-strip {
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  padding: 5px 8px 5px 12px;
+  font-size: 12px;
+}
+.composer-startup-strip[data-workspace-selector] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  padding-block: 0;
+}
+.composer-workspace-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-startup-strip[data-workspace-selector] > [role] {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.composer-startup-strip[data-workspace-selector] .workspace-source-trigger {
+  max-width: 65%;
+  min-height: 30px;
+  padding-inline: 6px;
+  border: 0;
+  background: transparent;
+  font-size: inherit;
+}
+.composer-startup-strip[data-workspace-selector] .workspace-source-trigger:hover,
+.composer-startup-strip[data-workspace-selector] .workspace-source-trigger[data-popup-open] {
+  background: var(--bg-hover);
+}
+
 .workspace-source-trigger {
   display: inline-flex;
   align-items: center;

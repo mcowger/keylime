@@ -396,6 +396,7 @@ interface Props {
   advisorEnabled?: boolean;
   advisorReviewPending?: boolean;
   startupStage?: ChatStartupStage;
+  workspaceBaseSelector?: React.ReactNode;
   /** Toggle the per-chat advisor (composer icon + /advisor command). */
   onAdvisorChange?: (enabled: boolean) => void;
   /** Collapse the entire composer into a minimized bar. */
@@ -549,6 +550,7 @@ export const ChatInput = memo(
       advisorModel,
       advisorReviewPending = false,
       startupStage,
+      workspaceBaseSelector,
       onCompact,
       contextUsage,
       modelActivity,
@@ -2650,6 +2652,7 @@ export const ChatInput = memo(
     ];
     const firstQueued = queuedEntries[0] ?? null;
     const queuedCount = queuedEntries.length;
+    const hasAttachedHeader = !!(advisorReviewPending || startupStage || workspaceBaseSelector);
 
     const [queueExpanded, setQueueExpanded] = useState(false);
     const [queueActionPending, setQueueActionPending] = useState(false);
@@ -4262,19 +4265,16 @@ export const ChatInput = memo(
                   </div>
                 );
               })()}
-            {startupStage ? (
+            {startupStage || workspaceBaseSelector ? (
               <div
-                style={{
-                  border: "1px solid var(--border)",
-                  borderBottom: "none",
-                  borderRadius: "var(--radius-card) var(--radius-card) 0 0",
-                  background: "var(--bg-panel)",
-                  color: "var(--text-muted)",
-                  padding: "5px 8px 5px 12px",
-                  fontSize: 12,
-                }}
+                className="composer-startup-strip"
+                data-workspace-selector={startupStage ? undefined : ""}
               >
-                <PendingOperation label={t(`chatInput.${startupStage}`)} />
+                {startupStage ? (
+                  <PendingOperation label={t(`chatInput.${startupStage}`)} />
+                ) : (
+                  workspaceBaseSelector
+                )}
               </div>
             ) : (
               <AdvisorReviewStatus pending={advisorReviewPending} />
@@ -4287,7 +4287,7 @@ export const ChatInput = memo(
                 style={{
                   border: "1px solid var(--border)",
                   borderBottom: "none",
-                  borderRadius: advisorReviewPending || startupStage
+                  borderRadius: hasAttachedHeader
                     ? 0
                     : "var(--radius-card) var(--radius-card) 0 0",
                   background: "var(--bg-panel)",
@@ -4592,7 +4592,7 @@ export const ChatInput = memo(
                     ? "1px solid var(--accent)"
                     : "1px solid var(--shell-border, color-mix(in srgb, var(--border) 70%, transparent))",
                   borderRadius:
-                    queuedCount > 0 || advisorReviewPending || startupStage
+                    queuedCount > 0 || hasAttachedHeader
                       ? "0 0 var(--radius-card) var(--radius-card)"
                       : "var(--radius-card)",
                   padding: "12px 12px 10px",

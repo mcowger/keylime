@@ -13,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test, { after, type TestContext } from "node:test";
+import { fakeRunnerSocket } from "../../tests/fake-runner-socket";
 import type { UpMessage } from "./link-protocol.ts";
 import type { RpcTransport } from "../omp/rpc-transport";
 import type { HostDaemon } from "./daemon";
@@ -104,8 +105,9 @@ if (process.argv.includes("--export")) {
 }
 require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
 require("node:fs").appendFileSync(${JSON.stringify(childrenFile)}, JSON.stringify({ pid: process.pid, cwd: process.cwd() }) + "\\n");
-const emit = (frame) => process.stdout.write(JSON.stringify(frame) + "\\n");
-require("node:readline").createInterface({ input: process.stdin }).on("line", (line) => {
+${fakeRunnerSocket}
+const emit = (frame) => rpcSocket.write(JSON.stringify(frame) + "\\n");
+require("node:readline").createInterface({ input: rpcSocket }).on("line", (line) => {
   const command = JSON.parse(line);
   // The runner channel protocol: a command is {t: "cmd", id, op, args}; the daemon's own set-up commands get a reply, the test ops none.
   const { op, args = {} } = command;
@@ -113,7 +115,7 @@ require("node:readline").createInterface({ input: process.stdin }).on("line", (l
   if (op === "set_event_filter" || op === "set_subagent_subscription") return emit({ t: "res", id: command.id, ok: true, data: {} });
   if (op === "state") emit({ t: "session", sessionId: args.sessionId });
   if (op === "flood") for (let i = 0; i < ${FLOOD_LINES}; i++) emit({ t: "x", i, pad: "y".repeat(${FLOOD_PAD}) });
-  if (op === "many") for (let i = 0; i < 25000; i++) process.stdout.write('{"t":"n"}\\n');
+  if (op === "many") for (let i = 0; i < 25000; i++) rpcSocket.write('{"t":"n"}\\n');
   if (op === "parts") for (let i = 0; i < args.n; i++) emit({ t: "p", i, pad: "q".repeat(400_000) });
   if (op === "cjk") for (let i = 0; i < 100; i++) emit({ t: "c", i, text: "漢".repeat(10_000) });
   if (op === "huge") emit({ t: "x", pad: "y".repeat(9 * 1024 * 1024) });

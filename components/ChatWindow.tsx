@@ -109,6 +109,7 @@ interface Props {
   startupStage?: ChatStartupStage;
   onStartupStage?: (stage: ChatStartupStage | undefined) => void;
   workspaceSourceRequired?: boolean;
+  workspaceBaseSelector?: ReactNode;
   /** Host a fresh chat starts on (this machine when absent). */
   newSessionHostId?: string;
   onBackgroundSessionCreated?: (session: SessionInfo) => void;
@@ -552,6 +553,7 @@ export function ChatWindow({
   startupStage,
   onStartupStage,
   workspaceSourceRequired,
+  workspaceBaseSelector,
   newSessionHostId,
   onBackgroundSessionCreated,
   newSessionCreationId,
@@ -1571,6 +1573,7 @@ export function ChatWindow({
       advisorEnabled={advisorEnabled}
       advisorReviewPending={advisorReviewPending}
       startupStage={startupStage}
+      workspaceBaseSelector={workspaceBaseSelector}
       onAdvisorChange={handleAdvisorChange}
       advisorModel={advisorModelMeta}
       queuedMessages={queuedMessages}

@@ -5,3 +5,6 @@ env = "KEYLIME_PUBLIC_*"
 
 [run]
 bun = true
+
+[test]
+preload = ["./tests/setup-runtime.ts"]

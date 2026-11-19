@@ -1,6 +1,7 @@
 import "../tests/setup-dom.ts";
 import assert from "node:assert/strict";
 import test, { afterEach, beforeEach } from "node:test";
+import { stageTestUpload } from "../tests/staged-upload-fixture";
 import React, { act } from "react";
 import type { ChatInputHandle } from "./ChatInput";
 const { cleanup, fireEvent, render, screen, waitFor } =
@@ -93,10 +94,12 @@ test("no-key composer text survives minimization and warns on document exit unti
   assert.equal(warnsOnExit(), false);
 });
 
-test("attachment-only drafts stay protected across live draft-key changes and restore without warning on internal picks", async () => {
+test("attachment-only drafts stay protected across live draft-key changes and restore without warning on internal picks", async (t) => {
   const user = userEvent.setup();
   const ref = React.createRef<ChatInputHandle>();
-  const sent: string[] = [];
+  const sent: { text: string; uploads?: string[] }[] = [];
+  const file = new File(["important attachment"], "notes.txt", { type: "text/plain" });
+  const uploadId = stageTestUpload(t, file);
   function Shell({ session }: { session: string }) {
     return React.createElement(
       React.Fragment,
@@ -105,8 +108,8 @@ test("attachment-only drafts stay protected across live draft-key changes and re
       React.createElement(ChatInput, {
         draftKey: session,
         ref,
-        onSend: async (text) => {
-          sent.push(text);
+        onSend: async (text, _images, uploads) => {
+          sent.push({ text, uploads });
           return { status: "accepted" };
         },
         onAbort() {},
@@ -119,25 +122,20 @@ test("attachment-only drafts stay protected across live draft-key changes and re
   );
   await act(async () => {
     assert.ok(ref.current);
-    ref.current.addFiles([
-      new File(["important attachment"], "notes.txt", { type: "text/plain" }),
-    ]);
+    ref.current.addFiles([file]);
   });
   await waitFor(() =>
-    assert.equal(
-      getDraft("draft-a")?.files[0]?.content,
-      "important attachment",
-    ),
+    assert.equal(getDraft("draft-a")?.uploads?.[0]?.name, file.name),
   );
   assert.equal(warnsOnExit(), true);
   rerender(React.createElement(Shell, { session: "draft-b" }));
   assert.equal((screen.getByRole("textbox") as HTMLTextAreaElement).value, "");
-  assert.equal(getDraft("draft-a")?.files[0]?.content, "important attachment");
+  assert.equal(getDraft("draft-a")?.uploads?.[0]?.id, uploadId());
   assert.equal(warnsOnExit(), true);
   rerender(React.createElement(Shell, { session: "draft-a" }));
   await user.click(screen.getByRole("textbox"));
   await user.keyboard("{Enter}");
-  assert.match(sent[0], /important attachment/);
+  await waitFor(() => assert.deepEqual(sent, [{ text: "", uploads: [uploadId()] }]));
   assert.equal(warnsOnExit(), false);
 });
 

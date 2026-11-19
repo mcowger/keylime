@@ -13,6 +13,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - New chats show when Keylime is building the workspace, starting OMP, and sending the first prompt.
 - The workspace base branch picker uses the composer model picker's layout: a search box, a checkmark next to the selected branch, and separate expandable sections for pull requests and other branches. The local default is preselected, and `origin`'s default appears only when ahead.
 - Opening the workspace base branch picker on mobile no longer focuses search or brings up the keyboard.
+- New workspace drafts show the project name and base branch in a thin row attached to the composer.
 - The OMP integration importer can select the latest published build with `--latest`.
 - The bundled runner uses OMP integration build 18.22.0.
 - Open **More…** in the composer model picker to refresh available models without restarting a session.
@@ -134,6 +135,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Subagent previews display the model slug and reported effort, stripping OMP upstream selectors
 - Tool call rows leave more room for intent: standard tools use icons, failures tint the icon red, and MCP names omit the `mcp__` prefix
 - Tool call rows use icons for standard tools to make more room for intent, tint failed-tool icons red, and omit the `mcp__` prefix from MCP names
+- New workspace drafts show the project name and base branch in a thin row attached to the composer
 
 ### Changed
 - The sidebar and Settings call projects repos, including in add, remove, and settings controls.

@@ -1,6 +1,7 @@
 import "../tests/setup-dom.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
+import { stageTestUpload } from "../tests/staged-upload-fixture";
 import React from "react";
 import type { ChatInputHandle } from "./ChatInput";
 const { act, cleanup, render, screen, waitFor } =
@@ -64,10 +65,14 @@ test("a session row marks unsent composer content and drops the mark once it is 
   }
 });
 
-test("a mounted session row follows composer typing, attachment-only drafts and sending", async () => {
+test("a mounted session row follows composer typing, attachment-only drafts and sending", async (t) => {
   const user = userEvent.setup();
   const composer = React.createRef<ChatInputHandle>();
-  const sent: string[] = [];
+  const sent: { text: string; uploads?: string[] }[] = [];
+  const file = new File(["attachment content"], "notes.txt", {
+    type: "text/plain",
+  });
+  const uploadId = stageTestUpload(t, file);
   const previousMatchMedia = window.matchMedia;
   window.matchMedia = globalThis.matchMedia;
   try {
@@ -81,8 +86,8 @@ test("a mounted session row follows composer typing, attachment-only drafts and 
           draftKey: "composer-draft",
           isStreaming: false,
           onAbort() {},
-          async onSend(text) {
-            sent.push(text);
+          async onSend(text, _images, uploads) {
+            sent.push({ text, uploads });
             return { status: "accepted" };
           },
         }),
@@ -96,9 +101,7 @@ test("a mounted session row follows composer typing, attachment-only drafts and 
     assert.equal(mark(), null, "clearing the composer clears its mark");
     await act(async () => {
       assert.ok(composer.current);
-      composer.current.addFiles([
-        new File(["attachment content"], "notes.txt", { type: "text/plain" }),
-      ]);
+      composer.current.addFiles([file]);
     });
     await waitFor(() =>
       assert.ok(mark(), "a file without text marks the mounted row"),
@@ -106,8 +109,7 @@ test("a mounted session row follows composer typing, attachment-only drafts and 
     await user.click(input);
     await user.keyboard("{Enter}");
     await waitFor(() => assert.equal(mark(), null, "sending clears the mark"));
-    assert.equal(sent.length, 1);
-    assert.match(sent[0], /attachment content/);
+    assert.deepEqual(sent, [{ text: "", uploads: [uploadId()] }]);
   } finally {
     cleanup();
     clearDraft("composer-draft");

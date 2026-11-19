@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -18,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable } from "node:stream";
 import { captureExpectedConsole } from "../../tests/expected-console.ts";
+import { fakeRunnerSocket } from "../../tests/fake-runner-socket.ts";
 import type { AgentEvent } from "../rpc-manager.ts";
 import type { LinkSocket, LinkSocketData } from "./hub.ts";
 
@@ -102,7 +104,7 @@ const ompLog = (): OmpLogEntry[] =>
         .filter(Boolean)
         .map((line) => JSON.parse(line))
     : [];
-/** Whether omp children have written stdout lines containing each of `parts`. */
+/** Whether omp children have sent socket frames containing each of `parts`. */
 const ompSaid = (...parts: string[]) => {
   const lines = ompLog()
     .filter((entry) => entry.kind === "out")
@@ -113,13 +115,14 @@ const fakeOmp = join(scratch, "fake-omp");
 writeFakeOmp(
   fakeOmp,
   `if (process.argv.includes("--version")) { console.log("14.0.0-fake"); process.exit(0); }
+${fakeRunnerSocket}
 const fs = require("node:fs");
 const path = require("node:path");
 const log = (entry) => fs.appendFileSync(${JSON.stringify(ompLogFile)}, JSON.stringify({ pid: process.pid, ...entry }) + "\\n");
 const out = (frame) => {
   const line = JSON.stringify(frame);
   log({ kind: "out", line });
-  process.stdout.write(line + "\\n");
+  rpcSocket.write(line + "\\n");
 };
 const resumeAt = process.argv.indexOf("--resume");
 const resumed = resumeAt === -1 ? null : process.argv[resumeAt + 1];
@@ -148,7 +151,7 @@ const end = () => {
 };
 log({ kind: "start", sessionId });
 out({ t: "hello", proto: 1, pid: process.pid, sessionId, sessionFile, cwd: process.cwd() });
-require("node:readline").createInterface({ input: process.stdin }).on("line", (line) => {
+require("node:readline").createInterface({ input: rpcSocket }).on("line", (line) => {
   const command = JSON.parse(line);
   // Bulk stdin (the backpressure test): logged without its padding.
   if (command.op === "pad") return log({ kind: "pad", n: command.args.n });
@@ -207,7 +210,6 @@ require("node:readline").createInterface({ input: process.stdin }).on("line", (l
   for (let i = 1; i <= ${FRAMES}; i++) update(i);
   end();
 });
-process.stdin.on("end", () => process.exit(0));
 `,
 );
 
@@ -427,6 +429,7 @@ before(async () => {
     HOME: daemonHome,
     PI_CODING_AGENT_DIR: daemonAgentDir,
     KEYLIME_OMP_BIN: fakeOmp,
+    KEYLIME_HOST_SOCKET: join(scratch, "host.sock"),
   };
 
   const login = spawnSync(process.execPath, [hostBin, "login", "--url", url], {
@@ -463,6 +466,14 @@ before(async () => {
     path: projectDir,
   });
   assert.ok(registration.ok);
+  assert.ok(
+    registration.value.projects.some((project) =>
+      project.workspaces.some(
+        (workspace) => workspace.path === realpathSync(projectDir),
+      ),
+    ),
+    "the project directory is a managed workspace for fresh sessions",
+  );
 });
 
 after(async () => {

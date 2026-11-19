@@ -107,6 +107,10 @@ bun run typecheck   # bun check for the root project and runner
 bun run test        # unit tests (bun test --parallel)
 ```
 
+`bun test --parallel` also works for focused runs. Bun loads `tests/setup-runtime.ts`
+for both direct runs and package scripts, giving each test worker a private home
+and host socket so it cannot reuse the running Keylime daemon's socket.
+
 Use `bun fmt` to format files. Local release checks enforce `bun fmt --check`. Linting has been removed: pinned Bun 1.4.4 has no built-in linter, and the project uses neither ESLint nor `tsc`.
 
 `bun run build` bundles the browser app into `dist/` and `bun run smoke`

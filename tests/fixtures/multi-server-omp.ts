@@ -1,10 +1,16 @@
 // The external omp boundary only; both web servers and the host daemon are real.
 import * as fs from "node:fs";
+import { createConnection } from "node:net";
 import * as readline from "node:readline";
 if (process.argv.includes("--version")) {
   console.log("18.15.0-multi-server-test");
   process.exit(0);
 }
+// Stdout belongs to the PTY; runner frames use the daemon's Unix socket.
+const socketPath = process.env.KEYLIME_HOST_SOCKET;
+if (!socketPath) throw new Error("Missing KEYLIME_HOST_SOCKET");
+const rpcSocket = createConnection(socketPath);
+rpcSocket.once("end", () => process.exit(0));
 const sessionId = process.env.OMP_MULTI_SESSION_ID;
 const sessionFile = process.env.OMP_MULTI_SESSION_FILE!;
 const record = (entry: Record<string, unknown>) =>
@@ -13,7 +19,7 @@ const record = (entry: Record<string, unknown>) =>
     `${JSON.stringify({ pid: process.pid, ...entry })}\n`,
   );
 const send = (frame: Record<string, unknown>) =>
-  process.stdout.write(`${JSON.stringify(frame)}\n`);
+  rpcSocket.write(`${JSON.stringify(frame)}\n`);
 const out = (event: Record<string, unknown>) => send({ t: "event", event });
 const resumed = process.argv.includes("--resume");
 record({ type: "start", resumed });
@@ -55,9 +61,9 @@ send({
   sessionFile,
   cwd: process.cwd(),
 });
-readline.createInterface({ input: process.stdin }).on("line", (line) => {
+readline.createInterface({ input: rpcSocket }).on("line", (line) => {
   const command = JSON.parse(line);
-  record({ type: "stdin", command });
+  record({ type: "command", command });
   if (command.t === "ui_response") {
     // keylime names the dialog by its wire id as a string.
     record({ type: "answer", id: String(command.id) });
@@ -198,4 +204,3 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
       return reply();
   }
 });
-process.stdin.on("end", () => process.exit(0));

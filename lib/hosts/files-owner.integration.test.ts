@@ -19,6 +19,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable } from "node:stream";
+import { fakeRunnerSocket } from "../../tests/fake-runner-socket";
 import type { LinkSocket, LinkSocketData } from "./hub";
 import type { HostControlStatus } from "./host-control";
 
@@ -63,6 +64,8 @@ type FileJson = {
 const scratch = realpathSync(
   mkdtempSync(join(homedir(), ".keylime-owner-files-")),
 );
+// Both the runner and .attach sockets must fit Darwin's Unix socket path limit.
+const socketDir = mkdtempSync(join(realpathSync("/tmp"), "keylime-owner-"));
 const hostBin = fileURLToPath(
   new URL("../../bin/keylime-host.ts", import.meta.url),
 );
@@ -220,18 +223,18 @@ process.env.PI_CONFIG_DIR = ".omp";
 process.env.PI_CODING_AGENT_DIR = central.agent;
 const fakeOmp = join(scratch, "fake-omp");
 const ompScript = `if(process.argv.includes('--version')){console.log('18.0.0-files-fixture');process.exit(0)}
+${fakeRunnerSocket}
 const path=require('node:path');
 const sessionId=require('node:crypto').randomUUID();
 const sessionFile=path.join(process.env.PI_CODING_AGENT_DIR,'sessions',sessionId+'.jsonl');
-const out=(value)=>process.stdout.write(JSON.stringify(value)+'\\n');
+const out=(value)=>rpcSocket.write(JSON.stringify(value)+'\\n');
 out({t:'hello',proto:1,pid:process.pid,sessionId,sessionFile,cwd:process.cwd()});
-require('node:readline').createInterface({input:process.stdin}).on('line',(line)=>{
+require('node:readline').createInterface({input:rpcSocket}).on('line',(line)=>{
  const command=JSON.parse(line);
  if(command.t!=='cmd')return;
  const data=command.op==='get_state'?{sessionId,sessionFile,isStreaming:false,isCompacting:false}:{};
  out({t:'res',id:command.id,ok:true,data});
-});
-process.stdin.on('end',()=>process.exit(0));`;
+});`;
 writeFileSync(fakeOmp, `#!${process.execPath}\n${ompScript}`, { mode: 0o755 });
 
 const linkRoute = await import("../../app/api/hosts/link/route.ts");
@@ -352,6 +355,7 @@ async function startDaemon(machine: Machine, token: string) {
     PI_CONFIG_DIR: ".omp",
     PI_CODING_AGENT_DIR: machine.agent,
     KEYLIME_OMP_BIN: fakeOmp,
+    KEYLIME_HOST_SOCKET: join(socketDir, `${machine.name}.sock`),
   };
   const url = `http://127.0.0.1:${server.port}`;
   const login = spawnSync(process.execPath, [hostBin, "login", "--url", url], {
@@ -447,6 +451,7 @@ after(async () => {
     if (!(key in originalEnv)) delete process.env[key];
   Object.assign(process.env, originalEnv);
   rmSync(scratch, { recursive: true, force: true });
+  rmSync(socketDir, { recursive: true, force: true });
 });
 
 const slash = (value: string) => value.replace(/\\/g, "/");

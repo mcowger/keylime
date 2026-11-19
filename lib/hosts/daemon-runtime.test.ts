@@ -11,6 +11,7 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { captureExpectedConsole } from "../../tests/expected-console.ts";
+import { fakeRunnerSocket } from "../../tests/fake-runner-socket.ts";
 import {
   encodeBlobFrame,
   encodeLine,
@@ -46,8 +47,9 @@ fs.appendFileSync(${JSON.stringify(envs)}, JSON.stringify({ url: process.env.OMP
   leaked: JSON.stringify([process.env, process.argv]).includes(${JSON.stringify(LINK_TOKEN)}), rules }) + "\\n");
 const file = process.argv[process.argv.indexOf("--resume") + 1];
 const id = JSON.parse(fs.readFileSync(file, "utf8").split("\\n")[0]).id;
-const emit = frame => process.stdout.write(JSON.stringify(frame) + "\\n");
-require("node:readline").createInterface({input:process.stdin}).on("line", line => {
+${fakeRunnerSocket}
+const emit = frame => rpcSocket.write(JSON.stringify(frame) + "\\n");
+require("node:readline").createInterface({input:rpcSocket}).on("line", line => {
   const command = JSON.parse(line);
   if (command.t === "cmd") emit({t:"res",id:command.id,ok:true,data:{}});
   if (command.t === "cmd" && command.op === "prompt") emit({t:"event",event:{type:"agent_start"}});

@@ -1,6 +1,7 @@
 import "../tests/setup-dom.ts";
 import assert from "node:assert/strict";
 import test, { afterEach, beforeEach } from "node:test";
+import { stageTestUpload } from "../tests/staged-upload-fixture";
 import React, { act } from "react";
 import type { ChatInputHandle } from "./ChatInput";
 const { cleanup, render, screen, waitFor } =
@@ -119,16 +120,16 @@ test("without builtin dispatch, /btw during a run keeps the Queue button and que
   );
 });
 
-test("/btw with an attachment is refused and keeps the draft and the attachment", async () => {
+test("/btw with an attachment is refused and keeps the draft and the attachment", async (t) => {
   const user = userEvent.setup();
   const { calls, ref } = renderComposer({ isStreaming: false });
+  const file = new File(["notes"], "notes.txt", { type: "text/plain" });
+  const uploadId = stageTestUpload(t, file);
   await act(async () => {
     assert.ok(ref.current);
-    ref.current.addFiles([
-      new File(["notes"], "notes.txt", { type: "text/plain" }),
-    ]);
+    ref.current.addFiles([file]);
   });
-  await waitFor(() => assert.equal(getDraft("btw-draft")?.files.length, 1));
+  await waitFor(() => assert.equal(getDraft("btw-draft")?.uploads?.[0]?.name, file.name));
   await user.type(screen.getByRole("textbox"), "/btw what is this");
   await user.keyboard("{Enter}");
   await new Promise((resolve) => setTimeout(resolve, 50));
@@ -137,7 +138,7 @@ test("/btw with an attachment is refused and keeps the draft and the attachment"
     (screen.getByRole("textbox") as HTMLTextAreaElement).value,
     "/btw what is this",
   );
-  assert.equal(getDraft("btw-draft")?.files.length, 1);
+  assert.equal(getDraft("btw-draft")?.uploads?.[0]?.id, uploadId());
 });
 
 test("slash palette keeps /btw available during a streaming run", async () => {
