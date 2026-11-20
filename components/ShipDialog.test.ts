@@ -138,6 +138,7 @@ test("ship shows complete hook output and retries with the edited commit message
   const originalFetch = globalThis.fetch;
   const commands: Command[] = [];
   const hookError = `Pre-commit hook failed\n${"Checking staged changes\n".repeat(100)}Typecheck failed`;
+  const recoveryRequests: string[] = [];
   let failCommit = true;
   globalThis.fetch = Object.assign(
     async (url: Parameters<typeof fetch>[0], init: RequestInit = {}) => {
@@ -147,7 +148,10 @@ test("ship shows complete hook output and retries with the edited commit message
         commands.push(command);
         if (command.type === "commit_apply" && failCommit) {
           failCommit = false;
-          return Response.json({ error: hookError }, { status: 500 });
+          return Response.json(
+            { error: `\x1b[31m${hookError}\x1b[0m` },
+            { status: 500 },
+          );
         }
         return Response.json({
           success: true,
@@ -202,7 +206,10 @@ test("ship shows complete hook output and retries with the edited commit message
         projectPath: "/repo",
         path: "/work",
         sessionId: "session",
-        onAskAgentToResolve: async () => {},
+        onAskAgentToResolve: async (message) => {
+          recoveryRequests.push(message);
+          throw new Error("Couldn't send the recovery request");
+        },
       }),
     );
     const message = await view.findByLabelText("Commit 1 message");
@@ -214,9 +221,21 @@ test("ship shows complete hook output and retries with the edited commit message
     assert.equal(details.textContent, hookError);
     details.focus();
     assert.equal(document.activeElement, details);
+    fireEvent.click(
+      view.getByRole("button", { name: "Ask the agent to fix it" }),
+    );
+    await view.findByText("Couldn't send the recovery request");
+    assert.equal(recoveryRequests.length, 1);
+    assert.ok(recoveryRequests[0].includes(hookError));
+    assert.equal(details.textContent, hookError);
+    assert.ok(view.getByRole("button", { name: "Ask the agent to fix it" }));
     fireEvent.click(view.getByRole("button", { name: "Ship" }));
     await waitFor(() =>
       assert.ok(view.getByRole("button", { name: "Ask agent to resolve" })),
+    );
+    assert.equal(
+      view.queryByRole("button", { name: "Ask the agent to fix it" }),
+      null,
     );
     assert.deepEqual(
       commands
