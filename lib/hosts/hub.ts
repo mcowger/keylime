@@ -23,9 +23,11 @@ import {
 } from "../api-contracts/usage-models";
 import {
   HostArtifactActivationResultSchema,
+  HostInstalledBinaryDigestsSchema,
   type ActivateHostArtifactArgs,
   type HostArtifactActivationArgs,
   type HostArtifactActivationResult,
+  type HostInstalledBinaryDigests,
 } from "../api-contracts/host-control-models";
 import {
   BrowserListSchema,
@@ -193,6 +195,7 @@ interface Link {
   canReportUsage: boolean;
   canStageArtifact: boolean;
   canActivateArtifact: boolean;
+  canReportBinaryDigests: boolean;
   platform: string | null;
   releaseArch?: string;
   lastSeenAt: string | null;
@@ -424,6 +427,7 @@ function linkFor(id: string): Link {
       canReportUsage: false,
       canStageArtifact: false,
       canActivateArtifact: false,
+      canReportBinaryDigests: false,
       platform: null,
       lastSeenAt: null,
       autoApprove: false,
@@ -983,6 +987,13 @@ function openLink(link: Link, ws: LinkSocket, hello: Hello): void {
     );
     link.shipCredential = ws.data.hostCredential;
   }
+  link.canReportBinaryDigests = hello.canReportBinaryDigests === true;
+  if (!link.canReportBinaryDigests) {
+    // A daemon without this capability may reject the request frame itself.
+    for (const [id, pending] of link.pending)
+      if (pending.op === "hostInstalledBinaryDigests")
+        failOp(link, id, binaryDigestsUnsupported());
+  }
   // One link per host: the newest wins and the previous daemon exits.
   const previous = link.socket;
   link.socket = ws;
@@ -1432,6 +1443,8 @@ function request(
       new HostOpError(503, "host_offline", `${label} is offline`),
     );
   }
+  if (op === "hostInstalledBinaryDigests" && !link.canReportBinaryDigests)
+    return Promise.reject(binaryDigestsUnsupported());
   if (
     (op === "usageReport" && !link.canReportUsage) ||
     (link.hostVersion === 13 &&
@@ -2723,6 +2736,29 @@ export async function hostArtifactActivationOp(
       502,
       "host_bad_result",
       "The host did not send a valid activation result",
+    );
+  return result;
+}
+
+function binaryDigestsUnsupported(): HostOpError {
+  return new HostOpError(
+    501,
+    "host_binary_digests_unsupported",
+    "This daemon does not report installed binary digests",
+  );
+}
+
+export async function readHostInstalledBinaryDigests(
+  hostId: string,
+): Promise<HostInstalledBinaryDigests> {
+  if (hostId === LOCAL_HOST_ID || !getHost(hostId))
+    throw new HostOpError(404, "host_not_found", "Select a linked remote host");
+  const result = await request(hostId, "hostInstalledBinaryDigests", {});
+  if (!Value.Check(HostInstalledBinaryDigestsSchema, result))
+    throw new HostOpError(
+      502,
+      "host_bad_result",
+      "The host did not send valid installed binary digests",
     );
   return result;
 }

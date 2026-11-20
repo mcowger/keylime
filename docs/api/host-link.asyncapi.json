@@ -181,6 +181,9 @@
         "HostReply_hostArtifactActivationStatus": {
           "$ref": "#/components/messages/HostReply_hostArtifactActivationStatus"
         },
+        "HostReply_hostInstalledBinaryDigests": {
+          "$ref": "#/components/messages/HostReply_hostInstalledBinaryDigests"
+        },
         "HostReply_hostSettingsGet": {
           "$ref": "#/components/messages/HostReply_hostSettingsGet"
         },
@@ -438,6 +441,9 @@
         },
         "HostRequest_hostArtifactActivationStatus": {
           "$ref": "#/components/messages/HostRequest_hostArtifactActivationStatus"
+        },
+        "HostRequest_hostInstalledBinaryDigests": {
+          "$ref": "#/components/messages/HostRequest_hostInstalledBinaryDigests"
         },
         "HostRequest_hostSettingsGet": {
           "$ref": "#/components/messages/HostRequest_hostSettingsGet"
@@ -884,7 +890,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Reply to activateHostArtifact; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Install a selected staged binary and restart the standalone daemon.\nInputs: Supply its staged upload ID, an operation ID, the target executable and its expected SHA-256.\nInvariants: Valid only on a supported standalone install and the server link that staged the artifact. Replaying an admitted operation ID cannot trigger a second activation. Busy hosts refuse activation.\nEffects: Hands installation to a worker that verifies the bytes and preflights the replacement with the other installed binary before draining. On success, it saves a backup, replaces the binary atomically and restarts the unit. Acceptance is not completion.\nRecovery: Read hostArtifactActivationStatus with the same operation ID after reconnect. Never blindly retry or automatically roll back a restart.",
+        "description": "Reply to activateHostArtifact; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Install a selected staged binary or pair and restart the standalone daemon.\nInputs: Supply its staged upload ID, an operation ID, the target executable and its expected SHA-256. A paired deployment also supplies the staged runner ID and digest.\nInvariants: Valid only on a supported standalone install and the server link that staged the artifacts. Replaying an admitted operation ID cannot trigger a second activation. Busy hosts refuse activation.\nEffects: The worker verifies and preflights the resulting pair before draining. It backs up existing binaries before replacing them. If the runner is absent, a paired deployment creates it without overwriting a concurrently added file. The worker restarts the unit once; acceptance is not completion.\nRecovery: Read hostArtifactActivationStatus with the same operation ID after reconnect. Never blindly retry or automatically roll back a restart.",
         "name": "HostReply_activateHostArtifact",
         "payload": {
           "$ref": "#/components/schemas/HostReply_activateHostArtifact"
@@ -1214,6 +1220,18 @@
           "$ref": "#/components/schemas/HostReply_hostArtifactActivationStatus"
         },
         "title": "HostReply_hostArtifactActivationStatus"
+      },
+      "HostReply_hostInstalledBinaryDigests": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Reply to hostInstalledBinaryDigests; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read the SHA-256 digests of the managed standalone binaries.\nInputs: None.\nInvariants: Only the authenticated current controller can read them. The daemon chooses both paths. A null runner digest means the managed runner is absent.\nEffects: Reads the installed files on each request without changing them.\nRecovery: Retry after reconnect, or inspect the managed binaries if they cannot be read.",
+        "name": "HostReply_hostInstalledBinaryDigests",
+        "payload": {
+          "$ref": "#/components/schemas/HostReply_hostInstalledBinaryDigests"
+        },
+        "title": "HostReply_hostInstalledBinaryDigests"
       },
       "HostReply_hostSettingsGet": {
         "contentType": "application/json",
@@ -1916,7 +1934,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Usage: Install a selected staged binary and restart the standalone daemon.\nInputs: Supply its staged upload ID, an operation ID, the target executable and its expected SHA-256.\nInvariants: Valid only on a supported standalone install and the server link that staged the artifact. Replaying an admitted operation ID cannot trigger a second activation. Busy hosts refuse activation.\nEffects: Hands installation to a worker that verifies the bytes and preflights the replacement with the other installed binary before draining. On success, it saves a backup, replaces the binary atomically and restarts the unit. Acceptance is not completion.\nRecovery: Read hostArtifactActivationStatus with the same operation ID after reconnect. Never blindly retry or automatically roll back a restart.",
+        "description": "Usage: Install a selected staged binary or pair and restart the standalone daemon.\nInputs: Supply its staged upload ID, an operation ID, the target executable and its expected SHA-256. A paired deployment also supplies the staged runner ID and digest.\nInvariants: Valid only on a supported standalone install and the server link that staged the artifacts. Replaying an admitted operation ID cannot trigger a second activation. Busy hosts refuse activation.\nEffects: The worker verifies and preflights the resulting pair before draining. It backs up existing binaries before replacing them. If the runner is absent, a paired deployment creates it without overwriting a concurrently added file. The worker restarts the unit once; acceptance is not completion.\nRecovery: Read hostArtifactActivationStatus with the same operation ID after reconnect. Never blindly retry or automatically roll back a restart.",
         "name": "HostRequest_activateHostArtifact",
         "payload": {
           "$ref": "#/components/schemas/HostRequest_activateHostArtifact"
@@ -2246,6 +2264,18 @@
           "$ref": "#/components/schemas/HostRequest_hostArtifactActivationStatus"
         },
         "title": "HostRequest_hostArtifactActivationStatus"
+      },
+      "HostRequest_hostInstalledBinaryDigests": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Read the SHA-256 digests of the managed standalone binaries.\nInputs: None.\nInvariants: Only the authenticated current controller can read them. The daemon chooses both paths. A null runner digest means the managed runner is absent.\nEffects: Reads the installed files on each request without changing them.\nRecovery: Retry after reconnect, or inspect the managed binaries if they cannot be read.",
+        "name": "HostRequest_hostInstalledBinaryDigests",
+        "payload": {
+          "$ref": "#/components/schemas/HostRequest_hostInstalledBinaryDigests"
+        },
+        "title": "HostRequest_hostInstalledBinaryDigests"
       },
       "HostRequest_hostSettingsGet": {
         "contentType": "application/json",
@@ -3137,6 +3167,10 @@
           },
           "canActivateArtifact": {
             "description": "This standalone daemon accepts staged binary activation.",
+            "type": "boolean"
+          },
+          "canReportBinaryDigests": {
+            "description": "This daemon accepts hostInstalledBinaryDigests.",
             "type": "boolean"
           },
           "canReportUsage": {
@@ -42780,7 +42814,7 @@
                     "type": "string"
                   },
                   "runnerBackup": {
-                    "description": "Path to the retained runner backup for a paired deployment.",
+                    "description": "Path to the retained runner backup for a paired deployment, omitted if no runner was backed up.",
                     "type": "string"
                   },
                   "state": {
@@ -42861,7 +42895,7 @@
                   "type": "string"
                 },
                 "runnerBackup": {
-                  "description": "Path to the retained runner backup for a paired deployment.",
+                  "description": "Path to the retained runner backup for a paired deployment, omitted if no runner was backed up.",
                   "type": "string"
                 },
                 "state": {
@@ -42924,7 +42958,7 @@
             "type": "object"
           }
         ],
-        "description": "Reply to activateHostArtifact; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Install a selected staged binary and restart the standalone daemon.\nInputs: Supply its staged upload ID, an operation ID, the target executable and its expected SHA-256.\nInvariants: Valid only on a supported standalone install and the server link that staged the artifact. Replaying an admitted operation ID cannot trigger a second activation. Busy hosts refuse activation.\nEffects: Hands installation to a worker that verifies the bytes and preflights the replacement with the other installed binary before draining. On success, it saves a backup, replaces the binary atomically and restarts the unit. Acceptance is not completion.\nRecovery: Read hostArtifactActivationStatus with the same operation ID after reconnect. Never blindly retry or automatically roll back a restart.",
+        "description": "Reply to activateHostArtifact; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Install a selected staged binary or pair and restart the standalone daemon.\nInputs: Supply its staged upload ID, an operation ID, the target executable and its expected SHA-256. A paired deployment also supplies the staged runner ID and digest.\nInvariants: Valid only on a supported standalone install and the server link that staged the artifacts. Replaying an admitted operation ID cannot trigger a second activation. Busy hosts refuse activation.\nEffects: The worker verifies and preflights the resulting pair before draining. It backs up existing binaries before replacing them. If the runner is absent, a paired deployment creates it without overwriting a concurrently added file. The worker restarts the unit once; acceptance is not completion.\nRecovery: Read hostArtifactActivationStatus with the same operation ID after reconnect. Never blindly retry or automatically roll back a restart.",
         "title": "HostReply_activateHostArtifact"
       },
       "HostReply_addProject": {
@@ -49576,7 +49610,7 @@
                     "type": "string"
                   },
                   "runnerBackup": {
-                    "description": "Path to the retained runner backup for a paired deployment.",
+                    "description": "Path to the retained runner backup for a paired deployment, omitted if no runner was backed up.",
                     "type": "string"
                   },
                   "state": {
@@ -49657,7 +49691,7 @@
                   "type": "string"
                 },
                 "runnerBackup": {
-                  "description": "Path to the retained runner backup for a paired deployment.",
+                  "description": "Path to the retained runner backup for a paired deployment, omitted if no runner was backed up.",
                   "type": "string"
                 },
                 "state": {
@@ -49722,6 +49756,154 @@
         ],
         "description": "Reply to hostArtifactActivationStatus; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read the outcome of a standalone host activation.\nInputs: Supply the original operation ID.\nInvariants: State belongs to the daemon and the server relationship that requested the activation. A missing receipt does not prove that the operation ran or failed.\nEffects: Reads durable state without installing, restarting or retrying.\nRecovery: Poll after the link returns. If the outcome stays unknown, inspect the service and backup on the host before retrying.",
         "title": "HostReply_hostArtifactActivationStatus"
+      },
+      "HostReply_hostInstalledBinaryDigests": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "result": {
+                "additionalProperties": false,
+                "description": "Digests of the two managed binaries read on the selected standalone host.",
+                "properties": {
+                  "keylime": {
+                    "description": "SHA-256 of the installed standalone Keylime daemon, in lowercase hex.",
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "runner": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "SHA-256 of the installed standalone runner, in lowercase hex, or null if the runner is absent."
+                  }
+                },
+                "required": ["keylime", "runner"],
+                "type": "object"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "result"],
+            "type": "object"
+          },
+          {
+            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
+            "properties": {
+              "blob": {
+                "properties": {
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["bytes"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "blob"],
+            "type": "object",
+            "x-decoded-result": {
+              "additionalProperties": false,
+              "description": "Digests of the two managed binaries read on the selected standalone host.",
+              "properties": {
+                "keylime": {
+                  "description": "SHA-256 of the installed standalone Keylime daemon, in lowercase hex.",
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "runner": {
+                  "anyOf": [
+                    {
+                      "pattern": "^[0-9a-f]{64}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "SHA-256 of the installed standalone runner, in lowercase hex, or null if the runner is absent."
+                }
+              },
+              "required": ["keylime", "runner"],
+              "type": "object"
+            }
+          },
+          {
+            "properties": {
+              "error": {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number"
+                  }
+                },
+                "required": ["status", "code", "message"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Reply to hostInstalledBinaryDigests; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read the SHA-256 digests of the managed standalone binaries.\nInputs: None.\nInvariants: Only the authenticated current controller can read them. The daemon chooses both paths. A null runner digest means the managed runner is absent.\nEffects: Reads the installed files on each request without changing them.\nRecovery: Retry after reconnect, or inspect the managed binaries if they cannot be read.",
+        "title": "HostReply_hostInstalledBinaryDigests"
       },
       "HostReply_hostSettingsGet": {
         "anyOf": [
@@ -80227,7 +80409,7 @@
         "title": "HostReply_workspaceCreationStatus"
       },
       "HostRequest_activateHostArtifact": {
-        "description": "Usage: Install a selected staged binary and restart the standalone daemon.\nInputs: Supply its staged upload ID, an operation ID, the target executable and its expected SHA-256.\nInvariants: Valid only on a supported standalone install and the server link that staged the artifact. Replaying an admitted operation ID cannot trigger a second activation. Busy hosts refuse activation.\nEffects: Hands installation to a worker that verifies the bytes and preflights the replacement with the other installed binary before draining. On success, it saves a backup, replaces the binary atomically and restarts the unit. Acceptance is not completion.\nRecovery: Read hostArtifactActivationStatus with the same operation ID after reconnect. Never blindly retry or automatically roll back a restart.",
+        "description": "Usage: Install a selected staged binary or pair and restart the standalone daemon.\nInputs: Supply its staged upload ID, an operation ID, the target executable and its expected SHA-256. A paired deployment also supplies the staged runner ID and digest.\nInvariants: Valid only on a supported standalone install and the server link that staged the artifacts. Replaying an admitted operation ID cannot trigger a second activation. Busy hosts refuse activation.\nEffects: The worker verifies and preflights the resulting pair before draining. It backs up existing binaries before replacing them. If the runner is absent, a paired deployment creates it without overwriting a concurrently added file. The worker restarts the unit once; acceptance is not completion.\nRecovery: Read hostArtifactActivationStatus with the same operation ID after reconnect. Never blindly retry or automatically roll back a restart.",
         "properties": {
           "args": {
             "additionalProperties": false,
@@ -82029,6 +82211,35 @@
         },
         "required": ["type", "seq", "id", "op", "args"],
         "title": "HostRequest_hostArtifactActivationStatus",
+        "type": "object"
+      },
+      "HostRequest_hostInstalledBinaryDigests": {
+        "description": "Usage: Read the SHA-256 digests of the managed standalone binaries.\nInputs: None.\nInvariants: Only the authenticated current controller can read them. The daemon chooses both paths. A null runner digest means the managed runner is absent.\nEffects: Reads the installed files on each request without changing them.\nRecovery: Retry after reconnect, or inspect the managed binaries if they cannot be read.",
+        "properties": {
+          "args": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "const": "hostInstalledBinaryDigests",
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "const": "req",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "id", "op", "args"],
+        "title": "HostRequest_hostInstalledBinaryDigests",
         "type": "object"
       },
       "HostRequest_hostSettingsGet": {
@@ -86349,7 +86560,7 @@
   "defaultContentType": "application/json",
   "id": "urn:keylime:host-link",
   "info": {
-    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. The controller accepts protocol 13 through 14 and welcomes each daemon at its offered version. Upgrade the controller first: new daemons require protocol 14. Older accepted daemons can still use existing operations, including managed deployment; hostSettingsGet, hostSettingsSet and modelsList require v14. Incompatible versions close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 86 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. The controller accepts protocol 13 through 14 and welcomes each daemon at its offered version. Upgrade the controller first: new daemons require protocol 14. Older accepted daemons can still use existing operations, including managed deployment; hostSettingsGet, hostSettingsSet and modelsList require v14. Incompatible versions close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 87 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
     "title": "Host daemon link",
     "version": "14"
   },
@@ -86359,7 +86570,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: Install a selected staged binary and restart the standalone daemon.\nInputs: Supply its staged upload ID, an operation ID, the target executable and its expected SHA-256.\nInvariants: Valid only on a supported standalone install and the server link that staged the artifact. Replaying an admitted operation ID cannot trigger a second activation. Busy hosts refuse activation.\nEffects: Hands installation to a worker that verifies the bytes and preflights the replacement with the other installed binary before draining. On success, it saves a backup, replaces the binary atomically and restarts the unit. Acceptance is not completion.\nRecovery: Read hostArtifactActivationStatus with the same operation ID after reconnect. Never blindly retry or automatically roll back a restart.",
+      "description": "Usage: Install a selected staged binary or pair and restart the standalone daemon.\nInputs: Supply its staged upload ID, an operation ID, the target executable and its expected SHA-256. A paired deployment also supplies the staged runner ID and digest.\nInvariants: Valid only on a supported standalone install and the server link that staged the artifacts. Replaying an admitted operation ID cannot trigger a second activation. Busy hosts refuse activation.\nEffects: The worker verifies and preflights the resulting pair before draining. It backs up existing binaries before replacing them. If the runner is absent, a paired deployment creates it without overwriting a concurrently added file. The worker restarts the unit once; acceptance is not completion.\nRecovery: Read hostArtifactActivationStatus with the same operation ID after reconnect. Never blindly retry or automatically roll back a restart.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/HostRequest_activateHostArtifact"
@@ -86997,6 +87208,29 @@
         ]
       },
       "summary": "hostArtifactActivationStatus"
+    },
+    "operation_hostInstalledBinaryDigests": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Read the SHA-256 digests of the managed standalone binaries.\nInputs: None.\nInvariants: Only the authenticated current controller can read them. The daemon chooses both paths. A null runner digest means the managed runner is absent.\nEffects: Reads the installed files on each request without changing them.\nRecovery: Retry after reconnect, or inspect the managed binaries if they cannot be read.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/HostRequest_hostInstalledBinaryDigests"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/HostReply_hostInstalledBinaryDigests"
+          }
+        ]
+      },
+      "summary": "hostInstalledBinaryDigests"
     },
     "operation_hostSettingsGet": {
       "action": "send",

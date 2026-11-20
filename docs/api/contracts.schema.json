@@ -29724,7 +29724,7 @@
           "type": "string"
         },
         "runnerBackup": {
-          "description": "Path to the retained runner backup for a paired deployment.",
+          "description": "Path to the retained runner backup for a paired deployment, omitted if no runner was backed up.",
           "type": "string"
         },
         "state": {
@@ -33201,7 +33201,7 @@
           "type": "string"
         },
         "runnerBackup": {
-          "description": "Path to the retained runner backup for a paired deployment.",
+          "description": "Path to the retained runner backup for a paired deployment, omitted if no runner was backed up.",
           "type": "string"
         },
         "state": {
@@ -33223,6 +33223,36 @@
         }
       },
       "required": ["state"],
+      "type": "object"
+    },
+    "host_hostInstalledBinaryDigests_args": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "host_hostInstalledBinaryDigests_result": {
+      "additionalProperties": false,
+      "description": "Digests of the two managed binaries read on the selected standalone host.",
+      "properties": {
+        "keylime": {
+          "description": "SHA-256 of the installed standalone Keylime daemon, in lowercase hex.",
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "runner": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "SHA-256 of the installed standalone runner, in lowercase hex, or null if the runner is absent."
+        }
+      },
+      "required": ["keylime", "runner"],
       "type": "object"
     },
     "host_hostSettingsGet_args": {
@@ -47315,6 +47345,10 @@
               "description": "This standalone daemon accepts staged binary activation.",
               "type": "boolean"
             },
+            "canReportBinaryDigests": {
+              "description": "This daemon accepts hostInstalledBinaryDigests.",
+              "type": "boolean"
+            },
             "canReportUsage": {
               "description": "This daemon accepts usageReport.",
               "type": "boolean"
@@ -49587,7 +49621,7 @@
           "type": "string"
         },
         "runnerBackup": {
-          "description": "Path to the retained runner backup for a paired deployment.",
+          "description": "Path to the retained runner backup for a paired deployment, omitted if no runner was backed up.",
           "type": "string"
         },
         "state": {
@@ -49609,6 +49643,31 @@
         }
       },
       "required": ["state"],
+      "type": "object"
+    },
+    "hostControl_HostInstalledBinaryDigests": {
+      "additionalProperties": false,
+      "description": "Digests of the two managed binaries read on the selected standalone host.",
+      "properties": {
+        "keylime": {
+          "description": "SHA-256 of the installed standalone Keylime daemon, in lowercase hex.",
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "runner": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "SHA-256 of the installed standalone runner, in lowercase hex, or null if the runner is absent."
+        }
+      },
+      "required": ["keylime", "runner"],
       "type": "object"
     },
     "hostControl_HostReleaseDeployFrame": {
@@ -49665,7 +49724,7 @@
                   "type": "string"
                 },
                 "runnerBackup": {
-                  "description": "Path to the retained runner backup for a paired deployment.",
+                  "description": "Path to the retained runner backup for a paired deployment, omitted if no runner was backed up.",
                   "type": "string"
                 },
                 "state": {
@@ -49735,9 +49794,26 @@
               "id": {
                 "description": "Opaque build ID, not a path.",
                 "type": "string"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "installed",
+                    "type": "string"
+                  },
+                  {
+                    "const": "different",
+                    "type": "string"
+                  },
+                  {
+                    "const": "unknown",
+                    "type": "string"
+                  }
+                ],
+                "description": "Installed means both binaries match byte for byte. Different means at least one differs or the runner is missing. Unknown means the comparison could not be verified."
               }
             },
-            "required": ["id", "builtAt"],
+            "required": ["id", "builtAt", "status"],
             "type": "object"
           },
           "type": "array"

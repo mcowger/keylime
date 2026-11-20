@@ -168,6 +168,7 @@ export const HOST_OP_NAMES = [
   "stageHostArtifact",
   "activateHostArtifact",
   "hostArtifactActivationStatus",
+  "hostInstalledBinaryDigests",
   "hostSettingsGet",
   "hostSettingsSet",
   "modelsList",
@@ -643,6 +644,9 @@ export function decodeUp(line: string): UpMessage | UnknownMessage {
         ...(o.canActivateArtifact === undefined
           ? {}
           : { canActivateArtifact: bool(o, "canActivateArtifact") }),
+        ...(o.canReportBinaryDigests === undefined
+          ? {}
+          : { canReportBinaryDigests: bool(o, "canReportBinaryDigests") }),
         ...(o.canReportUsage === undefined
           ? {}
           : { canReportUsage: bool(o, "canReportUsage") }),

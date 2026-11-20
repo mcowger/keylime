@@ -9,6 +9,7 @@ import {
   realpathSync,
   renameSync,
   rmSync,
+  type Stats,
 } from "node:fs";
 import { open } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -30,9 +31,10 @@ const USAGE =
   "Usage: keylime host install-artifact <staged-path> --target <keylime|keylime-omp> --sha256 <hex>";
 
 function serviceCommand(argv: string[], timeout: number): string {
-  const env = process.platform === "linux" && !process.env.XDG_RUNTIME_DIR
-    ? { ...process.env, XDG_RUNTIME_DIR: `/run/user/${process.getuid!()}` }
-    : process.env;
+  const env =
+    process.platform === "linux" && !process.env.XDG_RUNTIME_DIR
+      ? { ...process.env, XDG_RUNTIME_DIR: `/run/user/${process.getuid!()}` }
+      : process.env;
   const result = Bun.spawnSync(argv, { env, timeout, stdin: "ignore" });
   if (result.exitCode !== 0 || result.signalCode) {
     const detail = result.stderr.toString().trim();
@@ -84,7 +86,12 @@ function standaloneService(uid: number) {
 function standaloneInstall(uid: number): string {
   const install = join(realpathSync(homedir()), STANDALONE_HOST_INSTALL);
   const info = lstatSync(install);
-  if (!info.isDirectory() || info.uid !== uid || (info.mode & 0o022) !== 0 || realpathSync(install) !== install)
+  if (
+    !info.isDirectory() ||
+    info.uid !== uid ||
+    (info.mode & 0o022) !== 0 ||
+    realpathSync(install) !== install
+  )
     throw new Error(`Expected an owned standalone installation at ${install}`);
   return install;
 }
@@ -92,8 +99,11 @@ function standaloneInstall(uid: number): string {
 export function isManagedArtifactBinary(): boolean {
   try {
     const uid = process.getuid?.();
-    return !!uid && import.meta.path.startsWith("/$bunfs/") &&
-      realpathSync(process.execPath) === join(standaloneInstall(uid), "keylime");
+    return (
+      !!uid &&
+      import.meta.path.startsWith("/$bunfs/") &&
+      realpathSync(process.execPath) === join(standaloneInstall(uid), "keylime")
+    );
   } catch {
     return false;
   }
@@ -101,7 +111,10 @@ export function isManagedArtifactBinary(): boolean {
 
 export function isManagedArtifactDaemon(): boolean {
   try {
-    return isManagedArtifactBinary() && standaloneService(process.getuid!()).pid() === process.pid;
+    return (
+      isManagedArtifactBinary() &&
+      standaloneService(process.getuid!()).pid() === process.pid
+    );
   } catch {
     return false;
   }
@@ -199,7 +212,11 @@ export async function runInstallArtifact(args: string[]): Promise<number> {
     !/^[0-9a-f]{64}$/i.test(sha256)
   )
     throw new Error(USAGE);
-  return installArtifact({ stagedPath: positionals[0], target, sha256: sha256.toLowerCase() });
+  return installArtifact({
+    stagedPath: positionals[0],
+    target,
+    sha256: sha256.toLowerCase(),
+  });
 }
 
 export async function installArtifact({
@@ -225,12 +242,15 @@ export async function installArtifact({
   if (!uid) throw new Error("Run this as the host service user, not root");
   const service = standaloneService(uid);
   const install = standaloneInstall(uid);
-  const control = (command: Parameters<typeof requestHostControl>[0]) => requestHostControl(command, agentDir);
+  const control = (command: Parameters<typeof requestHostControl>[0]) =>
+    requestHostControl(command, agentDir);
   const daemon = join(install, "keylime");
   const installedRunner = join(install, "keylime-omp");
-  const plan = (binary: "keylime" | "keylime-omp") => {
-    const destination = join(install, binary);
-    const previous = lstatSync(destination);
+  const plan = (
+    binary: "keylime" | "keylime-omp",
+    destination: string,
+    previous: Stats,
+  ) => {
     if (
       !previous.isFile() ||
       previous.uid !== uid ||
@@ -251,15 +271,28 @@ export async function installArtifact({
   const backups: string[] = [];
   let drainedPid: number | undefined;
   let replaced = false;
+  let runnerAdded = false;
   try {
-    const primary = plan(target);
-    const secondary = runner ? plan("keylime-omp") : undefined;
+    const destination = target === "keylime" ? daemon : installedRunner;
+    const primary = plan(target, destination, lstatSync(destination));
+    const previousRunner = runner
+      ? lstatSync(installedRunner, { throwIfNoEntry: false })
+      : undefined;
+    const secondary = previousRunner
+      ? plan("keylime-omp", installedRunner, previousRunner)
+      : undefined;
     scratch = mkdtempSync(join(install, ".install-artifact-"));
     const candidate = join(scratch, "candidate");
     await copyVerified(stagedPath, candidate, sha256, uid, agentDir);
     const runnerCandidate = join(scratch, "runner-candidate");
     if (runner)
-      await copyVerified(runner.stagedPath, runnerCandidate, runner.sha256, uid, agentDir);
+      await copyVerified(
+        runner.stagedPath,
+        runnerCandidate,
+        runner.sha256,
+        uid,
+        agentDir,
+      );
     const preflight = spawnSync(
       target === "keylime" ? candidate : daemon,
       ["preflight"],
@@ -272,7 +305,9 @@ export async function installArtifact({
           PI_CODING_AGENT_DIR: join(scratch, "agent"),
           KEYLIME_OMP_BIN: runner
             ? runnerCandidate
-            : target === "keylime-omp" ? candidate : installedRunner,
+            : target === "keylime-omp"
+              ? candidate
+              : installedRunner,
         },
         stdio: ["ignore", "pipe", "pipe"],
         encoding: "utf8",
@@ -286,15 +321,19 @@ export async function installArtifact({
       preflight.status !== 0 ||
       !/^preflight ok: /m.test(preflight.stdout)
     ) {
-      const detail = (preflight.stderr?.trim() || preflight.error?.message)
-        ?.slice(-500);
+      const detail = (
+        preflight.stderr?.trim() || preflight.error?.message
+      )?.slice(-500);
       throw new Error(
         `Preflight failed for ${runner ? "keylime and keylime-omp" : target}; the installed binary was not changed${detail ? `: ${detail}` : ""}`,
       );
     }
     const status = await control("status");
-    if (status.executable !== daemon || status.pid !== service.pid() ||
-        (expectedPid !== undefined && status.pid !== expectedPid))
+    if (
+      status.executable !== daemon ||
+      status.pid !== service.pid() ||
+      (expectedPid !== undefined && status.pid !== expectedPid)
+    )
       throw new Error(
         "The local daemon is not the installed standalone host service",
       );
@@ -315,7 +354,9 @@ export async function installArtifact({
     for (const { binary, destination, previous } of binaries) {
       const current = lstatSync(destination);
       if (current.dev !== previous.dev || current.ino !== previous.ino)
-        throw new Error(`The installed binary changed while preparing ${binary}`);
+        throw new Error(
+          `The installed binary changed while preparing ${binary}`,
+        );
     }
     for (const { binary, destination, backup } of binaries) {
       // Keep the old inode by an exclusive link; the installed name never goes missing.
@@ -325,9 +366,15 @@ export async function installArtifact({
     }
     renameSync(candidate, primary.destination);
     replaced = true;
-    if (secondary) {
+    if (runner) {
       try {
-        renameSync(runnerCandidate, secondary.destination);
+        if (secondary) {
+          renameSync(runnerCandidate, secondary.destination);
+        } else {
+          // Publish exclusively: a runner added during preflight or drain must not be overwritten.
+          linkSync(runnerCandidate, installedRunner);
+          runnerAdded = true;
+        }
       } catch (error) {
         try {
           // Restore the first binary atomically without consuming its backup.
@@ -349,6 +396,10 @@ export async function installArtifact({
     }
     for (const { binary, backup } of binaries)
       console.log(`Installed ${binary}. Backup: ${backup}`);
+    if (runnerAdded)
+      console.log(
+        "Installed missing keylime-omp. No previous runner to back up.",
+      );
     // Once restart is attempted, the supervisor may already have run the new pair.
     // Keep both backups and leave recovery to the operator from this point on.
     service.restart();
@@ -378,7 +429,7 @@ export async function installArtifact({
   } catch (error) {
     if (replaced)
       throw new Error(
-        `${error instanceof Error ? error.message : String(error)}. ${backups.length === 1 ? "Backup" : "Backups"}: ${backups.join(", ")}. Check the service before restoring it; no automatic rollback.`,
+        `${error instanceof Error ? error.message : String(error)}. ${backups.length === 1 ? "Backup" : "Backups"}: ${backups.join(", ")}. Check the service before restoring it; no automatic rollback.${runnerAdded ? ` If returning to the previous install, remove the newly installed runner at ${installedRunner}.` : ""}`,
         { cause: error },
       );
     if (drainedPid) {

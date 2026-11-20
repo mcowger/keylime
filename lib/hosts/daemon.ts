@@ -9,6 +9,7 @@ import type { SpawnResult } from "./host";
 import { SessionPtyManager } from "./session-pty";
 import { Value } from "@sinclair/typebox/value";
 import { SystemsRequestSchema } from "../api-contracts/systems";
+import type { HostInstalledBinaryDigests } from "../api-contracts/host-control-models";
 import {
   BrowserListSchema,
   BrowserFrameSchema,
@@ -63,6 +64,8 @@ import {
 } from "./systems";
 import { HostResumeTracker, type HostResumeEntry } from "./host-resume";
 import { ManagedArtifactActivation } from "./managed-artifact-activation";
+import { digestBinary, openBinary } from "./binary-digest";
+import { STANDALONE_HOST_INSTALL } from "./standalone-service";
 import {
   CREATION_ID_RE,
   encodeLine,
@@ -696,7 +699,9 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
           workspaceOps: Object.keys(WORKSPACE_OP_PARAMS),
           canReportUsage: true,
           canStageArtifact: true,
-          ...(activation.supported() ? { canActivateArtifact: true } : {}),
+          ...(activation.supported()
+            ? { canActivateArtifact: true, canReportBinaryDigests: true }
+            : {}),
           platform: process.platform,
           arch: process.arch,
           home: homedir(),
@@ -904,6 +909,52 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         "Another server owns this upload attempt",
       );
   }
+  async function readManagedBinaryDigests(): Promise<HostInstalledBinaryDigests> {
+    let install: string;
+    try {
+      install = join(realpathSync(homedir()), STANDALONE_HOST_INSTALL);
+    } catch {
+      throw new HostOpError(
+        500,
+        "host_binary_digest_failed",
+        "Could not locate the managed installation",
+      );
+    }
+    async function digest(binary: "keylime" | "keylime-omp") {
+      try {
+        const file = await openBinary(join(install, binary)).catch(
+          (error: unknown) => {
+            if (
+              binary === "keylime-omp" &&
+              (error as NodeJS.ErrnoException | undefined)?.code === "ENOENT"
+            )
+              return null;
+            throw error;
+          },
+        );
+        if (file === null) return null;
+        try {
+          return (await digestBinary(file)).sha256;
+        } finally {
+          await file.close();
+        }
+      } catch {
+        throw new HostOpError(
+          500,
+          "host_binary_digest_failed",
+          `Could not read the managed ${binary} binary`,
+        );
+      }
+    }
+    const keylime = await digest("keylime");
+    if (keylime === null)
+      throw new HostOpError(
+        500,
+        "host_binary_digest_failed",
+        "The managed keylime binary is absent",
+      );
+    return { keylime, runner: await digest("keylime-omp") };
+  }
   async function runOp(
     link: DaemonLink,
     op: string,
@@ -928,6 +979,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         "close",
         "ptySessions",
         "hostArtifactActivationStatus",
+        "hostInstalledBinaryDigests",
         "hostSettingsGet",
       ].includes(op)
     ) {
@@ -1260,7 +1312,8 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         return staged;
       }
       case "activateHostArtifact":
-      case "hostArtifactActivationStatus": {
+      case "hostArtifactActivationStatus":
+      case "hostInstalledBinaryDigests": {
         const owner = shipOwnerByLink.get(link);
         if (!owner || !link.isUp() || controller !== link)
           throw new HostOpError(
@@ -1268,6 +1321,21 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
             "link_not_authenticated",
             "The server link is no longer authenticated",
           );
+        if (op === "hostInstalledBinaryDigests") {
+          if (Object.keys(args).length !== 0)
+            throw new HostOpError(
+              400,
+              "invalid_request",
+              "This operation accepts no arguments",
+            );
+          if (!activation.supported())
+            throw new HostOpError(
+              409,
+              "artifact_activation_unsupported",
+              "This daemon is not the supervised standalone host",
+            );
+          return readManagedBinaryDigests();
+        }
         return op === "activateHostArtifact"
           ? activation.start(args, owner)
           : activation.status(args.operationId, owner);

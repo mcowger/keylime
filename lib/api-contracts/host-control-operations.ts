@@ -18,6 +18,7 @@ import {
   ActivateHostArtifactArgsSchema,
   HostArtifactActivationArgsSchema,
   HostArtifactActivationResultSchema,
+  HostInstalledBinaryDigestsSchema,
 } from "./host-control-models";
 import {
   BrowserListResultSchema,
@@ -177,7 +178,7 @@ export const hostControlOperations: readonly OperationContract[] = [
   {
     name: "activateHostArtifact",
     description:
-      "Usage: Install a selected staged binary and restart the standalone daemon.\nInputs: Supply its staged upload ID, an operation ID, the target executable and its expected SHA-256.\nInvariants: Valid only on a supported standalone install and the server link that staged the artifact. Replaying an admitted operation ID cannot trigger a second activation. Busy hosts refuse activation.\nEffects: Hands installation to a worker that verifies the bytes and preflights the replacement with the other installed binary before draining. On success, it saves a backup, replaces the binary atomically and restarts the unit. Acceptance is not completion.\nRecovery: Read hostArtifactActivationStatus with the same operation ID after reconnect. Never blindly retry or automatically roll back a restart.",
+      "Usage: Install a selected staged binary or pair and restart the standalone daemon.\nInputs: Supply its staged upload ID, an operation ID, the target executable and its expected SHA-256. A paired deployment also supplies the staged runner ID and digest.\nInvariants: Valid only on a supported standalone install and the server link that staged the artifacts. Replaying an admitted operation ID cannot trigger a second activation. Busy hosts refuse activation.\nEffects: The worker verifies and preflights the resulting pair before draining. It backs up existing binaries before replacing them. If the runner is absent, a paired deployment creates it without overwriting a concurrently added file. The worker restarts the unit once; acceptance is not completion.\nRecovery: Read hostArtifactActivationStatus with the same operation ID after reconnect. Never blindly retry or automatically roll back a restart.",
     args: ActivateHostArtifactArgsSchema,
     result: HostArtifactActivationResultSchema,
   },
@@ -187,6 +188,13 @@ export const hostControlOperations: readonly OperationContract[] = [
       "Usage: Read the outcome of a standalone host activation.\nInputs: Supply the original operation ID.\nInvariants: State belongs to the daemon and the server relationship that requested the activation. A missing receipt does not prove that the operation ran or failed.\nEffects: Reads durable state without installing, restarting or retrying.\nRecovery: Poll after the link returns. If the outcome stays unknown, inspect the service and backup on the host before retrying.",
     args: HostArtifactActivationArgsSchema,
     result: HostArtifactActivationResultSchema,
+  },
+  {
+    name: "hostInstalledBinaryDigests",
+    description:
+      "Usage: Read the SHA-256 digests of the managed standalone binaries.\nInputs: None.\nInvariants: Only the authenticated current controller can read them. The daemon chooses both paths. A null runner digest means the managed runner is absent.\nEffects: Reads the installed files on each request without changing them.\nRecovery: Retry after reconnect, or inspect the managed binaries if they cannot be read.",
+    args: Type.Object({}, { additionalProperties: false }),
+    result: HostInstalledBinaryDigestsSchema,
   },
   {
     name: "hostSettingsGet",

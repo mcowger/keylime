@@ -11,7 +11,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ### Added
 - `bun run deploy:host` installs the daemon and runner over SSH, prompts for a host token, and offers user autostart with systemd or launchd. It doesn't deploy the FE.
-- **Settings → Hosts → Deploy release** lists compatible builds already on the web server, shows their build times in your time zone, and marks the newest. The dialog tracks transfer progress for the matched daemon and runner before they install and restart together.
+- **Settings → Hosts** shows each remote host's Keylime and omp versions and checks for a different compatible build. **Deploy release** skips builds already installed, even when version strings alone can't tell builds apart.
+- Deploying a matched release can restore a missing `keylime-omp` on a standalone host.
 - In **Settings → Hosts**, use **Stage artifact** on a linked host to transfer a binary without SSH. On supported standalone hosts you can then verify its SHA-256, choose **Install & restart**, and confirm the outcome after reconnect.
 - Run `keylime host install-artifact` on the target host to verify the SHA-256 of a staged binary, replace the installed daemon or runner with a backup, and restart the standalone host service. The command refuses a busy daemon.
 - Standalone host activation runs `keylime preflight` before drain or replacement. A matching checksum alone no longer lets a wrong-platform or incompatible binary through.
@@ -164,6 +165,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The workspace `…` menu can start or stop PR feedback monitoring for a selected chat without running Ship or changing auto-merge. The PR row's bell shows monitoring status; closing the chat picker restores focus to the menu
 - Ship can monitor a PR for new comments and reviews. The server verifies the shipping chat opted in and sends only feedback links; stop monitoring from workspace actions
 - Host-specific settings, model discovery, sessions, notifications, restore claims, and outbox quotas; combined search checks metadata across hosts and transcripts locally
+- **Settings → Hosts** shows each remote host's Keylime and omp versions and checks for a different compatible build. **Deploy release** skips builds already installed, even when version strings alone can't tell builds apart
+- Deploying a matched release can restore a missing `keylime-omp` on a standalone host
 
 ### Changed
 - `bun run build:binary` builds the browser assets and runners, then compiles and packages all four Keylime targets in parallel. Runner builds use faster native addon compression.

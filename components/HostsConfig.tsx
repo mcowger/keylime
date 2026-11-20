@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -326,6 +327,7 @@ type ActivationBackups = Pick<
 >;
 
 type ReleaseCatalog =
+  | { kind: "idle" }
   | { kind: "loading" }
   | { kind: "loaded"; releases: HostReleaseList["releases"] }
   | { kind: "error"; message?: string };
@@ -425,12 +427,16 @@ function activationOutcome(
 function StageArtifactDialog({
   host,
   mode,
+  catalog,
   releaseAvailable,
+  onActivationChange,
   onClose,
 }: {
   host: HostRow;
   mode: "manual" | "release";
+  catalog: ReleaseCatalog;
   releaseAvailable: boolean;
+  onActivationChange: (active: boolean) => void;
   onClose: () => void;
 }) {
   const { t } = useI18n();
@@ -444,8 +450,13 @@ function StageArtifactDialog({
   );
   const hostUrl = `/api/hosts/${encodeURIComponent(host.id)}`;
   const releasesUrl = `${hostUrl}/releases`;
-  const [catalog, setCatalog] = useState<ReleaseCatalog>({ kind: "loading" });
-  const [releaseId, setReleaseId] = useState("");
+  const [releaseId, setReleaseId] = useState(() =>
+    catalog.kind === "loaded" ? (catalog.releases[0]?.id ?? "") : "",
+  );
+  const selectedRelease =
+    catalog.kind === "loaded"
+      ? catalog.releases.find(({ id }) => id === releaseId)
+      : undefined;
   const releaseLabelId = useId();
   const canStage = !!host.canStageArtifact && isLinkUp(host.status);
   const canActivate = host.id !== LOCAL_HOST_ID && !!host.canActivateArtifact;
@@ -453,7 +464,10 @@ function StageArtifactDialog({
     useState<ActivateHostArtifactArgs["target"]>("keylime");
   const [sha256, setSha256] = useState("");
   const expectedHash = sha256.trim().toLowerCase();
-  const [confirming, setConfirming] = useState(false);
+  const [reviewed, setConfirming] = useState<boolean | ReleaseCatalog>(false);
+  const confirming = deployingRelease
+    ? reviewed === catalog
+    : reviewed === true;
   const [activation, setActivation] = useState<ArtifactActivation>({
     kind: "idle",
   });
@@ -464,8 +478,7 @@ function StageArtifactDialog({
   const canInstall = deployingRelease
     ? activation.kind === "idle" &&
       releaseAvailable &&
-      catalog.kind === "loaded" &&
-      !!releaseId
+      selectedRelease?.status === "different"
     : canConfigure &&
       isLinkUp(host.status) &&
       /^[0-9a-f]{64}$/.test(expectedHash);
@@ -489,54 +502,6 @@ function StageArtifactDialog({
   useEffect(() => {
     available.current = canStage;
   }, [canStage]);
-
-  useEffect(() => {
-    if (!deployingRelease) return;
-    const controller = new AbortController();
-    const { signal } = controller;
-    void (async () => {
-      try {
-        const response = await fetch(releasesUrl, {
-          cache: "no-store",
-          signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
-        });
-        const data: unknown = await response.json();
-        if (signal.aborted) return;
-        if (!response.ok) {
-          setCatalog({
-            kind: "error",
-            message:
-              isRecord(data) && typeof data.error === "string"
-                ? data.error
-                : undefined,
-          });
-          return;
-        }
-        if (!isRecord(data) || !Array.isArray(data.releases)) {
-          setCatalog({ kind: "error" });
-          return;
-        }
-        const releases: HostReleaseList["releases"] = [];
-        for (const item of data.releases as unknown[]) {
-          if (
-            !isRecord(item) ||
-            typeof item.id !== "string" ||
-            typeof item.builtAt !== "string"
-          ) {
-            setCatalog({ kind: "error" });
-            return;
-          }
-          releases.push({ id: item.id, builtAt: item.builtAt });
-        }
-        // The API lists releases newest first.
-        setReleaseId(releases[0]?.id ?? "");
-        setCatalog({ kind: "loaded", releases });
-      } catch {
-        if (!signal.aborted) setCatalog({ kind: "error" });
-      }
-    })();
-    return () => controller.abort();
-  }, [deployingRelease, releasesUrl]);
 
   useEffect(() => {
     return () => {
@@ -576,6 +541,7 @@ function StageArtifactDialog({
     const failedMessage = t("hostsConfig.activateArtifactFailed");
     activationRequest.current = controller;
     setConfirming(false);
+    onActivationChange(true);
     setActivation({ kind: deployingRelease ? "transferring" : "installing" });
 
     try {
@@ -664,6 +630,7 @@ function StageArtifactDialog({
       if (!signal.aborted) setActivation({ kind: "unconfirmed", operationId });
     } finally {
       activationRequest.current = null;
+      if (!signal.aborted) onActivationChange(false);
     }
   }
 
@@ -760,7 +727,7 @@ function StageArtifactDialog({
           style={{ display: "flex", flexDirection: "column", gap: 12 }}
         >
           {host.platform && <span>{host.platform}</span>}
-          {deployingRelease && (
+          {deployingRelease && activation.kind === "idle" && (
             <>
               {catalog.kind === "loading" && (
                 <div role="status">{t("hostsConfig.deployReleaseLoading")}</div>
@@ -820,9 +787,20 @@ function StageArtifactDialog({
                       };
                     })}
                   />
+                  {selectedRelease?.status === "installed" && (
+                    <div role="status">
+                      {t("hostsConfig.releaseAlreadyInstalled")}
+                    </div>
+                  )}
+                  {(!selectedRelease ||
+                    selectedRelease.status === "unknown") && (
+                    <div role="status">
+                      {t("hostsConfig.releaseSelectionUnconfirmed")}
+                    </div>
+                  )}
                 </div>
               )}
-              {!releaseAvailable && activation.kind === "idle" && (
+              {!releaseAvailable && (
                 <div role="status">
                   {t("hostsConfig.deployReleaseUnavailable")}
                 </div>
@@ -1026,10 +1004,14 @@ function StageArtifactDialog({
               <button
                 type="button"
                 className="ui-focus-ring"
-                style={primaryStyle}
+                style={
+                  deployingRelease && !canInstall ? buttonStyle : primaryStyle
+                }
                 disabled={!canInstall}
                 onClick={
-                  confirming ? () => void install() : () => setConfirming(true)
+                  confirming
+                    ? () => void install()
+                    : () => setConfirming(deployingRelease ? catalog : true)
                 }
               >
                 {deployingRelease
@@ -1078,18 +1060,119 @@ function HostCard({
   const [artifactMode, setArtifactMode] = useState<"manual" | "release" | null>(
     null,
   );
-  const linked = isLocalRow(host) ? null : host;
+  const remote = isLocalRow(host) ? null : host;
+  const linked = isLinkUp(host.status);
   const releaseAvailable =
-    !!linked &&
-    !!linked.canActivateArtifact &&
-    !!linked.arch &&
-    isLinkUp(linked.status);
+    !!remote?.canActivateArtifact && !!remote.arch && linked;
+  const [{ active: activationInProgress, generation }, setActivationState] =
+    useState({ active: false, generation: 0 });
+  const releasesUrl = `/api/hosts/${encodeURIComponent(host.id)}/releases`;
+  const request = useMemo(
+    () =>
+      releaseAvailable && !activationInProgress
+        ? { url: releasesUrl, generation }
+        : null,
+    [
+      releaseAvailable,
+      activationInProgress,
+      generation,
+      releasesUrl,
+      host.platform,
+      host.arch,
+      host.keylimeVersion,
+      host.ompVersion,
+    ],
+  );
+  const [comparison, setComparison] = useState<{
+    request: NonNullable<typeof request>;
+    catalog: ReleaseCatalog;
+  } | null>(null);
+  // A result belongs only to the request for this link and activation state.
+  const catalog: ReleaseCatalog = !request
+    ? { kind: "idle" }
+    : comparison?.request === request
+      ? comparison.catalog
+      : { kind: "loading" };
+
+  useEffect(() => {
+    if (!request) return;
+    const controller = new AbortController();
+    const { signal } = controller;
+    const finish = (catalog: ReleaseCatalog) => {
+      if (!signal.aborted) setComparison({ request, catalog });
+    };
+    void (async () => {
+      try {
+        const response = await fetch(request.url, {
+          cache: "no-store",
+          signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
+        });
+        const data: unknown = await response.json();
+        if (!response.ok) {
+          finish({
+            kind: "error",
+            message:
+              isRecord(data) && typeof data.error === "string"
+                ? data.error
+                : undefined,
+          });
+          return;
+        }
+        if (!isRecord(data) || !Array.isArray(data.releases)) {
+          finish({ kind: "error" });
+          return;
+        }
+        const releases: HostReleaseList["releases"] = [];
+        for (const item of data.releases as unknown[]) {
+          if (
+            !isRecord(item) ||
+            typeof item.id !== "string" ||
+            typeof item.builtAt !== "string" ||
+            (item.status !== "installed" &&
+              item.status !== "different" &&
+              item.status !== "unknown")
+          ) {
+            finish({ kind: "error" });
+            return;
+          }
+          releases.push({
+            id: item.id,
+            builtAt: item.builtAt,
+            status: item.status,
+          });
+        }
+        finish({ kind: "loaded", releases });
+      } catch {
+        finish({ kind: "error" });
+      }
+    })();
+    return () => controller.abort();
+  }, [request]);
+
+  const newest = catalog.kind === "loaded" ? catalog.releases[0] : undefined;
+  const releaseStatus = !linked
+    ? "hostsConfig.releaseComparisonOffline"
+    : catalog.kind === "loading" || activationInProgress
+      ? "hostsConfig.releaseComparisonChecking"
+      : catalog.kind !== "loaded" || newest?.status === "unknown"
+        ? "hostsConfig.releaseComparisonFailed"
+        : !newest
+          ? "hostsConfig.releaseComparisonEmpty"
+          : newest.status === "installed"
+            ? "hostsConfig.releaseComparisonCurrent"
+            : "hostsConfig.releaseComparisonDifferent";
+  const versionText = (version?: string | null) => {
+    if (!version) return t("hostsConfig.binaryVersionUnavailable");
+    return linked
+      ? version
+      : t("hostsConfig.binaryVersionLastReported", { version });
+  };
   const details = [
     host.platform,
     host.hostVersion !== null &&
       host.status !== "needs-upgrade" &&
       t("hostsConfig.protocol", { version: host.hostVersion }),
-    linked &&
+    remote &&
       (host.lastSeenAt
         ? t("hostsConfig.lastSeen", {
             time: new Date(host.lastSeenAt).toLocaleString(),
@@ -1145,6 +1228,24 @@ function HostCard({
             {details}
           </div>
         )}
+        {remote && (
+          <div
+            style={{
+              marginTop: 4,
+              fontSize: 12,
+              color: "var(--text-muted)",
+              overflowWrap: "anywhere",
+            }}
+          >
+            <div>
+              {t("hostsConfig.binaryVersions", {
+                keylime: versionText(remote.keylimeVersion),
+                omp: versionText(remote.ompVersion),
+              })}
+            </div>
+            <div role="status">{t(releaseStatus)}</div>
+          </div>
+        )}
         {isLocalRow(host) &&
           host.daemonManaged &&
           host.status === "offline" && (
@@ -1182,12 +1283,13 @@ function HostCard({
           maxWidth: "100%",
         }}
       >
-        {releaseAvailable && (
+        {remote && (
           <button
             type="button"
             className="ui-focus-ring"
-            style={primaryStyle}
+            style={newest?.status === "different" ? primaryStyle : buttonStyle}
             aria-label={t("hostsConfig.deployReleaseTitle", { name })}
+            disabled={newest?.status !== "different"}
             onClick={() => setArtifactMode("release")}
           >
             {t("hostsConfig.deployRelease")}
@@ -1218,7 +1320,7 @@ function HostCard({
           <Pencil size={13} aria-hidden="true" />
           {t("hostsConfig.rename")}
         </button>
-        {linked && (
+        {remote && (
           <button
             type="button"
             className="ui-focus-ring"
@@ -1239,7 +1341,14 @@ function HostCard({
         <StageArtifactDialog
           host={host}
           mode={artifactMode}
+          catalog={catalog}
           releaseAvailable={releaseAvailable}
+          onActivationChange={(active) =>
+            setActivationState(({ generation }) => ({
+              active,
+              generation: active ? generation : generation + 1,
+            }))
+          }
           onClose={() => setArtifactMode(null)}
         />
       )}

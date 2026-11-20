@@ -62,29 +62,39 @@ claims during the upgrade. See [host independence](specs/2026-11-20-host-indepen
 
 ## Deploy a release without SSH
 
-In **Settings → Hosts**, choose **Deploy release** on the target host. The
-picker shows each build's time in your browser's time zone and marks the newest.
-Pick a build, review it, then choose **Deploy & restart**. The progress bar
-tracks the bytes the host acknowledges for the daemon and runner together.
+In **Settings → Hosts**, each remote host shows its reported Keylime and omp
+versions and whether the newest compatible build on the web server differs.
+Keylime compares both binaries byte for byte, so a rebuild can differ even
+if the reported versions haven't changed. **Deploy release** is disabled when
+the newest build is already installed or Keylime can't confirm a difference.
+
+When a different build is available, open **Deploy release**, pick a build,
+review it, then choose **Deploy & restart**. If you select a build that's already
+installed, you can't proceed to review. The progress bar tracks the bytes the host
+acknowledges for the daemon and runner together.
 Once both binaries are staged, the dialog switches to **Installing and restarting…**.
 Keylime checks both digests and runs preflight on the pair. It refuses a busy
-host. Otherwise it keeps backups of both binaries, replaces them, and restarts
-the service once.
+host. Otherwise it backs up the installed binaries and restarts the service
+once. If `keylime-omp` is missing, the paired deployment installs it without
+creating a runner backup. If restart fails, check the service before restoring
+anything. To return to the previous install, restore the daemon backup and
+remove the newly installed runner.
 
 The list comes from builds already on the web server. It includes matching
 native builds from `~/.local/share/keylime/releases/` and the unpacked
 `release/keylime-<os>-<arch>/` build under the server's package directory. A
 build must contain both `keylime` and `keylime-omp` to appear. If the list is
 empty, [build a matching release](release.md#building-binary-archives) on the
-web server and reopen it.
+web server and reopen Hosts.
 
 For native builds, the catalog uses the timestamp assigned when the build
 starts. For unpacked builds, it uses the newer of the two binaries' modification
 times.
 
-Deploy from Hosts requires a standalone remote daemon that already supports
-release deployment. The web server and its own daemon aren't updated by this
-action.
+Deploy from Hosts requires a standalone remote daemon that can report its
+installed binary digests. For an older daemon that can't report them, install
+the matched pair from the host console and restart the service once. There's
+no need to re-enroll. This action doesn't update the web server or its daemon.
 
 The picker checks OS, CPU, and whether both binaries are present. It doesn't
 check whether a build can report deployment status. If you deploy a build

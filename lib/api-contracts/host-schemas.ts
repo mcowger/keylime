@@ -355,6 +355,11 @@ export const UpMessageSchema = Type.Union(
               "This standalone daemon accepts staged binary activation.",
           }),
         ),
+        canReportBinaryDigests: Type.Optional(
+          Type.Boolean({
+            description: "This daemon accepts hostInstalledBinaryDigests.",
+          }),
+        ),
         platform: Type.String(),
         arch: Type.Optional(
           Type.String({

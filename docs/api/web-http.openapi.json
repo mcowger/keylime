@@ -42626,7 +42626,7 @@
                       "type": "string"
                     },
                     "runnerBackup": {
-                      "description": "Path to the retained runner backup for a paired deployment.",
+                      "description": "Path to the retained runner backup for a paired deployment, omitted if no runner was backed up.",
                       "type": "string"
                     },
                     "state": {
@@ -43103,7 +43103,7 @@
                       "type": "string"
                     },
                     "runnerBackup": {
-                      "description": "Path to the retained runner backup for a paired deployment.",
+                      "description": "Path to the retained runner backup for a paired deployment, omitted if no runner was backed up.",
                       "type": "string"
                     },
                     "state": {
@@ -43909,7 +43909,7 @@
     },
     "/api/hosts/{id}/releases": {
       "get": {
-        "description": "### Usage\n\nList builds available to deploy to the selected standalone host.\n\n### Inputs\n\nSelect the linked host in the URL.\n\n### Invariants\n\nOnly complete daemon and runner pairs matching the host OS and CPU are listed. The server reads its own builds, not paths supplied by the client.\n\n### Effects\n\nReturns opaque build IDs and UTC build times, newest first. Does not transfer or install anything.\n\n### Recovery\n\nAn empty list means no complete compatible build was found. Build a release on the server and open the list again.",
+        "description": "### Usage\n\nList builds available to deploy to the selected standalone host.\n\n### Inputs\n\nSelect the linked host in the URL.\n\n### Invariants\n\nOnly complete daemon and runner pairs matching the host OS and CPU are listed. The server reads its own builds, not paths supplied by the client.\n\n### Effects\n\nReturns opaque build IDs, UTC build times, and whether each build matches the host's installed binaries, newest first. Does not transfer or install anything.\n\n### Recovery\n\nAn empty list means no complete compatible build was found. Build a release on the server and reopen the list. An unknown comparison blocks deployment; check the link and the installed daemon's support for binary reporting.",
         "operationId": "listHostReleases",
         "parameters": [
           {
@@ -43940,9 +43940,26 @@
                           "id": {
                             "description": "Opaque build ID, not a path.",
                             "type": "string"
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "const": "installed",
+                                "type": "string"
+                              },
+                              {
+                                "const": "different",
+                                "type": "string"
+                              },
+                              {
+                                "const": "unknown",
+                                "type": "string"
+                              }
+                            ],
+                            "description": "Installed means both binaries match byte for byte. Different means at least one differs or the runner is missing. Unknown means the comparison could not be verified."
                           }
                         },
-                        "required": ["id", "builtAt"],
+                        "required": ["id", "builtAt", "status"],
                         "type": "object"
                       },
                       "type": "array"
@@ -44290,15 +44307,15 @@
         ],
         "summary": "List compatible standalone host releases",
         "x-client-semantics": {
-          "Effects": "Returns opaque build IDs and UTC build times, newest first. Does not transfer or install anything.",
+          "Effects": "Returns opaque build IDs, UTC build times, and whether each build matches the host's installed binaries, newest first. Does not transfer or install anything.",
           "Inputs": "Select the linked host in the URL.",
           "Invariants": "Only complete daemon and runner pairs matching the host OS and CPU are listed. The server reads its own builds, not paths supplied by the client.",
-          "Recovery": "An empty list means no complete compatible build was found. Build a release on the server and open the list again.",
+          "Recovery": "An empty list means no complete compatible build was found. Build a release on the server and reopen the list. An unknown comparison blocks deployment; check the link and the installed daemon's support for binary reporting.",
           "Usage": "List builds available to deploy to the selected standalone host."
         }
       },
       "post": {
-        "description": "### Usage\n\nDeploy the selected build to a linked standalone host and stream progress as NDJSON.\n\n### Inputs\n\nSupply the selected release ID and a new operation ID.\n\n### Invariants\n\nBoth binaries come from the same server build. Caller paths, binary names and digests are not accepted. The host refuses busy or incompatible installs.\n\n### Effects\n\nStreams cumulative host-acknowledged bytes across both binaries, then reports installation after both are staged. Acceptance does not confirm the restart.\n\n### Recovery\n\nA pending result or lost reply requires GET /api/hosts/{id}/artifacts with the original operation ID. Disconnect cancels remaining transfer, but can race activation. Do not blindly send another deployment.",
+        "description": "### Usage\n\nDeploy the selected build to a linked standalone host and stream progress as NDJSON.\n\n### Inputs\n\nSupply the selected release ID and a new operation ID.\n\n### Invariants\n\nBoth binaries come from the same server build. Caller paths, binary names and digests are not accepted. The installed binaries must differ from the selected build and be readable, except that the runner can be absent. The host refuses busy or incompatible installs and adds a missing runner without overwriting an existing file.\n\n### Effects\n\nStreams cumulative host-acknowledged bytes across both binaries, then reports installation after both are staged. Acceptance does not confirm the restart.\n\n### Recovery\n\nA pending result or lost reply requires GET /api/hosts/{id}/artifacts with the original operation ID. Disconnect cancels remaining transfer, but can race activation. Do not blindly send another deployment.",
         "operationId": "deployHostRelease",
         "parameters": [
           {
@@ -44398,7 +44415,7 @@
                               "type": "string"
                             },
                             "runnerBackup": {
-                              "description": "Path to the retained runner backup for a paired deployment.",
+                              "description": "Path to the retained runner backup for a paired deployment, omitted if no runner was backed up.",
                               "type": "string"
                             },
                             "state": {
@@ -44813,7 +44830,7 @@
         "x-client-semantics": {
           "Effects": "Streams cumulative host-acknowledged bytes across both binaries, then reports installation after both are staged. Acceptance does not confirm the restart.",
           "Inputs": "Supply the selected release ID and a new operation ID.",
-          "Invariants": "Both binaries come from the same server build. Caller paths, binary names and digests are not accepted. The host refuses busy or incompatible installs.",
+          "Invariants": "Both binaries come from the same server build. Caller paths, binary names and digests are not accepted. The installed binaries must differ from the selected build and be readable, except that the runner can be absent. The host refuses busy or incompatible installs and adds a missing runner without overwriting an existing file.",
           "Recovery": "A pending result or lost reply requires GET /api/hosts/{id}/artifacts with the original operation ID. Disconnect cancels remaining transfer, but can race activation. Do not blindly send another deployment.",
           "Usage": "Deploy the selected build to a linked standalone host and stream progress as NDJSON."
         }

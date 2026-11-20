@@ -37,6 +37,8 @@ after(() => {
 });
 
 const route = await import("../../app/api/hosts/route.ts");
+// Load the release handlers after isolating the agent directory, like the hosts route.
+const releases = await import("../../app/api/hosts/[id]/releases/route.ts");
 const hub = await import("./hub.ts");
 const { LinkDriver, upgradeSocket } =
   await import("./link-driver.test-helper.ts");
@@ -271,4 +273,81 @@ test("the local row and getHost(local) show the reserved record's real link stat
     [""],
   );
   assert.equal(hub.getHost("local").label, "This machine");
+});
+
+test("release deployment refuses an installed pair even if an earlier check found a difference", async () => {
+  const arch = process.arch === "arm64" ? "x64" : "arm64";
+  const fixture = join(agentDir, `release/keylime-linux-${arch}`);
+  mkdirSync(fixture, { recursive: true });
+  for (const name of ["keylime", "keylime-omp"]) {
+    const path = join(fixture, name);
+    writeFileSync(path, name);
+    chmodSync(path, 0o755);
+  }
+
+  const previous = process.env.KEYLIME_PACKAGE_DIR;
+  process.env.KEYLIME_PACKAGE_DIR = agentDir;
+  const { host, token } = await (
+    await send("POST", { label: "Release host" })
+  ).json();
+  const link = new LinkDriver(host.id, token);
+  try {
+    await link.dial({
+      hello: { arch, canActivateArtifact: true, canReportBinaryDigests: true },
+    });
+    const keylime = new Bun.CryptoHasher("sha256")
+      .update("keylime")
+      .digest("hex");
+    const runner = new Bun.CryptoHasher("sha256")
+      .update("keylime-omp")
+      .digest("hex");
+    let installedRunner: string | null = null;
+    const ops: string[] = [];
+    void link.serve({
+      hostInstalledBinaryDigests() {
+        ops.push("compare");
+        return { keylime, runner: installedRunner };
+      },
+      uploadStart() {
+        ops.push("upload");
+        throw new Error("A matching build must not start uploading");
+      },
+    });
+
+    const url = `${BASE}/${host.id}/releases`;
+    const context = { params: Promise.resolve({ id: host.id }) };
+    const list = async () =>
+      (await releases.GET(new Request(url), context)).json();
+    const initial = (await list()).releases[0];
+    assert.equal(initial.status, "different");
+    installedRunner = runner;
+    const deployment = await releases.POST(
+      new Request(url, {
+        method: "POST",
+        body: JSON.stringify({
+          releaseId: initial.id,
+          operationId: crypto.randomUUID(),
+        }),
+        headers: { "content-type": "application/json" },
+      }),
+      { ...context, disableIdleTimeout() {} },
+    );
+    const frames = (await deployment.text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.equal(frames.length, 1);
+    assert.equal(frames[0].status, 409);
+    assert.equal(frames[0].code, "host_release_already_installed");
+    assert.deepEqual(ops, ["compare", "compare"]);
+    assert.equal((await list()).releases[0].status, "installed");
+
+    // The runner changed on the server without changing its filename or size.
+    writeFileSync(join(fixture, "keylime-omp"), "keylime-new");
+    assert.equal((await list()).releases[0].status, "different");
+  } finally {
+    if (link.socket) link.drop();
+    if (previous === undefined) delete process.env.KEYLIME_PACKAGE_DIR;
+    else process.env.KEYLIME_PACKAGE_DIR = previous;
+  }
 });
