@@ -12,6 +12,7 @@ import { createHash, createHmac, randomBytes } from "node:crypto";
 import { join } from "path";
 import { Database } from "bun:sqlite";
 import { commandErrorResponse, runAgentCommand } from "./agent-command";
+import type { OutboxAddResult } from "./api-contracts/browser-agent-operations";
 import {
   SHIP_DIGEST_RETRY_MS,
   ShipPrDigestSchema,
@@ -399,6 +400,13 @@ function createHostOutbox(hostId: string) {
         : {}),
       createdAt: entry.created_at,
     };
+  }
+
+  function addReceipt(row: Row, replaces?: string): Response {
+    const data = {
+      entry: Object.assign(toEntry(row), { hostId, replaces }),
+    } satisfies OutboxAddResult;
+    return Response.json({ success: true, data });
   }
 
   /** A session's entries not delivered yet, in submission order. An unreadable store must fail explicitly, not tell a
@@ -963,11 +971,7 @@ function createHostOutbox(hostId: string) {
         sessionId,
         command.replaces,
       );
-      const entry = toEntry(known);
-      return Response.json({
-        success: true,
-        data: { entry: replaces ? { ...entry, replaces } : entry },
-      });
+      return addReceipt(known, replaces);
     }
     const { mode, message, images, uploads, replaces } = command;
     if (
@@ -1317,40 +1321,18 @@ function createHostOutbox(hostId: string) {
         },
         { status: 429 },
       );
-    if (result.kind === "existing") {
-      const entry = toEntry(result.entry);
-      return Response.json({
-        success: true,
-        data: {
-          entry: result.replaces
-            ? { ...entry, replaces: result.replaces }
-            : entry,
-        },
-      });
-    }
+    if (result.kind === "existing")
+      return addReceipt(result.entry, result.replaces);
     if (result.kind === "duplicate") {
       publish(result.originalSession);
       if (result.originalSession !== sessionId) publish(sessionId);
-      return Response.json({
-        success: true,
-        data: {
-          entry: { ...toEntry(result.entry), replaces: result.replaces },
-        },
-      });
+      return addReceipt(result.entry, result.replaces);
     }
     publish(sessionId);
     if (result.replaced && result.replaced.session_id !== sessionId)
       publish(result.replaced.session_id);
     pumpOutbox(sessionId);
-    const entry = toEntry(result.entry);
-    return Response.json({
-      success: true,
-      data: {
-        entry: result.replaced
-          ? { ...entry, replaces: result.replaced.id }
-          : entry,
-      },
-    });
+    return addReceipt(result.entry, result.replaced?.id);
   }
 
   function removeEntry(sessionId: string, id: string): Response {

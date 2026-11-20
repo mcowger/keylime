@@ -1,4 +1,4 @@
-import { Type, type TSchema } from "@sinclair/typebox";
+import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import {
   BashResultInfoSchema,
   ClientMessageStatusSchema,
@@ -61,8 +61,22 @@ const outboxImage = Type.Object({
 });
 const receiptEntry = Type.Composite([
   OutboxEntrySchema,
-  Type.Object({ replaces: Type.Optional(id) }),
+  Type.Object({
+    hostId: Type.String({
+      minLength: 1,
+      description: "Host whose durable queue accepted this intent.",
+    }),
+    replaces: Type.Optional(id),
+  }),
 ]);
+export const OutboxAddResultSchema = Type.Object(
+  { entry: receiptEntry },
+  {
+    description:
+      "Host-qualified storage receipt for a new or replayed browser outbox submission.",
+  },
+);
+export type OutboxAddResult = Static<typeof OutboxAddResultSchema>;
 const native = (name: string): OperationContract => {
   const operation = lifecycleRunnerOperations.find(
     (item) => item.name === name,
@@ -198,7 +212,7 @@ Recovery: Refresh the scope after a sign-in change before adding entries.`,
     name: "outbox_add",
     description: `Usage: Durably accept a held outbox message, independently of its eventual delivery.
 Inputs: Supply id and scope; first insertion also requires mode and message. Images and completed uploads are optional; replaces identifies an earlier entry.
-Invariants: Reusing an existing id returns its stored payload. Replacing a failed or delivered entry requires the same original payload; pending originals cannot be replaced. Scope, upload, size and capacity checks can reject the request.
+Invariants: Reusing an existing id on the same host returns its stored receipt, including the owning host ID, without dispatching again. Replacing a failed or delivered entry requires the same original payload; pending originals cannot be replaced. Scope, upload, size and capacity checks can reject the request.
 Effects: Stores an entry for later delivery; acceptance does not mean the runner has admitted or completed a prompt.
 Recovery: Retry an uncertain insertion with the same id and scope to recover its receipt; resolve scope or payload conflicts rather than changing the original intent.`,
     args: Type.Composite([
@@ -212,7 +226,7 @@ Recovery: Retry an uncertain insertion with the same id and scope to recover its
         replaces: Type.Optional(id),
       }),
     ]),
-    result: Type.Object({ entry: receiptEntry }),
+    result: OutboxAddResultSchema,
   },
   {
     name: "outbox_remove",

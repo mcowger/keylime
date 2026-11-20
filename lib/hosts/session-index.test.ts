@@ -445,6 +445,7 @@ test("a cold-cache outbox message survives main restart and reaches its remote q
     { hostId: remote.id },
   );
   assert.equal(response.status, 200, await response.clone().text());
+  assert.equal((await response.json()).data.entry.hostId, remote.id);
   await until(
     () => outbox.outboxEntries(SHARED, remote.id)[0]?.state === "waiting_host",
     "durable host wait",
@@ -514,7 +515,9 @@ test("a cold-cache outbox message survives main restart and reaches its remote q
     "owner",
     { hostId: remote.id },
   );
-  assert.equal((await replay.json()).data.entry.state, "delivered");
+  const receipt = (await replay.json()).data.entry;
+  assert.equal(receipt.state, "delivered");
+  assert.equal(receipt.hostId, remote.id);
   assert.equal(
     commands.length,
     1,

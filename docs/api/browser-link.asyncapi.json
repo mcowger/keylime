@@ -1826,7 +1826,7 @@
         "correlationId": {
           "location": "$message.payload#/rid"
         },
-        "description": "Usage: Durably accept a held outbox message, independently of its eventual delivery.\nInputs: Supply id and scope; first insertion also requires mode and message. Images and completed uploads are optional; replaces identifies an earlier entry.\nInvariants: Reusing an existing id returns its stored payload. Replacing a failed or delivered entry requires the same original payload; pending originals cannot be replaced. Scope, upload, size and capacity checks can reject the request.\nEffects: Stores an entry for later delivery; acceptance does not mean the runner has admitted or completed a prompt.\nRecovery: Retry an uncertain insertion with the same id and scope to recover its receipt; resolve scope or payload conflicts rather than changing the original intent.",
+        "description": "Usage: Durably accept a held outbox message, independently of its eventual delivery.\nInputs: Supply id and scope; first insertion also requires mode and message. Images and completed uploads are optional; replaces identifies an earlier entry.\nInvariants: Reusing an existing id on the same host returns its stored receipt, including the owning host ID, without dispatching again. Replacing a failed or delivered entry requires the same original payload; pending originals cannot be replaced. Scope, upload, size and capacity checks can reject the request.\nEffects: Stores an entry for later delivery; acceptance does not mean the runner has admitted or completed a prompt.\nRecovery: Retry an uncertain insertion with the same id and scope to recover its receipt; resolve scope or payload conflicts rather than changing the original intent.",
         "name": "BrowserRequest_outbox_add",
         "payload": {
           "$ref": "#/components/schemas/BrowserRequest_outbox_add"
@@ -4797,7 +4797,7 @@
                     "type": "object"
                   }
                 ],
-                "description": "Usage: Durably accept a held outbox message, independently of its eventual delivery.\nInputs: Supply id and scope; first insertion also requires mode and message. Images and completed uploads are optional; replaces identifies an earlier entry.\nInvariants: Reusing an existing id returns its stored payload. Replacing a failed or delivered entry requires the same original payload; pending originals cannot be replaced. Scope, upload, size and capacity checks can reject the request.\nEffects: Stores an entry for later delivery; acceptance does not mean the runner has admitted or completed a prompt.\nRecovery: Retry an uncertain insertion with the same id and scope to recover its receipt; resolve scope or payload conflicts rather than changing the original intent.",
+                "description": "Usage: Durably accept a held outbox message, independently of its eventual delivery.\nInputs: Supply id and scope; first insertion also requires mode and message. Images and completed uploads are optional; replaces identifies an earlier entry.\nInvariants: Reusing an existing id on the same host returns its stored receipt, including the owning host ID, without dispatching again. Replacing a failed or delivered entry requires the same original payload; pending originals cannot be replaced. Scope, upload, size and capacity checks can reject the request.\nEffects: Stores an entry for later delivery; acceptance does not mean the runner has admitted or completed a prompt.\nRecovery: Retry an uncertain insertion with the same id and scope to recover its receipt; resolve scope or payload conflicts rather than changing the original intent.",
                 "title": "AgentCommand_outbox_add",
                 "type": "object"
               },
@@ -54573,6 +54573,7 @@
                         "type": "object"
                       },
                       {
+                        "description": "Host-qualified storage receipt for a new or replayed browser outbox submission.",
                         "properties": {
                           "entry": {
                             "properties": {
@@ -54585,6 +54586,11 @@
                                 "type": "number"
                               },
                               "error": {
+                                "type": "string"
+                              },
+                              "hostId": {
+                                "description": "Host whose durable queue accepted this intent.",
+                                "minLength": 1,
                                 "type": "string"
                               },
                               "id": {
@@ -54706,7 +54712,8 @@
                               "mode",
                               "message",
                               "state",
-                              "createdAt"
+                              "createdAt",
+                              "hostId"
                             ],
                             "type": "object"
                           }
@@ -67984,6 +67991,7 @@
               {
                 "properties": {
                   "data": {
+                    "description": "Host-qualified storage receipt for a new or replayed browser outbox submission.",
                     "properties": {
                       "entry": {
                         "properties": {
@@ -67996,6 +68004,11 @@
                             "type": "number"
                           },
                           "error": {
+                            "type": "string"
+                          },
+                          "hostId": {
+                            "description": "Host whose durable queue accepted this intent.",
+                            "minLength": 1,
                             "type": "string"
                           },
                           "id": {
@@ -68117,7 +68130,8 @@
                           "mode",
                           "message",
                           "state",
-                          "createdAt"
+                          "createdAt",
+                          "hostId"
                         ],
                         "type": "object"
                       }
@@ -73158,7 +73172,7 @@
         "type": "object"
       },
       "BrowserRequest_outbox_add": {
-        "description": "Usage: Durably accept a held outbox message, independently of its eventual delivery.\nInputs: Supply id and scope; first insertion also requires mode and message. Images and completed uploads are optional; replaces identifies an earlier entry.\nInvariants: Reusing an existing id returns its stored payload. Replacing a failed or delivered entry requires the same original payload; pending originals cannot be replaced. Scope, upload, size and capacity checks can reject the request.\nEffects: Stores an entry for later delivery; acceptance does not mean the runner has admitted or completed a prompt.\nRecovery: Retry an uncertain insertion with the same id and scope to recover its receipt; resolve scope or payload conflicts rather than changing the original intent.",
+        "description": "Usage: Durably accept a held outbox message, independently of its eventual delivery.\nInputs: Supply id and scope; first insertion also requires mode and message. Images and completed uploads are optional; replaces identifies an earlier entry.\nInvariants: Reusing an existing id on the same host returns its stored receipt, including the owning host ID, without dispatching again. Replacing a failed or delivered entry requires the same original payload; pending originals cannot be replaced. Scope, upload, size and capacity checks can reject the request.\nEffects: Stores an entry for later delivery; acceptance does not mean the runner has admitted or completed a prompt.\nRecovery: Retry an uncertain insertion with the same id and scope to recover its receipt; resolve scope or payload conflicts rather than changing the original intent.",
         "properties": {
           "advisor": {
             "type": "boolean"
@@ -76295,7 +76309,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: Durably accept a held outbox message, independently of its eventual delivery.\nInputs: Supply id and scope; first insertion also requires mode and message. Images and completed uploads are optional; replaces identifies an earlier entry.\nInvariants: Reusing an existing id returns its stored payload. Replacing a failed or delivered entry requires the same original payload; pending originals cannot be replaced. Scope, upload, size and capacity checks can reject the request.\nEffects: Stores an entry for later delivery; acceptance does not mean the runner has admitted or completed a prompt.\nRecovery: Retry an uncertain insertion with the same id and scope to recover its receipt; resolve scope or payload conflicts rather than changing the original intent.",
+      "description": "Usage: Durably accept a held outbox message, independently of its eventual delivery.\nInputs: Supply id and scope; first insertion also requires mode and message. Images and completed uploads are optional; replaces identifies an earlier entry.\nInvariants: Reusing an existing id on the same host returns its stored receipt, including the owning host ID, without dispatching again. Replacing a failed or delivered entry requires the same original payload; pending originals cannot be replaced. Scope, upload, size and capacity checks can reject the request.\nEffects: Stores an entry for later delivery; acceptance does not mean the runner has admitted or completed a prompt.\nRecovery: Retry an uncertain insertion with the same id and scope to recover its receipt; resolve scope or payload conflicts rather than changing the original intent.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/BrowserRequest_outbox_add"

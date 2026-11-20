@@ -450,6 +450,7 @@ test("outbox_add stores an id once, across a restart; a removed id is answered a
   const first = await add(sid, "m1", "hello");
   const again = await add(sid, "m1", "hello");
   assert.equal(first.success, true);
+  assert.equal(first.data.entry.hostId, "local");
   assert.equal(again.data.entry.id, "m1");
   assert.equal(again.data.entry.createdAt, first.data.entry.createdAt);
   await until(
@@ -474,6 +475,7 @@ test("outbox_add stores an id once, across a restart; a removed id is answered a
     "delivered",
     "a late resend of a removed id is answered, not held again",
   );
+  assert.equal(late.data.entry.hostId, "local");
   assert.equal(late.data.entry.settlement, "none");
   assert.deepEqual(states(sid), []);
   assert.deepEqual(

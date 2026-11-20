@@ -65,6 +65,7 @@ import type {
   BrowserUnsubscribe,
   BrowserUploadAbort,
 } from "./api-contracts/browser-link";
+import type { OutboxAddResult } from "./api-contracts/browser-agent-operations";
 import type { LocalOutboxEntry } from "./event-stream";
 import {
   LINK_LIMITS,
@@ -2817,7 +2818,7 @@ function acceptedOutboxEntry(
 ): unknown {
   const reply = body as {
     success?: unknown;
-    data?: { entry?: Record<string, unknown> };
+    data?: { entry?: Partial<Record<keyof OutboxAddResult["entry"], unknown>> };
   } | null;
   const entry = reply?.data?.entry;
   return reply?.success === true &&

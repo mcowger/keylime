@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+import type { OutboxAddResult } from "./api-contracts/browser-agent-operations";
 import type { LocalOutboxEntry } from "./event-stream";
 import { isRecord } from "./type-guards";
 import { sessionKey, sessionUrl } from "./session-identity";
@@ -319,7 +320,8 @@ function acceptedOutboxEntry(
 ): { replaces?: string } | null {
   if (!isRecord(reply) || !isRecord(reply.data) || !isRecord(reply.data.entry))
     return null;
-  const entry = reply.data.entry;
+  const entry: Partial<Record<keyof OutboxAddResult["entry"], unknown>> =
+    reply.data.entry;
   return reply?.success === true &&
     entry?.id === id &&
     typeof entry.sessionId === "string" &&

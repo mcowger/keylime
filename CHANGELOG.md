@@ -6,6 +6,9 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ## [Unreleased]
 
+### Fixed
+- Outbox receipts include the owning host, so delivered prompts no longer stay stuck on **Sending…** and block later prompts.
+
 ### Breaking Changes
 - Removed host pools and shared project identities. New daemons use one controller and link protocol 14. Upgrade the controller first; it still accepts enrolled v13 daemons so you can upgrade them individually.
 
