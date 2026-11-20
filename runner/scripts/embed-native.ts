@@ -38,7 +38,10 @@ export async function embeddedAddonFiles(target: { platform: string; arch: strin
     bytes: await Bun.file(path.join(leafDir, candidate.filename)).bytes(),
   })));
   if (available.length === 0) throw new Error(`${leafPackage} has no pi_natives addon in ${leafDir}`);
-  const frames = await Promise.all(available.map(({ bytes }) => Bun.zstdCompress(bytes, { level: 19 })));
+  // These large addons dominate build time at zstd's highest levels.
+  const frames = await Promise.all(
+    available.map(({ bytes }) => Bun.zstdCompress(bytes, { level: 6 })),
+  );
   const imports = available.map(({ filename }, index) =>
     `import zstdPath${index} from ${JSON.stringify(`./${filename}.zst`)} with { type: "file" };`,
   );

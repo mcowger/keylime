@@ -157,6 +157,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - **Settings → Hosts → Deploy release** lists compatible builds already on the web server, shows their build times in your time zone, and marks the newest. The dialog tracks transfer progress for the matched daemon and runner before they install and restart together
 
 ### Changed
+- `bun run build:binary` builds the browser assets and runners, then compiles and packages all four Keylime targets in parallel. Runner builds use faster native addon compression.
 - Linked hosts use their own OMP settings, plugins, environment, and provider logins. Keylime no longer mirrors configuration or brokers provider credentials. Binary deployment is unchanged.
 - Repo and System Notes & Tasks use the workspace's compact typography, with a shorter notes editor and task actions on one row where space allows.
 - Drop image files onto the Notes or task attachment buttons, or click to choose files. Missing the button won't open the file or discard your draft.

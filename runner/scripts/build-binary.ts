@@ -125,11 +125,14 @@ async function build(
   let videoLaunchPatched = false;
   const outfile = path.join(runnerDir, "release", target.outName);
   console.log(`Building ${path.relative(runnerDir, outfile)}...`);
+  const start = performance.now();
+  const addons = await embeddedAddonFiles(target);
+  const compileStart = performance.now();
   const output = await Bun.build({
     entrypoints: [path.join(runnerDir, "src", "cli.ts")],
     root: runnerDir,
     external: EXTERNAL,
-    files: { ...(await embeddedAddonFiles(target)), ...statsClient },
+    files: { ...addons, ...statsClient },
     define: {
       "process.env.PI_COMPILED": JSON.stringify("true"),
       "process.env.PI_DOCS_EMBED": JSON.stringify(docsEmbed),
@@ -162,14 +165,20 @@ async function build(
     throw new Error(
       `${id}: bundle failed:\n${output.logs.map((log) => log.message).join("\n")}`,
     );
+  const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
+  console.log(
+    `Built ${target.outName} (native addons: ${seconds(compileStart - start)}, compile: ${seconds(performance.now() - compileStart)})`,
+  );
   // shortcut: darwin binaries carry only Bun's built-in ad-hoc signature (no hardened runtime, no
   // entitlements); add omp's Developer ID signing step before distributing outside our own machines.
 }
 
 const hostId = `${process.platform}-${process.arch}`;
-const ids = process.argv.length > 2 ? process.argv.slice(2) : [hostId];
+const ids = process.argv.length > 2
+  ? [...new Set(process.argv.slice(2))]
+  : [hostId];
 for (const id of ids) {
-  if (!TARGETS[id])
+  if (!Object.hasOwn(TARGETS, id))
     throw new Error(
       `unknown target ${id}; expected one of ${Object.keys(TARGETS).join(", ")}`,
     );
@@ -188,4 +197,6 @@ const docsEmbed = (
   ).text()
 ).trimEnd();
 const statsClient = await embeddedStatsClient();
-for (const id of ids) await build(id, TARGETS[id], statsClient, docsEmbed);
+await Promise.all(
+  ids.map((id) => build(id, TARGETS[id], statsClient, docsEmbed)),
+);

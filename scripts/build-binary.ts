@@ -1,5 +1,5 @@
-// `bun run build:binary [--target bun-<os>-<arch>]` (after the client build and the runner build,
-// `bun runner/scripts/build-binary.ts <os>-<arch>`): compiles server/binary.ts into release/keylime-<os>-<arch>/keylime
+// Single-target packager. Run `bun run build:binary` to build prerequisites and package all four targets.
+// Compiles server/binary.ts into release/keylime-<os>-<arch>/keylime
 // next to the files it serves, the omp runner it spawns (keylime-omp; not with --no-runner,
 // where keylime fetches it from its release, lib/omp/runner-fetch.ts) and the licenses of what it redistributes, then
 // archives that directory as release/keylime-<os>-<arch>.tar.gz. Default target: this machine.

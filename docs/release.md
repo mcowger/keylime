@@ -38,27 +38,28 @@ instructions for publishing Keylime.
 
 ## Building binary archives
 
-For the current platform, build the runner before the web binary:
+After installing the root dependencies, run:
 
 ```bash
-bun runner/scripts/build-binary.ts
 bun run build:binary
 ```
 
-The archive and its unpacked directory are written under `release/`. The
-directory contains `keylime`, `keylime-omp`, browser assets, API documents and
-licenses. Keep the directory contents together when installing it. Linux and
-macOS x64 and arm64 are supported. To build all four targets, run
-`bun run build` followed by `sh scripts/build-release-binaries.sh`; that script
-fetches the pinned runner packages and installs native dependencies for all
-targets. Passing `--no-runner` omits the runner from each archive, so it must be
-available from the matching release when fetched.
+This builds the browser assets and runners, then builds the four Keylime
+archives in parallel for Linux and macOS, on x64 and arm64. No prebuilt runner
+is required. The archives and unpacked directories are written under `release/`.
+Each directory contains `keylime`, `keylime-omp`, browser assets, API documents
+and licenses. Keep the directory contents together when installing it.
+
+Use `--target bun-linux-x64-baseline` (or another Bun target) to build one
+platform. `--no-archive` leaves just the unpacked output. `--no-runner` omits
+the runner from each archive but still builds it under `runner/release/` so it
+can be attached separately to the matching release.
 
 Build the standalone terminal client for the current platform with
 `bun scripts/build-klc-binary.ts`. It writes `release/klc-<os>-<arch>.tar.gz`;
 the archive contains `klc` and its licenses, not the server or browser assets.
-The executable embeds Bun, so users don't need Bun installed. The four-target
-release script builds these client archives alongside the web archives.
+The executable embeds Bun, so users don't need Bun installed. Pass `--with-klc`
+to `bun run build:binary` to build the client alongside Keylime for each target.
 
 ## Runtime and upgrades
 

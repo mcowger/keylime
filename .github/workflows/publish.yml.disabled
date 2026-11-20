@@ -47,11 +47,10 @@ jobs:
       - name: Pin the runner to it
         run: bun runner/scripts/use-omp-build.ts "$OMP_TAG" && bun check -p runner
       - run: bun run test
-      - run: bun run build
       # Builds the omp runners too, which the source smoke spawns from runner/release/. The archives leave them out:
       # every install fetches its runner from this release (lib/omp/runner-fetch.ts), attached below.
       - name: Build the release binaries
-        run: sh scripts/build-release-binaries.sh --no-runner
+        run: bun run build:binary --with-klc --no-runner
       - run: bun run smoke
       # --omp: the draft release cannot serve the runner to the binary yet.
       - run: bun run smoke --binary release/keylime-linux-x64/keylime --omp runner/release/keylime-omp-linux-x64

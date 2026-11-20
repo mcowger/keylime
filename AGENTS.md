@@ -67,7 +67,7 @@ bun run build   # bundle the SPA into dist/ (scripts/build-client.ts)
 bun run start   # serve dist/ + the API, port 30177
 bun run test    # bun test --parallel
 bun run smoke   # build the runner, start the built server and `keylime host`, and check them
-bun run build:binary --target bun-<os>-<arch>   # compile release/keylime-<os>-<arch>/ and its .tar.gz
+bun run build:binary   # build the client and runners, then package all four platforms in parallel
 bun run typecheck  # bun check for the root project and runner
 bun run api:generate # regenerate and validate source-derived API documents
 bun run api:check    # validate semantic coverage and checked-in freshness
@@ -382,8 +382,8 @@ scripts/
   smoke.ts            `bun run smoke`: starts the built server (or `--binary <path>`) and `ompweb host` with a throwaway HOME; checks the SPA, an asset, the API, a session listed through the daemon and SSE
   transport-metrics.ts `bun scripts/transport-metrics.ts [--since 2h|<ISO>] [--until <ISO>] [--client <id>] [--session <id>] [--file <path>]`: per-transport summary of the browser transport samples and per host and direction of the host link samples (`--session`: link samples of one session; default: the last 24 h of the agent dir's file)
   link-hol-probe.ts   `bun scripts/link-hol-probe.ts --host <id> --model <provider/modelId>`: head-of-line load on one host link (large prompts down, large session reads up, get_state beside them) for the link samples; usage at its top
-  build-binary.ts     `bun run build:binary`: compiles server/binary.ts (NODE_ENV define, no .env/bunfig autoload) into release/ompweb-<os>-<arch>/ beside dist/, public/, the KaTeX files, the omp runner (`ompweb-omp`, built first by `runner/scripts/build-binary.ts`; not with `--no-runner`, which releases use: they attach the runners as separate assets) and the licenses; archives it
-  build-release-binaries.sh  the five release targets (one list), run by publish.yml and prerelease.yml (a prerelease per verified `main` commit, titled by build time; one concurrency group per commit, so no commit's run is dropped)
+  build-binary.ts     compiles and packages one Keylime target with its static files, runner and licenses
+  build-release-binaries.ts  `bun run build:binary`: builds the client and runners, then packages targets in parallel; `--target` selects one
   licenses.ts         the release's `licenses/`: license files of every npm package the server and client bundles hold (Bun.build metafiles; build-client.ts writes build/client-packages.json) and `bun-LICENSE-<version>.md`, the vendored license of the embedded Bun runtime. Bumping Bun: vendor its LICENSE.md for the new version, or build-binary.ts stops
 
 dist/                 build output (git-ignored, shipped in the package); the production server reads index.html and assets from here
