@@ -2250,17 +2250,75 @@ html[data-touch-targets="accessible"]
 .sidebar-tree-children {
   padding-inline-start: 16px;
 }
-.sidebar-pr-link {
-  display: inline-flex;
+
+.sidebar-workspace-row {
+  display: grid;
+  grid-template-areas:
+    "name ship running attention setup menu"
+    "pr   pr   pr      pr        pr    pr";
+  /* Keep badge tracks reserved even when a workspace is idle. */
+  grid-template-columns: minmax(0, 1fr) 18px 38px 18px 18px 28px;
   align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-  color: var(--text-muted);
-  font-size: 11px;
+  padding: 4px 6px;
+  border-radius: var(--radius-control);
+}
+.sidebar-workspace-name {
+  grid-area: name;
   white-space: nowrap;
 }
-.sidebar-pr-link:hover {
-  color: var(--accent);
+.sidebar-workspace-ship {
+  grid-area: ship;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.sidebar-workspace-pr {
+  grid-area: pr;
+  justify-self: start;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 3px;
+  margin-inline-start: 6px;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--text);
+}
+.sidebar-workspace-pr-indicator {
+  flex: 0 0 14px;
+}
+.sidebar-workspace-pr-number {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.sidebar-workspace-running {
+  grid-area: running;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.sidebar-workspace-attention {
+  grid-area: attention;
+  color: var(--status-warning);
+}
+.sidebar-workspace-setup {
+  grid-area: setup;
+  display: flex;
+  align-items: center;
+}
+.sidebar-workspace-menu {
+  grid-area: menu;
+}
+@container (max-width: 240px) {
+  .sidebar-workspace-row {
+    grid-template-columns: minmax(0, 1fr) repeat(4, 16px) 28px;
+  }
+  .sidebar-workspace-count {
+    display: none;
+  }
 }
 
 .sidebar-branch-toggle {

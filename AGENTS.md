@@ -356,7 +356,7 @@ components/
   GhostMirror.tsx     textarea overlay painting ghost-text word completion
   TabBar.tsx          tab bar (Chat + open file tabs)
   WorktreesPanel.tsx  file-panel Worktrees tab: list/switch/create/remove the active repo's worktrees
-  ShipDialog.tsx      the Ship sheet (commit plan via the session's runner commands, land locally / PR / PR + auto-merge, step progress) and the sidebar PR pill's Clean up
+  ShipDialog.tsx      the Ship sheet (commit plan via the session's runner commands, land locally / PR / PR + auto-merge, step progress) and merged-workspace cleanup from the workspace actions menu
   ui/                 shared primitives: Dialog/Tooltip/Collapsible, fields, toast
 
 hooks/

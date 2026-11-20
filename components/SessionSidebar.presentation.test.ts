@@ -947,12 +947,11 @@ test("manager setup and teardown stay visible in the sidebar after dismissal", a
       stage: "postBlocking",
     };
     createReply.resolve(Response.json(job));
-    await screen.findByRole("button", { name: "Feature" });
-    assert.ok(
-      screen
-        .getByTitle("Setting up workspace…")
-        .parentElement?.textContent?.includes("Feature"),
-    );
+    const featureButton = await screen.findByRole("button", {
+      name: "Feature",
+    });
+    const featureRow = featureButton.closest(".sidebar-workspace-row");
+    assert.ok(featureRow?.contains(screen.getByTitle("Setting up workspace…")));
     statusReply.resolve(Response.json({ ...job, status: "complete" }));
     await waitFor(
       () => assert.ok(!screen.queryByTitle("Setting up workspace…")),
@@ -969,17 +968,13 @@ test("manager setup and teardown stay visible in the sidebar after dismissal", a
     await waitFor(() =>
       assert.ok(!screen.queryByRole("dialog", { name: "Manage workspaces" })),
     );
-    assert.ok(
-      screen
-        .getByText("Deleting…")
-        .parentElement?.textContent?.includes("Feature"),
-    );
+    assert.ok(featureRow?.contains(screen.getByTitle("Deleting…")));
     hierarchy.projects = [project];
     deleteReply.resolve(Response.json({ status: "deleted" }));
     await waitFor(() =>
       assert.ok(!screen.queryByRole("button", { name: "Feature" })),
     );
-    assert.equal(screen.queryByText("Deleting…"), null);
+    assert.equal(screen.queryByTitle("Deleting…"), null);
   } finally {
     restore();
   }

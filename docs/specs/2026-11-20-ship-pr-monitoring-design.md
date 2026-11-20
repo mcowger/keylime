@@ -5,7 +5,7 @@ Ship starts the watch directly. There is no subscription tool or setup turn. A q
 ## User flow
 
 - **Monitor PR feedback** is off by default and available in **Open PR** and **PR + auto-merge**, not **Land locally**. It targets the chat that opened Ship. Closing the browser doesn't stop the watch.
-- Once Ship records the exact PR it opened or adopted, it also records the monitor if opted in. A later failure enabling auto-merge doesn't undo the PR or its watch. The PR link stays on the workspace row. The workspace's `…` menu shows monitoring status and offers **Start monitoring** or **Stop monitoring**. Start picks a workspace chat, watches for new feedback only, and doesn't run Ship or change auto-merge. Polling and delivery errors are distinct from monitoring being off.
+- If opted in during Ship, monitoring is recorded with the exact PR Ship opens or adopts, even if enabling auto-merge later fails. The PR link below the workspace name shows a bell that distinguishes monitoring errors from monitoring being off. Use **Start monitoring** or **Stop monitoring** in the workspace's `…` menu. Start picks a workspace chat and watches for new feedback without running Ship or changing auto-merge.
 - Monitoring doesn't hold up auto-merge. Use **Open PR** if feedback needs to be handled before merge. Stop on merge, close, session archive/deletion, or explicit cancellation. Existing automatic cleanup still runs in its normal order. Stop discards unsent digests; it doesn't cancel an agent turn or recall a message already handed to the server.
 
 ## GitHub polling

@@ -501,6 +501,29 @@ await hierarchy({
   projectId: project.id,
   paths: [worktree],
 });
+// Exercise the fixed workspace status slots without polling GitHub in dev.
+const shipDir = path.join(getAgentDir(), "keylime", "ship");
+mkdirSync(shipDir, { recursive: true });
+writeFileSync(
+  path.join(shipDir, "prs.json"),
+  JSON.stringify({
+    [worktree]: {
+      projectPath: repo,
+      path: worktree,
+      base: "main",
+      retryAt: Number.MAX_SAFE_INTEGER,
+      pr: {
+        number: 1081,
+        url: "https://github.com/example/atlas/pull/1081",
+        state: "open",
+        checks: "pending",
+        autoMerge: false,
+        cleanup: false,
+        checkedAt: new Date().toISOString(),
+      } satisfies ShipPr,
+    },
+  }),
+);
 const all = await hierarchy({ action: "registerProject", path: notes });
 for (const session of sessions) {
   const workspace = all.projects

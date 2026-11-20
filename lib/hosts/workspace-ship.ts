@@ -55,7 +55,7 @@ interface RecordPr {
   generation?: string;
   monitor?: PrMonitor;
   retryAt?: number;
-  /** The watcher started the automatic cleanup once; a failure leaves it to the pill's Clean up. */
+  /** The watcher attempted automatic cleanup; a failure leaves cleanup to the workspace menu. */
   autoFinished?: boolean;
 }
 const root = () => path.join(getAgentDir(), "keylime", "ship");

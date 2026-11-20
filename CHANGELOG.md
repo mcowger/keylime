@@ -18,6 +18,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The bell beside the PR number shows whether monitoring is on. Use the bell in the workspace's `…` menu to turn monitoring on or off without changing auto-merge.
 - Closing the PR monitoring chat picker with Cancel or Escape returns keyboard focus to the workspace's `…` menu.
 - The workspace `…` menu uses a ship icon for Ship.
+- Ship can monitor a PR for new comments and reviews. The server checks that the shipping chat opted in and sends only feedback links. Stop monitoring from the workspace actions menu.
 - Subagent previews show the model and effort as `model-slug:effort` when effort is reported.
 - **Systems** group repos, service commands, and shared instructions on one host. Create an **Effort** to get a branch and worktree for each repo, a root chat, and one terminal per service. Preview cleanup before removing worktrees; branches and PRs stay put.
 - The sidebar shows worktree setup and cleanup progress even after you close Manage workspaces.
@@ -158,6 +159,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Background job notices, system reminders, incoming agent messages, and diagnostics line up with tool rows. Job notices show the result without the internal event label
 - **Settings → Hosts → Deploy release** lists compatible builds already on the web server, shows their build times in your time zone, and marks the newest. The dialog tracks transfer progress for the matched daemon and runner before they install and restart together
 - The workspace `…` menu can start or stop PR feedback monitoring for a selected chat without running Ship or changing auto-merge. The PR row's bell shows monitoring status; closing the chat picker restores focus to the menu
+- Ship can monitor a PR for new comments and reviews. The server verifies the shipping chat opted in and sends only feedback links; stop monitoring from workspace actions
 
 ### Changed
 - `bun run build:binary` builds the browser assets and runners, then compiles and packages all four Keylime targets in parallel. Runner builds use faster native addon compression.
@@ -230,6 +232,9 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- Workspace names in the sidebar stay on one line and truncate with an ellipsis. PR links sit below the name, and running-agent and attention indicators have fixed slots.
+- The PR link keeps its colored checks icon before the number. The bell after it warns about polling errors or expired delivery and is crossed out only when monitoring is off.
+- Pending PR checks show a spinner before the PR number and read as “Checks: in progress” in the tooltip and to screen readers.
 - New chats on linked hosts and in host pools use the chosen host's default model unless you explicitly pick one.
 - Chat previews screenshots embedded with `local://` and opens links to those files in the file panel. If the file is missing, Keylime shows an error instead of doing nothing.
 - When a commit fails during Ship, **Ask the agent to fix it** sends the error output to the workspace chat. Ship doesn't retry automatically.
@@ -390,6 +395,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - A workspace shows **Attention required** after a chat crashes, even if the chat isn't open. Closing the crashed chat dismisses that warning in the current browser tab, and deleting the chat removes its badge
 - When a commit fails during Ship, **Ask the agent to fix it** sends the error output to the workspace chat. Ship doesn't retry automatically
 - New chats on linked hosts and in host pools use the chosen host's default model unless you explicitly pick one
+- Workspace names stay on one line and truncate; PR links sit below names with stable status indicator slots
+- PR checks and monitoring bells show accurate status, with accessible pending-check labels
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

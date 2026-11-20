@@ -9,6 +9,7 @@ import {
 } from "react";
 import {
   AlertCircle,
+  Bell,
   BellOff,
   BellRing,
   Bot,
@@ -16,6 +17,9 @@ import {
   ClipboardList,
   FolderCog,
   FolderInput,
+  GitMerge,
+  GitPullRequest,
+  GitPullRequestClosed,
   Loader2,
   MoreHorizontal,
   Plus,
@@ -1283,11 +1287,6 @@ export function HierarchySidebar({
                               ? creation
                               : workspace.setup;
                           const pr = workspace.ship?.pr;
-                          const showOpenPr =
-                            pr?.state === "open" &&
-                            !deleting &&
-                            !cleaningUp &&
-                            workspace.ship?.job?.status !== "running";
                           const monitorStatus = !monitor
                             ? "Monitoring off"
                             : monitor.state === "watching"
@@ -1300,18 +1299,73 @@ export function HierarchySidebar({
                             : monitor.state === "watching"
                               ? BellRing
                               : AlertCircle;
-                          return (
-                            <div
-                              key={workspace.id}
-                              className="sidebar-tree-children"
+                          const shipBusy =
+                            deleting ||
+                            cleaningUp ||
+                            workspace.ship?.job?.status === "running";
+                          const checksLabel =
+                            pr?.checks === "pending"
+                              ? "in progress"
+                              : pr?.checks === "none"
+                                ? "not reported"
+                                : pr?.checks;
+                          const showOpenPr = pr?.state === "open" && !shipBusy;
+                          const prLink = showOpenPr && (
+                            <a
+                              href={pr.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="sidebar-workspace-pr"
+                              aria-label={`PR #${pr.number}`}
+                              aria-description={`Checks: ${checksLabel} · ${monitorStatus}`}
+                              title={`PR #${pr.number} · Checks: ${checksLabel} · ${monitorStatus}`}
                             >
-                              <div
+                              <span
+                                className="sidebar-workspace-pr-indicator"
+                                aria-hidden="true"
                                 style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 8,
-                                  padding: "4px 6px",
-                                  borderRadius: "var(--radius-control)",
+                                  color:
+                                    pr.checks === "passing"
+                                      ? "var(--status-success)"
+                                      : pr.checks === "failing"
+                                        ? "var(--status-error)"
+                                        : pr.checks === "pending"
+                                          ? "var(--status-warning)"
+                                          : "var(--text-muted)",
+                                }}
+                              >
+                                {pr.checks === "pending" ? (
+                                  <Loader2
+                                    size={14}
+                                    className="motion-safe:animate-spin"
+                                  />
+                                ) : (
+                                  <GitPullRequest size={14} />
+                                )}
+                              </span>
+                              <span className="sidebar-workspace-pr-number">
+                                {pr.number}
+                              </span>
+                              {monitor ? (
+                                <Bell
+                                  size={12}
+                                  aria-hidden="true"
+                                  color={
+                                    monitor.state === "watching"
+                                      ? undefined
+                                      : "var(--status-warning)"
+                                  }
+                                />
+                              ) : (
+                                <BellOff size={12} aria-hidden="true" />
+                              )}
+                            </a>
+                          );
+                          return (
+                            <div key={workspace.id}>
+                              <div
+                                className="sidebar-workspace-row"
+                                style={{
                                   background:
                                     selectedHostId === host.id &&
                                     selectedCwd === workspace.path
@@ -1320,9 +1374,10 @@ export function HierarchySidebar({
                                 }}
                               >
                                 <button
+                                  className="sidebar-workspace-name"
                                   style={rowButton}
                                   type="button"
-                                  title={workspace.path}
+                                  title={`${workspace.name}\n${workspace.path}`}
                                   disabled={workspace.unavailable}
                                   aria-pressed={
                                     selectedHostId === host.id &&
@@ -1341,129 +1396,84 @@ export function HierarchySidebar({
                                     ? " (unavailable)"
                                     : ""}
                                 </button>
-                                {deleting ? (
-                                  <PendingOperation label="Deleting…" />
-                                ) : cleaningUp ? (
-                                  <PendingOperation label="Cleaning up…" />
-                                ) : workspace.ship?.job?.status ===
-                                  "running" ? (
-                                  <span
-                                    title="Shipping"
-                                    style={{
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      gap: 3,
-                                      fontSize: 11,
-                                      flexShrink: 0,
-                                    }}
-                                  >
-                                    <Loader2
-                                      size={12}
-                                      className="animate-spin"
-                                    />{" "}
-                                    Shipping...
-                                  </span>
-                                ) : showOpenPr ? (
-                                  <a
-                                    href={pr.url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="sidebar-pr-link"
-                                    title={`Checks: ${pr.checks}. ${monitorStatus}. See workspace actions.`}
-                                  >
-                                    <span
-                                      aria-hidden="true"
-                                      style={{
-                                        color:
-                                          pr.checks === "passing"
-                                            ? "var(--status-success)"
-                                            : pr.checks === "failing"
-                                              ? "var(--status-error)"
-                                              : "var(--status-warning)",
-                                      }}
+                                {prLink}
+                                <div className="sidebar-workspace-ship">
+                                  {deleting ? (
+                                    <PendingOperation
+                                      compact
+                                      label="Deleting…"
+                                    />
+                                  ) : cleaningUp ? (
+                                    <PendingOperation
+                                      compact
+                                      label="Cleaning up…"
+                                    />
+                                  ) : shipBusy ? (
+                                    <PendingOperation
+                                      compact
+                                      label="Shipping…"
+                                    />
+                                  ) : pr?.state === "merged" ? (
+                                    <GitMerge
+                                      size={14}
+                                      role="img"
+                                      aria-label="PR merged"
                                     >
-                                      ●
-                                    </span>{" "}
-                                    PR #{pr.number}
-                                    <MonitorIcon size={12} aria-hidden="true" />
-                                  </a>
-                                ) : workspace.ship?.pr?.state === "merged" ? (
-                                  <span
-                                    style={{
-                                      fontSize: 11,
-                                      whiteSpace: "nowrap",
-                                    }}
-                                  >
-                                    Merged{" "}
-                                    <button
-                                      type="button"
-                                      disabled={
-                                        busy || finishingWorkspace !== null
-                                      }
-                                      onClick={() =>
-                                        setFinishTarget({
-                                          host: host.id,
-                                          projectPath: project.path,
-                                          path: workspace.path,
-                                        })
-                                      }
+                                      <title>PR merged</title>
+                                    </GitMerge>
+                                  ) : pr?.state === "closed" ? (
+                                    <GitPullRequestClosed
+                                      size={14}
+                                      role="img"
+                                      aria-label="PR closed"
                                     >
-                                      Clean up
-                                    </button>
-                                  </span>
-                                ) : workspace.ship?.pr?.state === "closed" ? (
-                                  <span
-                                    style={{
-                                      fontSize: 11,
-                                      whiteSpace: "nowrap",
-                                    }}
-                                  >
-                                    PR closed
-                                  </span>
-                                ) : null}
+                                      <title>PR closed</title>
+                                    </GitPullRequestClosed>
+                                  ) : null}
+                                </div>
                                 {runningCount > 0 && (
                                   <span
+                                    className="sidebar-workspace-running"
                                     title={`${runningCount} running agents`}
                                     aria-label={`${runningCount} running agents`}
-                                    style={{
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      gap: 3,
-                                      flexShrink: 0,
-                                    }}
                                   >
                                     <Bot size={14} aria-hidden="true" />
-                                    {runningCount}
+                                    <span
+                                      className="sidebar-workspace-count"
+                                      aria-hidden="true"
+                                    >
+                                      {runningCount > 99 ? "99+" : runningCount}
+                                    </span>
                                   </span>
                                 )}
                                 {needsAttention && (
                                   <span
+                                    className="sidebar-workspace-attention"
                                     title="Attention required"
                                     aria-label="Attention required"
-                                    style={{
-                                      color: "var(--status-warning)",
-                                      padding: "0 4px",
-                                    }}
                                   >
                                     <AlertCircle size={14} aria-hidden="true" />
                                   </span>
                                 )}
-                                {setup?.status === "running" ? (
-                                  <PendingOperation
-                                    compact
-                                    label="Setting up workspace…"
-                                  />
-                                ) : setup && setup.status !== "complete" ? (
-                                  <span
-                                    title={
-                                      setup.error || `Setup ${setup.status}`
-                                    }
-                                    aria-label={`Setup ${setup.status}`}
-                                  >
-                                    <Wrench size={14} aria-hidden="true" />
-                                  </span>
-                                ) : null}
+                                <div className="sidebar-workspace-setup">
+                                  {setup?.status === "running" ? (
+                                    <PendingOperation
+                                      compact
+                                      label="Setting up workspace…"
+                                    />
+                                  ) : setup && setup.status !== "complete" ? (
+                                    <span
+                                      title={
+                                        setup.error || `Setup ${setup.status}`
+                                      }
+                                      aria-label={`Setup ${setup.status}`}
+                                    >
+                                      <Wrench size={14} aria-hidden="true" />
+                                    </span>
+                                  ) : null}
+                                </div>
                                 <details
+                                  className="sidebar-workspace-menu"
                                   style={{ position: "relative" }}
                                   onToggle={(e) =>
                                     setOpenWorkspaceMenu(
@@ -1523,6 +1533,32 @@ export function HierarchySidebar({
                                           }}
                                         />
                                       )}
+                                    {pr?.state === "merged" && !shipBusy && (
+                                      <button
+                                        style={menuButton}
+                                        type="button"
+                                        aria-label="Clean up merged workspace"
+                                        title="Clean up merged workspace"
+                                        disabled={
+                                          busy || finishingWorkspace !== null
+                                        }
+                                        onClick={(e) => {
+                                          e.currentTarget
+                                            .closest("details")
+                                            ?.removeAttribute("open");
+                                          setFinishTarget({
+                                            host: host.id,
+                                            projectPath: project.path,
+                                            path: workspace.path,
+                                          });
+                                        }}
+                                      >
+                                        <GitMerge
+                                          size={16}
+                                          aria-hidden="true"
+                                        />
+                                      </button>
+                                    )}
                                     <button
                                       style={menuButton}
                                       type="button"
