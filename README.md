@@ -108,7 +108,7 @@ Password authentication is optional on every bind address. Without it, anyone wh
 
 The browser connects through `/api/events/link`; host daemons connect through `/api/hosts/link`. A reverse proxy must forward WebSocket upgrades. Browser connections can fall back to server-sent events. Hosts sharing credentials or cluster configuration also need access to the broker and cluster configuration endpoints without proxy authentication or redirects; those endpoints authenticate host tokens themselves.
 
-Add a remote host in **Settings → Hosts**. The token is shown once. Run `keylime host login --url https://your-server` on that machine, provide the token on stdin, then run `keylime host`. The daemon connects outward and keeps runs alive across web-server restarts. Only join machines you trust to a cluster: members receive shared provider credentials and executable OMP configuration. Projects and sessions remain on their owning hosts.
+To add a machine without installing the web server or browser assets, follow the [remote host deployment guide](docs/remote-host-deployment.md). The daemon connects outward and keeps runs alive across web-server restarts. Only join machines you trust to a cluster: members receive shared provider credentials and executable OMP configuration.
 
 ## Deployment and development
 

@@ -39,6 +39,7 @@
     "postinstall": "if [ -f runner/omp-build.json ] && [ \"${KEYLIME_SKIP_RUNNER_INSTALL:-}\" != 1 ]; then bun run install:runner; fi",
     "install:runner": "bun runner/scripts/use-omp-build.ts && bun install --cwd=runner --frozen-lockfile",
     "dev": "bun --no-env-file scripts/dev.ts",
+    "deploy:host": "bun --no-env-file scripts/deploy-host.ts",
     "deploy:local": "bun --no-env-file scripts/deploy-local.ts",
     "deploy:local:fast": "bun --no-env-file scripts/deploy-local.ts --timeout 10",
     "deploy:local:fast:follow": "bun --no-env-file scripts/deploy-local.ts --timeout 10 --follow",

@@ -7,6 +7,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ## [Unreleased]
 
 ### Added
+- `bun run deploy:host` installs the daemon and runner over SSH, prompts for a host token, and offers user autostart with systemd or launchd. It doesn't deploy the FE.
 - Ship can monitor a PR for new comments and reviews. The server checks that the shipping chat opted in and sends only feedback links. Stop monitoring from the sidebar PR pill.
 - Subagent previews show the model and effort as `model-slug:effort` when effort is reported.
 - **Systems** group repos, service commands, and shared instructions on one host. Create an **Effort** to get a branch and worktree for each repo, a root chat, and one terminal per service. Preview cleanup before removing worktrees; branches and PRs stay put.
