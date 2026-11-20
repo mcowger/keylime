@@ -139,6 +139,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Tool call rows use icons for standard tools to make more room for intent, tint failed-tool icons red, and omit the `mcp__` prefix from MCP names
 - New workspace drafts show the project name and base branch in a thin row attached to the composer
 - Documented that Keylime is a single-user tool and clarified its security boundaries
+- `bun run deploy:host` installs the daemon and runner over SSH, prompts for a host token, and offers user autostart with systemd or launchd. It doesn't deploy the FE
 
 ### Changed
 - The sidebar and Settings call projects repos, including in add, remove, and settings controls.
