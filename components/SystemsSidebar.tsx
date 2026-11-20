@@ -155,11 +155,21 @@ export function SystemsSidebar({
         key={system.id}
         style={{ ...systemsStack, gap: 4, paddingInlineStart: 4 }}
       >
-        <div style={systemsRow}>
+        <div
+          style={{
+            ...systemsRow,
+            flexWrap: "nowrap",
+            minWidth: 0,
+            position: "relative",
+          }}
+        >
           <SystemsButton
             aria-expanded={open}
             style={{
-              flex: "1 1 7em",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              flex: 1,
               minWidth: 0,
               border: 0,
               background: "transparent",
@@ -178,15 +188,18 @@ export function SystemsSidebar({
             <ChevronRight
               size={12}
               style={{
-                verticalAlign: "middle",
+                flexShrink: 0,
                 transform: open ? "rotate(90deg)" : undefined,
               }}
               aria-hidden="true"
-            />{" "}
-            {system.name}
+            />
+            <span className="truncate" title={system.name}>
+              {system.name}
+            </span>
           </SystemsButton>
           {!system.archived && (
             <SystemsButton
+              style={{ flexShrink: 0 }}
               disabled={disabled}
               aria-label={`New Effort in ${system.name}`}
               title="New Effort"
@@ -198,11 +211,27 @@ export function SystemsSidebar({
           <details>
             <summary
               aria-label={`Actions for ${system.name}`}
-              style={{ cursor: "pointer" }}
+              style={{ cursor: "pointer", whiteSpace: "nowrap" }}
             >
               Actions
             </summary>
-            <div style={{ ...systemsStack, padding: 4 }}>
+            <div
+              style={{
+                ...systemsStack,
+                position: "absolute",
+                insetBlockStart: "100%",
+                insetInlineEnd: 0,
+                zIndex: 10,
+                width: "max-content",
+                maxWidth: "100%",
+                gap: 4,
+                padding: 4,
+                background: "var(--bg-panel)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-control)",
+                boxShadow: "var(--shadow-pop)",
+              }}
+            >
               <SystemsButton
                 style={{ display: "flex", alignItems: "center", gap: 8 }}
                 onClick={(event) => {

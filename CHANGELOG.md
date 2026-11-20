@@ -199,6 +199,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- System names line up beside their expand chevrons and stay visible when **Actions** is open, even at the sidebar's minimum width.
 - Repo sidebar menus stack labeled actions vertically, and Notes & Tasks has a clipboard icon in both Repo and System menus.
 - Notes & Tasks opens in the workspace area, and task cards can be deleted without removing linked work.
 - Notes and their images are never sent to a model or agent. Launch and Resume use only the task's own prompt and attachments.
@@ -345,6 +346,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Repo sidebar menus stack labeled actions vertically, and Notes & Tasks has a clipboard icon in both Repo and System menus
 - Notes & Tasks opens in the workspace area, and task cards can be deleted without removing linked work
 - Notes and their images are never sent to a model or agent. Launch and Resume use only the task's own prompt and attachments
+- System names line up beside their expand chevrons and stay visible when **Actions** is open, even at the sidebar's minimum width
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
