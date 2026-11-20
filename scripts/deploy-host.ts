@@ -171,6 +171,36 @@ trap - EXIT
     throw new Error(`Install failed on ${host}.`);
 }
 
+async function buildRelease(platform: string, arch: string) {
+  const root = resolve(import.meta.dir, "..");
+  const target = `${platform}-${arch}`;
+  const compileTarget = `bun-${target}${arch === "x64" ? "-baseline" : ""}`;
+  console.log(`Building missing ${target} release from this checkout...`);
+  const commands = [
+    ["--no-env-file", "runner/scripts/use-omp-build.ts"],
+    ["install", "--cwd=runner", "--frozen-lockfile", "--os=*", "--cpu=*"],
+    ["--no-env-file", "runner/scripts/build-binary.ts", target],
+    ["--no-env-file", "scripts/build-client.ts"],
+    [
+      "--no-env-file",
+      "scripts/build-binary.ts",
+      "--target",
+      compileTarget,
+      "--no-archive",
+    ],
+  ];
+  for (const args of commands) {
+    const code = await Bun.spawn([process.execPath, ...args], {
+      cwd: root,
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    }).exited;
+    if (code !== 0)
+      throw new Error(`Release build failed (${code}): bun ${args.join(" ")}`);
+  }
+}
+
 async function main(args: string[]) {
   const { positionals, values } = parseArgs({
     args,
@@ -202,6 +232,8 @@ async function main(args: string[]) {
       ? active
       : `release/keylime-${platform}-${arch}`;
   const candidate = resolve(values.release ?? defaultRelease);
+  if (values.release === undefined && !existsSync(candidate))
+    await buildRelease(platform, arch);
   if (!existsSync(candidate)) {
     throw new Error(
       `Release directory not found: ${candidate}. Pass --release with the unpacked ${platform}-${arch} build.`,

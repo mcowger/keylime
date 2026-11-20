@@ -22,8 +22,15 @@ or stop it with Ctrl-C.
 
 The installer defaults to `~/.local/share/keylime/current` if it exists on the
 same platform as the target, otherwise `release/keylime-<os>-<arch>` in the
-checkout. Use the same Keylime build as the FE. To pick a different unpacked
-release that includes its runner, pass `--release`:
+checkout. If that default release directory is missing, it installs the pinned
+runner dependencies (including cross-platform native packages), then builds the
+target runner, web assets, binary and licenses locally before prompting for
+enrollment. Build failures stop deployment before copying anything to the host.
+Existing release directories are reused, not rebuilt. Use a checkout matching
+the FE's build when building a missing release.
+
+To pick a different unpacked release that includes its runner, pass `--release`.
+An explicit directory is never built or replaced:
 
 ```bash
 mise exec -- bun run deploy:host you@worker.example.com --release release/keylime-linux-arm64
