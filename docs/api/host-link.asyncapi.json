@@ -4959,7 +4959,7 @@
                   "type": "object"
                 },
                 {
-                  "description": "Usage: Run handoff compaction.\nInputs: customInstructions may be omitted.\nInvariants: OMP owns the handoff lifecycle.\nEffects: Compacts the session through OMP's handoff mode.\nRecovery: Inspect session state before repeating.",
+                  "description": "Usage: Compact the current session with an OMP handoff summary.\nInputs: Optional string customInstructions guides the summary.\nInvariants: Compaction runs in the background without interrupting an active response. OMP rejects overlapping compaction or a session transition.\nEffects: Updates the current session's context, not a separate session. The runner waits for compaction to finish before replying with {}; compaction errors fail the command.\nRecovery: If delivery is uncertain, inspect session state and manual_compaction_end before retrying.",
                   "properties": {
                     "args": {
                       "properties": {

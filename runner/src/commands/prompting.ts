@@ -556,7 +556,15 @@ export const promptingCommands: CommandTable = {
     session.setInterruptMode(args.mode, false);
     return undefined;
   },
-  /** @apiCommand handoff */
+  /**
+   * @apiCommand handoff
+   * @apiContract handoff
+   * @apiUsage Compact the current session with an OMP handoff summary.
+   * @apiInputs Optional string `customInstructions` guides the summary.
+   * @apiInvariants Compaction runs in the background without interrupting an active response. OMP rejects overlapping compaction or a session transition.
+   * @apiEffects Updates the current session's context, not a separate session. The runner waits for compaction to finish before replying with `{}`; compaction errors fail the command.
+   * @apiRecovery If delivery is uncertain, inspect session state and `manual_compaction_end` before retrying.
+   */
   async handoff({ session }, args) {
     if (
       args.customInstructions !== undefined &&

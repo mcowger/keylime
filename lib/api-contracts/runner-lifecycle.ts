@@ -459,11 +459,11 @@ Recovery: Read state and reapply the desired mode after restart.`,
   ),
   command(
     "handoff",
-    `Usage: Run handoff compaction.
-Inputs: customInstructions may be omitted.
-Invariants: OMP owns the handoff lifecycle.
-Effects: Compacts the session through OMP's handoff mode.
-Recovery: Inspect session state before repeating.`,
+    `Usage: Compact the current session with an OMP handoff summary.
+Inputs: Optional string customInstructions guides the summary.
+Invariants: Compaction runs in the background without interrupting an active response. OMP rejects overlapping compaction or a session transition.
+Effects: Updates the current session's context, not a separate session. The runner waits for compaction to finish before replying with {}; compaction errors fail the command.
+Recovery: If delivery is uncertain, inspect session state and manual_compaction_end before retrying.`,
     Type.Object(instructions),
     Type.Object({}),
   ),
