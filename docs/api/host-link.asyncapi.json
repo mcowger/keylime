@@ -4959,7 +4959,7 @@
                   "type": "object"
                 },
                 {
-                  "description": "Usage: Hand off an idle session.\nInputs: customInstructions may be omitted.\nInvariants: A streaming session is rejected; null means no handoff result.\nEffects: Performs handoff and may save a path.\nRecovery: Inspect session and saved output after uncertainty before repeating.",
+                  "description": "Usage: Run handoff compaction.\nInputs: customInstructions may be omitted.\nInvariants: OMP owns the handoff lifecycle.\nEffects: Compacts the session through OMP's handoff mode.\nRecovery: Inspect session state before repeating.",
                   "properties": {
                     "args": {
                       "properties": {

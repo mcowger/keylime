@@ -4,14 +4,11 @@ import type { FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { sanitizeText } from "@oh-my-pi/pi-utils";
 import { truncateTail } from "@oh-my-pi/pi-tui/tools/streaming-output";
-import {
-  canonicalProjectDir,
-  daemonRuntimeDir,
-} from "@oh-my-pi/pi-coding-agent/launch/paths";
+import { canonicalProjectDir, daemonClient } from "@oh-my-pi/pi-coding-agent/daemon/client";
+import { unitLogDir } from "@oh-my-pi/pi-coding-agent/daemon/paths";
+import { projectScope, type UnitSnapshot } from "@oh-my-pi/pi-coding-agent/daemon/protocol";
 import type { AsyncJob } from "@oh-my-pi/pi-coding-agent/async/job-manager";
 import { AgentRegistry } from "@oh-my-pi/pi-coding-agent/registry/agent-registry";
-import { daemonClientForProject } from "@oh-my-pi/pi-coding-agent/launch/client";
-import type { DaemonSnapshot } from "@oh-my-pi/pi-tui/tools/daemon";
 import type {
   JobActivity,
   JobDetail,
@@ -34,14 +31,9 @@ const OUTPUT_LIMIT = 256 * 1024;
 const LOG_READ_LIMIT = 2 * 1024 * 1024;
 
 async function serviceOutput(
-  cwd: string,
-  name: string,
+  id: string,
 ): Promise<{ output: string; truncated: boolean }> {
-  const dir = join(
-    daemonRuntimeDir(await canonicalProjectDir(cwd)),
-    "daemons",
-    name,
-  );
+  const dir = unitLogDir(id);
   const handles: (FileHandle | undefined)[] = [];
   try {
     for (const file of ["output.previous.log", "output.log"]) {
@@ -150,13 +142,13 @@ function activity(job: AsyncJob, root: string | undefined): JobActivity {
   };
 }
 
-function serviceActivity(daemon: DaemonSnapshot): JobActivity {
+function serviceActivity(daemon: UnitSnapshot): JobActivity {
   return {
     id: daemon.id,
-    incarnation: daemon.id,
+    incarnation: daemon.generation,
     kind: "service",
     status: daemon.state,
-    label: daemon.name,
+    label: daemon.key,
     ownerId: daemon.owner,
     startTime: daemon.startedAt || daemon.createdAt,
     endTime: daemon.exitedAt,
@@ -209,14 +201,19 @@ function findJob(
   return { job, root: scope.root };
 }
 
-async function service(ctx: CommandContext, id: string) {
-  const client = await daemonClientForProject(
-    ctx.session.sessionManager.getCwd(),
-  );
-  const list = await client.request({ op: "list" });
-  if (list.op !== "list") throw new Error("Unexpected service list response");
-  const daemon = list.daemons.find((item) => item.id === id);
+async function services(ctx: CommandContext) {
+  const scope = projectScope(await canonicalProjectDir(ctx.session.sessionManager.getCwd()));
+  const client = await daemonClient();
+  const { units } = await client.request({ op: "list", scope, kind: "proc" });
+  return { client, units };
+}
+
+async function service(ctx: CommandContext, id: string, token: string) {
+  const { client, units } = await services(ctx);
+  const daemon = units.find((item) => item.id === id);
   if (!daemon) throw new CommandError("Service not found", "job_not_found");
+  if (daemon.generation !== token)
+    throw new CommandError("Service generation changed", "stale_generation");
   return { client, daemon };
 }
 
@@ -233,13 +230,8 @@ export const jobsCommands: CommandTable = {
       services: [],
     };
     try {
-      const client = await daemonClientForProject(
-        ctx.session.sessionManager.getCwd(),
-      );
-      const result = await client.request({ op: "list" });
-      if (result.op !== "list")
-        throw new Error("Unexpected service list response");
-      snapshot.services = result.daemons.map(serviceActivity);
+      const { units } = await services(ctx);
+      snapshot.services = units.map(serviceActivity);
     } catch (error) {
       snapshot.servicesError =
         error instanceof Error ? error.message : String(error);
@@ -250,40 +242,24 @@ export const jobsCommands: CommandTable = {
   async get_job_output(ctx, args): Promise<JobDetail> {
     const { id, kind, incarnation: token, cursor } = parseArgs(args);
     if (kind === "service") {
-      if (token !== id)
-        throw new CommandError("Service replaced", "stale_generation");
-      const { client, daemon } = await service(ctx, id);
-      const description = await client.request({
-        op: "describe",
-        name: daemon.name,
-      });
-      if (description.op !== "describe" || description.daemon.id !== id)
-        throw new CommandError("Service replaced", "stale_generation");
-      const { output, truncated } = await serviceOutput(
-        ctx.session.sessionManager.getCwd(),
-        daemon.name,
-      );
-      const check = await client.request({ op: "describe", name: daemon.name });
-      if (check.op !== "describe" || check.daemon.id !== id)
-        throw new CommandError("Service replaced", "stale_generation");
+      const { client } = await service(ctx, id, token);
+      const { output, truncated } = await serviceOutput(id);
+      const { unit } = await client.request({ op: "describe", unit: id });
+      if (unit.generation !== token)
+        throw new CommandError("Service generation changed", "stale_generation");
       return {
         id,
         incarnation: token,
         kind,
         generation,
-        command: [description.spec.application, ...description.spec.args].join(
-          " ",
-        ),
-        cwd: description.spec.cwd,
-        pids:
-          check.daemon.pid && active(check.daemon.state)
-            ? [check.daemon.pid]
-            : [],
-        exitCode: check.daemon.exitCode,
+        command: unit.command,
+        cwd: unit.cwd,
+        pids: active(unit.state) ? unit.pids : [],
+        exitCode: unit.exitCode,
         output,
         start: 0,
         cursor: output.length,
-        open: active(check.daemon.state),
+        open: active(unit.state),
         truncated,
       };
     }
@@ -341,18 +317,14 @@ export const jobsCommands: CommandTable = {
   async cancel_job(ctx, args): Promise<{ requested: boolean }> {
     const { id, kind, incarnation: token } = parseArgs(args);
     if (kind === "service") {
-      if (token !== id)
-        throw new CommandError("Service replaced", "stale_generation");
-      const { client, daemon } = await service(ctx, id);
+      const { client, daemon } = await service(ctx, id, token);
       if (!active(daemon.state)) return { requested: false };
-      const result = await client.request({
+      await client.request({
         op: "stop",
-        name: daemon.name,
-        id,
+        unit: id,
+        generation: token,
         timeoutMs: 5000,
       });
-      if (result.op !== "stop" || result.daemon.id !== id)
-        throw new CommandError("Service replaced", "stale_generation");
       return { requested: true };
     }
     const { job, root } = findJob(ctx, id, kind, token);

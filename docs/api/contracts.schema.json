@@ -9994,20 +9994,8 @@
       "type": "object"
     },
     "agent_handoff_result": {
-      "anyOf": [
-        {
-          "properties": {
-            "savedPath": {
-              "type": "string"
-            }
-          },
-          "required": ["savedPath"],
-          "type": "object"
-        },
-        {
-          "type": "null"
-        }
-      ]
+      "properties": {},
+      "type": "object"
     },
     "agent_host_tool_result_args": {
       "description": "Host tool completion correlated to the request id; isError distinguishes a failed result.",
@@ -48134,7 +48122,7 @@
               "type": "object"
             }
           ],
-          "description": "Usage: Hand off an idle session.\nInputs: customInstructions may be omitted.\nInvariants: A streaming session is rejected; null means no handoff result.\nEffects: Performs handoff and may save a path.\nRecovery: Inspect session and saved output after uncertainty before repeating.",
+          "description": "Usage: Run handoff compaction.\nInputs: customInstructions may be omitted.\nInvariants: OMP owns the handoff lifecycle.\nEffects: Compacts the session through OMP's handoff mode.\nRecovery: Inspect session state before repeating.",
           "title": "AgentCommand_handoff",
           "type": "object"
         },
@@ -53038,20 +53026,8 @@
                   "type": "object"
                 },
                 {
-                  "anyOf": [
-                    {
-                      "properties": {
-                        "savedPath": {
-                          "type": "string"
-                        }
-                      },
-                      "required": ["savedPath"],
-                      "type": "object"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
+                  "properties": {},
+                  "type": "object"
                 },
                 {
                   "properties": {
@@ -63210,20 +63186,8 @@
           "type": "object"
         },
         {
-          "anyOf": [
-            {
-              "properties": {
-                "savedPath": {
-                  "type": "string"
-                }
-              },
-              "required": ["savedPath"],
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ]
+          "properties": {},
+          "type": "object"
         },
         {
           "properties": {
@@ -124571,20 +124535,8 @@
       "type": "object"
     },
     "runner_handoff_result": {
-      "anyOf": [
-        {
-          "properties": {
-            "savedPath": {
-              "type": "string"
-            }
-          },
-          "required": ["savedPath"],
-          "type": "object"
-        },
-        {
-          "type": "null"
-        }
-      ]
+      "properties": {},
+      "type": "object"
     },
     "runner_live_connect_args": {
       "properties": {
@@ -125333,7 +125285,7 @@
                   "type": "object"
                 }
               ],
-              "description": "Usage: Hand off an idle session.\nInputs: customInstructions may be omitted.\nInvariants: A streaming session is rejected; null means no handoff result.\nEffects: Performs handoff and may save a path.\nRecovery: Inspect session and saved output after uncertainty before repeating.",
+              "description": "Usage: Run handoff compaction.\nInputs: customInstructions may be omitted.\nInvariants: OMP owns the handoff lifecycle.\nEffects: Compacts the session through OMP's handoff mode.\nRecovery: Inspect session state before repeating.",
               "title": "AgentCommand_handoff",
               "type": "object"
             },

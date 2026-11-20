@@ -338,6 +338,7 @@ it("rejects video requests for tabs and streams not owned by the session", async
     tabs.set(name, {
       name, targetId: "other-video", ownerSessionId: "other", backend: "worker", state: "alive",
       kindTag: "headless", info: { title: "", url: "https://example.test" },
+      browser: { browser: { connected: false } },
     } as unknown as TabSession);
     await expect(browserCommands.browser_video_start(ctx, { id: "other-video" })).rejects.toThrow("Browser tab not found");
     await expect(browserCommands.browser_video_start(ctx, { id: "" })).rejects.toThrow("Invalid browser video arguments");

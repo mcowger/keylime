@@ -459,13 +459,13 @@ Recovery: Read state and reapply the desired mode after restart.`,
   ),
   command(
     "handoff",
-    `Usage: Hand off an idle session.
+    `Usage: Run handoff compaction.
 Inputs: customInstructions may be omitted.
-Invariants: A streaming session is rejected; null means no handoff result.
-Effects: Performs handoff and may save a path.
-Recovery: Inspect session and saved output after uncertainty before repeating.`,
+Invariants: OMP owns the handoff lifecycle.
+Effects: Compacts the session through OMP's handoff mode.
+Recovery: Inspect session state before repeating.`,
     Type.Object(instructions),
-    nullable(Type.Object({ savedPath: s() })),
+    Type.Object({}),
   ),
   command(
     "goal",

@@ -15,7 +15,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Opening the workspace base branch picker on mobile no longer focuses search or brings up the keyboard.
 - New workspace drafts show the project name and base branch in a thin row attached to the composer.
 - The OMP integration importer can select the latest published build with `--latest`.
-- The bundled runner uses OMP integration build 18.22.0.
+- The bundled runner uses OMP integration build 19.0.0.
 - Open **More…** in the composer model picker to refresh available models without restarting a session.
 - Star a model to move it from **More…** to **Favorites**. Each model appears once, and favorites are saved in the browser.
 - Question forms have larger action targets, show validation and submission status, prevent duplicate answers, and allow retry after a send failure.

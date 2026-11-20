@@ -1,8 +1,9 @@
-import { expect, it } from "bun:test";
+import { afterEach, beforeEach, expect, it } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { daemonClientForProject } from "@oh-my-pi/pi-coding-agent/launch/client";
+import { canonicalProjectDir, daemonClient, isolateDaemonForSmokeTest } from "@oh-my-pi/pi-coding-agent/daemon/client";
+import { projectScope } from "@oh-my-pi/pi-coding-agent/daemon/protocol";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { BashTool } from "@oh-my-pi/pi-coding-agent/tools/bash";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
@@ -12,6 +13,14 @@ import type { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-sessi
 import type { JobSnapshot, JobDetail } from "../../lib/jobs-types";
 import { jobsCommands } from "../src/commands/jobs";
 import type { CommandContext } from "../src/commands/types";
+
+let restoreDaemon: () => Promise<void>;
+beforeEach(async () => {
+  restoreDaemon = await isolateDaemonForSmokeTest();
+});
+afterEach(async () => {
+  await restoreDaemon();
+});
 
 it("scopes managed jobs, reads bounded live output, and cancels only the owner", async () => {
   const manager = new AsyncJobManager({});
@@ -199,60 +208,42 @@ it("does not stop a replacement service sharing the old name", async () => {
     } as unknown as AgentSession,
     send() {},
   } satisfies CommandContext;
-  const client = await daemonClientForProject(cwd);
   try {
+    const client = await daemonClient();
     const spec = {
-      name: "jobs-test",
-      application: "/bin/sleep",
-      args: ["60"],
-      env: {},
-      cwd,
-      pty: false,
-      restart: "no" as const,
-      persist: false,
-      detached: false,
-    };
-    const first = await client.request({
-      op: "start",
-      spec,
+      op: "open" as const,
+      kind: "proc",
+      scope: projectScope(await canonicalProjectDir(cwd)),
+      key: "jobs-test",
+      proc: { application: "/bin/sleep", args: ["60"], env: {}, cwd, pty: false },
       awaitReady: false,
-    });
-    if (first.op !== "start") throw new Error("Unexpected start result");
+    };
+    const first = await client.request(spec);
     const snapshot = (await jobsCommands.get_jobs(ctx, {})) as JobSnapshot;
     expect(
-      snapshot.services.some((service) => service.id === first.daemon.id),
+      snapshot.services.some((service) => service.id === first.unit.id),
     ).toBe(true);
-    const replacement = await client.request({
-      op: "start",
-      spec,
-      replace: true,
-      awaitReady: false,
-    });
-    if (replacement.op !== "start") throw new Error("Unexpected start result");
-    expect(replacement.daemon.id).not.toBe(first.daemon.id);
+    const replacement = await client.request({ ...spec, replace: true });
+    expect(replacement.unit.generation).not.toBe(first.unit.generation);
     await expect(
       jobsCommands.cancel_job(ctx, {
         kind: "service",
-        id: first.daemon.id,
-        incarnation: first.daemon.id,
+        id: first.unit.id,
+        incarnation: first.unit.generation,
         generation: snapshot.generation,
       }),
     ).rejects.toThrow();
-    const current = await client.request({ op: "describe", name: spec.name });
-    expect(current.op === "describe" && current.daemon.id).toBe(
-      replacement.daemon.id,
-    );
+    const current = await client.request({ op: "describe", unit: replacement.unit.id });
+    expect(current.unit.generation).toBe(replacement.unit.generation);
     expect(
       await jobsCommands.cancel_job(ctx, {
         kind: "service",
-        id: replacement.daemon.id,
-        incarnation: replacement.daemon.id,
+        id: replacement.unit.id,
+        incarnation: replacement.unit.generation,
         generation: snapshot.generation,
       }),
     ).toEqual({ requested: true });
   } finally {
-    await client.request({ op: "shutdown" }).catch(() => {});
-    client.close();
     await rm(cwd, { recursive: true, force: true });
   }
 });
@@ -345,8 +336,9 @@ it("reports service truncation from captured log windows, not raw byte counts", 
     } as unknown as AgentSession,
     send() {},
   } satisfies CommandContext;
-  const client = await daemonClientForProject(cwd);
   try {
+    const client = await daemonClient();
+    const scope = projectScope(await canonicalProjectDir(cwd));
     for (const [name, command, truncated] of [
       ["short", "printf '\\033[31mred\\033[0m\\001done\\n'; sleep 60", false],
       [
@@ -356,42 +348,33 @@ it("reports service truncation from captured log windows, not raw byte counts", 
       ],
     ] as const) {
       const started = await client.request({
-        op: "start",
-        spec: {
-          name,
-          application: "/bin/sh",
-          args: ["-c", command],
-          env: {},
-          cwd,
-          pty: false,
-          restart: "no",
-          persist: false,
-          detached: false,
-        },
+        op: "open",
+        kind: "proc",
+        scope,
+        key: name,
+        proc: { application: "/bin/sh", args: ["-c", command], env: {}, cwd, pty: false },
         awaitReady: false,
       });
-      if (started.op !== "start") throw new Error("Unexpected start result");
       let cursor = 0;
       for (;;) {
         const logs = await client.request({
           op: "logs",
-          name,
+          unit: started.unit.id,
           lines: 1000,
           head: false,
           follow: true,
           cursor,
           timeoutMs: 5000,
         });
-        if (logs.op !== "logs") throw new Error("Unexpected logs result");
         if (logs.text.includes(name === "short" ? "done" : "END-MARKER")) break;
-        if (logs.timedOut) throw new Error("Service output timed out");
+        if (logs.cursor === cursor) throw new Error("Service output timed out");
         cursor = logs.cursor;
       }
       const snapshot = (await jobsCommands.get_jobs(ctx, {})) as JobSnapshot;
       const service = snapshot.services.find(
-        (job) => job.id === started.daemon.id,
+        (job) => job.id === started.unit.id,
       )!;
-      expect(service.incarnation).toBe(service.id);
+      expect(service.incarnation).toBe(started.unit.generation);
       const detail = (await jobsCommands.get_job_output(ctx, {
         id: service.id,
         kind: "service",
@@ -402,8 +385,6 @@ it("reports service truncation from captured log windows, not raw byte counts", 
       expect(detail.output).toContain(name === "short" ? "done" : "END-MARKER");
     }
   } finally {
-    await client.request({ op: "shutdown" }).catch(() => {});
-    client.close();
     await rm(cwd, { recursive: true, force: true });
   }
 });

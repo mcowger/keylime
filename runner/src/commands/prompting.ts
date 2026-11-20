@@ -564,11 +564,8 @@ export const promptingCommands: CommandTable = {
     ) {
       throw new Error("handoff: customInstructions must be a string");
     }
-    // Resetting the agent mid-stream lets the live turn emit into a torn-down session (the TUI's guard).
-    if (session.isStreaming)
-      throw new Error("Cannot hand off while a response is in progress");
-    const result = await session.handoff(args.customInstructions);
-    return result ? { savedPath: result.savedPath } : null;
+    await session.compact(args.customInstructions, { mode: "handoff" });
+    return {};
   },
   /** @apiCommand goal */
   async goal(ctx, args) {

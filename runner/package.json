@@ -6,30 +6,30 @@
     "build": "bun scripts/build-binary.ts"
   },
   "dependencies": {
-    "@oh-my-pi/pi-coding-agent": "file:./vendor/oh-my-pi-pi-coding-agent-18.22.0.tgz",
-    "@oh-my-pi/pi-natives": "file:./vendor/oh-my-pi-pi-natives-18.22.0-int.202611172116.g06ec7f5.tgz",
-    "@oh-my-pi/pi-tui": "file:./vendor/oh-my-pi-pi-tui-18.22.0.tgz",
-    "@oh-my-pi/pi-utils": "file:./vendor/oh-my-pi-pi-utils-18.22.0-int.202611172116.g06ec7f5.tgz"
+    "@oh-my-pi/pi-coding-agent": "file:./vendor/oh-my-pi-pi-coding-agent-19.0.0.tgz",
+    "@oh-my-pi/pi-natives": "file:./vendor/oh-my-pi-pi-natives-19.0.0-int.202611191402.g28d1a42.tgz",
+    "@oh-my-pi/pi-tui": "file:./vendor/oh-my-pi-pi-tui-19.0.0.tgz",
+    "@oh-my-pi/pi-utils": "file:./vendor/oh-my-pi-pi-utils-19.0.0-int.202611191402.g28d1a42.tgz"
   },
   "devDependencies": {
     "@types/bun": "1.4.4"
   },
   "overrides": {
-    "@oh-my-pi/omp-stats": "file:./vendor/oh-my-pi-omp-stats-18.22.0.tgz",
-    "@oh-my-pi/omptype": "file:./vendor/oh-my-pi-omptype-18.22.0.tgz",
-    "@oh-my-pi/pi-agent-core": "file:./vendor/oh-my-pi-pi-agent-core-18.22.0.tgz",
-    "@oh-my-pi/pi-ai": "file:./vendor/oh-my-pi-pi-ai-18.22.0.tgz",
-    "@oh-my-pi/pi-catalog": "file:./vendor/oh-my-pi-pi-catalog-18.22.0.tgz",
-    "@oh-my-pi/pi-coding-agent": "file:./vendor/oh-my-pi-pi-coding-agent-18.22.0.tgz",
-    "@oh-my-pi/pi-mnemopi": "file:./vendor/oh-my-pi-pi-mnemopi-18.22.0.tgz",
-    "@oh-my-pi/pi-natives": "file:./vendor/oh-my-pi-pi-natives-18.22.0-int.202611172116.g06ec7f5.tgz",
-    "@oh-my-pi/pi-natives-darwin-arm64": "file:./vendor/oh-my-pi-pi-natives-darwin-arm64-18.22.0-int.202611172116.g06ec7f5.tgz",
-    "@oh-my-pi/pi-natives-darwin-x64": "file:./vendor/oh-my-pi-pi-natives-darwin-x64-18.22.0-int.202611172116.g06ec7f5.tgz",
-    "@oh-my-pi/pi-natives-linux-arm64": "file:./vendor/oh-my-pi-pi-natives-linux-arm64-18.22.0-int.202611172116.g06ec7f5.tgz",
-    "@oh-my-pi/pi-natives-linux-x64": "file:./vendor/oh-my-pi-pi-natives-linux-x64-18.22.0-int.202611172116.g06ec7f5.tgz",
-    "@oh-my-pi/pi-tui": "file:./vendor/oh-my-pi-pi-tui-18.22.0.tgz",
-    "@oh-my-pi/pi-utils": "file:./vendor/oh-my-pi-pi-utils-18.22.0-int.202611172116.g06ec7f5.tgz",
-    "@oh-my-pi/pi-wire": "file:./vendor/oh-my-pi-pi-wire-18.22.0.tgz",
-    "@oh-my-pi/snapcompact": "file:./vendor/oh-my-pi-snapcompact-18.22.0.tgz"
+    "@oh-my-pi/omp-stats": "file:./vendor/oh-my-pi-omp-stats-19.0.0.tgz",
+    "@oh-my-pi/omptype": "file:./vendor/oh-my-pi-omptype-19.0.0.tgz",
+    "@oh-my-pi/pi-agent-core": "file:./vendor/oh-my-pi-pi-agent-core-19.0.0.tgz",
+    "@oh-my-pi/pi-ai": "file:./vendor/oh-my-pi-pi-ai-19.0.0.tgz",
+    "@oh-my-pi/pi-catalog": "file:./vendor/oh-my-pi-pi-catalog-19.0.0.tgz",
+    "@oh-my-pi/pi-coding-agent": "file:./vendor/oh-my-pi-pi-coding-agent-19.0.0.tgz",
+    "@oh-my-pi/pi-mnemopi": "file:./vendor/oh-my-pi-pi-mnemopi-19.0.0.tgz",
+    "@oh-my-pi/pi-natives": "file:./vendor/oh-my-pi-pi-natives-19.0.0-int.202611191402.g28d1a42.tgz",
+    "@oh-my-pi/pi-natives-darwin-arm64": "file:./vendor/oh-my-pi-pi-natives-darwin-arm64-19.0.0-int.202611191402.g28d1a42.tgz",
+    "@oh-my-pi/pi-natives-darwin-x64": "file:./vendor/oh-my-pi-pi-natives-darwin-x64-19.0.0-int.202611191402.g28d1a42.tgz",
+    "@oh-my-pi/pi-natives-linux-arm64": "file:./vendor/oh-my-pi-pi-natives-linux-arm64-19.0.0-int.202611191402.g28d1a42.tgz",
+    "@oh-my-pi/pi-natives-linux-x64": "file:./vendor/oh-my-pi-pi-natives-linux-x64-19.0.0-int.202611191402.g28d1a42.tgz",
+    "@oh-my-pi/pi-tui": "file:./vendor/oh-my-pi-pi-tui-19.0.0.tgz",
+    "@oh-my-pi/pi-utils": "file:./vendor/oh-my-pi-pi-utils-19.0.0-int.202611191402.g28d1a42.tgz",
+    "@oh-my-pi/pi-wire": "file:./vendor/oh-my-pi-pi-wire-19.0.0.tgz",
+    "@oh-my-pi/snapcompact": "file:./vendor/oh-my-pi-snapcompact-19.0.0.tgz"
   }
 }
