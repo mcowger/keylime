@@ -740,6 +740,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   );
   const [newSessionDefaultModel, setNewSessionDefaultModel] =
     useState<SelectedModel | null>(null);
+  const initialModel =
+    newSessionModel ??
+    (pooled || remoteHostId(newSessionHostId) ? null : newSessionDefaultModel);
   // Start at the default for SSR; hydrate from localStorage in an effect
   // to avoid a server/client mismatch when the user stored a different preset.
   const [toolPreset, setToolPreset] = useState<ToolPreset>("full");
@@ -1388,7 +1391,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const displayModel = useMemo(
     () =>
       isNew
-        ? (newSessionModel ?? newSessionDefaultModel)
+        ? initialModel
         : (currentModelOverride ??
           (liveModelMeta
             ? {
@@ -1398,8 +1401,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
             : (data?.context.model ?? pendingModel))),
     [
       isNew,
-      newSessionModel,
-      newSessionDefaultModel,
+      initialModel,
       currentModelOverride,
       liveModelMeta,
       data?.context.model,
@@ -2201,7 +2203,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           : undefined;
         if (firstPrompt) onStartupStage?.("startingOmp");
         const targetCwd = workspace?.cwd ?? newSessionCwd;
-        const selectedModel = newSessionModel ?? newSessionDefaultModel;
+        const selectedModel = initialModel;
         if (selectedModel) setPendingModel(selectedModel);
         const toolNames = getToolNamesForPreset(toolPreset);
         const request = {
@@ -2363,8 +2365,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       newSessionProjectId,
       newSessionInitialization,
       onNewSessionInitialization,
-      newSessionModel,
-      newSessionDefaultModel,
+      initialModel,
       toolPreset,
       thinkingLevel,
       promoteNewSession,

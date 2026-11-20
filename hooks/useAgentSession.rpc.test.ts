@@ -12336,6 +12336,42 @@ test("a fresh chat on a remote host creates its session there and toasts when th
   assert.equal(w.latest.notices.length, 0);
 });
 
+for (const modelId of [undefined, "worker-model"] as const) {
+  test(`a remote chat ${modelId ? "honors an explicit choice" : "keeps the host default"} with disjoint model catalogs`, async () => {
+    resetWorld();
+    world.models = {
+      models: { "web:web-model": "Web model" },
+      modelList: [{ id: "web-model", provider: "web", name: "Web model" }],
+      defaultModel: { provider: "web", modelId: "web-model" },
+    };
+    world.respond = (method, url, body) => {
+      if (method !== "POST" || url !== "/api/agent/new") return null;
+      if (body?.provider === "web")
+        return jsonResponse(409, { error: "Model not available on worker" });
+      assert.equal(body?.provider, modelId ? "worker" : undefined);
+      assert.equal(body?.modelId, modelId);
+      return jsonResponse(200, {
+        success: true,
+        sessionId: "remote-model-session",
+        hostId: "h1",
+        cwd: "/remote/work",
+      });
+    };
+    const w = await mountSession(null, undefined, {
+      newSessionCwd: "/remote/work",
+      newSessionHostId: "h1",
+    });
+    await act(async () => { await w.latest.refreshModels(); });
+    assert.ok(w.latest.modelList.some((model) => model.id === "web-model"));
+    assert.equal(w.latest.displayModel, null);
+    if (modelId) await act(() => w.latest.handleModelChange("worker", modelId));
+    await act(async () => {
+      assert.equal(await w.latest.resolveUploadHost(), "h1");
+    });
+    assert.equal(w.latest.sessionIdRef.current, "remote-model-session");
+  });
+}
+
 test("a fresh chat whose host drops after the spawn adopts the kept session, so a retry starts no second one", async (t) => {
   captureFailure(t, "Failed to send message:", "Build box is offline");
   resetWorld();

@@ -224,6 +224,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- New chats on linked hosts and in host pools use the chosen host's default model unless you explicitly pick one.
 - Chat previews screenshots embedded with `local://` and opens links to those files in the file panel. If the file is missing, Keylime shows an error instead of doing nothing.
 - When a commit fails during Ship, **Ask the agent to fix it** sends the error output to the workspace chat. Ship doesn't retry automatically.
 - A workspace shows **Attention required** after a chat crashes, even if the chat isn't open. Closing the crashed chat dismisses that warning in the current browser tab, and deleting the chat removes its badge.
@@ -381,6 +382,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Removed extra check marks from completed background job notices, system reminders, and incoming agent messages. Error, warning, running, and cancelled indicators remain
 - A workspace shows **Attention required** after a chat crashes, even if the chat isn't open. Closing the crashed chat dismisses that warning in the current browser tab, and deleting the chat removes its badge
 - When a commit fails during Ship, **Ask the agent to fix it** sends the error output to the workspace chat. Ship doesn't retry automatically
+- New chats on linked hosts and in host pools use the chosen host's default model unless you explicitly pick one
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
