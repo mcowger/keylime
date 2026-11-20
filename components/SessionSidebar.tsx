@@ -1559,6 +1559,7 @@ export const SessionSidebar = memo(function SessionSidebar({
       {addProjectOpen && (
         <DirectoryPicker
           key={addProjectHostId}
+          mode="repo"
           host={{
             id: addProjectHostId,
             name: hostName(

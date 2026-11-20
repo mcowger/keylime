@@ -148,6 +148,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Improve uses the task's attached images with a vision-capable planning model
 
 ### Changed
+- **New System → Member Repos** uses the same folder picker as **Add repo**, without the clone and launch options.
 - The sidebar and Settings call projects repos, including in add, remove, and settings controls.
 - Effort cleanup lists Git-ignored files and directories, like `.env` and local database folders. Removing them requires force confirmation.
 - Effort cleanup keeps unreadable `AGENTS.md` and `repomap.md` files at the Effort root without failing worktree removal.
@@ -192,6 +193,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - `keylime attach` was replaced by the standalone `klc` client; session binding is scoped to each host connection
 - Effort cleanup keeps unreadable `AGENTS.md` and `repomap.md` files at the Effort root without failing worktree removal
 - Dismiss exited Effort service output from the terminal tab or Effort details, even if setup failed. Opening a service terminal from a member worktree keeps it selected when the sidebar updates
+- **New System → Member Repos** uses the same folder picker as **Add repo**, without the clone and launch options
 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen

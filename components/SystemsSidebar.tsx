@@ -97,7 +97,7 @@ export function SystemsSidebar({
   onOpenPlanning,
   onChanged,
 }: {
-  host: string;
+  host: { id: string; name: string };
   state?: SystemsHost;
   action: SystemsAction;
   repos: { path: string; name: string }[];
@@ -239,13 +239,13 @@ export function SystemsSidebar({
                     .closest("details")
                     ?.removeAttribute("open");
                   onOpenPlanning?.({
-                    host,
+                    host: host.id,
                     owner: { kind: "system", id: system.id },
                     onChanged,
                     onOpenTarget: async ({ effortId, path }) => {
-                      const effort = (await systemsRequest(host)).efforts.find(
-                        ({ id }) => id === effortId,
-                      );
+                      const effort = (
+                        await systemsRequest(host.id)
+                      ).efforts.find(({ id }) => id === effortId);
                       if (!effort) throw new Error("Effort not found.");
                       setExpanded((previous) =>
                         new Set(previous).add(effort.systemId),

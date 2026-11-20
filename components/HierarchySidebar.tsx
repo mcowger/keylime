@@ -1599,7 +1599,10 @@ export function HierarchySidebar({
             })}
           {hostExpanded(host.id) && (
             <SystemsSidebar
-              host={host.id}
+              host={{
+                id: host.id,
+                name: host.label || t("hostsConfig.thisMachine"),
+              }}
               state={systemsHosts.byHost[host.id]}
               action={(input) => systemsHosts.run(host.id, input)}
               repos={(snapshots[host.id]?.projects ?? [])

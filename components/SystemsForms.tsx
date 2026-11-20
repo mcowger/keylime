@@ -1,20 +1,12 @@
 "use client";
 
 import {
-  useEffect,
   useId,
   useState,
   type CSSProperties,
   type ComponentProps,
 } from "react";
-import { Type, type Static } from "@sinclair/typebox";
-import { Value } from "@sinclair/typebox/value";
 import { browserUUID } from "@/lib/browser-uuid";
-import { formatApiError } from "@/lib/i18n/api-error";
-import {
-  BrowsableDirectorySchema,
-  WorkspaceDirectoryBrowseSchema,
-} from "@/lib/api-contracts/workspace-models";
 import type {
   EffortPlan,
   EffortRecord,
@@ -23,6 +15,7 @@ import type {
   SystemsRequest,
 } from "@/lib/api-contracts/systems";
 import type { SystemsAction } from "./SystemsHost";
+import { DirectoryPicker } from "./DirectoryPicker";
 import { WorkspaceSourcePicker } from "./WorkspaceSourcePicker";
 import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
 
@@ -136,116 +129,6 @@ export function useSystemsAction(action: SystemsAction) {
   return { busy, error, run, setError };
 }
 
-type BrowseResult = Static<typeof WorkspaceDirectoryBrowseSchema>;
-const driveList = Type.Array(BrowsableDirectorySchema);
-function HostDirectoryBrowser({
-  host,
-  start,
-  onSelect,
-  onCancel,
-}: {
-  host: string;
-  start?: string;
-  onSelect: (path: string) => void;
-  onCancel: () => void;
-}) {
-  const [request, setRequest] = useState({ path: start ?? "", sequence: 0 });
-  const [entry, setEntry] = useState<{
-    request: typeof request;
-    data?: BrowseResult;
-    error?: string;
-  }>();
-  const [input, setInput] = useState(start ?? "");
-  useEffect(() => {
-    const abort = new AbortController();
-    const params = new URLSearchParams({ hostId: host });
-    if (request.path) params.set("path", request.path);
-    void (async () => {
-      try {
-        const res = await fetch(`/api/cwd/browse?${params}`, {
-          signal: abort.signal,
-        });
-        const body = await res.json();
-        if (!res.ok)
-          throw new Error(
-            formatApiError({ error: `HTTP ${res.status}`, ...body }),
-          );
-        if (abort.signal.aborted) return;
-        if (!Value.Check(WorkspaceDirectoryBrowseSchema, body))
-          throw new Error("Invalid host folder listing");
-        setEntry({ request, data: body });
-        setInput(body.path);
-      } catch (error) {
-        if (!abort.signal.aborted)
-          setEntry({
-            request,
-            error: error instanceof Error ? error.message : String(error),
-          });
-      }
-    })();
-    return () => abort.abort();
-  }, [host, request]);
-  const go = (path: string) =>
-    setRequest(({ sequence }) => ({ path, sequence: sequence + 1 }));
-  const data = entry?.request === request ? entry.data : undefined;
-  const folders =
-    data && "drives" in data && Value.Check(driveList, data.drives)
-      ? data.drives
-      : (data?.directories ?? []);
-  return (
-    <div style={systemsCard} aria-label="Browse host folders">
-      <label>
-        Folder path{" "}
-        <input
-          style={systemsInput}
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              go(input.trim());
-            }
-          }}
-        />
-      </label>
-      <div style={systemsRow}>
-        <SystemsButton onClick={() => go(input.trim())}>
-          Go to path
-        </SystemsButton>
-        {data?.parentPath && (
-          <SystemsButton onClick={() => go(data.parentPath!)}>
-            Parent folder
-          </SystemsButton>
-        )}
-        <SystemsButton
-          disabled={!data?.path}
-          onClick={() => data?.path && onSelect(data.path)}
-        >
-          Use this folder
-        </SystemsButton>
-        <SystemsButton onClick={onCancel}>Cancel browsing</SystemsButton>
-      </div>
-      {entry?.request !== request && <div role="status">Loading folders…</div>}
-      {entry?.request === request && <SystemsError message={entry.error} />}
-      {data && (
-        <div
-          style={{ ...systemsStack, gap: 3, maxHeight: 160, overflow: "auto" }}
-        >
-          {folders.map(({ name, path }) => (
-            <SystemsButton
-              key={path}
-              style={{ textAlign: "left" }}
-              onClick={() => go(path)}
-            >
-              {name}
-            </SystemsButton>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function SystemEditor({
   host,
   system,
@@ -253,7 +136,7 @@ export function SystemEditor({
   action,
   onClose,
 }: {
-  host: string;
+  host: { id: string; name: string };
   system?: SystemRecord;
   repos: { path: string; name: string }[];
   action: SystemsAction;
@@ -360,19 +243,10 @@ export function SystemEditor({
             <SystemsButton disabled={!repo} onClick={() => addRepo(repo)}>
               Add registered Repo
             </SystemsButton>
-            {!browse && (
-              <SystemsButton onClick={() => setBrowse(true)}>
-                Browse host folders
-              </SystemsButton>
-            )}
+            <SystemsButton disabled={busy} onClick={() => setBrowse(true)}>
+              Browse host folders
+            </SystemsButton>
           </div>
-          {browse && (
-            <HostDirectoryBrowser
-              host={host}
-              onSelect={addRepo}
-              onCancel={() => setBrowse(false)}
-            />
-          )}
           <span style={systemsMuted}>
             Choose existing Git checkouts on this host.
           </span>
@@ -468,6 +342,14 @@ export function SystemEditor({
           </SystemsButton>
         </div>
       </form>
+      {browse && (
+        <DirectoryPicker
+          host={host}
+          mode="folder"
+          onSelect={addRepo}
+          onCancel={() => setBrowse(false)}
+        />
+      )}
     </SystemsDialog>
   );
 }
@@ -478,7 +360,7 @@ export function EffortRootEditor({
   action,
   onClose,
 }: {
-  host: string;
+  host: { id: string; name: string };
   root: string;
   action: SystemsAction;
   onClose: () => void;
@@ -508,22 +390,9 @@ export function EffortRootEditor({
           This applies to new Efforts only. Existing Efforts stay where they
           are.
         </span>
-        {!browse && (
-          <SystemsButton onClick={() => setBrowse(true)}>
-            Browse host folders
-          </SystemsButton>
-        )}
-        {browse && (
-          <HostDirectoryBrowser
-            host={host}
-            start={input}
-            onSelect={(path) => {
-              setInput(path);
-              setBrowse(false);
-            }}
-            onCancel={() => setBrowse(false)}
-          />
-        )}
+        <SystemsButton disabled={busy} onClick={() => setBrowse(true)}>
+          Browse host folders
+        </SystemsButton>
         <SystemsError message={error} />
         <div style={systemsRow}>
           <SystemsButton type="submit" disabled={busy || !input.trim()}>
@@ -534,6 +403,18 @@ export function EffortRootEditor({
           </SystemsButton>
         </div>
       </form>
+      {browse && (
+        <DirectoryPicker
+          host={host}
+          mode="folder"
+          startPath={input}
+          onSelect={(path) => {
+            setInput(path);
+            setBrowse(false);
+          }}
+          onCancel={() => setBrowse(false)}
+        />
+      )}
     </SystemsDialog>
   );
 }
