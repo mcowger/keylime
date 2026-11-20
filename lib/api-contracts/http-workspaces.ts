@@ -33,6 +33,8 @@ import {
   ShipPreviewSchema,
   ShipRequestSchema,
   ShipJobSchema,
+  ShipPrMonitorSchema,
+  ShipStartMonitorHttpRequestSchema,
   ShipStopMonitorRequestSchema,
   ShipStopMonitorResultSchema,
   UploadTargetInspectionSchema,
@@ -813,6 +815,16 @@ export const workspaceHttpOperations: readonly HttpOperation[] = [
     {
       requestBody: jsonBody(obj({ host: opt(s), projectPath: s, path: s })),
       responses: responses(ShipJobSchema),
+    },
+  ),
+  ops(
+    "/api/ship/monitor/start",
+    "post",
+    "workspaceShipMonitorStart",
+    "Start PR feedback monitoring",
+    {
+      requestBody: jsonBody(ShipStartMonitorHttpRequestSchema),
+      responses: responses(ShipPrMonitorSchema),
     },
   ),
   ops(

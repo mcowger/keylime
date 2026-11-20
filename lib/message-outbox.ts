@@ -811,15 +811,18 @@ function syncOutboxWrite<T>(database: Database, write: () => T): T {
   }
 }
 
-/** Ship POST supplies the server-issued ID, before dispatching the start RPC. */
-export function insertShipMonitorGrant(grant: ShipMonitorGrant): void {
+/** Persist before dispatch; standalone starts pin the recorded PR at issuance. */
+export function insertShipMonitorGrant(
+  grant: ShipMonitorGrant,
+  prUrl?: string,
+): void {
   const database = db();
   syncOutboxWrite(database, () => {
     database
       .query(
         `INSERT INTO ship_monitor_grants
-        (monitor_id, host_id, credential, session_id, project_path, path)
-        VALUES (?, ?, ?, ?, ?, ?)`,
+        (monitor_id, host_id, credential, session_id, project_path, path, pr_url)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         grant.monitorId,
@@ -828,6 +831,7 @@ export function insertShipMonitorGrant(grant: ShipMonitorGrant): void {
         grant.sessionId,
         grant.projectPath,
         grant.path,
+        prUrl ?? null,
       );
   });
 }

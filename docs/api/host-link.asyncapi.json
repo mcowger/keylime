@@ -310,6 +310,9 @@
         "HostReply_startShip": {
           "$ref": "#/components/messages/HostReply_startShip"
         },
+        "HostReply_startShipMonitor": {
+          "$ref": "#/components/messages/HostReply_startShipMonitor"
+        },
         "HostReply_stopShipMonitor": {
           "$ref": "#/components/messages/HostReply_stopShipMonitor"
         },
@@ -555,6 +558,9 @@
         },
         "HostRequest_startShip": {
           "$ref": "#/components/messages/HostRequest_startShip"
+        },
+        "HostRequest_startShipMonitor": {
+          "$ref": "#/components/messages/HostRequest_startShipMonitor"
         },
         "HostRequest_stopShipMonitor": {
           "$ref": "#/components/messages/HostRequest_stopShipMonitor"
@@ -1707,6 +1713,18 @@
         },
         "title": "HostReply_startShip"
       },
+      "HostReply_startShipMonitor": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Reply to startShipMonitor; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Watch an already recorded open PR without running Ship.\nInputs: projectPath and path identify the workspace. Pass the expected canonical prUrl, a chat sessionId in this workspace, and a server-issued monitorId.\nInvariants: The authenticated link selects the notification server. The host checks the recorded PR and chat; it never replaces an existing watch.\nEffects: Starts feedback monitoring without changing the PR or merge settings.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain start.",
+        "name": "HostReply_startShipMonitor",
+        "payload": {
+          "$ref": "#/components/schemas/HostReply_startShipMonitor"
+        },
+        "title": "HostReply_startShipMonitor"
+      },
       "HostReply_stopShipMonitor": {
         "contentType": "application/json",
         "correlationId": {
@@ -2690,6 +2708,18 @@
           "$ref": "#/components/schemas/HostRequest_startShip"
         },
         "title": "HostRequest_startShip"
+      },
+      "HostRequest_startShipMonitor": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Watch an already recorded open PR without running Ship.\nInputs: projectPath and path identify the workspace. Pass the expected canonical prUrl, a chat sessionId in this workspace, and a server-issued monitorId.\nInvariants: The authenticated link selects the notification server. The host checks the recorded PR and chat; it never replaces an existing watch.\nEffects: Starts feedback monitoring without changing the PR or merge settings.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain start.",
+        "name": "HostRequest_startShipMonitor",
+        "payload": {
+          "$ref": "#/components/schemas/HostRequest_startShipMonitor"
+        },
+        "title": "HostRequest_startShipMonitor"
       },
       "HostRequest_stopShipMonitor": {
         "contentType": "application/json",
@@ -48604,8 +48634,10 @@
                                                 "type": "boolean"
                                               },
                                               "monitor": {
+                                                "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                                                 "properties": {
                                                   "id": {
+                                                    "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                                                     "type": "string"
                                                   },
                                                   "state": {
@@ -48622,7 +48654,8 @@
                                                         "const": "delivery-expired",
                                                         "type": "string"
                                                       }
-                                                    ]
+                                                    ],
+                                                    "description": "Active watch health: watching, polling error, or expired delivery."
                                                   }
                                                 },
                                                 "required": ["id", "state"],
@@ -49104,8 +49137,10 @@
                                               "type": "boolean"
                                             },
                                             "monitor": {
+                                              "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                                               "properties": {
                                                 "id": {
+                                                  "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                                                   "type": "string"
                                                 },
                                                 "state": {
@@ -49122,7 +49157,8 @@
                                                       "const": "delivery-expired",
                                                       "type": "string"
                                                     }
-                                                  ]
+                                                  ],
+                                                  "description": "Active watch health: watching, polling error, or expired delivery."
                                                 }
                                               },
                                               "required": ["id", "state"],
@@ -71031,8 +71067,10 @@
                                 "type": "boolean"
                               },
                               "monitor": {
+                                "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                                 "properties": {
                                   "id": {
+                                    "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                                     "type": "string"
                                   },
                                   "state": {
@@ -71049,7 +71087,8 @@
                                         "const": "delivery-expired",
                                         "type": "string"
                                       }
-                                    ]
+                                    ],
+                                    "description": "Active watch health: watching, polling error, or expired delivery."
                                   }
                                 },
                                 "required": ["id", "state"],
@@ -71369,8 +71408,10 @@
                               "type": "boolean"
                             },
                             "monitor": {
+                              "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                               "properties": {
                                 "id": {
+                                  "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                                   "type": "string"
                                 },
                                 "state": {
@@ -71387,7 +71428,8 @@
                                       "const": "delivery-expired",
                                       "type": "string"
                                     }
-                                  ]
+                                  ],
+                                  "description": "Active watch health: watching, polling error, or expired delivery."
                                 }
                               },
                               "required": ["id", "state"],
@@ -71966,8 +72008,10 @@
                                     "type": "boolean"
                                   },
                                   "monitor": {
+                                    "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                                     "properties": {
                                       "id": {
+                                        "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                                         "type": "string"
                                       },
                                       "state": {
@@ -71984,7 +72028,8 @@
                                             "const": "delivery-expired",
                                             "type": "string"
                                           }
-                                        ]
+                                        ],
+                                        "description": "Active watch health: watching, polling error, or expired delivery."
                                       }
                                     },
                                     "required": ["id", "state"],
@@ -72242,8 +72287,10 @@
                                   "type": "boolean"
                                 },
                                 "monitor": {
+                                  "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                                   "properties": {
                                     "id": {
+                                      "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                                       "type": "string"
                                     },
                                     "state": {
@@ -72260,7 +72307,8 @@
                                           "const": "delivery-expired",
                                           "type": "string"
                                         }
-                                      ]
+                                      ],
+                                      "description": "Active watch health: watching, polling error, or expired delivery."
                                     }
                                   },
                                   "required": ["id", "state"],
@@ -72495,8 +72543,10 @@
                                 "type": "boolean"
                               },
                               "monitor": {
+                                "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                                 "properties": {
                                   "id": {
+                                    "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                                     "type": "string"
                                   },
                                   "state": {
@@ -72513,7 +72563,8 @@
                                         "const": "delivery-expired",
                                         "type": "string"
                                       }
-                                    ]
+                                    ],
+                                    "description": "Active watch health: watching, polling error, or expired delivery."
                                   }
                                 },
                                 "required": ["id", "state"],
@@ -72833,8 +72884,10 @@
                               "type": "boolean"
                             },
                             "monitor": {
+                              "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                               "properties": {
                                 "id": {
+                                  "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                                   "type": "string"
                                 },
                                 "state": {
@@ -72851,7 +72904,8 @@
                                       "const": "delivery-expired",
                                       "type": "string"
                                     }
-                                  ]
+                                  ],
+                                  "description": "Active watch health: watching, polling error, or expired delivery."
                                 }
                               },
                               "required": ["id", "state"],
@@ -73483,8 +73537,10 @@
                                 "type": "boolean"
                               },
                               "monitor": {
+                                "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                                 "properties": {
                                   "id": {
+                                    "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                                     "type": "string"
                                   },
                                   "state": {
@@ -73501,7 +73557,8 @@
                                         "const": "delivery-expired",
                                         "type": "string"
                                       }
-                                    ]
+                                    ],
+                                    "description": "Active watch health: watching, polling error, or expired delivery."
                                   }
                                 },
                                 "required": ["id", "state"],
@@ -73821,8 +73878,10 @@
                               "type": "boolean"
                             },
                             "monitor": {
+                              "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                               "properties": {
                                 "id": {
+                                  "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                                   "type": "string"
                                 },
                                 "state": {
@@ -73839,7 +73898,8 @@
                                       "const": "delivery-expired",
                                       "type": "string"
                                     }
-                                  ]
+                                  ],
+                                  "description": "Active watch health: watching, polling error, or expired delivery."
                                 }
                               },
                               "required": ["id", "state"],
@@ -74059,6 +74119,226 @@
         ],
         "description": "Reply to startShip; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Start the asynchronous ship sequence for a registered workspace.\nInputs: Host project/workspace paths, mode, rebase, PR and cleanup choices control the sequence. For monitoring in PR modes, pass both monitorSessionId for a chat in the same workspace and the server-issued monitorGrantId.\nInvariants: Checkout and branch preconditions are checked during execution; steps can fail after earlier steps succeeded. The authenticated daemon link selects the notification server. Job acceptance does not mean monitoring has started.\nEffects: Depending on mode, rebases, fast-forwards, pushes, creates or configures a PR, and may archive sessions and remove the workspace. Opted-in monitoring sends feedback links to chat without gating merges.\nRecovery: Inspect job status and Git/PR state after uncertainty; do not blindly replay destructive steps.",
         "title": "HostReply_startShip"
+      },
+      "HostReply_startShipMonitor": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "result": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "ok": {
+                        "const": true,
+                        "type": "boolean"
+                      },
+                      "value": {
+                        "description": "Public state of an existing PR feedback watch. No routing or chat details.",
+                        "properties": {
+                          "id": {
+                            "description": "Watch generation ID used to stop this watch without affecting a replacement.",
+                            "type": "string"
+                          },
+                          "state": {
+                            "anyOf": [
+                              {
+                                "const": "watching",
+                                "type": "string"
+                              },
+                              {
+                                "const": "error",
+                                "type": "string"
+                              },
+                              {
+                                "const": "delivery-expired",
+                                "type": "string"
+                              }
+                            ],
+                            "description": "Active watch health: watching, polling error, or expired delivery."
+                          }
+                        },
+                        "required": ["id", "state"],
+                        "type": "object"
+                      }
+                    },
+                    "required": ["ok", "value"],
+                    "type": "object"
+                  },
+                  {
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "error": {
+                        "type": "string"
+                      },
+                      "ok": {
+                        "const": false,
+                        "type": "boolean"
+                      },
+                      "status": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["ok", "status", "code", "error"],
+                    "type": "object"
+                  }
+                ]
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "result"],
+            "type": "object"
+          },
+          {
+            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
+            "properties": {
+              "blob": {
+                "properties": {
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["bytes"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "blob"],
+            "type": "object",
+            "x-decoded-result": {
+              "anyOf": [
+                {
+                  "properties": {
+                    "ok": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "value": {
+                      "description": "Public state of an existing PR feedback watch. No routing or chat details.",
+                      "properties": {
+                        "id": {
+                          "description": "Watch generation ID used to stop this watch without affecting a replacement.",
+                          "type": "string"
+                        },
+                        "state": {
+                          "anyOf": [
+                            {
+                              "const": "watching",
+                              "type": "string"
+                            },
+                            {
+                              "const": "error",
+                              "type": "string"
+                            },
+                            {
+                              "const": "delivery-expired",
+                              "type": "string"
+                            }
+                          ],
+                          "description": "Active watch health: watching, polling error, or expired delivery."
+                        }
+                      },
+                      "required": ["id", "state"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["ok", "value"],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "ok": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["ok", "status", "code", "error"],
+                  "type": "object"
+                }
+              ]
+            }
+          },
+          {
+            "properties": {
+              "error": {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number"
+                  }
+                },
+                "required": ["status", "code", "message"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Reply to startShipMonitor; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Watch an already recorded open PR without running Ship.\nInputs: projectPath and path identify the workspace. Pass the expected canonical prUrl, a chat sessionId in this workspace, and a server-issued monitorId.\nInvariants: The authenticated link selects the notification server. The host checks the recorded PR and chat; it never replaces an existing watch.\nEffects: Starts feedback monitoring without changing the PR or merge settings.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain start.",
+        "title": "HostReply_startShipMonitor"
       },
       "HostReply_stopShipMonitor": {
         "anyOf": [
@@ -83348,6 +83628,73 @@
         "title": "HostRequest_startShip",
         "type": "object"
       },
+      "HostRequest_startShipMonitor": {
+        "description": "Usage: Watch an already recorded open PR without running Ship.\nInputs: projectPath and path identify the workspace. Pass the expected canonical prUrl, a chat sessionId in this workspace, and a server-issued monitorId.\nInvariants: The authenticated link selects the notification server. The host checks the recorded PR and chat; it never replaces an existing watch.\nEffects: Starts feedback monitoring without changing the PR or merge settings.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain start.",
+        "properties": {
+          "args": {
+            "properties": {
+              "input": {
+                "additionalProperties": false,
+                "description": "Start the watch on the owning daemon under the initiating server's grant ID.",
+                "properties": {
+                  "monitorId": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "path": {
+                    "minLength": 1,
+                    "pattern": "^[^\\x00]+$",
+                    "type": "string"
+                  },
+                  "projectPath": {
+                    "minLength": 1,
+                    "pattern": "^[^\\x00]+$",
+                    "type": "string"
+                  },
+                  "prUrl": {
+                    "description": "Canonical GitHub.com PR being monitored. Must match the server grant.",
+                    "pattern": "^https://github\\.com/[a-z0-9][a-z0-9-]{0,38}/(?!\\.\\.?/)[a-z0-9._-]{1,100}/pull/[1-9][0-9]{0,15}$",
+                    "type": "string"
+                  },
+                  "sessionId": {
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "projectPath",
+                  "path",
+                  "prUrl",
+                  "sessionId",
+                  "monitorId"
+                ],
+                "type": "object"
+              }
+            },
+            "required": ["input"],
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "const": "startShipMonitor",
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "const": "req",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "id", "op", "args"],
+        "title": "HostRequest_startShipMonitor",
+        "type": "object"
+      },
       "HostRequest_stopShipMonitor": {
         "description": "Usage: Stop PR feedback monitoring for a workspace.\nInputs: projectPath, path and monitorId identify a workspace and monitor generation.\nInvariants: Only the initiating server link can stop a monitor. A stale generation cannot stop its replacement.\nEffects: Stops feedback monitoring without changing the pull request or merge settings.\nRecovery: Refresh workspace state before retrying an uncertain request.",
         "properties": {
@@ -84520,7 +84867,7 @@
   "defaultContentType": "application/json",
   "id": "urn:keylime:host-link",
   "info": {
-    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 13, minimum 13; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 82 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 13, minimum 13; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 83 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
     "title": "Host daemon link",
     "version": "13"
   },
@@ -86111,6 +86458,29 @@
         ]
       },
       "summary": "startShip"
+    },
+    "operation_startShipMonitor": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Watch an already recorded open PR without running Ship.\nInputs: projectPath and path identify the workspace. Pass the expected canonical prUrl, a chat sessionId in this workspace, and a server-issued monitorId.\nInvariants: The authenticated link selects the notification server. The host checks the recorded PR and chat; it never replaces an existing watch.\nEffects: Starts feedback monitoring without changing the PR or merge settings.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain start.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/HostRequest_startShipMonitor"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/HostReply_startShipMonitor"
+          }
+        ]
+      },
+      "summary": "startShipMonitor"
     },
     "operation_stopShipMonitor": {
       "action": "send",

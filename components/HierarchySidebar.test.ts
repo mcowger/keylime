@@ -5,6 +5,7 @@ import {
   cleanup,
   fireEvent,
   waitFor,
+  within,
 } from "@testing-library/react/pure.js";
 import test from "node:test";
 import React from "react";
@@ -12,11 +13,21 @@ import type { HierarchySnapshot } from "@/lib/project-hierarchy-types";
 import { HierarchySidebar } from "./HierarchySidebar";
 
 for (const [state, label] of [
-  ["watching", "Monitoring"],
+  ["watching", "Monitoring on"],
   ["error", "Monitoring error"],
-  ["delivery-expired", "Delivery expired"],
+  ["delivery-expired", "Feedback delivery expired"],
 ] as const) {
-  test(`the PR pill shows ${label} and can stop monitoring`, async () => {
+  test(`the sidebar shows ${label} and keeps the PR link in place after stopping`, async () => {
+    const chat = {
+      id: "22222222-2222-4222-8222-222222222222",
+      path: "/sessions/work.jsonl",
+      cwd: "/work",
+      name: "Work chat",
+      created: "2026-11-20",
+      modified: "2026-11-20",
+      messageCount: 1,
+      firstMessage: "Review the change",
+    };
     const originalFetch = globalThis.fetch;
     const stop = Promise.withResolvers<Response>();
     let monitored = true;
@@ -40,7 +51,7 @@ for (const [state, label] of [
                     path: "/work",
                     name: "Work",
                     isDefault: false,
-                    sessionIds: [],
+                    sessionIds: [chat.id],
                     ship: {
                       pr: {
                         number: 42,
@@ -74,7 +85,7 @@ for (const [state, label] of [
       const view = render(
         React.createElement(HierarchySidebar, {
           hosts: [{ id: "local", label: "Local" }],
-          sessions: [],
+          sessions: [chat],
           selectedSessionId: null,
           selectedCwd: null,
           selectedHostId: "local",
@@ -107,13 +118,20 @@ for (const [state, label] of [
         }),
       );
       const link = await view.findByRole("link", {
-        name: new RegExp(`PR #42 · ${label}$`),
+        name: "PR #42",
       });
+      const summary = view.getByLabelText("Actions for workspace Work");
+      const menu = summary.closest("details")!;
+      const actions = within(menu);
+      assert.equal(menu.open, false);
+      fireEvent.click(summary);
+      assert.equal(menu.open, true);
+      assert.ok(link.title.includes(label));
       assert.equal(
         link.getAttribute("href"),
         "https://github.com/owner/repo/pull/42",
       );
-      const button = view.getByRole("button", {
+      const button = actions.getByRole("button", {
         name: "Stop monitoring",
       }) as HTMLButtonElement;
       fireEvent.click(button);
@@ -130,13 +148,20 @@ for (const [state, label] of [
       monitored = false;
       stop.resolve(Response.json({ stopped: true }));
       await waitFor(() => {
-        assert.ok(view.getByRole("link", { name: /PR #42$/ }));
-        assert.equal(
-          view.queryByRole("button", { name: /Stop monitoring|Stopping/ }),
-          null,
-        );
+        assert.equal(view.getByRole("link", { name: "PR #42" }), link);
+        assert.ok(link.title.includes("Monitoring off"));
+        assert.ok(actions.getByRole("button", { name: "Start monitoring" }));
         assert.equal(changed, 1);
       });
+      const start = actions.getByRole("button", { name: "Start monitoring" });
+      start.focus();
+      fireEvent.click(start);
+      const picker = await view.findByRole("dialog", {
+        name: "Monitor PR #42",
+      });
+      assert.equal(menu.open, false);
+      fireEvent.click(within(picker).getByRole("button", { name: "Cancel" }));
+      await waitFor(() => assert.equal(document.activeElement, summary));
     } finally {
       cleanup();
       globalThis.fetch = originalFetch;

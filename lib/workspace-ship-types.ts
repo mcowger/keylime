@@ -10,11 +10,18 @@ export type PrDescription = Static<typeof M.PrDescriptionSchema>;
 export type ShipMode = Static<typeof M.ShipModeSchema>;
 export type ShipMergeMethod = Static<typeof M.ShipMergeMethodSchema>;
 export type ShipPr = Static<typeof M.ShipPrSchema>;
+export type ShipPrMonitor = Static<typeof M.ShipPrMonitorSchema>;
 /** Preflight snapshot, not a reservation: checkout, GitHub and PR state may change before shipping. */
 export type ShipPreview = Static<typeof M.ShipPreviewSchema>;
 /** Shipping choices may rebase, push, create a PR and clean up the workspace. */
 export type ShipRequest = Static<typeof M.ShipRequestSchema>;
 export type ShipStartInput = Static<typeof M.ShipStartInputSchema>;
+export type ShipStartMonitorRequest = Static<
+  typeof M.ShipStartMonitorRequestSchema
+>;
+export type ShipStartMonitorInput = Static<
+  typeof M.ShipStartMonitorInputSchema
+>;
 export type ShipMonitorStatusResult = Static<
   typeof M.ShipMonitorStatusResultSchema
 >;

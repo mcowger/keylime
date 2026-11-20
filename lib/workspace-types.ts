@@ -29,9 +29,11 @@ import type {
 } from "./workspace-creation-types";
 import type {
   ShipJob,
+  ShipPrMonitor,
   ShipPreview,
   ShipMonitorStatusResult,
   ShipStartInput,
+  ShipStartMonitorInput,
   ShipStopMonitorRequest,
 } from "./workspace-ship-types";
 
@@ -94,6 +96,9 @@ export interface WorkspaceOps {
     projectPath: string;
     path: string;
   }): Promise<OpResult<ShipJob>>;
+  startShipMonitor(
+    input: ShipStartMonitorInput,
+  ): Promise<OpResult<ShipPrMonitor>>;
   stopShipMonitor(
     input: ShipStopMonitorRequest,
   ): Promise<OpResult<{ stopped: boolean }>>;
@@ -239,6 +244,7 @@ export const WORKSPACE_OP_PARAMS: {
   startShip: ["input"],
   shipStatus: ["id"],
   shipFinish: ["input"],
+  startShipMonitor: ["input"],
   stopShipMonitor: ["input"],
   shipMonitorStatus: ["input"],
   systems: ["input"],

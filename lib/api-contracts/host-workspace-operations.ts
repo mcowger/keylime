@@ -154,6 +154,16 @@ Recovery: Read job and checkout state before retrying an uncertain finish.`,
     M.ShipJobSchema,
   ),
   op(
+    "startShipMonitor",
+    `Usage: Watch an already recorded open PR without running Ship.
+Inputs: projectPath and path identify the workspace. Pass the expected canonical prUrl, a chat sessionId in this workspace, and a server-issued monitorId.
+Invariants: The authenticated link selects the notification server. The host checks the recorded PR and chat; it never replaces an existing watch.
+Effects: Starts feedback monitoring without changing the PR or merge settings.
+Recovery: Refresh the workspace hierarchy before retrying an uncertain start.`,
+    obj({ input: M.ShipStartMonitorInputSchema }),
+    M.ShipPrMonitorSchema,
+  ),
+  op(
     "stopShipMonitor",
     `Usage: Stop PR feedback monitoring for a workspace.
 Inputs: projectPath, path and monitorId identify a workspace and monitor generation.

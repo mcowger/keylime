@@ -73,6 +73,7 @@ import { isEffortPath } from "./systems";
 import {
   shipPreview,
   startShip,
+  startShipMonitor,
   shipStatus,
   shipFinish,
   stopShipMonitor,
@@ -296,7 +297,13 @@ export interface WorkspaceService {
 export function createWorkspaceService(
   uploads: StagedUploads,
   emit: (id: string, epoch: string, event: WorkspaceFileEvent) => void,
-  { shipOwner }: { shipOwner?: string } = {},
+  {
+    shipOwner,
+    assertShipMonitorAvailable,
+  }: {
+    shipOwner?: string;
+    assertShipMonitorAvailable?: (path: string) => void;
+  } = {},
 ): WorkspaceService {
   recoverWorkspaceCreation();
   const reads = new WorkspaceReads();
@@ -310,6 +317,10 @@ export function createWorkspaceService(
     hierarchy: hierarchyOperation,
     shipPreview: (input) => result(() => shipPreview(input)),
     startShip: (input) => result(() => startShip(input, shipOwner)),
+    startShipMonitor: (input) =>
+      result(() =>
+        startShipMonitor(input, shipOwner, assertShipMonitorAvailable),
+      ),
     stopShipMonitor: (input) =>
       result(async () => {
         if (!shipOwner)

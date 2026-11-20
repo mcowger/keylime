@@ -52,6 +52,7 @@ that configuration before installing the hook.
 ```bash
 bun run dev                 # seeded, random free loopback port
 bun run dev -- --browser-fixture  # also start the live Chromium viewer fixture
+bun run dev -- --pr-monitor-fixture  # add an open PR with read-only GitHub fixture data
 ```
 
 Use the printed URL for browser checks. Avoid a fixed port when running multiple worktrees.
@@ -63,6 +64,10 @@ Chromium fixture. Use Take control to exercise navigation and input; no model ca
 The moving bar in the fixture makes continuous browser video visible during playback checks.
 Chromium must be available; set `PUPPETEER_EXECUTABLE_PATH` to a Chrome/Chromium binary or
 allow OMP to download Chromium into the isolated home on first use.
+
+With `--pr-monitor-fixture`, expand `atlas` in Repos. Open the `atlas-feature`
+workspace's `…` menu to start monitoring PR #42 for the `Improve search` chat,
+then stop and start it again. The fixture doesn't contact GitHub or deliver feedback.
 
 The real Chromium drag-selection regression is opt-in because it launches a browser and may download Chromium:
 `KEYLIME_TEST_BROWSER=1 bun test --parallel runner/test/browser-drag.integration.test.ts`.

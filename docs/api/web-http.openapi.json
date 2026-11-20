@@ -38592,8 +38592,10 @@
                                           "type": "boolean"
                                         },
                                         "monitor": {
+                                          "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                                           "properties": {
                                             "id": {
+                                              "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                                               "type": "string"
                                             },
                                             "state": {
@@ -38610,7 +38612,8 @@
                                                   "const": "delivery-expired",
                                                   "type": "string"
                                                 }
-                                              ]
+                                              ],
+                                              "description": "Active watch health: watching, polling error, or expired delivery."
                                             }
                                           },
                                           "required": ["id", "state"],
@@ -39492,8 +39495,10 @@
                                           "type": "boolean"
                                         },
                                         "monitor": {
+                                          "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                                           "properties": {
                                             "id": {
+                                              "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                                               "type": "string"
                                             },
                                             "state": {
@@ -39510,7 +39515,8 @@
                                                   "const": "delivery-expired",
                                                   "type": "string"
                                                 }
-                                              ]
+                                              ],
+                                              "description": "Active watch health: watching, polling error, or expired delivery."
                                             }
                                           },
                                           "required": ["id", "state"],
@@ -62227,8 +62233,10 @@
                                             "type": "boolean"
                                           },
                                           "monitor": {
+                                            "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                                             "properties": {
                                               "id": {
+                                                "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                                                 "type": "string"
                                               },
                                               "state": {
@@ -62245,7 +62253,8 @@
                                                     "const": "delivery-expired",
                                                     "type": "string"
                                                   }
-                                                ]
+                                                ],
+                                                "description": "Active watch health: watching, polling error, or expired delivery."
                                               }
                                             },
                                             "required": ["id", "state"],
@@ -85223,8 +85232,10 @@
                               "type": "boolean"
                             },
                             "monitor": {
+                              "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                               "properties": {
                                 "id": {
+                                  "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                                   "type": "string"
                                 },
                                 "state": {
@@ -85241,7 +85252,8 @@
                                       "const": "delivery-expired",
                                       "type": "string"
                                     }
-                                  ]
+                                  ],
+                                  "description": "Active watch health: watching, polling error, or expired delivery."
                                 }
                               },
                               "required": ["id", "state"],
@@ -85779,8 +85791,10 @@
                           "type": "boolean"
                         },
                         "monitor": {
+                          "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                           "properties": {
                             "id": {
+                              "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                               "type": "string"
                             },
                             "state": {
@@ -85797,7 +85811,8 @@
                                   "const": "delivery-expired",
                                   "type": "string"
                                 }
-                              ]
+                              ],
+                              "description": "Active watch health: watching, polling error, or expired delivery."
                             }
                           },
                           "required": ["id", "state"],
@@ -86393,8 +86408,10 @@
                           "type": "boolean"
                         },
                         "monitor": {
+                          "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                           "properties": {
                             "id": {
+                              "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                               "type": "string"
                             },
                             "state": {
@@ -86411,7 +86428,8 @@
                                   "const": "delivery-expired",
                                   "type": "string"
                                 }
-                              ]
+                              ],
+                              "description": "Active watch health: watching, polling error, or expired delivery."
                             }
                           },
                           "required": ["id", "state"],
@@ -86973,8 +86991,10 @@
                           "type": "boolean"
                         },
                         "monitor": {
+                          "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                           "properties": {
                             "id": {
+                              "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                               "type": "string"
                             },
                             "state": {
@@ -86991,7 +87011,8 @@
                                   "const": "delivery-expired",
                                   "type": "string"
                                 }
-                              ]
+                              ],
+                              "description": "Active watch health: watching, polling error, or expired delivery."
                             }
                           },
                           "required": ["id", "state"],
@@ -87432,6 +87453,370 @@
           "Invariants": "The host checks the workspace and workflow preconditions.",
           "Recovery": "Inspect workspace and ship state after uncertainty before repeating the request.",
           "Usage": "Finish the ship workflow for a workspace."
+        }
+      }
+    },
+    "/api/ship/monitor/start": {
+      "post": {
+        "description": "### Usage\n\nStart PR feedback monitoring for an already recorded open PR.\n\n### Inputs\n\nSend host, projectPath, path, the expected canonical prUrl and a sessionId for an active chat in the workspace.\n\n### Invariants\n\nThe host must support start and status. The host checks the PR and chat and never replaces an existing watch. The server pins the grant to the authenticated host, workspace, chat and exact PR URL.\n\n### Effects\n\nStarts a watch that sends feedback links to the chat without running Ship or changing the PR or its merge settings.\n\n### Recovery\n\nRefresh the workspace hierarchy before retrying after an uncertain response. The watch may be active even if the start response was lost.",
+        "operationId": "workspaceShipMonitorStart",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "description": "Start a watch on the selected host (this machine when omitted) for an open PR and its target chat.",
+                "properties": {
+                  "host": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "path": {
+                    "minLength": 1,
+                    "pattern": "^[^\\x00]+$",
+                    "type": "string"
+                  },
+                  "projectPath": {
+                    "minLength": 1,
+                    "pattern": "^[^\\x00]+$",
+                    "type": "string"
+                  },
+                  "prUrl": {
+                    "description": "Canonical GitHub.com PR being monitored. Must match the server grant.",
+                    "pattern": "^https://github\\.com/[a-z0-9][a-z0-9-]{0,38}/(?!\\.\\.?/)[a-z0-9._-]{1,100}/pull/[1-9][0-9]{0,15}$",
+                    "type": "string"
+                  },
+                  "sessionId": {
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+                    "type": "string"
+                  }
+                },
+                "required": ["projectPath", "path", "prUrl", "sessionId"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Public state of an existing PR feedback watch. No routing or chat details.",
+                  "properties": {
+                    "id": {
+                      "description": "Watch generation ID used to stop this watch without affecting a replacement.",
+                      "type": "string"
+                    },
+                    "state": {
+                      "anyOf": [
+                        {
+                          "const": "watching",
+                          "type": "string"
+                        },
+                        {
+                          "const": "error",
+                          "type": "string"
+                        },
+                        {
+                          "const": "delivery-expired",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Active watch health: watching, polling error, or expired delivery."
+                    }
+                  },
+                  "required": ["id", "state"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request or rejected operation."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authentication is required when configured."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Origin, ownership or authorization policy refused this request."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The requested resource does not exist."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Conflict: the workspace host does not match its session, the upload target exists, or another operation owns the resource."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The operation failed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The owning host or required service is unavailable."
+          }
+        },
+        "security": [
+          {
+            "webSession": []
+          },
+          {
+            "trustedProxy": []
+          },
+          {}
+        ],
+        "summary": "Start PR feedback monitoring",
+        "x-client-semantics": {
+          "Effects": "Starts a watch that sends feedback links to the chat without running Ship or changing the PR or its merge settings.",
+          "Inputs": "Send host, projectPath, path, the expected canonical prUrl and a sessionId for an active chat in the workspace.",
+          "Invariants": "The host must support start and status. The host checks the PR and chat and never replaces an existing watch. The server pins the grant to the authenticated host, workspace, chat and exact PR URL.",
+          "Recovery": "Refresh the workspace hierarchy before retrying after an uncertain response. The watch may be active even if the start response was lost.",
+          "Usage": "Start PR feedback monitoring for an already recorded open PR."
         }
       }
     },

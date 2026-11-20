@@ -32763,8 +32763,10 @@
                                       "type": "boolean"
                                     },
                                     "monitor": {
+                                      "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                                       "properties": {
                                         "id": {
+                                          "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                                           "type": "string"
                                         },
                                         "state": {
@@ -32781,7 +32783,8 @@
                                               "const": "delivery-expired",
                                               "type": "string"
                                             }
-                                          ]
+                                          ],
+                                          "description": "Active watch health: watching, polling error, or expired delivery."
                                         }
                                       },
                                       "required": ["id", "state"],
@@ -43792,8 +43795,10 @@
                       "type": "boolean"
                     },
                     "monitor": {
+                      "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                       "properties": {
                         "id": {
+                          "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                           "type": "string"
                         },
                         "state": {
@@ -43810,7 +43815,8 @@
                               "const": "delivery-expired",
                               "type": "string"
                             }
-                          ]
+                          ],
+                          "description": "Active watch health: watching, polling error, or expired delivery."
                         }
                       },
                       "required": ["id", "state"],
@@ -44388,8 +44394,10 @@
                           "type": "boolean"
                         },
                         "monitor": {
+                          "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                           "properties": {
                             "id": {
+                              "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                               "type": "string"
                             },
                             "state": {
@@ -44406,7 +44414,8 @@
                                   "const": "delivery-expired",
                                   "type": "string"
                                 }
-                              ]
+                              ],
+                              "description": "Active watch health: watching, polling error, or expired delivery."
                             }
                           },
                           "required": ["id", "state"],
@@ -44597,8 +44606,10 @@
                       "type": "boolean"
                     },
                     "monitor": {
+                      "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                       "properties": {
                         "id": {
+                          "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                           "type": "string"
                         },
                         "state": {
@@ -44615,7 +44626,8 @@
                               "const": "delivery-expired",
                               "type": "string"
                             }
-                          ]
+                          ],
+                          "description": "Active watch health: watching, polling error, or expired delivery."
                         }
                       },
                       "required": ["id", "state"],
@@ -45053,8 +45065,10 @@
                       "type": "boolean"
                     },
                     "monitor": {
+                      "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                       "properties": {
                         "id": {
+                          "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                           "type": "string"
                         },
                         "state": {
@@ -45071,7 +45085,8 @@
                               "const": "delivery-expired",
                               "type": "string"
                             }
-                          ]
+                          ],
+                          "description": "Active watch health: watching, polling error, or expired delivery."
                         }
                       },
                       "required": ["id", "state"],
@@ -45223,6 +45238,110 @@
                 "steps",
                 "logs"
               ],
+              "type": "object"
+            }
+          },
+          "required": ["ok", "value"],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string"
+            },
+            "ok": {
+              "const": false,
+              "type": "boolean"
+            },
+            "status": {
+              "type": "number"
+            }
+          },
+          "required": ["ok", "status", "code", "error"],
+          "type": "object"
+        }
+      ]
+    },
+    "host_startShipMonitor_args": {
+      "properties": {
+        "input": {
+          "additionalProperties": false,
+          "description": "Start the watch on the owning daemon under the initiating server's grant ID.",
+          "properties": {
+            "monitorId": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            "path": {
+              "minLength": 1,
+              "pattern": "^[^\\x00]+$",
+              "type": "string"
+            },
+            "projectPath": {
+              "minLength": 1,
+              "pattern": "^[^\\x00]+$",
+              "type": "string"
+            },
+            "prUrl": {
+              "description": "Canonical GitHub.com PR being monitored. Must match the server grant.",
+              "pattern": "^https://github\\.com/[a-z0-9][a-z0-9-]{0,38}/(?!\\.\\.?/)[a-z0-9._-]{1,100}/pull/[1-9][0-9]{0,15}$",
+              "type": "string"
+            },
+            "sessionId": {
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "projectPath",
+            "path",
+            "prUrl",
+            "sessionId",
+            "monitorId"
+          ],
+          "type": "object"
+        }
+      },
+      "required": ["input"],
+      "type": "object"
+    },
+    "host_startShipMonitor_result": {
+      "anyOf": [
+        {
+          "properties": {
+            "ok": {
+              "const": true,
+              "type": "boolean"
+            },
+            "value": {
+              "description": "Public state of an existing PR feedback watch. No routing or chat details.",
+              "properties": {
+                "id": {
+                  "description": "Watch generation ID used to stop this watch without affecting a replacement.",
+                  "type": "string"
+                },
+                "state": {
+                  "anyOf": [
+                    {
+                      "const": "watching",
+                      "type": "string"
+                    },
+                    {
+                      "const": "error",
+                      "type": "string"
+                    },
+                    {
+                      "const": "delivery-expired",
+                      "type": "string"
+                    }
+                  ],
+                  "description": "Active watch health: watching, polling error, or expired delivery."
+                }
+              },
+              "required": ["id", "state"],
               "type": "object"
             }
           },
@@ -192836,8 +192955,10 @@
                         "type": "boolean"
                       },
                       "monitor": {
+                        "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                         "properties": {
                           "id": {
+                            "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                             "type": "string"
                           },
                           "state": {
@@ -192854,7 +192975,8 @@
                                 "const": "delivery-expired",
                                 "type": "string"
                               }
-                            ]
+                            ],
+                            "description": "Active watch health: watching, polling error, or expired delivery."
                           }
                         },
                         "required": ["id", "state"],
@@ -193307,8 +193429,10 @@
                               "type": "boolean"
                             },
                             "monitor": {
+                              "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                               "properties": {
                                 "id": {
+                                  "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                                   "type": "string"
                                 },
                                 "state": {
@@ -193325,7 +193449,8 @@
                                       "const": "delivery-expired",
                                       "type": "string"
                                     }
-                                  ]
+                                  ],
+                                  "description": "Active watch health: watching, polling error, or expired delivery."
                                 }
                               },
                               "required": ["id", "state"],
@@ -193641,8 +193766,10 @@
                   "type": "boolean"
                 },
                 "monitor": {
+                  "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                   "properties": {
                     "id": {
+                      "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                       "type": "string"
                     },
                     "state": {
@@ -193659,7 +193786,8 @@
                           "const": "delivery-expired",
                           "type": "string"
                         }
-                      ]
+                      ],
+                      "description": "Active watch health: watching, polling error, or expired delivery."
                     }
                   },
                   "required": ["id", "state"],
@@ -193817,8 +193945,10 @@
               "type": "boolean"
             },
             "monitor": {
+              "description": "Public state of an existing PR feedback watch. No routing or chat details.",
               "properties": {
                 "id": {
+                  "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                   "type": "string"
                 },
                 "state": {
@@ -193835,7 +193965,8 @@
                       "const": "delivery-expired",
                       "type": "string"
                     }
-                  ]
+                  ],
+                  "description": "Active watch health: watching, polling error, or expired delivery."
                 }
               },
               "required": ["id", "state"],
@@ -194085,8 +194216,10 @@
           "type": "boolean"
         },
         "monitor": {
+          "description": "Public state of an existing PR feedback watch. No routing or chat details.",
           "properties": {
             "id": {
+              "description": "Watch generation ID used to stop this watch without affecting a replacement.",
               "type": "string"
             },
             "state": {
@@ -194103,7 +194236,8 @@
                   "const": "delivery-expired",
                   "type": "string"
                 }
-              ]
+              ],
+              "description": "Active watch health: watching, polling error, or expired delivery."
             }
           },
           "required": ["id", "state"],
@@ -194262,8 +194396,10 @@
                   "type": "boolean"
                 },
                 "monitor": {
+                  "description": "Public state of an existing PR feedback watch. No routing or chat details.",
                   "properties": {
                     "id": {
+                      "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                       "type": "string"
                     },
                     "state": {
@@ -194280,7 +194416,8 @@
                           "const": "delivery-expired",
                           "type": "string"
                         }
-                      ]
+                      ],
+                      "description": "Active watch health: watching, polling error, or expired delivery."
                     }
                   },
                   "required": ["id", "state"],
@@ -194339,6 +194476,34 @@
         "github",
         "pr"
       ],
+      "type": "object"
+    },
+    "workspace_ShipPrMonitor": {
+      "description": "Public state of an existing PR feedback watch. No routing or chat details.",
+      "properties": {
+        "id": {
+          "description": "Watch generation ID used to stop this watch without affecting a replacement.",
+          "type": "string"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "const": "watching",
+              "type": "string"
+            },
+            {
+              "const": "error",
+              "type": "string"
+            },
+            {
+              "const": "delivery-expired",
+              "type": "string"
+            }
+          ],
+          "description": "Active watch health: watching, polling error, or expired delivery."
+        }
+      },
+      "required": ["id", "state"],
       "type": "object"
     },
     "workspace_ShipRequest": {
@@ -194485,6 +194650,95 @@
         }
       },
       "required": ["projectPath", "path", "mode", "rebase", "cleanup"],
+      "type": "object"
+    },
+    "workspace_ShipStartMonitorHttpRequest": {
+      "additionalProperties": false,
+      "description": "Start a watch on the selected host (this machine when omitted) for an open PR and its target chat.",
+      "properties": {
+        "host": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "pattern": "^[^\\x00]+$",
+          "type": "string"
+        },
+        "projectPath": {
+          "minLength": 1,
+          "pattern": "^[^\\x00]+$",
+          "type": "string"
+        },
+        "prUrl": {
+          "description": "Canonical GitHub.com PR being monitored. Must match the server grant.",
+          "pattern": "^https://github\\.com/[a-z0-9][a-z0-9-]{0,38}/(?!\\.\\.?/)[a-z0-9._-]{1,100}/pull/[1-9][0-9]{0,15}$",
+          "type": "string"
+        },
+        "sessionId": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "type": "string"
+        }
+      },
+      "required": ["projectPath", "path", "prUrl", "sessionId"],
+      "type": "object"
+    },
+    "workspace_ShipStartMonitorInput": {
+      "additionalProperties": false,
+      "description": "Start the watch on the owning daemon under the initiating server's grant ID.",
+      "properties": {
+        "monitorId": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "pattern": "^[^\\x00]+$",
+          "type": "string"
+        },
+        "projectPath": {
+          "minLength": 1,
+          "pattern": "^[^\\x00]+$",
+          "type": "string"
+        },
+        "prUrl": {
+          "description": "Canonical GitHub.com PR being monitored. Must match the server grant.",
+          "pattern": "^https://github\\.com/[a-z0-9][a-z0-9-]{0,38}/(?!\\.\\.?/)[a-z0-9._-]{1,100}/pull/[1-9][0-9]{0,15}$",
+          "type": "string"
+        },
+        "sessionId": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "type": "string"
+        }
+      },
+      "required": ["projectPath", "path", "prUrl", "sessionId", "monitorId"],
+      "type": "object"
+    },
+    "workspace_ShipStartMonitorRequest": {
+      "additionalProperties": false,
+      "description": "Start watching the exact recorded open PR from a chat in its workspace.",
+      "properties": {
+        "path": {
+          "minLength": 1,
+          "pattern": "^[^\\x00]+$",
+          "type": "string"
+        },
+        "projectPath": {
+          "minLength": 1,
+          "pattern": "^[^\\x00]+$",
+          "type": "string"
+        },
+        "prUrl": {
+          "description": "Canonical GitHub.com PR being monitored. Must match the server grant.",
+          "pattern": "^https://github\\.com/[a-z0-9][a-z0-9-]{0,38}/(?!\\.\\.?/)[a-z0-9._-]{1,100}/pull/[1-9][0-9]{0,15}$",
+          "type": "string"
+        },
+        "sessionId": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "type": "string"
+        }
+      },
+      "required": ["projectPath", "path", "prUrl", "sessionId"],
       "type": "object"
     },
     "workspace_ShipStep": {
@@ -196124,8 +196378,10 @@
               "type": "boolean"
             },
             "monitor": {
+              "description": "Public state of an existing PR feedback watch. No routing or chat details.",
               "properties": {
                 "id": {
+                  "description": "Watch generation ID used to stop this watch without affecting a replacement.",
                   "type": "string"
                 },
                 "state": {
@@ -196142,7 +196398,8 @@
                       "const": "delivery-expired",
                       "type": "string"
                     }
-                  ]
+                  ],
+                  "description": "Active watch health: watching, polling error, or expired delivery."
                 }
               },
               "required": ["id", "state"],

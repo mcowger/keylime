@@ -15,7 +15,9 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Open **Notes & Tasks** from a Repo or System to save Markdown notes and plan work outside Git. Enter a Brief, optionally expand it in place with **Improve**, then launch a Workspace or Effort with the current text. If an Effort plan changes before creation, **Resume** lets you review the new starting commits without starting a second launch.
 - Task launch saves slash-prefixed Briefs as the first chat message instead of running them as commands.
 - Improve uses the task's attached images with a vision-capable planning model.
-- Ship can monitor a PR for new comments and reviews. The server checks that the shipping chat opted in and sends only feedback links. Stop monitoring from the sidebar PR pill.
+- The bell beside the PR number shows whether monitoring is on. Use the bell in the workspace's `…` menu to turn monitoring on or off without changing auto-merge.
+- Closing the PR monitoring chat picker with Cancel or Escape returns keyboard focus to the workspace's `…` menu.
+- The workspace `…` menu uses a ship icon for Ship.
 - Subagent previews show the model and effort as `model-slug:effort` when effort is reported.
 - **Systems** group repos, service commands, and shared instructions on one host. Create an **Effort** to get a branch and worktree for each repo, a root chat, and one terminal per service. Preview cleanup before removing worktrees; branches and PRs stay put.
 - The sidebar shows worktree setup and cleanup progress even after you close Manage workspaces.
@@ -155,6 +157,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The `keylime host install-artifact` command verifies staged binary checksums, runs preflight, and replaces supported standalone daemon or runner installs
 - Background job notices, system reminders, incoming agent messages, and diagnostics line up with tool rows. Job notices show the result without the internal event label
 - **Settings → Hosts → Deploy release** lists compatible builds already on the web server, shows their build times in your time zone, and marks the newest. The dialog tracks transfer progress for the matched daemon and runner before they install and restart together
+- The workspace `…` menu can start or stop PR feedback monitoring for a selected chat without running Ship or changing auto-merge. The PR row's bell shows monitoring status; closing the chat picker restores focus to the menu
 
 ### Changed
 - `bun run build:binary` builds the browser assets and runners, then compiles and packages all four Keylime targets in parallel. Runner builds use faster native addon compression.

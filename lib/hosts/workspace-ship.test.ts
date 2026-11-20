@@ -39,6 +39,7 @@ import {
   shipMonitorStatus,
   shipPreview,
   startShip,
+  startShipMonitor,
   shipStatus,
   refreshShipPrs,
   startShipWatcher,
@@ -99,6 +100,7 @@ case "$1 $2" in
     number=\${3##*/}
     state=MERGED
     [ ! -f "$root/pr-state" ] || state=$(cat "$root/pr-state")
+    [ "$state" != CLOSED ] || gate closed-view
     [ ! -f "$root/view-fails" ] || exit 1
     printf '{"state":"%s","url":"%s","number":%s,"autoMergeRequest":null,"statusCheckRollup":[]}\n' "$state" "$3" "$number";;
   'api --hostname')
@@ -710,6 +712,108 @@ async function waitForFile(file: string) {
   while (!existsSync(file) && Date.now() < deadline) await delay(10);
   assert.ok(existsSync(file), file);
 }
+
+test("standalone start pins the PR, preserves Ship settings and only watches new feedback", async (t) => {
+  const f = await fixture(t);
+  addChat(t, f);
+  addChat(t, f, otherChat);
+  const offers = startOffers(t);
+  const job = await finished(
+    await startShip({
+      ...f.input,
+      mode: "pr-auto",
+      rebase: false,
+      cleanup: true,
+      pr: { title: "Feature", body: "Details" },
+    }),
+  );
+  assert.equal(job.status, "complete", job.error);
+  const before = prState(f)!;
+  assert.equal(before.autoMerge, true);
+  assert.equal(before.cleanup, true);
+  const input = {
+    ...f.input,
+    prUrl: before.url,
+    monitorId: firstGrant,
+    sessionId: firstChat,
+  };
+  await assert.rejects(startShipMonitor(input), { status: 403 });
+  await assert.rejects(
+    startShipMonitor({ ...input, prUrl: `${input.prUrl}/` }, "server-a"),
+    { status: 409 },
+  );
+
+  const stateFile = join(f.root, "pr-state");
+  const hold = join(f.root, "hold-closed-view");
+  writeFileSync(stateFile, "CLOSED");
+  await assert.rejects(startShipMonitor(input, "server-a"), {
+    code: "pr_not_open",
+    status: 409,
+  });
+  assert.deepEqual(prState(f), before);
+  writeFileSync(hold, "");
+  const staleRefresh = refreshShipPrs();
+  try {
+    await waitForFile(join(f.root, "started-closed-view"));
+    writeFileSync(stateFile, "OPEN");
+    const log = join(f.root, "gh.log");
+    const previousLog = readFileSync(log, "utf8");
+    const head = f.git(f.workspace, "rev-parse", "HEAD");
+    const started = startShipMonitor(input, "server-a");
+    const other = { ...input, monitorId: otherGrant, sessionId: otherChat };
+    await assert.rejects(startShipMonitor(other, "server-b"), { status: 409 });
+    const monitor = await started;
+    assert.deepEqual(monitor, { id: firstGrant, state: "watching" });
+    assert.deepEqual(prState(f), { ...before, monitor });
+    assert.equal(f.git(f.workspace, "rev-parse", "HEAD"), head);
+    assert.match(
+      readFileSync(log, "utf8").slice(previousLog.length),
+      /^pr view [^\n]+\n$/,
+    );
+    await assert.rejects(startShipMonitor(other, "server-b"), { status: 409 });
+  } finally {
+    rmSync(hold);
+    await staleRefresh;
+  }
+  assert.equal(prState(f)?.monitor?.id, firstGrant);
+  const firstFeedbackAt = Date.now() + 1000;
+  writeFileSync(
+    join(f.root, "conversation"),
+    JSON.stringify([[issueComment(1, 1000), issueComment(2, firstFeedbackAt)]]),
+  );
+  await refreshShipPrs();
+  assert.deepEqual(offers[0]?.digest.feedback, [
+    { kind: "conversation", id: 2 },
+  ]);
+  assert.deepEqual(stopShipMonitor(input, "server-a"), { stopped: true });
+
+  const restartedAt = firstFeedbackAt + 10_000;
+  const clock = t.mock.method(Date, "now", () => restartedAt);
+  try {
+    assert.deepEqual(
+      await startShipMonitor(
+        { ...input, monitorId: otherGrant, sessionId: otherChat },
+        "server-b",
+      ),
+      { id: otherGrant, state: "watching" },
+    );
+    writeFileSync(
+      join(f.root, "conversation"),
+      JSON.stringify([
+        [issueComment(2, firstFeedbackAt), issueComment(3, restartedAt + 1000)],
+      ]),
+    );
+    await refreshShipPrs();
+  } finally {
+    clock.mock.restore();
+  }
+  assert.equal(offers.length, 2);
+  assert.equal(offers[1]?.owner, "server-b");
+  assert.equal(offers[1]?.digest.sessionId, otherChat);
+  assert.deepEqual(offers[1]?.digest.feedback, [
+    { kind: "conversation", id: 3 },
+  ]);
+});
 
 test("new PR monitor batches all kinds from paginated GitHub responses after an incomplete first poll", async (t) => {
   const f = await fixture(t);

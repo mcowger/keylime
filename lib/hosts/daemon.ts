@@ -25,14 +25,7 @@ import {
   BrowserVideoStopResultSchema,
 } from "../api-contracts/runner-lifecycle";
 import { homedir } from "node:os";
-import {
-  basename,
-  dirname,
-  isAbsolute,
-  join,
-  resolve,
-  sep,
-} from "node:path";
+import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { getOmpVersion } from "../omp/omp-cli";
 import { getAgentDir, getSessionsDir } from "../omp/paths";
 import { ProjectPathError } from "../project-registry";
@@ -197,7 +190,10 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   const entrypoint =
     canonicalPath(process.argv[1] || process.execPath) ||
     resolve(process.argv[1] || process.execPath);
-  const activation = new ManagedArtifactActivation(getAgentDir(), options.standaloneControl === true);
+  const activation = new ManagedArtifactActivation(
+    getAgentDir(),
+    options.standaloneControl === true,
+  );
   const resume = new HostResumeTracker();
   const socketPath = options.hostSocket ?? hostSocketPath();
   const attached = new Set<string>();
@@ -457,7 +453,9 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         ...(launch.spawnModel === undefined
           ? {}
           : { spawnModel: launch.spawnModel }),
-        ...(launch.creationId === undefined ? {} : { creationId: launch.creationId }),
+        ...(launch.creationId === undefined
+          ? {}
+          : { creationId: launch.creationId }),
       };
     },
     autoApproveExtension: () => localHost.autoApproveExtension(),
@@ -655,7 +653,11 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   }
   const capacityTimer = setInterval(reportCapacity, 5_000);
   capacityTimer.unref?.();
-  startShipWatcher(sessionsChanged, offerShipDigest, () => !drained && !stopped);
+  startShipWatcher(
+    sessionsChanged,
+    offerShipDigest,
+    () => !drained && !stopped,
+  );
 
   function offerShipDigest(owner: string, digest: ShipPrDigest): void {
     const link = shipOwners.get(owner);
@@ -789,7 +791,19 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
             { type: "workspace_file", id, epoch, event },
             "watch:" + id,
           ),
-        { shipOwner },
+        {
+          shipOwner,
+          assertShipMonitorAvailable: (directory) => {
+            if (!link.isUp() || shipOwners.get(shipOwner) !== link)
+              throw new HostOpError(
+                403,
+                "link_not_authenticated",
+                "The server link is no longer authenticated",
+              );
+            // Probe the deletion fence without holding it across remote reads.
+            channels.fenceWorkspace(directory)();
+          },
+        },
       ),
     );
     links.set(login.url, link);
@@ -983,7 +997,9 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     }
     if (isWorkspaceOp(op)) {
       if (
-        (op === "startShip" || op === "stopShipMonitor") &&
+        (op === "startShip" ||
+          op === "startShipMonitor" ||
+          op === "stopShipMonitor") &&
         (!link.isUp() || links.get(link.login.url) !== link)
       )
         throw new HostOpError(
@@ -1293,7 +1309,9 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       case "stageHostArtifact": {
         requireUploadOwner(link, args.id);
         const owner = shipOwnerByLink.get(link);
-        const ownedUpload = typeof args.id === "string" && uploadOwners.get(args.id)?.link === link;
+        const ownedUpload =
+          typeof args.id === "string" &&
+          uploadOwners.get(args.id)?.link === link;
         const staged = await uploads.stageHostArtifact(args.id);
         if (ownedUpload && owner && links.get(link.login.url) === link)
           activation.stage(args.id as string, staged.path, owner);
@@ -1303,7 +1321,11 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       case "hostArtifactActivationStatus": {
         const owner = shipOwnerByLink.get(link);
         if (!owner || !link.isUp() || links.get(link.login.url) !== link)
-          throw new HostOpError(403, "link_not_authenticated", "The server link is no longer authenticated");
+          throw new HostOpError(
+            403,
+            "link_not_authenticated",
+            "The server link is no longer authenticated",
+          );
         return op === "activateHostArtifact"
           ? activation.start(args, owner)
           : activation.status(args.operationId, owner);

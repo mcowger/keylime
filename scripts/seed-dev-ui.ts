@@ -6,10 +6,12 @@ import { hierarchyOperation } from "../lib/hosts/project-hierarchy";
 import { systemsOperation, type SystemsRuntime } from "../lib/hosts/systems";
 import { TerminalManager } from "../lib/hosts/terminals";
 import {
+  getAgentDir,
   getSessionDirNameForCwd,
   getSessionsDir,
   sessionLocalRoot,
 } from "../lib/omp/paths";
+import type { ShipPr } from "../lib/workspace-ship-types";
 import { saveWebServerSettings } from "../lib/web-settings";
 
 // Invoked only by the dev launcher, before the host starts and caches its hierarchy.
@@ -510,6 +512,46 @@ for (const session of sessions) {
     workspaceId: workspace.id,
     sessionIds: [session.id],
   });
+}
+if (Bun.argv.includes("--pr-monitor-fixture")) {
+  const pr: ShipPr = {
+    number: 42,
+    url: "https://github.com/example/atlas/pull/42",
+    state: "open",
+    checks: "passing",
+    autoMerge: false,
+    cleanup: false,
+    checkedAt: new Date().toISOString(),
+  };
+  const shipDir = path.join(getAgentDir(), "keylime", "ship");
+  mkdirSync(shipDir, { recursive: true });
+  writeFileSync(
+    path.join(shipDir, "prs.json"),
+    JSON.stringify({
+      [worktree]: { projectPath: repo, path: worktree, base: "main", pr },
+    }),
+  );
+  const bin = path.join(root, "pr-monitor-bin");
+  mkdirSync(bin);
+  // Only the isolated daemon sees this read-only GitHub fixture. No command reaches GitHub.
+  const status = JSON.stringify({
+    state: "OPEN",
+    url: pr.url,
+    number: pr.number,
+    autoMergeRequest: null,
+    statusCheckRollup: [{ status: "COMPLETED", conclusion: "SUCCESS" }],
+  });
+  writeFileSync(
+    path.join(bin, "gh"),
+    `#!/bin/sh
+case "$1 $2 $3" in
+  'pr view ${pr.url}') printf '%s\\n' '${status}' ;;
+  'api --hostname github.com') printf '%s\\n' '[[]]' ;;
+  *) exit 1 ;;
+esac
+`,
+    { mode: 0o700 },
+  );
 }
 const runtime: SystemsRuntime = {
   terminals: new TerminalManager(() => {}),

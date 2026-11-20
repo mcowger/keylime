@@ -75,6 +75,7 @@ import * as skillsUpdate from "@/app/api/skills/update/route";
 import * as ship from "@/app/api/ship/route";
 import * as shipId from "@/app/api/ship/[id]/route";
 import * as shipFinish from "@/app/api/ship/finish/route";
+import * as shipMonitorStart from "@/app/api/ship/monitor/start/route";
 import * as shipMonitorStop from "@/app/api/ship/monitor/stop/route";
 import * as sttJobIdAudio from "@/app/api/stt/[jobId]/audio/route";
 import * as sttJobId from "@/app/api/stt/[jobId]/route";
@@ -185,6 +186,7 @@ export const ROUTE_MODULES: Record<string, RouteModule> = {
   ship: ship,
   "ship/[id]": shipId,
   "ship/finish": shipFinish,
+  "ship/monitor/start": shipMonitorStart,
   "ship/monitor/stop": shipMonitorStop,
   "skills/check": skillsCheck,
   "skills/install": skillsInstall,

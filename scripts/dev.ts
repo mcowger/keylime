@@ -8,13 +8,14 @@ const { values } = parseArgs({
   options: {
     port: { type: "string" },
     "browser-fixture": { type: "boolean" },
+    "pr-monitor-fixture": { type: "boolean" },
     help: { type: "boolean", short: "h" },
   },
   strict: true,
 });
 if (values.help) {
   console.log(
-    "Usage: bun run dev [--port <port>] [--browser-fixture]\nDefaults to a free loopback port. Each run keeps its temporary home/config after exit.",
+    "Usage: bun run dev [--port <port>] [--browser-fixture] [--pr-monitor-fixture]\nDefaults to a free loopback port. Each run keeps its temporary home/config after exit.",
   );
   process.exit(0);
 }
@@ -123,7 +124,12 @@ try {
     throw new Error("Could not configure isolated host link");
   if (!stopping) {
     const seed = Bun.spawn(
-      [process.execPath, "--no-env-file", "scripts/seed-dev-ui.ts"],
+      [
+        process.execPath,
+        "--no-env-file",
+        "scripts/seed-dev-ui.ts",
+        ...(values["pr-monitor-fixture"] ? ["--pr-monitor-fixture"] : []),
+      ],
       {
         cwd: root,
         env: { ...env, KEYLIME_UI_FIXTURE_ROOT: directory },
@@ -147,8 +153,16 @@ try {
       "--port",
       String(port),
     ]);
-    spawn(["--hot", "--no-clear-screen", "bin/keylime-host.ts"],
-      values["browser-fixture"] ? { KEYLIME_UI_FIXTURE_ROOT: directory, KEYLIME_BROWSER_FIXTURE: "1" } : {});
+    spawn(["--hot", "--no-clear-screen", "bin/keylime-host.ts"], {
+      ...(values["browser-fixture"]
+        ? { KEYLIME_UI_FIXTURE_ROOT: directory, KEYLIME_BROWSER_FIXTURE: "1" }
+        : {}),
+      ...(values["pr-monitor-fixture"]
+        ? {
+            PATH: `${path.join(directory, "pr-monitor-bin")}${path.delimiter}${env.PATH ?? ""}`,
+          }
+        : {}),
+    });
     if (values["browser-fixture"]) {
       const fixtureSession = "11111111-1111-4111-8111-111111111111";
       const deadline = Date.now() + 60_000;
@@ -161,11 +175,19 @@ try {
             body: JSON.stringify({ type: "get_state" }),
             signal: AbortSignal.timeout(10_000),
           });
-          if (response.ok) { started = true; break; }
-        } catch { /* Server and host start asynchronously. */ }
+          if (response.ok) {
+            started = true;
+            break;
+          }
+        } catch {
+          /* Server and host start asynchronously. */
+        }
         await Bun.sleep(500);
       }
-      if (!started && !stopping) console.error("[dev] Could not start browser fixture session; check the runner build and host logs");
+      if (!started && !stopping)
+        console.error(
+          "[dev] Could not start browser fixture session; check the runner build and host logs",
+        );
     }
   }
   await finished;

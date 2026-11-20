@@ -1,7 +1,10 @@
 import { Value } from "@sinclair/typebox/value";
 import { PlanningBoardSchema } from "../api-contracts/planning";
 import { SystemsResultSchema } from "../api-contracts/systems";
-import { ShipMonitorStatusResultSchema } from "../api-contracts/workspace-models";
+import {
+  ShipMonitorStatusResultSchema,
+  ShipPrMonitorSchema,
+} from "../api-contracts/workspace-models";
 import { isRecord } from "../type-guards";
 import type { WorkspaceOps } from "../workspace-types";
 import { LINK_LIMITS } from "./link-protocol";
@@ -180,6 +183,8 @@ export function validWorkspaceResult(
         ) &&
         (value.pr === null || shipPr(value.pr))
       );
+    case "startShipMonitor":
+      return Value.Check(ShipPrMonitorSchema, value);
     case "stopShipMonitor":
       return typeof value.stopped === "boolean";
     case "shipMonitorStatus": {

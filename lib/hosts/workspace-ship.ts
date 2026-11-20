@@ -13,9 +13,11 @@ import { SHIP_MONITOR_GRANT_ID_PATTERN } from "../api-contracts/workspace-models
 import type {
   ShipJob,
   ShipPr,
+  ShipPrMonitor,
   ShipPreview,
   ShipMonitorStatusResult,
   ShipStartInput,
+  ShipStartMonitorInput,
   ShipStepName,
   ShipStopMonitorRequest,
   WorkspaceShipState,
@@ -37,6 +39,7 @@ interface PrMonitor {
   owner: string;
   sessionId: string;
   requestedAt: number;
+  strictBaseline?: true;
   seen: string[];
   pending: ShipPrDigest[];
   pollFailed?: true;
@@ -59,6 +62,7 @@ const root = () => path.join(getAgentDir(), "keylime", "ship");
 const jobsDir = () => path.join(root(), "jobs");
 const prFile = () => path.join(root(), "prs.json");
 const active = new Map<string, ShipJob>();
+const startingMonitors = new Map<string, symbol>();
 let changed = () => {};
 let offerDigest: ((owner: string, digest: ShipPrDigest) => void) | undefined;
 const OFFER_LIFETIME = 7 * 24 * 60 * 60 * 1000;
@@ -590,6 +594,8 @@ function createJob(
     steps: names.map((name) => ({ name, status: "skipped" })),
     logs: "",
   };
+  // A Ship/cleanup job supersedes any standalone start awaiting validation.
+  startingMonitors.delete(input.path);
   active.set(input.path, job);
   persist(job);
   return job;
@@ -966,7 +972,13 @@ async function refresh(record: RecordPr) {
   const data = await readShipPrStatus(cwd, record.pr.url, record.pr.number);
   const all = records();
   const current = all[record.path];
-  if (!sameRecord(current, record) || active.has(record.path)) return;
+  // A result started before a new monitor was installed must not clear it.
+  if (
+    !sameRecord(current, record) ||
+    active.has(record.path) ||
+    current.monitor?.id !== record.monitor?.id
+  )
+    return;
   const checks = data.statusCheckRollup ?? [];
   current.pr = {
     ...current.pr,
@@ -1051,6 +1063,124 @@ export async function shipFinish(input: {
       saveRecords(all);
     }
   });
+}
+
+export async function startShipMonitor(
+  input: ShipStartMonitorInput,
+  owner?: string,
+  assertAvailable?: (path: string) => void,
+): Promise<ShipPrMonitor> {
+  const requestedAt = Date.now();
+  const { workspace } = registered(input);
+  const { path, projectPath, prUrl, sessionId, monitorId } = input;
+  if (
+    typeof prUrl !== "string" ||
+    typeof sessionId !== "string" ||
+    !isValidSessionId(sessionId) ||
+    typeof monitorId !== "string" ||
+    !grantIdPattern.test(monitorId)
+  )
+    throw new HostOpError(
+      400,
+      "invalid_request",
+      "Invalid start monitor request",
+    );
+  if (!owner)
+    throw new HostOpError(
+      403,
+      "ship_monitor_owner_required",
+      "Monitoring requires an authenticated server",
+    );
+  const assertIdle = () => {
+    assertAvailable?.(path);
+    if (active.has(path))
+      throw new HostOpError(
+        409,
+        "ship_running",
+        "A ship job is already running for this workspace",
+      );
+  };
+  const assertOpen = (open: boolean) => {
+    if (!open)
+      throw new HostOpError(
+        409,
+        "pr_not_open",
+        "The recorded pull request is not open",
+      );
+  };
+  assertIdle();
+  const snapshot = records()[path];
+  if (
+    !snapshot ||
+    snapshot.path !== path ||
+    snapshot.projectPath !== projectPath
+  )
+    throw new HostOpError(404, "pr_not_found", "No recorded PR for workspace");
+  assertOpen(snapshot.pr.state === "open");
+  const pinned = githubShipPr(snapshot.pr.url, snapshot.pr.number);
+  if (snapshot.pr.url !== prUrl || pinned.url !== prUrl)
+    throw new HostOpError(
+      409,
+      "ship_changed",
+      "The selected pull request does not match the recorded pull request",
+    );
+  if (snapshot.monitor || startingMonitors.has(path))
+    throw new HostOpError(
+      409,
+      "ship_monitor_exists",
+      "A PR monitor already exists or is starting",
+    );
+
+  const start = Symbol();
+  startingMonitors.set(path, start);
+  const assertCurrent = (current: RecordPr | undefined): RecordPr => {
+    assertIdle();
+    if (
+      startingMonitors.get(path) !== start ||
+      !sameRecord(current, snapshot) ||
+      current.path !== path ||
+      current.pr.number !== pinned.number
+    )
+      throw new HostOpError(
+        409,
+        "ship_changed",
+        "The recorded pull request changed during validation",
+      );
+    assertOpen(current.pr.state === "open");
+    if (current.monitor)
+      throw new HostOpError(
+        409,
+        "ship_monitor_exists",
+        "A PR monitor already exists",
+      );
+    return current;
+  };
+  try {
+    const file = workspace.sessionIds.includes(sessionId)
+      ? await resolveSessionPath(sessionId)
+      : null;
+    assertCurrent(records()[path]);
+    assertLiveShipSession(input, sessionId, file);
+    const status = await readShipPrStatus(path, pinned.url, pinned.number);
+    const all = records();
+    const current = assertCurrent(all[path]);
+    assertLiveShipSession(input, sessionId, file);
+    assertOpen(status.state === "OPEN" && !status.mergedAt);
+    current.monitor = {
+      id: monitorId,
+      owner,
+      sessionId,
+      requestedAt,
+      strictBaseline: true,
+      seen: [],
+      pending: [],
+    };
+    saveRecords(all);
+    changed();
+    return { id: monitorId, state: "watching" };
+  } finally {
+    if (startingMonitors.get(path) === start) startingMonitors.delete(path);
+  }
 }
 
 export async function shipMonitorStatus(
@@ -1181,8 +1311,11 @@ function batchFeedback(
   const seen = new Set(monitor.seen);
   const feedback: ShipPrDigest["feedback"] = [];
   let count = 0;
-  // GitHub's timestamps have second precision. Include the request's second.
-  const since = Math.floor(monitor.requestedAt / 1000) * 1000;
+  // Ship includes its request's second. Standalone start must exclude feedback
+  // that could already have existed on the PR when monitoring was requested.
+  const since = monitor.strictBaseline
+    ? monitor.requestedAt
+    : Math.floor(monitor.requestedAt / 1000) * 1000;
   for (const event of events) {
     if (event.at < since || seen.has(event.key)) continue;
     seen.add(event.key);
@@ -1324,7 +1457,11 @@ export async function refreshShipPrs() {
       } catch {
         const all = records();
         const current = all[path];
-        if (sameRecord(current, record) && !active.has(path)) {
+        if (
+          sameRecord(current, record) &&
+          !active.has(path) &&
+          current.monitor?.id === record.monitor?.id
+        ) {
           current.retryAt = Date.now() + 300_000;
           if (current.monitor) current.monitor.pollFailed = true;
           saveRecords(all);

@@ -2250,6 +2250,19 @@ html[data-touch-targets="accessible"]
 .sidebar-tree-children {
   padding-inline-start: 16px;
 }
+.sidebar-pr-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.sidebar-pr-link:hover {
+  color: var(--accent);
+}
+
 .sidebar-branch-toggle {
   display: flex;
   align-items: center;

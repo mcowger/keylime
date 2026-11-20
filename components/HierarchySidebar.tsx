@@ -10,6 +10,7 @@ import {
 import {
   AlertCircle,
   BellOff,
+  BellRing,
   Bot,
   ChevronRight,
   ClipboardList,
@@ -19,6 +20,7 @@ import {
   MoreHorizontal,
   Plus,
   Server,
+  Ship,
   Trash2,
   Wrench,
 } from "lucide-react";
@@ -36,12 +38,21 @@ import type {
   WorkspaceCreationJob,
   WorkspaceDeleteResult,
 } from "@/lib/workspace-creation-types";
+import type {
+  ShipStartMonitorRequest,
+  ShipStopMonitorRequest,
+} from "@/lib/workspace-ship-types";
 import { readWorkspaceSetupJob, WorktreesPanel } from "./WorktreesPanel";
 import { PendingOperation } from "./PendingOperation";
-import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  ThemedSelect,
+} from "./ui/primitives";
 import type { ShipTarget } from "./ShipDialog";
 import { useShipAvailability } from "@/hooks/useShipAvailability";
-import { ConfirmDialog } from "./ui/field";
+import { ConfirmDialog, Field } from "./ui/field";
 import { ProjectSettings } from "./ReposConfig";
 import { toast } from "./ui/toast";
 import type { EffortRecord } from "@/lib/api-contracts/systems";
@@ -164,6 +175,7 @@ function SidebarShipButton({
     <button
       style={style}
       type="button"
+      aria-label="Ship workspace"
       disabled={disabled || empty}
       title={
         disabled && sessionId
@@ -177,7 +189,7 @@ function SidebarShipButton({
         onClick();
       }}
     >
-      Ship...
+      <Ship size={16} aria-hidden="true" />
     </button>
   );
 }
@@ -325,22 +337,28 @@ export function HierarchySidebar({
     setBranchChoice(null);
     branchChoice.resolve(choice);
   };
-  const stoppingMonitors = useRef(new Set<string>());
-  const [pendingMonitorStops, setPendingMonitorStops] = useState<
-    ReadonlySet<string>
-  >(() => new Set());
-  const stopMonitoring = async (target: {
+  const monitorChanges = useRef(new Map<string, "start" | "stop">());
+  const [pendingMonitors, setPendingMonitors] = useState<
+    ReadonlyMap<string, "start" | "stop">
+  >(() => new Map());
+  const [monitorTarget, setMonitorTarget] = useState<{
     host: string;
-    projectPath: string;
-    path: string;
-    monitorId: string;
-  }) => {
+    request: ShipStartMonitorRequest;
+    prNumber: number;
+    chats: SessionInfo[];
+  } | null>(null);
+  const changeMonitoring = async (
+    change:
+      | { action: "start"; target: ShipStartMonitorRequest & { host: string } }
+      | { action: "stop"; target: ShipStopMonitorRequest & { host: string } },
+  ) => {
+    const { action, target } = change;
     const key = hostProjectKey(target.host, target.path);
-    if (stoppingMonitors.current.has(key)) return;
-    stoppingMonitors.current.add(key);
-    setPendingMonitorStops(new Set(stoppingMonitors.current));
+    if (monitorChanges.current.has(key)) return;
+    monitorChanges.current.set(key, action);
+    setPendingMonitors(new Map(monitorChanges.current));
     try {
-      const response = await fetch("/api/ship/monitor/stop", {
+      const response = await fetch(`/api/ship/monitor/${action}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(target),
@@ -349,16 +367,16 @@ export function HierarchySidebar({
         const data = await response.json().catch(() => null);
         throw new Error(data?.error || `Request failed (${response.status})`);
       }
-      await load();
       onChanged();
     } catch (error) {
       toast.error(
-        "Couldn't stop PR monitoring",
+        `Couldn't ${action} PR monitoring`,
         error instanceof Error ? error.message : String(error),
       );
     } finally {
-      stoppingMonitors.current.delete(key);
-      setPendingMonitorStops(new Set(stoppingMonitors.current));
+      await load();
+      monitorChanges.current.delete(key);
+      setPendingMonitors(new Map(monitorChanges.current));
     }
   };
   const finishShip = async () => {
@@ -1249,8 +1267,8 @@ export function HierarchySidebar({
                             workspace.path,
                           );
                           const monitor = workspace.ship?.pr?.monitor;
-                          const stoppingMonitor =
-                            pendingMonitorStops.has(workspaceKey);
+                          const pendingMonitor =
+                            pendingMonitors.get(workspaceKey);
                           const deleting = deletingWorkspace === workspaceKey;
                           const cleaningUp =
                             finishingWorkspace === workspaceKey ||
@@ -1265,40 +1283,23 @@ export function HierarchySidebar({
                               ? creation
                               : workspace.setup;
                           const pr = workspace.ship?.pr;
-                          const prLink = pr?.state === "open" && (
-                            <a
-                              href={pr.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              title={`Checks: ${pr.checks}`}
-                              style={{
-                                fontSize: 11,
-                                whiteSpace: "nowrap",
-                                color: "var(--text)",
-                              }}
-                            >
-                              <span
-                                aria-hidden="true"
-                                style={{
-                                  color:
-                                    pr.checks === "passing"
-                                      ? "var(--status-success)"
-                                      : pr.checks === "failing"
-                                        ? "var(--status-error)"
-                                        : "var(--status-warning)",
-                                }}
-                              >
-                                ●
-                              </span>{" "}
-                              PR #{pr.number}
-                              {monitor &&
-                                (monitor.state === "watching"
-                                  ? " · Monitoring"
-                                  : monitor.state === "error"
-                                    ? " · Monitoring error"
-                                    : " · Delivery expired")}
-                            </a>
-                          );
+                          const showOpenPr =
+                            pr?.state === "open" &&
+                            !deleting &&
+                            !cleaningUp &&
+                            workspace.ship?.job?.status !== "running";
+                          const monitorStatus = !monitor
+                            ? "Monitoring off"
+                            : monitor.state === "watching"
+                              ? "Monitoring on"
+                              : monitor.state === "error"
+                                ? "Monitoring error"
+                                : "Feedback delivery expired";
+                          const MonitorIcon = !monitor
+                            ? BellOff
+                            : monitor.state === "watching"
+                              ? BellRing
+                              : AlertCircle;
                           return (
                             <div
                               key={workspace.id}
@@ -1362,10 +1363,30 @@ export function HierarchySidebar({
                                     />{" "}
                                     Shipping...
                                   </span>
-                                ) : pr?.state === "open" ? (
-                                  monitor ? null : (
-                                    prLink
-                                  )
+                                ) : showOpenPr ? (
+                                  <a
+                                    href={pr.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="sidebar-pr-link"
+                                    title={`Checks: ${pr.checks}. ${monitorStatus}. See workspace actions.`}
+                                  >
+                                    <span
+                                      aria-hidden="true"
+                                      style={{
+                                        color:
+                                          pr.checks === "passing"
+                                            ? "var(--status-success)"
+                                            : pr.checks === "failing"
+                                              ? "var(--status-error)"
+                                              : "var(--status-warning)",
+                                      }}
+                                    >
+                                      ●
+                                    </span>{" "}
+                                    PR #{pr.number}
+                                    <MonitorIcon size={12} aria-hidden="true" />
+                                  </a>
                                 ) : workspace.ship?.pr?.state === "merged" ? (
                                   <span
                                     style={{
@@ -1549,51 +1570,94 @@ export function HierarchySidebar({
                                         <Trash2 size={16} aria-hidden="true" />
                                       </button>
                                     )}
+                                    {showOpenPr && (
+                                      <button
+                                        style={menuButton}
+                                        aria-label={
+                                          pendingMonitor === "start"
+                                            ? "Starting monitoring…"
+                                            : pendingMonitor === "stop"
+                                              ? "Stopping monitoring…"
+                                              : monitor
+                                                ? "Stop monitoring"
+                                                : "Start monitoring"
+                                        }
+                                        type="button"
+                                        disabled={
+                                          busy ||
+                                          !!pendingMonitor ||
+                                          workspace.unavailable ||
+                                          (!monitor && !latestSession)
+                                        }
+                                        title={
+                                          !monitor && !latestSession
+                                            ? "Start a chat in this workspace first"
+                                            : `${monitorStatus}. ${monitor ? "Stop" : "Start"} monitoring`
+                                        }
+                                        onClick={(event) => {
+                                          const scope = {
+                                            projectPath: project.path,
+                                            path: workspace.path,
+                                          };
+                                          if (monitor) {
+                                            void changeMonitoring({
+                                              action: "stop",
+                                              target: {
+                                                ...scope,
+                                                host: host.id,
+                                                monitorId: monitor.id,
+                                              },
+                                            });
+                                          } else if (latestSession) {
+                                            const menu =
+                                              event.currentTarget.closest(
+                                                "details",
+                                              );
+                                            if (menu) {
+                                              menu.open = false;
+                                              menu
+                                                .querySelector("summary")
+                                                ?.focus();
+                                            }
+                                            const selectedChat =
+                                              selectedHostId === host.id &&
+                                              workspaceSessions.find(
+                                                (session) =>
+                                                  session.id ===
+                                                  selectedSessionId,
+                                              );
+                                            setMonitorTarget({
+                                              host: host.id,
+                                              request: {
+                                                ...scope,
+                                                prUrl: pr.url,
+                                                sessionId: (
+                                                  selectedChat || latestSession
+                                                ).id,
+                                              },
+                                              prNumber: pr.number,
+                                              chats: workspaceSessions,
+                                            });
+                                          }
+                                        }}
+                                      >
+                                        {pendingMonitor ? (
+                                          <Loader2
+                                            size={16}
+                                            className="animate-spin"
+                                            aria-hidden="true"
+                                          />
+                                        ) : (
+                                          <MonitorIcon
+                                            size={16}
+                                            aria-hidden="true"
+                                          />
+                                        )}
+                                      </button>
+                                    )}
                                   </div>
                                 </details>
                               </div>
-                              {pr?.state === "open" &&
-                                monitor &&
-                                !deleting &&
-                                !cleaningUp &&
-                                workspace.ship?.job?.status !== "running" && (
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      gap: 8,
-                                      alignItems: "center",
-                                      paddingLeft: 10,
-                                    }}
-                                  >
-                                    {prLink}
-                                    <SidebarIconButton
-                                      label={
-                                        stoppingMonitor
-                                          ? "Stopping monitoring"
-                                          : "Stop monitoring"
-                                      }
-                                      disabled={busy || stoppingMonitor}
-                                      onClick={() =>
-                                        void stopMonitoring({
-                                          host: host.id,
-                                          projectPath: project.path,
-                                          path: workspace.path,
-                                          monitorId: monitor.id,
-                                        })
-                                      }
-                                    >
-                                      {stoppingMonitor ? (
-                                        <Loader2
-                                          size={14}
-                                          className="animate-spin"
-                                          aria-hidden="true"
-                                        />
-                                      ) : (
-                                        <BellOff size={14} aria-hidden="true" />
-                                      )}
-                                    </SidebarIconButton>
-                                  </div>
-                                )}
                               {query &&
                                 workspace.sessionIds
                                   .filter((id) => matchedSessionIds?.has(id))
@@ -1701,6 +1765,99 @@ export function HierarchySidebar({
           </div>
         </section>
       ))}
+      {monitorTarget && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setMonitorTarget(null);
+          }}
+        >
+          <DialogContent
+            style={{ width: 420, maxWidth: "min(92vw, 420px)", padding: 22 }}
+          >
+            <DialogTitle>Monitor PR #{monitorTarget.prNumber}</DialogTitle>
+            <p
+              style={{
+                fontSize: 13,
+                color: "var(--text-muted)",
+                margin: "8px 0 12px",
+              }}
+            >
+              Send links to new comments and reviews to a chat in this
+              workspace. This doesn't change auto-merge or send past feedback.
+            </p>
+            <Field label="Send feedback links to">
+              <ThemedSelect
+                value={monitorTarget.request.sessionId}
+                onChange={(sessionId) =>
+                  setMonitorTarget({
+                    ...monitorTarget,
+                    request: { ...monitorTarget.request, sessionId },
+                  })
+                }
+                options={monitorTarget.chats.map((chat) => ({
+                  value: chat.id,
+                  label:
+                    chat.name ||
+                    chat.firstMessage.slice(0, 80) ||
+                    "Untitled chat",
+                }))}
+                style={{ width: "100%" }}
+              />
+            </Field>
+            <div
+              className="dialog-actions"
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 8,
+                marginTop: 16,
+              }}
+            >
+              <button
+                type="button"
+                className="dialog-action"
+                style={{
+                  padding: "6px 14px",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-control)",
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                  fontSize: 13,
+                }}
+                onClick={() => setMonitorTarget(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="dialog-action"
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "var(--radius-control)",
+                  background: "var(--accent-strong)",
+                  color: "var(--on-accent)",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+                onClick={() => {
+                  setMonitorTarget(null);
+                  void changeMonitoring({
+                    action: "start",
+                    target: {
+                      ...monitorTarget.request,
+                      host: monitorTarget.host,
+                    },
+                  });
+                }}
+              >
+                Start monitoring
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
       {settingsProject && (
         <Dialog
           open

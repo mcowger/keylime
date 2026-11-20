@@ -1,5 +1,6 @@
 import { Type, type TSchema } from "@sinclair/typebox";
 import { ProjectLaunchConfigSchema, SessionInfoSchema } from "./domain";
+import { ShipPrDigestSchema } from "./host-schemas";
 export { TerminalEventSchema, WorkspaceFileEventSchema } from "./host-schemas";
 
 // Bootstrapped from the workspace TypeScript declarations using TypeScriptToTypeBox.
@@ -344,6 +345,29 @@ export const ShipMergeMethodSchema = Type.Union(
       "GitHub pull-request merge strategy: squash, merge commit or rebase.",
   },
 );
+export const ShipPrMonitorSchema = Type.Object(
+  {
+    id: Type.String({
+      description:
+        "Watch generation ID used to stop this watch without affecting a replacement.",
+    }),
+    state: Type.Union(
+      [
+        Type.Literal("watching"),
+        Type.Literal("error"),
+        Type.Literal("delivery-expired"),
+      ],
+      {
+        description:
+          "Active watch health: watching, polling error, or expired delivery.",
+      },
+    ),
+  },
+  {
+    description:
+      "Public state of an existing PR feedback watch. No routing or chat details.",
+  },
+);
 export const ShipPrSchema = Type.Object(
   {
     number: Type.Number(),
@@ -353,12 +377,7 @@ export const ShipPrSchema = Type.Object(
     autoMerge: Type.Boolean(),
     cleanup: Type.Boolean(),
     checkedAt: Type.String({ description: "ISO time of the last gh pr view." }),
-    monitor: Type.Optional(
-      Type.Object({
-        id: Type.String(),
-        state: literals("watching", "error", "delivery-expired"),
-      }),
-    ),
+    monitor: Type.Optional(ShipPrMonitorSchema),
   },
   {
     description:
@@ -447,6 +466,43 @@ export const ShipStartInputSchema = Type.Object(
   {
     description:
       "Start a Ship job on the host. For PR monitoring, pair the server-issued grant ID with the target chat ID.",
+  },
+);
+
+const monitorPath = Type.String({ minLength: 1, pattern: "^[^\\x00]+$" });
+export const ShipStartMonitorRequestSchema = Type.Object(
+  {
+    projectPath: monitorPath,
+    path: monitorPath,
+    prUrl: ShipPrDigestSchema.properties.prUrl,
+    sessionId: ShipPrDigestSchema.properties.sessionId,
+  },
+  {
+    additionalProperties: false,
+    description:
+      "Start watching the exact recorded open PR from a chat in its workspace.",
+  },
+);
+export const ShipStartMonitorHttpRequestSchema = Type.Object(
+  {
+    host: Type.Optional(Type.String({ minLength: 1 })),
+    ...ShipStartMonitorRequestSchema.properties,
+  },
+  {
+    additionalProperties: false,
+    description:
+      "Start a watch on the selected host (this machine when omitted) for an open PR and its target chat.",
+  },
+);
+export const ShipStartMonitorInputSchema = Type.Object(
+  {
+    ...ShipStartMonitorRequestSchema.properties,
+    monitorId: Type.String({ pattern: SHIP_MONITOR_GRANT_ID_PATTERN }),
+  },
+  {
+    additionalProperties: false,
+    description:
+      "Start the watch on the owning daemon under the initiating server's grant ID.",
   },
 );
 
