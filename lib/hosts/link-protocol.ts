@@ -1,3 +1,4 @@
+import { Value } from "@sinclair/typebox/value";
 import type {
   HostUriScheme as SchemaHostUriScheme,
   Part as SchemaPart,
@@ -8,7 +9,7 @@ import type {
 } from "../api-contracts/host-schemas";
 import {
   SHIP_DIGEST_ID_RE,
-  SHIP_DIGEST_MESSAGE_LIMIT,
+  ShipPrDigestFrame,
 } from "../api-contracts/host-schemas";
 export type { ShipPrDigest } from "../api-contracts/host-schemas";
 import { CREATION_ID_RE } from "./creation-identity";
@@ -746,24 +747,15 @@ export function decodeUp(line: string): UpMessage | UnknownMessage {
       return { type: "notifier", seq: seqNum(o, "seq"), on: bool(o, "on") };
     case "sessions_changed":
       return { type: "sessions_changed", seq: seqNum(o, "seq") };
-    case "ship_pr_digest": {
-      const seq = seqNum(o, "seq");
-      const sessionId = str(o, "sessionId");
-      const createdAt = seqNum(o, "createdAt");
-      const message = str(o, "message");
-      if (!seq || !createdAt || !isValidSessionId(sessionId))
-        fail("invalid Ship digest metadata");
-      if (message.length > SHIP_DIGEST_MESSAGE_LIMIT || !/\S/.test(message))
-        fail("invalid Ship digest message");
-      return {
-        type: "ship_pr_digest",
-        seq,
-        id: shipDigestId(o),
-        sessionId,
-        createdAt,
-        message,
-      };
-    }
+    case "ship_pr_digest":
+      if (
+        !Value.Check(ShipPrDigestFrame, o) ||
+        !Number.isSafeInteger(
+          Number(o.prUrl.slice(o.prUrl.lastIndexOf("/") + 1)),
+        )
+      )
+        fail("invalid Ship feedback digest");
+      return o;
     case "channels_changed":
       return {
         type: "channels_changed",

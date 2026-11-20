@@ -289,6 +289,9 @@
         "HostReply_shipFinish": {
           "$ref": "#/components/messages/HostReply_shipFinish"
         },
+        "HostReply_shipMonitorStatus": {
+          "$ref": "#/components/messages/HostReply_shipMonitorStatus"
+        },
         "HostReply_shipPreview": {
           "$ref": "#/components/messages/HostReply_shipPreview"
         },
@@ -522,6 +525,9 @@
         },
         "HostRequest_shipFinish": {
           "$ref": "#/components/messages/HostRequest_shipFinish"
+        },
+        "HostRequest_shipMonitorStatus": {
+          "$ref": "#/components/messages/HostRequest_shipMonitorStatus"
         },
         "HostRequest_shipPreview": {
           "$ref": "#/components/messages/HostRequest_shipPreview"
@@ -1599,6 +1605,18 @@
         },
         "title": "HostReply_shipFinish"
       },
+      "HostReply_shipMonitorStatus": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Reply to shipMonitorStatus; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read the current PR feedback watch before admitting a digest.\nInputs: projectPath, path and monitorId identify the exact workspace and monitor generation.\nInvariants: Returns a watch only to its initiating server when the recorded PR is open and the chat is still active in the workspace. The PR URL is canonical.\nEffects: Reads local state without changing or caching the watch.\nRecovery: A missing watch cannot authorize a digest. Recheck on the next offer.",
+        "name": "HostReply_shipMonitorStatus",
+        "payload": {
+          "$ref": "#/components/schemas/HostReply_shipMonitorStatus"
+        },
+        "title": "HostReply_shipMonitorStatus"
+      },
       "HostReply_shipPreview": {
         "contentType": "application/json",
         "correlationId": {
@@ -1640,7 +1658,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Reply to startShip; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Start the asynchronous ship sequence for a registered workspace.\nInputs: Host project/workspace paths, mode, rebase, PR and cleanup choices control the sequence. Pass monitorSessionId only in PR modes, for a chat in the same workspace.\nInvariants: Checkout and branch preconditions are checked during execution; steps can fail after earlier steps succeeded. The authenticated daemon link selects the notification server. Job acceptance does not mean monitoring has started.\nEffects: Depending on mode, rebases, fast-forwards, pushes, creates or configures a PR, and may archive sessions and remove the workspace. Opted-in monitoring sends feedback links to chat without gating merges.\nRecovery: Inspect job status and Git/PR state after uncertainty; do not blindly replay destructive steps.",
+        "description": "Reply to startShip; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Start the asynchronous ship sequence for a registered workspace.\nInputs: Host project/workspace paths, mode, rebase, PR and cleanup choices control the sequence. For monitoring in PR modes, pass both monitorSessionId for a chat in the same workspace and the server-issued monitorGrantId.\nInvariants: Checkout and branch preconditions are checked during execution; steps can fail after earlier steps succeeded. The authenticated daemon link selects the notification server. Job acceptance does not mean monitoring has started.\nEffects: Depending on mode, rebases, fast-forwards, pushes, creates or configures a PR, and may archive sessions and remove the workspace. Opted-in monitoring sends feedback links to chat without gating merges.\nRecovery: Inspect job status and Git/PR state after uncertainty; do not blindly replay destructive steps.",
         "name": "HostReply_startShip",
         "payload": {
           "$ref": "#/components/schemas/HostReply_startShip"
@@ -2535,6 +2553,18 @@
         },
         "title": "HostRequest_shipFinish"
       },
+      "HostRequest_shipMonitorStatus": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Read the current PR feedback watch before admitting a digest.\nInputs: projectPath, path and monitorId identify the exact workspace and monitor generation.\nInvariants: Returns a watch only to its initiating server when the recorded PR is open and the chat is still active in the workspace. The PR URL is canonical.\nEffects: Reads local state without changing or caching the watch.\nRecovery: A missing watch cannot authorize a digest. Recheck on the next offer.",
+        "name": "HostRequest_shipMonitorStatus",
+        "payload": {
+          "$ref": "#/components/schemas/HostRequest_shipMonitorStatus"
+        },
+        "title": "HostRequest_shipMonitorStatus"
+      },
       "HostRequest_shipPreview": {
         "contentType": "application/json",
         "correlationId": {
@@ -2576,7 +2606,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Usage: Start the asynchronous ship sequence for a registered workspace.\nInputs: Host project/workspace paths, mode, rebase, PR and cleanup choices control the sequence. Pass monitorSessionId only in PR modes, for a chat in the same workspace.\nInvariants: Checkout and branch preconditions are checked during execution; steps can fail after earlier steps succeeded. The authenticated daemon link selects the notification server. Job acceptance does not mean monitoring has started.\nEffects: Depending on mode, rebases, fast-forwards, pushes, creates or configures a PR, and may archive sessions and remove the workspace. Opted-in monitoring sends feedback links to chat without gating merges.\nRecovery: Inspect job status and Git/PR state after uncertainty; do not blindly replay destructive steps.",
+        "description": "Usage: Start the asynchronous ship sequence for a registered workspace.\nInputs: Host project/workspace paths, mode, rebase, PR and cleanup choices control the sequence. For monitoring in PR modes, pass both monitorSessionId for a chat in the same workspace and the server-issued monitorGrantId.\nInvariants: Checkout and branch preconditions are checked during execution; steps can fail after earlier steps succeeded. The authenticated daemon link selects the notification server. Job acceptance does not mean monitoring has started.\nEffects: Depending on mode, rebases, fast-forwards, pushes, creates or configures a PR, and may archive sessions and remove the workspace. Opted-in monitoring sends feedback links to chat without gating merges.\nRecovery: Inspect job status and Git/PR state after uncertainty; do not blindly replay destructive steps.",
         "name": "HostRequest_startShip",
         "payload": {
           "$ref": "#/components/schemas/HostRequest_startShip"
@@ -3511,21 +3541,66 @@
         "type": "object"
       },
       "HostLinkShipPrDigest": {
+        "additionalProperties": false,
         "description": "A persisted PR feedback digest offered only to the initiating server. Retries use the same ID until application receipt.",
         "properties": {
           "createdAt": {
+            "description": "Host observation time in Unix milliseconds.",
             "maximum": 9007199254740991,
             "minimum": 1,
             "type": "integer"
+          },
+          "feedback": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "maximum": 9007199254740991,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "conversation",
+                      "type": "string"
+                    },
+                    {
+                      "const": "inline",
+                      "type": "string"
+                    },
+                    {
+                      "const": "review",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "required": ["kind", "id"],
+              "type": "object"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array"
           },
           "id": {
             "pattern": "^[A-Za-z0-9_-]{1,64}$",
             "type": "string"
           },
-          "message": {
-            "maxLength": 16384,
-            "minLength": 1,
-            "pattern": "\\S",
+          "monitorId": {
+            "description": "Server-issued Ship monitor generation.",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "omitted": {
+            "description": "Additional events not included in this bounded batch.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "prUrl": {
+            "description": "Canonical GitHub.com PR being monitored. Must match the server grant.",
+            "pattern": "^https://github\\.com/[a-z0-9][a-z0-9-]{0,38}/(?!\\.\\.?/)[a-z0-9._-]{1,100}/pull/[1-9][0-9]{0,15}$",
             "type": "string"
           },
           "seq": {
@@ -3542,7 +3617,17 @@
             "type": "string"
           }
         },
-        "required": ["type", "seq", "id", "sessionId", "createdAt", "message"],
+        "required": [
+          "type",
+          "seq",
+          "id",
+          "monitorId",
+          "sessionId",
+          "prUrl",
+          "createdAt",
+          "feedback",
+          "omitted"
+        ],
         "title": "HostLinkShipPrDigest",
         "type": "object"
       },
@@ -70387,6 +70472,226 @@
         "description": "Reply to shipFinish; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Start finishing a shipped workspace.\nInputs: projectPath and path identify registered host checkouts.\nInvariants: Finishing checks shipping and PR state before cleanup; earlier steps may already have completed on failure.\nEffects: May update the base checkout, archive sessions and remove the workspace.\nRecovery: Read job and checkout state before retrying an uncertain finish.",
         "title": "HostReply_shipFinish"
       },
+      "HostReply_shipMonitorStatus": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "result": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "ok": {
+                        "const": true,
+                        "type": "boolean"
+                      },
+                      "value": {
+                        "additionalProperties": false,
+                        "description": "Current PR watch for the requesting server and exact monitor generation, or null when no matching watch has a live chat.",
+                        "properties": {
+                          "watch": {
+                            "anyOf": [
+                              {
+                                "type": "null"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "prUrl": {
+                                    "type": "string"
+                                  },
+                                  "sessionId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["sessionId", "prUrl"],
+                                "type": "object"
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["watch"],
+                        "type": "object"
+                      }
+                    },
+                    "required": ["ok", "value"],
+                    "type": "object"
+                  },
+                  {
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "error": {
+                        "type": "string"
+                      },
+                      "ok": {
+                        "const": false,
+                        "type": "boolean"
+                      },
+                      "status": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["ok", "status", "code", "error"],
+                    "type": "object"
+                  }
+                ]
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "result"],
+            "type": "object"
+          },
+          {
+            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
+            "properties": {
+              "blob": {
+                "properties": {
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["bytes"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "blob"],
+            "type": "object",
+            "x-decoded-result": {
+              "anyOf": [
+                {
+                  "properties": {
+                    "ok": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "value": {
+                      "additionalProperties": false,
+                      "description": "Current PR watch for the requesting server and exact monitor generation, or null when no matching watch has a live chat.",
+                      "properties": {
+                        "watch": {
+                          "anyOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "prUrl": {
+                                  "type": "string"
+                                },
+                                "sessionId": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["sessionId", "prUrl"],
+                              "type": "object"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["watch"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["ok", "value"],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "ok": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["ok", "status", "code", "error"],
+                  "type": "object"
+                }
+              ]
+            }
+          },
+          {
+            "properties": {
+              "error": {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number"
+                  }
+                },
+                "required": ["status", "code", "message"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Reply to shipMonitorStatus; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read the current PR feedback watch before admitting a digest.\nInputs: projectPath, path and monitorId identify the exact workspace and monitor generation.\nInvariants: Returns a watch only to its initiating server when the recorded PR is open and the chat is still active in the workspace. The PR URL is canonical.\nEffects: Reads local state without changing or caching the watch.\nRecovery: A missing watch cannot authorize a digest. Recheck on the next offer.",
+        "title": "HostReply_shipMonitorStatus"
+      },
       "HostReply_shipPreview": {
         "anyOf": [
           {
@@ -72494,7 +72799,7 @@
             "type": "object"
           }
         ],
-        "description": "Reply to startShip; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Start the asynchronous ship sequence for a registered workspace.\nInputs: Host project/workspace paths, mode, rebase, PR and cleanup choices control the sequence. Pass monitorSessionId only in PR modes, for a chat in the same workspace.\nInvariants: Checkout and branch preconditions are checked during execution; steps can fail after earlier steps succeeded. The authenticated daemon link selects the notification server. Job acceptance does not mean monitoring has started.\nEffects: Depending on mode, rebases, fast-forwards, pushes, creates or configures a PR, and may archive sessions and remove the workspace. Opted-in monitoring sends feedback links to chat without gating merges.\nRecovery: Inspect job status and Git/PR state after uncertainty; do not blindly replay destructive steps.",
+        "description": "Reply to startShip; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Start the asynchronous ship sequence for a registered workspace.\nInputs: Host project/workspace paths, mode, rebase, PR and cleanup choices control the sequence. For monitoring in PR modes, pass both monitorSessionId for a chat in the same workspace and the server-issued monitorGrantId.\nInvariants: Checkout and branch preconditions are checked during execution; steps can fail after earlier steps succeeded. The authenticated daemon link selects the notification server. Job acceptance does not mean monitoring has started.\nEffects: Depending on mode, rebases, fast-forwards, pushes, creates or configures a PR, and may archive sessions and remove the workspace. Opted-in monitoring sends feedback links to chat without gating merges.\nRecovery: Inspect job status and Git/PR state after uncertainty; do not blindly replay destructive steps.",
         "title": "HostReply_startShip"
       },
       "HostReply_stopShipMonitor": {
@@ -80415,6 +80720,53 @@
         "title": "HostRequest_shipFinish",
         "type": "object"
       },
+      "HostRequest_shipMonitorStatus": {
+        "description": "Usage: Read the current PR feedback watch before admitting a digest.\nInputs: projectPath, path and monitorId identify the exact workspace and monitor generation.\nInvariants: Returns a watch only to its initiating server when the recorded PR is open and the chat is still active in the workspace. The PR URL is canonical.\nEffects: Reads local state without changing or caching the watch.\nRecovery: A missing watch cannot authorize a digest. Recheck on the next offer.",
+        "properties": {
+          "args": {
+            "properties": {
+              "input": {
+                "description": "Stop the named PR monitor generation for a registered workspace on the selected host.",
+                "properties": {
+                  "monitorId": {
+                    "description": "Monitor generation shown on the workspace pull request.",
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "projectPath": {
+                    "type": "string"
+                  }
+                },
+                "required": ["projectPath", "path", "monitorId"],
+                "type": "object"
+              }
+            },
+            "required": ["input"],
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "const": "shipMonitorStatus",
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "const": "req",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "id", "op", "args"],
+        "title": "HostRequest_shipMonitorStatus",
+        "type": "object"
+      },
       "HostRequest_shipPreview": {
         "description": "Usage: Preview shipping a registered workspace against its base checkout.\nInputs: projectPath and path are host filesystem paths.\nInvariants: Dirty state, branch divergence, issues and PR data are point-in-time observations; GitHub authentication status is briefly cached.\nEffects: Inspects Git and GitHub without starting a ship job.\nRecovery: Refresh the preview after state changes; it does not reserve the checkout.",
         "properties": {
@@ -80530,12 +80882,12 @@
         "type": "object"
       },
       "HostRequest_startShip": {
-        "description": "Usage: Start the asynchronous ship sequence for a registered workspace.\nInputs: Host project/workspace paths, mode, rebase, PR and cleanup choices control the sequence. Pass monitorSessionId only in PR modes, for a chat in the same workspace.\nInvariants: Checkout and branch preconditions are checked during execution; steps can fail after earlier steps succeeded. The authenticated daemon link selects the notification server. Job acceptance does not mean monitoring has started.\nEffects: Depending on mode, rebases, fast-forwards, pushes, creates or configures a PR, and may archive sessions and remove the workspace. Opted-in monitoring sends feedback links to chat without gating merges.\nRecovery: Inspect job status and Git/PR state after uncertainty; do not blindly replay destructive steps.",
+        "description": "Usage: Start the asynchronous ship sequence for a registered workspace.\nInputs: Host project/workspace paths, mode, rebase, PR and cleanup choices control the sequence. For monitoring in PR modes, pass both monitorSessionId for a chat in the same workspace and the server-issued monitorGrantId.\nInvariants: Checkout and branch preconditions are checked during execution; steps can fail after earlier steps succeeded. The authenticated daemon link selects the notification server. Job acceptance does not mean monitoring has started.\nEffects: Depending on mode, rebases, fast-forwards, pushes, creates or configures a PR, and may archive sessions and remove the workspace. Opted-in monitoring sends feedback links to chat without gating merges.\nRecovery: Inspect job status and Git/PR state after uncertainty; do not blindly replay destructive steps.",
         "properties": {
           "args": {
             "properties": {
               "input": {
-                "description": "Start shipping a registered host worktree with mode, optional rebase and PR options, and cleanup choice.",
+                "description": "Start a Ship job on the host. For PR monitoring, pair the server-issued grant ID with the target chat ID.",
                 "properties": {
                   "cleanup": {
                     "description": "Request eventual cleanup; local cleanup stops processes, archives sessions and removes the worktree and branch.",
@@ -80574,6 +80926,10 @@
                       }
                     ],
                     "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
+                  },
+                  "monitorGrantId": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                    "type": "string"
                   },
                   "monitorSessionId": {
                     "description": "Chat to notify about new PR feedback. Omit to leave monitoring off. Only valid in PR modes; monitoring does not gate merges.",
@@ -81782,7 +82138,7 @@
   "defaultContentType": "application/json",
   "id": "urn:keylime:host-link",
   "info": {
-    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 13, minimum 13; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 78 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 13, minimum 13; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 79 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
     "title": "Host daemon link",
     "version": "13"
   },
@@ -83190,6 +83546,29 @@
       },
       "summary": "shipFinish"
     },
+    "operation_shipMonitorStatus": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Read the current PR feedback watch before admitting a digest.\nInputs: projectPath, path and monitorId identify the exact workspace and monitor generation.\nInvariants: Returns a watch only to its initiating server when the recorded PR is open and the chat is still active in the workspace. The PR URL is canonical.\nEffects: Reads local state without changing or caching the watch.\nRecovery: A missing watch cannot authorize a digest. Recheck on the next offer.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/HostRequest_shipMonitorStatus"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/HostReply_shipMonitorStatus"
+          }
+        ]
+      },
+      "summary": "shipMonitorStatus"
+    },
     "operation_shipPreview": {
       "action": "send",
       "channel": {
@@ -83264,7 +83643,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: Start the asynchronous ship sequence for a registered workspace.\nInputs: Host project/workspace paths, mode, rebase, PR and cleanup choices control the sequence. Pass monitorSessionId only in PR modes, for a chat in the same workspace.\nInvariants: Checkout and branch preconditions are checked during execution; steps can fail after earlier steps succeeded. The authenticated daemon link selects the notification server. Job acceptance does not mean monitoring has started.\nEffects: Depending on mode, rebases, fast-forwards, pushes, creates or configures a PR, and may archive sessions and remove the workspace. Opted-in monitoring sends feedback links to chat without gating merges.\nRecovery: Inspect job status and Git/PR state after uncertainty; do not blindly replay destructive steps.",
+      "description": "Usage: Start the asynchronous ship sequence for a registered workspace.\nInputs: Host project/workspace paths, mode, rebase, PR and cleanup choices control the sequence. For monitoring in PR modes, pass both monitorSessionId for a chat in the same workspace and the server-issued monitorGrantId.\nInvariants: Checkout and branch preconditions are checked during execution; steps can fail after earlier steps succeeded. The authenticated daemon link selects the notification server. Job acceptance does not mean monitoring has started.\nEffects: Depending on mode, rebases, fast-forwards, pushes, creates or configures a PR, and may archive sessions and remove the workspace. Opted-in monitoring sends feedback links to chat without gating merges.\nRecovery: Inspect job status and Git/PR state after uncertainty; do not blindly replay destructive steps.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/HostRequest_startShip"

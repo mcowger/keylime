@@ -1,8 +1,10 @@
 import { Value } from "@sinclair/typebox/value";
 import { SystemsResultSchema } from "../api-contracts/systems";
+import { ShipMonitorStatusResultSchema } from "../api-contracts/workspace-models";
 import { isRecord } from "../type-guards";
 import type { WorkspaceOps } from "../workspace-types";
 import { LINK_LIMITS } from "./link-protocol";
+import { githubShipPr } from "./workspace-ship-github";
 
 const text = (value: unknown): value is string =>
   typeof value === "string" && value.length <= 32768;
@@ -178,6 +180,17 @@ export function validWorkspaceResult(
       );
     case "stopShipMonitor":
       return typeof value.stopped === "boolean";
+    case "shipMonitorStatus": {
+      if (!Value.Check(ShipMonitorStatusResultSchema, value)) return false;
+      if (value.watch === null) return true;
+      if (!text(value.watch.sessionId) || !text(value.watch.prUrl))
+        return false;
+      try {
+        return githubShipPr(value.watch.prUrl).url === value.watch.prUrl;
+      } catch {
+        return false;
+      }
+    }
     case "startShip":
     case "shipStatus":
     case "shipFinish":

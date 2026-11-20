@@ -18,6 +18,9 @@ import { join } from "node:path";
 import test, { after, before } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { POST as startShipRequest } from "../../app/api/ship/route.ts";
+import { POST as stopShipRequest } from "../../app/api/ship/monitor/stop/route.ts";
+import { insertShipMonitorGrant } from "../message-outbox.ts";
 import type { ChildProcess } from "node:child_process";
 import { captureExpectedConsole } from "../../tests/expected-console.ts";
 import { fakeRunnerSocket } from "../../tests/fake-runner-socket.ts";
@@ -157,7 +160,7 @@ require("node:readline").createInterface({ input: rpcSocket }).on("line", (line)
   const command = JSON.parse(line);
   // Bulk stdin (the backpressure test): logged without its padding.
   if (command.op === "pad") return log({ kind: "pad", n: command.args.n });
-  log({ kind: "stdin", command });
+  log({ kind: "stdin", sessionId, command });
   const reply = (data) => out({ t: "res", id: command.id, ok: true, data });
   // A dialog answer and a host tool result are frames: omp sends no res to them.
   if (command.t === "ui_response") {
@@ -1262,7 +1265,20 @@ test("Ship offers only to its initiating server, retries a lost receipt, and nev
   const prFile = join(daemonAgentDir, "keylime", "ship", "prs.json");
   mkdirSync(join(prFile, ".."), { recursive: true });
   const url = "https://github.com/test/repo/pull/42";
-  const message = `New PR feedback: ${url}#issuecomment-123`;
+  const monitorId = randomUUID();
+  insertShipMonitorGrant({
+    monitorId,
+    hostId,
+    credential: createHash("sha256").update(primaryLogin.token).digest("hex"),
+    sessionId,
+    projectPath: project,
+    path,
+  });
+  const feedback = [
+    { kind: "conversation", id: 123 },
+    { kind: "inline", id: 234 },
+    { kind: "review", id: 345 },
+  ];
   const owner = createHash("sha256")
     .update(
       JSON.stringify([
@@ -1279,12 +1295,22 @@ test("Ship offers only to its initiating server, retries a lost receipt, and nev
     generation: randomUUID(),
     pr: { url, number: 42, state: "open", cleanup: false },
     monitor: {
-      id: randomUUID(),
+      id: monitorId,
       owner,
       sessionId,
       requestedAt: Date.now(),
       seen: [],
-      pending: [{ id, sessionId, message, createdAt: Date.now() }],
+      pending: [
+        {
+          id,
+          monitorId,
+          sessionId,
+          prUrl: url,
+          feedback,
+          omitted: 0,
+          createdAt: Date.now(),
+        },
+      ],
     },
   };
   const monitor = () => JSON.parse(readFileSync(prFile, "utf8"))[path].monitor;
@@ -1381,10 +1407,16 @@ test("Ship offers only to its initiating server, retries a lost receipt, and nev
       { hostId, id },
     ],
   );
-  assert.equal(
-    ompLog().filter((e) => e.command?.args?.message === message).length,
-    1,
-  );
+  const delivered = ompLog().flatMap((event) => {
+    const text = event.command?.args?.message;
+    return event.sessionId === sessionId &&
+      text?.includes(`${url}#issuecomment-123`)
+      ? [text]
+      : [];
+  });
+  assert.equal(delivered.length, 1);
+  assert.ok(delivered[0].includes(`${url}#discussion_r234`));
+  assert.ok(delivered[0].includes(`${url}#pullrequestreview-345`));
 
   const archived = await host().sessionOps.archiveSession(sessionId);
   assert.ok(archived.ok);
@@ -1395,7 +1427,7 @@ test("Ship offers only to its initiating server, retries a lost receipt, and nev
   );
 });
 
-test("a digest cannot wake the same session ID on a different host", async (t) => {
+test("Ship digest admission requires a server grant and never falls back to another host", async (t) => {
   const { host: source, token } = createHost("Host without the session");
   const sessionId = randomUUID();
   writeSession(`2026-02-02_${sessionId}.jsonl`, sessionId, [
@@ -1407,6 +1439,13 @@ test("a digest cannot wake the same session ID on a different host", async (t) =
   );
   let socket: LinkSocket | undefined;
   let up = 0;
+  let ack = 0;
+  let monitorId: string | undefined;
+  const statusRequests: unknown[] = [];
+  const receipts: string[] = [];
+  const prUrl = "https://github.com/test/repo/pull/42";
+  const workspace = { projectPath: "/test/repo", path: "/test/work" };
+  const jobId = randomUUID();
   const sendUp = (frame: object) =>
     hub.hostLinkSocket.message(socket!, JSON.stringify(frame));
   const request = new Request(`${primaryLogin.url}/api/hosts/link`, {
@@ -1420,17 +1459,41 @@ test("a digest cannot wake the same session ID on a different host", async (t) =
           send(message) {
             for (const line of String(message).split("\n").filter(Boolean)) {
               const frame = JSON.parse(line);
-              if (frame.type === "req" && frame.op === "listSessions") {
-                queueMicrotask(() =>
-                  sendUp({
-                    type: "res",
-                    seq: ++up,
-                    id: frame.id,
-                    ok: true,
-                    result: [],
-                  }),
-                );
-              }
+              if (frame.type === "ack") ack = frame.ack;
+              if (frame.type === "ship_pr_digest_receipt")
+                receipts.push(frame.id);
+              if (frame.type !== "req") continue;
+              let result: unknown;
+              if (frame.op === "listSessions") result = [];
+              else if (frame.op === "startShip") {
+                monitorId = frame.args.input.monitorGrantId;
+                result = {
+                  ok: true,
+                  value: {
+                    id: jobId,
+                    kind: "ship",
+                    ...workspace,
+                    mode: "pr",
+                    status: "running",
+                    steps: [],
+                    logs: "",
+                  },
+                };
+              } else if (frame.op === "shipMonitorStatus") {
+                statusRequests.push(frame.args.input);
+                result = { ok: true, value: { watch: { sessionId, prUrl } } };
+              } else if (frame.op === "stopShipMonitor") {
+                result = { ok: true, value: { stopped: true } };
+              } else continue;
+              queueMicrotask(() =>
+                sendUp({
+                  type: "res",
+                  seq: ++up,
+                  id: frame.id,
+                  ok: true,
+                  result,
+                }),
+              );
             }
             return Buffer.byteLength(String(message));
           },
@@ -1455,34 +1518,94 @@ test("a digest cannot wake the same session ID on a different host", async (t) =
     autoApproveExtension: false,
     ack: 0,
     channels: [],
+    workspaceOps: ["startShip", "shipMonitorStatus", "stopShipMonitor"],
   });
-  const id = randomUUID();
-  const message =
-    "Feedback: https://github.com/test/repo/pull/42#issuecomment-456";
-  sendUp({
+  const requestBody = (url: string, body: object) =>
+    new Request(`${primaryLogin.url}${url}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const clientChosenId = randomUUID();
+  const accepted = await startShipRequest(
+    requestBody("/api/ship", {
+      host: source.id,
+      input: {
+        ...workspace,
+        mode: "pr",
+        rebase: false,
+        cleanup: false,
+        monitorSessionId: sessionId,
+        monitorGrantId: clientChosenId,
+      },
+    }),
+  );
+  assert.equal(accepted.status, 200, await accepted.text());
+  assert.ok(monitorId && monitorId !== clientChosenId);
+  const offer = {
     type: "ship_pr_digest",
-    seq: ++up,
-    id,
+    monitorId,
     sessionId,
-    message,
+    prUrl,
     createdAt: Date.now(),
-    hostId,
+    feedback: [{ kind: "conversation", id: 456 }],
+    omitted: 0,
+  };
+  function sendDigest(changes: Partial<typeof offer> = {}) {
+    const id = randomUUID();
+    sendUp({ ...offer, ...changes, seq: ++up, id });
+    return id;
+  }
+  const noGrant = sendDigest({ monitorId: clientChosenId });
+  const wrongSession = sendDigest({ sessionId: randomUUID() });
+  const wrongPr = sendDigest({ prUrl: "https://github.com/test/repo/pull/43" });
+  const id = sendDigest();
+  const database = new Database(join(mainAgentDir, "keylime", "outbox.db"), {
+    readonly: true,
   });
-  const databasePath = join(mainAgentDir, "keylime", "outbox.db");
-  await waitFor(() => existsSync(databasePath), "outbox store to open");
-  const database = new Database(databasePath, { readonly: true });
   t.after(() => database.close());
-  const entry = () =>
+  const entry = (digestId: string) =>
     database
       .query("SELECT source_host_id, state FROM entries WHERE id = ?")
-      .get(id);
+      .get(digestId);
   await waitFor(
-    () => (entry() as { state: string } | null)?.state === "failed",
+    () => (entry(id) as { state: string } | null)?.state === "failed",
     "missing source-host session to fail",
   );
-  assert.deepEqual(entry(), { source_host_id: source.id, state: "failed" });
+  assert.deepEqual(entry(id), { source_host_id: source.id, state: "failed" });
+  assert.deepEqual(statusRequests, [
+    { ...workspace, monitorId },
+    { ...workspace, monitorId },
+  ]);
+  assert.deepEqual(receipts, [id]);
+  for (const rejected of [noGrant, wrongSession, wrongPr])
+    assert.equal(entry(rejected), null);
+  const wrongAfterPin = sendDigest({
+    prUrl: "https://github.com/test/repo/pull/44",
+  });
+
+  const stopped = await stopShipRequest(
+    requestBody("/api/ship/monitor/stop", {
+      host: source.id,
+      ...workspace,
+      monitorId,
+    }),
+  );
+  assert.equal(stopped.status, 200, await stopped.text());
+  const afterStop = sendDigest();
+  const afterStopSeq = up;
+  await waitFor(
+    () => ack >= afterStopSeq,
+    "transport ACK of a post-stop offer",
+  );
+  assert.equal(entry(afterStop), null);
+  assert.equal(entry(wrongAfterPin), null);
+  assert.deepEqual(receipts, [id]);
+  assert.equal(statusRequests.length, 2);
   assert.equal(
-    ompLog().some((event) => event.command?.args?.message === message),
+    ompLog().some((event) =>
+      event.command?.args?.message?.includes(`${prUrl}#issuecomment-456`),
+    ),
     false,
   );
 });

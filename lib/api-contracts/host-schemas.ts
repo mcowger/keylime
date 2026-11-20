@@ -8,40 +8,72 @@ const SafeCount = Type.Integer({
   maximum: Number.MAX_SAFE_INTEGER,
 });
 export const SHIP_DIGEST_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
-export const SHIP_DIGEST_MESSAGE_LIMIT = 16_384;
+export const SHIP_DIGEST_FEEDBACK_LIMIT = 20;
 export const SHIP_DIGEST_RETRY_MS = 7 * 24 * 60 * 60 * 1000;
 const ShipDigestId = Type.String({ pattern: SHIP_DIGEST_ID_RE.source });
 const ShipDigestSeq = Type.Integer({
   minimum: 1,
   maximum: Number.MAX_SAFE_INTEGER,
 });
+const ShipFeedbackItem = Type.Object(
+  {
+    kind: Type.Union([
+      Type.Literal("conversation"),
+      Type.Literal("inline"),
+      Type.Literal("review"),
+    ]),
+    id: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+  },
+  { additionalProperties: false },
+);
 export const ShipPrDigestSchema = Type.Object(
   {
     id: ShipDigestId,
+    monitorId: Type.String({
+      pattern:
+        "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      description: "Server-issued Ship monitor generation.",
+    }),
     sessionId: Type.String({
       pattern:
         "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
     }),
-    createdAt: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
-    message: Type.String({
-      minLength: 1,
-      maxLength: SHIP_DIGEST_MESSAGE_LIMIT,
-      pattern: "\\S",
+    prUrl: Type.String({
+      pattern:
+        "^https://github\\.com/[a-z0-9][a-z0-9-]{0,38}/(?!\\.\\.?/)[a-z0-9._-]{1,100}/pull/[1-9][0-9]{0,15}$",
+      description:
+        "Canonical GitHub.com PR being monitored. Must match the server grant.",
+    }),
+    createdAt: Type.Integer({
+      minimum: 1,
+      maximum: Number.MAX_SAFE_INTEGER,
+      description: "Host observation time in Unix milliseconds.",
+    }),
+    feedback: Type.Array(ShipFeedbackItem, {
+      minItems: 1,
+      maxItems: SHIP_DIGEST_FEEDBACK_LIMIT,
+    }),
+    omitted: Type.Integer({
+      minimum: 0,
+      maximum: Number.MAX_SAFE_INTEGER,
+      description: "Additional events not included in this bounded batch.",
     }),
   },
   {
+    additionalProperties: false,
     description:
-      "A persisted, links-only Ship feedback digest for the initiating server's outbox, retried with the same ID until durable application acceptance.",
+      "A persisted batch of GitHub feedback IDs for a server-issued Ship watch. The server renders the follow-up; this payload carries no message text.",
   },
 );
 export type ShipPrDigest = Static<typeof ShipPrDigestSchema>;
-const ShipPrDigestFrame = Type.Object(
+export const ShipPrDigestFrame = Type.Object(
   {
     type: Type.Literal("ship_pr_digest"),
     seq: ShipDigestSeq,
     ...ShipPrDigestSchema.properties,
   },
   {
+    additionalProperties: false,
     title: "HostLinkShipPrDigest",
     description:
       "A persisted PR feedback digest offered only to the initiating server. Retries use the same ID until application receipt.",

@@ -26,7 +26,8 @@ import type {
 import type {
   ShipJob,
   ShipPreview,
-  ShipRequest,
+  ShipMonitorStatusResult,
+  ShipStartInput,
   ShipStopMonitorRequest,
 } from "./workspace-ship-types";
 
@@ -81,7 +82,7 @@ export interface WorkspaceOps {
     projectPath: string;
     path: string;
   }): Promise<OpResult<ShipPreview>>;
-  startShip(input: ShipRequest): Promise<OpResult<ShipJob>>;
+  startShip(input: ShipStartInput): Promise<OpResult<ShipJob>>;
   shipStatus(id: string): Promise<OpResult<ShipJob>>;
   shipFinish(input: {
     projectPath: string;
@@ -90,6 +91,9 @@ export interface WorkspaceOps {
   stopShipMonitor(
     input: ShipStopMonitorRequest,
   ): Promise<OpResult<{ stopped: boolean }>>;
+  shipMonitorStatus(
+    input: ShipStopMonitorRequest,
+  ): Promise<OpResult<ShipMonitorStatusResult>>;
   createWorkspace(
     input: WorkspaceCreateRequest,
   ): Promise<OpResult<WorkspaceCreationJob>>;
@@ -230,6 +234,7 @@ export const WORKSPACE_OP_PARAMS: {
   shipStatus: ["id"],
   shipFinish: ["input"],
   stopShipMonitor: ["input"],
+  shipMonitorStatus: ["input"],
   systems: ["input"],
 };
 

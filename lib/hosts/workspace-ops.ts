@@ -76,6 +76,7 @@ import {
   shipStatus,
   shipFinish,
   stopShipMonitor,
+  shipMonitorStatus,
 } from "./workspace-ship";
 import {
   createWorkspace,
@@ -319,6 +320,8 @@ export function createWorkspaceService(
           );
         return stopShipMonitor(input, shipOwner);
       }),
+    shipMonitorStatus: (input) =>
+      result(() => shipMonitorStatus(input, shipOwner)),
     shipStatus: (id) => result(() => shipStatus(id)),
     shipFinish: (input) => result(() => shipFinish(input)),
     createWorkspace: (input) => result(() => createWorkspace(input)),

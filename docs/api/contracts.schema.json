@@ -42693,22 +42693,151 @@
         }
       ]
     },
+    "host_shipMonitorStatus_args": {
+      "properties": {
+        "input": {
+          "description": "Stop the named PR monitor generation for a registered workspace on the selected host.",
+          "properties": {
+            "monitorId": {
+              "description": "Monitor generation shown on the workspace pull request.",
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "projectPath": {
+              "type": "string"
+            }
+          },
+          "required": ["projectPath", "path", "monitorId"],
+          "type": "object"
+        }
+      },
+      "required": ["input"],
+      "type": "object"
+    },
+    "host_shipMonitorStatus_result": {
+      "anyOf": [
+        {
+          "properties": {
+            "ok": {
+              "const": true,
+              "type": "boolean"
+            },
+            "value": {
+              "additionalProperties": false,
+              "description": "Current PR watch for the requesting server and exact monitor generation, or null when no matching watch has a live chat.",
+              "properties": {
+                "watch": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "prUrl": {
+                          "type": "string"
+                        },
+                        "sessionId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["sessionId", "prUrl"],
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "required": ["watch"],
+              "type": "object"
+            }
+          },
+          "required": ["ok", "value"],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string"
+            },
+            "ok": {
+              "const": false,
+              "type": "boolean"
+            },
+            "status": {
+              "type": "number"
+            }
+          },
+          "required": ["ok", "status", "code", "error"],
+          "type": "object"
+        }
+      ]
+    },
     "host_ShipPrDigest": {
-      "description": "A persisted, links-only Ship feedback digest for the initiating server's outbox, retried with the same ID until durable application acceptance.",
+      "additionalProperties": false,
+      "description": "A persisted batch of GitHub feedback IDs for a server-issued Ship watch. The server renders the follow-up; this payload carries no message text.",
       "properties": {
         "createdAt": {
+          "description": "Host observation time in Unix milliseconds.",
           "maximum": 9007199254740991,
           "minimum": 1,
           "type": "integer"
+        },
+        "feedback": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "conversation",
+                    "type": "string"
+                  },
+                  {
+                    "const": "inline",
+                    "type": "string"
+                  },
+                  {
+                    "const": "review",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": ["kind", "id"],
+            "type": "object"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "type": "array"
         },
         "id": {
           "pattern": "^[A-Za-z0-9_-]{1,64}$",
           "type": "string"
         },
-        "message": {
-          "maxLength": 16384,
-          "minLength": 1,
-          "pattern": "\\S",
+        "monitorId": {
+          "description": "Server-issued Ship monitor generation.",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "omitted": {
+          "description": "Additional events not included in this bounded batch.",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "prUrl": {
+          "description": "Canonical GitHub.com PR being monitored. Must match the server grant.",
+          "pattern": "^https://github\\.com/[a-z0-9][a-z0-9-]{0,38}/(?!\\.\\.?/)[a-z0-9._-]{1,100}/pull/[1-9][0-9]{0,15}$",
           "type": "string"
         },
         "sessionId": {
@@ -42716,7 +42845,106 @@
           "type": "string"
         }
       },
-      "required": ["id", "sessionId", "createdAt", "message"],
+      "required": [
+        "id",
+        "monitorId",
+        "sessionId",
+        "prUrl",
+        "createdAt",
+        "feedback",
+        "omitted"
+      ],
+      "type": "object"
+    },
+    "host_ShipPrDigestFrame": {
+      "additionalProperties": false,
+      "description": "A persisted PR feedback digest offered only to the initiating server. Retries use the same ID until application receipt.",
+      "properties": {
+        "createdAt": {
+          "description": "Host observation time in Unix milliseconds.",
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "feedback": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "conversation",
+                    "type": "string"
+                  },
+                  {
+                    "const": "inline",
+                    "type": "string"
+                  },
+                  {
+                    "const": "review",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": ["kind", "id"],
+            "type": "object"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "type": "array"
+        },
+        "id": {
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "type": "string"
+        },
+        "monitorId": {
+          "description": "Server-issued Ship monitor generation.",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "omitted": {
+          "description": "Additional events not included in this bounded batch.",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "prUrl": {
+          "description": "Canonical GitHub.com PR being monitored. Must match the server grant.",
+          "pattern": "^https://github\\.com/[a-z0-9][a-z0-9-]{0,38}/(?!\\.\\.?/)[a-z0-9._-]{1,100}/pull/[1-9][0-9]{0,15}$",
+          "type": "string"
+        },
+        "seq": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "sessionId": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "type": "string"
+        },
+        "type": {
+          "const": "ship_pr_digest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "seq",
+        "id",
+        "monitorId",
+        "sessionId",
+        "prUrl",
+        "createdAt",
+        "feedback",
+        "omitted"
+      ],
+      "title": "HostLinkShipPrDigest",
       "type": "object"
     },
     "host_shipPreview_args": {
@@ -43330,7 +43558,7 @@
     "host_startShip_args": {
       "properties": {
         "input": {
-          "description": "Start shipping a registered host worktree with mode, optional rebase and PR options, and cleanup choice.",
+          "description": "Start a Ship job on the host. For PR monitoring, pair the server-issued grant ID with the target chat ID.",
           "properties": {
             "cleanup": {
               "description": "Request eventual cleanup; local cleanup stops processes, archives sessions and removes the worktree and branch.",
@@ -43369,6 +43597,10 @@
                 }
               ],
               "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
+            },
+            "monitorGrantId": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
             },
             "monitorSessionId": {
               "description": "Chat to notify about new PR feedback. Omit to leave monitoring off. Only valid in PR modes; monitoring does not gate merges.",
@@ -45590,21 +45822,66 @@
           "type": "object"
         },
         {
+          "additionalProperties": false,
           "description": "A persisted PR feedback digest offered only to the initiating server. Retries use the same ID until application receipt.",
           "properties": {
             "createdAt": {
+              "description": "Host observation time in Unix milliseconds.",
               "maximum": 9007199254740991,
               "minimum": 1,
               "type": "integer"
+            },
+            "feedback": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "const": "conversation",
+                        "type": "string"
+                      },
+                      {
+                        "const": "inline",
+                        "type": "string"
+                      },
+                      {
+                        "const": "review",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "required": ["kind", "id"],
+                "type": "object"
+              },
+              "maxItems": 20,
+              "minItems": 1,
+              "type": "array"
             },
             "id": {
               "pattern": "^[A-Za-z0-9_-]{1,64}$",
               "type": "string"
             },
-            "message": {
-              "maxLength": 16384,
-              "minLength": 1,
-              "pattern": "\\S",
+            "monitorId": {
+              "description": "Server-issued Ship monitor generation.",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            "omitted": {
+              "description": "Additional events not included in this bounded batch.",
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "prUrl": {
+              "description": "Canonical GitHub.com PR being monitored. Must match the server grant.",
+              "pattern": "^https://github\\.com/[a-z0-9][a-z0-9-]{0,38}/(?!\\.\\.?/)[a-z0-9._-]{1,100}/pull/[1-9][0-9]{0,15}$",
               "type": "string"
             },
             "seq": {
@@ -45625,9 +45902,12 @@
             "type",
             "seq",
             "id",
+            "monitorId",
             "sessionId",
+            "prUrl",
             "createdAt",
-            "message"
+            "feedback",
+            "omitted"
           ],
           "title": "HostLinkShipPrDigest",
           "type": "object"
@@ -192160,6 +192440,34 @@
       ],
       "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
     },
+    "workspace_ShipMonitorStatusResult": {
+      "additionalProperties": false,
+      "description": "Current PR watch for the requesting server and exact monitor generation, or null when no matching watch has a live chat.",
+      "properties": {
+        "watch": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "prUrl": {
+                  "type": "string"
+                },
+                "sessionId": {
+                  "type": "string"
+                }
+              },
+              "required": ["sessionId", "prUrl"],
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "required": ["watch"],
+      "type": "object"
+    },
     "workspace_ShipPr": {
       "description": "Last observed pull-request identity, merge/check state, auto-merge and cleanup settings.",
       "properties": {
@@ -192490,6 +192798,81 @@
             }
           ],
           "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
+        },
+        "monitorSessionId": {
+          "description": "Chat to notify about new PR feedback. Omit to leave monitoring off. Only valid in PR modes; monitoring does not gate merges.",
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "pr": {
+          "description": "Required with nonempty title and body when creating a pull request; not required when auto-merging an existing open pull request.",
+          "properties": {
+            "body": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": ["title", "body"],
+          "type": "object"
+        },
+        "projectPath": {
+          "type": "string"
+        },
+        "rebase": {
+          "type": "boolean"
+        }
+      },
+      "required": ["projectPath", "path", "mode", "rebase", "cleanup"],
+      "type": "object"
+    },
+    "workspace_ShipStartInput": {
+      "description": "Start a Ship job on the host. For PR monitoring, pair the server-issued grant ID with the target chat ID.",
+      "properties": {
+        "cleanup": {
+          "description": "Request eventual cleanup; local cleanup stops processes, archives sessions and removes the worktree and branch.",
+          "type": "boolean"
+        },
+        "mergeMethod": {
+          "anyOf": [
+            {
+              "const": "squash",
+              "type": "string"
+            },
+            {
+              "const": "merge",
+              "type": "string"
+            },
+            {
+              "const": "rebase",
+              "type": "string"
+            }
+          ],
+          "description": "Auto-merge method; defaults to squash when omitted."
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "const": "local",
+              "type": "string"
+            },
+            {
+              "const": "pr",
+              "type": "string"
+            },
+            {
+              "const": "pr-auto",
+              "type": "string"
+            }
+          ],
+          "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
+        },
+        "monitorGrantId": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
         },
         "monitorSessionId": {
           "description": "Chat to notify about new PR feedback. Omit to leave monitoring off. Only valid in PR modes; monitoring does not gate merges.",

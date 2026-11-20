@@ -77,27 +77,24 @@ const sources = [
     kind: "conversation",
     path: "issues",
     resource: "comments",
-    anchor: "issuecomment-",
   },
   {
     kind: "inline",
     path: "pulls",
     resource: "comments",
-    anchor: "discussion_r",
   },
   {
     kind: "review",
     path: "pulls",
     resource: "reviews",
-    anchor: "pullrequestreview-",
   },
 ] as const;
 
 export interface ShipFeedback {
   key: string;
+  kind: (typeof sources)[number]["kind"];
   id: number;
   at: number;
-  url: string;
 }
 
 export async function readShipFeedback(
@@ -106,7 +103,7 @@ export async function readShipFeedback(
 ): Promise<ShipFeedback[]> {
   const pr = githubShipPr(prUrl);
   const groups = await Promise.all(
-    sources.map(async ({ kind, path, resource, anchor }) => {
+    sources.map(async ({ kind, path, resource }) => {
       const pages = await ghRead(cwd, [
         "api",
         "--hostname",
@@ -136,12 +133,12 @@ export async function readShipFeedback(
             !Number.isFinite(at)
           )
             throw new Error("Invalid GitHub feedback identity or timestamp");
-          // Never take link text, URLs or other user-authored content from a response.
+          // Persist identity only, never user-authored content or URLs.
           events.push({
             key: `${kind}:${id}`,
+            kind,
             id,
             at,
-            url: `${pr.url}#${anchor}${id}`,
           });
         }
       }

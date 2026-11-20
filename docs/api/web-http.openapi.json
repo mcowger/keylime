@@ -85311,7 +85311,7 @@
         }
       },
       "post": {
-        "description": "### Usage\n\nStart a ship job.\n\n### Inputs\n\nSend host and the ship input object. In PR modes, optionally send monitorSessionId for a chat in the same workspace.\n\n### Invariants\n\nThe host validates ship preconditions and chat ownership. The authenticated daemon link selects the server for notifications. A failed post-push lookup retains the job preview's PR, while a successful empty lookup does not. Job acceptance does not mean shipping is complete or monitoring has started.\n\n### Effects\n\nStarts a host job that may mutate Git and remote state. Opted-in monitoring sends feedback links to chat without gating merges.\n\n### Recovery\n\nPoll job status and inspect repository state after an uncertain response before starting another job.\n\n### Additional protocol details\n\nPR modes may opt into feedback links with monitorSessionId for a chat in the same workspace. The authenticated daemon link selects the notification server. Job acceptance does not mean monitoring has started, and monitoring does not gate merges.",
+        "description": "### Usage\n\nStart a ship job.\n\n### Inputs\n\nSend host and the ship input object. In PR modes, optionally send monitorSessionId for a chat in the same workspace.\n\n### Invariants\n\nMonitoring requires host shipMonitorStatus support. The server issues the monitor grant; the host validates ship preconditions and chat ownership. Job acceptance does not mean shipping is complete or monitoring has started.\n\n### Effects\n\nStarts a host job that may mutate Git and remote state. Opted-in monitoring sends feedback links to chat without gating merges.\n\n### Recovery\n\nPoll job status and inspect repository state after an uncertain response before starting another job.\n\n### Additional protocol details\n\nPR modes may opt into feedback links with monitorSessionId for a chat in the same workspace. The host must support shipMonitorStatus. The server issues the grant and checks that the same watch is still active before accepting feedback. Job acceptance does not mean monitoring has started, and monitoring does not gate merges.",
         "operationId": "workspaceShipPost",
         "requestBody": {
           "content": {
@@ -85992,7 +85992,7 @@
         "x-client-semantics": {
           "Effects": "Starts a host job that may mutate Git and remote state. Opted-in monitoring sends feedback links to chat without gating merges.",
           "Inputs": "Send host and the ship input object. In PR modes, optionally send monitorSessionId for a chat in the same workspace.",
-          "Invariants": "The host validates ship preconditions and chat ownership. The authenticated daemon link selects the server for notifications. A failed post-push lookup retains the job preview's PR, while a successful empty lookup does not. Job acceptance does not mean shipping is complete or monitoring has started.",
+          "Invariants": "Monitoring requires host shipMonitorStatus support. The server issues the monitor grant; the host validates ship preconditions and chat ownership. Job acceptance does not mean shipping is complete or monitoring has started.",
           "Recovery": "Poll job status and inspect repository state after an uncertain response before starting another job.",
           "Usage": "Start a ship job."
         }
@@ -87156,7 +87156,7 @@
     },
     "/api/ship/monitor/stop": {
       "post": {
-        "description": "### Usage\n\nStop PR feedback monitoring for a workspace.\n\n### Inputs\n\nSend host, projectPath, path and the monitorId from the workspace PR state.\n\n### Invariants\n\nOnly the initiating server link can stop the monitor; a stale id cannot stop a replacement.\n\n### Effects\n\nStops feedback notifications without changing the PR or its merge settings.\n\n### Recovery\n\nRefresh workspace state before retrying after an uncertain response.",
+        "description": "### Usage\n\nStop PR feedback monitoring for a workspace.\n\n### Inputs\n\nSend host, projectPath, path and the monitorId from the workspace PR state.\n\n### Invariants\n\nOnly the initiating server link can stop the monitor; a stale id cannot stop a replacement.\n\n### Effects\n\nRevokes the scoped server grant before attempting to stop the daemon watch, even if the host is offline. Does not change the PR or its merge settings.\n\n### Recovery\n\nRefresh workspace state before retrying after an uncertain response.\n\n### Additional protocol details\n\nRevokes the scoped server grant before attempting to stop the daemon watch. An offline or rejected host stop does not restore the grant.",
         "operationId": "workspaceShipMonitorStop",
         "requestBody": {
           "content": {
@@ -87481,7 +87481,7 @@
         ],
         "summary": "Stop PR feedback monitoring",
         "x-client-semantics": {
-          "Effects": "Stops feedback notifications without changing the PR or its merge settings.",
+          "Effects": "Revokes the scoped server grant before attempting to stop the daemon watch, even if the host is offline. Does not change the PR or its merge settings.",
           "Inputs": "Send host, projectPath, path and the monitorId from the workspace PR state.",
           "Invariants": "Only the initiating server link can stop the monitor; a stale id cannot stop a replacement.",
           "Recovery": "Refresh workspace state before retrying after an uncertain response.",

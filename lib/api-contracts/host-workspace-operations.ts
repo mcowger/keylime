@@ -125,11 +125,11 @@ Recovery: Refresh the preview after state changes; it does not reserve the check
   op(
     "startShip",
     `Usage: Start the asynchronous ship sequence for a registered workspace.
-Inputs: Host project/workspace paths, mode, rebase, PR and cleanup choices control the sequence. Pass monitorSessionId only in PR modes, for a chat in the same workspace.
+Inputs: Host project/workspace paths, mode, rebase, PR and cleanup choices control the sequence. For monitoring in PR modes, pass both monitorSessionId for a chat in the same workspace and the server-issued monitorGrantId.
 Invariants: Checkout and branch preconditions are checked during execution; steps can fail after earlier steps succeeded. The authenticated daemon link selects the notification server. Job acceptance does not mean monitoring has started.
 Effects: Depending on mode, rebases, fast-forwards, pushes, creates or configures a PR, and may archive sessions and remove the workspace. Opted-in monitoring sends feedback links to chat without gating merges.
 Recovery: Inspect job status and Git/PR state after uncertainty; do not blindly replay destructive steps.`,
-    obj({ input: M.ShipRequestSchema }),
+    obj({ input: M.ShipStartInputSchema }),
     M.ShipJobSchema,
   ),
   op(
@@ -161,6 +161,16 @@ Effects: Stops feedback monitoring without changing the pull request or merge se
 Recovery: Refresh workspace state before retrying an uncertain request.`,
     obj({ input: M.ShipStopMonitorRequestSchema }),
     M.ShipStopMonitorResultSchema,
+  ),
+  op(
+    "shipMonitorStatus",
+    `Usage: Read the current PR feedback watch before admitting a digest.
+Inputs: projectPath, path and monitorId identify the exact workspace and monitor generation.
+Invariants: Returns a watch only to its initiating server when the recorded PR is open and the chat is still active in the workspace. The PR URL is canonical.
+Effects: Reads local state without changing or caching the watch.
+Recovery: A missing watch cannot authorize a digest. Recheck on the next offer.`,
+    obj({ input: M.ShipStopMonitorRequestSchema }),
+    M.ShipMonitorStatusResultSchema,
   ),
   op(
     "createWorkspace",

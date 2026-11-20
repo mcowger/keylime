@@ -428,6 +428,39 @@ export const ShipRequestSchema = Type.Object(
       "Start shipping a registered host worktree with mode, optional rebase and PR options, and cleanup choice.",
   },
 );
+export const SHIP_MONITOR_GRANT_ID_PATTERN =
+  "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$";
+
+export const ShipStartInputSchema = Type.Object(
+  {
+    ...ShipRequestSchema.properties,
+    monitorGrantId: Type.Optional(
+      Type.String({ pattern: SHIP_MONITOR_GRANT_ID_PATTERN }),
+    ),
+  },
+  {
+    description:
+      "Start a Ship job on the host. For PR monitoring, pair the server-issued grant ID with the target chat ID.",
+  },
+);
+
+export const ShipMonitorStatusResultSchema = Type.Object(
+  {
+    watch: Type.Union([
+      Type.Null(),
+      Type.Object(
+        { sessionId: Type.String(), prUrl: Type.String() },
+        { additionalProperties: false },
+      ),
+    ]),
+  },
+  {
+    additionalProperties: false,
+    description:
+      "Current PR watch for the requesting server and exact monitor generation, or null when no matching watch has a live chat.",
+  },
+);
+
 export const ShipStopMonitorRequestSchema = Type.Object(
   {
     projectPath: Type.String(),

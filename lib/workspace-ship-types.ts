@@ -14,6 +14,10 @@ export type ShipPr = Static<typeof M.ShipPrSchema>;
 export type ShipPreview = Static<typeof M.ShipPreviewSchema>;
 /** Shipping choices may rebase, push, create a PR and clean up the workspace. */
 export type ShipRequest = Static<typeof M.ShipRequestSchema>;
+export type ShipStartInput = Static<typeof M.ShipStartInputSchema>;
+export type ShipMonitorStatusResult = Static<
+  typeof M.ShipMonitorStatusResultSchema
+>;
 export type ShipStopMonitorRequest = Static<
   typeof M.ShipStopMonitorRequestSchema
 >;

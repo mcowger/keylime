@@ -736,7 +736,7 @@ export const workspaceHttpOperations: readonly HttpOperation[] = [
   }),
   ops("/api/ship", "post", "workspaceShipPost", "Start shipping a workspace", {
     description:
-      "PR modes may opt into feedback links with monitorSessionId for a chat in the same workspace. The authenticated daemon link selects the notification server. Job acceptance does not mean monitoring has started, and monitoring does not gate merges.",
+      "PR modes may opt into feedback links with monitorSessionId for a chat in the same workspace. The host must support shipMonitorStatus. The server issues the grant and checks that the same watch is still active before accepting feedback. Job acceptance does not mean monitoring has started, and monitoring does not gate merges.",
     requestBody: jsonBody(obj({ host: opt(s), input: ShipRequestSchema })),
     responses: {
       ...responses(ShipJobSchema),
@@ -763,6 +763,8 @@ export const workspaceHttpOperations: readonly HttpOperation[] = [
     "workspaceShipMonitorStop",
     "Stop PR feedback monitoring",
     {
+      description:
+        "Revokes the scoped server grant before attempting to stop the daemon watch. An offline or rejected host stop does not restore the grant.",
       requestBody: jsonBody(
         obj({ host: opt(s), ...ShipStopMonitorRequestSchema.properties }),
       ),

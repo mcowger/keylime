@@ -56,8 +56,11 @@ test("Ship offers and receipts are sequenced, bounded and direction-specific", a
     seq: 1,
     id: ATTEMPT,
     sessionId: ATTEMPT,
+    monitorId: ATTEMPT,
+    prUrl: "https://github.com/test/repo/pull/42",
     createdAt: 123,
-    message: "Feedback: https://github.com/test/repo/pull/42#issuecomment-123",
+    feedback: [{ kind: "conversation" as const, id: 123 }],
+    omitted: 0,
   };
   const receipt = {
     type: "ship_pr_digest_receipt" as const,
@@ -66,12 +69,6 @@ test("Ship offers and receipts are sequenced, bounded and direction-specific", a
   };
   assert.deepEqual(decodeUp(encodeLine(offer)), offer);
   assert.deepEqual(decodeDown(encodeLine(receipt)), receipt);
-  assert.deepEqual(
-    decodeUp(
-      JSON.stringify({ ...offer, hostId: "untrusted", owner: "untrusted" }),
-    ),
-    offer,
-  );
   for (const fields of [
     { seq: undefined },
     { seq: 0 },
@@ -79,8 +76,23 @@ test("Ship offers and receipts are sequenced, bounded and direction-specific", a
     { sessionId: "bad" },
     { createdAt: 0 },
     { createdAt: 1.5 },
-    { message: "  " },
-    { message: "x".repeat(16_385) },
+    { monitorId: "bad" },
+    { prUrl: "https://example.invalid/test/repo/pull/42" },
+    { prUrl: "https://github.com/test/repo/pull/42?source=untrusted" },
+    { prUrl: "https://github.com/test/repo/pull/9007199254740992" },
+    { feedback: [] },
+    { feedback: [{ kind: "inline", id: 0 }] },
+    { feedback: [{ kind: "review", id: 42, body: "free text" }] },
+    { feedback: [{ kind: "custom", id: 42 }] },
+    {
+      feedback: Array.from({ length: 21 }, (_, i) => ({
+        kind: "review",
+        id: i + 1,
+      })),
+    },
+    { omitted: -1 },
+    { message: "free text" },
+    { hostId: "untrusted", owner: "untrusted" },
   ])
     assert.throws(
       () => decodeUp(JSON.stringify({ ...offer, ...fields })),

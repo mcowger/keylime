@@ -1,5 +1,14 @@
 // Durable entry identities and per-session revisions are shared by every connection to the outbox.
 export const OUTBOX_SCHEMA = `
+CREATE TABLE IF NOT EXISTS ship_monitor_grants (
+  monitor_id TEXT PRIMARY KEY NOT NULL,
+  host_id TEXT NOT NULL,
+  credential TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  project_path TEXT NOT NULL,
+  path TEXT NOT NULL,
+  pr_url TEXT
+);
 CREATE TABLE IF NOT EXISTS entries (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,

@@ -1369,35 +1369,36 @@ function applyUp(
   }
 }
 
-function offerShipDigest(
-  link: Link,
-  { id, sessionId, message, createdAt }: ShipPrDigest,
-): void {
+function offerShipDigest(link: Link, offer: ShipPrDigest): void {
   const socket = link.socket;
   const credential = socket?.data.hostCredential;
   if (!credential) return;
+  const stillAuthenticated = () => {
+    if (link.socket !== socket) return false;
+    return getShipHostCredential(link.id) === credential;
+  };
   // Import lazily: the outbox dispatcher uses the hub to open its pinned session.
   void import("../message-outbox")
-    .then(({ acceptShipDigestOffer }) => {
+    .then(async ({ acceptShipDigestOffer, findShipDigestGrant }) => {
       if (
-        link.socket !== socket ||
-        hub().frozen ||
-        !loadHosts().some(
-          (host) => host.id === link.id && host.tokenHash === credential,
-        )
+        !stillAuthenticated() ||
+        !link.host.supportsWorkspaceOp("shipMonitorStatus")
       )
         return;
-      if (
-        acceptShipDigestOffer(link.id, credential, {
-          id,
-          sessionId,
-          message,
-          createdAt,
-        })
-      )
+      const workspace = findShipDigestGrant(link.id, credential, offer);
+      if (!workspace) return;
+      const status = await link.host.workspaceOps.shipMonitorStatus({
+        ...workspace,
+        monitorId: offer.monitorId,
+      });
+      if (!stillAuthenticated() || !status.ok) return;
+      const watch = status.value.watch;
+      if (watch?.sessionId !== offer.sessionId || watch.prUrl !== offer.prUrl)
+        return;
+      if (acceptShipDigestOffer(link.id, credential, offer, workspace))
         sendDown(
           link,
-          { type: "ship_pr_digest_receipt", id },
+          { type: "ship_pr_digest_receipt", id: offer.id },
           SHIP_RECEIPT_KEY,
         );
     })
@@ -2427,6 +2428,19 @@ export class RemoteHost implements Host {
   autoApproveExtension(): boolean {
     return linkFor(this.id).autoApprove;
   }
+}
+
+/** The credential on the active link, only while it still matches the registry. */
+export function getShipHostCredential(hostId: string): string | undefined {
+  if (hub().frozen) return;
+  const credential = hub().links.get(hostId)?.socket?.data.hostCredential;
+  if (
+    credential &&
+    loadHosts().some(
+      (host) => host.id === hostId && host.tokenHash === credential,
+    )
+  )
+    return credential;
 }
 
 /** `local` is this machine, reached through its daemon link (offline while none is linked); other ids must be registered hosts. */
