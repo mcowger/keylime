@@ -74,9 +74,7 @@ Use native `bun check` for typechecking and `bun fmt` for formatting. `bun run t
 
 GitHub Actions are disabled. All four workflow definitions are preserved as `.github/workflows/*.yml.disabled`; do not reactivate them or add active workflows without an explicit request. Run checks locally. `bun run release:check` runs formatting, typechecking, tests, build, and smoke verification; it does not publish or check API documentation.
 
-Live-agent features need key lime's omp build (`runner/`). Fetch the pinned omp packages first, then install
-(`bun run test` needs this too):
-`bun runner/scripts/use-omp-build.ts && cd runner && bun install --frozen-lockfile`; then build
+Root `bun install` fetches and installs the pinned OMP runner dependencies. For live-agent features, then build
 `runner/release/keylime-omp-<os>-<arch>` (`bun runner/scripts/build-binary.ts`, this machine's target).
 Session browsing and seeded UI checks work without it.
 

@@ -10,6 +10,7 @@ import {
   type RefObject,
 } from "react";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
+import { MINIMAP_WIDTH } from "@/lib/chat-layout";
 import type { AgentMessage, TextContent } from "@/lib/types";
 
 interface Props {
@@ -399,12 +400,17 @@ export const ChatMinimap = memo(function ChatMinimap({
       if (!activeRow) return;
       const row = activeRow.getBoundingClientRect();
       const bounds = rail.getBoundingClientRect();
-      const delta = row.top < bounds.top ? row.top - bounds.top :
-        row.bottom > bounds.bottom ? row.bottom - bounds.bottom : 0;
-      if (delta) rail.scrollTo({
-        top: rail.scrollTop + delta,
-        behavior: smooth && !reducedMotion ? "smooth" : "instant",
-      });
+      const delta =
+        row.top < bounds.top
+          ? row.top - bounds.top
+          : row.bottom > bounds.bottom
+            ? row.bottom - bounds.bottom
+            : 0;
+      if (delta)
+        rail.scrollTo({
+          top: rail.scrollTop + delta,
+          behavior: smooth && !reducedMotion ? "smooth" : "instant",
+        });
     };
     revealActiveRow(true);
     const resize = new ResizeObserver(() => revealActiveRow(false));
@@ -505,10 +511,11 @@ export const ChatMinimap = memo(function ChatMinimap({
         // spilling out, which let its scrollIntoView scroll the clipped chat area.
         flexDirection: "column",
         maxHeight: "100%",
-        alignItems: "center",
-        pointerEvents: "auto",
+        // Keep the rail's hit area inside the same gutter the transcript reserves.
+        width: MINIMAP_WIDTH,
+        boxSizing: "border-box",
         userSelect: "none",
-        marginRight: 8,
+        paddingLeft: 8,
       }}
     >
       {/* Floating Preview Tooltip - rendered in unclipped outer container! */}
@@ -521,7 +528,7 @@ export const ChatMinimap = memo(function ChatMinimap({
           }}
           style={{
             position: "absolute",
-            right: "calc(100% + 10px)",
+            right: "calc(100% + 2px)",
             top: tooltipTopPx,
             transform: "translateY(-50%)",
             whiteSpace: "nowrap",
@@ -572,6 +579,7 @@ export const ChatMinimap = memo(function ChatMinimap({
           // them (#251 follow-up). scrollbarWidth none keeps it clean.
           overflowY: "auto",
           scrollbarWidth: "none",
+          pointerEvents: "auto",
           cursor: "pointer",
         }}
       >

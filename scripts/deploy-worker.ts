@@ -146,6 +146,8 @@ try {
       run(["mise", "install"], scratch);
       const sourceEnv = { ...env };
       delete sourceEnv.NODE_ENV;
+      // Deployment installs runner dependencies only when it cannot reuse the binary.
+      sourceEnv.KEYLIME_SKIP_RUNNER_INSTALL = "1";
       const bun = (...args: string[]) =>
         run(["mise", "exec", "--", "bun", ...args], scratch, sourceEnv);
       bun("install", "--frozen-lockfile");
@@ -218,12 +220,7 @@ try {
           // Missing metadata or unavailable git objects require a fresh build.
         }
         if (!reusedRunner) {
-          bun("runner/scripts/use-omp-build.ts");
-          run(
-            ["mise", "exec", "--", "bun", "install", "--frozen-lockfile"],
-            path.join(scratch, "runner"),
-            sourceEnv,
-          );
+          bun("run", "install:runner");
           bun("runner/scripts/build-binary.ts");
         }
         bun("run", "build");

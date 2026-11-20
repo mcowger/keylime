@@ -3,7 +3,5 @@
  *  composer cannot drift apart. */
 export const CHAT_COLUMN_MAX_WIDTH = "var(--chat-column-width, 960px)";
 
-/** Width of the minimap strip overlaid on the right edge of the chat scroll
- *  area (desktop only). Used to constrain the centered transcript column so
- *  it never extends under the minimap on narrow viewports. */
-export const MINIMAP_WIDTH = 36;
+/** Desktop space reserved for the minimap, including its gap from the transcript. */
+export const MINIMAP_WIDTH = 60;

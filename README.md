@@ -56,8 +56,6 @@ These differences describe key lime's changes since the fork, not a comparison w
 ```bash
 mise trust && mise install
 mise exec -- bun install
-mise exec -- bun runner/scripts/use-omp-build.ts
-cd runner && mise exec -- bun install --frozen-lockfile && cd ..
 mise exec -- bun runner/scripts/build-binary.ts
 mise exec -- bun run dev
 ```

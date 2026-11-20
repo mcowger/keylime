@@ -189,6 +189,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- Root `bun install` installs the pinned OMP runner dependencies, so typechecking works without a separate runner setup step.
+- The desktop chat message indicator no longer overlaps transcript rows or their expand controls.
 - The sidebar no longer flashes the Provider Usage bar on reload when Provider usage limits is off.
 - Repos and Systems use matching sidebar headings, collapse independently, and share one search control above both sections.
 - Sidebar search reveals matches in collapsed Repos and Systems sections. Clearing the query restores their previous collapse state.
@@ -324,6 +326,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Failed commits show their full output in a scrollable area inside the Ship dialog
 - Repos and Systems use matching sidebar headings, collapse independently, and share one search control above both sections
 - Sidebar search reveals matches in collapsed Repos and Systems sections. Clearing the query restores their previous collapse state
+- The desktop chat message indicator no longer overlaps transcript rows or their expand controls
+- Root `bun install` installs the pinned OMP runner dependencies, so typechecking works without a separate runner setup step
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

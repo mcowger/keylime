@@ -14,7 +14,6 @@ but don't add compatibility layers or migrations unless explicitly requested.
 mise trust
 mise install
 bun install
-bun runner/scripts/use-omp-build.ts && (cd runner && bun install --frozen-lockfile)   # key lime's omp build; bun run test needs it too
 bun run dev   # seeded development server; prints its URL
 ```
 
@@ -23,7 +22,7 @@ The optional dev browser fixture and other live sessions need a compiled runner:
 `runner/release/keylime-omp-<os>-<arch>` by itself (`KEYLIME_OMP_BIN` overrides it).
 A stock `omp` does not speak key lime's channel.
 
-Worktrees created with the repository's Paseo setup copy ignored `runner/vendor/` packages from the source checkout before setup. If those packages are missing or do not match the worktree's pin, run `bun runner/scripts/use-omp-build.ts` and then install the runner dependencies. The runner binary is not built during worktree setup; `bun run smoke` builds it before running the smoke checks.
+Root `bun install` fetches and installs the pinned OMP runner dependencies, including in Paseo worktrees. It does not build the runner binary; `bun run smoke` builds it before running the smoke checks.
 
 To update the runner's OMP integration build:
 

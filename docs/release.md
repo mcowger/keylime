@@ -9,15 +9,13 @@ or publish a release. Do not re-enable them as part of local verification.
 ## Local release verification
 
 From the intended checkout, install the pinned Bun runtime and dependencies.
-The runner setup downloads the integration packages pinned by
-`runner/omp-build.json` and requires `unzip`:
+Root `bun install --frozen-lockfile` also installs the integration packages pinned
+in `runner/omp-build.json`. Make sure `unzip` is available before running it:
 
 ```bash
 mise trust
 mise install
 bun install --frozen-lockfile
-bun runner/scripts/use-omp-build.ts
-(cd runner && bun install --frozen-lockfile)
 ```
 
 Update API source schemas, semantics and annotations when behavior changes,

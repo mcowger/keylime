@@ -2,8 +2,7 @@
   "worktree": {
     "setup": [
       "mise trust && mise install",
-      "mise exec -- bun install --frozen-lockfile",
-      "cd runner && mise exec -- bun install --frozen-lockfile"
+      "mise exec -- bun install --frozen-lockfile"
     ]
   },
   "scripts": {
