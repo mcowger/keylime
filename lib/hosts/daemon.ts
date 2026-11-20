@@ -1,14 +1,29 @@
 import { createConnection, type Socket } from "node:net";
-import { TerminalAttachClientSchema, TerminalAttachServerSchema } from "../api-contracts/terminal-attach";
+import {
+  TerminalAttachClientSchema,
+  TerminalAttachServerSchema,
+} from "../api-contracts/terminal-attach";
 import { lstatSync, realpathSync, mkdirSync, watch } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { SpawnResult } from "./host";
 import { SessionPtyManager } from "./session-pty";
 import { Value } from "@sinclair/typebox/value";
 import { SystemsRequestSchema } from "../api-contracts/systems";
-import { BrowserListSchema, BrowserFrameSchema } from "../api-contracts/host-control-operations";
-import { BrowserControlArgsSchema, BrowserControlResultSchema } from "../api-contracts/runner-lifecycle";
-import { BrowserVideoStartArgsSchema, BrowserVideoStreamArgsSchema, BrowserVideoStartResultSchema, BrowserVideoNextResultSchema, BrowserVideoStopResultSchema } from "../api-contracts/runner-lifecycle";
+import {
+  BrowserListSchema,
+  BrowserFrameSchema,
+} from "../api-contracts/host-control-operations";
+import {
+  BrowserControlArgsSchema,
+  BrowserControlResultSchema,
+} from "../api-contracts/runner-lifecycle";
+import {
+  BrowserVideoStartArgsSchema,
+  BrowserVideoStreamArgsSchema,
+  BrowserVideoStartResultSchema,
+  BrowserVideoNextResultSchema,
+  BrowserVideoStopResultSchema,
+} from "../api-contracts/runner-lifecycle";
 import { access, constants } from "node:fs/promises";
 import { homedir } from "node:os";
 import {
@@ -67,17 +82,31 @@ import {
   SESSION_OP_PARAMS,
   type DownMessage,
   type OpenChannelRequest,
+  type ShipPrDigest,
   type UnknownMessage,
 } from "./link-protocol";
-import { localHost, prepareInteractiveLaunch, resolveSpawnCwdResult } from "./local-host";
-import { hostSocketPath, listenHostSocket, type HostSocket } from "./omp-socket";
+import {
+  localHost,
+  prepareInteractiveLaunch,
+  resolveSpawnCwdResult,
+} from "./local-host";
+import {
+  hostSocketPath,
+  listenHostSocket,
+  type HostSocket,
+} from "./omp-socket";
 import { sessionOps } from "./session-ops";
 import packageJson from "../../package.json";
 import { UploadRetention } from "./upload-retention";
 import { StagedUploads, UPLOAD_SWEEP_INTERVAL_MS } from "./uploads";
 import { isWorkspaceOp, WORKSPACE_OP_PARAMS } from "../workspace-types";
 import { createWorkspaceService, type WorkspaceService } from "./workspace-ops";
-import { startShipWatcher, stopShipWatcher } from "./workspace-ship";
+import {
+  acceptShipDigestReceipt,
+  removeShipMonitorsForSession,
+  startShipWatcher,
+  stopShipWatcher,
+} from "./workspace-ship";
 import {
   grantWorkspaceRoot,
   invalidateWorkspaceRoots,
@@ -121,7 +150,6 @@ function sessionsPath(value: unknown): string {
   }
   return target;
 }
-
 
 /** Whether `command` names an executable: a path as given, else a name on PATH. */
 async function commandExists(command: string): Promise<boolean> {
@@ -173,6 +201,8 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     initial[0]?.url
   )?.replace(/\/+$/, "");
   const links = new Map<string, DaemonLink>();
+  const shipOwners = new Map<string, DaemonLink>();
+  const shipOwnerByLink = new WeakMap<DaemonLink, string>();
   const ended = new Map<string, string>();
   const services = new Map<string, WorkspaceService>();
   const uploadOwners = new Map<string, { link: DaemonLink; attempt: string }>();
@@ -232,19 +262,38 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   });
   const socketPath = options.hostSocket ?? hostSocketPath();
   const attached = new Set<string>();
-  const ptys = new SessionPtyManager(socketPath + ".attach", (runtimeId, on) => {
-    if (on) attached.add(runtimeId);
-    else attached.delete(runtimeId);
-    channels.setTerminalAttached(runtimeId, on);
-  });
+  const ptys = new SessionPtyManager(
+    socketPath + ".attach",
+    (runtimeId, on) => {
+      if (on) attached.add(runtimeId);
+      else attached.delete(runtimeId);
+      channels.setTerminalAttached(runtimeId, on);
+    },
+  );
   const ptyStarted = ptys.start();
-  const ptyAttachments = new Map<string, { link: DaemonLink; sessionId: string; socket: Socket }>();
+  const ptyAttachments = new Map<
+    string,
+    { link: DaemonLink; sessionId: string; socket: Socket }
+  >();
   function closePtyAttachments(link: DaemonLink): void {
-    for (const [id, attachment] of ptyAttachments) if (attachment.link === link) { ptyAttachments.delete(id); attachment.socket.destroy(); }
+    for (const [id, attachment] of ptyAttachments)
+      if (attachment.link === link) {
+        ptyAttachments.delete(id);
+        attachment.socket.destroy();
+      }
   }
-  function ptyFrame(link: DaemonLink, id: string, sessionId: string, payload: string): void {
+  function ptyFrame(
+    link: DaemonLink,
+    id: string,
+    sessionId: string,
+    payload: string,
+  ): void {
     let message: unknown;
-    try { message = JSON.parse(payload); } catch { return; }
+    try {
+      message = JSON.parse(payload);
+    } catch {
+      return;
+    }
     if (!Value.Check(TerminalAttachClientSchema, message)) return;
     let attachment = ptyAttachments.get(id);
     if (!attachment) {
@@ -256,30 +305,81 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       socket.setEncoding("utf8");
       socket.on("data", (chunk: string) => {
         buffer += chunk;
-        if (buffer.length > 8000000) { socket.destroy(); link.abortTerminalLink(); return; }
+        if (buffer.length > 8000000) {
+          socket.destroy();
+          link.abortTerminalLink();
+          return;
+        }
         let end: number;
         while ((end = buffer.indexOf("\n")) !== -1) {
-          const line = buffer.slice(0, end); buffer = buffer.slice(end + 1);
+          const line = buffer.slice(0, end);
+          buffer = buffer.slice(end + 1);
           try {
             const event: unknown = JSON.parse(line);
-            if (!Value.Check(TerminalAttachServerSchema, event) || !link.terminalEvent(id, line)) { socket.destroy(); link.abortTerminalLink(); return; }
-          } catch { socket.destroy(); link.abortTerminalLink(); return; }
+            if (
+              !Value.Check(TerminalAttachServerSchema, event) ||
+              !link.terminalEvent(id, line)
+            ) {
+              socket.destroy();
+              link.abortTerminalLink();
+              return;
+            }
+          } catch {
+            socket.destroy();
+            link.abortTerminalLink();
+            return;
+          }
         }
       });
       socket.on("error", () => {});
       socket.on("close", () => {
         if (ptyAttachments.get(id)?.socket !== socket) return;
         ptyAttachments.delete(id);
-        if (!link.terminalEvent(id, JSON.stringify({ type: "error", message: "Terminal attachment closed" }))) link.abortTerminalLink();
+        if (
+          !link.terminalEvent(
+            id,
+            JSON.stringify({
+              type: "error",
+              message: "Terminal attachment closed",
+            }),
+          )
+        )
+          link.abortTerminalLink();
       });
-      socket.write(JSON.stringify({ type: "hello", sessionId, cols: message.cols, rows: message.rows }) + "\n");
+      socket.write(
+        JSON.stringify({
+          type: "hello",
+          sessionId,
+          cols: message.cols,
+          rows: message.rows,
+        }) + "\n",
+      );
       return;
     }
-    if (attachment.link !== link || attachment.sessionId !== sessionId || message.type === "hello") return;
-    if (attachment.socket.writableLength + Buffer.byteLength(payload) > 262144) { attachment.socket.destroy(); link.abortTerminalLink(); return; }
+    if (
+      attachment.link !== link ||
+      attachment.sessionId !== sessionId ||
+      message.type === "hello"
+    )
+      return;
+    if (
+      attachment.socket.writableLength + Buffer.byteLength(payload) >
+      262144
+    ) {
+      attachment.socket.destroy();
+      link.abortTerminalLink();
+      return;
+    }
     attachment.socket.write(payload + "\n");
   }
-  const pendingPtys = new Map<number, { resolve(spawned: SpawnResult): void; reject(error: Error): void; kill(): void }>();
+  const pendingPtys = new Map<
+    number,
+    {
+      resolve(spawned: SpawnResult): void;
+      reject(error: Error): void;
+      kill(): void;
+    }
+  >();
   const channels = new ChannelTable({
     spawn: async (launch) => {
       if (!launch.sessionFile) {
@@ -336,17 +436,40 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         await config.ensure(launch.configVersion, launch.credentialsServer);
       }
       await ptyStarted;
-      if (!(await hostSocket)) throw new Error("Host socket is unavailable for terminal launch");
+      if (!(await hostSocket))
+        throw new Error("Host socket is unavailable for terminal launch");
       if (stopped) throw new Error("Host is stopping");
-      const prepared = await prepareInteractiveLaunch({ ...launch, cwd: resolved.cwd }, { ...env, KEYLIME_HOST_SOCKET: socketPath });
+      const prepared = await prepareInteractiveLaunch(
+        { ...launch, cwd: resolved.cwd },
+        { ...env, KEYLIME_HOST_SOCKET: socketPath },
+      );
       if (stopped) throw new Error("Host is stopping");
       const runtimeId = randomUUID();
-      const child = ptys.spawn({ runtimeId, argv: prepared.argv, cwd: prepared.cwd, env: prepared.env });
+      const child = ptys.spawn({
+        runtimeId,
+        argv: prepared.argv,
+        cwd: prepared.cwd,
+        env: prepared.env,
+      });
       const handshake = Promise.withResolvers<SpawnResult>();
-      pendingPtys.set(child.pid, { resolve: handshake.resolve, reject: handshake.reject, kill: () => child.kill(true) });
-      const timeout = setTimeout(() => handshake.reject(new Error("Timed out waiting for the terminal runner to connect")), LINK_LIMITS.channelReadyMs);
+      pendingPtys.set(child.pid, {
+        resolve: handshake.resolve,
+        reject: handshake.reject,
+        kill: () => child.kill(true),
+      });
+      const timeout = setTimeout(
+        () =>
+          handshake.reject(
+            new Error("Timed out waiting for the terminal runner to connect"),
+          ),
+        LINK_LIMITS.channelReadyMs,
+      );
       timeout.unref?.();
-      void child.exited.then((code) => handshake.reject(new Error(`Terminal runner exited before connecting (${code})`)));
+      void child.exited.then((code) =>
+        handshake.reject(
+          new Error(`Terminal runner exited before connecting (${code})`),
+        ),
+      );
       try {
         const connected = await handshake.promise;
         const socket = connected.transport;
@@ -360,7 +483,12 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
             ...socket,
             id: runtimeId,
             killTree: (force: boolean) => child.kill(force),
-            onExit: (listener: (code: number | null, signal: NodeJS.Signals | null) => void) => {
+            onExit: (
+              listener: (
+                code: number | null,
+                signal: NodeJS.Signals | null,
+              ) => void,
+            ) => {
               void child.exited.then((code) => listener(code, null));
             },
           },
@@ -484,34 +612,32 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     },
   };
   setWorkspaceDeletionAdapter(processes);
-  const hostSocket: Promise<HostSocket | undefined> =
-    listenHostSocket(socketPath, {
-          adopt: async (spawned, launch, sessionId) => {
-            const pending = pendingPtys.get(Number(spawned.transport.id));
-            if (pending) {
-              pendingPtys.delete(Number(spawned.transport.id));
-              pending.resolve(spawned);
-              return;
-            }
-            if (stopped)
-              throw new HostOpError(
-                503,
-                "host_stopping",
-                "This host is stopping",
-              );
-            if (drained)
-              throw new HostOpError(
-                409,
-                "host_drained",
-                "This host is locally drained for maintenance",
-              );
-            return channels.adopt(spawned, launch, sessionId);
-          },
-          log,
-        }).catch((error) => {
-          log("omps started from a TUI cannot attach: " + reason(error));
-          return undefined;
-        });
+  const hostSocket: Promise<HostSocket | undefined> = listenHostSocket(
+    socketPath,
+    {
+      adopt: async (spawned, launch, sessionId) => {
+        const pending = pendingPtys.get(Number(spawned.transport.id));
+        if (pending) {
+          pendingPtys.delete(Number(spawned.transport.id));
+          pending.resolve(spawned);
+          return;
+        }
+        if (stopped)
+          throw new HostOpError(503, "host_stopping", "This host is stopping");
+        if (drained)
+          throw new HostOpError(
+            409,
+            "host_drained",
+            "This host is locally drained for maintenance",
+          );
+        return channels.adopt(spawned, launch, sessionId);
+      },
+      log,
+    },
+  ).catch((error) => {
+    log("omps started from a TUI cannot attach: " + reason(error));
+    return undefined;
+  });
   const uploads = new StagedUploads((ack) => {
     const link = uploadAttempts.get(ack.id + ":" + ack.attempt);
     link?.queue({ type: "upload_ack", ...ack }, "up:" + ack.id);
@@ -607,7 +733,13 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   }
   const capacityTimer = setInterval(reportCapacity, 5_000);
   capacityTimer.unref?.();
-  startShipWatcher(sessionsChanged);
+  startShipWatcher(sessionsChanged, offerShipDigest);
+
+  function offerShipDigest(owner: string, digest: ShipPrDigest): void {
+    const link = shipOwners.get(owner);
+    if (!stopped && link?.isUp())
+      link.queue({ type: "ship_pr_digest", ...digest }, "ship-pr-digest");
+  }
 
   function sessionsChanged(): void {
     localHost.invalidateSessionLists();
@@ -647,6 +779,9 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   }
   /** Stops a removed link's workspace service (tracked so shutdown awaits it) and frees its upload ownership so other servers can take those uploads. */
   function dropLink(link: DaemonLink): void {
+    const shipOwner = shipOwnerByLink.get(link);
+    if (shipOwner && shipOwners.get(shipOwner) === link)
+      shipOwners.delete(shipOwner);
     const service = services.get(link.id);
     services.delete(link.id);
     if (service) {
@@ -664,6 +799,12 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       if (owner === link) uploadAttempts.delete(key);
   }
   function makeLink(login: HostLink, primary: boolean): DaemonLink {
+    // The bearer identifies a configured server relationship, not just an address.
+    const shipOwner = createHash("sha256")
+      .update(
+        JSON.stringify(["keylime-ship-server-v1", login.url, login.token]),
+      )
+      .digest("hex");
     const link = new DaemonLink(login, "l" + ++linkId, {
       allowHttp: options.allowHttp,
       primary,
@@ -749,11 +890,19 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     });
     services.set(
       link.id,
-      createWorkspaceService(uploads, (id, epoch, event) =>
-        link.queue({ type: "workspace_file", id, epoch, event }, "watch:" + id),
+      createWorkspaceService(
+        uploads,
+        (id, epoch, event) =>
+          link.queue(
+            { type: "workspace_file", id, epoch, event },
+            "watch:" + id,
+          ),
+        { shipOwner },
       ),
     );
     links.set(login.url, link);
+    shipOwners.set(shipOwner, link);
+    shipOwnerByLink.set(link, shipOwner);
     return link;
   }
 
@@ -789,10 +938,8 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     for (const [url, link] of links) {
       const login = wanted.get(url);
       if (login?.token === link.login.token) continue;
-      if (login) {
-        link.rekey(login.token);
-        continue;
-      }
+      // A replacement credential must not replay the previous link's queued digests.
+      // Do not rekey this transport in place: its sequence windows and outbox survive a redial.
       links.delete(url);
       channels.linkGone(link);
       dropLink(link);
@@ -824,6 +971,12 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   ): void {
     try {
       switch (message.type) {
+        case "ship_pr_digest_receipt": {
+          const shipOwner = shipOwnerByLink.get(link);
+          if (shipOwner && shipOwners.get(shipOwner) === link && link.isUp())
+            acceptShipDigestReceipt(shipOwner, message.id);
+          return;
+        }
         case "pty_attach":
           ptyFrame(link, message.id, message.sessionId, message.payload);
           return;
@@ -923,7 +1076,13 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     // Putting this host's own configuration back is not new work: a drained member can still leave its cluster.
     if (
       drained &&
-      !["closeFile", "unwatchFile", "cancelClone", "close", "ptySessions"].includes(op) &&
+      ![
+        "closeFile",
+        "unwatchFile",
+        "cancelClone",
+        "close",
+        "ptySessions",
+      ].includes(op) &&
       !(op === "clusterConfig" && args.action === "restore")
     ) {
       throw new HostOpError(
@@ -933,6 +1092,15 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       );
     }
     if (isWorkspaceOp(op)) {
+      if (
+        (op === "startShip" || op === "stopShipMonitor") &&
+        (!link.isUp() || links.get(link.login.url) !== link)
+      )
+        throw new HostOpError(
+          403,
+          "link_not_authenticated",
+          "The server link is no longer authenticated",
+        );
       if (op === "terminals" || op === "systems") {
         try {
           const input = args.input;
@@ -1036,35 +1204,110 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         return ptys.listSessions();
       case "browserList":
       case "browserCapture": {
-        if (typeof args.sessionId !== "string" || !isValidSessionId(args.sessionId) ||
-          (op === "browserCapture" && (typeof args.tabId !== "string" || args.tabId.length === 0 || args.tabId.length > 1024)))
-          throw new HostOpError(400, "invalid_request", "Invalid browser request");
-        const result = await channels.browserCommand(args.sessionId, op === "browserCapture" ? args.tabId as string : undefined);
-        if (!Value.Check(op === "browserList" ? BrowserListSchema : BrowserFrameSchema, result))
-          throw new HostOpError(502, "invalid_browser_result", "Invalid browser result from runner");
+        if (
+          typeof args.sessionId !== "string" ||
+          !isValidSessionId(args.sessionId) ||
+          (op === "browserCapture" &&
+            (typeof args.tabId !== "string" ||
+              args.tabId.length === 0 ||
+              args.tabId.length > 1024))
+        )
+          throw new HostOpError(
+            400,
+            "invalid_request",
+            "Invalid browser request",
+          );
+        const result = await channels.browserCommand(
+          args.sessionId,
+          op === "browserCapture" ? (args.tabId as string) : undefined,
+        );
+        if (
+          !Value.Check(
+            op === "browserList" ? BrowserListSchema : BrowserFrameSchema,
+            result,
+          )
+        )
+          throw new HostOpError(
+            502,
+            "invalid_browser_result",
+            "Invalid browser result from runner",
+          );
         return result;
       }
       case "browserVideoStart":
       case "browserVideoNext":
       case "browserVideoStop": {
-        const kind = op === "browserVideoStart" ? "start" : op === "browserVideoNext" ? "next" : "stop";
-        const argsSchema = kind === "start" ? BrowserVideoStartArgsSchema : BrowserVideoStreamArgsSchema;
-        if (typeof args.sessionId !== "string" || !isValidSessionId(args.sessionId) || !Value.Check(argsSchema, args.input))
-          throw new HostOpError(400, "invalid_request", "Invalid browser video request");
-        const result = await channels.browserVideo(args.sessionId, kind, args.input as { id: string; streamId?: string });
-        const resultSchema = kind === "start" ? BrowserVideoStartResultSchema : kind === "next" ? BrowserVideoNextResultSchema : BrowserVideoStopResultSchema;
+        const kind =
+          op === "browserVideoStart"
+            ? "start"
+            : op === "browserVideoNext"
+              ? "next"
+              : "stop";
+        const argsSchema =
+          kind === "start"
+            ? BrowserVideoStartArgsSchema
+            : BrowserVideoStreamArgsSchema;
+        if (
+          typeof args.sessionId !== "string" ||
+          !isValidSessionId(args.sessionId) ||
+          !Value.Check(argsSchema, args.input)
+        )
+          throw new HostOpError(
+            400,
+            "invalid_request",
+            "Invalid browser video request",
+          );
+        const result = await channels.browserVideo(
+          args.sessionId,
+          kind,
+          args.input as { id: string; streamId?: string },
+        );
+        const resultSchema =
+          kind === "start"
+            ? BrowserVideoStartResultSchema
+            : kind === "next"
+              ? BrowserVideoNextResultSchema
+              : BrowserVideoStopResultSchema;
         if (!Value.Check(resultSchema, result))
-          throw new HostOpError(502, "invalid_browser_result", "Invalid browser video result from runner");
-        if (kind === "next" && Value.Check(BrowserVideoNextResultSchema, result) && result.packets.reduce((n, packet) => n + packet.data.length, 0) > 512 * 1024)
-          throw new HostOpError(502, "invalid_browser_result", "Invalid browser video result from runner");
+          throw new HostOpError(
+            502,
+            "invalid_browser_result",
+            "Invalid browser video result from runner",
+          );
+        if (
+          kind === "next" &&
+          Value.Check(BrowserVideoNextResultSchema, result) &&
+          result.packets.reduce((n, packet) => n + packet.data.length, 0) >
+            512 * 1024
+        )
+          throw new HostOpError(
+            502,
+            "invalid_browser_result",
+            "Invalid browser video result from runner",
+          );
         return result;
       }
       case "browserControl": {
-        if (typeof args.sessionId !== "string" || !isValidSessionId(args.sessionId) || !Value.Check(BrowserControlArgsSchema, args.control))
-          throw new HostOpError(400, "invalid_request", "Invalid browser request");
-        const result = await channels.browserControl(args.sessionId, args.control);
+        if (
+          typeof args.sessionId !== "string" ||
+          !isValidSessionId(args.sessionId) ||
+          !Value.Check(BrowserControlArgsSchema, args.control)
+        )
+          throw new HostOpError(
+            400,
+            "invalid_request",
+            "Invalid browser request",
+          );
+        const result = await channels.browserControl(
+          args.sessionId,
+          args.control,
+        );
         if (!Value.Check(BrowserControlResultSchema, result))
-          throw new HostOpError(502, "invalid_browser_result", "Invalid browser result from runner");
+          throw new HostOpError(
+            502,
+            "invalid_browser_result",
+            "Invalid browser result from runner",
+          );
         return result;
       }
       case "open":
@@ -1099,7 +1342,10 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
                 ])
               : sessionOps.archiveSession(id),
         );
-        if (!(isRecord(result) && result.ok === false)) sessionsChanged();
+        if (isRecord(result) && result.ok === true) {
+          removeShipMonitorsForSession(args.id);
+          sessionsChanged();
+        }
         return result;
       }
       case "sessionFileExists":

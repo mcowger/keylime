@@ -75,6 +75,7 @@ import {
   startShip,
   shipStatus,
   shipFinish,
+  stopShipMonitor,
 } from "./workspace-ship";
 import {
   createWorkspace,
@@ -283,6 +284,7 @@ async function bashPath(sessionId: string, requested: string): Promise<string> {
     throw new HostOpError(403, "access_denied", "Access denied");
   return resolved;
 }
+
 export interface WorkspaceService {
   ops: Omit<WorkspaceOps, "terminals" | "systems">;
   busy(): boolean;
@@ -293,6 +295,7 @@ export interface WorkspaceService {
 export function createWorkspaceService(
   uploads: StagedUploads,
   emit: (id: string, epoch: string, event: WorkspaceFileEvent) => void,
+  { shipOwner }: { shipOwner?: string } = {},
 ): WorkspaceService {
   recoverWorkspaceCreation();
   const reads = new WorkspaceReads();
@@ -305,7 +308,17 @@ export function createWorkspaceService(
   const ops: WorkspaceService["ops"] = {
     hierarchy: hierarchyOperation,
     shipPreview: (input) => result(() => shipPreview(input)),
-    startShip: (input) => result(() => startShip(input)),
+    startShip: (input) => result(() => startShip(input, shipOwner)),
+    stopShipMonitor: (input) =>
+      result(async () => {
+        if (!shipOwner)
+          throw new HostOpError(
+            403,
+            "access_denied",
+            "No authenticated server link",
+          );
+        return stopShipMonitor(input, shipOwner);
+      }),
     shipStatus: (id) => result(() => shipStatus(id)),
     shipFinish: (input) => result(() => shipFinish(input)),
     createWorkspace: (input) => result(() => createWorkspace(input)),
@@ -453,7 +466,8 @@ export function createWorkspaceService(
         }
         worktrees = worktrees.filter(
           (tree) =>
-            !isEffortPath(tree.path) && !fs.lstatSync(tree.path).isSymbolicLink(),
+            !isEffortPath(tree.path) &&
+            !fs.lstatSync(tree.path).isSymbolicLink(),
         );
         for (const tree of worktrees) grantWorkspaceRoot(tree.path);
         return {

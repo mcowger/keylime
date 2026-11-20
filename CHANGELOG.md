@@ -7,6 +7,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ## [Unreleased]
 
 ### Added
+- Ship can monitor a PR for new comments and reviews and send feedback links to the chat that shipped it. Stop monitoring from the sidebar PR pill.
 - Subagent previews show the model and effort as `model-slug:effort` when effort is reported.
 - **Systems** group repos, service commands, and shared instructions on one host. Create an **Effort** to get a branch and worktree for each repo, a root chat, and one terminal per service. Preview cleanup before removing worktrees; branches and PRs stay put.
 - The sidebar shows worktree setup and cleanup progress even after you close Manage workspaces.

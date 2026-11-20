@@ -6,6 +6,10 @@ import { createHash, createHmac, randomBytes } from "node:crypto";
 import { join } from "path";
 import { Database } from "bun:sqlite";
 import { commandErrorResponse, runAgentCommand } from "./agent-command";
+import {
+  SHIP_DIGEST_RETRY_MS,
+  type ShipPrDigest,
+} from "./api-contracts/host-schemas";
 import { apiErrorResponse, resolveSessionHostOr404 } from "./api-utils";
 import {
   getHost,
@@ -15,6 +19,7 @@ import {
 } from "./hosts/hub";
 import { isLinkUp } from "./hosts/host";
 import { HostOpError } from "./hosts/link-protocol";
+import { readHosts } from "./hosts/registry";
 import { STAGED_MAX_AGE_MS } from "./hosts/uploads";
 import {
   validateAgentImages,
@@ -64,14 +69,18 @@ const MODES: Record<OutboxMode, true> = {
   steer: true,
 };
 
-const COLUMNS =
+const BASE_COLUMNS =
   "id, session_id, mode, message, images, uploads, owner, advisor, state, error, may_have_been_sent, created_at, upload_receipts, previous_entry_ids, source_session_id, settlement, replacement_id, replacement_digest, payload_bytes";
+const COLUMNS = `${BASE_COLUMNS}, source_host_id, source_host_credential, ship_offer_digest`;
 
 /** `owner`: the web session whose uploads the entry attaches; `advisor`: the chat's spawn flag at Send. */
 interface Row {
   id: string;
   session_id: string;
   source_session_id: string;
+  source_host_id: string | null;
+  source_host_credential: string | null;
+  ship_offer_digest: string | null;
   mode: OutboxMode;
   message: string;
   images: string | null;
@@ -181,6 +190,9 @@ function db(): Database {
           ["settlement", "TEXT"],
           ["replacement_id", "TEXT"],
           ["replacement_digest", "TEXT"],
+          ["source_host_id", "TEXT"],
+          ["source_host_credential", "TEXT"],
+          ["ship_offer_digest", "TEXT"],
         ]) {
           if (!columns.some((column) => column.name === name))
             database.exec(`ALTER TABLE entries ADD COLUMN ${name} ${type}`);
@@ -597,9 +609,9 @@ function publish(sessionId: string): void {
     // Native identity moves keep old registry keys. Ordinary branch/switch drops them and cannot migrate other rows.
     db()
       .prepare(
-        `UPDATE entries SET session_id = ? WHERE session_id IN (${slots(keys)}) AND session_id != ?`,
+        `UPDATE entries SET session_id = ? WHERE session_id IN (${slots(keys)}) AND session_id != ? AND (source_host_id IS NULL OR source_host_id = ?)`,
       )
-      .run(canonical, ...keys, canonical);
+      .run(canonical, ...keys, canonical, getRpcSession(sessionId)!.host.id);
   }
   for (const watched of [...outbox().listeners.keys()])
     notifyListeners(watched);
@@ -752,6 +764,104 @@ function confirmedReplacementId(
       original.replacement_id === entry.replacement_id)
     ? value
     : undefined;
+}
+
+function outboxHasRoom(
+  database: Database,
+  keys: string[],
+  bytes: number,
+  replaced: Row | null,
+): boolean {
+  const replacedBytes = replaced?.payload_bytes ?? 0;
+  const total = database
+    .prepare(
+      `SELECT COALESCE(SUM(payload_bytes), 0) AS bytes FROM entries WHERE ${entrySessionMatch(keys)} AND state != 'delivered'`,
+    )
+    .get(...keys, ...keys, ...keys) as { bytes: number };
+  if (total.bytes - replacedBytes + bytes > MAX_OUTBOX_BYTES - 64 * 1024)
+    return false;
+  const global = database
+    .prepare(
+      "SELECT COALESCE(SUM(payload_bytes), 0) AS bytes, COUNT(*) AS count FROM entries WHERE state != 'delivered'",
+    )
+    .get() as { bytes: number; count: number };
+  return (
+    global.bytes - replacedBytes + bytes <= MAX_GLOBAL_OUTBOX_BYTES &&
+    global.count - (replaced ? 1 : 0) < MAX_GLOBAL_OUTBOX_ENTRIES
+  );
+}
+
+/** Host-link only. Both routing fields come from the authenticated socket, never an outbox command. */
+export function acceptShipDigestOffer(
+  hostId: string,
+  credential: string,
+  offer: ShipPrDigest,
+): boolean {
+  const { id, sessionId, message, createdAt } = offer;
+  const now = Date.now();
+  if (createdAt > now + 5 * 60_000 || now - createdAt >= SHIP_DIGEST_RETRY_MS)
+    return false;
+  const proof = createHash("sha256")
+    .update(
+      JSON.stringify([hostId, credential, id, sessionId, createdAt, message]),
+    )
+    .digest("hex");
+  const payloadBytes = Buffer.byteLength(JSON.stringify(offer)) + 8192;
+  const database = db();
+  const accept = database.transaction(() => {
+    // This remains comparable even after the existing outbox retires and clears the message.
+    const existing = row(id);
+    if (existing)
+      return existing.ship_offer_digest === proof ? "existing" : "conflict";
+    if (!outboxHasRoom(database, sessionKeys(sessionId), payloadBytes, null))
+      return "full";
+    const wrapper = getRpcSession(sessionId);
+    const advisor =
+      wrapper?.host.id === hostId && wrapper.advisorSpawned ? 1 : 0;
+    database
+      .prepare(
+        `INSERT INTO entries (
+      id, session_id, source_session_id, mode, message, owner, advisor, state,
+      may_have_been_sent, created_at, payload_bytes, source_host_id, source_host_credential, ship_offer_digest
+    ) VALUES (?, ?, ?, 'followUp', ?, ?, ?, 'held', 0, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        id,
+        sessionId,
+        sessionId,
+        message,
+        `ship:${hostId}`,
+        advisor,
+        now,
+        payloadBytes,
+        hostId,
+        credential,
+        proof,
+      );
+    return "inserted";
+  });
+  // A receipt may let the daemon discard its copy, so sync this commit before acknowledging it.
+  database.exec("PRAGMA synchronous = FULL");
+  let result;
+  try {
+    result = accept.immediate();
+  } finally {
+    database.exec("PRAGMA synchronous = NORMAL");
+  }
+  if (result === "inserted") {
+    // The commit, not notification or dispatch success, decides whether to send a receipt.
+    queueMicrotask(() => {
+      try {
+        publish(sessionId);
+      } catch (error) {
+        console.warn(
+          `[keylime] outbox: unable to publish Ship digest: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      pumpOutbox(sessionId);
+    });
+  }
+  return result === "inserted" || result === "existing";
 }
 
 /** `outbox_add` / `outbox_remove` for `sessionId`, as runAgentCommand answers them. */
@@ -920,6 +1030,12 @@ export async function runOutboxCommand(
         const original = typeof replaces === "string" ? row(replaces) : null;
         const matchesSession =
           original !== null && entryBelongsToSession(original, sessionId);
+        if (original?.source_host_id && matchesSession && uploadPayload)
+          throw new UploadError(
+            409,
+            "outbox_replacement_conflict",
+            "A Ship digest retry cannot attach uploads",
+          );
         if (original && matchesSession && original.replacement_id) {
           if (original.replacement_digest !== retryDigest)
             throw new UploadError(
@@ -935,7 +1051,7 @@ export async function runOutboxCommand(
             .run(settledAt, original.id, original.replacement_id);
           database
             .prepare(
-              `INSERT INTO entries (${COLUMNS}, done_at) VALUES (?, ?, ?, '', NULL, NULL, ?, ?, 'delivered', NULL, 0, ?, NULL, NULL, ?, 'none', ?, NULL, 0, ?)`,
+              `INSERT INTO entries (${BASE_COLUMNS}, done_at) VALUES (?, ?, ?, '', NULL, NULL, ?, ?, 'delivered', NULL, 0, ?, NULL, NULL, ?, 'none', ?, NULL, 0, ?)`,
             )
             .run(
               id,
@@ -1046,31 +1162,11 @@ export async function runOutboxCommand(
           : null;
         const payloadBytes =
           entryBytes + (savedUploads ? Buffer.byteLength(savedUploads) : 0);
-        const replacedBytes = replaceable?.payload_bytes ?? 0;
-        const total = database
-          .prepare(
-            `SELECT COALESCE(SUM(payload_bytes), 0) AS bytes FROM entries WHERE ${entrySessionMatch(keys)} AND state != 'delivered'`,
-          )
-          .get(...keys, ...keys, ...keys) as { bytes: number };
-        if (
-          total.bytes - replacedBytes + payloadBytes >
-          MAX_OUTBOX_BYTES - 64 * 1024
-        )
-          return { kind: "full" };
-        const global = database
-          .prepare(
-            "SELECT COALESCE(SUM(payload_bytes), 0) AS bytes, COUNT(*) AS count FROM entries WHERE state != 'delivered'",
-          )
-          .get() as { bytes: number; count: number };
-        if (
-          global.bytes - replacedBytes + payloadBytes >
-            MAX_GLOBAL_OUTBOX_BYTES ||
-          global.count - (replaceable ? 1 : 0) >= MAX_GLOBAL_OUTBOX_ENTRIES
-        )
+        if (!outboxHasRoom(database, keys, payloadBytes, replaceable))
           return { kind: "full" };
         database
           .prepare(
-            `INSERT INTO entries (${COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'held', NULL, 0, ?, ?, NULL, ?, NULL, NULL, ?, ?)`,
+            `INSERT INTO entries (${BASE_COLUMNS}, source_host_id, source_host_credential) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'held', NULL, 0, ?, ?, NULL, ?, NULL, NULL, ?, ?, ?, ?)`,
           )
           .run(
             id,
@@ -1086,6 +1182,8 @@ export async function runOutboxCommand(
             sessionId,
             retryDigest,
             payloadBytes,
+            matchesSession ? (original?.source_host_id ?? null) : null,
+            matchesSession ? (original?.source_host_credential ?? null) : null,
           );
         let retiredRoot = replaceable;
         if (replaceable) retire(replaceable.id, "none", id, retryDigest);
@@ -1100,7 +1198,7 @@ export async function runOutboxCommand(
         } else if (!original && typeof replaces === "string") {
           database
             .prepare(
-              `INSERT INTO entries (${COLUMNS}, done_at) VALUES (?, ?, ?, '', NULL, NULL, ?, ?, 'delivered', NULL, 0, ?, NULL, NULL, ?, 'none', ?, ?, 0, ?)`,
+              `INSERT INTO entries (${BASE_COLUMNS}, done_at) VALUES (?, ?, ?, '', NULL, NULL, ?, ?, 'delivered', NULL, 0, ?, NULL, NULL, ?, 'none', ?, ?, 0, ?)`,
             )
             .run(
               replaces,
@@ -1538,6 +1636,16 @@ function onChildExit(wrapper: AgentSessionWrapper, event: AgentEvent): void {
  * "offline" when the host is down (every entry waits for its next hello), "wait" when a timer or a restore resumes it. */
 type Outcome = "next" | "wait" | "offline";
 
+function sourceHost(entry: Row) {
+  return readHosts().some(
+    (host) =>
+      host.id === entry.source_host_id &&
+      host.tokenHash === entry.source_host_credential,
+  )
+    ? getHost(entry.source_host_id!)
+    : null;
+}
+
 async function deliver(entry: Row): Promise<Outcome> {
   const sessionId = entry.session_id;
   if (entry.uploads && Date.now() - entry.created_at > STAGED_MAX_AGE_MS) {
@@ -1545,12 +1653,25 @@ async function deliver(entry: Row): Promise<Outcome> {
     return fail(entry, "The attached files are gone: attach them again", false);
   }
   // Start (or join) the session's omp first, as any command would, so the echo watch is on the wrapper that gets it.
+  if (entry.source_host_id) {
+    const host = sourceHost(entry);
+    if (!host)
+      return fail(
+        entry,
+        "The host that offered this Ship digest is no longer linked",
+        false,
+      );
+    if (!isLinkUp(host.status())) return "offline";
+  }
   const priorWrapper = getRpcSession(sessionId);
   const generation = priorWrapper?.getMessageCommandGeneration() ?? 0;
   const competingPending = priorWrapper?.hasPendingMessageCommands() ?? false;
   const started = await runAgentCommand(
     sessionId,
-    { type: "get_state" },
+    {
+      type: "get_state",
+      ...(entry.source_host_id ? { hostId: entry.source_host_id } : {}),
+    },
     entry.advisor === 1,
     entry.owner,
   );
@@ -1563,6 +1684,8 @@ async function deliver(entry: Row): Promise<Outcome> {
     return "next";
   if (!started.ok) return refused(current, started, false);
   if (!wrapper?.isAlive()) return retry(current);
+  if (current.source_host_id && wrapper.host.id !== current.source_host_id)
+    return retry(current);
   const baseline = (await started.json()) as {
     data?: { queuedMessages?: unknown; supportsClientMessageIds?: boolean };
   };
@@ -1755,13 +1878,15 @@ async function deliver(entry: Row): Promise<Outcome> {
   publish(sessionId);
   try {
     // attachUploads mutates this same command before writing it: the watcher matches the final attachment block too.
-    const response = await runAgentCommand(
-      sessionId,
-      command,
-      current.advisor === 1,
-      current.owner,
-      uploadReceipts,
-    );
+    const response = current.source_host_id
+      ? await sendPinnedShipDigest(current, sessionId, wrapper, command)
+      : await runAgentCommand(
+          sessionId,
+          command,
+          current.advisor === 1,
+          current.owner,
+          uploadReceipts,
+        );
     if (!response.ok) {
       // Nothing was written: a gone child is retried, and any other refusal is classified as not sent.
       const written = nativeWriteStarted(command);
@@ -1794,6 +1919,51 @@ async function deliver(entry: Row): Promise<Outcome> {
   } finally {
     preparing.delete(current.id);
     replacement.stop();
+  }
+}
+
+async function sendPinnedShipDigest(
+  entry: Row,
+  sessionId: string,
+  wrapper: AgentSessionWrapper,
+  command: Record<string, unknown>,
+): Promise<Response> {
+  try {
+    const host = sourceHost(entry);
+    if (!host || !isLinkUp(host.status()))
+      throw new HostOpError(
+        503,
+        "host_offline",
+        "The host that offered this Ship digest is offline",
+      );
+    const sessionFile = wrapper.sessionFile;
+    if (!(await host.sessionFileExists(sessionFile)))
+      throw new HostOpError(
+        404,
+        "session_not_found",
+        "Session not found on the host that offered this Ship digest",
+      );
+    if (
+      getRpcSession(sessionId) !== wrapper ||
+      wrapper.sessionFile !== sessionFile ||
+      wrapper.host !== host ||
+      !wrapper.isAlive()
+    )
+      throw new HostOpError(
+        409,
+        "session_busy",
+        "Session changed before the Ship digest could be sent",
+      );
+    if (sourceHost(entry) !== host || !isLinkUp(host.status()))
+      throw new HostOpError(
+        503,
+        "host_offline",
+        "The host that offered this Ship digest is offline",
+      );
+    // Unlike a browser command, never discover a different wrapper or spawn another one at the final write.
+    return Response.json({ success: true, data: await wrapper.send(command) });
+  } catch (error) {
+    return commandErrorResponse(error);
   }
 }
 
@@ -1861,6 +2031,8 @@ async function refused(
   if (body.hostOffline === true && (!sent || body.delivery === "refused"))
     return "offline";
   // A timed-out status read (`session_state_timeout`, e.g. omp busy streaming) is the preflight, not the message.
+  if (entry.source_host_id && body.code === "session_host_conflict")
+    return retry(entry);
   if (
     body.code === "session_busy" ||
     body.code === "session_restarting" ||
@@ -1872,6 +2044,7 @@ async function refused(
     return retry(entry);
   // Only a missing session can be an archived one; any other 404 (an upload that is gone, say) is that refusal.
   if (!sent && response.status === 404 && body.code === "session_not_found") {
+    if (entry.source_host_id) return fail(entry, error, false);
     const archive = await archiveState(entry.session_id);
     // An unreadable archive cannot prove the session is gone: never failed. A passing failure is tried again; one
     // only a host's next hello can change waits for it, as for an offline host, without a timer.

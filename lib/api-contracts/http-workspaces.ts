@@ -33,6 +33,8 @@ import {
   ShipPreviewSchema,
   ShipRequestSchema,
   ShipJobSchema,
+  ShipStopMonitorRequestSchema,
+  ShipStopMonitorResultSchema,
   UploadTargetInspectionSchema,
   CloneFrameSchema,
   CloneProgressSchema,
@@ -407,28 +409,40 @@ export const workspaceHttpOperations: readonly HttpOperation[] = [
       responses: responses(HierarchySnapshotSchema),
     },
   ),
-  ops("/api/systems", "get", "workspaceSystemsGet", "List Systems and Efforts", {
-    parameters: [host],
-    responses: {
-      ...webErrors,
-      200: jsonResponse(SystemsResultSchema),
-      409: error("The host daemon is drained for maintenance."),
-      501: error("The host daemon does not support Systems."),
-      504: error("The host did not answer in time."),
+  ops(
+    "/api/systems",
+    "get",
+    "workspaceSystemsGet",
+    "List Systems and Efforts",
+    {
+      parameters: [host],
+      responses: {
+        ...webErrors,
+        200: jsonResponse(SystemsResultSchema),
+        409: error("The host daemon is drained for maintenance."),
+        501: error("The host daemon does not support Systems."),
+        504: error("The host did not answer in time."),
+      },
     },
-  }),
-  ops("/api/systems", "post", "workspaceSystemsPost", "Manage Systems and Efforts", {
-    requestBody: jsonBody(SystemsHttpPostSchema, "At most 384 KiB of JSON."),
-    responses: {
-      ...responses(SystemsResultSchema),
-      409: error(
-        "The host rejected the action due to current state or a stale confirmation.",
-      ),
-      413: error("The request body exceeds 384 KiB."),
-      501: error("The host daemon does not support Systems."),
-      504: error("The host did not answer in time; the action may have run."),
+  ),
+  ops(
+    "/api/systems",
+    "post",
+    "workspaceSystemsPost",
+    "Manage Systems and Efforts",
+    {
+      requestBody: jsonBody(SystemsHttpPostSchema, "At most 384 KiB of JSON."),
+      responses: {
+        ...responses(SystemsResultSchema),
+        409: error(
+          "The host rejected the action due to current state or a stale confirmation.",
+        ),
+        413: error("The request body exceeds 384 KiB."),
+        501: error("The host daemon does not support Systems."),
+        504: error("The host did not answer in time; the action may have run."),
+      },
     },
-  }),
+  ),
   ops(
     "/api/projects",
     "get",
@@ -721,8 +735,13 @@ export const workspaceHttpOperations: readonly HttpOperation[] = [
     responses: responses(ShipPreviewSchema),
   }),
   ops("/api/ship", "post", "workspaceShipPost", "Start shipping a workspace", {
+    description:
+      "PR modes may opt into feedback links with monitorSessionId for a chat in the same workspace. The authenticated daemon link selects the notification server. Job acceptance does not mean monitoring has started, and monitoring does not gate merges.",
     requestBody: jsonBody(obj({ host: opt(s), input: ShipRequestSchema })),
-    responses: responses(ShipJobSchema),
+    responses: {
+      ...responses(ShipJobSchema),
+      501: error("The host daemon does not support PR monitoring."),
+    },
   }),
   ops("/api/ship/[id]", "get", "workspaceShipStatus", "Get ship job status", {
     parameters: [id, host],
@@ -736,6 +755,18 @@ export const workspaceHttpOperations: readonly HttpOperation[] = [
     {
       requestBody: jsonBody(obj({ host: opt(s), projectPath: s, path: s })),
       responses: responses(ShipJobSchema),
+    },
+  ),
+  ops(
+    "/api/ship/monitor/stop",
+    "post",
+    "workspaceShipMonitorStop",
+    "Stop PR feedback monitoring",
+    {
+      requestBody: jsonBody(
+        obj({ host: opt(s), ...ShipStopMonitorRequestSchema.properties }),
+      ),
+      responses: responses(ShipStopMonitorResultSchema),
     },
   ),
   ops(

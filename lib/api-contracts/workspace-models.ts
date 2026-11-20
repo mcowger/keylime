@@ -347,6 +347,12 @@ export const ShipPrSchema = Type.Object(
     autoMerge: Type.Boolean(),
     cleanup: Type.Boolean(),
     checkedAt: Type.String({ description: "ISO time of the last gh pr view." }),
+    monitor: Type.Optional(
+      Type.Object({
+        id: Type.String(),
+        state: literals("watching", "error", "delivery-expired"),
+      }),
+    ),
   },
   {
     description:
@@ -394,6 +400,12 @@ export const ShipRequestSchema = Type.Object(
     path: Type.String(),
     mode: ShipModeSchema,
     rebase: Type.Boolean(),
+    monitorSessionId: Type.Optional(
+      Type.String({
+        description:
+          "Chat to notify about new PR feedback. Omit to leave monitoring off. Only valid in PR modes; monitoring does not gate merges.",
+      }),
+    ),
     pr: Type.Optional(
       Type.Object(PrDescriptionSchema.properties, {
         description:
@@ -416,6 +428,30 @@ export const ShipRequestSchema = Type.Object(
       "Start shipping a registered host worktree with mode, optional rebase and PR options, and cleanup choice.",
   },
 );
+export const ShipStopMonitorRequestSchema = Type.Object(
+  {
+    projectPath: Type.String(),
+    path: Type.String(),
+    monitorId: Type.String({
+      description: "Monitor generation shown on the workspace pull request.",
+    }),
+  },
+  {
+    description:
+      "Stop the named PR monitor generation for a registered workspace on the selected host.",
+  },
+);
+
+export const ShipStopMonitorResultSchema = Type.Object(
+  {
+    stopped: Type.Boolean({
+      description:
+        "False if the monitor was already absent or a different generation is active.",
+    }),
+  },
+  { description: "Result of a request to stop monitoring PR feedback." },
+);
+
 export const ShipStepNameSchema = Type.Union(
   [
     Type.Literal("rebase"),

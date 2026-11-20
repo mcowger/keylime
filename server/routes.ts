@@ -76,6 +76,7 @@ import * as skillsUpdate from "@/app/api/skills/update/route";
 import * as ship from "@/app/api/ship/route";
 import * as shipId from "@/app/api/ship/[id]/route";
 import * as shipFinish from "@/app/api/ship/finish/route";
+import * as shipMonitorStop from "@/app/api/ship/monitor/stop/route";
 import * as sttJobIdAudio from "@/app/api/stt/[jobId]/audio/route";
 import * as sttJobId from "@/app/api/stt/[jobId]/route";
 import * as stt from "@/app/api/stt/route";
@@ -94,7 +95,8 @@ import type { LinkSocketData } from "@/lib/hosts/hub";
 import type { TerminalAttachData } from "@/lib/terminal-attach";
 
 /** What Bun keeps on an upgraded socket (`ws.data`): a host link's or a browser link's. */
-export type ServerSocketData = LinkSocketData | BrowserLinkData | TerminalAttachData;
+export type ServerSocketData =
+  LinkSocketData | BrowserLinkData | TerminalAttachData;
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 // never: each handler narrows its own params; the router passes Record<string, string | string[]>.
@@ -185,6 +187,7 @@ export const ROUTE_MODULES: Record<string, RouteModule> = {
   ship: ship,
   "ship/[id]": shipId,
   "ship/finish": shipFinish,
+  "ship/monitor/stop": shipMonitorStop,
   "skills/check": skillsCheck,
   "skills/install": skillsInstall,
   skills: skills,

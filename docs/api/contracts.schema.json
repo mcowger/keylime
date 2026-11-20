@@ -31387,6 +31387,27 @@
           "type": "object"
         },
         {
+          "description": "The authenticated server durably accepted this ID in its outbox. This is not a transport acknowledgement or agent delivery confirmation.",
+          "properties": {
+            "id": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            },
+            "seq": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "type": {
+              "const": "ship_pr_digest_receipt",
+              "type": "string"
+            }
+          },
+          "required": ["type", "seq", "id"],
+          "title": "HostLinkShipPrDigestReceipt",
+          "type": "object"
+        },
+        {
           "description": "Unsequenced liveness ping.",
           "properties": {
             "type": {
@@ -32809,6 +32830,31 @@
                                     },
                                     "cleanup": {
                                       "type": "boolean"
+                                    },
+                                    "monitor": {
+                                      "properties": {
+                                        "id": {
+                                          "type": "string"
+                                        },
+                                        "state": {
+                                          "anyOf": [
+                                            {
+                                              "const": "watching",
+                                              "type": "string"
+                                            },
+                                            {
+                                              "const": "error",
+                                              "type": "string"
+                                            },
+                                            {
+                                              "const": "delivery-expired",
+                                              "type": "string"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": ["id", "state"],
+                                      "type": "object"
                                     },
                                     "number": {
                                       "type": "number"
@@ -42449,6 +42495,31 @@
                     "cleanup": {
                       "type": "boolean"
                     },
+                    "monitor": {
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "anyOf": [
+                            {
+                              "const": "watching",
+                              "type": "string"
+                            },
+                            {
+                              "const": "error",
+                              "type": "string"
+                            },
+                            {
+                              "const": "delivery-expired",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["id", "state"],
+                      "type": "object"
+                    },
                     "number": {
                       "type": "number"
                     },
@@ -42622,6 +42693,32 @@
         }
       ]
     },
+    "host_ShipPrDigest": {
+      "description": "A persisted, links-only Ship feedback digest for the initiating server's outbox, retried with the same ID until durable application acceptance.",
+      "properties": {
+        "createdAt": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "id": {
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "type": "string"
+        },
+        "message": {
+          "maxLength": 16384,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "sessionId": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "type": "string"
+        }
+      },
+      "required": ["id", "sessionId", "createdAt", "message"],
+      "type": "object"
+    },
     "host_shipPreview_args": {
       "properties": {
         "input": {
@@ -42765,6 +42862,31 @@
                         },
                         "cleanup": {
                           "type": "boolean"
+                        },
+                        "monitor": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "anyOf": [
+                                {
+                                  "const": "watching",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "error",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "delivery-expired",
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["id", "state"],
+                          "type": "object"
                         },
                         "number": {
                           "type": "number"
@@ -42949,6 +43071,31 @@
                     },
                     "cleanup": {
                       "type": "boolean"
+                    },
+                    "monitor": {
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "anyOf": [
+                            {
+                              "const": "watching",
+                              "type": "string"
+                            },
+                            {
+                              "const": "error",
+                              "type": "string"
+                            },
+                            {
+                              "const": "delivery-expired",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["id", "state"],
+                      "type": "object"
                     },
                     "number": {
                       "type": "number"
@@ -43223,6 +43370,10 @@
               ],
               "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
             },
+            "monitorSessionId": {
+              "description": "Chat to notify about new PR feedback. Omit to leave monitoring off. Only valid in PR modes; monitoring does not gate merges.",
+              "type": "string"
+            },
             "path": {
               "type": "string"
             },
@@ -43347,6 +43498,31 @@
                     },
                     "cleanup": {
                       "type": "boolean"
+                    },
+                    "monitor": {
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "anyOf": [
+                            {
+                              "const": "watching",
+                              "type": "string"
+                            },
+                            {
+                              "const": "error",
+                              "type": "string"
+                            },
+                            {
+                              "const": "delivery-expired",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["id", "state"],
+                      "type": "object"
                     },
                     "number": {
                       "type": "number"
@@ -43494,6 +43670,73 @@
                 "steps",
                 "logs"
               ],
+              "type": "object"
+            }
+          },
+          "required": ["ok", "value"],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string"
+            },
+            "ok": {
+              "const": false,
+              "type": "boolean"
+            },
+            "status": {
+              "type": "number"
+            }
+          },
+          "required": ["ok", "status", "code", "error"],
+          "type": "object"
+        }
+      ]
+    },
+    "host_stopShipMonitor_args": {
+      "properties": {
+        "input": {
+          "description": "Stop the named PR monitor generation for a registered workspace on the selected host.",
+          "properties": {
+            "monitorId": {
+              "description": "Monitor generation shown on the workspace pull request.",
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "projectPath": {
+              "type": "string"
+            }
+          },
+          "required": ["projectPath", "path", "monitorId"],
+          "type": "object"
+        }
+      },
+      "required": ["input"],
+      "type": "object"
+    },
+    "host_stopShipMonitor_result": {
+      "anyOf": [
+        {
+          "properties": {
+            "ok": {
+              "const": true,
+              "type": "boolean"
+            },
+            "value": {
+              "description": "Result of a request to stop monitoring PR feedback.",
+              "properties": {
+                "stopped": {
+                  "description": "False if the monitor was already absent or a different generation is active.",
+                  "type": "boolean"
+                }
+              },
+              "required": ["stopped"],
               "type": "object"
             }
           },
@@ -45344,6 +45587,49 @@
           },
           "required": ["type", "seq"],
           "title": "HostLinkSessionsChanged",
+          "type": "object"
+        },
+        {
+          "description": "A persisted PR feedback digest offered only to the initiating server. Retries use the same ID until application receipt.",
+          "properties": {
+            "createdAt": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "id": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            },
+            "message": {
+              "maxLength": 16384,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "seq": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "sessionId": {
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "type": "string"
+            },
+            "type": {
+              "const": "ship_pr_digest",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "seq",
+            "id",
+            "sessionId",
+            "createdAt",
+            "message"
+          ],
+          "title": "HostLinkShipPrDigest",
           "type": "object"
         },
         {
@@ -190686,6 +190972,31 @@
                       "cleanup": {
                         "type": "boolean"
                       },
+                      "monitor": {
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "anyOf": [
+                              {
+                                "const": "watching",
+                                "type": "string"
+                              },
+                              {
+                                "const": "error",
+                                "type": "string"
+                              },
+                              {
+                                "const": "delivery-expired",
+                                "type": "string"
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["id", "state"],
+                        "type": "object"
+                      },
                       "number": {
                         "type": "number"
                       },
@@ -191132,6 +191443,31 @@
                             "cleanup": {
                               "type": "boolean"
                             },
+                            "monitor": {
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "state": {
+                                  "anyOf": [
+                                    {
+                                      "const": "watching",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "error",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "delivery-expired",
+                                      "type": "string"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": ["id", "state"],
+                              "type": "object"
+                            },
                             "number": {
                               "type": "number"
                             },
@@ -191441,6 +191777,31 @@
                 "cleanup": {
                   "type": "boolean"
                 },
+                "monitor": {
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "anyOf": [
+                        {
+                          "const": "watching",
+                          "type": "string"
+                        },
+                        {
+                          "const": "error",
+                          "type": "string"
+                        },
+                        {
+                          "const": "delivery-expired",
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["id", "state"],
+                  "type": "object"
+                },
                 "number": {
                   "type": "number"
                 },
@@ -191591,6 +191952,31 @@
             },
             "cleanup": {
               "type": "boolean"
+            },
+            "monitor": {
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "state": {
+                  "anyOf": [
+                    {
+                      "const": "watching",
+                      "type": "string"
+                    },
+                    {
+                      "const": "error",
+                      "type": "string"
+                    },
+                    {
+                      "const": "delivery-expired",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "required": ["id", "state"],
+              "type": "object"
             },
             "number": {
               "type": "number"
@@ -191807,6 +192193,31 @@
         "cleanup": {
           "type": "boolean"
         },
+        "monitor": {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "state": {
+              "anyOf": [
+                {
+                  "const": "watching",
+                  "type": "string"
+                },
+                {
+                  "const": "error",
+                  "type": "string"
+                },
+                {
+                  "const": "delivery-expired",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "required": ["id", "state"],
+          "type": "object"
+        },
         "number": {
           "type": "number"
         },
@@ -191959,6 +192370,31 @@
                 "cleanup": {
                   "type": "boolean"
                 },
+                "monitor": {
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "anyOf": [
+                        {
+                          "const": "watching",
+                          "type": "string"
+                        },
+                        {
+                          "const": "error",
+                          "type": "string"
+                        },
+                        {
+                          "const": "delivery-expired",
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["id", "state"],
+                  "type": "object"
+                },
                 "number": {
                   "type": "number"
                 },
@@ -192054,6 +192490,10 @@
             }
           ],
           "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
+        },
+        "monitorSessionId": {
+          "description": "Chat to notify about new PR feedback. Omit to leave monitoring off. Only valid in PR modes; monitoring does not gate merges.",
+          "type": "string"
         },
         "path": {
           "type": "string"
@@ -192188,6 +192628,34 @@
         }
       ],
       "description": "Named stage in the ship or finish sequence, including potentially destructive workspace cleanup."
+    },
+    "workspace_ShipStopMonitorRequest": {
+      "description": "Stop the named PR monitor generation for a registered workspace on the selected host.",
+      "properties": {
+        "monitorId": {
+          "description": "Monitor generation shown on the workspace pull request.",
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "projectPath": {
+          "type": "string"
+        }
+      },
+      "required": ["projectPath", "path", "monitorId"],
+      "type": "object"
+    },
+    "workspace_ShipStopMonitorResult": {
+      "description": "Result of a request to stop monitoring PR feedback.",
+      "properties": {
+        "stopped": {
+          "description": "False if the monitor was already absent or a different generation is active.",
+          "type": "boolean"
+        }
+      },
+      "required": ["stopped"],
+      "type": "object"
     },
     "workspace_TerminalEvent": {
       "anyOf": [
@@ -193658,6 +194126,31 @@
             },
             "cleanup": {
               "type": "boolean"
+            },
+            "monitor": {
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "state": {
+                  "anyOf": [
+                    {
+                      "const": "watching",
+                      "type": "string"
+                    },
+                    {
+                      "const": "error",
+                      "type": "string"
+                    },
+                    {
+                      "const": "delivery-expired",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "required": ["id", "state"],
+              "type": "object"
             },
             "number": {
               "type": "number"

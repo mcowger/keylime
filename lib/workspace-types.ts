@@ -23,7 +23,12 @@ import type {
   WorkspaceDeleteResult,
   WorkspaceSettingsRequest,
 } from "./workspace-creation-types";
-import type { ShipJob, ShipPreview, ShipRequest } from "./workspace-ship-types";
+import type {
+  ShipJob,
+  ShipPreview,
+  ShipRequest,
+  ShipStopMonitorRequest,
+} from "./workspace-ship-types";
 
 /** Host identity and session context used to locate workspace files. */
 export type WorkspaceFileSource = Static<typeof M.WorkspaceFileSourceSchema>;
@@ -82,6 +87,9 @@ export interface WorkspaceOps {
     projectPath: string;
     path: string;
   }): Promise<OpResult<ShipJob>>;
+  stopShipMonitor(
+    input: ShipStopMonitorRequest,
+  ): Promise<OpResult<{ stopped: boolean }>>;
   createWorkspace(
     input: WorkspaceCreateRequest,
   ): Promise<OpResult<WorkspaceCreationJob>>;
@@ -221,6 +229,7 @@ export const WORKSPACE_OP_PARAMS: {
   startShip: ["input"],
   shipStatus: ["id"],
   shipFinish: ["input"],
+  stopShipMonitor: ["input"],
   systems: ["input"],
 };
 

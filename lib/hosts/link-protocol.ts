@@ -6,6 +6,11 @@ import type {
   LinkStatSample as SchemaLinkStatSample,
   UpMessage as SchemaUpMessage,
 } from "../api-contracts/host-schemas";
+import {
+  SHIP_DIGEST_ID_RE,
+  SHIP_DIGEST_MESSAGE_LIMIT,
+} from "../api-contracts/host-schemas";
+export type { ShipPrDigest } from "../api-contracts/host-schemas";
 import { CREATION_ID_RE } from "./creation-identity";
 export { CREATION_ID_RE } from "./creation-identity";
 // Wire format between the main keylime server and the `keylime host` daemon.
@@ -338,6 +343,7 @@ const DOWN_TYPES: readonly string[] = [
   "host_tools",
   "req",
   "pty_attach",
+  "ship_pr_digest_receipt",
   "ping",
   "pong",
   "ack",
@@ -350,6 +356,7 @@ const UP_TYPES: readonly string[] = [
   "resync",
   "notifier",
   "sessions_changed",
+  "ship_pr_digest",
   "channels_changed",
   "stats",
   "capacity",
@@ -429,12 +436,29 @@ function parseLine(line: string): Obj {
   return value;
 }
 
+function shipDigestId(o: Obj): string {
+  const id = str(o, "id");
+  return SHIP_DIGEST_ID_RE.test(id) ? id : fail("invalid Ship digest id");
+}
+
 export function decodeDown(line: string): DownMessage | UnknownMessage {
   const o = parseLine(line);
   switch (o.type) {
+    case "ship_pr_digest_receipt": {
+      const seq = seqNum(o, "seq");
+      if (seq === 0) fail("invalid Ship digest receipt sequence");
+      return { type: "ship_pr_digest_receipt", seq, id: shipDigestId(o) };
+    }
     case "pty_attach": {
-      const id = str(o, "id"), sessionId = str(o, "sessionId"), payload = str(o, "payload");
-      if (!/^[0-9a-f-]{36}$/i.test(id) || !isValidSessionId(sessionId) || payload.length > 131072) fail("invalid terminal attachment frame");
+      const id = str(o, "id"),
+        sessionId = str(o, "sessionId"),
+        payload = str(o, "payload");
+      if (
+        !/^[0-9a-f-]{36}$/i.test(id) ||
+        !isValidSessionId(sessionId) ||
+        payload.length > 131072
+      )
+        fail("invalid terminal attachment frame");
       return { type: "pty_attach", id, sessionId, payload };
     }
     case "welcome":
@@ -665,8 +689,10 @@ export function decodeUp(line: string): UpMessage | UnknownMessage {
   const o = parseLine(line);
   switch (o.type) {
     case "pty_event": {
-      const id = str(o, "id"), payload = str(o, "payload");
-      if (!/^[0-9a-f-]{36}$/i.test(id) || payload.length > 8000000) fail("invalid terminal event frame");
+      const id = str(o, "id"),
+        payload = str(o, "payload");
+      if (!/^[0-9a-f-]{36}$/i.test(id) || payload.length > 8000000)
+        fail("invalid terminal event frame");
       return { type: "pty_event", id, payload };
     }
     case "hello":
@@ -720,6 +746,24 @@ export function decodeUp(line: string): UpMessage | UnknownMessage {
       return { type: "notifier", seq: seqNum(o, "seq"), on: bool(o, "on") };
     case "sessions_changed":
       return { type: "sessions_changed", seq: seqNum(o, "seq") };
+    case "ship_pr_digest": {
+      const seq = seqNum(o, "seq");
+      const sessionId = str(o, "sessionId");
+      const createdAt = seqNum(o, "createdAt");
+      const message = str(o, "message");
+      if (!seq || !createdAt || !isValidSessionId(sessionId))
+        fail("invalid Ship digest metadata");
+      if (message.length > SHIP_DIGEST_MESSAGE_LIMIT || !/\S/.test(message))
+        fail("invalid Ship digest message");
+      return {
+        type: "ship_pr_digest",
+        seq,
+        id: shipDigestId(o),
+        sessionId,
+        createdAt,
+        message,
+      };
+    }
     case "channels_changed":
       return {
         type: "channels_changed",

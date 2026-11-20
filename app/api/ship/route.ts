@@ -32,9 +32,9 @@ export async function GET(request: Request) {
 /**
  * @apiContract workspaceShipPost
  * @apiUsage Start a ship job.
- * @apiInputs Send host and the ship input object for its project and workspace.
- * @apiInvariants The host validates ship preconditions; a failed post-push lookup retains the job preview's PR, while a successful empty lookup does not; job acceptance is not completion.
- * @apiEffects Starts a host job that may mutate Git and remote state.
+ * @apiInputs Send host and the ship input object. In PR modes, optionally send monitorSessionId for a chat in the same workspace.
+ * @apiInvariants The host validates ship preconditions and chat ownership. The authenticated daemon link selects the server for notifications. A failed post-push lookup retains the job preview's PR, while a successful empty lookup does not. Job acceptance does not mean shipping is complete or monitoring has started.
+ * @apiEffects Starts a host job that may mutate Git and remote state. Opted-in monitoring sends feedback links to chat without gating merges.
  * @apiRecovery Poll job status and inspect repository state after an uncertain response before starting another job.
  */
 export async function POST(request: Request) {
@@ -51,6 +51,17 @@ export async function POST(request: Request) {
       );
     const resolved = resolveHostOrError(body.host);
     if ("response" in resolved) return resolved.response;
+    if (
+      body.input.monitorSessionId !== undefined &&
+      !resolved.host.supportsWorkspaceOp("stopShipMonitor")
+    )
+      return Response.json(
+        {
+          error: "This host doesn't support PR monitoring",
+          code: "unsupported_operation",
+        },
+        { status: 501 },
+      );
     const result = await resolved.host.workspaceOps.startShip(
       body.input as unknown as ShipRequest,
     );

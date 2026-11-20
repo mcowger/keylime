@@ -1,15 +1,33 @@
 import type { TerminalEvent } from "../terminal-types";
-import { TerminalAttachServerSchema, type TerminalAttachServer } from "../api-contracts/terminal-attach";
+import {
+  TerminalAttachServerSchema,
+  type TerminalAttachServer,
+} from "../api-contracts/terminal-attach";
 // Main-server end of the host link (spec "Link protocol"): accepts `keylime
 // host` daemons on /api/hosts/link and exposes each linked machine as a
 // `RemoteHost`. Everything a daemon sends is untrusted input.
 // No `next/*` or `@/` imports.
 import { randomUUID } from "node:crypto";
 import { Value } from "@sinclair/typebox/value";
-import { BrowserListSchema, BrowserFrameSchema } from "../api-contracts/host-control-operations";
-import type { BrowserListResult, BrowserCaptureResult } from "../api-contracts/runner-lifecycle";
-import { BrowserControlResultSchema, type BrowserControlArgs, type BrowserControlResult } from "../api-contracts/runner-lifecycle";
-import { BrowserVideoStartResultSchema, BrowserVideoNextResultSchema, BrowserVideoStopResultSchema, type BrowserVideoRequest } from "../api-contracts/runner-lifecycle";
+import {
+  BrowserListSchema,
+  BrowserFrameSchema,
+} from "../api-contracts/host-control-operations";
+import type {
+  BrowserListResult,
+  BrowserCaptureResult,
+} from "../api-contracts/runner-lifecycle";
+import {
+  BrowserControlResultSchema,
+  type BrowserControlArgs,
+  type BrowserControlResult,
+} from "../api-contracts/runner-lifecycle";
+import {
+  BrowserVideoStartResultSchema,
+  BrowserVideoNextResultSchema,
+  BrowserVideoStopResultSchema,
+  type BrowserVideoRequest,
+} from "../api-contracts/runner-lifecycle";
 import { readBodyWithinLimit } from "../bounded-form-data";
 import type { RpcTransport } from "../omp/rpc-transport";
 import type { ProjectRegistryEntry } from "../project-registry";
@@ -52,6 +70,7 @@ import {
   type UnknownMessage,
   type OpenChannelRequest,
   type OpenChannelResult,
+  type ShipPrDigest,
   type HostUriScheme,
   type Unsequenced,
   UnknownMessageLog,
@@ -93,6 +112,8 @@ export const linkTimings = {
 export interface LinkSocketData {
   hostId: string;
   hello: boolean;
+  /** Registry token hash at authenticated upgrade. Synthetic test sockets lack this authority. */
+  hostCredential?: string;
 }
 
 /** The server end of a link WebSocket: the part of Bun's ServerWebSocket the hub uses, so tests drive it with a plain object. */
@@ -179,6 +200,7 @@ interface Link {
   notifier: boolean;
   /** The socket whose hello this link took; null while the daemon has none. */
   socket: LinkSocket | null;
+  shipCredential?: string;
   /** Last downlink seq handed out. Lines stay in `outbox` until the daemon acks them. */
   downSeq: number;
   /** Downlink messages not numbered yet, per channel or request, sent fair (spec D7); from v6 also upload bytes under
@@ -319,38 +341,67 @@ export function onWorkspaceFile(
 }
 
 /** Attachments are tied to one host-link incarnation and never resumed. */
-export function onPtyEvent(hostId: string, id: string, listener: (event: TerminalAttachServer | null) => void): () => void {
+export function onPtyEvent(
+  hostId: string,
+  id: string,
+  listener: (event: TerminalAttachServer | null) => void,
+): () => void {
   const key = JSON.stringify([hostId, id]);
   hub().ptyListeners.set(key, listener);
-  return () => { if (hub().ptyListeners.get(key) === listener) hub().ptyListeners.delete(key); };
+  return () => {
+    if (hub().ptyListeners.get(key) === listener)
+      hub().ptyListeners.delete(key);
+  };
 }
-export function sendPtyFrame(hostId: string, id: string, sessionId: string, payload: string): boolean {
+export function sendPtyFrame(
+  hostId: string,
+  id: string,
+  sessionId: string,
+  payload: string,
+): boolean {
   const link = hub().links.get(hostId);
   if (!link?.socket || !isLinkUp(link.status) || hub().frozen) return false;
   if (link.awaitingDrain) {
     if (payload === '{"type":"detach"}') {
       let pending = hub().pendingPtyDetaches.get(link.socket);
-      if (!pending) hub().pendingPtyDetaches.set(link.socket, pending = new Map());
-      pending.set(id, encodeLine({ type: "pty_attach", id, sessionId, payload }));
+      if (!pending)
+        hub().pendingPtyDetaches.set(link.socket, (pending = new Map()));
+      pending.set(
+        id,
+        encodeLine({ type: "pty_attach", id, sessionId, payload }),
+      );
       return true;
     }
     return false;
   }
-  const sent = link.socket.send(encodeLine({ type: "pty_attach", id, sessionId, payload }));
+  const sent = link.socket.send(
+    encodeLine({ type: "pty_attach", id, sessionId, payload }),
+  );
   if (sent === 0) return false;
   if (sent < 0) link.awaitingDrain = true;
   return true;
 }
 export async function hostPtySessions(hostId: string): Promise<string[]> {
   const result = await request(hostId, "ptySessions", {});
-  if (!Array.isArray(result) || !result.every((id) => typeof id === "string" && isValidSessionId(id))) throw new HostOpError(502, "invalid_pty_sessions", "Invalid terminal session inventory from host");
+  if (
+    !Array.isArray(result) ||
+    !result.every((id) => typeof id === "string" && isValidSessionId(id))
+  )
+    throw new HostOpError(
+      502,
+      "invalid_pty_sessions",
+      "Invalid terminal session inventory from host",
+    );
   return result;
 }
 
 function endWorkspaceWatches(hostId: string): void {
   const terminalPrefix = `${JSON.stringify([hostId]).slice(0, -1)},`;
   for (const [key, listener] of hub().ptyListeners) {
-    if (key.startsWith(terminalPrefix)) { hub().ptyListeners.delete(key); listener(null); }
+    if (key.startsWith(terminalPrefix)) {
+      hub().ptyListeners.delete(key);
+      listener(null);
+    }
   }
   for (const [key, listeners] of hub().terminalListeners) {
     if (!key.startsWith(terminalPrefix)) continue;
@@ -764,7 +815,11 @@ export function handleLinkUpgrade(
   const record = authenticate(req);
   if (record instanceof Response) return record;
   if (hub().frozen) return stopping();
-  return upgrade({ hostId: record.id, hello: false })
+  return upgrade({
+    hostId: record.id,
+    hello: false,
+    hostCredential: record.tokenHash,
+  })
     ? undefined
     : json({ error: "The host link is a WebSocket" }, 426);
 }
@@ -851,9 +906,15 @@ export const hostLinkSocket = {
       if (detaches) {
         for (const [id, line] of detaches) {
           const sent = ws.send(line);
-          if (sent === 0) { ws.terminate(); return; }
+          if (sent === 0) {
+            ws.terminate();
+            return;
+          }
           detaches.delete(id);
-          if (sent < 0) { link.awaitingDrain = true; return; }
+          if (sent < 0) {
+            link.awaitingDrain = true;
+            return;
+          }
         }
         hub().pendingPtyDetaches.delete(ws);
       }
@@ -923,7 +984,18 @@ function onFirstFrame(ws: LinkSocket, data: string | Uint8Array): void {
   openLink(link, ws, hello);
 }
 
+const SHIP_RECEIPT_KEY = "ship-pr-digest-receipt";
+
 function openLink(link: Link, ws: LinkSocket, hello: Hello): void {
+  if (link.shipCredential !== ws.data.hostCredential) {
+    // In particular, `local` can be rotated without changing the host id.
+    link.sender.drop(SHIP_RECEIPT_KEY);
+    released(
+      link,
+      link.outbox.drop((item) => item.key === SHIP_RECEIPT_KEY),
+    );
+    link.shipCredential = ws.data.hostCredential;
+  }
   // One link per host: the newest wins and the previous daemon exits.
   const previous = link.socket;
   link.socket = ws;
@@ -1217,13 +1289,18 @@ function applyUp(
     return;
   }
   if (message.type === "pty_event") {
-    const listener = hub().ptyListeners.get(JSON.stringify([link.id, message.id]));
+    const listener = hub().ptyListeners.get(
+      JSON.stringify([link.id, message.id]),
+    );
     if (!listener) return;
     try {
       const event: unknown = JSON.parse(message.payload);
-      if (!Value.Check(TerminalAttachServerSchema, event)) throw new Error("Invalid terminal event");
+      if (!Value.Check(TerminalAttachServerSchema, event))
+        throw new Error("Invalid terminal event");
       listener(event);
-    } catch { listener(null); }
+    } catch {
+      listener(null);
+    }
     return;
   }
   if (message.type === "unknown") {
@@ -1272,6 +1349,9 @@ function applyUp(
           notifyRunningChange({ refreshSessionList: true }),
         );
       return;
+    case "ship_pr_digest":
+      offerShipDigest(link, message);
+      return;
     case "upload_ack":
       return notify(hub().uploadListeners, link.id, message);
     case "terminal_event":
@@ -1287,6 +1367,46 @@ function applyUp(
     case "stats":
       return applyStats(link, message);
   }
+}
+
+function offerShipDigest(
+  link: Link,
+  { id, sessionId, message, createdAt }: ShipPrDigest,
+): void {
+  const socket = link.socket;
+  const credential = socket?.data.hostCredential;
+  if (!credential) return;
+  // Import lazily: the outbox dispatcher uses the hub to open its pinned session.
+  void import("../message-outbox")
+    .then(({ acceptShipDigestOffer }) => {
+      if (
+        link.socket !== socket ||
+        hub().frozen ||
+        !loadHosts().some(
+          (host) => host.id === link.id && host.tokenHash === credential,
+        )
+      )
+        return;
+      if (
+        acceptShipDigestOffer(link.id, credential, {
+          id,
+          sessionId,
+          message,
+          createdAt,
+        })
+      )
+        sendDown(
+          link,
+          { type: "ship_pr_digest_receipt", id },
+          SHIP_RECEIPT_KEY,
+        );
+    })
+    .catch(() => {
+      // The daemon's persisted offer will retry; never synthesize a receipt after an error.
+      console.warn(
+        `[keylime] could not accept a Ship digest from host ${link.id}`,
+      );
+    });
 }
 
 function settle(link: Link, message: Res): void {
@@ -1453,9 +1573,13 @@ function validResult(
         typeof value.fileName === "string"
       );
     case "readSession":
-      return isRecord(value) && isRecord(value.context) &&
+      return (
+        isRecord(value) &&
+        isRecord(value.context) &&
         (isRecord(value.info) ||
-          (typeof value.historyHasMore === "boolean" && typeof value.historyRevision === "string"));
+          (typeof value.historyHasMore === "boolean" &&
+            typeof value.historyRevision === "string"))
+      );
     case "readContext": {
       // The context route reads a different shape per mode.
       const options = isRecord(args[2]) ? args[2] : {};
@@ -2314,7 +2438,6 @@ export function getHost(id: string): Host | null {
     : null;
 }
 
-
 export interface LinkedHostRow {
   id: string;
   label: string;
@@ -2680,34 +2803,84 @@ export async function orphanExit(
 /** An attach may copy 2 GiB (to another device): far longer than an op's usual deadline. */
 const UPLOAD_ATTACH_TIMEOUT_MS = 10 * 60_000;
 /** Read-only browser operations are sent to the daemon owning the session. */
-export async function hostBrowserList(hostId: string, sessionId: string): Promise<BrowserListResult> {
+export async function hostBrowserList(
+  hostId: string,
+  sessionId: string,
+): Promise<BrowserListResult> {
   const value = await request(hostId, "browserList", { sessionId });
   if (!Value.Check(BrowserListSchema, value))
-    throw new HostOpError(502, "invalid_browser_result", "Invalid browser result from host");
+    throw new HostOpError(
+      502,
+      "invalid_browser_result",
+      "Invalid browser result from host",
+    );
   return value;
 }
 
-export async function hostBrowserCapture(hostId: string, sessionId: string, tabId: string): Promise<BrowserCaptureResult> {
+export async function hostBrowserCapture(
+  hostId: string,
+  sessionId: string,
+  tabId: string,
+): Promise<BrowserCaptureResult> {
   const value = await request(hostId, "browserCapture", { sessionId, tabId });
   if (!Value.Check(BrowserFrameSchema, value))
-    throw new HostOpError(502, "invalid_browser_result", "Invalid browser result from host");
+    throw new HostOpError(
+      502,
+      "invalid_browser_result",
+      "Invalid browser result from host",
+    );
   return value;
 }
-export async function hostBrowserVideo(hostId: string, sessionId: string, command: BrowserVideoRequest): Promise<unknown> {
-  const op = command.op === "start" ? "browserVideoStart" : command.op === "next" ? "browserVideoNext" : "browserVideoStop";
+export async function hostBrowserVideo(
+  hostId: string,
+  sessionId: string,
+  command: BrowserVideoRequest,
+): Promise<unknown> {
+  const op =
+    command.op === "start"
+      ? "browserVideoStart"
+      : command.op === "next"
+        ? "browserVideoNext"
+        : "browserVideoStop";
   const value = await request(hostId, op, { sessionId, input: command.input });
-  const schema = command.op === "start" ? BrowserVideoStartResultSchema : command.op === "next" ? BrowserVideoNextResultSchema : BrowserVideoStopResultSchema;
-  if (!Value.Check(schema, value)) throw new HostOpError(502, "invalid_browser_result", "Invalid browser video result from host");
-  if (command.op === "next" && Value.Check(BrowserVideoNextResultSchema, value) && value.packets.reduce((n, packet) => n + packet.data.length, 0) > 512 * 1024)
-    throw new HostOpError(502, "invalid_browser_result", "Invalid browser video result from host");
+  const schema =
+    command.op === "start"
+      ? BrowserVideoStartResultSchema
+      : command.op === "next"
+        ? BrowserVideoNextResultSchema
+        : BrowserVideoStopResultSchema;
+  if (!Value.Check(schema, value))
+    throw new HostOpError(
+      502,
+      "invalid_browser_result",
+      "Invalid browser video result from host",
+    );
+  if (
+    command.op === "next" &&
+    Value.Check(BrowserVideoNextResultSchema, value) &&
+    value.packets.reduce((n, packet) => n + packet.data.length, 0) > 512 * 1024
+  )
+    throw new HostOpError(
+      502,
+      "invalid_browser_result",
+      "Invalid browser video result from host",
+    );
   return value;
 }
 
 /** Send an ordered batch to the owning host without retrying uncertain partial delivery. */
-export async function hostBrowserControl(hostId: string, sessionId: string, control: BrowserControlArgs): Promise<BrowserControlResult> {
+export async function hostBrowserControl(
+  hostId: string,
+  sessionId: string,
+  control: BrowserControlArgs,
+): Promise<BrowserControlResult> {
   const value = await request(hostId, "browserControl", { sessionId, control });
   if (!Value.Check(BrowserControlResultSchema, value))
-    throw new HostOpError(502, "invalid_browser_result", "Invalid browser result from host");
+    throw new HostOpError(
+      502,
+      "invalid_browser_result",
+      "Invalid browser result from host",
+    );
   return value;
 }
 

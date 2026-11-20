@@ -61,7 +61,11 @@ const hierarchyArgs = Type.Union([
     obj({ action: Type.Literal(action), projectId: str }),
   ),
   obj({ action: Type.Literal("listProjectIcons"), projectId: str }),
-  obj({ action: Type.Literal("setProjectIcon"), projectId: str, icon: nullableString }),
+  obj({
+    action: Type.Literal("setProjectIcon"),
+    projectId: str,
+    icon: nullableString,
+  }),
   obj({
     action: Type.Literal("updateProject"),
     projectId: str,
@@ -121,9 +125,9 @@ Recovery: Refresh the preview after state changes; it does not reserve the check
   op(
     "startShip",
     `Usage: Start the asynchronous ship sequence for a registered workspace.
-Inputs: Host project/workspace paths, mode, rebase, PR and cleanup choices control the sequence.
-Invariants: Checkout and branch preconditions are checked during execution; steps can fail after earlier steps succeeded.
-Effects: Depending on mode, rebases, fast-forwards, pushes, creates or configures a PR, and may archive sessions and remove the workspace.
+Inputs: Host project/workspace paths, mode, rebase, PR and cleanup choices control the sequence. Pass monitorSessionId only in PR modes, for a chat in the same workspace.
+Invariants: Checkout and branch preconditions are checked during execution; steps can fail after earlier steps succeeded. The authenticated daemon link selects the notification server. Job acceptance does not mean monitoring has started.
+Effects: Depending on mode, rebases, fast-forwards, pushes, creates or configures a PR, and may archive sessions and remove the workspace. Opted-in monitoring sends feedback links to chat without gating merges.
 Recovery: Inspect job status and Git/PR state after uncertainty; do not blindly replay destructive steps.`,
     obj({ input: M.ShipRequestSchema }),
     M.ShipJobSchema,
@@ -147,6 +151,16 @@ Effects: May update the base checkout, archive sessions and remove the workspace
 Recovery: Read job and checkout state before retrying an uncertain finish.`,
     obj({ input: projectPathAndPath }),
     M.ShipJobSchema,
+  ),
+  op(
+    "stopShipMonitor",
+    `Usage: Stop PR feedback monitoring for a workspace.
+Inputs: projectPath, path and monitorId identify a workspace and monitor generation.
+Invariants: Only the initiating server link can stop a monitor. A stale generation cannot stop its replacement.
+Effects: Stops feedback monitoring without changing the pull request or merge settings.
+Recovery: Refresh workspace state before retrying an uncertain request.`,
+    obj({ input: M.ShipStopMonitorRequestSchema }),
+    M.ShipStopMonitorResultSchema,
   ),
   op(
     "createWorkspace",

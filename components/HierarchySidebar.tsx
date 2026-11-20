@@ -1,8 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import {
   AlertCircle,
+  BellOff,
   Bot,
   ChevronRight,
   FolderCog,
@@ -23,7 +30,11 @@ import type {
 } from "@/lib/project-hierarchy-types";
 import type { ManagedProject, SessionInfo } from "@/lib/types";
 import { hostProjectKey, LOCAL_HOST_ID } from "@/lib/project-ordering";
-import type { WorkspaceCreateRequest, WorkspaceCreationJob, WorkspaceDeleteResult } from "@/lib/workspace-creation-types";
+import type {
+  WorkspaceCreateRequest,
+  WorkspaceCreationJob,
+  WorkspaceDeleteResult,
+} from "@/lib/workspace-creation-types";
 import { readWorkspaceSetupJob, WorktreesPanel } from "./WorktreesPanel";
 import { PendingOperation } from "./PendingOperation";
 import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
@@ -33,14 +44,18 @@ import { ConfirmDialog } from "./ui/field";
 import { ProjectSettings } from "./ReposConfig";
 import { toast } from "./ui/toast";
 import type { EffortRecord } from "@/lib/api-contracts/systems";
-import { SidebarIconButton, SidebarSectionHeader } from "./SessionSidebar-chrome";
+import {
+  SidebarIconButton,
+  SidebarSectionHeader,
+} from "./SessionSidebar-chrome";
 import { SystemsSidebar } from "./SystemsSidebar";
 import type { SystemsHosts } from "./SystemsHost";
 
 function ProjectIcon({ project }: { project: HierarchyProject }) {
   const name = project.alias || project.name;
   let hash = 2166136261;
-  for (const character of name) hash = Math.imul(hash ^ character.codePointAt(0)!, 16777619);
+  for (const character of name)
+    hash = Math.imul(hash ^ character.codePointAt(0)!, 16777619);
   const style: CSSProperties = {
     width: 26,
     height: 26,
@@ -52,7 +67,17 @@ function ProjectIcon({ project }: { project: HierarchyProject }) {
   return project.icon ? (
     <img src={project.icon} alt="" style={style} />
   ) : (
-    <span aria-hidden="true" style={{ ...style, display: "grid", placeItems: "center", background: `var(--project-icon-${(hash >>> 0) % 6})`, color: "var(--project-icon-text)", fontSize: 13 }}>
+    <span
+      aria-hidden="true"
+      style={{
+        ...style,
+        display: "grid",
+        placeItems: "center",
+        background: `var(--project-icon-${(hash >>> 0) % 6})`,
+        color: "var(--project-icon-text)",
+        fontSize: 13,
+      }}
+    >
       {Array.from(name.trim())[0]?.toLocaleUpperCase() ?? "?"}
     </span>
   );
@@ -67,8 +92,17 @@ type Props = {
   selectedHostId: string;
   refreshKey?: number;
   systemsHosts: SystemsHosts;
-  onOpenEffort: (host: string, effort: EffortRecord, navigate: boolean, latestSession?: SessionInfo) => void;
-  onSelectWorkspace: (path: string, host: string, latestSession?: SessionInfo) => void;
+  onOpenEffort: (
+    host: string,
+    effort: EffortRecord,
+    navigate: boolean,
+    latestSession?: SessionInfo,
+  ) => void;
+  onSelectWorkspace: (
+    path: string,
+    host: string,
+    latestSession?: SessionInfo,
+  ) => void;
   onWorkspaceRemoved: (path: string, host: string) => void;
   onShip?: (target: ShipTarget) => void;
   onProjects: (projects: ManagedProject[]) => void;
@@ -97,16 +131,51 @@ type Discovery = {
   snapshot: HierarchySnapshot;
 };
 
-function SidebarShipButton({ host, projectPath, path, sessionId, disabled, open, onClick, style }: {
-  host: string; projectPath: string; path: string; sessionId?: string;
-  disabled: boolean; open: boolean; onClick: () => void; style: CSSProperties;
+function SidebarShipButton({
+  host,
+  projectPath,
+  path,
+  sessionId,
+  disabled,
+  open,
+  onClick,
+  style,
+}: {
+  host: string;
+  projectPath: string;
+  path: string;
+  sessionId?: string;
+  disabled: boolean;
+  open: boolean;
+  onClick: () => void;
+  style: CSSProperties;
 }) {
-  const empty = useShipAvailability(host, projectPath, path, open && !!sessionId);
-  return <button style={style} type="button" disabled={disabled || empty}
-    title={disabled && sessionId ? "Wait for the session to finish" : empty ? "Nothing to ship" : "Ship workspace"}
-    onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); onClick(); }}>
-    Ship...
-  </button>;
+  const empty = useShipAvailability(
+    host,
+    projectPath,
+    path,
+    open && !!sessionId,
+  );
+  return (
+    <button
+      style={style}
+      type="button"
+      disabled={disabled || empty}
+      title={
+        disabled && sessionId
+          ? "Wait for the session to finish"
+          : empty
+            ? "Nothing to ship"
+            : "Ship workspace"
+      }
+      onClick={(e) => {
+        e.currentTarget.closest("details")?.removeAttribute("open");
+        onClick();
+      }}
+    >
+      Ship...
+    </button>
+  );
 }
 
 export function HierarchySidebar({
@@ -140,14 +209,25 @@ export function HierarchySidebar({
   onToggleHost,
 }: Props) {
   const { t } = useI18n();
-  const connectedHosts = hosts.filter((host) => host.status && isLinkUp(host.status));
-  const ungroupedHostId = connectedHosts.length === 1 ? connectedHosts[0].id : hosts.length === 1 ? hosts[0].id : null;
-  const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(() => new Set());
+  const connectedHosts = hosts.filter(
+    (host) => host.status && isLinkUp(host.status),
+  );
+  const ungroupedHostId =
+    connectedHosts.length === 1
+      ? connectedHosts[0].id
+      : hosts.length === 1
+        ? hosts[0].id
+        : null;
+  const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(
+    () => new Set(),
+  );
   const sidebarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const dismissMenus = (event: PointerEvent) => {
       sidebarRef.current
-        ?.querySelectorAll<HTMLDetailsElement>("details[open]:not([data-persistent])")
+        ?.querySelectorAll<HTMLDetailsElement>(
+          "details[open]:not([data-persistent])",
+        )
         .forEach((menu) => {
           if (event.target instanceof Node && !menu.contains(event.target))
             menu.open = false;
@@ -168,8 +248,12 @@ export function HierarchySidebar({
     host: string;
     project: HierarchyProject;
   } | null>(null);
-  const [managerCreations, setManagerCreations] = useState<Partial<Record<string, WorkspaceCreationJob | "starting">>>({});
-  const setupObservers = useRef(new Map<string, { controller: AbortController; blocking: boolean }>());
+  const [managerCreations, setManagerCreations] = useState<
+    Partial<Record<string, WorkspaceCreationJob | "starting">>
+  >({});
+  const setupObservers = useRef(
+    new Map<string, { controller: AbortController; blocking: boolean }>(),
+  );
   useEffect(() => {
     const observers = setupObservers.current;
     return () => {
@@ -182,14 +266,20 @@ export function HierarchySidebar({
     project: HierarchyProject;
   } | null>(null);
   const [projectSettingsPending, setProjectSettingsPending] = useState(false);
-  const [openWorkspaceMenu, setOpenWorkspaceMenu] = useState<string | null>(null);
+  const [openWorkspaceMenu, setOpenWorkspaceMenu] = useState<string | null>(
+    null,
+  );
   const [finishTarget, setFinishTarget] = useState<{
     host: string;
     projectPath: string;
     path: string;
   } | null>(null);
-  const [finishingWorkspace, setFinishingWorkspace] = useState<string | null>(null);
-  const [deletingWorkspace, setDeletingWorkspace] = useState<string | null>(null);
+  const [finishingWorkspace, setFinishingWorkspace] = useState<string | null>(
+    null,
+  );
+  const [deletingWorkspace, setDeletingWorkspace] = useState<string | null>(
+    null,
+  );
   const finishAbort = useRef<AbortController | null>(null);
   useEffect(() => () => finishAbort.current?.abort(), []);
   const [confirmation, setConfirmation] = useState<{
@@ -234,6 +324,42 @@ export function HierarchySidebar({
     branchChoiceRef.current = null;
     setBranchChoice(null);
     branchChoice.resolve(choice);
+  };
+  const stoppingMonitors = useRef(new Set<string>());
+  const [pendingMonitorStops, setPendingMonitorStops] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
+  const stopMonitoring = async (target: {
+    host: string;
+    projectPath: string;
+    path: string;
+    monitorId: string;
+  }) => {
+    const key = hostProjectKey(target.host, target.path);
+    if (stoppingMonitors.current.has(key)) return;
+    stoppingMonitors.current.add(key);
+    setPendingMonitorStops(new Set(stoppingMonitors.current));
+    try {
+      const response = await fetch("/api/ship/monitor/stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(target),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || `Request failed (${response.status})`);
+      }
+      await load();
+      onChanged();
+    } catch (error) {
+      toast.error(
+        "Couldn't stop PR monitoring",
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      stoppingMonitors.current.delete(key);
+      setPendingMonitorStops(new Set(stoppingMonitors.current));
+    }
   };
   const finishShip = async () => {
     if (!finishTarget || finishAbort.current) return;
@@ -337,7 +463,10 @@ export function HierarchySidebar({
       window.removeEventListener("focus", refresh);
     };
   }, [load]);
-  async function createWorkspace(hostId: string, input: WorkspaceCreateRequest) {
+  async function createWorkspace(
+    hostId: string,
+    input: WorkspaceCreateRequest,
+  ) {
     const key = hostProjectKey(hostId, input.projectPath);
     const previous = setupObservers.current.get(key);
     if (previous?.blocking) return;
@@ -355,11 +484,13 @@ export function HierarchySidebar({
         signal,
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
+      if (!response.ok)
+        throw new Error(data.error ?? `HTTP ${response.status}`);
       let job: WorkspaceCreationJob = data;
       let registered = false;
       while (!signal.aborted) {
-        observer.blocking = job.status === "running" && job.stage !== "postNonBlocking";
+        observer.blocking =
+          job.status === "running" && job.stage !== "postNonBlocking";
         const snapshot = job;
         setManagerCreations((jobs) => ({ ...jobs, [key]: snapshot }));
         if (job.status !== "running") {
@@ -381,10 +512,14 @@ export function HierarchySidebar({
     } catch (error) {
       if (!signal.aborted) {
         setManagerCreations((jobs) => ({ ...jobs, [key]: undefined }));
-        toast.error("Couldn't track workspace setup", error instanceof Error ? error.message : String(error));
+        toast.error(
+          "Couldn't track workspace setup",
+          error instanceof Error ? error.message : String(error),
+        );
       }
     } finally {
-      if (setupObservers.current.get(key) === observer) setupObservers.current.delete(key);
+      if (setupObservers.current.get(key) === observer)
+        setupObservers.current.delete(key);
     }
   }
   const operate = async (host: string, input: HierarchyRequest) => {
@@ -476,7 +611,11 @@ export function HierarchySidebar({
           await response.json();
         if (!response.ok)
           throw new Error(result.error ?? `HTTP ${response.status}`);
-        if (result.status === "processes" || result.status === "dirty" || result.status === "branch")
+        if (
+          result.status === "processes" ||
+          result.status === "dirty" ||
+          result.status === "branch"
+        )
           setDeletingWorkspace(null);
         if (result.status === "processes") {
           const processes =
@@ -534,7 +673,8 @@ export function HierarchySidebar({
   const exitedIds = new Set(exitedSessionIds);
   const query = searchQuery.trim().toLowerCase();
   const searching = Boolean(query);
-  const hostExpanded = (id: string) => searching || id === ungroupedHostId || !collapsedHosts.has(id);
+  const hostExpanded = (id: string) =>
+    searching || id === ungroupedHostId || !collapsedHosts.has(id);
   const button = {
     border: "1px solid var(--border)",
     borderRadius: "var(--radius-control)",
@@ -573,9 +713,12 @@ export function HierarchySidebar({
     textOverflow: "ellipsis",
     flex: 1,
   } as const;
-  const currentManagedProject = managedProject && (
-    snapshots[managedProject.host]?.projects.find((project) => project.id === managedProject.project.id) ?? managedProject.project
-  );
+  const currentManagedProject =
+    managedProject &&
+    (snapshots[managedProject.host]?.projects.find(
+      (project) => project.id === managedProject.project.id,
+    ) ??
+      managedProject.project);
   const workspaceConfirmations = (
     <>
       <ConfirmDialog
@@ -702,7 +845,14 @@ export function HierarchySidebar({
       {hosts.map((host) => (
         <section key={host.id} style={{ marginBottom: 8 }}>
           {host.id !== ungroupedHostId && (
-            <div style={{ display: "flex", alignItems: "center", gap: 2, padding: "4px 0 2px" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 2,
+                padding: "4px 0 2px",
+              }}
+            >
               <button
                 type="button"
                 className="ui-focus-ring"
@@ -726,9 +876,30 @@ export function HierarchySidebar({
                   cursor: "pointer",
                 }}
               >
-                <ChevronRight size={12} aria-hidden="true" style={{ flexShrink: 0, transform: hostExpanded(host.id) ? "rotate(90deg)" : undefined }} />
-                <Server size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{host.label || "This machine"}</span>
+                <ChevronRight
+                  size={12}
+                  aria-hidden="true"
+                  style={{
+                    flexShrink: 0,
+                    transform: hostExpanded(host.id)
+                      ? "rotate(90deg)"
+                      : undefined,
+                  }}
+                />
+                <Server
+                  size={14}
+                  aria-hidden="true"
+                  style={{ flexShrink: 0 }}
+                />
+                <span
+                  style={{
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {host.label || "This machine"}
+                </span>
               </button>
             </div>
           )}
@@ -737,16 +908,25 @@ export function HierarchySidebar({
               label={t("projects.heading")}
               disclosure={{
                 expanded: searching || !collapsedRepos.has(host.id),
-                onToggle: searching ? undefined : () => setCollapsedRepos((current) => {
-                  const next = new Set(current);
-                  if (next.has(host.id)) next.delete(host.id);
-                  else next.add(host.id);
-                  return next;
-                }),
+                onToggle: searching
+                  ? undefined
+                  : () =>
+                      setCollapsedRepos((current) => {
+                        const next = new Set(current);
+                        if (next.has(host.id)) next.delete(host.id);
+                        else next.add(host.id);
+                        return next;
+                      }),
               }}
             >
               <SidebarIconButton
-                label={host.id === ungroupedHostId ? t("projects.add") : t("projects.addOnHost", { host: host.label || "This machine" })}
+                label={
+                  host.id === ungroupedHostId
+                    ? t("projects.add")
+                    : t("projects.addOnHost", {
+                        host: host.label || "This machine",
+                      })
+                }
                 title={t("projects.addTitle")}
                 onClick={() => onAddProject(host.id)}
               >
@@ -787,10 +967,12 @@ export function HierarchySidebar({
                 hostUnavailableReason?.(host.id) ?? null;
               const projectKey = hostProjectKey(host.id, project.path);
               const creation = managerCreations[projectKey];
-              const buildingFromManager = creation === "starting" || (
-                creation?.status === "running" &&
-                !project.workspaces.some((workspace) => workspace.id === creation.workspaceId)
-              );
+              const buildingFromManager =
+                creation === "starting" ||
+                (creation?.status === "running" &&
+                  !project.workspaces.some(
+                    (workspace) => workspace.id === creation.workspaceId,
+                  ));
               return (
                 <div key={project.id} style={{ marginBottom: 4 }}>
                   <div
@@ -812,7 +994,8 @@ export function HierarchySidebar({
                     >
                       {project.alias || project.name}
                     </span>
-                    {(buildingFromManager || buildingWorkspaceProjects?.has(projectKey)) && (
+                    {(buildingFromManager ||
+                      buildingWorkspaceProjects?.has(projectKey)) && (
                       <PendingOperation compact label="Building workspace…" />
                     )}
                     <button
@@ -949,13 +1132,61 @@ export function HierarchySidebar({
                         unreadSessionIds.has(id) ||
                         exitedIds.has(id),
                     );
-                    const workspaceKey = hostProjectKey(host.id, workspace.path);
+                    const workspaceKey = hostProjectKey(
+                      host.id,
+                      workspace.path,
+                    );
+                    const monitor = workspace.ship?.pr?.monitor;
+                    const stoppingMonitor =
+                      pendingMonitorStops.has(workspaceKey);
                     const deleting = deletingWorkspace === workspaceKey;
-                    const cleaningUp = finishingWorkspace === workspaceKey ||
-                      (workspace.ship?.job?.status === "running" && workspace.ship.job.kind === "finish");
-                    const setup = creation && creation !== "starting" &&
-                      (creation.id === workspace.setup?.jobId || (!workspace.setup && creation.workspaceId === workspace.id))
-                      ? creation : workspace.setup;
+                    const cleaningUp =
+                      finishingWorkspace === workspaceKey ||
+                      (workspace.ship?.job?.status === "running" &&
+                        workspace.ship.job.kind === "finish");
+                    const setup =
+                      creation &&
+                      creation !== "starting" &&
+                      (creation.id === workspace.setup?.jobId ||
+                        (!workspace.setup &&
+                          creation.workspaceId === workspace.id))
+                        ? creation
+                        : workspace.setup;
+                    const pr = workspace.ship?.pr;
+                    const prLink = pr?.state === "open" && (
+                      <a
+                        href={pr.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={`Checks: ${pr.checks}`}
+                        style={{
+                          fontSize: 11,
+                          whiteSpace: "nowrap",
+                          color: "var(--text)",
+                        }}
+                      >
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            color:
+                              pr.checks === "passing"
+                                ? "var(--status-success)"
+                                : pr.checks === "failing"
+                                  ? "var(--status-error)"
+                                  : "var(--status-warning)",
+                          }}
+                        >
+                          ●
+                        </span>{" "}
+                        PR #{pr.number}
+                        {monitor &&
+                          (monitor.state === "watching"
+                            ? " · Monitoring"
+                            : monitor.state === "error"
+                              ? " · Monitoring error"
+                              : " · Delivery expired")}
+                      </a>
+                    );
                     return (
                       <div key={workspace.id} style={{ marginLeft: 12 }}>
                         <div
@@ -982,7 +1213,11 @@ export function HierarchySidebar({
                               selectedCwd === workspace.path
                             }
                             onClick={() =>
-                              onSelectWorkspace(workspace.path, host.id, latestSession)
+                              onSelectWorkspace(
+                                workspace.path,
+                                host.id,
+                                latestSession,
+                              )
                             }
                           >
                             {workspace.name}
@@ -1006,32 +1241,10 @@ export function HierarchySidebar({
                               <Loader2 size={12} className="animate-spin" />{" "}
                               Shipping...
                             </span>
-                          ) : workspace.ship?.pr?.state === "open" ? (
-                            <a
-                              href={workspace.ship.pr.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              title={`Checks: ${workspace.ship.pr.checks}`}
-                              style={{
-                                fontSize: 11,
-                                whiteSpace: "nowrap",
-                                color: "var(--text)",
-                              }}
-                            >
-                              <span
-                                style={{
-                                  color:
-                                    workspace.ship.pr.checks === "passing"
-                                      ? "var(--status-success)"
-                                      : workspace.ship.pr.checks === "failing"
-                                        ? "var(--status-error)"
-                                        : "var(--status-warning)",
-                                }}
-                              >
-                                ●
-                              </span>{" "}
-                              PR #{workspace.ship.pr.number}
-                            </a>
+                          ) : pr?.state === "open" ? (
+                            monitor ? null : (
+                              prLink
+                            )
                           ) : workspace.ship?.pr?.state === "merged" ? (
                             <span
                               style={{ fontSize: 11, whiteSpace: "nowrap" }}
@@ -1086,13 +1299,28 @@ export function HierarchySidebar({
                             </span>
                           )}
                           {setup?.status === "running" ? (
-                            <PendingOperation compact label="Setting up workspace…" />
+                            <PendingOperation
+                              compact
+                              label="Setting up workspace…"
+                            />
                           ) : setup && setup.status !== "complete" ? (
-                            <span title={setup.error || `Setup ${setup.status}`} aria-label={`Setup ${setup.status}`}>
+                            <span
+                              title={setup.error || `Setup ${setup.status}`}
+                              aria-label={`Setup ${setup.status}`}
+                            >
                               <Wrench size={14} aria-hidden="true" />
                             </span>
                           ) : null}
-                          <details style={{ position: "relative" }} onToggle={(e) => setOpenWorkspaceMenu(e.currentTarget.open ? `${host.id}:${workspace.path}` : null)}>
+                          <details
+                            style={{ position: "relative" }}
+                            onToggle={(e) =>
+                              setOpenWorkspaceMenu(
+                                e.currentTarget.open
+                                  ? `${host.id}:${workspace.path}`
+                                  : null,
+                              )
+                            }
+                          >
                             <summary
                               aria-label={`Actions for workspace ${workspace.name}`}
                               style={{
@@ -1112,12 +1340,28 @@ export function HierarchySidebar({
                                     projectPath={project.path}
                                     path={workspace.path}
                                     sessionId={latestSession?.id}
-                                    open={openWorkspaceMenu === `${host.id}:${workspace.path}`}
-                                    disabled={workspace.unavailable || !latestSession || runningSessionIds.has(latestSession.id)}
+                                    open={
+                                      openWorkspaceMenu ===
+                                      `${host.id}:${workspace.path}`
+                                    }
+                                    disabled={
+                                      workspace.unavailable ||
+                                      !latestSession ||
+                                      runningSessionIds.has(latestSession.id)
+                                    }
                                     onClick={() => {
                                       if (latestSession) {
-                                        onSelectWorkspace(workspace.path, host.id, latestSession);
-                                        onShip?.({ host: host.id, projectPath: project.path, path: workspace.path, sessionId: latestSession.id });
+                                        onSelectWorkspace(
+                                          workspace.path,
+                                          host.id,
+                                          latestSession,
+                                        );
+                                        onShip?.({
+                                          host: host.id,
+                                          projectPath: project.path,
+                                          path: workspace.path,
+                                          sessionId: latestSession.id,
+                                        });
                                       }
                                     }}
                                   />
@@ -1143,7 +1387,11 @@ export function HierarchySidebar({
                                   type="button"
                                   aria-label="Unregister workspace"
                                   title="Unregister workspace"
-                                  disabled={busy || cleaningUp || setup?.status === "running"}
+                                  disabled={
+                                    busy ||
+                                    cleaningUp ||
+                                    setup?.status === "running"
+                                  }
                                   onClick={(e) => {
                                     e.currentTarget
                                       .closest("details")
@@ -1161,6 +1409,48 @@ export function HierarchySidebar({
                             </div>
                           </details>
                         </div>
+                        {pr?.state === "open" &&
+                          monitor &&
+                          !deleting &&
+                          !cleaningUp &&
+                          workspace.ship?.job?.status !== "running" && (
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: 8,
+                                alignItems: "center",
+                                paddingLeft: 10,
+                              }}
+                            >
+                              {prLink}
+                              <SidebarIconButton
+                                label={
+                                  stoppingMonitor
+                                    ? "Stopping monitoring"
+                                    : "Stop monitoring"
+                                }
+                                disabled={busy || stoppingMonitor}
+                                onClick={() =>
+                                  void stopMonitoring({
+                                    host: host.id,
+                                    projectPath: project.path,
+                                    path: workspace.path,
+                                    monitorId: monitor.id,
+                                  })
+                                }
+                              >
+                                {stoppingMonitor ? (
+                                  <Loader2
+                                    size={14}
+                                    className="animate-spin"
+                                    aria-hidden="true"
+                                  />
+                                ) : (
+                                  <BellOff size={14} aria-hidden="true" />
+                                )}
+                              </SidebarIconButton>
+                            </div>
+                          )}
                         {query &&
                           workspace.sessionIds
                             .filter((id) => matchedSessionIds?.has(id))
@@ -1261,7 +1551,12 @@ export function HierarchySidebar({
               host={host.id}
               state={systemsHosts.byHost[host.id]}
               action={(input) => systemsHosts.run(host.id, input)}
-              repos={(snapshots[host.id]?.projects ?? []).filter((project) => project.kind === "git").map((project) => ({ path: project.path, name: project.alias ?? project.name }))}
+              repos={(snapshots[host.id]?.projects ?? [])
+                .filter((project) => project.kind === "git")
+                .map((project) => ({
+                  path: project.path,
+                  name: project.alias ?? project.name,
+                }))}
               selectedPath={selectedHostId === host.id ? selectedCwd : null}
               query={query}
               runningOnly={runningOnly}
@@ -1269,9 +1564,20 @@ export function HierarchySidebar({
               matchedIds={matchedSessionIds}
               unavailable={hostUnavailableReason?.(host.id)}
               onOpenEffort={(effort, navigate) => {
-                const latest = navigate ? sessions.filter((session) =>
-                  (session.hostId ?? LOCAL_HOST_ID) === host.id && effort.sessionIds.includes(session.id) && session.cwd === effort.root,
-                ).sort((a, b) => (b.lastMessageAt ?? b.modified).localeCompare(a.lastMessageAt ?? a.modified))[0] : undefined;
+                const latest = navigate
+                  ? sessions
+                      .filter(
+                        (session) =>
+                          (session.hostId ?? LOCAL_HOST_ID) === host.id &&
+                          effort.sessionIds.includes(session.id) &&
+                          session.cwd === effort.root,
+                      )
+                      .sort((a, b) =>
+                        (b.lastMessageAt ?? b.modified).localeCompare(
+                          a.lastMessageAt ?? a.modified,
+                        ),
+                      )[0]
+                  : undefined;
                 onOpenEffort(host.id, effort, navigate, latest);
               }}
               onChanged={onChanged}
@@ -1286,10 +1592,45 @@ export function HierarchySidebar({
             if (!open && !projectSettingsPending) setSettingsProject(null);
           }}
         >
-          <DialogContent style={{ width: 850, maxWidth: "calc(100vw - 24px)", maxHeight: "calc(100dvh - 24px)", overflowY: "auto", boxSizing: "border-box" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, paddingBottom: 16, marginBottom: 16, borderBottom: "1px solid var(--border)" }}>
+          <DialogContent
+            style={{
+              width: 850,
+              maxWidth: "calc(100vw - 24px)",
+              maxHeight: "calc(100dvh - 24px)",
+              overflowY: "auto",
+              boxSizing: "border-box",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                paddingBottom: 16,
+                marginBottom: 16,
+                borderBottom: "1px solid var(--border)",
+              }}
+            >
               <DialogTitle style={{ margin: 0 }}>Repo settings</DialogTitle>
-              <button type="button" className="dialog-action" disabled={projectSettingsPending} onClick={() => setSettingsProject(null)} style={{ padding: "6px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius-control)", color: "var(--text)", background: "var(--bg-panel)", cursor: projectSettingsPending ? "not-allowed" : "pointer", opacity: projectSettingsPending ? 0.5 : 1, fontSize: 13 }}>Close</button>
+              <button
+                type="button"
+                className="dialog-action"
+                disabled={projectSettingsPending}
+                onClick={() => setSettingsProject(null)}
+                style={{
+                  padding: "6px 12px",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-control)",
+                  color: "var(--text)",
+                  background: "var(--bg-panel)",
+                  cursor: projectSettingsPending ? "not-allowed" : "pointer",
+                  opacity: projectSettingsPending ? 0.5 : 1,
+                  fontSize: 13,
+                }}
+              >
+                Close
+              </button>
             </div>
             <ProjectSettings
               key={`${settingsProject.host}:${settingsProject.project.id}`}
@@ -1330,13 +1671,35 @@ export function HierarchySidebar({
             <WorktreesPanel
               hostId={managedProject.host}
               project={currentManagedProject}
-              currentPath={selectedHostId === managedProject.host ? selectedCwd : null}
-              creation={managerCreations[hostProjectKey(managedProject.host, currentManagedProject.path)]}
+              currentPath={
+                selectedHostId === managedProject.host ? selectedCwd : null
+              }
+              creation={
+                managerCreations[
+                  hostProjectKey(
+                    managedProject.host,
+                    currentManagedProject.path,
+                  )
+                ]
+              }
               deletionDisabled={busy || finishingWorkspace !== null}
-              removingPath={currentManagedProject.workspaces.find((workspace) =>
-                hostProjectKey(managedProject.host, workspace.path) === deletingWorkspace)?.path}
-              onCreate={(input) => void createWorkspace(managedProject.host, input)}
-              onRemove={(path) => void unregisterWorkspace(managedProject.host, currentManagedProject.path, path)}
+              removingPath={
+                currentManagedProject.workspaces.find(
+                  (workspace) =>
+                    hostProjectKey(managedProject.host, workspace.path) ===
+                    deletingWorkspace,
+                )?.path
+              }
+              onCreate={(input) =>
+                void createWorkspace(managedProject.host, input)
+              }
+              onRemove={(path) =>
+                void unregisterWorkspace(
+                  managedProject.host,
+                  currentManagedProject.path,
+                  path,
+                )
+              }
               onSelect={(path) => {
                 onSelectWorkspace(path, managedProject.host);
                 setManagedProject(null);

@@ -7,6 +7,58 @@ const SafeCount = Type.Integer({
   minimum: 0,
   maximum: Number.MAX_SAFE_INTEGER,
 });
+export const SHIP_DIGEST_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+export const SHIP_DIGEST_MESSAGE_LIMIT = 16_384;
+export const SHIP_DIGEST_RETRY_MS = 7 * 24 * 60 * 60 * 1000;
+const ShipDigestId = Type.String({ pattern: SHIP_DIGEST_ID_RE.source });
+const ShipDigestSeq = Type.Integer({
+  minimum: 1,
+  maximum: Number.MAX_SAFE_INTEGER,
+});
+export const ShipPrDigestSchema = Type.Object(
+  {
+    id: ShipDigestId,
+    sessionId: Type.String({
+      pattern:
+        "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+    }),
+    createdAt: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+    message: Type.String({
+      minLength: 1,
+      maxLength: SHIP_DIGEST_MESSAGE_LIMIT,
+      pattern: "\\S",
+    }),
+  },
+  {
+    description:
+      "A persisted, links-only Ship feedback digest for the initiating server's outbox, retried with the same ID until durable application acceptance.",
+  },
+);
+export type ShipPrDigest = Static<typeof ShipPrDigestSchema>;
+const ShipPrDigestFrame = Type.Object(
+  {
+    type: Type.Literal("ship_pr_digest"),
+    seq: ShipDigestSeq,
+    ...ShipPrDigestSchema.properties,
+  },
+  {
+    title: "HostLinkShipPrDigest",
+    description:
+      "A persisted PR feedback digest offered only to the initiating server. Retries use the same ID until application receipt.",
+  },
+);
+const ShipPrDigestReceipt = Type.Object(
+  {
+    type: Type.Literal("ship_pr_digest_receipt"),
+    seq: ShipDigestSeq,
+    id: ShipDigestId,
+  },
+  {
+    title: "HostLinkShipPrDigestReceipt",
+    description:
+      "The authenticated server durably accepted this ID in its outbox. This is not a transport acknowledgement or agent delivery confirmation.",
+  },
+);
 export const HostUriSchemeSchema = Type.Object(
   { scheme: Type.String(), writable: Type.Boolean() },
   {
@@ -270,7 +322,20 @@ export const DownMessageSchema = Type.Union(
         ],
       },
     ),
-    Type.Object({ type: Type.Literal("pty_attach"), id: Type.String(), sessionId: Type.String(), payload: Type.String() }, { title: "HostLinkPtyAttach", description: "Connection-scoped terminal frame, sent once and never replayed." }),
+    Type.Object(
+      {
+        type: Type.Literal("pty_attach"),
+        id: Type.String(),
+        sessionId: Type.String(),
+        payload: Type.String(),
+      },
+      {
+        title: "HostLinkPtyAttach",
+        description:
+          "Connection-scoped terminal frame, sent once and never replayed.",
+      },
+    ),
+    ShipPrDigestReceipt,
     ping,
     pong,
     ack,
@@ -319,7 +384,18 @@ export const UpMessageSchema = Type.Union(
         ],
       },
     ),
-    Type.Object({ type: Type.Literal("pty_event"), id: Type.String(), payload: Type.String() }, { title: "HostLinkPtyEvent", description: "Connection-scoped terminal event, sent once and never replayed." }),
+    Type.Object(
+      {
+        type: Type.Literal("pty_event"),
+        id: Type.String(),
+        payload: Type.String(),
+      },
+      {
+        title: "HostLinkPtyEvent",
+        description:
+          "Connection-scoped terminal event, sent once and never replayed.",
+      },
+    ),
     Type.Object(
       {
         type: Type.Literal("stdout"),
@@ -377,6 +453,7 @@ export const UpMessageSchema = Type.Union(
         description: "Host session list changed.",
       },
     ),
+    ShipPrDigestFrame,
     Type.Object(
       {
         type: Type.Literal("channels_changed"),

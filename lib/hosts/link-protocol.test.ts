@@ -19,15 +19,89 @@ const MB = 1024 * 1024;
 const ATTEMPT = "3aa8ab15-162b-4bee-97c8-2b35a65a7b32";
 
 test("terminal frames are unsequenced and reject malformed identities and oversized input", async () => {
-  const { decodeDown, decodeUp, encodeLine, LinkProtocolError, isHostOp } = await load();
-  const down = { type: "pty_attach" as const, id: ATTEMPT, sessionId: ATTEMPT, payload: JSON.stringify({ type: "input", data: "hello" }) };
-  const up = { type: "pty_event" as const, id: ATTEMPT, payload: JSON.stringify({ type: "output", data: "hello", cursor: 1 }) };
+  const { decodeDown, decodeUp, encodeLine, LinkProtocolError, isHostOp } =
+    await load();
+  const down = {
+    type: "pty_attach" as const,
+    id: ATTEMPT,
+    sessionId: ATTEMPT,
+    payload: JSON.stringify({ type: "input", data: "hello" }),
+  };
+  const up = {
+    type: "pty_event" as const,
+    id: ATTEMPT,
+    payload: JSON.stringify({ type: "output", data: "hello", cursor: 1 }),
+  };
   assert.deepEqual(decodeDown(encodeLine(down)), down);
   assert.deepEqual(decodeUp(encodeLine(up)), up);
   assert.equal(isHostOp("ptySessions"), true);
-  assert.throws(() => decodeDown(JSON.stringify({ ...down, id: "bad" })), LinkProtocolError);
-  assert.throws(() => decodeDown(JSON.stringify({ ...down, payload: "x".repeat(131073) })), LinkProtocolError);
-  assert.throws(() => decodeUp(JSON.stringify({ ...up, id: "bad" })), LinkProtocolError);
+  assert.throws(
+    () => decodeDown(JSON.stringify({ ...down, id: "bad" })),
+    LinkProtocolError,
+  );
+  assert.throws(
+    () => decodeDown(JSON.stringify({ ...down, payload: "x".repeat(131073) })),
+    LinkProtocolError,
+  );
+  assert.throws(
+    () => decodeUp(JSON.stringify({ ...up, id: "bad" })),
+    LinkProtocolError,
+  );
+});
+
+test("Ship offers and receipts are sequenced, bounded and direction-specific", async () => {
+  const { decodeDown, decodeUp, encodeLine, LinkProtocolError } = await load();
+  const offer = {
+    type: "ship_pr_digest" as const,
+    seq: 1,
+    id: ATTEMPT,
+    sessionId: ATTEMPT,
+    createdAt: 123,
+    message: "Feedback: https://github.com/test/repo/pull/42#issuecomment-123",
+  };
+  const receipt = {
+    type: "ship_pr_digest_receipt" as const,
+    seq: 2,
+    id: ATTEMPT,
+  };
+  assert.deepEqual(decodeUp(encodeLine(offer)), offer);
+  assert.deepEqual(decodeDown(encodeLine(receipt)), receipt);
+  assert.deepEqual(
+    decodeUp(
+      JSON.stringify({ ...offer, hostId: "untrusted", owner: "untrusted" }),
+    ),
+    offer,
+  );
+  for (const fields of [
+    { seq: undefined },
+    { seq: 0 },
+    { id: "bad id" },
+    { sessionId: "bad" },
+    { createdAt: 0 },
+    { createdAt: 1.5 },
+    { message: "  " },
+    { message: "x".repeat(16_385) },
+  ])
+    assert.throws(
+      () => decodeUp(JSON.stringify({ ...offer, ...fields })),
+      LinkProtocolError,
+    );
+  assert.throws(
+    () => decodeDown(JSON.stringify({ ...receipt, seq: 0 })),
+    LinkProtocolError,
+  );
+  assert.deepEqual(decodeDown(encodeLine(offer)), {
+    type: "unknown",
+    messageType: offer.type,
+    seq: offer.seq,
+    wrongDirection: true,
+  });
+  assert.deepEqual(decodeUp(encodeLine(receipt)), {
+    type: "unknown",
+    messageType: receipt.type,
+    seq: receipt.seq,
+    wrongDirection: true,
+  });
 });
 
 const DOWN = [

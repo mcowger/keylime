@@ -14,6 +14,9 @@ export type ShipPr = Static<typeof M.ShipPrSchema>;
 export type ShipPreview = Static<typeof M.ShipPreviewSchema>;
 /** Shipping choices may rebase, push, create a PR and clean up the workspace. */
 export type ShipRequest = Static<typeof M.ShipRequestSchema>;
+export type ShipStopMonitorRequest = Static<
+  typeof M.ShipStopMonitorRequestSchema
+>;
 export type ShipStepName = Static<typeof M.ShipStepNameSchema>;
 export type ShipStep = Static<typeof M.ShipStepSchema>;
 /** Persisted step-by-step job; a failure or interruption can leave earlier Git or cleanup effects in place. */

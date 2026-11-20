@@ -56,7 +56,13 @@ function shipPr(value: unknown): boolean {
     ) &&
     typeof value.autoMerge === "boolean" &&
     typeof value.cleanup === "boolean" &&
-    text(value.checkedAt)
+    text(value.checkedAt) &&
+    (value.monitor === undefined ||
+      (isRecord(value.monitor) &&
+        text(value.monitor.id) &&
+        ["watching", "error", "delivery-expired"].includes(
+          value.monitor.state as string,
+        )))
   );
 }
 
@@ -170,6 +176,8 @@ export function validWorkspaceResult(
         ) &&
         (value.pr === null || shipPr(value.pr))
       );
+    case "stopShipMonitor":
+      return typeof value.stopped === "boolean";
     case "startShip":
     case "shipStatus":
     case "shipFinish":

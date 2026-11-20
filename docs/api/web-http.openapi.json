@@ -38591,6 +38591,31 @@
                                         "cleanup": {
                                           "type": "boolean"
                                         },
+                                        "monitor": {
+                                          "properties": {
+                                            "id": {
+                                              "type": "string"
+                                            },
+                                            "state": {
+                                              "anyOf": [
+                                                {
+                                                  "const": "watching",
+                                                  "type": "string"
+                                                },
+                                                {
+                                                  "const": "error",
+                                                  "type": "string"
+                                                },
+                                                {
+                                                  "const": "delivery-expired",
+                                                  "type": "string"
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": ["id", "state"],
+                                          "type": "object"
+                                        },
                                         "number": {
                                           "type": "number"
                                         },
@@ -39465,6 +39490,31 @@
                                         },
                                         "cleanup": {
                                           "type": "boolean"
+                                        },
+                                        "monitor": {
+                                          "properties": {
+                                            "id": {
+                                              "type": "string"
+                                            },
+                                            "state": {
+                                              "anyOf": [
+                                                {
+                                                  "const": "watching",
+                                                  "type": "string"
+                                                },
+                                                {
+                                                  "const": "error",
+                                                  "type": "string"
+                                                },
+                                                {
+                                                  "const": "delivery-expired",
+                                                  "type": "string"
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": ["id", "state"],
+                                          "type": "object"
                                         },
                                         "number": {
                                           "type": "number"
@@ -61894,6 +61944,31 @@
                                           },
                                           "cleanup": {
                                             "type": "boolean"
+                                          },
+                                          "monitor": {
+                                            "properties": {
+                                              "id": {
+                                                "type": "string"
+                                              },
+                                              "state": {
+                                                "anyOf": [
+                                                  {
+                                                    "const": "watching",
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "const": "error",
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "const": "delivery-expired",
+                                                    "type": "string"
+                                                  }
+                                                ]
+                                              }
+                                            },
+                                            "required": ["id", "state"],
+                                            "type": "object"
                                           },
                                           "number": {
                                             "type": "number"
@@ -84866,6 +84941,31 @@
                             "cleanup": {
                               "type": "boolean"
                             },
+                            "monitor": {
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "state": {
+                                  "anyOf": [
+                                    {
+                                      "const": "watching",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "error",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "delivery-expired",
+                                      "type": "string"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": ["id", "state"],
+                              "type": "object"
+                            },
                             "number": {
                               "type": "number"
                             },
@@ -85211,7 +85311,7 @@
         }
       },
       "post": {
-        "description": "### Usage\n\nStart a ship job.\n\n### Inputs\n\nSend host and the ship input object for its project and workspace.\n\n### Invariants\n\nThe host validates ship preconditions; a failed post-push lookup retains the job preview's PR, while a successful empty lookup does not; job acceptance is not completion.\n\n### Effects\n\nStarts a host job that may mutate Git and remote state.\n\n### Recovery\n\nPoll job status and inspect repository state after an uncertain response before starting another job.",
+        "description": "### Usage\n\nStart a ship job.\n\n### Inputs\n\nSend host and the ship input object. In PR modes, optionally send monitorSessionId for a chat in the same workspace.\n\n### Invariants\n\nThe host validates ship preconditions and chat ownership. The authenticated daemon link selects the server for notifications. A failed post-push lookup retains the job preview's PR, while a successful empty lookup does not. Job acceptance does not mean shipping is complete or monitoring has started.\n\n### Effects\n\nStarts a host job that may mutate Git and remote state. Opted-in monitoring sends feedback links to chat without gating merges.\n\n### Recovery\n\nPoll job status and inspect repository state after an uncertain response before starting another job.\n\n### Additional protocol details\n\nPR modes may opt into feedback links with monitorSessionId for a chat in the same workspace. The authenticated daemon link selects the notification server. Job acceptance does not mean monitoring has started, and monitoring does not gate merges.",
         "operationId": "workspaceShipPost",
         "requestBody": {
           "content": {
@@ -85261,6 +85361,10 @@
                           }
                         ],
                         "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
+                      },
+                      "monitorSessionId": {
+                        "description": "Chat to notify about new PR feedback. Omit to leave monitoring off. Only valid in PR modes; monitoring does not gate merges.",
+                        "type": "string"
                       },
                       "path": {
                         "type": "string"
@@ -85392,6 +85496,31 @@
                         },
                         "cleanup": {
                           "type": "boolean"
+                        },
+                        "monitor": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "anyOf": [
+                                {
+                                  "const": "watching",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "error",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "delivery-expired",
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["id", "state"],
+                          "type": "object"
                         },
                         "number": {
                           "type": "number"
@@ -85773,6 +85902,44 @@
             },
             "description": "The operation failed."
           },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host daemon does not support PR monitoring."
+          },
           "503": {
             "content": {
               "application/json": {
@@ -85823,9 +85990,9 @@
         ],
         "summary": "Start shipping a workspace",
         "x-client-semantics": {
-          "Effects": "Starts a host job that may mutate Git and remote state.",
-          "Inputs": "Send host and the ship input object for its project and workspace.",
-          "Invariants": "The host validates ship preconditions; a failed post-push lookup retains the job preview's PR, while a successful empty lookup does not; job acceptance is not completion.",
+          "Effects": "Starts a host job that may mutate Git and remote state. Opted-in monitoring sends feedback links to chat without gating merges.",
+          "Inputs": "Send host and the ship input object. In PR modes, optionally send monitorSessionId for a chat in the same workspace.",
+          "Invariants": "The host validates ship preconditions and chat ownership. The authenticated daemon link selects the server for notifications. A failed post-push lookup retains the job preview's PR, while a successful empty lookup does not. Job acceptance does not mean shipping is complete or monitoring has started.",
           "Recovery": "Poll job status and inspect repository state after an uncertain response before starting another job.",
           "Usage": "Start a ship job."
         }
@@ -85943,6 +86110,31 @@
                         },
                         "cleanup": {
                           "type": "boolean"
+                        },
+                        "monitor": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "anyOf": [
+                                {
+                                  "const": "watching",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "error",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "delivery-expired",
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["id", "state"],
+                          "type": "object"
                         },
                         "number": {
                           "type": "number"
@@ -86499,6 +86691,31 @@
                         "cleanup": {
                           "type": "boolean"
                         },
+                        "monitor": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "anyOf": [
+                                {
+                                  "const": "watching",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "error",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "delivery-expired",
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["id", "state"],
+                          "type": "object"
+                        },
                         "number": {
                           "type": "number"
                         },
@@ -86934,6 +87151,341 @@
           "Invariants": "The host checks the workspace and workflow preconditions.",
           "Recovery": "Inspect workspace and ship state after uncertainty before repeating the request.",
           "Usage": "Finish the ship workflow for a workspace."
+        }
+      }
+    },
+    "/api/ship/monitor/stop": {
+      "post": {
+        "description": "### Usage\n\nStop PR feedback monitoring for a workspace.\n\n### Inputs\n\nSend host, projectPath, path and the monitorId from the workspace PR state.\n\n### Invariants\n\nOnly the initiating server link can stop the monitor; a stale id cannot stop a replacement.\n\n### Effects\n\nStops feedback notifications without changing the PR or its merge settings.\n\n### Recovery\n\nRefresh workspace state before retrying after an uncertain response.",
+        "operationId": "workspaceShipMonitorStop",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "host": {
+                    "type": "string"
+                  },
+                  "monitorId": {
+                    "description": "Monitor generation shown on the workspace pull request.",
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "projectPath": {
+                    "type": "string"
+                  }
+                },
+                "required": ["projectPath", "path", "monitorId"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Result of a request to stop monitoring PR feedback.",
+                  "properties": {
+                    "stopped": {
+                      "description": "False if the monitor was already absent or a different generation is active.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["stopped"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request or rejected operation."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authentication is required when configured."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Origin, ownership or authorization policy refused this request."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The requested resource does not exist."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Conflict: the workspace host does not match its session, the upload target exists, or another operation owns the resource."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The operation failed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The owning host or required service is unavailable."
+          }
+        },
+        "security": [
+          {
+            "webSession": []
+          },
+          {
+            "trustedProxy": []
+          },
+          {}
+        ],
+        "summary": "Stop PR feedback monitoring",
+        "x-client-semantics": {
+          "Effects": "Stops feedback notifications without changing the PR or its merge settings.",
+          "Inputs": "Send host, projectPath, path and the monitorId from the workspace PR state.",
+          "Invariants": "Only the initiating server link can stop the monitor; a stale id cannot stop a replacement.",
+          "Recovery": "Refresh workspace state before retrying after an uncertain response.",
+          "Usage": "Stop PR feedback monitoring for a workspace."
         }
       }
     },

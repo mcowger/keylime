@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
+import { Database } from "bun:sqlite";
 import {
   existsSync,
   mkdirSync,
@@ -15,13 +17,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after, before } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
-import { fileURLToPath } from "node:url";
-import type { ChildProcessByStdio } from "node:child_process";
-import type { Readable } from "node:stream";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import type { ChildProcess } from "node:child_process";
 import { captureExpectedConsole } from "../../tests/expected-console.ts";
 import { fakeRunnerSocket } from "../../tests/fake-runner-socket.ts";
 import type { AgentEvent } from "../rpc-manager.ts";
 import type { LinkSocket, LinkSocketData } from "./hub.ts";
+import { LINK_PROTOCOL_VERSION } from "./link-protocol.ts";
 
 type OmpLogEntry = {
   pid: number;
@@ -167,7 +169,16 @@ require("node:readline").createInterface({ input: rpcSocket }).on("line", (line)
     return end();
   }
   if (command.t !== "cmd") return;
-  if (command.op === "get_state") return reply({ sessionId, sessionFile, isStreaming: streaming, isCompacting: false });
+  if (command.op === "get_state") return reply({ sessionId, sessionFile, isStreaming: streaming, isCompacting: false, supportsClientMessageIds: true, queuedMessages: [] });
+  if (command.op === "follow_up") {
+    reply({});
+    const { message: text, clientMessageId } = command.args;
+    const message = { role: "user", content: [{ type: "text", text }], timestamp: Date.now() };
+    out({ t: "event", event: { type: "agent_start" } });
+    out({ t: "event", event: { type: "message_start", messageId: "ship-feedback", message, clientMessageId } });
+    out({ t: "event", event: { type: "message_end", messageId: "ship-feedback", message, clientMessageId } });
+    return end();
+  }
   if (command.op !== "prompt") return reply({});
   reply({ agentInvoked: true });
   prompt = command.args.message;
@@ -213,13 +224,18 @@ require("node:readline").createInterface({ input: rpcSocket }).on("line", (line)
 `,
 );
 
-function writeSession(name: string, id: string, messages: string[]) {
+function writeSession(
+  name: string,
+  id: string,
+  messages: string[],
+  cwd = projectDir,
+) {
   const lines: object[] = [
     {
       type: "session",
       version: 3,
       id,
-      cwd: projectDir,
+      cwd,
       timestamp: "2026-01-01T00:00:00.000Z",
     },
   ];
@@ -279,6 +295,7 @@ const faults = {
   loseStdin: false,
   cutUplinkBeforeApply: false,
   cutUplinkAfterApply: false,
+  loseShipReceipt: false,
 };
 // `kills`: the channel of each `kill` main sent down to the daemon; `refusedUpgrades`: link GETs answered 503.
 const seen: {
@@ -287,6 +304,8 @@ const seen: {
   kills: string[];
   refusedUpgrades: number;
 } = { cuts: [], binaryFrames: 0, kills: [], refusedUpgrades: 0 };
+const shipOffers: { hostId: string; id: string }[] = [];
+const shipReceipts: string[] = [];
 
 // The open link sockets, and the one stand-in the hub sees for each (it keys its state on socket identity).
 const sockets = new Set<Bun.ServerWebSocket<LinkSocketData>>();
@@ -305,6 +324,12 @@ function wrap(ws: Bun.ServerWebSocket<LinkSocketData>): LinkSocket {
     send(frame) {
       if (dropSends) return 0;
       if (typeof frame === "string") {
+        for (const [, id] of frame.matchAll(
+          /"type":"ship_pr_digest_receipt","id":"([^"]+)"/g,
+        )) {
+          shipReceipts.push(id);
+          if (faults.loseShipReceipt) return Buffer.byteLength(frame);
+        }
         if (faults.loseStdin && frame.includes('"type":"stdin"')) {
           // The downlink drops with this stdin line still in flight.
           faults.loseStdin = false;
@@ -345,6 +370,12 @@ const server: Bun.Server<LinkSocketData> = Bun.serve<LinkSocketData>({
       sockets.add(ws);
     },
     message(ws, data) {
+      if (typeof data === "string") {
+        for (const [, id] of data.matchAll(
+          /"type":"ship_pr_digest","id":"([^"]+)"/g,
+        ))
+          shipOffers.push({ hostId: ws.data.hostId, id });
+      }
       const carriesFrames =
         typeof data === "string" && data.includes('"message_update');
       if (faults.cutUplinkBeforeApply && carriesFrames) {
@@ -379,7 +410,8 @@ const server: Bun.Server<LinkSocketData> = Bun.serve<LinkSocketData>({
 });
 
 let hostId: string;
-let daemon: ChildProcessByStdio<null, Readable, Readable>;
+let primaryLogin: { url: string; token: string };
+let daemon: ChildProcess;
 let daemonLog = "";
 
 /** A restart of the web server as the daemon sees it: the old process runs its shutdown
@@ -423,12 +455,46 @@ function waitFor(predicate: () => unknown, what: string, timeoutMs = 20_000) {
 before(async () => {
   const url = `http://127.0.0.1:${server.port}`;
   const { host, token } = createHost("Laptop");
+  primaryLogin = { url, token };
   hostId = host.id;
+  const preload = join(scratch, "ship-test-preload.ts");
+  writeFileSync(
+    preload,
+    `
+import { refreshShipPrs } from ${JSON.stringify(pathToFileURL(join(repoRoot, "lib/hosts/workspace-ship.ts")).href)};
+import { registerCreatedWorkspace, registerCreatedSession } from ${JSON.stringify(pathToFileURL(join(repoRoot, "lib/hosts/project-hierarchy.ts")).href)};
+process.on("message", async ({ requestId, worktree }) => {
+  try {
+    if (worktree) {
+      registerCreatedWorkspace(worktree.project, worktree.path, "feature");
+      registerCreatedSession(worktree.path, worktree.sessionId);
+    } else {
+      await refreshShipPrs();
+    }
+    process.send({ requestId });
+  } catch (error) {
+    process.send({ requestId, error: String(error) });
+  }
+});
+`,
+  );
+  writeFileSync(
+    join(scratch, "gh"),
+    `#!/bin/sh
+case "$1 $2" in
+  'pr view') printf '{"state":"OPEN","url":"%s","number":42,"autoMergeRequest":null,"statusCheckRollup":[]}\\n' "$3";;
+  'api --hostname') echo '[[]]';;
+  *) exit 1;;
+esac
+`,
+    { mode: 0o755 },
+  );
   const env = {
     ...process.env,
     HOME: daemonHome,
     PI_CODING_AGENT_DIR: daemonAgentDir,
     KEYLIME_OMP_BIN: fakeOmp,
+    PATH: `${scratch}:${process.env.PATH}`,
     KEYLIME_HOST_SOCKET: join(scratch, "host.sock"),
   };
 
@@ -447,14 +513,14 @@ before(async () => {
   });
   assert.ok(!login.stdout.includes(token) && !login.stderr.includes(token));
 
-  daemon = spawn(process.execPath, [hostBin], {
+  daemon = spawn(process.execPath, ["--preload", preload, hostBin], {
     env,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", "pipe", "pipe", "ipc"],
   });
-  daemon.stdout.on("data", (chunk) => {
+  daemon.stdout!.on("data", (chunk) => {
     daemonLog += chunk;
   });
-  daemon.stderr.on("data", (chunk) => {
+  daemon.stderr!.on("data", (chunk) => {
     daemonLog += chunk;
   });
   await waitFor(
@@ -1073,6 +1139,352 @@ test("a daemon that stops reading is paced, not closed: the hub sends its outbox
     Array.from({ length: count }, (_, i) => i + 1),
   );
   assert.deepEqual([...sockets], [socket], "no redial");
+});
+
+async function shipTestTick(worktree?: {
+  project: string;
+  path: string;
+  sessionId: string;
+}) {
+  const requestId = randomUUID();
+  let reply: { requestId: string; error?: string } | undefined;
+  const received = (message: typeof reply) => {
+    if (message?.requestId === requestId) reply = message;
+  };
+  daemon.on("message", received);
+  try {
+    daemon.send({ requestId, worktree });
+    await waitFor(() => reply, "daemon's Ship tick to finish");
+    assert.equal(reply?.error, undefined);
+  } finally {
+    daemon.off("message", received);
+  }
+}
+
+test("Ship offers only to its initiating server, retries a lost receipt, and never retargets to a replacement token", async (t) => {
+  const id = randomUUID(),
+    sessionId = randomUUID();
+  const project = realpathSync(daemonHome) + "/ship-repo";
+  const path = realpathSync(daemonHome) + "/ship-worktree";
+  execFileSync("git", ["init", "-q", project]);
+  execFileSync("git", [
+    "-C",
+    project,
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@example.invalid",
+    "commit",
+    "--allow-empty",
+    "-qm",
+    "base",
+  ]);
+  execFileSync("git", [
+    "-C",
+    project,
+    "worktree",
+    "add",
+    "-qb",
+    "feature",
+    path,
+  ]);
+  const registration = await host().workspaceOps.hierarchy({
+    action: "registerProject",
+    path: project,
+  });
+  assert.ok(registration.ok);
+  writeSession("2026-02-01_ship.jsonl", sessionId, ["ship context"], path);
+  host().invalidateSessionLists();
+  await shipTestTick({ project, path, sessionId });
+
+  type PeerData = { token: string };
+  let peer: Bun.ServerWebSocket<PeerData> | undefined;
+  let peerAck = 0,
+    peerInvalidations = 0;
+  const peerOffers: unknown[] = [];
+  const other = Bun.serve<PeerData>({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(req, server) {
+      if (req.headers.get("authorization") !== "Bearer other-token")
+        return new Response(null, { status: 401 });
+      if (server.upgrade(req, { data: { token: "other-token" } })) return;
+      return new Response(null, { status: 426 });
+    },
+    websocket: {
+      message(ws, data) {
+        assert.equal(typeof data, "string");
+        for (const line of String(data).split("\n").filter(Boolean)) {
+          const frame = JSON.parse(line);
+          if (frame.type === "hello") {
+            peer = ws;
+            ws.send(
+              JSON.stringify({
+                type: "welcome",
+                v: LINK_PROTOCOL_VERSION,
+                hostId: "peer",
+              }),
+            );
+          } else if (frame.type === "ack") {
+            peerAck = frame.ack;
+          } else if (frame.seq !== undefined) {
+            if (frame.type === "ship_pr_digest") peerOffers.push(frame);
+            if (frame.type === "sessions_changed") peerInvalidations++;
+            ws.send(JSON.stringify({ type: "ack", ack: frame.seq }));
+          }
+        }
+      },
+    },
+  });
+  const loginFile = join(daemonAgentDir, "keylime", "host.json");
+  const secondary = {
+    url: `http://127.0.0.1:${other.port}`,
+    token: "other-token",
+  };
+  const configure = (primary = primaryLogin, withPeer = true) =>
+    writeFileSync(
+      loginFile,
+      JSON.stringify({
+        ...primary,
+        links: withPeer ? [primary, secondary] : [primary],
+      }),
+    );
+  const replacement = createHost("Replacement token");
+  t.after(() => {
+    faults.loseShipReceipt = false;
+    configure(primaryLogin, false);
+    other.stop(true);
+    revokeHost(replacement.host.id);
+  });
+  configure();
+  await waitFor(() => peer, "second configured server to link");
+
+  const prFile = join(daemonAgentDir, "keylime", "ship", "prs.json");
+  mkdirSync(join(prFile, ".."), { recursive: true });
+  const url = "https://github.com/test/repo/pull/42";
+  const message = `New PR feedback: ${url}#issuecomment-123`;
+  const owner = createHash("sha256")
+    .update(
+      JSON.stringify([
+        "keylime-ship-server-v1",
+        primaryLogin.url,
+        primaryLogin.token,
+      ]),
+    )
+    .digest("hex");
+  const record = {
+    projectPath: project,
+    path,
+    base: "main",
+    generation: randomUUID(),
+    pr: { url, number: 42, state: "open", cleanup: false },
+    monitor: {
+      id: randomUUID(),
+      owner,
+      sessionId,
+      requestedAt: Date.now(),
+      seen: [],
+      pending: [{ id, sessionId, message, createdAt: Date.now() }],
+    },
+  };
+  const monitor = () => JSON.parse(readFileSync(prFile, "utf8"))[path].monitor;
+  writeFileSync(prFile, JSON.stringify({ [path]: record }));
+
+  const poll = async () => {
+    const previous = peerInvalidations;
+    await shipTestTick();
+    await waitFor(
+      () => peerInvalidations > previous,
+      "invalidation on the second server after the poll",
+    );
+    assert.deepEqual(
+      peerOffers,
+      [],
+      "list invalidations are shared, not the digest",
+    );
+  };
+  faults.loseShipReceipt = true;
+  await poll();
+  await waitFor(
+    () => shipReceipts.includes(id),
+    "durable application receipt generated (but lost)",
+  );
+  assert.deepEqual(
+    shipOffers.filter((offer) => offer.id === id),
+    [{ hostId, id }],
+  );
+  const database = new Database(join(mainAgentDir, "keylime", "outbox.db"), {
+    readonly: true,
+  });
+  t.after(() => database.close());
+  const entry = () =>
+    database
+      .query(
+        "SELECT source_host_id, mode, state, error FROM entries WHERE id = ?",
+      )
+      .get(id) as {
+      source_host_id: string;
+      mode: string;
+      state: string;
+      error: string | null;
+    } | null;
+  await waitFor(
+    () => ["delivered", "failed"].includes(entry()?.state ?? ""),
+    "the single digest outbox handoff to finish",
+  );
+  assert.deepEqual(entry(), {
+    source_host_id: hostId,
+    mode: "followUp",
+    state: "delivered",
+    error: null,
+  });
+  assert.equal(
+    monitor().pending[0].id,
+    id,
+    "transport acknowledgement does not retire the digest",
+  );
+  peer!.send(JSON.stringify({ type: "ship_pr_digest_receipt", seq: 1, id }));
+  await waitFor(
+    () => peerAck >= 1,
+    "transport ACK for a receipt offered by the wrong owner",
+  );
+  assert.equal(monitor().pending[0].id, id);
+
+  configure({ url: primaryLogin.url, token: replacement.token });
+  await waitFor(
+    () => hub.getHost(replacement.host.id)?.status() === "online",
+    "replacement token on same URL to link",
+  );
+  await poll();
+  assert.deepEqual(
+    shipOffers.filter((offer) => offer.id === id),
+    [{ hostId, id }],
+  );
+  assert.equal(monitor().pending[0].id, id);
+
+  // Reset the receiving hub so its original downlink receipt is not replayed; the new receipt must follow the retry.
+  await restartWeb({ whileStopping: async () => configure() });
+  await waitFor(
+    () => hub.getHost(hostId)?.status() === "online",
+    "original authenticated owner to reconnect",
+  );
+  faults.loseShipReceipt = false;
+  await poll();
+  await waitFor(
+    () => monitor()?.pending.length === 0,
+    "new durable receipt for the same digest ID",
+  );
+  assert.deepEqual(
+    shipOffers.filter((offer) => offer.id === id),
+    [
+      { hostId, id },
+      { hostId, id },
+    ],
+  );
+  assert.equal(
+    ompLog().filter((e) => e.command?.args?.message === message).length,
+    1,
+  );
+
+  const archived = await host().sessionOps.archiveSession(sessionId);
+  assert.ok(archived.ok);
+  assert.equal(
+    monitor(),
+    undefined,
+    "successful archive removes the watch immediately",
+  );
+});
+
+test("a digest cannot wake the same session ID on a different host", async (t) => {
+  const { host: source, token } = createHost("Host without the session");
+  const sessionId = randomUUID();
+  writeSession(`2026-02-02_${sessionId}.jsonl`, sessionId, [
+    "other host context",
+  ]);
+  host().invalidateSessionLists();
+  assert.ok(
+    (await host().sessionOps.listSessions()).some(({ id }) => id === sessionId),
+  );
+  let socket: LinkSocket | undefined;
+  let up = 0;
+  const sendUp = (frame: object) =>
+    hub.hostLinkSocket.message(socket!, JSON.stringify(frame));
+  const request = new Request(`${primaryLogin.url}/api/hosts/link`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(
+    linkRoute.GET(request, {
+      upgrade(data) {
+        socket = {
+          data,
+          send(message) {
+            for (const line of String(message).split("\n").filter(Boolean)) {
+              const frame = JSON.parse(line);
+              if (frame.type === "req" && frame.op === "listSessions") {
+                queueMicrotask(() =>
+                  sendUp({
+                    type: "res",
+                    seq: ++up,
+                    id: frame.id,
+                    ok: true,
+                    result: [],
+                  }),
+                );
+              }
+            }
+            return Buffer.byteLength(String(message));
+          },
+          close: () => hub.hostLinkSocket.close(socket!),
+          terminate: () => hub.hostLinkSocket.close(socket!),
+        };
+        return true;
+      },
+    }),
+    undefined,
+  );
+  t.after(() => {
+    socket?.close();
+    revokeHost(source.id);
+  });
+  sendUp({
+    type: "hello",
+    v: LINK_PROTOCOL_VERSION,
+    ompVersion: "fake",
+    home: "/tmp",
+    platform: process.platform,
+    autoApproveExtension: false,
+    ack: 0,
+    channels: [],
+  });
+  const id = randomUUID();
+  const message =
+    "Feedback: https://github.com/test/repo/pull/42#issuecomment-456";
+  sendUp({
+    type: "ship_pr_digest",
+    seq: ++up,
+    id,
+    sessionId,
+    message,
+    createdAt: Date.now(),
+    hostId,
+  });
+  const databasePath = join(mainAgentDir, "keylime", "outbox.db");
+  await waitFor(() => existsSync(databasePath), "outbox store to open");
+  const database = new Database(databasePath, { readonly: true });
+  t.after(() => database.close());
+  const entry = () =>
+    database
+      .query("SELECT source_host_id, state FROM entries WHERE id = ?")
+      .get(id);
+  await waitFor(
+    () => (entry() as { state: string } | null)?.state === "failed",
+    "missing source-host session to fail",
+  );
+  assert.deepEqual(entry(), { source_host_id: source.id, state: "failed" });
+  assert.equal(
+    ompLog().some((event) => event.command?.args?.message === message),
+    false,
+  );
 });
 
 test("revoking the host closes its socket; the daemon is refused 401, stops its omp children and exits 1", async () => {

@@ -70,6 +70,8 @@ with `gh pr view` every 60 s. `HierarchyWorkspace.ship` carries the PR and any r
 (`PR #N · checks`, `Merged · Clean up`) follows the hierarchy refresh. When a PR merges and `cleanup` is set, the
 daemon runs `shipFinish` itself; otherwise the pill's **Clean up** does.
 
+See [Monitor pull requests from Ship](2026-11-20-ship-pr-monitoring-design.md) for the optional review feedback watch.
+
 ## Decisions
 
 - Split commits allowed (omp decides; the user edits each message).

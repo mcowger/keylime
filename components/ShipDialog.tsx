@@ -4,7 +4,11 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
 import { sendAgentCommand } from "@/lib/agent-client";
 import { browserUUID } from "@/lib/browser-uuid";
-import { EVENT_STREAM_CLOSED, EVENT_STREAM_OPEN, openEventStream } from "@/lib/event-stream";
+import {
+  EVENT_STREAM_CLOSED,
+  EVENT_STREAM_OPEN,
+  openEventStream,
+} from "@/lib/event-stream";
 import type {
   CommitPlan,
   PrDescription,
@@ -28,7 +32,10 @@ interface Props {
   onRemoved?: () => void;
 }
 
-export type ShipTarget = Pick<Props, "host" | "projectPath" | "path" | "sessionId">;
+export type ShipTarget = Pick<
+  Props,
+  "host" | "projectPath" | "path" | "sessionId"
+>;
 
 async function json<T>(url: string, init: RequestInit): Promise<T> {
   const response = await fetch(url, init);
@@ -80,23 +87,72 @@ const PLAN_STAGES: Record<string, true> = {
   "Finalizing commit plan": true,
 };
 
-export function ShipPlanProgress({ elapsed, messages }: { elapsed: number; messages: string[] }) {
-  const stages = messages.filter((message) => Object.hasOwn(PLAN_STAGES, message));
+export function ShipPlanProgress({
+  elapsed,
+  messages,
+}: {
+  elapsed: number;
+  messages: string[];
+}) {
+  const stages = messages.filter((message) =>
+    Object.hasOwn(PLAN_STAGES, message),
+  );
   const detail = messages.at(-1);
   return (
     <div style={{ color: "var(--text-muted)", fontSize: 12, minWidth: 0 }}>
       <p>Generating commit plan ({elapsed}s)</p>
-      <ul style={{ display: "grid", gap: 8, margin: 0, padding: 0, listStyle: "none" }}>
+      <ul
+        style={{
+          display: "grid",
+          gap: 8,
+          margin: 0,
+          padding: 0,
+          listStyle: "none",
+        }}
+      >
         {stages.map((stage, index) => (
-          <li key={`${stage}-${index}`} style={{ display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.5 }}>
-            <span aria-hidden="true" style={{ display: "flex", flexShrink: 0, marginTop: 2, color: index === stages.length - 1 ? "var(--text-dim)" : "var(--status-success)" }}>
-              {index === stages.length - 1 ? <Loader2 size={14} /> : <CheckCircle2 size={14} />}
+          <li
+            key={`${stage}-${index}`}
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 8,
+              lineHeight: 1.5,
+            }}
+          >
+            <span
+              aria-hidden="true"
+              style={{
+                display: "flex",
+                flexShrink: 0,
+                marginTop: 2,
+                color:
+                  index === stages.length - 1
+                    ? "var(--text-dim)"
+                    : "var(--status-success)",
+              }}
+            >
+              {index === stages.length - 1 ? (
+                <Loader2 size={14} />
+              ) : (
+                <CheckCircle2 size={14} />
+              )}
             </span>
-            <strong style={{ color: "var(--text)", overflowWrap: "anywhere" }}>{stage}</strong>
+            <strong style={{ color: "var(--text)", overflowWrap: "anywhere" }}>
+              {stage}
+            </strong>
           </li>
         ))}
       </ul>
-      {detail && !Object.hasOwn(PLAN_STAGES, detail) && <div role="status" aria-live="polite" style={{ marginTop: 4, overflowWrap: "anywhere" }}>{detail}</div>}
+      {detail && !Object.hasOwn(PLAN_STAGES, detail) && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{ marginTop: 4, overflowWrap: "anywhere" }}
+        >
+          {detail}
+        </div>
+      )}
     </div>
   );
 }
@@ -119,11 +175,13 @@ export function ShipDialog({
   const [mode, setMode] = useState<ShipMode>("local");
   const [rebase, setRebase] = useState(false);
   const [cleanup, setCleanup] = useState(true);
+  const [monitorFeedback, setMonitorFeedback] = useState(false);
   const [mergeMethod, setMergeMethod] = useState<ShipMergeMethod>("squash");
   const [pr, setPr] = useState<PrDescription | null>(null);
   const [prLoading, setPrLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
+  const workingRef = useRef(false);
   const [job, setJob] = useState<ShipJob | null>(null);
   const [asking, setAsking] = useState(false);
   const askingRef = useRef(false);
@@ -141,10 +199,12 @@ export function ShipDialog({
     setElapsed(0);
     setMode("local");
     setCleanup(true);
+    setMonitorFeedback(false);
     setPr(null);
     setPrLoading(false);
     setError(null);
     setWorking(false);
+    workingRef.current = false;
     setJob(null);
     setAsking(false);
     askingRef.current = false;
@@ -168,10 +228,13 @@ export function ShipDialog({
           stream = openEventStream({ kind: "commit-plan-progress", sessionId });
         } catch {
           setProgress(["Live progress is unavailable."]);
-          const result = await sendAgentCommand<{ plan: CommitPlan | null }>(sessionId, {
-            type: "commit_plan",
-            requestId,
-          });
+          const result = await sendAgentCommand<{ plan: CommitPlan | null }>(
+            sessionId,
+            {
+              type: "commit_plan",
+              requestId,
+            },
+          );
           if (generation.current === current) setPlan(result.plan);
           return;
         }
@@ -194,14 +257,23 @@ export function ShipDialog({
           if (settled || generation.current !== current) return;
           try {
             const frame = JSON.parse(event.data);
-            if (frame.type !== "commit_plan_progress" || frame.requestId !== requestId || typeof frame.message !== "string") return;
+            if (
+              frame.type !== "commit_plan_progress" ||
+              frame.requestId !== requestId ||
+              typeof frame.message !== "string"
+            )
+              return;
             const message = frame.message
               .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\|$)/g, "")
               .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
               .replace(/[\x00-\x1f\x7f-\x9f]/g, " ")
               .trim()
               .slice(0, 300);
-            if (message) setProgress((items) => [...items.filter((item) => Object.hasOwn(PLAN_STAGES, item)), message]);
+            if (message)
+              setProgress((items) => [
+                ...items.filter((item) => Object.hasOwn(PLAN_STAGES, item)),
+                message,
+              ]);
           } catch {
             // Ignore malformed and unrelated frames.
           }
@@ -218,21 +290,26 @@ export function ShipDialog({
           void sendAgentCommand<{ plan: CommitPlan | null }>(sessionId, {
             type: "commit_plan",
             requestId,
-          }).then((result) => {
-            if (!settled && generation.current === current) setPlan(result.plan);
-            settled = true;
-            close();
-            resolve();
-          }, (error: unknown) => {
-            settled = true;
-            close();
-            reject(error);
-          });
+          }).then(
+            (result) => {
+              if (!settled && generation.current === current)
+                setPlan(result.plan);
+              settled = true;
+              close();
+              resolve();
+            },
+            (error: unknown) => {
+              settled = true;
+              close();
+              reject(error);
+            },
+          );
         };
         stream.onopen = start;
         stream.onerror = () => {
           if (stream.readyState === EVENT_STREAM_CLOSED) {
-            if (started && !settled) setProgress(["Live progress is unavailable."]);
+            if (started && !settled)
+              setProgress(["Live progress is unavailable."]);
             else unavailable();
           }
         };
@@ -287,7 +364,14 @@ export function ShipDialog({
   }, [open, mode, preview, plan, pr, prLoading, sessionId]);
 
   async function ship() {
-    if (!preview || plan === undefined || !controller.current) return;
+    if (
+      workingRef.current ||
+      !preview ||
+      plan === undefined ||
+      !controller.current
+    )
+      return;
+    workingRef.current = true;
     const signal = controller.current.signal;
     const current = generation.current;
     setWorking(true);
@@ -310,7 +394,13 @@ export function ShipDialog({
             mode,
             rebase,
             cleanup,
-            ...(mode !== "local" ? { mergeMethod, ...(pr ? { pr } : {}) } : {}),
+            ...(mode !== "local"
+              ? {
+                  mergeMethod,
+                  ...(pr ? { pr } : {}),
+                  ...(monitorFeedback ? { monitorSessionId: sessionId } : {}),
+                }
+              : {}),
           },
         }),
         signal,
@@ -354,7 +444,10 @@ export function ShipDialog({
     } catch (e) {
       if (!signal.aborted) setError(String(e instanceof Error ? e.message : e));
     } finally {
-      if (generation.current === current) setWorking(false);
+      if (generation.current === current) {
+        workingRef.current = false;
+        setWorking(false);
+      }
     }
   }
   async function askAgent(message: string) {
@@ -427,7 +520,10 @@ export function ShipDialog({
           boxShadow: "var(--shadow-modal)",
         }}
       >
-        <h2 className="display-heading" style={{ fontSize: 20, margin: "0 0 12px" }}>
+        <h2
+          className="display-heading"
+          style={{ fontSize: 20, margin: "0 0 12px" }}
+        >
           Ship workspace
         </h2>
         {error && (
@@ -492,7 +588,8 @@ export function ShipDialog({
                 role="status"
                 style={{ margin: 0, color: "var(--text-muted)", fontSize: 13 }}
               >
-                No uncommitted changes. Ship won't generate a new commit message.
+                No uncommitted changes. Ship won't generate a new commit
+                message.
               </p>
             )}
             {plan?.commits.map((commit, index) => (
@@ -624,6 +721,19 @@ export function ShipDialog({
                 />{" "}
                 PR + auto-merge{githubReason ? ` (${githubReason})` : ""}
               </label>
+              {mode !== "local" && (
+                <>
+                  <Check
+                    checked={monitorFeedback}
+                    onChange={setMonitorFeedback}
+                    label="Monitor PR feedback"
+                  />
+                  <span>
+                    Send new PR feedback links to this chat. This doesn't block
+                    merges.
+                  </span>
+                </>
+              )}
             </fieldset>
             {preview.github.prLookupError && (
               <Alert
@@ -692,53 +802,55 @@ export function ShipDialog({
                 listStyle: "none",
               }}
             >
-              {job.steps.filter((step) => step.status !== "skipped").map((step) => (
-                <li
-                  key={step.name}
-                  style={{
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: 8,
-                    color:
-                      step.status === "failed"
-                        ? "var(--status-error)"
-                        : "var(--text-muted)",
-                    fontSize: 12,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  <span
-                    aria-hidden="true"
+              {job.steps
+                .filter((step) => step.status !== "skipped")
+                .map((step) => (
+                  <li
+                    key={step.name}
                     style={{
                       display: "flex",
-                      flexShrink: 0,
-                      marginTop: 2,
+                      alignItems: "flex-start",
+                      gap: 8,
                       color:
-                        step.status === "done"
-                          ? "var(--status-success)"
-                          : step.status === "failed"
-                            ? "var(--status-error)"
-                            : "var(--text-dim)",
+                        step.status === "failed"
+                          ? "var(--status-error)"
+                          : "var(--text-muted)",
+                      fontSize: 12,
+                      lineHeight: 1.5,
                     }}
                   >
-                    {step.status === "running" ? (
-                      <Loader2 size={14} />
-                    ) : step.status === "done" ? (
-                      <CheckCircle2 size={14} />
-                    ) : step.status === "failed" ? (
-                      <XCircle size={14} />
-                    ) : (
-                      <Circle size={14} />
-                    )}
-                  </span>
-                  <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
-                    <strong style={{ color: "var(--text)" }}>
-                      {step.name}
-                    </strong>
-                    : {step.status} {step.detail}
-                  </span>
-                </li>
-              ))}
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        display: "flex",
+                        flexShrink: 0,
+                        marginTop: 2,
+                        color:
+                          step.status === "done"
+                            ? "var(--status-success)"
+                            : step.status === "failed"
+                              ? "var(--status-error)"
+                              : "var(--text-dim)",
+                      }}
+                    >
+                      {step.status === "running" ? (
+                        <Loader2 size={14} />
+                      ) : step.status === "done" ? (
+                        <CheckCircle2 size={14} />
+                      ) : step.status === "failed" ? (
+                        <XCircle size={14} />
+                      ) : (
+                        <Circle size={14} />
+                      )}
+                    </span>
+                    <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+                      <strong style={{ color: "var(--text)" }}>
+                        {step.name}
+                      </strong>
+                      : {step.status} {step.detail}
+                    </span>
+                  </li>
+                ))}
             </ul>
             {job.status === "conflict" && (
               <>
@@ -816,7 +928,11 @@ export function ShipDialog({
                 border: "none",
                 borderRadius: "var(--radius-control)",
                 color: "var(--on-accent)",
-                cursor: working ? "wait" : shipDisabled ? "not-allowed" : "pointer",
+                cursor: working
+                  ? "wait"
+                  : shipDisabled
+                    ? "not-allowed"
+                    : "pointer",
                 opacity: shipDisabled ? 0.5 : 1,
                 fontSize: 13,
                 fontWeight: 600,
