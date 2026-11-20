@@ -61,16 +61,14 @@ function fakeOps(overrides: Partial<AgentToolSessionOps> = {}) {
           id: "local",
           label: "This machine",
           online: true,
-          allowAgentStart: true,
         },
         {
           id: "h-build",
           label: "build-box",
           online: true,
-          allowAgentStart: false,
         },
-        { id: "h-gpu", label: "gpu-box", online: false, allowAgentStart: true },
-        { id: "h-ci", label: "ci-box", online: true, allowAgentStart: true },
+        { id: "h-gpu", label: "gpu-box", online: false },
+        { id: "h-ci", label: "ci-box", online: true },
       ];
     },
     async createSession(
@@ -402,7 +400,7 @@ test("rate limit caps a source at 20 agent tool calls per minute (#275)", async 
   );
 });
 
-test("new_session on a remote host that disallows agent starts asks the user first", async () => {
+test("new_session on a remote host asks the user first", async () => {
   const ops = fakeOps();
   const titles: string[] = [];
   const result = await executeAgentTool(
@@ -437,17 +435,6 @@ test("new_session declined by the user creates nothing", async () => {
   assert.equal(ops.calls.create.length, 0);
 });
 
-test("new_session on a remote host that allows agent starts asks nothing", async () => {
-  const ops = fakeOps();
-  await executeAgentTool(
-    "new_session",
-    { host: "ci-box", cwd: "/srv/app" },
-    ops,
-    ctx(),
-  );
-  assert.equal(ops.calls.create[0].hostId, "h-ci");
-});
-
 test("new_session refuses unknown and offline hosts", async () => {
   const ops = fakeOps();
   await assert.rejects(
@@ -463,9 +450,9 @@ test("new_session refuses unknown and offline hosts", async () => {
 
 test("new_session refuses a label two hosts share and names their ids; an id still resolves", async () => {
   const hosts = [
-    { id: "local", label: "This machine", online: true, allowAgentStart: true },
-    { id: "h-a", label: "laptop", online: true, allowAgentStart: true },
-    { id: "h-b", label: "Laptop", online: true, allowAgentStart: true },
+    { id: "local", label: "This machine", online: true },
+    { id: "h-a", label: "laptop", online: true },
+    { id: "h-b", label: "Laptop", online: true },
   ];
   const ops = fakeOps({ listHosts: () => hosts });
   await assert.rejects(
@@ -483,7 +470,7 @@ test("new_session refuses a label two hosts share and names their ids; an id sti
     "new_session",
     { host: "h-b", cwd: "/srv/app" },
     ops,
-    ctx(),
+    ctx({ confirm: async () => true }),
   );
   assert.equal(ops.calls.create[0].hostId, "h-b");
 });
@@ -501,8 +488,8 @@ test("new_session without a host, or with local / This machine, starts here with
 
 test('a renamed this machine resolves by its custom label, `local` and "This machine", and list_sessions names it', async () => {
   const listHosts = () => [
-    { id: "local", label: "Desk", online: true, allowAgentStart: true },
-    { id: "h-ci", label: "ci-box", online: true, allowAgentStart: true },
+    { id: "local", label: "Desk", online: true },
+    { id: "h-ci", label: "ci-box", online: true },
   ];
   const ops = fakeOps({ listHosts });
   for (const host of ["Desk", "local", "This machine"])
@@ -535,18 +522,8 @@ const asking =
     return answer;
   };
 
-test("a remote caller's new_session defaults to its own host and follows that host's allowAgentStart", async () => {
+test("a remote caller's new_session defaults to its own host and asks first", async () => {
   const ops = fakeOps();
-  await executeAgentTool(
-    "new_session",
-    {},
-    ops,
-    ctx({ sourceHostId: "h-ci", sourceCwd: "/srv/ci" }),
-  );
-  assert.deepEqual(
-    [ops.calls.create[0].hostId, ops.calls.create[0].cwd],
-    ["h-ci", "/srv/ci"],
-  );
   const titles: string[] = [];
   await executeAgentTool(
     "new_session",
@@ -559,7 +536,10 @@ test("a remote caller's new_session defaults to its own host and follows that ho
     }),
   );
   assert.deepEqual(titles, ["Start a session on build-box in /srv/app?"]);
-  assert.equal(ops.calls.create[1].hostId, "h-build");
+  assert.deepEqual(
+    [ops.calls.create[0].hostId, ops.calls.create[0].cwd],
+    ["h-build", "/srv/app"],
+  );
 });
 
 test("a remote caller starting a session on this machine is always asked", async () => {
@@ -579,7 +559,7 @@ test("a remote caller starting a session on this machine is always asked", async
   assert.equal(ops.calls.create.length, 0);
 });
 
-test("a remote caller reaching another host is asked unless that host allows agent starts", async () => {
+test("a remote caller starting a session on another linked host asks first", async () => {
   const ops = fakeOps();
   const titles: string[] = [];
   await executeAgentTool(
@@ -593,8 +573,12 @@ test("a remote caller reaching another host is asked unless that host allows age
     "new_session",
     { host: "ci-box", cwd: "/srv/ci" },
     ops,
-    ctx({ sourceHostId: "h-build" }),
+    ctx({ sourceHostId: "h-build", confirm: asking(titles) }),
   );
+  assert.deepEqual(titles, [
+    "Start a session on build-box in /srv/app?",
+    "Start a session on ci-box in /srv/ci?",
+  ]);
   assert.deepEqual(
     ops.calls.create.map((input) => input.hostId),
     ["h-build", "h-ci"],
@@ -627,7 +611,7 @@ test("a remote caller's send_to_session to a session on this machine asks first"
   assert.equal(ops.calls.deliver.length, 1);
 });
 
-test("a remote caller's send_to_session on its own host, or to a host that allows agent starts, asks nothing", async () => {
+test("a remote caller's send_to_session asks only when crossing hosts", async () => {
   const ops = fakeOps();
   await executeAgentTool(
     "send_to_session",
@@ -635,12 +619,16 @@ test("a remote caller's send_to_session on its own host, or to a host that allow
     ops,
     ctx({ sourceHostId: "h-build" }),
   );
+  const titles: string[] = [];
   await executeAgentTool(
     "send_to_session",
     { sessionId: "ci-target", message: "hi" },
     ops,
-    ctx({ sourceHostId: "h-build" }),
+    ctx({ sourceHostId: "h-build", confirm: asking(titles) }),
   );
+  assert.deepEqual(titles, [
+    "Send a message from a session on build-box to session ci-target on ci-box?",
+  ]);
   assert.equal(ops.calls.deliver.length, 2);
   await assert.rejects(
     () =>

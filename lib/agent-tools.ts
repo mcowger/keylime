@@ -147,8 +147,6 @@ export interface AgentToolHost {
   id: string;
   label: string;
   online: boolean;
-  /** Off: the user confirms each agent-started session there. */
-  allowAgentStart: boolean;
 }
 
 export interface AgentToolCreateSessionInput {
@@ -417,14 +415,6 @@ function resolveHost(hosts: AgentToolHost[], host: string): AgentToolHost {
   return match;
 }
 
-/** A host's allowAgentStart covers its agents' calls; a remote caller always asks before reaching this machine. */
-function startsUnasked(target: AgentToolHost, sourceHostId: string): boolean {
-  return (
-    target.allowAgentStart &&
-    !(target.id === "local" && sourceHostId !== "local")
-  );
-}
-
 /**
  * Execute one server-side agent tool. Returns a plain JSON-able result the
  * caller renders as the host_tool_result text payload. Throws on every
@@ -506,7 +496,7 @@ export async function executeAgentTool(
         name,
       },
       async (target) =>
-        startsUnasked(target, ctx.sourceHostId) ||
+        (target.id === "local" && ctx.sourceHostId === "local") ||
         ctx.confirm(`Start a session on ${target.label} in ${cwd}?`),
     );
     ctx.guard.setDepth(created.sessionId, depth);
@@ -532,10 +522,7 @@ export async function executeAgentTool(
     if (!targetHostId) throw new Error(`Session not found: ${sessionId}`);
     const hosts = ops.listHosts();
     const target = hosts.find((h) => h.id === targetHostId);
-    if (
-      targetHostId !== ctx.sourceHostId &&
-      !(target && startsUnasked(target, ctx.sourceHostId))
-    ) {
+    if (targetHostId !== ctx.sourceHostId) {
       const sourceLabel =
         hosts.find((h) => h.id === ctx.sourceHostId)?.label ?? ctx.sourceHostId;
       if (

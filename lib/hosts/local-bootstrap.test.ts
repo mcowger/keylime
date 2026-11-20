@@ -23,7 +23,7 @@ after(() => {
 
 const { ensureLocalHostLink, localLinkUrl } =
   await import("./local-bootstrap.ts");
-const { createHost, hostForToken, loadHosts, revokeHost, updateHost } =
+const { createHost, hostForToken, loadHosts, revokeHost } =
   await import("./registry.ts");
 
 const hostJson = join(agentDir, "keylime", "host.json");
@@ -173,11 +173,8 @@ test("malformed host.json is left untouched before any local token rotation", as
   assert.equal(hostForToken(token)?.id, "local");
 });
 
-test("the registry refuses to revoke local or change its agent-start right, and createHost never makes it", () => {
+test("the registry refuses to revoke local, and createHost never makes it", () => {
   assert.throws(() => revokeHost("local"), { name: "ReservedHostError" });
-  assert.throws(() => updateHost("local", { allowAgentStart: false }), {
-    name: "ReservedHostError",
-  });
   assert.notEqual(createHost("laptop").host.id, "local");
   assert.equal(loadHosts().filter((host) => host.id === "local").length, 1);
 });

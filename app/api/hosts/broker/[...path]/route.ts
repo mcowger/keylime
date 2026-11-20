@@ -2,8 +2,6 @@ import {
   readBodyWithinLimit,
   RequestBodyTooLargeError,
 } from "@/lib/bounded-form-data";
-import { sharesCredentials } from "@/lib/hosts/cluster";
-import { loadPools } from "@/lib/hosts/pools";
 import { hostFromBearer } from "@/lib/hosts/host-bearer";
 import { LOCAL_HOST_ID, type HostRecord } from "@/lib/hosts/registry";
 import { AuthBrokerUnavailableError, brokerFetch } from "@/lib/omp/auth-broker";
@@ -58,27 +56,13 @@ function only(source: Headers, names: readonly string[]): Headers {
   return picked;
 }
 
-/** The sharing host (own flag or cluster member) the bearer token names, or the refusal to answer with (a 403 and a pool 503 are logged; a 401 has no host to name). */
+/** Admit only registered remote bearer identities. */
 function admit(request: Request, path: string): HostRecord | Response {
   const host = hostFromBearer(request);
   if (host instanceof Response) return host;
-  // `local` is refused by id: a hand-edited hosts.json can give its record the flag.
-  let shares: boolean;
-  try {
-    shares = host.id !== LOCAL_HOST_ID && sharesCredentials(host, loadPools());
-  } catch {
-    log(
-      host.id,
-      request.method,
-      PLAIN_PATH.test(path) ? path : "-",
-      503,
-      "pools_unreadable",
-    );
-    return fail("The host pool configuration cannot be read", 503);
-  }
-  if (!shares) {
+  if (host.id === LOCAL_HOST_ID) {
     log(host.id, request.method, PLAIN_PATH.test(path) ? path : "-", 403);
-    return fail("Credential sharing is off for this host", 403);
+    return fail("Not a linked host", 403);
   }
   return host;
 }
@@ -116,7 +100,7 @@ async function forward(
   }
 
   // The body can take as long as the sender likes, and no request of this host is abortable (abortBrokerRequests) until
-  // brokerFetch registers it: a host revoked or switched off meanwhile must not get through. No await from here to that call.
+  // brokerFetch registers it: a host revoked meanwhile must not get through. No await from here to that call.
   const host = admit(request, path);
   if (host instanceof Response) return host;
 
@@ -159,9 +143,9 @@ async function forward(
  * @apiContract hostBrokerUsageClients
  * @apiUsage Read an allowed auth-broker resource through the host credential-sharing proxy.
  * @apiInputs Supply a host bearer token, allowed path and optional query; only selected request headers pass through.
- * @apiInvariants The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.
+ * @apiInvariants The bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.
  * @apiEffects Forwards the request and streams the upstream status and body with selected response headers.
- * @apiRecovery Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.
+ * @apiRecovery Re-enroll a revoked host or restore broker availability before retrying.
  */
 export const GET = forward;
 /**

@@ -26,7 +26,6 @@ import * as hostsClusterConfigFileHash from "@/app/api/hosts/cluster-config/file
 import * as hostsClusterConfigManifest from "@/app/api/hosts/cluster-config/manifest/route";
 import * as hostsLink from "@/app/api/hosts/link/route";
 import * as hosts from "@/app/api/hosts/route";
-import * as hostsIdCluster from "@/app/api/hosts/[id]/cluster/route";
 import * as hostsIdTerminalSessions from "@/app/api/hosts/[id]/terminal-sessions/route";
 import * as terminalAttach from "@/app/api/terminal/attach/route";
 import * as manifest from "@/app/api/manifest/route";
@@ -143,7 +142,6 @@ export const ROUTE_MODULES: Record<string, RouteModule> = {
   "hosts/cluster-config/manifest": hostsClusterConfigManifest,
   "hosts/link": hostsLink,
   hosts: hosts,
-  "hosts/[id]/cluster": hostsIdCluster,
   "hosts/[id]/terminal-sessions": hostsIdTerminalSessions,
   "terminal/attach": terminalAttach,
   manifest: manifest,

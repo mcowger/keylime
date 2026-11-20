@@ -13,7 +13,8 @@ export const SpawnRequestSchema = Type.Object(
     ),
     shareCredentials: Type.Optional(
       Type.Literal(true, {
-        description: "Use the opening server's provider credentials.",
+        description:
+          "Required on linked-host opens that can start a process. Use the opening server's provider credentials.",
       }),
     ),
     credentialsServer: Type.Optional(
@@ -26,7 +27,7 @@ export const SpawnRequestSchema = Type.Object(
       Type.String({
         pattern: "^[0-9a-f]{64}$",
         description:
-          "Required master configuration content version. Not persisted in resume manifests.",
+          "Required on linked-host opens that can start a process. Identifies the opening server's configuration. Not persisted in resume manifests.",
       }),
     ),
     cwd: Type.String(),
@@ -47,7 +48,7 @@ export const SpawnRequestSchema = Type.Object(
   {
     title: "SpawnRequest",
     description:
-      "A launch request; trusted link context overrides credential-sharing and cluster-configuration authority.",
+      "A launch request. A linked-host start uses the opening server's configuration and credentials; a pure join starts nothing.",
   },
 );
 export type SpawnRequest = Static<typeof SpawnRequestSchema>;

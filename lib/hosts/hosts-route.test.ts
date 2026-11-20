@@ -69,7 +69,6 @@ const send = (
     }),
   );
 type HostRow = HubHostRow & {
-  allowAgentStart?: boolean;
   serverPlatform?: string;
 };
 const get = async (): Promise<{ hosts: HostRow[]; pools: HostPool[] }> =>
@@ -91,11 +90,14 @@ test("POST returns the token once; GET lists the host without any secret", async
   assert.ok(!text.includes(token) && !text.includes("tokenHash"));
   const { hosts }: { hosts: HostRow[] } = JSON.parse(text);
   assert.equal(hosts[0].id, "local");
-  assert.ok(!("allowAgentStart" in hosts[0]));
+  for (const row of [host, ...hosts]) {
+    assert.ok(!("allowAgentStart" in row));
+    assert.ok(!("shareCredentials" in row));
+  }
   assert.equal(hosts[0].serverPlatform, process.platform);
   assert.deepEqual(
-    hosts.slice(1).map((h) => [h.id, h.status, h.allowAgentStart]),
-    [[host.id, "offline", false]],
+    hosts.slice(1).map((h) => [h.id, h.status]),
+    [[host.id, "offline"]],
   );
 });
 
@@ -135,20 +137,15 @@ test("DELETE revokes: the host's socket closes and its token then gets 401 on th
   );
 });
 
-test("PATCH renames and toggles allowAgentStart; local cannot be edited or revoked", async () => {
+test("PATCH renames a linked host", async () => {
   const { host } = await (await send("POST", { label: "old" })).json();
   const patched = await send("PATCH", {
     id: host.id,
     label: "new",
-    allowAgentStart: true,
   });
   assert.equal(patched.status, 200);
-  assert.deepEqual(
-    (await get()).hosts
-      .filter((h) => h.id === host.id)
-      .map((h) => [h.label, h.allowAgentStart]),
-    [["new", true]],
-  );
+  const row = (await get()).hosts.find((h) => h.id === host.id);
+  assert.equal(row?.label, "new");
 
   assert.equal(
     (await send("PATCH", { id: "missing", label: "x" })).status,
@@ -156,102 +153,27 @@ test("PATCH renames and toggles allowAgentStart; local cannot be edited or revok
   );
 });
 
-test("PATCH sets shareCredentials; it must be a boolean and cannot change on this machine", async () => {
-  const { host } = await (await send("POST", { label: "sharer" })).json();
-  const patched = await send("PATCH", { id: host.id, shareCredentials: true });
-  assert.equal(patched.status, 200);
-  assert.equal((await patched.json()).host.shareCredentials, true);
-
-  const bad = await send("PATCH", { id: host.id, shareCredentials: "yes" });
-  assert.equal(bad.status, 400);
-  assert.equal((await bad.json()).error, "shareCredentials must be a boolean");
-
-  const local = await send("PATCH", { id: "local", shareCredentials: true });
-  assert.equal(local.status, 400);
-  assert.equal(
-    (await local.json()).error,
-    "This machine's credential sharing cannot be changed",
-  );
+test("PATCH rejects both legacy toggles, even alongside a valid rename", async () => {
+  const { host } = await (await send("POST", { label: "linked" })).json();
+  const before = await get();
+  for (const id of [host.id, "local"]) {
+    for (const key of ["allowAgentStart", "shareCredentials"]) {
+      for (const label of [undefined, "new"]) {
+        const response = await send("PATCH", { id, label, [key]: true });
+        assert.equal(response.status, 400);
+      }
+    }
+  }
+  assert.deepEqual(await get(), before);
 });
 
-test("turning sharing off and revoking abort the host's open broker requests; turning it on does not", async () => {
-  const { host } = await (await send("POST", { label: "aborting" })).json();
-  abortedBrokerHosts.length = 0;
-  assert.equal(
-    (await send("PATCH", { id: host.id, shareCredentials: true })).status,
-    200,
-  );
-  assert.deepEqual(abortedBrokerHosts, []);
-  assert.equal(
-    (await send("PATCH", { id: host.id, shareCredentials: false })).status,
-    200,
-  );
-  assert.deepEqual(abortedBrokerHosts, [host.id]);
-  assert.equal(
-    (await send("PATCH", { id: "missing", shareCredentials: false })).status,
-    404,
-  );
-  assert.deepEqual(
-    abortedBrokerHosts,
-    [host.id],
-    "a failed write aborts nothing",
-  );
-
-  assert.equal(
-    (
-      await route.DELETE(
-        new Request(`${BASE}?id=${host.id}`, { method: "DELETE" }),
-      )
-    ).status,
-    200,
-  );
-  assert.deepEqual(abortedBrokerHosts, [host.id, host.id]);
-});
-
-test("turning a member's own sharing off aborts nothing, a non-member's does, an unreadable pools.json aborts; revoking always does", async (t) => {
+test("revoking a cluster member removes it and aborts its broker requests", async (t) => {
   const { host: member } = await (
     await send("POST", { label: "member" })
   ).json();
-  const { host: plain } = await (await send("POST", { label: "plain" })).json();
   seedPools(t, [member.id]);
-  assert.equal(
-    (await send("PATCH", { id: member.id, shareCredentials: true })).status,
-    200,
-  );
-  assert.equal(
-    (await send("PATCH", { id: plain.id, shareCredentials: true })).status,
-    200,
-  );
   abortedBrokerHosts.length = 0;
-
-  const patched = await send("PATCH", {
-    id: member.id,
-    shareCredentials: false,
-  });
-  assert.equal(patched.status, 200);
-  assert.equal((await patched.json()).host.shareCredentials, false);
-  assert.deepEqual(
-    abortedBrokerHosts,
-    [],
-    "the member still shares, so its requests keep running",
-  );
-
-  assert.equal(
-    (await send("PATCH", { id: plain.id, shareCredentials: false })).status,
-    200,
-  );
-  assert.deepEqual(abortedBrokerHosts, [plain.id]);
-
   writeFileSync(poolsFile, "{not json");
-  assert.equal(
-    (await send("PATCH", { id: member.id, shareCredentials: false })).status,
-    200,
-  );
-  assert.deepEqual(
-    abortedBrokerHosts,
-    [plain.id, member.id],
-    "membership unknown: cut the requests",
-  );
 
   const revoke = () =>
     route.DELETE(new Request(`${BASE}?id=${member.id}`, { method: "DELETE" }));
@@ -261,11 +183,11 @@ test("turning a member's own sharing off aborts nothing, a non-member's does, an
     "membership unknown: the revoke could leave a stale member",
   );
   assert.equal(readFileSync(poolsFile, "utf8"), "{not json");
-  assert.deepEqual(abortedBrokerHosts, [plain.id, member.id]);
+  assert.deepEqual(abortedBrokerHosts, []);
 
   const pool = seedPools(t, ["local", member.id]);
   assert.equal((await revoke()).status, 200);
-  assert.deepEqual(abortedBrokerHosts, [plain.id, member.id, member.id]);
+  assert.deepEqual(abortedBrokerHosts, [member.id]);
   // Revoking leaves the cluster by leaveCluster's rules: the member is gone, its checkout inside its folder stays bound.
   assert.deepEqual((await get()).pools, [
     { ...pool, members: pool.members.filter((m) => m.hostId !== member.id) },
@@ -283,7 +205,6 @@ test("bodies are validated at the route", async () => {
     { id: host.id },
     { id: host.id, label: "" },
     { id: host.id, label: "y".repeat(101) },
-    { id: host.id, allowAgentStart: "yes" },
     { label: "no id" },
   ])
     assert.equal((await send("PATCH", body)).status, 400, JSON.stringify(body));
@@ -347,10 +268,6 @@ test("the local row and getHost(local) show the reserved record's real link stat
   const [row] = await localRows();
   assert.equal(row.status, "online");
   assert.equal(row.ompVersion, "14.0.0");
-  assert.ok(
-    !("allowAgentStart" in row),
-    "the UI shows no revoke/rename controls for this machine",
-  );
   assert.equal((await get()).hosts[0].id, "local");
   assert.equal((await get()).hosts.filter((h) => h.id === "local").length, 1);
 
@@ -359,10 +276,6 @@ test("the local row and getHost(local) show the reserved record's real link stat
   assert.equal(local.id, "local");
   assert.equal(local.status(), "online");
 
-  assert.equal(
-    (await send("PATCH", { id: "local", allowAgentStart: false })).status,
-    400,
-  );
   assert.equal(
     (await route.DELETE(new Request(`${BASE}?id=local`, { method: "DELETE" })))
       .status,
@@ -627,80 +540,13 @@ test("PUT accepts only known members but retains clone paths after a member is r
   );
 });
 
-/** The hosts whose open broker requests one PUT of `pools` cut off. */
-async function abortedByPut(pools: unknown) {
+test("removing a pool member doesn't abort its broker requests", async (t) => {
+  const { host } = await (await send("POST", { label: "worker" })).json();
+  const pool = seedPools(t, [host.id]);
   abortedBrokerHosts.length = 0;
-  const response = await send("PUT", { pools });
-  assert.equal(response.status, 200, await response.clone().text());
-  return [...abortedBrokerHosts];
-}
-
-async function clusterHosts(t: TestContext, ...labels: string[]) {
-  const hosts: { id: string }[] = [];
-  for (const label of labels)
-    hosts.push((await (await send("POST", { label })).json()).host);
-  seedPools(
-    t,
-    hosts.map((host) => host.id),
-  );
-  return hosts;
-}
-
-test("a PUT cuts off a member's broker requests only when it stops sharing", async (t) => {
-  const [off, on, spare] = await clusterHosts(t, "off", "on", "spare");
-  assert.equal(
-    (await send("PATCH", { id: on.id, shareCredentials: true })).status,
-    200,
-  );
-  const cluster = (...hosts: { id: string }[]) =>
-    configuredPool(hosts.map((host) => host.id));
-
-  assert.deepEqual(
-    await abortedByPut([cluster(off, on)]),
-    [spare.id],
-    "a member with its own flag off left",
-  );
-  assert.deepEqual(
-    await abortedByPut([cluster(off, on)]),
-    [],
-    "membership unchanged",
-  );
-  assert.deepEqual(
-    await abortedByPut([cluster(off, on, spare)]),
-    [],
-    "a host added to the first pool",
-  );
-  assert.deepEqual(
-    await abortedByPut([cluster(off, spare)]),
-    [],
-    "the member that left still shares by its own flag",
-  );
-  assert.deepEqual(
-    await abortedByPut([cluster(spare)]),
-    [off.id],
-    "exactly once, for the member whose flag is off",
-  );
-});
-
-test("a PUT that puts another pool first cuts off each former member whose own flag is off", async (t) => {
-  const [off, on, spare] = await clusterHosts(t, "off", "on", "spare");
-  assert.equal(
-    (await send("PATCH", { id: on.id, shareCredentials: true })).status,
-    200,
-  );
-  const front = {
-    id: "front",
-    label: "Front",
-    enabled: true,
-    members: [],
-    projects: [],
-  };
-  assert.deepEqual(
-    (
-      await abortedByPut([front, configuredPool([off.id, on.id, spare.id])])
-    ).sort(),
-    [off.id, spare.id].sort(),
-  );
+  const response = await send("PUT", { pools: [{ ...pool, members: [] }] });
+  assert.equal(response.status, 200);
+  assert.deepEqual(abortedBrokerHosts, []);
 });
 
 test("GET and PUT fail closed for damaged existing pool registries without overwriting them", async (t) => {

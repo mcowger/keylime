@@ -16,7 +16,7 @@ const authResponses = {
 };
 const clusterResponses = {
   ...authResponses,
-  403: errorResponse("The host is not a cluster member."),
+  403: errorResponse("The bearer token identifies the local host, not a linked host."),
   409: {
     description: "The configuration cannot be built.",
     content: {
@@ -39,7 +39,7 @@ const opaque = Type.Unknown({
 });
 const brokerResponses = {
   ...authResponses,
-  403: errorResponse("Credential sharing is disabled for this host."),
+  403: errorResponse("The bearer token identifies the local host, not a linked host."),
   404: errorResponse(
     "Method and path are not allowed, or the upstream returned 404.",
   ),
@@ -170,7 +170,7 @@ export const hostHttpOperations = [
     route: "/api/hosts/cluster-config/manifest",
     operationId: "hostClusterManifest",
     summary: "Get cluster configuration manifest",
-    description: "Returns the master's current mirrored configuration.",
+    description: "Returns the web server's current configuration to a linked host.",
     security,
     responses: {
       200: {

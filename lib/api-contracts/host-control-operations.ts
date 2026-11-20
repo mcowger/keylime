@@ -121,7 +121,7 @@ export const hostControlOperations: readonly OperationContract[] = [
   {
     name: "clusterConfig",
     description:
-      "Usage: Apply master configuration or restore the host's own configuration.\nInputs: Apply takes a lowercase SHA-256 version; restore takes no version.\nInvariants: Applies are serialized and must succeed before a new cluster session starts; foreign ownership and a departed credentials link are refused, and only the owner may restore.\nEffects: Changes daemon configuration and returns state and ownership.\nRecovery: Inspect returned or current state after an uncertain result before retrying.",
+      "Usage: Apply or clear the requesting server's mirrored runner configuration.\nInputs: Apply takes a lowercase SHA-256 version; restore takes no version.\nInvariants: A cold runner uses the configuration of its opening server; joining a running runner does not change it. A departed link cannot apply configuration.\nEffects: Updates only that server's mirror and reports its state; the daemon's local configuration and other mirrors are unchanged.\nRecovery: Inspect the returned or current state before retrying an uncertain result.",
     args: Type.Union([
       Type.Object({
         action: Type.Literal("apply"),

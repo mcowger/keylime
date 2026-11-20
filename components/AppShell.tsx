@@ -98,7 +98,6 @@ import {
   newChatDraftKey,
   remoteHostId,
 } from "@/lib/project-ordering";
-import { isClusterTarget } from "@/lib/hosts/cluster";
 import { useHostRows } from "@/hooks/useHostRows";
 import { LocalDaemonBanner } from "./LocalDaemonBanner";
 import { hostName } from "./host-status";
@@ -2809,15 +2808,9 @@ export function AppShell({ appName }: { appName: string }) {
     ? hosts?.find((host) => host.id === currentHostId)
     : undefined;
   const settingsHostId = activeCwd ? activeHostId : currentHostId;
-  const settingsTarget = activeCwd
-    ? { hostId: activeHostId }
-    : (selectedSession ??
-      (newSessionCwd !== null ? { hostId: newSessionHostId } : null));
-  const clusterSettings = isClusterTarget(
-    settingsTarget,
-    settingsHostId,
-    pools,
-  );
+  const remoteSettings = remoteHostId(settingsHostId) !== undefined;
+  const sharedSettings =
+    remoteSettings || (hosts?.some((host) => host.id !== LOCAL_HOST_ID) ?? false);
   const showChat = selectedSession !== null || effectiveNewSessionCwd !== null;
   const currentRate = generationSpeed?.current;
   const rate = currentRate ?? generationSpeed?.average;
@@ -3481,8 +3474,8 @@ export function AppShell({ appName }: { appName: string }) {
                 openUrlAutomatically={openUrlAutomatically}
                 onOpenUrlAutomaticallyChange={handleOpenUrlAutomaticallyChange}
                 cwd={activeCwd ?? selectedSession?.cwd ?? newSessionCwd}
-                remoteHost={settingsHostId !== undefined}
-                cluster={clusterSettings}
+                remoteHost={remoteSettings}
+                cluster={sharedSettings}
                 sessionId={selectedSession?.id ?? null}
                 onModelsSaved={() => setModelsRefreshKey((k) => k + 1)}
                 onPluginsReloaded={() => setSessionKey((k) => k + 1)}

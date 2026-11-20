@@ -4659,13 +4659,11 @@ function createAgentToolOps(
           id: local.id,
           label: local.label,
           online: isLinkUp(local.status()),
-          allowAgentStart: true,
         },
         ...listHosts().map((h) => ({
           id: h.id,
           label: h.label,
           online: isLinkUp(h.status),
-          allowAgentStart: h.allowAgentStart,
         })),
       ];
     },

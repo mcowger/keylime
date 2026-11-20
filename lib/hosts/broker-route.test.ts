@@ -33,7 +33,7 @@ mock.module("../omp/auth-broker.ts", () => ({
   },
 }));
 const route = await import("../../app/api/hosts/broker/[...path]/route.ts");
-const { createHost, revokeHost, rotateLocalHostToken, updateHost } =
+const { createHost, revokeHost, rotateLocalHostToken } =
   await import("./registry.ts");
 const { savePools } = await import("./pools.ts");
 
@@ -80,11 +80,7 @@ async function send(
   return { response, idle: () => idle };
 }
 
-function sharingHost(label = "sharer") {
-  const { host, token } = createHost(label);
-  updateHost(host.id, { shareCredentials: true });
-  return { host, token };
-}
+const sharingHost = createHost;
 
 /** `clusterHostIds` are the members of the first pool, the cluster; a second pool holds `otherHostIds`. */
 function seedPools(clusterHostIds: string[], otherHostIds: string[] = []) {
@@ -128,27 +124,11 @@ test("a missing or unknown bearer token is 401 and nothing is forwarded", async 
   assert.equal(calls.length, 0);
 });
 
-test("sharing off, and the local record whatever its flag says, are 403", async () => {
-  const { token } = createHost("private");
-  const off = await send("GET", "v1/healthz", { token });
-  assert.equal(off.response.status, 403);
-  assert.deepEqual(await off.response.json(), {
-    error: "Credential sharing is off for this host",
-  });
-  assert.equal(off.response.headers.get("cache-control"), "no-store");
-
-  // A hand-edited hosts.json can give `local` the flag; the route refuses it by id.
-  const localToken = rotateLocalHostToken();
-  const file: { hosts: { id: string; shareCredentials: boolean }[] } =
-    JSON.parse(readFileSync(hostsFile, "utf8"));
-  file.hosts.find((h) => h.id === "local")!.shareCredentials = true;
-  writeFileSync(hostsFile, JSON.stringify(file));
-  const local = await send("GET", "v1/healthz", { token: localToken });
+test("the local bearer is forbidden", async () => {
+  const local = await send("GET", "v1/healthz", { token: rotateLocalHostToken() });
   assert.equal(local.response.status, 403);
-  assert.deepEqual(await local.response.json(), {
-    error: "Credential sharing is off for this host",
-  });
-
+  assert.deepEqual(await local.response.json(), { error: "Not a linked host" });
+  assert.equal(local.response.headers.get("cache-control"), "no-store");
   assert.equal(calls.length, 0);
 });
 
@@ -167,42 +147,21 @@ test("an unreadable hosts.json is 503, not 401", async () => {
   assert.equal(calls.length, 0);
 });
 
-test("a cluster member is admitted with its own flag off; the local record and a host in a second pool are not", async () => {
+test("linked hosts are admitted regardless of pool membership", async () => {
   const { host: member, token } = createHost("member");
   const { host: other, token: otherToken } = createHost("second-pool");
-  const localToken = rotateLocalHostToken();
   seedPools([member.id, "local"], [other.id]);
-
-  const admitted = await send("GET", "v1/healthz", { token });
-  assert.equal(admitted.response.status, 200);
-  assert.deepEqual(
-    calls.map(([hostId]) => hostId),
-    [member.id],
-  );
-
-  for (const refused of [otherToken, localToken]) {
-    const { response } = await send("GET", "v1/healthz", { token: refused });
-    assert.equal(response.status, 403);
-    assert.deepEqual(await response.json(), {
-      error: "Credential sharing is off for this host",
-    });
+  for (const bearer of [token, otherToken]) {
+    assert.equal((await send("GET", "v1/healthz", { token: bearer })).response.status, 200);
   }
-  assert.equal(calls.length, 1);
+  assert.deepEqual(calls.map(([id]) => id), [member.id, other.id]);
 });
 
-test("an unreadable pools.json is 503, logged with its reason, and nothing is forwarded", async () => {
-  const { host, token } = sharingHost("pools");
+test("unreadable pools.json does not block the broker", async () => {
+  const { token } = sharingHost("pools");
   writeFileSync(poolsFile, "{not json");
-  const { response } = await send("GET", "v1/healthz", { token });
-  assert.equal(response.status, 503);
-  assert.equal(response.headers.get("cache-control"), "no-store");
-  assert.deepEqual(await response.json(), {
-    error: "The host pool configuration cannot be read",
-  });
-  assert.deepEqual(logs, [
-    `[keylime] broker ${host.id} GET /v1/healthz 503 pools_unreadable`,
-  ]);
-  assert.equal(calls.length, 0);
+  assert.equal((await send("GET", "v1/healthz", { token })).response.status, 200);
+  assert.equal(calls.length, 1);
 });
 
 test("the path and query go to the broker for the host the token names", async () => {
@@ -397,22 +356,22 @@ test("an unavailable broker is 503 and any other failure 502", async () => {
 });
 
 test("a 403 and a 404 are logged like a forwarded request, a 404 or 403 path only as plain /v1/ text, and a 401 not at all", async () => {
-  const { host: off, token: offToken } = createHost("logged-off");
-  await send("GET", "v1/healthz", { token: offToken });
-  await send("GET", "v1/odd path", { token: offToken });
+  const localToken = rotateLocalHostToken();
+  await send("GET", "v1/healthz", { token: localToken });
+  await send("GET", "v1/odd path", { token: localToken });
   const { host, token } = sharingHost("logged-404");
   await send("POST", "v1/credential", { token, body: "BODY-SECRET" });
   await send("GET", "v2/snapshot", { token });
   await send("GET", "v1/evil\ninjected", { token });
   await send("GET", "v1/healthz", { token: "not-a-host-token" });
   assert.deepEqual(logs, [
-    `[keylime] broker ${off.id} GET /v1/healthz 403`,
-    `[keylime] broker ${off.id} GET - 403`,
+    "[keylime] broker local GET /v1/healthz 403",
+    "[keylime] broker local GET - 403",
     `[keylime] broker ${host.id} POST /v1/credential 404`,
     `[keylime] broker ${host.id} GET - 404`,
     `[keylime] broker ${host.id} GET - 404`,
   ]);
-  for (const secret of [offToken, token, "not-a-host-token", "BODY-SECRET"])
+  for (const secret of [localToken, token, "not-a-host-token", "BODY-SECRET"])
     assert.ok(!logs.join("\n").includes(secret));
 });
 
@@ -529,32 +488,15 @@ test("a body that arrives late is forwarded while the host still shares", async 
   );
 });
 
-test("a host switched off while its body is still arriving gets 403 and nothing is forwarded", async () => {
-  const { host, token } = sharingHost("switched-off");
-  const post = stalledPost(token);
-  await post.started;
-  updateHost(host.id, { shareCredentials: false });
-  post.release();
-  const response = await post.response;
-  assert.equal(response.status, 403);
-  assert.deepEqual(await response.json(), {
-    error: "Credential sharing is off for this host",
-  });
-  assert.equal(calls.length, 0);
-  assert.deepEqual(logs, [
-    `[keylime] broker ${host.id} POST /v1/credential/1/disable 403`,
-  ]);
-});
-
-test("a member that leaves the cluster while its body is still arriving gets 403 and nothing is forwarded", async () => {
+test("a pool change while the body is arriving does not block forwarding", async () => {
   const { host, token } = createHost("leaving");
   seedPools([host.id]);
   const post = stalledPost(token);
   await post.started;
   seedPools(["local"]);
   post.release();
-  assert.equal((await post.response).status, 403);
-  assert.equal(calls.length, 0);
+  assert.equal((await post.response).status, 200);
+  assert.equal(calls.length, 1);
 });
 
 test("a host revoked while its body is still arriving gets 401 and nothing is forwarded", async () => {

@@ -16,6 +16,7 @@ import { getAgentDir, getSessionsDir } from "../omp/paths";
 import { readSessionHeaderSync } from "../omp/session-files";
 import { isValidSessionId } from "../session-file-references-core";
 import { isRecord } from "../type-guards";
+import { CONFIG_VERSION_RE } from "./link-protocol";
 import { loadWebServerSettings } from "../web-settings";
 import type { SpawnRequest } from "./host";
 
@@ -219,6 +220,10 @@ export class HostResumeTracker {
           launch.credentialsServer === undefined ||
           typeof launch.credentialsServer === "string"
         )
+        || !(launch.configVersion === undefined || (
+          typeof launch.configVersion === "string" && CONFIG_VERSION_RE.test(launch.configVersion) &&
+          typeof launch.credentialsServer === "string"
+        ))
       )
         throw new Error("Invalid recovery launch");
       const root = realpathSync(this.root);
@@ -254,6 +259,7 @@ export class HostResumeTracker {
           ...(launch.credentialsServer === undefined
             ? {}
             : { credentialsServer: launch.credentialsServer }),
+          ...(launch.configVersion === undefined ? {} : { configVersion: launch.configVersion }),
         },
       });
     }

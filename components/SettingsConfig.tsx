@@ -2037,9 +2037,9 @@ export function SettingsConfig({
   openUrlAutomatically: boolean;
   onOpenUrlAutomaticallyChange: (enabled: boolean) => void;
   cwd: string | null;
-  /** `cwd` lives on a remote host: its MCP settings are not available yet, unless it is a cluster member (`cluster`). */
+  /** Remote workspace paths do not exist on the web server's filesystem. */
   remoteHost: boolean;
-  /** `cwd` or `sessionId` is a session or project of the cluster: its settings are the master's, this machine's (spec K7). */
+  /** Server settings are shared with linked hosts. */
   cluster: boolean;
   sessionId: string | null;
   onModelsSaved: () => void;
@@ -2050,19 +2050,8 @@ export function SettingsConfig({
   const isMobile = useIsMobile();
   const { t } = useI18n();
   const workspaceReady = cwd !== null;
-  // Workspace-scoped panels read this machine's disk: not for a remote workspace yet.
-  const remoteUnavailable = (
-    <p
-      role="status"
-      style={{ margin: 0, color: "var(--text-muted)", fontSize: 12 }}
-    >
-      {t("hosts.notAvailableRemote")}
-    </p>
-  );
-  // On another member the panels act on this machine's user level, which every member runs; that member's workspace
-  // and session are not this machine's, so they are left out with the project-level parts they would show. MCP alone
-  // keeps the session, to read its live status from the process running there (spec K7).
-  const panelsUnavailable = remoteHost && !cluster;
+  // User-level settings live on the server. Don't pass remote paths or sessions to local panels.
+  // MCP keeps the session ID to show live status from the remote process.
   const panelCwd = remoteHost ? null : cwd;
   const panelSessionId = remoteHost ? null : sessionId;
   const { fontSize, setFontSize } = useFontSize();
@@ -4007,7 +3996,7 @@ export function SettingsConfig({
                         >
                           {t("settingsConfig.extensionsToolsDesc")}
                         </p>
-                        {cwd && (!remoteHost || cluster) && (
+                        {cwd && (
                           <button
                             type="button"
                             className="settings-back ui-focus-ring"
@@ -4017,7 +4006,7 @@ export function SettingsConfig({
                           </button>
                         )}
                       </div>
-                      {cwd && (!remoteHost || cluster) && (
+                      {cwd && (
                         <div
                           style={{
                             display: "flex",
@@ -4082,15 +4071,11 @@ export function SettingsConfig({
                           </NativeSetting>
                         </div>
                       )}
-                      {panelsUnavailable ? (
-                        remoteUnavailable
-                      ) : (
-                        <McpConfig
-                          cwd={panelCwd}
-                          sessionId={sessionId}
-                          liveOnly={remoteHost}
-                        />
-                      )}
+                      <McpConfig
+                        cwd={panelCwd}
+                        sessionId={sessionId}
+                        liveOnly={remoteHost}
+                      />
                       {!cwd && (
                         <p
                           style={{
@@ -4121,15 +4106,7 @@ export function SettingsConfig({
                         padding: isMobile ? "16px 14px 32px" : "32px 24px 64px",
                       }}
                     >
-                      {panelsUnavailable ? (
-                        remoteUnavailable
-                      ) : (
-                        <SkillsConfig
-                          embedded
-                          cwd={panelCwd}
-                          onClose={onClose}
-                        />
-                      )}
+                      <SkillsConfig embedded cwd={panelCwd} onClose={onClose} />
                     </div>
                   )}
 
@@ -4149,17 +4126,13 @@ export function SettingsConfig({
                         padding: isMobile ? "16px 14px 32px" : "32px 24px 64px",
                       }}
                     >
-                      {panelsUnavailable ? (
-                        remoteUnavailable
-                      ) : (
-                        <PluginsConfig
-                          embedded
-                          cwd={panelCwd}
-                          sessionId={panelSessionId}
-                          onClose={onClose}
-                          onReloaded={onPluginsReloaded}
-                        />
-                      )}
+                      <PluginsConfig
+                        embedded
+                        cwd={panelCwd}
+                        sessionId={panelSessionId}
+                        onClose={onClose}
+                        onReloaded={onPluginsReloaded}
+                      />
                     </div>
                   )}
 
@@ -4214,11 +4187,7 @@ export function SettingsConfig({
                           {t("settingsConfig.agentsDesc")}
                         </p>
                       </div>
-                      {panelsUnavailable ? (
-                        remoteUnavailable
-                      ) : (
-                        <AgentsConfig cwd={panelCwd} userOnly={remoteHost} />
-                      )}
+                      <AgentsConfig cwd={panelCwd} userOnly={remoteHost} />
                     </div>
                   )}
 

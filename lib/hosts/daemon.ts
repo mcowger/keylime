@@ -36,7 +36,7 @@ import {
   sep,
 } from "node:path";
 import { getOmpVersion } from "../omp/omp-cli";
-import { getAgentDir, getSessionsDir } from "../omp/paths";
+import { getAgentDir, getBlobsDir, getSessionsDir } from "../omp/paths";
 import { ProjectPathError } from "../project-registry";
 import { isValidSessionId } from "../session-file-references-core";
 import { isRecord } from "../type-guards";
@@ -223,10 +223,11 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     canonicalPath(process.argv[1] || process.execPath) ||
     resolve(process.argv[1] || process.execPath);
   const resume = new HostResumeTracker();
-  // A cluster member runs on the master's configuration (spec K3-K6): fetched over the link that asks, with its token.
-  // Each link is told whether the configuration this host holds is its server's.
+  // Each mirror is fetched over its own authenticated link.
   const config = createClusterConfig({
     roots: () => ({ agent: getAgentDir(), home: homedir() }),
+    sessionsDir: getSessionsDir,
+    blobsDir: getBlobsDir,
     stateDir: () => join(getAgentDir(), "keylime"),
     fetch: async (serverUrl, path, signal) => {
       const login = links.get(serverUrl)?.login;
@@ -241,20 +242,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     },
     runOmp: runOmpCli,
     commandExists,
-    // Never called while createClusterConfig runs: `config` is set by then.
-    onState: (state) => reportConfig(state),
-    // Configured, connected or not: host.json, or the links given on the command line. Unreadable, it may still be.
-    isLinked: (url) => {
-      let saved: HostLink[];
-      try {
-        saved = readHostLinks();
-      } catch {
-        return true;
-      }
-      return [...saved, ...(explicit ?? [])].some(
-        (login) => login.url.replace(/\/+$/, "") === url.replace(/\/+$/, ""),
-      );
-    },
+    onState: (state, url) => reportConfig(url, state),
     log,
   });
   const forwarder = startBrokerForwarder({
@@ -382,7 +370,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     }
   >();
   const channels = new ChannelTable({
-    spawn: async (launch) => {
+    spawn: async (launch, recoveringSession) => {
       if (!launch.sessionFile) {
         let cwd = resolve(launch.cwd);
         try {
@@ -426,7 +414,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         forwarder,
         ompVersion: getOmpVersion,
       });
-      // Never on this host's own configuration: the master's version is applied first, or the start is refused (spec K4).
+      let mirrorEnv: Record<string, string> | undefined;
       if (launch.configVersion !== undefined) {
         if (launch.credentialsServer === undefined)
           throw new HostOpError(
@@ -434,7 +422,9 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
             "cluster_config_failed",
             "A cluster session must start through the web server that shares its configuration",
           );
-        await config.ensure(launch.configVersion, launch.credentialsServer);
+        mirrorEnv = recoveringSession
+          ? config.recover(launch.credentialsServer)
+          : await config.ensure(launch.configVersion, launch.credentialsServer);
       }
       await ptyStarted;
       if (!(await hostSocket))
@@ -442,9 +432,12 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       if (stopped) throw new Error("Host is stopping");
       const prepared = await prepareInteractiveLaunch(
         { ...launch, cwd: resolved.cwd },
-        { ...env, KEYLIME_HOST_SOCKET: socketPath },
+        { ...env, KEYLIME_HOST_SOCKET: socketPath, ...(mirrorEnv && { KEYLIME_MIRROR_HOST_HOME: resolve(homedir()) }) },
+        mirrorEnv,
       );
       if (stopped) throw new Error("Host is stopping");
+      if (mirrorEnv && (!launch.credentialsServer || !links.has(launch.credentialsServer) || !config.holds(launch.credentialsServer)))
+        throw new HostOpError(409, "cluster_config_failed", "The session's configuration link is no longer available");
       const runtimeId = randomUUID();
       const child = ptys.spawn({
         runtimeId,
@@ -769,14 +762,13 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         link.queue({ type: "notifier", on: link.id === next }, "notifier");
   }
   /** Tells each link the configuration state and whether it holds that configuration. */
-  function reportConfig(state = config.state()): void {
+  function reportConfig(url: string, state = config.state(url)): void {
     if (!stopped)
-      for (const link of links.values())
-        link.report({
-          type: "config_state",
-          state,
-          owned: config.holds(link.login.url),
-        });
+      links.get(url)?.report({
+        type: "config_state",
+        state,
+        owned: config.holds(url),
+      });
   }
   /** Stops a removed link's workspace service (tracked so shutdown awaits it) and frees its upload ownership so other servers can take those uploads. */
   function dropLink(link: DaemonLink): void {
@@ -831,7 +823,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
           reportCapacity();
           link.report({
             type: "config_state",
-            state: config.state(),
+            state: config.state(link.login.url),
             owned: config.holds(link.login.url),
           });
           link.queue(
@@ -860,22 +852,12 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         channels.linkGone(link);
         dropLink(link);
         electNotifier();
-        // A revoked server can never send its restore, and while host.json still names it no other server may (spec K6).
-        const restored =
-          why === "revoked" && config.holds(login.url)
-            ? config
-                .restore(login.url)
-                .catch((error) =>
-                  log(
-                    "could not put this host's own omp configuration back: " +
-                      reason(error),
-                  ),
-                )
-            : null;
-        if (restored)
-          log(
-            "the server that revoked this host held its omp configuration; putting this host's own back",
-          );
+        // Revocation drops only the revoked link's mirror, including an apply still in flight.
+        const restored = why === "revoked"
+          ? config.restore(login.url).catch((error) =>
+              log("could not discard the revoked server's configuration: " + reason(error)),
+            )
+          : null;
         if (links.size === 0) {
           log(
             why === "revoked"
@@ -957,8 +939,6 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       );
       link.start();
     }
-    // Who holds the configuration follows host.json (holds()): a removed holder hands it to the links that remain.
-    reportConfig();
     electNotifier();
     return source
       ? links.get(source.login.url) !== source ||
@@ -1427,7 +1407,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
             "invalid_request",
             "Invalid cluster configuration request",
           );
-        return { state: config.state(), owned: config.holds(link.login.url) };
+        return { state: config.state(link.login.url), owned: config.holds(link.login.url) };
       default: {
         const run = sessionOps[op] as (
           ...params: unknown[]

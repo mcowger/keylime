@@ -48,7 +48,6 @@ test("createHost returns a 43-char base64url token and stores only its sha256", 
     assert.equal(host.tokenHash, sha256(token));
     assert.equal(host.label, "laptop");
     assert.equal(host.lastSeenAt, null);
-    assert.equal(host.allowAgentStart, false);
 
     const onDisk = readFileSync(file, "utf8");
     assert.ok(onDisk.includes(sha256(token)));
@@ -126,10 +125,8 @@ test("updateHost persists changes and rejects an unknown id", () =>
     const { host } = createHost("laptop");
     const updated = updateHost(host.id, {
       label: " studio ",
-      allowAgentStart: true,
     });
     assert.equal(updated.label, "studio");
-    assert.equal(updated.allowAgentStart, true);
     assert.equal(loadHosts()[0].label, "studio");
     assert.throws(() => updateHost("missing", { label: "x" }), {
       message: "Unknown host",
@@ -161,7 +158,7 @@ test("malformed records are skipped and do not break token lookup", () =>
     assert.equal(hostForToken(undefined), null);
   }));
 
-test("this machine can be renamed and reset, never revoked or given agent-start rights", () =>
+test("this machine can be renamed and reset, never revoked", () =>
   withAgentDir(async () => {
     const token = rotateLocalHostToken();
     assert.equal(customLocalLabel(), "");
@@ -169,15 +166,11 @@ test("this machine can be renamed and reset, never revoked or given agent-start 
     assert.equal(updateHost("local", { label: "  Desk  " }).label, "Desk");
     assert.equal(customLocalLabel(), "Desk");
     assert.equal(hostForToken(token)?.id, "local");
-    assert.equal(loadHosts()[0].allowAgentStart, true);
 
     rotateLocalHostToken();
     assert.equal(customLocalLabel(), "Desk", "a new token keeps the name");
 
     assert.throws(() => revokeHost("local"), { name: "ReservedHostError" });
-    assert.throws(() => updateHost("local", { allowAgentStart: false }), {
-      name: "ReservedHostError",
-    });
     assert.equal(customLocalLabel(), "Desk");
 
     updateHost("local", { label: "  " });
@@ -188,19 +181,18 @@ test("this machine can be renamed and reset, never revoked or given agent-start 
     );
   }));
 
-test("shareCredentials is off by default, persists once set, and is refused for this machine", () =>
+test("legacy toggles are ignored on read and dropped on the next registry write", () =>
   withAgentDir(async (file) => {
-    const { host } = createHost("laptop");
-    assert.equal(host.shareCredentials, false);
+    const { host, token } = createHost("laptop");
 
     const stored = JSON.parse(readFileSync(file, "utf8"));
-    delete stored.hosts[0].shareCredentials;
+    stored.hosts[0].allowAgentStart = true;
+    stored.hosts[0].shareCredentials = true;
     writeFileSync(file, JSON.stringify(stored));
-    assert.equal(loadHosts()[0].shareCredentials, false);
-
-    updateHost(host.id, { shareCredentials: true });
-    assert.equal(loadHosts()[0].shareCredentials, true);
-    assert.throws(() => updateHost("local", { shareCredentials: true }), {
-      name: "ReservedHostError",
-    });
+    assert.deepEqual(loadHosts(), [host]);
+    assert.deepEqual(hostForToken(token), host);
+    updateHost(host.id, { label: "Studio" });
+    assert.deepEqual(JSON.parse(readFileSync(file, "utf8")).hosts, [
+      { ...host, label: "Studio" },
+    ]);
   }));

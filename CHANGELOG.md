@@ -153,6 +153,9 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The sidebar indents Systems and Repos under their host, and Efforts and Workspaces under their parent. Collapse each host, section, System, or Repo independently.
 - The sidebar activity filter temporarily expands matching Repos and restores their previous collapse state when turned off.
 - **New System → Member Repos** uses the same folder picker as **Add repo**, without the clone and launch options.
+- Linked hosts use the server's OMP configuration and provider logins for new sessions. Settings → Hosts no longer shows cluster membership, provider sharing, or agent-start switches. Agents still ask before starting a session on a linked host.
+- A daemon linked to multiple servers keeps each server's OMP configuration separate. Workspace file access blocks mirrored settings and cached copies, including through symlinks.
+- Images in saved chats on linked hosts stay available after the server's configuration refreshes.
 - The sidebar and Settings call projects repos, including in add, remove, and settings controls.
 - Effort cleanup lists Git-ignored files and directories, like `.env` and local database folders. Removing them requires force confirmation.
 - Effort cleanup keeps unreadable `AGENTS.md` and `repomap.md` files at the Effort root without failing worktree removal.
@@ -202,6 +205,9 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Drop image files onto the Notes or task attachment buttons, or click to choose files. Missing the button won't open the file or discard your draft
 - The sidebar nests Systems and Repos under hosts, and Efforts and Workspaces under their parent, with independent collapse controls. Activity filtering temporarily expands matching Repos and restores their prior collapse state afterward
 - The sidebar nests Systems and Repos under hosts, and Efforts and Workspaces under their parent, with independent collapse controls. Activity filtering temporarily reveals matching Repos and restores their previous collapse state
+- Linked hosts use the server's OMP configuration and provider logins for new sessions; host settings no longer expose cluster membership, provider sharing or agent-start switches
+- Daemons linked to multiple servers keep each server's OMP configuration separate, and workspace access blocks mirrored settings and cached copies through symlinks
+- Images in saved chats on linked hosts remain available after server configuration refreshes
 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen

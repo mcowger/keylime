@@ -8,7 +8,7 @@ import fs, {
 import { homedir } from "os";
 import path from "path";
 import { isUtf8 } from "node:buffer";
-import { getAgentDir, getConfigRoot } from "./omp/paths";
+import { getAgentDir, getConfigRoot, HOST_CONFIG_MIRROR_DIR } from "./omp/paths";
 import { hostSessions } from "./hosts/session-index";
 import { LOCAL_HOST_ID } from "./hosts/registry";
 import { HostOpError } from "./hosts/link-protocol";
@@ -115,6 +115,16 @@ export function isOmpSecretFile(filePath: string): boolean {
     getAgentDir(),
     ...configDirs.map((dir) => path.join(dir, "agent")),
   ];
+  // Mirrored generations and object caches can both contain credentials.
+  const mirrorDir = path.join(agentDirs[0], "keylime", HOST_CONFIG_MIRROR_DIR);
+  const canonicalMirror = resolvedOrSelf(mirrorDir, markUnavailable);
+  if (
+    filePath === mirrorDir ||
+    filePath.startsWith(mirrorDir + path.sep) ||
+    target === canonicalMirror ||
+    target.startsWith(canonicalMirror + path.sep)
+  )
+    return true;
   const requestedIdentity = fileIdentity(filePath, markRequestUnavailable);
   const identity =
     requestedIdentity &&

@@ -1047,7 +1047,6 @@ function serveManagedWorkspace() {
       keylimeVersion: "0.6.0",
       platform: "linux",
       lastSeenAt: "2026-11-10T00:00:00.000Z",
-      allowAgentStart: true,
       hostVersion: 2,
       serverVersion: 2,
     })),

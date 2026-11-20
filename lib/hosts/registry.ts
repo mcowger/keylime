@@ -22,8 +22,6 @@ export interface HostRecord {
   tokenHash: string;
   createdAt: string;
   lastSeenAt: string | null;
-  allowAgentStart: boolean;
-  shareCredentials: boolean;
 }
 
 interface HostsFile {
@@ -61,8 +59,6 @@ function parseHostRecord(raw: unknown): HostRecord | null {
     tokenHash: r.tokenHash,
     createdAt: typeof r.createdAt === "string" ? r.createdAt : "",
     lastSeenAt: typeof r.lastSeenAt === "string" ? r.lastSeenAt : null,
-    allowAgentStart: r.allowAgentStart === true,
-    shareCredentials: r.shareCredentials === true,
   };
 }
 
@@ -133,8 +129,6 @@ export function createHost(label: string): { host: HostRecord; token: string } {
     tokenHash: sha256Hex(token),
     createdAt: new Date().toISOString(),
     lastSeenAt: null,
-    allowAgentStart: false,
-    shareCredentials: false,
   };
   saveHosts([...readHosts(), host]);
   return { host, token };
@@ -147,7 +141,7 @@ export class UnknownHostError extends Error {
   }
 }
 
-/** `local` is created and keyed by the web server only; it can be renamed but not revoked or given agent-start or credential-sharing rights. */
+/** `local` is created and keyed by the web server; it can be renamed but not revoked. */
 export class ReservedHostError extends Error {
   readonly name = "ReservedHostError";
   constructor() {
@@ -155,33 +149,15 @@ export class ReservedHostError extends Error {
   }
 }
 
-export function updateHost(
-  id: string,
-  updates: {
-    label?: string;
-    allowAgentStart?: boolean;
-    shareCredentials?: boolean;
-  },
-): HostRecord {
-  if (
-    id === LOCAL_HOST_ID &&
-    (updates.allowAgentStart !== undefined ||
-      updates.shareCredentials !== undefined)
-  )
-    throw new ReservedHostError();
+export function updateHost(id: string, updates: { label: string }): HostRecord {
   const hosts = readHosts();
   const host = hosts.find((h) => h.id === id);
   if (!host) throw new UnknownHostError();
   // An empty name resets this machine to the default.
-  if (updates.label !== undefined)
-    host.label =
-      id === LOCAL_HOST_ID && !updates.label.trim()
-        ? ""
-        : normalizeLabel(updates.label);
-  if (updates.allowAgentStart !== undefined)
-    host.allowAgentStart = updates.allowAgentStart;
-  if (updates.shareCredentials !== undefined)
-    host.shareCredentials = updates.shareCredentials;
+  host.label =
+    id === LOCAL_HOST_ID && !updates.label.trim()
+      ? ""
+      : normalizeLabel(updates.label);
   saveHosts(hosts);
   return host;
 }
@@ -197,8 +173,6 @@ export function rotateLocalHostToken(): string {
     tokenHash: sha256Hex(token),
     createdAt: existing?.createdAt || new Date().toISOString(),
     lastSeenAt: existing?.lastSeenAt ?? null,
-    allowAgentStart: true,
-    shareCredentials: false,
   };
   saveHosts([...hosts.filter((h) => h.id !== LOCAL_HOST_ID), record]);
   return token;

@@ -98,7 +98,7 @@ type Channel = {
   resuming?: boolean;
 };
 type ChannelDeps = {
-  spawn(launch: SpawnRequest): Promise<SpawnResult>;
+  spawn(launch: SpawnRequest, recoveringSession: boolean): Promise<SpawnResult>;
   bindTerminal?(runtimeId: string, sessionId: string): void;
   terminalAttached?(runtimeId: string): boolean;
   workspaceDeleting?(cwd: string): boolean;
@@ -138,11 +138,17 @@ function forStart(
   delete result.configVersion;
   if (opener.shareCredentials === true)
     result.credentialsServer = link.login.url;
-  if (
-    typeof opener.configVersion === "string" &&
-    CONFIG_VERSION_RE.test(opener.configVersion)
-  )
+  if (opener.configVersion !== undefined) {
+    if (
+      typeof opener.configVersion !== "string" ||
+      !CONFIG_VERSION_RE.test(opener.configVersion) ||
+      opener.shareCredentials !== true
+    )
+      throw invalid(
+        "A configured launch requires a valid configuration version and server credentials",
+      );
     result.configVersion = opener.configVersion;
+  }
   return result;
 }
 
@@ -759,7 +765,7 @@ export class ChannelTable {
         adopted?.transport.killTree(true);
         throw new HostOpError(503, "host_stopping", "keylime host is stopping");
       }
-      const spawned = adopted ?? (await this.deps.spawn(launch));
+      const spawned = adopted ?? (await this.deps.spawn(launch, preparingLinkId === "d:resume"));
       if (this.stopped) {
         spawned.transport.killTree(true);
         throw new HostOpError(503, "host_stopping", "keylime host is stopping");
@@ -1397,7 +1403,6 @@ export class ChannelTable {
     }));
   }
   running(): HostResumeEntry[] {
-    // A recovered session starts on the version already applied: the resume manifest never names one.
     return [...this.channels.values()]
       .filter(
         (channel) =>
@@ -1409,7 +1414,6 @@ export class ChannelTable {
       )
       .map((channel) => {
         const launch = { ...channel.launch };
-        delete launch.configVersion;
         return { sessionId: channel.pending.sessionId!, launch };
       });
   }

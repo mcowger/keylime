@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { once } from "node:events";
 import { Database } from "bun:sqlite";
 import {
   existsSync,
@@ -34,6 +35,14 @@ type OmpLogEntry = {
   sessionId: string;
   line: string;
   n: number;
+  brokerConfigured?: boolean;
+  config?: {
+    agentDir: string;
+    home: string;
+    settings: string | null;
+    skill: string | null;
+    marker?: string;
+  };
   command?: {
     t?: string;
     op?: string;
@@ -76,9 +85,12 @@ mkdirSync(join(sessionsDir, "-project"), { recursive: true });
 mkdirSync(projectDir, { recursive: true });
 
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+const previousOmpBin = process.env.KEYLIME_OMP_BIN;
 process.env.PI_CODING_AGENT_DIR = mainAgentDir;
 
 const linkRoute = await import("../../app/api/hosts/link/route.ts");
+const configManifestRoute = await import("../../app/api/hosts/cluster-config/manifest/route.ts");
+const configFileRoute = await import("../../app/api/hosts/cluster-config/file/[hash]/route.ts");
 const hub = await import("./hub.ts");
 const { createHost, revokeHost } = await import("./registry.ts");
 const {
@@ -102,9 +114,9 @@ const SLOW_FRAMES = 80;
 const slowGo = (sessionId: string) => join(scratch, `go-${sessionId}`);
 // Every omp child appends {pid, kind: "start" | "stdin" | "out" | "pad", ...} here.
 const ompLogFile = join(scratch, "omp.log");
-const ompLog = (): OmpLogEntry[] =>
-  existsSync(ompLogFile)
-    ? readFileSync(ompLogFile, "utf8")
+const ompLog = (file = ompLogFile): OmpLogEntry[] =>
+  existsSync(file)
+    ? readFileSync(file, "utf8")
         .split("\n")
         .filter(Boolean)
         .map((line) => JSON.parse(line))
@@ -117,13 +129,15 @@ const ompSaid = (...parts: string[]) => {
   return parts.every((part) => lines.some((line) => line.includes(part)));
 };
 const fakeOmp = join(scratch, "fake-omp");
+process.env.KEYLIME_OMP_BIN = fakeOmp;
 writeFakeOmp(
   fakeOmp,
-  `if (process.argv.includes("--version")) { console.log("14.0.0-fake"); process.exit(0); }
+  `if (process.argv.includes("--version")) { console.log("15.13.1"); process.exit(0); }
+if (process.argv.slice(2, 4).join(" ") === "plugin list") { console.log('{"npm":[],"marketplace":[]}'); process.exit(0); }
 ${fakeRunnerSocket}
 const fs = require("node:fs");
 const path = require("node:path");
-const log = (entry) => fs.appendFileSync(${JSON.stringify(ompLogFile)}, JSON.stringify({ pid: process.pid, ...entry }) + "\\n");
+const log = (entry) => fs.appendFileSync(process.env.LINK_TEST_LOG_FILE ?? ${JSON.stringify(ompLogFile)}, JSON.stringify({ pid: process.pid, ...entry }) + "\\n");
 const out = (frame) => {
   const line = JSON.stringify(frame);
   log({ kind: "out", line });
@@ -133,7 +147,8 @@ const resumeAt = process.argv.indexOf("--resume");
 const resumed = resumeAt === -1 ? null : process.argv[resumeAt + 1];
 // As omp does, a new session's file is written only once its first assistant message ends.
 const sessionId = resumed ? JSON.parse(fs.readFileSync(resumed, "utf8").split("\\n")[0]).id : require("node:crypto").randomUUID();
-const sessionFile = resumed ?? path.join(${JSON.stringify(sessionsDir)}, "-project", sessionId + ".jsonl");
+const sessionRoot = process.env.LINK_TEST_LOG_FILE ? path.join(process.env.PI_CODING_AGENT_DIR, "sessions") : ${JSON.stringify(sessionsDir)};
+const sessionFile = resumed ?? path.join(sessionRoot, "-project", sessionId + ".jsonl");
 let prompt = null;
 let streaming = false;
 let text = "";
@@ -154,7 +169,19 @@ const end = () => {
   }
   out({ t: "event", event: { type: "agent_end", isTerminal: true, messages: [] } });
 };
-log({ kind: "start", sessionId });
+const configSnapshot = () => {
+  const agentDir = process.env.OMP_CODING_AGENT_DIR ?? process.env.PI_CODING_AGENT_DIR;
+  const home = require("node:os").homedir();
+  const read = (file) => fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
+  return {
+    agentDir,
+    home,
+    settings: agentDir ? read(path.join(agentDir, "config.yml")) : null,
+    skill: read(path.join(home, ".agents", "skills", "link-test", "SKILL.md")),
+    marker: process.env.LINK_TEST_MARKER,
+  };
+};
+log({ kind: "start", sessionId, brokerConfigured: Boolean(process.env.OMP_AUTH_BROKER_URL && process.env.OMP_AUTH_BROKER_TOKEN), config: process.env.LINK_TEST_LOG_FILE ? configSnapshot() : undefined });
 out({ t: "hello", proto: 1, pid: process.pid, sessionId, sessionFile, cwd: process.cwd() });
 require("node:readline").createInterface({ input: rpcSocket }).on("line", (line) => {
   const command = JSON.parse(line);
@@ -356,6 +383,11 @@ const server: Bun.Server<LinkSocketData> = Bun.serve<LinkSocketData>({
   port: 0,
   hostname: "127.0.0.1",
   routes: {
+    "/api/hosts/cluster-config/manifest": { GET: configManifestRoute.GET },
+    "/api/hosts/cluster-config/file/:hash": {
+      GET: (req: Bun.BunRequest<"/api/hosts/cluster-config/file/:hash">) =>
+        configFileRoute.GET(req, { params: Promise.resolve(req.params) }),
+    },
     "/api/hosts/link": {
       GET(req: Request) {
         const response = linkRoute.GET(req, {
@@ -563,14 +595,135 @@ after(async () => {
   hub.flushLinkSamples();
   if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
   else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+  if (previousOmpBin === undefined) delete process.env.KEYLIME_OMP_BIN;
+  else process.env.KEYLIME_OMP_BIN = previousOmpBin;
   rmSync(scratch, { recursive: true, force: true });
+});
+
+test("two cold links launch runners with their own config without changing daemon-local config", async (t) => {
+  const root = join(scratch, "cold-start");
+  mkdirSync(root, { mode: 0o700 });
+  const coldLog = join(root, "omp.log");
+  const laptop = join(root, "laptop");
+  const laptopAgent = join(laptop, ".omp", "agent");
+  const skillDir = join(".agents", "skills", "link-test");
+  const skillPath = join(skillDir, "SKILL.md");
+  const localSettings = "# Keep these local bytes\ndefaultModel: local-model\n";
+  const localWebSettings = '{"agentEnv":{"LINK_TEST_MARKER":"local"}}\n';
+  const localSkill = "# Local skill\n";
+  mkdirSync(join(laptopAgent, "keylime"), { recursive: true });
+  mkdirSync(join(laptopAgent, "sessions", "-project"), { recursive: true });
+  mkdirSync(join(laptop, skillDir), { recursive: true });
+  writeFileSync(join(laptopAgent, "config.yml"), localSettings);
+  const localWebSettingsFile = join(laptopAgent, "keylime-settings.json");
+  writeFileSync(localWebSettingsFile, localWebSettings);
+  writeFileSync(join(laptop, skillPath), localSkill);
+
+  const children: ChildProcess[] = [];
+  t.after(async () => {
+    for (const child of children.reverse()) {
+      if (!child.pid || child.exitCode !== null || child.signalCode !== null) continue;
+      const exited = once(child, "exit");
+      child.kill("SIGKILL");
+      await exited;
+    }
+  });
+  const links = await Promise.all(
+    ["alpha", "beta"].map(async (marker) => {
+      const home = join(root, marker);
+      const agentDir = join(home, ".omp", "agent");
+      const project = join(laptop, marker);
+      mkdirSync(project, { recursive: true });
+      mkdirSync(agentDir, { recursive: true });
+      mkdirSync(join(home, skillDir), { recursive: true });
+      writeFileSync(
+        join(agentDir, "config.yml"),
+        `defaultModel: ${marker}-model\n`,
+      );
+      writeFileSync(join(home, skillPath), `# ${marker} skill\n`);
+      const fixture = new URL(
+        "./link-integration-server.fixture.ts",
+        import.meta.url,
+      );
+      const web = spawn(
+        process.execPath,
+        [fileURLToPath(fixture), project, marker],
+        {
+          env: {
+            ...process.env,
+            HOME: home,
+            PI_CODING_AGENT_DIR: agentDir,
+            OMP_CODING_AGENT_DIR: agentDir,
+          },
+          stdio: ["ignore", "inherit", "inherit", "ipc"],
+        },
+      );
+      children.push(web);
+      const signal = AbortSignal.timeout(10_000);
+      const [login] = await Promise.race([
+        once(web, "message", { signal }) as Promise<[{ url: string; token: string }]>,
+        once(web, "exit", { signal }).then(([code]) => {
+          throw new Error(`${marker} fixture exited before startup: ${code}`);
+        }),
+      ]);
+      return { marker, login };
+    }),
+  );
+  // Both links are present on the daemon's first boot, with no cached config.
+  writeFileSync(
+    join(laptopAgent, "keylime", "host.json"),
+    JSON.stringify({ ...links[0].login, links: links.map(({ login }) => login) }),
+    { mode: 0o600 },
+  );
+  const coldDaemon = spawn(process.execPath, [hostBin], {
+    env: {
+      ...process.env,
+      HOME: laptop,
+      PI_CODING_AGENT_DIR: laptopAgent,
+      OMP_CODING_AGENT_DIR: laptopAgent,
+      KEYLIME_HOST_SOCKET: join(root, "host.sock"),
+      LINK_TEST_LOG_FILE: coldLog,
+    },
+    stdio: ["ignore", "inherit", "inherit"],
+  });
+  children.push(coldDaemon);
+
+  const configs = await Promise.all(
+    links.map(async ({ marker, login }) => {
+      const launch = await fetch(`${login.url}/launch`, {
+        method: "POST",
+        signal: AbortSignal.timeout(4_000),
+      });
+      const body = await launch.text();
+      assert.ok(launch.ok, `${marker} launch: ${body}`);
+      const { sessionId } = JSON.parse(body) as { sessionId: string };
+      const config = ompLog(coldLog).find(
+        (entry) => entry.kind === "start" && entry.sessionId === sessionId,
+      )?.config;
+      assert.ok(config, `${marker} runner recorded its config before hello`);
+      assert.equal(config.marker, marker);
+      assert.equal(config.skill, `# ${marker} skill\n`);
+      assert.match(
+        config.settings ?? "",
+        new RegExp(`^defaultModel: ${marker}-model$`, "m"),
+      );
+      assert.notEqual(config.agentDir, laptopAgent);
+      assert.notEqual(config.home, laptop);
+      return config;
+    }),
+  );
+  assert.notEqual(configs[0].agentDir, configs[1].agentDir);
+  assert.notEqual(configs[0].home, configs[1].home);
+  assert.equal(readFileSync(join(laptopAgent, "config.yml"), "utf8"), localSettings);
+  assert.equal(readFileSync(localWebSettingsFile, "utf8"), localWebSettings);
+  assert.equal(readFileSync(join(laptop, skillPath), "utf8"), localSkill);
 });
 
 test("the linked host reports itself and lists its sessions", async () => {
   const listed = hub.listHosts().find((h) => h.id === hostId);
   assert.ok(listed);
   assert.equal(listed.status, "online");
-  assert.equal(listed.ompVersion, "14.0.0-fake");
+  assert.equal(listed.ompVersion, "15.13.1");
   assert.equal(listed.platform, process.platform);
   const ids = (await host().sessionOps.listSessions()).map((s) => s.id);
   assert.ok(ids.includes(SMALL_ID) && ids.includes(BIG_ID), ids.join(","));
@@ -669,6 +822,14 @@ test("a remote session streams a reply with no frame lost or duplicated across l
   sessionId = realSessionId;
   countSessionId = realSessionId;
   assert.equal(session.host, remote);
+  assert.ok(
+    ompLog().some(
+      (entry) =>
+        entry.kind === "start" &&
+        entry.sessionId === realSessionId &&
+        entry.brokerConfigured,
+    ),
+  );
   const texts: number[] = [];
   let ended = false;
   session.onEvent((event) => {

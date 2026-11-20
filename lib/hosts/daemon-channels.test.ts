@@ -1396,29 +1396,27 @@ test("a session-file move keeps the credentials server in the recorded launch", 
   );
 });
 
-test("a start keeps the configuration version only as 64 hex characters", async (t) => {
+test("a malformed configuration version or missing server credentials refuses the start", async (t) => {
+  const h = harness();
+  t.after(() => h.table.stop());
+  h.a.login = { url: "https://a.example", token: "a" };
   const version = "a".repeat(64);
-  for (const [given, kept] of [
-    ["x", undefined],
-    [version.toUpperCase(), undefined],
-    [7, undefined],
-    [version, version],
+  for (const bad of [
+    { shareCredentials: true as const, configVersion: "x" },
+    { shareCredentials: true as const, configVersion: version.toUpperCase() },
+    { configVersion: version },
   ]) {
-    const h = harness();
-    t.after(() => h.table.stop());
-    h.a.version = LINK_PROTOCOL_VERSION;
-    h.a.login = { url: "https://a.example", token: "a" };
-    await h.table.open(h.a, {
-      sessionId: SAVED,
-      launch: {
-        ...launch,
-        shareCredentials: true,
-        configVersion: given as string,
-      },
-    });
-    assert.equal(h.children[0].request.configVersion, kept);
-    assert.equal("configVersion" in h.children[0].request, kept !== undefined);
+    await assert.rejects(
+      h.table.open(h.a, { sessionId: SAVED, launch: { ...launch, ...bad } }),
+      /requires a valid configuration version and server credentials/,
+    );
   }
+  assert.equal(h.children.length, 0);
+  await h.table.open(h.a, {
+    sessionId: SAVED,
+    launch: { ...launch, shareCredentials: true, configVersion: version },
+  });
+  assert.equal(h.children[0].request.configVersion, version);
 });
 
 test("an omp that exits during startup logs the last 500 bytes of its stderr to the daemon log only", async (t) => {

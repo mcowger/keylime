@@ -25,6 +25,7 @@ export function runOmpCli(
   args: string[],
   timeoutMs: number,
   signal?: AbortSignal,
+  environment?: Record<string, string>,
 ): Promise<string> {
   const bin = resolveOmpBin();
   if (!bin) return Promise.reject(new Error(OMP_NOT_FOUND));
@@ -36,7 +37,8 @@ export function runOmpCli(
         timeout: timeoutMs,
         signal,
         maxBuffer: 16 * 1024 * 1024,
-        env: createChildProcessEnvironment({ FORCE_COLOR: "0", NO_COLOR: "1" }),
+        ...(environment && { cwd: environment.HOME }),
+        env: createChildProcessEnvironment({ ...environment, FORCE_COLOR: "0", NO_COLOR: "1" }),
       },
       (error, stdout, stderr) => {
         if (!error) return resolve(stdout);

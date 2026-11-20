@@ -247,15 +247,12 @@ test("no token and an unknown token are 401", async () => {
   }
 });
 
-test("a linked host that is not a cluster member is 403", async () => {
-  const { token } = createHost("outsider");
-  for (const response of [
-    await getManifest(token),
-    await getFile(token, "a".repeat(64)),
-  ]) {
-    assert.equal(response.status, 403);
-    assert.deepEqual(await response.json(), { error: "Not a cluster member" });
-  }
+test("a linked host outside any pool gets the server configuration", async () => {
+  const { token } = createHost("unpooled");
+  const manifest = await getManifest(token);
+  assert.equal(manifest.status, 200);
+  const { files } = await manifest.json();
+  assert.equal((await getFile(token, files[0].hash)).status, 200);
 });
 
 test("the local record's token is 403 even when pools.json lists it", async () => {
@@ -279,11 +276,13 @@ test("the local record's token is 403 even when pools.json lists it", async () =
   assert.equal((await getManifest(localToken)).status, 403);
 });
 
-test("an unreadable hosts.json or pools.json is 503", async () => {
+test("an unreadable registry blocks configuration, but unreadable pools do not", async () => {
   const token = clusterMember();
   writeFileSync(poolsFile, "{not json");
-  assert.equal((await getManifest(token)).status, 503);
-  assert.equal((await getFile(token, "a".repeat(64))).status, 503);
+  const manifest = await getManifest(token);
+  assert.equal(manifest.status, 200);
+  const { files } = await manifest.json();
+  assert.equal((await getFile(token, files[0].hash)).status, 200);
   const hosts = realFs.readFileSync(hostsFile, "utf8");
   writeFileSync(hostsFile, "{not json");
   try {
@@ -454,51 +453,30 @@ test("a revoked host gets 401 on its next file request", async () => {
   assert.equal((await getManifest(token)).status, 401);
 });
 
-test("a host removed from the cluster gets 403 on its next request", async () => {
+test("removing a host from a pool does not revoke configuration access", async () => {
   const token = clusterMember();
   const { files } = await (await getManifest(token)).json();
   assert.equal((await getFile(token, files[0].hash)).status, 200);
   rmSync(poolsFile);
-  assert.equal((await getFile(token, files[0].hash)).status, 403);
-  assert.equal((await getManifest(token)).status, 403);
+  assert.equal((await getFile(token, files[0].hash)).status, 200);
+  assert.equal((await getManifest(token)).status, 200);
 });
 
-test("a host revoked or removed from the cluster while the configuration is built gets 401 or 403, neither the manifest nor a file", async () => {
-  for (const [leave, status] of [
-    [(id: string) => revokeHost(id), 401],
-    [() => rmSync(poolsFile), 403],
-  ] as [(id: string) => unknown, number][]) {
-    for (const get of [getManifest, getFile]) {
-      const { host, token } = createHost("leaving");
-      savePools([
-        {
-          id: "cluster",
-          label: "cluster",
-          enabled: true,
-          projects: [],
-          members: [
-            {
-              hostId: host.id,
-              projectsRoot: "/srv/p",
-              provisioned: true,
-              draining: false,
-            },
-          ],
-        },
-      ]);
-      const { files } = await (await getManifest(token)).json();
-      held = {
-        dir: join(agentDir, "skills"),
-        reached: Promise.withResolvers(),
-        release: Promise.withResolvers(),
-      };
-      const { reached, release } = held;
-      const answer = get(token, files[0].hash);
-      await reached.promise; // admitted, and building
-      leave(host.id);
-      release.resolve();
-      assert.equal((await answer).status, status);
-    }
+test("a host revoked while configuration is built gets neither the manifest nor a file", async () => {
+  for (const get of [getManifest, getFile]) {
+    const { host, token } = createHost("revoked-during-build");
+    const { files } = await (await getManifest(token)).json();
+    held = {
+      dir: join(agentDir, "skills"),
+      reached: Promise.withResolvers(),
+      release: Promise.withResolvers(),
+    };
+    const { reached, release } = held;
+    const answer = get(token, files[0].hash);
+    await reached.promise;
+    assert.equal(revokeHost(host.id), true);
+    release.resolve();
+    assert.equal((await answer).status, 401);
   }
 });
 

@@ -43863,9 +43863,6 @@
                         },
                         {
                           "properties": {
-                            "allowAgentStart": {
-                              "type": "boolean"
-                            },
                             "clusterConfig": {
                               "allOf": [
                                 {
@@ -44020,9 +44017,6 @@
                             "serverVersion": {
                               "type": "number"
                             },
-                            "shareCredentials": {
-                              "type": "boolean"
-                            },
                             "status": {
                               "anyOf": [
                                 {
@@ -44059,9 +44053,7 @@
                             "lastSeenAt",
                             "hostVersion",
                             "serverVersion",
-                            "workspaceOps",
-                            "allowAgentStart",
-                            "shareCredentials"
+                            "workspaceOps"
                           ],
                           "type": "object"
                         }

@@ -1,3 +1,4 @@
+import { mock } from "bun:test";
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 import {
@@ -9,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import { captureExpectedConsole } from "../../tests/expected-console.ts";
 import { fakeRunnerSocket } from "../../tests/fake-runner-socket.ts";
 import {
@@ -20,7 +21,7 @@ import {
   PartJoiner,
 } from "./link-protocol.ts";
 
-const scratch = mkdtempSync(join(tmpdir(), "daemon-multi-runtime-"));
+const scratch = mkdtempSync(join(os.tmpdir(), "daemon-multi-runtime-"));
 const old = {
   agent: process.env.PI_CODING_AGENT_DIR,
   bin: process.env.KEYLIME_OMP_BIN,
@@ -28,8 +29,12 @@ const old = {
 };
 process.env.PI_CODING_AGENT_DIR = join(scratch, "agent");
 // A member applies the master's configuration under its home directory too (`~/.agents/skills`).
-process.env.HOME = join(scratch, "home");
-mkdirSync(process.env.HOME, { recursive: true });
+const home = join(scratch, "home");
+process.env.HOME = home;
+mkdirSync(home, { recursive: true });
+// Bun can cache homedir() before this file changes HOME.
+const scratchOs = { ...os, homedir: () => home };
+mock.module("node:os", () => ({ ...scratchOs, default: scratchOs }));
 const fakeOmp = join(scratch, "omp");
 const spawns = join(scratch, "spawns");
 const envs = join(scratch, "envs");

@@ -14,11 +14,14 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import type { PathLike } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, sep } from "node:path";
+import { dirname, join } from "node:path";
 import test, { after, afterEach, beforeEach } from "node:test";
 import { mock } from "bun:test";
 import { parse } from "yaml";
+import { getBlobsDir } from "../omp/paths";
+import { sessionOps } from "./session-ops";
 import type { PluginEntry } from "./cluster-config";
 import type { ConfigState } from "./daemon-cluster-config";
 
@@ -40,41 +43,16 @@ type FakeOmp = {
   run: (args: string[], signal?: AbortSignal) => Promise<string>;
 };
 
-// Fault injection: every renameSync passes `renameHook` first, and while `dead` (a crash) every write to the disk fails.
-// Bun patches the live namespace in place, so the wrapper calls a copy of the real module; "fs" (web-settings) and
-// "node:fs" are separate mock keys.
+// Bun patches the live namespace in place, so call a copy of the real rename.
 const realFs = { ...(await import("node:fs")) };
 let renameHook: ((from: string, to: string) => void) | null = null;
-let dead = false;
-const alive = () => {
-  if (dead) throw Object.assign(new Error("injected crash"), { code: "EIO" });
-};
-const mockedFs = () => ({
+mock.module("node:fs", () => ({
   ...realFs,
-  renameSync(from: import("node:fs").PathLike, to: import("node:fs").PathLike) {
-    alive();
+  renameSync(from: PathLike, to: PathLike) {
     renameHook?.(String(from), String(to));
     return realFs.renameSync(from, to);
   },
-  ...Object.fromEntries(
-    (
-      [
-        "rmSync",
-        "rmdirSync",
-        "mkdirSync",
-        "writeFileSync",
-        "chmodSync",
-      ] as const
-    ).map((name) => [
-      name,
-      (...args: never[]) => {
-        alive();
-        return (realFs[name] as (...args: never[]) => unknown)(...args);
-      },
-    ]),
-  ),
-});
-for (const name of ["fs", "node:fs"]) mock.module(name, mockedFs);
+}));
 
 const { buildManifest } = await import("./cluster-config.ts");
 const { clusterConfigTimings, createClusterConfig } =
@@ -102,9 +80,7 @@ let base: string;
 let roots: Record<"agent" | "home", string>;
 let master: Record<"agent" | "home", string>;
 let stateDir: string;
-let own: string;
 beforeEach(() => {
-  dead = false;
   base = realpathSync(
     mkdtempSync(join(tmpdir(), "keylime-member-config-test-")),
   );
@@ -119,16 +95,22 @@ beforeEach(() => {
   for (const dir of [...Object.values(roots), ...Object.values(master)])
     mkdirSync(dir, { recursive: true });
   stateDir = join(roots.agent, "keylime");
-  own = join(stateDir, "own-config");
   // web-settings resolves keylime-settings.json in the agent directory.
   process.env.PI_CODING_AGENT_DIR = roots.agent;
   renameHook = null;
 });
 afterEach(() => {
-  dead = false;
   renameHook = null;
   rmSync(base, { recursive: true, force: true });
 });
+
+function mirrorDir() {
+  const servers = join(stateDir, "cluster-config", "servers");
+  if (!existsSync(servers)) return join(servers, "not-created");
+  const scopes = readdirSync(servers);
+  assert.ok(scopes.length <= 1);
+  return join(servers, scopes[0] ?? "not-created");
+}
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -178,6 +160,7 @@ function memberSetup() {
   put(roots.agent, "skills/mine/SKILL.md", "member skill\n");
   chmodSync(join(roots.agent, "skills"), 0o755);
   put(roots.agent, "sessions/s.jsonl", "{}\n");
+  mkdirSync(getBlobsDir(), { recursive: true });
   put(roots.home, ".agents/skills/home-skill/SKILL.md", "home skill\n");
   saveWebServerSettings({ agentEnv: { MEMBER_ONLY: "1" } });
 }
@@ -349,35 +332,35 @@ function fakeOmp(
   return omp;
 }
 
-/** `linked`: the servers this daemon links to (null: every one). */
 function member(
   srv: { fetch: Fetch },
   omp = fakeOmp(),
   available = new Set(["present-cmd"]),
-  linked: Set<string> | null = null,
 ) {
   const logs: string[] = [];
   const states: ConfigState[] = [];
   const config = createClusterConfig({
     roots: () => roots,
+    blobsDir: getBlobsDir,
     stateDir: () => stateDir,
     fetch: srv.fetch,
-    runOmp: (args, timeoutMs, signal) => {
+    runOmp: (args, timeoutMs, signal, env) => {
       assert.ok(timeoutMs > 0);
+      assert.notEqual(env.PI_CODING_AGENT_DIR, roots.agent);
+      assert.notEqual(env.HOME, roots.home);
       return omp.run(args, signal);
     },
     commandExists: async (command) => available.has(command),
     onState: (state) => states.push(state),
-    isLinked: (url) => linked?.has(url) ?? true,
     log: (message) => logs.push(message),
   });
   return { config, logs, states, omp };
 }
 
 async function pluginsSettled(config: Config) {
-  for (let i = 0; i < 400 && config.state().plugins === "pending"; i++)
+  for (let i = 0; i < 400 && config.state(MASTER).plugins === "pending"; i++)
     await sleep(5);
-  assert.notEqual(config.state().plugins, "pending");
+  assert.notEqual(config.state(MASTER).plugins, "pending");
 }
 
 const rejectsConfig = (promise: Promise<unknown>, pattern?: RegExp) =>
@@ -400,38 +383,6 @@ const rejectsConfig = (promise: Promise<unknown>, pattern?: RegExp) =>
     return true;
   });
 
-/** Fails the `n`-th move of a staged entry into the live tree. */
-function failAtSwap(n: number) {
-  const stage = join(stateDir, "cluster-config", "stage");
-  let count = 0;
-  renameHook = (from, to) => {
-    if (
-      from.startsWith(`${stage}${sep}`) &&
-      !to.startsWith(`${stateDir}${sep}`) &&
-      ++count === n
-    )
-      throw Object.assign(new Error("injected rename failure"), {
-        code: "EIO",
-      });
-  };
-}
-
-/** The process dies at the `n`-th move of a staged entry into the live tree: from there on nothing reaches the disk. */
-function crashAtSwap(n: number) {
-  const stage = join(stateDir, "cluster-config", "stage");
-  let count = 0;
-  renameHook = (from, to) => {
-    if (
-      from.startsWith(`${stage}${sep}`) &&
-      !to.startsWith(`${stateDir}${sep}`) &&
-      ++count === n
-    ) {
-      dead = true;
-      alive();
-    }
-  };
-}
-
 /** A gate for `omp`, opened by the returned function. */
 function hold(omp: FakeOmp) {
   const { promise, resolve } = Promise.withResolvers<void>();
@@ -444,86 +395,93 @@ async function firstApply(options?: Parameters<typeof masterBuild>[0]) {
   const build = masterBuild(options);
   const srv = serve(build);
   const m = member(srv);
-  await m.config.ensure(build.manifest.version, MASTER);
-  return { ...m, build, srv };
+  const env = await m.config.ensure(build.manifest.version, MASTER);
+  return { ...m, build, srv, env };
 }
 
-test("first apply writes the master's files privately, creates nested directories and backs up the member's own", async () => {
+test("apply writes a private server profile without changing the host profile", async () => {
   memberSetup();
-  const original = fakeOmp([
-    { kind: "npm", id: "own", version: "1.0.0", enabled: true },
-  ]);
-  const build = masterBuild();
-  const { config } = member(serve(build), original);
-  await config.ensure(build.manifest.version, MASTER);
-
-  assert.equal(read(join(roots.agent, "AGENTS.md")), "master rules\n");
-  assert.equal(mode(join(roots.agent, "AGENTS.md")), 0o600);
-  assert.equal(
-    mode(join(roots.agent, "skills/shared/scripts/deep/run.sh")),
-    0o700,
-  );
-  assert.equal(mode(join(roots.agent, "skills/shared/scripts/deep")), 0o700);
-  assert.equal(
-    read(join(roots.home, ".agents/skills/remote/SKILL.md")),
-    "remote skill\n",
-  );
-  assert.equal(
-    read(join(roots.agent, "sessions/s.jsonl")),
-    "{}\n",
-    "an entry that is not mirrored is left alone",
-  );
-
-  assert.equal(read(join(own, "agent/AGENTS.md")), "member rules\n");
-  assert.equal(mode(join(own, "agent/AGENTS.md")), 0o640);
-  assert.equal(
-    read(join(own, "home/.agents/skills/home-skill/SKILL.md")),
-    "home skill\n",
-  );
-  assert.deepEqual(JSON.parse(read(join(own, "agent-env.json"))), {
-    MEMBER_ONLY: "1",
-  });
-  assert.deepEqual(JSON.parse(read(join(own, "plugins.json"))), [
-    { kind: "npm", id: "own", version: "1.0.0", enabled: true },
-  ]);
-
-  const state = config.state();
-  assert.equal(state.version, build.manifest.version);
-  assert.equal(state.files, "current");
-  assert.equal(state.error, null);
-});
-
-test("a member file inside a mirrored directory the master lacks leaves the live tree for the backup", async () => {
-  await firstApply();
-  assert.equal(existsSync(join(roots.agent, "skills/mine")), false);
-  assert.equal(
-    existsSync(join(roots.home, ".agents/skills/home-skill")),
-    false,
-  );
-  assert.equal(read(join(own, "agent/skills/mine/SKILL.md")), "member skill\n");
-});
-
-test("config.yml keeps the member's shellPath and takes the master's other keys", async () => {
-  await firstApply();
-  const settings = parse(read(join(roots.agent, "config.yml")));
+  const original = tree();
+  const build = masterBuild({ agentEnv: { CLUSTER_KEY: "c", HOME: "/untrusted" } });
+  const { config } = member(serve(build));
+  const env = await config.ensure(build.manifest.version, MASTER);
+  const agent = env.PI_CODING_AGENT_DIR;
+  assert.notEqual(agent, roots.agent);
+  assert.notEqual(env.HOME, roots.home);
+  assert.equal(env.CLUSTER_KEY, "c");
+  assert.equal(env.MEMBER_ONLY, undefined);
+  assert.equal(read(join(agent, "AGENTS.md")), "master rules\n");
+  assert.equal(mode(join(agent, "AGENTS.md")), 0o600);
+  assert.equal(mode(join(agent, "skills/shared/scripts/deep/run.sh")), 0o700);
+  assert.equal(mode(join(agent, "skills/shared/scripts/deep")), 0o700);
+  assert.equal(read(join(env.HOME, ".agents/skills/remote/SKILL.md")), "remote skill\n");
+  assert.equal(read(join(agent, "sessions/s.jsonl")), "{}\n");
+  assert.equal(existsSync(join(agent, "skills/mine")), false);
+  const settings = parse(read(join(agent, "config.yml")));
   assert.equal(settings.shellPath, "/member/bash");
   assert.equal(settings.modelRoles.default, "master-model");
+  assert.deepEqual(loadWebServerSettings().agentEnv, { MEMBER_ONLY: "1" });
+  assert.deepEqual(tree(), original);
+  assert.equal(config.state(MASTER).version, build.manifest.version);
+  await pluginsSettled(config);
 });
-
-test("agentEnv in the member's keylime-settings.json equals the manifest's", async () => {
-  const { build } = await firstApply();
-  assert.deepEqual(
-    JSON.parse(read(join(roots.agent, "keylime-settings.json"))).agentEnv,
-    build.manifest.agentEnv,
-  );
-  assert.deepEqual(loadWebServerSettings().agentEnv, build.manifest.agentEnv);
-});
-
 test("ensure with the applied version fetches nothing", async () => {
   const { config, build, srv } = await firstApply();
   const calls = srv.calls.length;
   await config.ensure(build.manifest.version, MASTER);
   assert.equal(srv.calls.length, calls);
+});
+
+test("native OMP reopens a blob-backed chat after a configuration refresh", async () => {
+  const { config, srv, env } = await firstApply();
+  const image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j0l8AAAAASUVORK5CYII=";
+  const script = `
+    import { writeFileSync } from "node:fs";
+    import { join } from "node:path";
+    import { getBlobsDir, getSessionsDir } from "@oh-my-pi/pi-utils";
+    import { BlobStore } from "@oh-my-pi/pi-coding-agent/session/blob-store";
+    import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
+
+    const file = join(getSessionsDir(), "blob-chat.jsonl");
+    if (process.argv.at(-1) === "save") {
+      const { hash, ref } = new BlobStore(getBlobsDir()).putSync(Buffer.from(${JSON.stringify(image)}, "base64"));
+      const timestamp = new Date().toISOString();
+      const entries = [
+        { type: "session", version: 3, id: crypto.randomUUID(), timestamp, cwd: ${JSON.stringify(roots.home)} },
+        { type: "message", id: "abcd1234", parentId: null, timestamp, message: {
+          role: "user", timestamp: Date.now(), content: [{ type: "image", mimeType: "image/png", data: ref }],
+        } },
+      ];
+      writeFileSync(file, entries.map((entry) => JSON.stringify(entry)).join("\\n") + "\\n");
+      console.log(hash);
+    } else {
+      const chat = await SessionManager.open(file, undefined, undefined, { throwIfMissing: true });
+      try {
+        const image = chat.getBranch().find((entry) => entry.type === "message").message.content[0];
+        console.log(image.data);
+      } finally {
+        await chat.close();
+      }
+    }
+  `;
+  const run = (profile: Record<string, string>, command: "save" | "open") => {
+    const child = Bun.spawnSync([process.execPath, "--no-env-file", "-e", script, command], {
+      cwd: join(import.meta.dir, "../../runner"),
+      env: profile,
+      timeout: 4_000,
+    });
+    assert.equal(child.exitCode, 0, child.stderr.toString());
+    return child.stdout.toString().trim();
+  };
+
+  const hash = run(env, "save");
+  srv.current = masterBuild({ rules: "updated server rules\n" });
+  const refreshed = await config.ensure(srv.current.manifest.version, MASTER);
+  assert.equal(read(join(refreshed.PI_CODING_AGENT_DIR, "AGENTS.md")), "updated server rules\n");
+  assert.equal(run(refreshed, "open"), image);
+  const media = await sessionOps.readMedia(hash);
+  assert.ok(media.ok);
+  assert.equal(Buffer.from(media.value).toString("base64"), image);
 });
 
 test("two concurrent ensure calls share one apply", async () => {
@@ -536,7 +494,7 @@ test("two concurrent ensure calls share one apply", async () => {
     config.ensure(build.manifest.version, MASTER),
   ]);
   assert.equal(srv.calls.filter((path) => path === MANIFEST).length, 1);
-  assert.equal(config.state().files, "current");
+  assert.equal(config.state(MASTER).files, "current");
 });
 
 test("a manifest path outside the mirrored entries rejects the version before anything is written", async () => {
@@ -559,12 +517,11 @@ test("a manifest path outside the mirrored entries rejects the version before an
     await rejectsConfig(config.ensure(build.manifest.version, MASTER));
     assert.deepEqual(srv.calls, [MANIFEST], "no file is downloaded");
     assert.deepEqual(tree(), before);
-    assert.equal(existsSync(own), false);
     assert.equal(
-      existsSync(join(stateDir, "cluster-config", "objects")),
+      existsSync(join(mirrorDir(), "objects")),
       false,
     );
-    assert.equal(config.state().files, "failed");
+    assert.equal(config.state(MASTER).files, "failed");
   }
 });
 
@@ -584,10 +541,9 @@ test("a downloaded file whose hash does not match is rejected and never stored",
   );
   assert.deepEqual(tree(), before);
   assert.equal(
-    existsSync(join(stateDir, "cluster-config", "objects", agents.hash)),
+    existsSync(join(mirrorDir(), "objects", agents.hash)),
     false,
   );
-  assert.equal(existsSync(own), false);
 });
 
 test("a body longer than the manifest's size is refused", async () => {
@@ -605,7 +561,7 @@ test("a body longer than the manifest's size is refused", async () => {
   await rejectsConfig(config.ensure(build.manifest.version, MASTER), /longer/);
   assert.deepEqual(tree(), before);
   assert.equal(
-    existsSync(join(stateDir, "cluster-config", "objects", agents.hash)),
+    existsSync(join(mirrorDir(), "objects", agents.hash)),
     false,
   );
 });
@@ -621,191 +577,82 @@ test("a 404 for a file fetches the manifest again and applies the new version", 
     return Response.json({ error: "Not found" }, { status: 404 });
   };
   const { config } = member(srv);
-  await config.ensure(v1.manifest.version, MASTER);
+  const env = await config.ensure(v1.manifest.version, MASTER);
   assert.equal(srv.calls.filter((path) => path === MANIFEST).length, 2);
-  assert.equal(config.state().version, v2.manifest.version);
-  assert.equal(read(join(roots.agent, "AGENTS.md")), "master rules v2\n");
+  assert.equal(config.state(MASTER).version, v2.manifest.version);
+  assert.equal(read(join(env.PI_CODING_AGENT_DIR, "AGENTS.md")), "master rules v2\n");
 });
 
-test("a failure at the third swap of a later version leaves the live tree as it was", async () => {
-  const { config, build: v1, srv } = await firstApply();
-  srv.current = masterBuild({
-    rules: "master rules v2\n",
-    agentEnv: { CLUSTER_KEY: "v2" },
-  });
-  const before = tree();
-  failAtSwap(3);
-  await rejectsConfig(
-    config.ensure(srv.current.manifest.version, MASTER),
-    /injected/,
-  );
-  renameHook = null;
-  assert.deepEqual(tree(), before);
-  assert.deepEqual(loadWebServerSettings().agentEnv, v1.manifest.agentEnv);
-  const state = config.state();
-  assert.equal(state.files, "failed");
-  assert.match(state.error!, /injected/);
-  assert.equal(state.version, v1.manifest.version);
-  assert.equal(
-    read(join(own, "agent/AGENTS.md")),
-    "member rules\n",
-    "the backup is untouched",
-  );
-  const restarted = member(srv);
-  assert.equal(
-    restarted.config.state().version,
-    v1.manifest.version,
-    "state.json is back",
-  );
-  await pluginsSettled(restarted.config);
-});
-
-test("a failure at the third swap of the first apply leaves the live tree as it was, without a backup", async () => {
-  memberSetup();
-  const build = masterBuild();
-  const { config } = member(serve(build));
-  const before = tree();
-  failAtSwap(3);
-  await rejectsConfig(
-    config.ensure(build.manifest.version, MASTER),
-    /injected/,
-  );
-  renameHook = null;
-  assert.deepEqual(tree(), before);
-  assert.equal(existsSync(own), false);
-  assert.equal(config.state().files, "failed");
-  assert.equal(config.state().version, null);
-
-  await config.ensure(build.manifest.version, MASTER);
-  assert.equal(
-    read(join(own, "agent/AGENTS.md")),
-    "member rules\n",
-    "the retry backs up the member's own files",
-  );
-  assert.equal(config.state().files, "current");
-  assert.equal(config.state().error, null);
-});
-
-test("a failure writing state.json undoes the swaps and the agent environment", async () => {
-  memberSetup();
-  const build = masterBuild();
-  const { config } = member(serve(build));
-  const before = tree();
-  renameHook = (from, to) => {
-    if (to === join(stateDir, "cluster-config", "state.json"))
-      throw Object.assign(new Error("injected state failure"), { code: "EIO" });
+test("a failed publication keeps the selected generation and leaves no partially selected update", async () => {
+  const { config, build, srv, env } = await firstApply();
+  const original = tree();
+  const second = masterBuild({ rules: "version two\n", agentEnv: { SECOND: "yes" } });
+  srv.current = second;
+  renameHook = (_from, to) => {
+    if (to.endsWith("/state.json")) throw new Error("injected publication failure");
   };
-  await rejectsConfig(
-    config.ensure(build.manifest.version, MASTER),
-    /injected/,
-  );
+  await rejectsConfig(config.ensure(second.manifest.version, MASTER), /injected publication failure/);
   renameHook = null;
-  assert.deepEqual(tree(), before);
-  assert.deepEqual(loadWebServerSettings().agentEnv, { MEMBER_ONLY: "1" });
-  assert.equal(existsSync(own), false);
+  assert.deepEqual(config.recover(MASTER), env);
+  assert.equal(config.state(MASTER).version, build.manifest.version);
+  assert.equal(read(join(env.PI_CODING_AGENT_DIR, "AGENTS.md")), "master rules\n");
+  const next = await config.ensure(second.manifest.version, MASTER);
+  assert.notEqual(next.PI_CODING_AGENT_DIR, env.PI_CODING_AGENT_DIR);
+  assert.equal(next.SECOND, "yes");
+  assert.equal(read(join(next.PI_CODING_AGENT_DIR, "AGENTS.md")), "version two\n");
+  assert.equal(read(join(env.PI_CODING_AGENT_DIR, "AGENTS.md")), "master rules\n");
+  assert.deepEqual(tree(), original);
+  await pluginsSettled(config);
 });
 
-test("a second version keeps the first backup", async () => {
-  const { config, srv } = await firstApply();
-  srv.current = masterBuild({ rules: "master rules v2\n" });
-  await config.ensure(srv.current.manifest.version, MASTER);
-  assert.equal(read(join(roots.agent, "AGENTS.md")), "master rules v2\n");
-  assert.equal(read(join(own, "agent/AGENTS.md")), "member rules\n");
-  assert.equal(read(join(own, "agent/skills/mine/SKILL.md")), "member skill\n");
-  assert.equal(
-    parse(read(join(roots.agent, "config.yml"))).shellPath,
-    "/member/bash",
-  );
-  assert.equal(existsSync(join(stateDir, "cluster-config", "trash")), false);
-});
-
-test("symbolic links at managed paths move to the backup as links and nothing is written through them", async () => {
+test("a failed first publication has no recoverable selection after restart", async () => {
   memberSetup();
-  const outside = join(base, "outside");
-  put(outside, "target.md", "outside\n");
-  put(outside, "skills/x/SKILL.md", "outside skill\n");
-  rmSync(join(roots.agent, "AGENTS.md"));
-  symlinkSync(join(outside, "target.md"), join(roots.agent, "AGENTS.md"));
-  rmSync(join(roots.agent, "skills"), { recursive: true });
-  symlinkSync(join(outside, "skills"), join(roots.agent, "skills"));
-  put(roots.agent, "rules/own.md", "own rule\n");
-  symlinkSync(join(outside, "target.md"), join(roots.agent, "rules/link.md"));
   const original = tree();
+  const build = masterBuild();
+  const srv = serve(build);
+  const { config } = member(srv);
+  renameHook = (_from, to) => {
+    if (to.endsWith("/state.json")) throw new Error("injected publication failure");
+  };
+  await rejectsConfig(config.ensure(build.manifest.version, MASTER), /injected publication failure/);
+  renameHook = null;
+  const restarted = member(srv).config;
+  assert.throws(() => restarted.recover(MASTER), /No saved configuration/);
+  await restarted.ensure(build.manifest.version, MASTER);
+  assert.deepEqual(tree(), original);
+  await pluginsSettled(restarted);
+});
 
+test("host symlinks stay untouched and are not inherited by the server profile", async () => {
+  memberSetup();
+  renameSync(join(roots.agent, "AGENTS.md"), join(roots.agent, "local-rules.md"));
+  symlinkSync("local-rules.md", join(roots.agent, "AGENTS.md"));
+  renameSync(join(roots.agent, "config.yml"), join(roots.agent, "local.yml"));
+  symlinkSync("local.yml", join(roots.agent, "config.yml"));
+  const original = tree();
   const build = masterBuild();
   const { config } = member(serve(build));
-  await config.ensure(build.manifest.version, MASTER);
-
-  assert.equal(read(join(outside, "target.md")), "outside\n");
-  assert.deepEqual(readdirSync(join(outside, "skills")), ["x"]);
-  assert.equal(read(join(outside, "skills/x/SKILL.md")), "outside skill\n");
-  assert.ok(lstatSync(join(roots.agent, "AGENTS.md")).isFile());
-  assert.ok(lstatSync(join(roots.agent, "skills")).isDirectory());
-  assert.equal(
-    readlinkSync(join(own, "agent/AGENTS.md")),
-    join(outside, "target.md"),
-  );
-  assert.equal(
-    readlinkSync(join(own, "agent/skills")),
-    join(outside, "skills"),
-  );
-  assert.equal(
-    readlinkSync(join(own, "agent/rules/link.md")),
-    join(outside, "target.md"),
-  );
-  assert.equal(existsSync(join(roots.agent, "rules")), false);
-
+  const env = await config.ensure(build.manifest.version, MASTER);
+  assert.equal(read(join(env.PI_CODING_AGENT_DIR, "AGENTS.md")), "master rules\n");
+  assert.equal(lstatSync(join(env.PI_CODING_AGENT_DIR, "AGENTS.md")).isSymbolicLink(), false);
+  assert.equal(parse(read(join(env.PI_CODING_AGENT_DIR, "config.yml"))).shellPath, "/member/bash");
   await config.restore(MASTER);
   assert.deepEqual(tree(), original);
-  assert.equal(read(join(outside, "target.md")), "outside\n");
 });
 
-test("a member config.yml that is a relative symbolic link keeps its own settings at every apply, and the link comes back on leaving", async () => {
-  memberSetup();
-  rmSync(join(roots.agent, "config.yml"));
-  put(
-    base,
-    "dotfiles/config.yml",
-    "shellPath: /member/bash\npython:\n  interpreter: /member/py\n",
-  );
-  symlinkSync("../../dotfiles/config.yml", join(roots.agent, "config.yml"));
-  const original = tree();
-  const srv = serve(masterBuild());
-  const { config, logs } = member(srv);
-  for (const rules of ["master rules\n", "master rules v2\n"]) {
-    srv.current = masterBuild({ rules });
-    await config.ensure(srv.current.manifest.version, MASTER);
-    const settings = parse(read(join(roots.agent, "config.yml")));
-    assert.deepEqual(
-      [
-        settings.shellPath,
-        settings.python?.interpreter,
-        settings.modelRoles.default,
-      ],
-      ["/member/bash", "/member/py", "master-model"],
-      rules,
-    );
-  }
-  assert.equal(mode(join(own, "settings.yml")), 0o600);
-  assert.deepEqual(logs, []);
-  await config.restore(MASTER);
-  assert.deepEqual(tree(), original);
-  assert.equal(existsSync(own), false);
-});
-
-test("a later version with the same plugin set keeps the plugins current; a changed set is pending until its step ran", async () => {
+test("each new generation reconciles plugins even when the list has not changed", async () => {
   const { config, srv, states } = await firstApply();
   await pluginsSettled(config);
   srv.current = masterBuild({ rules: "master rules v2\n" });
   const v2 = srv.current.manifest.version;
   await config.ensure(v2, MASTER);
-  assert.equal(config.state().plugins, "current");
+  assert.equal(config.state(MASTER).plugins, "pending");
   srv.current = masterBuild({
     rules: "master rules v3\n",
     plugins: [{ kind: "npm", id: "new", version: "2.0.0", enabled: true }],
   });
   await config.ensure(srv.current.manifest.version, MASTER); // queued after v2's plugin step
-  assert.equal(config.state().plugins, "pending");
+  assert.equal(config.state(MASTER).plugins, "pending");
   assert.deepEqual(
     [
       ...new Set(
@@ -814,10 +661,10 @@ test("a later version with the same plugin set keeps the plugins current; a chan
           .map((state) => state.plugins),
       ),
     ],
-    ["current"],
+    ["pending", "current"],
   );
   await pluginsSettled(config);
-  assert.equal(config.state().plugins, "current");
+  assert.equal(config.state(MASTER).plugins, "current");
 });
 
 test("plugins: install, then uninstall, then disable, after ensure resolved", async () => {
@@ -839,7 +686,7 @@ test("plugins: install, then uninstall, then disable, after ensure resolved", as
   const { config } = member(serve(build), omp);
   await config.ensure(build.manifest.version, MASTER);
   assert.deepEqual(omp.commands, [], "ensure does not wait for the plugins");
-  assert.equal(config.state().plugins, "pending");
+  assert.equal(config.state(MASTER).plugins, "pending");
   await pluginsSettled(config);
   assert.deepEqual(omp.commands, [
     "install market@mp",
@@ -847,8 +694,8 @@ test("plugins: install, then uninstall, then disable, after ensure resolved", as
     "uninstall old",
     "disable keep",
   ]);
-  assert.equal(config.state().plugins, "current");
-  assert.equal(config.state().error, null);
+  assert.equal(config.state(MASTER).plugins, "current");
+  assert.equal(config.state(MASTER).error, null);
 });
 
 test("a failing plugin install reports plugins failed with omp's last line, files still current", async () => {
@@ -860,7 +707,7 @@ test("a failing plugin install reports plugins failed with omp's last line, file
   const { config } = member(serve(build), omp);
   await config.ensure(build.manifest.version, MASTER);
   await pluginsSettled(config);
-  const state = config.state();
+  const state = config.state(MASTER);
   assert.equal(state.plugins, "failed");
   assert.equal(state.error, "error: new@2.0.0 could not be resolved");
   assert.equal(state.files, "current");
@@ -917,9 +764,9 @@ test("an npm plugin the master installed from git installs from that source; a l
     `install ${source}`,
     "install tarball@https://example.com/tarball-1.0.0.tgz",
   ]);
-  assert.equal(config.state().plugins, "failed");
+  assert.equal(config.state(MASTER).plugins, "failed");
   assert.match(
-    config.state().error!,
+    config.state(MASTER).error!,
     /graphify-pi is installed from a local directory on the master/,
   );
 });
@@ -938,9 +785,9 @@ test("a plugin whose unpinned source installs another version than the master ru
   const { config } = member(serve(build), omp);
   await config.ensure(build.manifest.version, MASTER);
   await pluginsSettled(config);
-  assert.equal(config.state().plugins, "failed");
+  assert.equal(config.state(MASTER).plugins, "failed");
   assert.equal(
-    config.state().error,
+    config.state(MASTER).error,
     "plugin: installed 1.1.0, the master runs 1.0.0",
   );
   const saved = clusterConfigTimings.pluginRetryMs;
@@ -952,7 +799,7 @@ test("a plugin whose unpinned source installs another version than the master ru
     clusterConfigTimings.pluginRetryMs = saved;
   }
   assert.deepEqual(omp.commands, [`install ${source}`, `install ${source}`]);
-  assert.equal(config.state().plugins, "failed");
+  assert.equal(config.state(MASTER).plugins, "failed");
 });
 
 test("a failed install from a source with credentials logs the plugin id, never the source", async () => {
@@ -967,7 +814,7 @@ test("a failed install from a source with credentials logs the plugin id, never 
   const { config, logs } = member(serve(build), omp);
   await config.ensure(build.manifest.version, MASTER);
   await pluginsSettled(config);
-  assert.equal(config.state().plugins, "failed");
+  assert.equal(config.state(MASTER).plugins, "failed");
   assert.ok(
     logs.includes("cluster-config: omp plugin install plugin failed"),
     logs.join("\n"),
@@ -1009,7 +856,7 @@ test("a plugin of the master's version installed from another source is installe
   await config.ensure(build.manifest.version, MASTER);
   await pluginsSettled(config);
   assert.deepEqual(fromRegistry.commands, [`install ${source}`]);
-  assert.equal(config.state().plugins, "current");
+  assert.equal(config.state(MASTER).plugins, "current");
 
   memberSetup();
   const fromSource = fakeOmp([
@@ -1019,7 +866,7 @@ test("a plugin of the master's version installed from another source is installe
   await again.ensure(build.manifest.version, MASTER);
   await pluginsSettled(again);
   assert.deepEqual(fromSource.commands, []);
-  assert.equal(again.state().plugins, "current");
+  assert.equal(again.state(MASTER).plugins, "current");
 });
 
 test("a plugin of the master's version whose source this host cannot read is installed from the master's source", async () => {
@@ -1046,7 +893,7 @@ test("a plugin of the master's version whose source this host cannot read is ins
   await config.ensure(build.manifest.version, MASTER);
   await pluginsSettled(config);
   assert.deepEqual(omp.commands, [`install ${source}`]);
-  assert.equal(config.state().plugins, "current");
+  assert.equal(config.state(MASTER).plugins, "current");
 });
 
 test("a plugin linked on the master with no version is not satisfied by a registry package of that name; a linked one here is", async () => {
@@ -1075,9 +922,9 @@ test("a plugin linked on the master with no version is not satisfied by a regist
   await config.ensure(build.manifest.version, MASTER);
   await pluginsSettled(config);
   assert.deepEqual(fromRegistry.commands, []);
-  assert.equal(config.state().plugins, "failed");
+  assert.equal(config.state(MASTER).plugins, "failed");
   assert.match(
-    config.state().error!,
+    config.state(MASTER).error!,
     /graphify-pi is installed from a local directory on the master/,
   );
 
@@ -1095,7 +942,7 @@ test("a plugin linked on the master with no version is not satisfied by a regist
   await again.ensure(build.manifest.version, MASTER);
   await pluginsSettled(again);
   assert.deepEqual(linked.commands, []);
-  assert.equal(again.state().plugins, "current");
+  assert.equal(again.state(MASTER).plugins, "current");
 });
 
 test("after a restart the applied version counts and its plugin job runs again", async () => {
@@ -1110,11 +957,11 @@ test("after a restart the applied version counts and its plugin job runs again",
 
   const omp = fakeOmp();
   const { config } = member(srv, omp);
-  assert.equal(config.state().version, build.manifest.version);
-  assert.equal(config.state().files, "current");
+  assert.equal(config.state(MASTER).version, build.manifest.version);
+  assert.equal(config.state(MASTER).files, "current");
   await pluginsSettled(config);
   assert.deepEqual(omp.commands, ["install new@2.0.0"]);
-  assert.equal(config.state().plugins, "current");
+  assert.equal(config.state(MASTER).plugins, "current");
   const calls = srv.calls.length;
   await config.ensure(build.manifest.version, MASTER);
   assert.equal(srv.calls.length, calls);
@@ -1123,519 +970,34 @@ test("after a restart the applied version counts and its plugin job runs again",
 test("missingCommands lists the MCP command the member lacks", async () => {
   const { config } = await firstApply();
   await pluginsSettled(config);
-  assert.deepEqual(config.state().missingCommands, ["absent-cmd"]);
+  assert.deepEqual(config.state(MASTER).missingCommands, ["absent-cmd"]);
 });
 
-test("restore puts the member's own configuration back byte for byte, modes included", async () => {
+test("config.yaml supplies machine settings without changing the local profile", async () => {
   memberSetup();
-  put(roots.agent, "rules/strict.md", "strict\n", 0o400);
-  chmodSync(join(roots.agent, "rules"), 0o750);
-  const original = tree();
-  const omp = fakeOmp([
-    { kind: "npm", id: "old", version: "1.0.0", enabled: true },
-  ]);
-  const build = masterBuild({
-    plugins: [{ kind: "npm", id: "new", version: "2.0.0", enabled: true }],
-  });
-  const { config, states } = member(serve(build), omp);
-  await config.ensure(build.manifest.version, MASTER);
-  await pluginsSettled(config);
-
-  await config.restore(MASTER);
-  assert.deepEqual(tree(), original);
-  assert.deepEqual(loadWebServerSettings().agentEnv, { MEMBER_ONLY: "1" });
-  assert.deepEqual(
-    [...omp.installed.values()],
-    [{ kind: "npm", id: "old", version: "1.0.0", enabled: true }],
-  );
-  assert.deepEqual(config.state(), EMPTY);
-  assert.deepEqual(states.at(-1), EMPTY);
-  assert.equal(existsSync(own), false);
-  assert.equal(existsSync(join(stateDir, "cluster-config")), false);
-
-  await config.apply(build.manifest.version, MASTER);
-  assert.equal(
-    read(join(own, "agent/AGENTS.md")),
-    "member rules\n",
-    "a later apply makes a fresh backup",
-  );
-  await pluginsSettled(config);
-  await config.restore(MASTER);
-  await config.restore(MASTER);
-  assert.deepEqual(tree(), original);
-  assert.deepEqual(config.state(), EMPTY);
-});
-
-test("restore without a backup does nothing", async () => {
-  memberSetup();
-  const before = tree();
-  const { config, states } = member(serve(masterBuild()));
-  await config.restore(MASTER);
-  assert.deepEqual(tree(), before);
-  assert.deepEqual(states, []);
-});
-
-test("restore waits for an in-flight apply and its plugin job", async () => {
-  memberSetup();
-  const original = tree();
-  const omp = fakeOmp([
-    { kind: "npm", id: "own", version: "1.0.0", enabled: true },
-  ]);
-  const v1 = masterBuild();
-  const srv = serve(v1);
-  const { config } = member(srv, omp);
-  await config.ensure(v1.manifest.version, MASTER);
-  await pluginsSettled(config);
-
-  srv.current = masterBuild({
-    rules: "master rules v2\n",
-    plugins: [{ kind: "npm", id: "late", version: "3.0.0", enabled: true }],
-  });
-  const { promise, resolve: release } = Promise.withResolvers<void>();
-  srv.gate = promise;
-  const applying = config.ensure(srv.current.manifest.version, MASTER);
-  let restored = false;
-  const restoring = config.restore(MASTER).then(() => (restored = true));
-  await sleep(30);
-  assert.equal(restored, false);
-  release();
-  await applying;
-  await restoring;
-
-  assert.deepEqual(tree(), original);
-  assert.deepEqual(omp.commands, [
-    "uninstall own",
-    "install late@3.0.0",
-    "install own@1.0.0",
-    "uninstall late",
-  ]);
-  assert.deepEqual([...omp.installed.keys()], ["own"]);
-  assert.deepEqual(config.state(), EMPTY);
-});
-
-test("a member's config.yaml is backed up under its own name, its shellPath kept, and restored exactly", async () => {
-  put(
-    roots.agent,
-    "config.yaml",
-    "shellPath: /member/yaml-bash\ntheme: dark\n",
-    0o640,
-  );
-  saveWebServerSettings({ agentEnv: {} });
+  renameSync(join(roots.agent, "config.yml"), join(roots.agent, "config.yaml"));
   const original = tree();
   const build = masterBuild();
-  const srv = serve(build);
-  const { config } = member(srv);
-  await config.ensure(build.manifest.version, MASTER);
-  assert.equal(existsSync(join(roots.agent, "config.yaml")), false);
-  assert.equal(
-    parse(read(join(roots.agent, "config.yml"))).shellPath,
-    "/member/yaml-bash",
-  );
-  assert.equal(
-    read(join(own, "agent/config.yaml")),
-    "shellPath: /member/yaml-bash\ntheme: dark\n",
-  );
-
-  srv.current = masterBuild({ rules: "master rules v2\n" });
-  await config.ensure(srv.current.manifest.version, MASTER);
-  assert.equal(
-    parse(read(join(roots.agent, "config.yml"))).shellPath,
-    "/member/yaml-bash",
-    "later versions merge from the backed-up config.yaml",
-  );
-
+  const { config } = member(serve(build));
+  const env = await config.ensure(build.manifest.version, MASTER);
+  assert.equal(parse(read(join(env.PI_CODING_AGENT_DIR, "config.yml"))).shellPath, "/member/bash");
   await config.restore(MASTER);
+  assert.deepEqual(config.state(MASTER), EMPTY);
+  assert.throws(() => config.recover(MASTER), /No saved configuration/);
   assert.deepEqual(tree(), original);
 });
 
-test("an unparsable member config.yml keeps nothing of it and logs its path only", async () => {
-  put(roots.agent, "config.yml", "shellPath: [unclosed\n");
+test("invalid host settings do not leak their contents or join the server profile", async () => {
+  memberSetup();
+  put(roots.agent, "config.yml", "[PRIVATE_HOST_SETTING\n");
   const build = masterBuild();
   const { config, logs } = member(serve(build));
-  await config.ensure(build.manifest.version, MASTER);
-  const settings = parse(read(join(roots.agent, "config.yml")));
-  assert.equal(settings.shellPath, undefined);
-  assert.equal(settings.modelRoles.default, "master-model");
-  const lines = logs.filter((line) => line.includes("config.yml"));
-  assert.equal(lines.length, 1);
-  assert.ok(
-    lines[0].includes(join(own, "agent", "config.yml")) ||
-      lines[0].includes(join(roots.agent, "config.yml")),
-  );
-  assert.ok(!lines[0].includes("unclosed"));
+  const env = await config.ensure(build.manifest.version, MASTER);
+  assert.equal(parse(read(join(env.PI_CODING_AGENT_DIR, "config.yml"))).shellPath, undefined);
+  assert.ok(logs.some((line) => line.includes("config.yml")));
+  assert.ok(logs.every((line) => !line.includes("PRIVATE_HOST_SETTING")));
+  await config.stop();
 });
-
-test("a first apply whose rollback could not put files back is finished before the next apply", async () => {
-  memberSetup();
-  const original = tree();
-  const build = masterBuild();
-  const { config } = member(serve(build));
-  failAtSwap(3);
-  const swap = renameHook;
-  assert.ok(swap);
-  renameHook = (from, to) => {
-    if (from.startsWith(`${own}${sep}`) && !to.startsWith(`${stateDir}${sep}`))
-      throw Object.assign(new Error("injected undo failure"), { code: "EIO" });
-    swap(from, to);
-  };
-  await rejectsConfig(
-    config.ensure(build.manifest.version, MASTER),
-    /injected rename failure/,
-  );
-  renameHook = null;
-  assert.notDeepEqual(
-    tree(),
-    original,
-    "the rollback left files in the backup",
-  );
-
-  await config.ensure(build.manifest.version, MASTER);
-  assert.equal(read(join(own, "agent/AGENTS.md")), "member rules\n");
-  assert.equal(read(join(own, "agent/mcp.json")), '{"mcpServers":{}}\n');
-  assert.equal(read(join(own, "agent/skills/mine/SKILL.md")), "member skill\n");
-  assert.equal(
-    parse(read(join(roots.agent, "config.yml"))).shellPath,
-    "/member/bash",
-  );
-  await pluginsSettled(config);
-  await config.restore(MASTER);
-  assert.deepEqual(tree(), original);
-});
-
-test("a restore that failed half-way is finished before the next version is applied", async () => {
-  memberSetup();
-  const original = tree();
-  const v1 = masterBuild();
-  const srv = serve(v1);
-  const { config } = member(srv);
-  await config.ensure(v1.manifest.version, MASTER);
-  await pluginsSettled(config);
-  let count = 0;
-  renameHook = (from) => {
-    if (from.startsWith(`${join(own, "agent")}${sep}`) && ++count === 3)
-      throw Object.assign(new Error("injected restore failure"), {
-        code: "EIO",
-      });
-  };
-  await rejectsConfig(config.restore(MASTER), /injected restore failure/);
-  renameHook = null;
-  assert.equal(config.state().version, null);
-
-  srv.current = masterBuild({ rules: "master rules v2\n" });
-  await config.apply(srv.current.manifest.version, MASTER);
-  assert.equal(read(join(roots.agent, "AGENTS.md")), "master rules v2\n");
-  assert.equal(read(join(own, "agent/AGENTS.md")), "member rules\n");
-  assert.equal(
-    read(join(own, "agent/models.yml")),
-    "providers:\n  member: {}\n",
-  );
-  assert.equal(
-    parse(read(join(roots.agent, "config.yml"))).shellPath,
-    "/member/bash",
-  );
-  await pluginsSettled(config);
-  await config.restore(MASTER);
-  assert.deepEqual(tree(), original);
-});
-
-test("a crash in the middle of the first apply is put back after the restart, and the next apply backs up the original", async () => {
-  memberSetup();
-  const original = tree();
-  const build = masterBuild();
-  const srv = serve(build);
-  crashAtSwap(3);
-  await rejectsConfig(
-    member(srv).config.ensure(build.manifest.version, MASTER),
-    /injected crash/,
-  );
-  dead = false;
-  renameHook = null;
-  assert.notDeepEqual(tree(), original, "the crash left a mixed tree");
-
-  const { config } = member(srv);
-  await config.ensure(build.manifest.version, MASTER);
-  assert.equal(read(join(own, "agent/AGENTS.md")), "member rules\n");
-  assert.equal(
-    read(join(own, "agent/models.yml")),
-    "providers:\n  member: {}\n",
-  );
-  assert.equal(
-    parse(read(join(roots.agent, "config.yml"))).shellPath,
-    "/member/bash",
-  );
-  await pluginsSettled(config);
-  await config.restore(MASTER);
-  assert.deepEqual(tree(), original);
-});
-
-test("a stop during the restore's plugins keeps the backup's plugin list, and the next start finishes it", async () => {
-  memberSetup();
-  const original = tree();
-  const omp = fakeOmp([
-    { kind: "npm", id: "old", version: "1.0.0", enabled: true },
-  ]);
-  const build = masterBuild({
-    plugins: [{ kind: "npm", id: "new", version: "2.0.0", enabled: true }],
-  });
-  const srv = serve(build);
-  const { config } = member(srv, omp);
-  await config.ensure(build.manifest.version, MASTER);
-  await pluginsSettled(config);
-  omp.commands.length = 0;
-
-  const release = hold(omp);
-  const restoring = config.restore(MASTER);
-  await sleep(20);
-  const stopping = config.stop();
-  release();
-  await rejectsConfig(restoring, /stopped/);
-  await stopping;
-  assert.deepEqual(omp.commands, []);
-  assert.ok(existsSync(join(own, "plugins.json")));
-  assert.equal(
-    existsSync(join(stateDir, "cluster-config", "state.json")),
-    false,
-  );
-  assert.deepEqual(tree(), original);
-  assert.deepEqual(config.state(), { ...EMPTY, plugins: "pending" });
-
-  const restarted = member(srv, omp);
-  assert.equal(restarted.config.state().version, null);
-  await pluginsSettled(restarted.config);
-  assert.deepEqual(omp.commands, ["install old@1.0.0", "uninstall new"]);
-  assert.equal(existsSync(own), false);
-  assert.deepEqual(restarted.config.state(), EMPTY);
-  assert.deepEqual(tree(), original);
-});
-
-test("an ensure while a restore is pending or running is refused and changes nothing; after it, the server's apply applies as before", async () => {
-  memberSetup();
-  const original = tree();
-  const omp = fakeOmp();
-  const build = masterBuild();
-  const { config, states } = member(serve(build), omp);
-  await config.ensure(build.manifest.version, MASTER);
-  await pluginsSettled(config);
-
-  const leaving = (promise: Promise<unknown>) =>
-    assert.rejects(promise, (error) => {
-      assert.ok(
-        error &&
-          typeof error === "object" &&
-          "name" in error &&
-          "status" in error &&
-          "code" in error &&
-          "message" in error,
-      );
-      assert.equal(error.name, "HostOpError");
-      assert.equal(error.status, 409);
-      assert.equal(error.code, "cluster_config_failed");
-      assert.equal(error.message, "This host is leaving the cluster");
-      return true;
-    });
-  // The restore runs alongside, so the state is compared right around the call.
-  const refusedUnchanged = async () => {
-    const state = config.state();
-    const reports = states.length;
-    const refused = config.ensure(build.manifest.version, MASTER);
-    assert.deepEqual(config.state(), state);
-    assert.equal(states.length, reports);
-    await leaving(refused);
-  };
-  const release = hold(omp);
-  const restoring = config.restore(MASTER);
-  await refusedUnchanged(); // pending
-  await sleep(20);
-  await refusedUnchanged(); // running, held at omp
-  release();
-  await restoring;
-  await sleep(20);
-  assert.deepEqual(tree(), original);
-  assert.deepEqual(config.state(), EMPTY);
-  assert.ok(
-    !states.some((state) => state.error === "This host is leaving the cluster"),
-    "the refusal is never reported as the host's state",
-  );
-  assert.equal(existsSync(own), false);
-
-  await config.apply(build.manifest.version, MASTER);
-  assert.equal(read(join(roots.agent, "AGENTS.md")), "master rules\n");
-  assert.equal(read(join(own, "agent/AGENTS.md")), "member rules\n");
-  await pluginsSettled(config);
-});
-
-test("a failed plugin restore keeps the member's plugin list: the next backup adopts it and leaving reinstalls it", async () => {
-  memberSetup();
-  const original = tree();
-  const omp = fakeOmp([
-    { kind: "npm", id: "own", version: "1.0.0", enabled: true },
-  ]);
-  const v1 = masterBuild({
-    plugins: [{ kind: "npm", id: "new", version: "2.0.0", enabled: true }],
-  });
-  const srv = serve(v1);
-  const first = member(srv, omp);
-  await first.config.ensure(v1.manifest.version, MASTER);
-  await pluginsSettled(first.config);
-  srv.current = masterBuild({
-    rules: "master rules v2\n",
-    plugins: [{ kind: "npm", id: "new", version: "2.0.0", enabled: true }],
-  });
-  crashAtSwap(3);
-  await rejectsConfig(
-    first.config.ensure(srv.current.manifest.version, MASTER),
-    /injected crash/,
-  );
-  dead = false;
-  renameHook = null;
-
-  // Restarted with omp offline: putting `own` back fails, removing `new` works.
-  omp.fail.add("own@1.0.0");
-  omp.commands.length = 0;
-  const { config } = member(srv, omp);
-  await pluginsSettled(config);
-  assert.deepEqual(omp.commands, ["install own@1.0.0", "uninstall new"]);
-  assert.equal(config.state().plugins, "failed");
-  assert.deepEqual(tree(), original);
-  const ownList = [{ kind: "npm", id: "own", version: "1.0.0", enabled: true }];
-  assert.deepEqual(JSON.parse(read(join(own, "plugins.json"))), ownList);
-
-  await config.ensure(srv.current.manifest.version, MASTER);
-  assert.deepEqual(
-    JSON.parse(read(join(own, "plugins.json"))),
-    ownList,
-    "the new backup adopts the kept list",
-  );
-  await pluginsSettled(config);
-
-  omp.fail.clear();
-  await config.restore(MASTER);
-  assert.deepEqual([...omp.installed.values()], ownList);
-  assert.deepEqual(tree(), original);
-  assert.deepEqual(config.state(), EMPTY);
-  assert.equal(existsSync(own), false);
-});
-
-const CHOSEN: PluginEntry = {
-  kind: "npm",
-  id: "chosen",
-  version: "3.0.0",
-  enabled: true,
-};
-
-/** A leave whose plugin step ran to the end with `install own@1.0.0` failing; then the user, standalone again, installs `chosen`. */
-async function leaveWithFailedInstall() {
-  memberSetup();
-  const original = tree();
-  const omp = fakeOmp([
-    { kind: "npm", id: "own", version: "1.0.0", enabled: true },
-  ]);
-  const build = masterBuild({
-    plugins: [{ kind: "npm", id: "new", version: "2.0.0", enabled: true }],
-  });
-  const srv = serve(build);
-  const { config } = member(srv, omp);
-  await config.ensure(build.manifest.version, MASTER);
-  await pluginsSettled(config);
-  omp.fail.add("own@1.0.0");
-  await config.restore(MASTER);
-  assert.equal(config.state().plugins, "failed");
-  assert.equal(config.state().error, "error: own@1.0.0 could not be resolved");
-  assert.equal(
-    existsSync(own),
-    false,
-    "the leave is done with its plugin list",
-  );
-  assert.deepEqual(tree(), original);
-  omp.installed.set(CHOSEN.id, { ...CHOSEN });
-  omp.commands.length = 0;
-  return { config, omp, build, srv };
-}
-
-test("after a leave whose plugin install failed, a restart leaves the user's own later plugins alone", async () => {
-  const { omp, srv } = await leaveWithFailedInstall();
-  const { config } = member(srv, omp);
-  await pluginsSettled(config);
-  await sleep(20);
-  assert.deepEqual(omp.commands, []);
-  assert.deepEqual([...omp.installed.values()], [CHOSEN]);
-  assert.deepEqual(config.state(), EMPTY);
-});
-
-test("after a leave whose plugin install failed, a re-join backs up the plugins as they are now, and the next leave restores them", async () => {
-  const { config, omp, build } = await leaveWithFailedInstall();
-  await config.apply(build.manifest.version, MASTER);
-  assert.deepEqual(JSON.parse(read(join(own, "plugins.json"))), [CHOSEN]);
-  await pluginsSettled(config);
-  await config.restore(MASTER);
-  assert.deepEqual([...omp.installed.values()], [CHOSEN]);
-  assert.deepEqual(config.state(), EMPTY);
-});
-
-test("a linked directory above a mirrored entry refuses the restore before anything moves", async () => {
-  const { config } = await firstApply();
-  await pluginsSettled(config);
-  const outside = join(base, "outside-agents");
-  renameSync(join(roots.home, ".agents"), outside);
-  symlinkSync(outside, join(roots.home, ".agents"));
-  const before = tree();
-  await rejectsConfig(config.restore(MASTER), /real directory/);
-  assert.ok(config.state().error!.includes(join(roots.home, ".agents")));
-  assert.deepEqual(tree(), before);
-  assert.deepEqual(readdirSync(join(outside, "skills")), ["remote"]);
-  assert.equal(
-    read(join(own, "home/.agents/skills/home-skill/SKILL.md")),
-    "home skill\n",
-  );
-  assert.ok(existsSync(join(stateDir, "cluster-config", "state.json")));
-});
-
-test("a linked directory above a mirrored entry refuses the apply before anything moves", async () => {
-  memberSetup();
-  const outside = join(base, "outside-agents");
-  put(outside, "skills/linked/SKILL.md", "linked\n");
-  rmSync(join(roots.home, ".agents"), { recursive: true });
-  symlinkSync(outside, join(roots.home, ".agents"));
-  const before = tree();
-  const build = masterBuild();
-  const { config } = member(serve(build));
-  await rejectsConfig(
-    config.ensure(build.manifest.version, MASTER),
-    /real directory/,
-  );
-  assert.ok(config.state().error!.includes(join(roots.home, ".agents")));
-  assert.deepEqual(tree(), before);
-  assert.deepEqual(readdirSync(join(outside, "skills")), ["linked"]);
-  assert.equal(existsSync(own), false);
-});
-
-test("an entry on another filesystem than the state directory names both directories", async () => {
-  memberSetup();
-  const before = tree();
-  const build = masterBuild();
-  const { config } = member(serve(build));
-  renameHook = (from) => {
-    if (from === join(roots.home, ".agents/skills"))
-      throw Object.assign(new Error("cross-device link not permitted"), {
-        code: "EXDEV",
-      });
-  };
-  await rejectsConfig(
-    config.ensure(build.manifest.version, MASTER),
-    /different filesystems; cluster configuration needs them on one filesystem/,
-  );
-  renameHook = null;
-  assert.ok(
-    config
-      .state()
-      .error!.includes(
-        `${join(roots.home, ".agents")} and ${join(own, "home", ".agents")}`,
-      ),
-  );
-  assert.deepEqual(tree(), before);
-  assert.equal(existsSync(own), false);
-});
-
 test("a manifest longer than 5 MiB is refused before anything is downloaded", async () => {
   memberSetup();
   const build = masterBuild();
@@ -1653,107 +1015,43 @@ test("a manifest longer than 5 MiB is refused before anything is downloaded", as
   assert.deepEqual(tree(), before);
 });
 
-test("a start its server sent before the leave applies nothing once the restore came, until that server's next apply", async () => {
-  memberSetup();
-  const before = tree();
-  const build = masterBuild();
-  const srv = serve(build);
-  const { config } = member(srv);
-  // The leave of a member that never applied: nothing to put back, so it is over before the start gets here.
-  await config.restore(MASTER);
-  await rejectsConfig(
-    config.ensure(build.manifest.version, MASTER),
-    /^This host has left the cluster$/,
-  );
-  assert.deepEqual(srv.calls, [], "nothing was fetched");
-  assert.deepEqual(tree(), before);
-  assert.equal(existsSync(own), false);
-  assert.equal(existsSync(join(stateDir, "cluster-config")), false);
-
-  await config.apply(build.manifest.version, MASTER);
-  assert.equal(read(join(roots.agent, "AGENTS.md")), "master rules\n");
-  await config.ensure(build.manifest.version, MASTER);
-  await pluginsSettled(config);
-});
-
 const OTHER = "https://other.test";
-/** Two masters with the same configuration, so only the server tells them apart. */
-const twoServers = (build: Build) => {
-  const servers: Record<string, Server> = {
-    [MASTER]: serve(build, MASTER),
-    [OTHER]: serve(build, OTHER),
-  };
-  return {
-    servers,
-    fetch: ((url, path, signal) =>
-      servers[url].fetch(url, path, signal)) satisfies Fetch,
-  };
-};
-const held =
-  /^This host runs the cluster configuration of https:\/\/master\.test; it must leave that cluster first$/;
-/** The servers among the two that `config` holds the configuration for. */
-const holder = (config: Config) =>
-  [MASTER, OTHER].filter((url) => config.holds(url));
 
-test("a holder the daemon no longer links to (re-linked at a new address) gives way: the new address's restore puts the member's own back", async () => {
+test("two servers can apply and recover independent profiles; revocation affects only its server", async () => {
   memberSetup();
   const original = tree();
-  const build = masterBuild();
-  const { fetch } = twoServers(build);
-  const linked = new Set([MASTER, OTHER]);
-  const { config } = member({ fetch }, undefined, undefined, linked);
-  await config.apply(build.manifest.version, MASTER);
-  await pluginsSettled(config);
-  await config.restore(OTHER);
-  assert.equal(
-    read(join(roots.agent, "AGENTS.md")),
-    "master rules\n",
-    "while the holder is linked, another address's leave keeps it",
-  );
-  linked.delete(MASTER);
-  assert.equal(
-    config.holds(OTHER),
-    true,
-    "every address it links to may decide over a configuration whose holder it no longer links to",
-  );
-  await config.restore(OTHER);
+  const first = masterBuild({ rules: "first server\n", agentEnv: { SERVER_NAME: "first" } });
+  const second = masterBuild({ rules: "second server\n", agentEnv: { SERVER_NAME: "second" } });
+  const a = serve(first);
+  const b = serve(second, OTHER);
+  const fetch: Fetch = (url, path, signal) => (url === MASTER ? a : b).fetch(url, path, signal);
+  const { config } = member({ fetch });
+  const [envA, envB] = await Promise.all([
+    config.apply(first.manifest.version, MASTER),
+    config.apply(second.manifest.version, OTHER),
+  ]);
+  assert.notEqual(envA.HOME, envB.HOME);
+  assert.notEqual(envA.PI_CODING_AGENT_DIR, envB.PI_CODING_AGENT_DIR);
+  assert.equal(envA.SERVER_NAME, "first");
+  assert.equal(envB.SERVER_NAME, "second");
+  assert.equal(read(join(envA.PI_CODING_AGENT_DIR, "AGENTS.md")), "first server\n");
+  assert.equal(read(join(envB.PI_CODING_AGENT_DIR, "AGENTS.md")), "second server\n");
+  await config.stop();
+  const restarted = member({ fetch }).config;
+  assert.deepEqual(restarted.recover(MASTER), envA);
+  assert.deepEqual(restarted.recover(OTHER), envB);
+  await restarted.restore(MASTER);
+  assert.deepEqual(restarted.state(MASTER), EMPTY);
+  await rejectsConfig(restarted.ensure(first.manifest.version, MASTER), /no longer available/);
+  assert.throws(() => restarted.recover(MASTER), /No saved configuration/);
+  assert.deepEqual(restarted.recover(OTHER), envB);
+  assert.equal(restarted.state(OTHER).version, second.manifest.version);
+  assert.equal(existsSync(envA.PI_CODING_AGENT_DIR), false);
+  assert.equal(read(join(envB.PI_CODING_AGENT_DIR, "AGENTS.md")), "second server\n");
   assert.deepEqual(tree(), original);
-  assert.deepEqual(holder(config), []);
+  await restarted.apply(first.manifest.version, MASTER);
+  await restarted.stop();
 });
-
-test("a holder the daemon no longer links to gives way: the new address's apply takes the host over without a download", async () => {
-  memberSetup();
-  const build = masterBuild();
-  const { servers, fetch } = twoServers(build);
-  const linked = new Set([MASTER, OTHER]);
-  const { config, states } = member({ fetch }, undefined, undefined, linked);
-  await config.apply(build.manifest.version, MASTER);
-  await pluginsSettled(config);
-  await rejectsConfig(config.ensure(build.manifest.version, OTHER), held);
-  linked.delete(MASTER);
-  const reports = states.length;
-  await config.ensure(build.manifest.version, OTHER);
-  assert.equal(JSON.parse(read(join(own, "server.json"))), OTHER);
-  linked.add(MASTER);
-  assert.deepEqual(
-    holder(config),
-    [OTHER],
-    "recorded: the old address no longer holds it, linked again or not",
-  );
-  assert.ok(states.length > reports, "the change of holder is reported");
-  assert.deepEqual(
-    servers[OTHER].calls,
-    [],
-    "the version it holds needs no download",
-  );
-  await rejectsConfig(
-    config.apply(build.manifest.version, MASTER),
-    /^This host runs the cluster configuration of https:\/\/other\.test; it must leave that cluster first$/,
-  );
-  await config.restore(OTHER);
-  assert.deepEqual(holder(config), []);
-});
-
 test("a failed plugin step runs again when its version is asked for, at most once per retry interval, and nobody waits for it", async (t) => {
   memberSetup();
   const omp = fakeOmp([], { fail: new Set(["new@2.0.0"]) });
@@ -1763,7 +1061,7 @@ test("a failed plugin step runs again when its version is asked for, at most onc
   const { config } = member(serve(build), omp);
   await config.ensure(build.manifest.version, MASTER);
   await pluginsSettled(config);
-  assert.equal(config.state().plugins, "failed");
+  assert.equal(config.state(MASTER).plugins, "failed");
   omp.commands.length = 0;
   await config.ensure(build.manifest.version, MASTER);
   await sleep(20);
@@ -1772,7 +1070,7 @@ test("a failed plugin step runs again when its version is asked for, at most onc
     [],
     "within the interval of the last try: no retry",
   );
-  assert.equal(config.state().plugins, "failed");
+  assert.equal(config.state(MASTER).plugins, "failed");
 
   const saved = clusterConfigTimings.pluginRetryMs;
   clusterConfigTimings.pluginRetryMs = 0;
@@ -1782,76 +1080,12 @@ test("a failed plugin step runs again when its version is asked for, at most onc
   omp.fail.clear();
   const release = hold(omp);
   await config.apply(build.manifest.version, MASTER); // resolves while the plugin step waits for omp
-  assert.equal(config.state().plugins, "pending");
-  assert.equal(config.state().error, null);
+  assert.equal(config.state(MASTER).plugins, "pending");
+  assert.equal(config.state(MASTER).error, null);
   release();
   await pluginsSettled(config);
   assert.deepEqual(omp.commands, ["install new@2.0.0"]);
-  assert.equal(config.state().plugins, "current");
-});
-
-test("one cluster per host: another server's apply and starts are refused until the holding server's restore, after a restart too", async () => {
-  memberSetup();
-  const original = tree();
-  const build = masterBuild();
-  const { servers, fetch } = twoServers(build);
-  const first = member({ fetch });
-  await first.config.apply(build.manifest.version, MASTER);
-  await pluginsSettled(first.config);
-  assert.deepEqual(holder(first.config), [MASTER]);
-  assert.equal(
-    JSON.parse(read(join(own, "server.json"))),
-    MASTER,
-    "the backup names the server it was taken for",
-  );
-  const state = first.config.state();
-  await rejectsConfig(first.config.apply(build.manifest.version, OTHER), held);
-  await rejectsConfig(first.config.ensure(build.manifest.version, OTHER), held);
-  assert.deepEqual(servers[OTHER].calls, []);
-  assert.deepEqual(
-    first.config.state(),
-    state,
-    "a refusal is not this host's state",
-  );
-  // The other server's leave: not its configuration to put back.
-  await first.config.restore(OTHER);
-  assert.equal(read(join(roots.agent, "AGENTS.md")), "master rules\n");
-  assert.deepEqual(holder(first.config), [MASTER]);
-  await first.config.stop();
-
-  const { config } = member({ fetch });
-  assert.deepEqual(holder(config), [MASTER], "after a restart too");
-  await pluginsSettled(config);
-  await rejectsConfig(config.apply(build.manifest.version, OTHER), held);
-  await config.restore(MASTER);
-  assert.deepEqual(tree(), original);
-  assert.deepEqual(holder(config), []);
-  assert.equal(existsSync(join(own, "server.json")), false);
-  await config.apply(build.manifest.version, OTHER);
-  assert.deepEqual(holder(config), [OTHER]);
-  assert.equal(read(join(roots.agent, "AGENTS.md")), "master rules\n");
-  assert.deepEqual(servers[OTHER].calls.slice(0, 1), [MANIFEST]);
-  await pluginsSettled(config);
-  await config.restore(OTHER);
-  assert.deepEqual(tree(), original);
-});
-
-test("two servers' first applies at once: the first in the queue takes the host, the other is refused without a request or a report", async () => {
-  memberSetup();
-  const build = masterBuild();
-  const { servers, fetch } = twoServers(build);
-  const { config, states } = member({ fetch });
-  const [first, second] = await Promise.allSettled([
-    config.apply(build.manifest.version, MASTER),
-    config.apply(build.manifest.version, OTHER),
-  ]);
-  assert.equal(first.status, "fulfilled");
-  assert.equal(second.status, "rejected");
-  assert.match(second.reason.message, held);
-  assert.deepEqual(servers[OTHER].calls, []);
-  assert.ok(states.every((reported) => reported.error === null));
-  assert.deepEqual(holder(config), [MASTER]);
-  await pluginsSettled(config);
+  assert.equal(config.state(MASTER).plugins, "current");
 });
 
 /** A master that never finishes a request: the manifest's headers (or, with `body`, every file's body) wait until the request is aborted. */
@@ -1887,6 +1121,22 @@ function stalled({
   return srv;
 }
 
+test("revoking a server aborts its download and leaves no recoverable profile", async () => {
+  memberSetup();
+  const before = tree();
+  const build = masterBuild();
+  const srv = stalled({ body: true, build });
+  const { config } = member(srv);
+  const applying = rejectsConfig(config.ensure(build.manifest.version, MASTER));
+  for (let i = 0; i < 200 && srv.calls.length < 2; i++) await sleep(5);
+  assert.equal(srv.calls.length, 2);
+  await config.restore(MASTER);
+  await applying;
+  assert.deepEqual(config.state(MASTER), EMPTY);
+  assert.throws(() => member(srv).config.recover(MASTER), /No saved configuration/);
+  assert.deepEqual(tree(), before);
+});
+
 test("a master that stops answering fails the apply within the request time limit, headers or body, and changes nothing", async (t) => {
   memberSetup();
   const before = tree();
@@ -1909,9 +1159,9 @@ test("a master that stops answering fails the apply within the request time limi
       ),
     );
     assert.ok(Date.now() - started < 3000, "failed at the time limit");
-    assert.equal(config.state().files, "failed");
+    assert.equal(config.state(MASTER).files, "failed");
     assert.deepEqual(tree(), before);
-    assert.equal(existsSync(own), false);
+    assert.equal(config.holds(MASTER), false);
   }
 });
 
@@ -1930,7 +1180,7 @@ test("stop aborts a stalled request to the master at once instead of waiting for
     "the stop did not wait for the 30 s limit",
   );
   await rejectsConfig(applying, /^the host daemon is stopping$/);
-  assert.equal(existsSync(own), false);
+  assert.equal(config.holds(MASTER), false);
 });
 
 test("a stop during a plugin install ends the command instead of waiting for it", async () => {
@@ -1959,47 +1209,9 @@ test("a stop during a plugin install ends the command instead of waiting for it"
   );
   await config.stop();
   assert.equal(
-    config.state().plugins,
+    config.state(MASTER).plugins,
     "pending",
     "cut short: the next start runs it again",
   );
 });
 
-test("a restore from a server that holds nothing here changes nothing, a plugin list the backup kept included", async () => {
-  memberSetup();
-  // A start that finished a recovery whose plugin install failed: the list stays for the next start, and nobody holds it.
-  const ownList = [{ kind: "npm", id: "own", version: "1.0.0", enabled: true }];
-  mkdirSync(own, { recursive: true });
-  writeFileSync(join(own, "plugins.json"), JSON.stringify(ownList));
-  const omp = fakeOmp([], { fail: new Set(["own@1.0.0"]) });
-  const before = tree();
-  const { config } = member(serve(masterBuild()), omp);
-  await config.restore(OTHER); // queued after that recovery
-  assert.deepEqual(holder(config), []);
-  assert.deepEqual(
-    omp.commands,
-    ["install own@1.0.0"],
-    "the recovery's install only",
-  );
-  assert.deepEqual(JSON.parse(read(join(own, "plugins.json"))), ownList);
-  assert.equal(config.state().plugins, "failed");
-  assert.deepEqual(tree(), before);
-});
-
-test("another server's restore answers at once, and the holder's starts are not refused while its plugin job runs", async () => {
-  memberSetup();
-  const omp = fakeOmp();
-  const build = masterBuild({
-    plugins: [{ kind: "npm", id: "new", version: "2.0.0", enabled: true }],
-  });
-  const { fetch } = twoServers(build);
-  const { config } = member({ fetch }, omp);
-  await config.ensure(build.manifest.version, MASTER);
-  const release = hold(omp); // the plugin job, queued behind the files, waits here
-  await config.restore(OTHER);
-  await config.ensure(build.manifest.version, MASTER);
-  assert.equal(read(join(roots.agent, "AGENTS.md")), "master rules\n");
-  assert.deepEqual(holder(config), [MASTER]);
-  release();
-  await config.stop();
-});

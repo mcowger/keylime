@@ -14,6 +14,7 @@ import * as path from "path";
 
 const APP_NAME = "omp";
 const CONFIG_DIR_NAME = ".omp";
+export const HOST_CONFIG_MIRROR_DIR = "cluster-config";
 
 export function getConfigDirName(): string {
   return process.env.PI_CONFIG_DIR || CONFIG_DIR_NAME;

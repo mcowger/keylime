@@ -467,7 +467,7 @@ test("leaves only the two cluster-config routes to their bearer check, and nothi
     ]) {
       assert.equal(gate(`http://localhost:30177${path}`), "public", path);
     }
-    // hosts/[id]/cluster and hosts/[id]/updates with id = "cluster-config" are the password-gated host routes.
+    // A host's updates route with id = "cluster-config" is still password-gated.
     for (const path of [
       "/api/hosts/cluster-config",
       "/api/hosts/cluster-configx",

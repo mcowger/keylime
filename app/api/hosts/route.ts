@@ -1,8 +1,4 @@
-import {
-  isClusterMember,
-  leaveCluster,
-  sharesCredentials,
-} from "@/lib/hosts/cluster";
+import { isClusterMember, leaveCluster } from "@/lib/hosts/cluster";
 import {
   closeHostLink,
   hostsSnapshot,
@@ -51,15 +47,6 @@ function failFor(error: unknown) {
   }
   if (error instanceof UnknownHostError) return fail("Unknown host", 404);
   throw error;
-}
-
-/** A member keeps sharing when its own flag goes off; pools that cannot be read leave that unknown, so its requests are cut. */
-function stillShares(record: HostRecord): boolean {
-  try {
-    return sharesCredentials(record, loadPools());
-  } catch {
-    return false;
-  }
 }
 
 async function readBody(req: Request): Promise<Record<string, unknown> | null> {
@@ -119,7 +106,7 @@ export function GET() {
  * @apiUsage Replace the complete pool registry.
  * @apiInputs JSON object with a pools array of pool, member and project configurations.
  * @apiInvariants Members must reference known hosts; pool configurations are validated before persistence.
- * @apiEffects Saves pools, notifies listeners and aborts broker requests for hosts that lose credential sharing.
+ * @apiEffects Saves pools and notifies listeners.
  * @apiRecovery Correct invalid configurations on 400; repair unreadable or unwritable registries on 503.
  */
 export async function PUT(req: Request) {
@@ -179,9 +166,9 @@ export async function PUT(req: Request) {
       }
     }
   }
-  let before: HostPool[];
+  // Don't overwrite an existing registry that cannot be read.
   try {
-    before = loadPools();
+    loadPools();
   } catch {
     return poolStorageFailure();
   }
@@ -195,11 +182,6 @@ export async function PUT(req: Request) {
     return fail("Invalid pool configuration", 400);
   }
   notifyHostsChange();
-  // Leaving the first pool, or no longer being in it, can end a host's sharing: cut off what it already has open.
-  for (const host of hosts) {
-    if (sharesCredentials(host, before) && !sharesCredentials(host, after))
-      abortBrokerRequests(host.id);
-  }
   return Response.json({ pools: after }, { headers: noStore });
 }
 
@@ -237,10 +219,10 @@ export async function POST(req: Request) {
 
 /**
  * @apiContract patchHosts
- * @apiUsage Update host settings or rename one pool without replacing the registry.
- * @apiInputs JSON host id and at least one of label, allowAgentStart or shareCredentials; alternatively poolId and label.
- * @apiInvariants The local host cannot change agent-start or credential-sharing settings; an empty local label resets its name.
- * @apiEffects Persists changes and notifies listeners; disabling effective credential sharing aborts broker requests.
+ * @apiUsage Rename one host or pool without replacing the registry.
+ * @apiInputs JSON host id and label, or poolId and label.
+ * @apiInvariants An empty local label resets its name.
+ * @apiEffects Persists the name and notifies listeners.
  * @apiRecovery Correct invalid input, use an existing host or pool, or repair unavailable registry storage.
  */
 export async function PATCH(req: Request) {
@@ -249,39 +231,20 @@ export async function PATCH(req: Request) {
   if (!body || typeof body.id !== "string" || !body.id)
     return fail("id is required", 400);
   const isLocal = body.id === "local";
-  if (isLocal && body.allowAgentStart !== undefined)
-    return fail("This machine's agent-start setting cannot be changed", 400);
-  if (isLocal && body.shareCredentials !== undefined)
-    return fail("This machine's credential sharing cannot be changed", 400);
+  if (!hasOnlyKeys(body, ["id", "label"]))
+    return fail("Only label can be updated", 400);
   // An empty name resets this machine to its default name.
   const label =
     isLocal && typeof body.label === "string" && !body.label.trim()
       ? ""
       : parseLabel(body.label);
-  if (label === null)
+  if (label === null || label === undefined)
     return fail(
       `label must be a non-empty string of at most ${MAX_LABEL_LENGTH} characters`,
       400,
     );
-  const { allowAgentStart, shareCredentials } = body;
-  if (allowAgentStart !== undefined && typeof allowAgentStart !== "boolean")
-    return fail("allowAgentStart must be a boolean", 400);
-  if (shareCredentials !== undefined && typeof shareCredentials !== "boolean")
-    return fail("shareCredentials must be a boolean", 400);
-  if (
-    label === undefined &&
-    allowAgentStart === undefined &&
-    shareCredentials === undefined
-  )
-    return fail("Nothing to update", 400);
   try {
-    const updated = updateHost(body.id, {
-      label,
-      allowAgentStart,
-      shareCredentials,
-    });
-    if (shareCredentials === false && !stillShares(updated))
-      abortBrokerRequests(body.id);
+    updateHost(body.id, { label });
     notifyHostsChange();
     return Response.json(
       { host: hostsSnapshot().hosts.find((h) => h.id === body.id) },

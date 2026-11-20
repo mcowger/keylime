@@ -4,11 +4,9 @@ import { useEffect, useId, useState, type FormEvent } from "react";
 import { Copy, Pencil, Plus, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/field";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/primitives";
-import { ToggleSwitch } from "@/components/ui/ToggleSwitch";
 import { toast } from "@/components/ui/toast";
 import { copyText } from "@/lib/clipboard";
 import {
-  CLUSTER_PROJECTS_DIR,
   clusterJoinBlock,
   clusterOf,
   isClusterMember,
@@ -230,6 +228,7 @@ function HostDialog({
             onSubmit={(event) => void submit(event)}
             style={{ display: "flex", flexDirection: "column", gap: 12 }}
           >
+            {adding && <p>{t("hostsConfig.linkTrustNotice")}</p>}
             <label
               style={{
                 display: "flex",
@@ -299,159 +298,8 @@ function HostDialog({
   );
 }
 
-/** The folder on the joining host where the cluster keeps the checkouts it creates. Without a home folder it starts empty and stays required. */
-function JoinDialog({
-  host,
-  localJoins,
-  reload,
-  onClose,
-}: {
-  host: HostRow;
-  localJoins: boolean;
-  reload: () => Promise<HostPool[] | null>;
-  onClose: () => void;
-}) {
-  const { t } = useI18n();
-  const name = hostName(t, host);
-  const [folder, setFolder] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const errorId = useId();
-
-  useEffect(() => {
-    let current = true;
-    void call("GET", `/api/home?hostId=${encodeURIComponent(host.id)}`)
-      .then(({ home }) => {
-        if (current && typeof home === "string" && home)
-          setFolder((typed) => typed || `${home}/${CLUSTER_PROJECTS_DIR}`);
-      })
-      .catch(() => {});
-    return () => {
-      current = false;
-    };
-  }, [host.id]);
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    const projectsRoot = folder.trim();
-    if (!projectsRoot.startsWith("/"))
-      return setError(t("errors.path_must_be_absolute"));
-    setBusy(true);
-    setError(null);
-    try {
-      await call("PUT", `/api/hosts/${encodeURIComponent(host.id)}/cluster`, {
-        projectsRoot,
-      });
-      onClose();
-    } catch (failed) {
-      const message = failed instanceof Error ? failed.message : String(failed);
-      // The join may have been saved before its answer was lost: the membership the server has now decides.
-      const pools = await reload();
-      if (pools && isClusterMember(pools, host.id)) return onClose();
-      setError(
-        pools
-          ? message
-          : t("hostsConfig.clusterOutcomeUnknown", { error: message }),
-      );
-      setBusy(false);
-    }
-  };
-
-  const title = t("hostsConfig.joinTitle", { name });
-  const noteStyle = {
-    margin: 0,
-    fontSize: 13,
-    lineHeight: 1.5,
-    color: "var(--text-muted)",
-  } as const;
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open && !busy) onClose();
-      }}
-    >
-      <DialogContent
-        ariaLabel={title}
-        style={{ width: 520, maxWidth: "min(92vw, 520px)", padding: 22 }}
-      >
-        <DialogTitle>{title}</DialogTitle>
-        <form
-          onSubmit={(event) => void submit(event)}
-          style={{ display: "flex", flexDirection: "column", gap: 12 }}
-        >
-          <label
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 4,
-              fontSize: 11,
-              fontWeight: 500,
-              color: "var(--text-muted)",
-            }}
-          >
-            {t("hostsConfig.joinFolder", { name })}
-            <input
-              autoFocus
-              required
-              value={folder}
-              aria-invalid={error !== null}
-              aria-describedby={error ? errorId : undefined}
-              onChange={(event) => setFolder(event.target.value)}
-              style={inputStyle}
-            />
-          </label>
-          <p style={noteStyle}>{t("hostsConfig.joinProjectsNote", { name })}</p>
-          {localJoins && (
-            <p style={noteStyle}>{t("hostsConfig.joinLocalNote")}</p>
-          )}
-          <p style={noteStyle}>
-            {t("hostsConfig.joinCredentialsNote", { name })}
-          </p>
-          <p style={noteStyle}>{t("hostsConfig.joinConfigNote")}</p>
-          {error && (
-            <div
-              id={errorId}
-              role="alert"
-              style={{ fontSize: 12, color: "var(--status-error)" }}
-            >
-              {error}
-            </div>
-          )}
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-            <button
-              type="button"
-              className="ui-focus-ring"
-              style={buttonStyle}
-              disabled={busy}
-              onClick={onClose}
-            >
-              {t("hostsConfig.cancel")}
-            </button>
-            <button
-              type="submit"
-              className="ui-focus-ring"
-              style={{
-                ...primaryStyle,
-                opacity: busy || !folder.trim() ? 0.7 : 1,
-              }}
-              disabled={busy || !folder.trim()}
-            >
-              {t("hostsConfig.joinConfirm")}
-            </button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/** `localReason`: this machine is not a member yet, so a join adds it too, and why its own daemon is not ready for that. */
 type ClusterState = {
   pools: HostPool[];
-  poolsLoaded: boolean;
-  poolsFailed: boolean;
-  localReason: string | null;
   masterFailed: boolean;
 };
 
@@ -467,45 +315,16 @@ function HostCard({
   cluster,
   onRename,
   onRevoke,
-  onShare,
-  onJoin,
-  onLeave,
 }: {
   host: HostRow;
   cluster: ClusterState;
   onRename: () => void;
   onRevoke: () => void;
-  onShare: () => void;
-  onJoin: () => void;
-  onLeave: () => void;
 }) {
   const { t } = useI18n();
   const name = hostName(t, host);
-  const linked = "allowAgentStart" in host ? host : null;
+  const linked = isLocalRow(host) ? null : host;
   const member = isClusterMember(cluster.pools, host.id);
-  // Unknown membership (pools not loaded) disables every switch and every share toggle; the reason is only shown once the load failed.
-  // Otherwise only a non-member needs a ready host, and this machine too while it is not a member: leaving always works.
-  const unavailable =
-    !cluster.poolsLoaded && cluster.poolsFailed
-      ? t("hostsConfig.poolsUnavailable")
-      : null;
-  const block =
-    cluster.poolsLoaded && !member && linked ? joinBlock(host) : null;
-  const joinReason =
-    unavailable ??
-    (block === "upgrade" || block === "needs-upgrade"
-      ? t("hostsConfig.joinUpgrade")
-      : block === "omp-old"
-        ? t("hostsConfig.joinOmpOld", { name })
-        : block === "omp-missing"
-          ? hostStatusText(t, host)
-          : block !== null
-            ? t("hostsConfig.joinOffline")
-            : !member
-              ? cluster.localReason
-              : null);
-  const reasonId = useId();
-  const forcedId = useId();
   const details = [
     host.platform,
     host.hostVersion !== null &&
@@ -520,17 +339,14 @@ function HostCard({
   ]
     .filter(Boolean)
     .join(" · ");
-  // A member's configuration (spec K4): no line while it is offline; a daemon below link protocol 10 never applies it,
-  // so it needs an update; a member without a report yet is still being brought up to date, unless this machine cannot
-  // serve its configuration, which the message above the rows says once.
-  const memberBlock = member && linked ? joinBlock(host) : null;
+  const memberBlock = linked ? joinBlock(host) : null;
   const outdated = memberBlock === "upgrade" || memberBlock === "needs-upgrade";
-  const config = member && !outdated ? linked?.clusterConfig : undefined;
+  const config = !outdated ? linked?.clusterConfig : undefined;
   const updating = cluster.masterFailed
     ? null
     : t("hostsConfig.configUpdating");
   const configLine =
-    !member || !linked || host.status === "offline"
+    !linked || host.status === "offline"
       ? null
       : outdated
         ? t("hostsConfig.joinUpgrade")
@@ -655,125 +471,6 @@ function HostCard({
             {t("hostsConfig.clusterMaster")}
           </span>
         )}
-        {linked && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              maxWidth: "100%",
-              flexWrap: "wrap",
-            }}
-          >
-            <span
-              style={{
-                fontSize: 11,
-                color: "var(--text-muted)",
-                maxWidth: 200,
-              }}
-            >
-              {t("hostsConfig.inCluster")}
-            </span>
-            <ToggleSwitch
-              checked={member}
-              disabled={!cluster.poolsLoaded || joinReason !== null}
-              aria-label={t("hostsConfig.inClusterAria", { name })}
-              aria-describedby={joinReason ? reasonId : undefined}
-              onChange={(joining) => (joining ? onJoin() : onLeave())}
-            />
-            {joinReason && (
-              <span
-                id={reasonId}
-                style={{
-                  fontSize: 11,
-                  color: "var(--text-dim)",
-                  maxWidth: 200,
-                }}
-              >
-                {joinReason}
-              </span>
-            )}
-          </div>
-        )}
-        {linked && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              maxWidth: "100%",
-            }}
-          >
-            <span
-              style={{
-                fontSize: 11,
-                color: "var(--text-muted)",
-                maxWidth: 200,
-              }}
-            >
-              {t("hostsConfig.allowAgentStart")}
-            </span>
-            <ToggleSwitch
-              checked={linked.allowAgentStart}
-              aria-label={t("hostsConfig.allowAgentStartAria", { name })}
-              onChange={(allowAgentStart) =>
-                void call("PATCH", "/api/hosts", {
-                  id: host.id,
-                  allowAgentStart,
-                }).catch(failure)
-              }
-            />
-          </div>
-        )}
-        {linked && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              maxWidth: "100%",
-              flexWrap: "wrap",
-            }}
-          >
-            <span
-              style={{
-                fontSize: 11,
-                color: "var(--text-muted)",
-                maxWidth: 200,
-              }}
-            >
-              {t("hostsConfig.shareCredentials")}
-            </span>
-            <ToggleSwitch
-              checked={linked.shareCredentials || member}
-              disabled={member || !cluster.poolsLoaded}
-              aria-label={t("hostsConfig.shareCredentialsAria", { name })}
-              aria-describedby={
-                member ? forcedId : unavailable ? reasonId : undefined
-              }
-              onChange={(shareCredentials) => {
-                if (shareCredentials) onShare();
-                else
-                  void call("PATCH", "/api/hosts", {
-                    id: host.id,
-                    shareCredentials,
-                  }).catch(failure);
-              }}
-            />
-            {member && (
-              <span
-                id={forcedId}
-                style={{
-                  fontSize: 11,
-                  color: "var(--text-dim)",
-                  maxWidth: 200,
-                }}
-              >
-                {t("hostsConfig.shareForced")}
-              </span>
-            )}
-          </div>
-        )}
         <button
           type="button"
           className="ui-focus-ring"
@@ -815,81 +512,15 @@ export function HostsConfig() {
   const {
     hosts,
     pools,
-    poolsLoaded,
-    poolsFailed,
     failed: loadFailed,
     masterConfigError,
-    reload,
   } = useHostRows();
   const [dialog, setDialog] = useState<Dialogs>(null);
   const [revoking, setRevoking] = useState<HostRow | null>(null);
-  const [sharing, setSharing] = useState<HostRow | null>(null);
-  const [joining, setJoining] = useState<HostRow | null>(null);
-  const [leaving, setLeaving] = useState<HostRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [creationHostId, setCreationHostId] = useState(LOCAL_HOST_ID);
-  const local = hosts?.find(isLocalRow);
-  const localJoins = !isClusterMember(pools, LOCAL_HOST_ID);
-  const localBlock =
-    poolsLoaded && localJoins && local ? joinBlock(local) : null;
-  const localReason =
-    !local || localBlock === null
-      ? null
-      : localBlock === "omp-old"
-        ? t("hostsConfig.joinOmpOld", { name: hostName(t, local) })
-        : t("hostsConfig.joinLocalRestart");
   const cluster = clusterOf(pools);
-  const linkedMembers =
-    cluster?.members.some((member) => member.hostId !== LOCAL_HOST_ID) ?? false;
-
-  const share = async () => {
-    if (!sharing) return;
-    setBusy(true);
-    try {
-      await call("PATCH", "/api/hosts", {
-        id: sharing.id,
-        shareCredentials: true,
-      });
-      setSharing(null);
-    } catch (error) {
-      failure(error);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const leave = async () => {
-    if (!leaving) return;
-    setBusy(true);
-    try {
-      const { restoreError } = await call(
-        "DELETE",
-        `/api/hosts/${encodeURIComponent(leaving.id)}/cluster`,
-      );
-      // It left; only putting its own configuration back failed (spec K6), which the server retries while the host is linked.
-      if (typeof restoreError === "string")
-        toast.error(
-          t("hostsConfig.leaveRestoreFailed", {
-            name: leaving.label,
-            reason: restoreError,
-          }),
-        );
-      setLeaving(null);
-    } catch (error) {
-      // As for a join: the leave may have been saved before its answer was lost.
-      const pools = await reload();
-      if (pools && !isClusterMember(pools, leaving.id)) setLeaving(null);
-      else if (pools) failure(error);
-      else
-        toast.error(
-          t("hostsConfig.clusterOutcomeUnknown", {
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        );
-    } finally {
-      setBusy(false);
-    }
-  };
+  const hasLinkedHosts = hosts?.some((host) => !isLocalRow(host));
 
   const revoke = async () => {
     if (!revoking) return;
@@ -999,8 +630,7 @@ export function HostsConfig() {
           {t("hostsConfig.loadFailed")}
         </div>
       )}
-      {/* Once for every member: none of them can get this machine's configuration (spec K1). */}
-      {masterConfigError && linkedMembers && (
+      {masterConfigError && hasLinkedHosts && (
         <div
           role="alert"
           style={{
@@ -1031,16 +661,10 @@ export function HostsConfig() {
               host={host}
               cluster={{
                 pools,
-                poolsLoaded,
-                poolsFailed,
-                localReason,
                 masterFailed: masterConfigError !== null,
               }}
               onRename={() => setDialog({ kind: "rename", host })}
               onRevoke={() => setRevoking(host)}
-              onShare={() => setSharing(host)}
-              onJoin={() => setJoining(host)}
-              onLeave={() => setLeaving(host)}
             />
           ))}
           {hosts.length === 1 && (
@@ -1089,28 +713,6 @@ export function HostsConfig() {
         )}
       </section>
       {dialog && <HostDialog dialog={dialog} onClose={() => setDialog(null)} />}
-      {joining && (
-        <JoinDialog
-          host={joining}
-          localJoins={localJoins}
-          reload={reload}
-          onClose={() => setJoining(null)}
-        />
-      )}
-      <ConfirmDialog
-        open={leaving !== null}
-        onOpenChange={(open) => {
-          if (!open) setLeaving(null);
-        }}
-        title={t("hostsConfig.leaveTitle", { name: leaving?.label ?? "" })}
-        description={t("hostsConfig.leaveDescription", {
-          name: leaving?.label ?? "",
-        })}
-        confirmLabel={t("hostsConfig.leaveConfirm")}
-        cancelLabel={t("hostsConfig.cancel")}
-        busy={busy}
-        onConfirm={() => void leave()}
-      />
       <ConfirmDialog
         open={revoking !== null}
         onOpenChange={(open) => {
@@ -1123,22 +725,6 @@ export function HostsConfig() {
         danger
         busy={busy}
         onConfirm={() => void revoke()}
-      />
-      <ConfirmDialog
-        open={sharing !== null}
-        onOpenChange={(open) => {
-          if (!open) setSharing(null);
-        }}
-        title={t("hostsConfig.shareCredentialsTitle", {
-          name: sharing?.label ?? "",
-        })}
-        description={t("hostsConfig.shareCredentialsDescription", {
-          name: sharing?.label ?? "",
-        })}
-        confirmLabel={t("hostsConfig.shareCredentialsConfirm")}
-        cancelLabel={t("hostsConfig.cancel")}
-        busy={busy}
-        onConfirm={() => void share()}
       />
     </div>
   );

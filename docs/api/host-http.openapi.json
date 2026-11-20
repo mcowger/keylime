@@ -93,7 +93,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -268,7 +268,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -445,7 +445,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -622,7 +622,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -799,7 +799,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -911,7 +911,7 @@
     },
     "/api/hosts/broker/v1/credentials/disabled": {
       "get": {
-        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-enroll a revoked host or restore broker availability before retrying.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
         "operationId": "hostBrokerDisabledCredentials",
         "responses": {
           "401": {
@@ -946,7 +946,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -1050,15 +1050,15 @@
         "x-client-semantics": {
           "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
           "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
-          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
-          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Invariants": "The bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-enroll a revoked host or restore broker availability before retrying.",
           "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
         }
       }
     },
     "/api/hosts/broker/v1/healthz": {
       "get": {
-        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-enroll a revoked host or restore broker availability before retrying.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
         "operationId": "hostBrokerHealth",
         "responses": {
           "401": {
@@ -1093,7 +1093,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -1197,15 +1197,15 @@
         "x-client-semantics": {
           "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
           "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
-          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
-          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Invariants": "The bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-enroll a revoked host or restore broker availability before retrying.",
           "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
         }
       }
     },
     "/api/hosts/broker/v1/snapshot": {
       "get": {
-        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-enroll a revoked host or restore broker availability before retrying.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
         "operationId": "hostBrokerSnapshot",
         "responses": {
           "401": {
@@ -1240,7 +1240,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -1344,15 +1344,15 @@
         "x-client-semantics": {
           "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
           "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
-          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
-          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Invariants": "The bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-enroll a revoked host or restore broker availability before retrying.",
           "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
         }
       }
     },
     "/api/hosts/broker/v1/snapshot/stream": {
       "get": {
-        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-enroll a revoked host or restore broker availability before retrying.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
         "operationId": "hostBrokerSnapshotStream",
         "responses": {
           "401": {
@@ -1387,7 +1387,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -1491,15 +1491,15 @@
         "x-client-semantics": {
           "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
           "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
-          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
-          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Invariants": "The bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-enroll a revoked host or restore broker availability before retrying.",
           "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
         }
       }
     },
     "/api/hosts/broker/v1/usage": {
       "get": {
-        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-enroll a revoked host or restore broker availability before retrying.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
         "operationId": "hostBrokerUsage",
         "responses": {
           "401": {
@@ -1534,7 +1534,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -1638,15 +1638,15 @@
         "x-client-semantics": {
           "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
           "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
-          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
-          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Invariants": "The bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-enroll a revoked host or restore broker availability before retrying.",
           "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
         }
       }
     },
     "/api/hosts/broker/v1/usage/clients": {
       "get": {
-        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-enroll a revoked host or restore broker availability before retrying.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
         "operationId": "hostBrokerUsageClients",
         "responses": {
           "401": {
@@ -1681,7 +1681,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -1785,15 +1785,15 @@
         "x-client-semantics": {
           "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
           "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
-          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
-          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Invariants": "The bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-enroll a revoked host or restore broker availability before retrying.",
           "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
         }
       }
     },
     "/api/hosts/broker/v1/usage/history": {
       "get": {
-        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-enroll a revoked host or restore broker availability before retrying.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
         "operationId": "hostBrokerUsageHistory",
         "responses": {
           "401": {
@@ -1828,7 +1828,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -1932,8 +1932,8 @@
         "x-client-semantics": {
           "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
           "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
-          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
-          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Invariants": "The bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-enroll a revoked host or restore broker availability before retrying.",
           "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
         }
       }
@@ -1993,7 +1993,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -2158,7 +2158,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -2270,7 +2270,7 @@
     },
     "/api/hosts/cluster-config/file/{hash}": {
       "get": {
-        "description": "### Usage\n\nDownload a file belonging to the current cluster configuration.\n\n### Inputs\n\nAuthenticate as a cluster member and supply the lowercase 64-character content hash in the path.\n\n### Invariants\n\nMembership is checked again after building the configuration; hashes absent from the current manifest, including older versions, return 404.\n\n### Effects\n\nReturns raw application/octet-stream bytes with no-store; it does not apply configuration.\n\n### Recovery\n\nFetch a fresh manifest if the hash is no longer present; restore membership or service availability after an admission failure.\n\n### Additional protocol details\n\nThe hash addresses content in the current manifest, not an older configuration.",
+        "description": "### Usage\n\nDownload a file belonging to the web server's current mirrored configuration.\n\n### Inputs\n\nAuthenticate with a linked host's bearer token and supply the lowercase 64-character content hash in the path.\n\n### Invariants\n\nThe token is checked again after building the configuration; hashes absent from the current manifest, including older versions, return 404.\n\n### Effects\n\nReturns raw application/octet-stream bytes with no-store; it does not apply configuration.\n\n### Recovery\n\nFetch a fresh manifest if the hash is gone, or re-enroll a revoked host before retrying.\n\n### Additional protocol details\n\nThe hash addresses content in the current manifest, not an older configuration.",
         "operationId": "hostClusterFile",
         "parameters": [
           {
@@ -2328,7 +2328,7 @@
                 }
               }
             },
-            "description": "The host is not a cluster member."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -2410,16 +2410,16 @@
         "summary": "Get a mirrored configuration file",
         "x-client-semantics": {
           "Effects": "Returns raw application/octet-stream bytes with no-store; it does not apply configuration.",
-          "Inputs": "Authenticate as a cluster member and supply the lowercase 64-character content hash in the path.",
-          "Invariants": "Membership is checked again after building the configuration; hashes absent from the current manifest, including older versions, return 404.",
-          "Recovery": "Fetch a fresh manifest if the hash is no longer present; restore membership or service availability after an admission failure.",
-          "Usage": "Download a file belonging to the current cluster configuration."
+          "Inputs": "Authenticate with a linked host's bearer token and supply the lowercase 64-character content hash in the path.",
+          "Invariants": "The token is checked again after building the configuration; hashes absent from the current manifest, including older versions, return 404.",
+          "Recovery": "Fetch a fresh manifest if the hash is gone, or re-enroll a revoked host before retrying.",
+          "Usage": "Download a file belonging to the web server's current mirrored configuration."
         }
       }
     },
     "/api/hosts/cluster-config/manifest": {
       "get": {
-        "description": "### Usage\n\nFetch the master's current mirrored configuration manifest.\n\n### Inputs\n\nAuthenticate with a cluster member's host bearer token.\n\n### Invariants\n\nMembership is checked both before and after building the current configuration; the response is not cached by HTTP clients.\n\n### Effects\n\nReads the current configuration and returns JSON; it does not apply it to the daemon.\n\n### Recovery\n\nOn revoked membership or unavailable configuration, restore admission or configuration availability before retrying.\n\n### Additional protocol details\n\nReturns the master's current mirrored configuration.",
+        "description": "### Usage\n\nFetch the web server's current mirrored configuration manifest.\n\n### Inputs\n\nAuthenticate with a linked host's bearer token.\n\n### Invariants\n\nThe token is checked both before and after building the current configuration; HTTP clients do not cache the response.\n\n### Effects\n\nReads the current configuration and returns JSON; it does not apply it to the daemon.\n\n### Recovery\n\nRe-enroll a revoked host or fix server configuration errors before retrying.\n\n### Additional protocol details\n\nReturns the web server's current configuration to a linked host.",
         "operationId": "hostClusterManifest",
         "responses": {
           "200": {
@@ -2573,7 +2573,7 @@
                 }
               }
             },
-            "description": "The host is not a cluster member."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "409": {
             "content": {
@@ -2638,10 +2638,10 @@
         "summary": "Get cluster configuration manifest",
         "x-client-semantics": {
           "Effects": "Reads the current configuration and returns JSON; it does not apply it to the daemon.",
-          "Inputs": "Authenticate with a cluster member's host bearer token.",
-          "Invariants": "Membership is checked both before and after building the current configuration; the response is not cached by HTTP clients.",
-          "Recovery": "On revoked membership or unavailable configuration, restore admission or configuration availability before retrying.",
-          "Usage": "Fetch the master's current mirrored configuration manifest."
+          "Inputs": "Authenticate with a linked host's bearer token.",
+          "Invariants": "The token is checked both before and after building the current configuration; HTTP clients do not cache the response.",
+          "Recovery": "Re-enroll a revoked host or fix server configuration errors before retrying.",
+          "Usage": "Fetch the web server's current mirrored configuration manifest."
         }
       }
     },

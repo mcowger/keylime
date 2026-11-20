@@ -61,7 +61,7 @@ mock.module("./cluster-config-server.ts", () => ({
 const { ClusterConfigError } = await import("./cluster-config.ts");
 const hub = await import("./hub.ts");
 const { RpcProcess } = await import("../omp/rpc-process.ts");
-const { rotateLocalHostToken, updateHost } = await import("./registry.ts");
+const { rotateLocalHostToken, revokeHost } = await import("./registry.ts");
 const { savePools } = await import("./pools.ts");
 const { HostOpError, LINK_PROTOCOL_VERSION } =
   await import("./link-protocol.ts");
@@ -295,7 +295,10 @@ test("v7 open installs the returned channel and snapshot before same-frame live 
   const opening = hub.getHost(link.id)!.spawnRpc(launch(id), id);
   const req = await nextRequest(link);
   assert.equal(req.op, "open");
-  assert.deepEqual(req.args, { sessionId: id, launch: launch(id) });
+  assert.deepEqual(req.args, {
+    sessionId: id,
+    launch: { ...launch(id), shareCredentials: true, configVersion: VERSION },
+  });
   const dialog = JSON.stringify({
     t: "ui_request",
     id: 5,
@@ -396,17 +399,11 @@ test("v7 open installs the returned channel and snapshot before same-frame live 
   );
 });
 
-// The hub flags a start for a credential-sharing host.
-async function sharingLink(
-  t: TestContext,
-  label: string,
-  { share }: { share: boolean },
-) {
+async function sharingLink(t: TestContext, label: string) {
   const link = await linkHost(label, {
     hello: { v: LINK_PROTOCOL_VERSION, link: { id: "l1", notifier: true } },
   });
   t.after(() => hub.closeHostLink(link.id));
-  if (share) updateHost(link.id, { shareCredentials: true });
   return link;
 }
 
@@ -433,18 +430,17 @@ async function openedLaunch(
   };
 }
 
-test("a sharing host gets shareCredentials on the open launch", async (t) => {
-  const link = await sharingLink(t, "Sharing", { share: true });
-  assert.equal((await openedLaunch(link)).shareCredentials, true);
-});
-
-test("a non-sharing host gets no shareCredentials key", async (t) => {
-  const link = await sharingLink(t, "Plain", { share: false });
-  assert.equal("shareCredentials" in (await openedLaunch(link)), false);
+test("a linked host with no pool gets both server credentials and configuration", async (t) => {
+  const link = await sharingLink(t, "Plain");
+  const launched = await openedLaunch(link);
+  assert.deepEqual([launched.shareCredentials, launched.configVersion], [
+    true,
+    VERSION,
+  ]);
 });
 
 test("a pure join on a sharing host is neither refused nor flagged", async (t) => {
-  const link = await sharingLink(t, "Sharing join", { share: true });
+  const link = await sharingLink(t, "Sharing join");
   assert.equal(
     "shareCredentials" in (await openedLaunch(link, { expectedChannel: "c1" })),
     false,
@@ -458,7 +454,7 @@ async function assertNothingSent(link: Driver) {
 }
 
 test("an unreadable registry refuses a start with 503 and sends nothing", async (t) => {
-  const link = await sharingLink(t, "Registry gone", { share: true });
+  const link = await sharingLink(t, "Registry gone");
   const file = join(dir, "keylime", "hosts.json");
   const host = hub.getHost(link.id)!; // a held RemoteHost, as rpc-manager's reload respawn keeps one
   const saved = readFileSync(file);
@@ -479,7 +475,7 @@ test("an unreadable registry refuses a start with 503 and sends nothing", async 
 });
 
 test("a linked host with no registry record refuses a start with 409 and sends nothing", async (t) => {
-  const link = await sharingLink(t, "Record gone", { share: true });
+  const link = await sharingLink(t, "Record gone");
   const file = join(dir, "keylime", "hosts.json");
   const host = hub.getHost(link.id)!; // held, as rpc-manager's reload respawn keeps one; getHost itself needs the record
   const saved = readFileSync(file);
@@ -521,7 +517,7 @@ function seedCluster(t: TestContext, ...hostIds: string[]) {
 }
 
 test("a cluster member with its own flag off gets shareCredentials on the open launch", async (t) => {
-  const link = await sharingLink(t, "Member", { share: false });
+  const link = await sharingLink(t, "Member");
   seedCluster(t, link.id);
   assert.equal((await openedLaunch(link)).shareCredentials, true);
 });
@@ -537,7 +533,7 @@ test("this machine as a cluster member is not flagged", async (t) => {
 });
 
 test("a pure join for a member reads neither the registry nor the pools and is not refused", async (t) => {
-  const link = await sharingLink(t, "Member join", { share: false });
+  const link = await sharingLink(t, "Member join");
   seedCluster(t, link.id);
   const [hosts, pools] = [readFileSync(hostsFile), readFileSync(poolsFile)];
   const host = hub.getHost(link.id); // looked up while hosts.json is still readable
@@ -554,23 +550,13 @@ test("a pure join for a member reads neither the registry nor the pools and is n
   );
 });
 
-test("an unreadable pools.json refuses a start with 503 and sends nothing", async (t) => {
-  const link = await sharingLink(t, "Pools gone", { share: false });
-  const host = hub.getHost(link.id)!;
+test("a linked start does not depend on pools.json", async (t) => {
+  const link = await sharingLink(t, "Pools gone");
   t.after(() => rmSync(poolsFile, { force: true }));
   writeFileSync(poolsFile, "not json");
-  const id = sessionId();
-  await assert.rejects(
-    host.spawnRpc(launch(id), id),
-    (error) =>
-      typeof error === "object" &&
-      error !== null &&
-      "status" in error &&
-      "code" in error &&
-      error.status === 503 &&
-      error.code === "pool_storage_unavailable",
-  );
-  await assertNothingSent(link);
+  const launched = await openedLaunch(link);
+  assert.equal(launched.shareCredentials, true);
+  assert.equal(launched.configVersion, VERSION);
 });
 
 // A member runs on the master's configuration, so a start carries its version (spec K3, K4).
@@ -585,19 +571,20 @@ const configState = (fields = {}) => ({
 const configRow = (link: Driver) =>
   hub.listHosts().find((row) => row.id === link.id)!.clusterConfig;
 
-test("a cluster member gets the master's configuration version on the open launch; a host outside the cluster does not", async (t) => {
-  const member = await sharingLink(t, "Config member", { share: false });
-  const outside = await sharingLink(t, "Config outside", { share: true });
+test("every linked host gets the server configuration regardless of pool membership", async (t) => {
+  const member = await sharingLink(t, "Config member");
+  const outside = await sharingLink(t, "Config outside");
   seedCluster(t, member.id);
   const launched = await openedLaunch(member);
   assert.deepEqual(
     [launched.configVersion, launched.shareCredentials],
     [VERSION, true],
   );
-  assert.equal("configVersion" in (await openedLaunch(outside)), false);
+  const other = await openedLaunch(outside);
+  assert.deepEqual([other.configVersion, other.shareCredentials], [VERSION, true]);
 });
 
-test("an invalid master configuration refuses a member's start with 409 cluster_config_invalid and sends nothing", async (t) => {
+test("an invalid server configuration refuses an unpooled host's start without sending an open", async (t) => {
   captureExpectedConsole(
     t,
     "warn",
@@ -605,8 +592,7 @@ test("an invalid master configuration refuses a member's start with 409 cluster_
       message ===
       "[keylime] cluster members cannot get this machine's configuration (invalid_settings: config.yml is not a map of settings)",
   );
-  const link = await sharingLink(t, "Config invalid", { share: false });
-  seedCluster(t, link.id);
+  const link = await sharingLink(t, "Config invalid");
   master = async () => {
     throw new ClusterConfigError(
       "invalid_settings",
@@ -633,7 +619,7 @@ test("an invalid master configuration refuses a member's start with 409 cluster_
 });
 
 test("a pure join on a member is neither refused nor given a version", async (t) => {
-  const link = await sharingLink(t, "Config join", { share: false });
+  const link = await sharingLink(t, "Config join");
   seedCluster(t, link.id);
   master = async () => {
     throw new ClusterConfigError(
@@ -697,8 +683,8 @@ test("a master configuration the members cannot get is in the hosts snapshot, it
   assert.equal("masterConfigError" in hub.hostsSnapshot(), false);
 });
 
-test("a member that leaves while its start waits for the master's version starts without one", async (t) => {
-  const link = await sharingLink(t, "Config leaving start", { share: false });
+test("changing pools while a linked start waits for configuration cannot bypass server policy", async (t) => {
+  const link = await sharingLink(t, "Config leaving start");
   seedCluster(t, link.id);
   const called = Promise.withResolvers<void>(),
     gate = Promise.withResolvers<string>();
@@ -717,15 +703,34 @@ test("a member that leaves while its start waits for the master's version starts
   const req = await nextRequest(link);
   assert.deepEqual(
     req.args.launch,
-    launch(id),
-    "neither a version nor the member's credentials",
+    { ...launch(id), shareCredentials: true, configVersion: VERSION },
   );
   await link.post({ type: "res", id: req.id, ok: true, result: result("c1") });
   await opening;
 });
 
+test("revoking a host while a linked start waits for configuration prevents the open", async (t) => {
+  const link = await sharingLink(t, "Revoked during start");
+  const called = Promise.withResolvers<void>();
+  const gate = Promise.withResolvers<string>();
+  master = () => {
+    called.resolve();
+    return gate.promise;
+  };
+  t.after(() => {
+    master = async () => VERSION;
+  });
+  const id = sessionId();
+  const opening = hub.getHost(link.id)!.spawnRpc(launch(id), id);
+  await called.promise;
+  assert.equal(revokeHost(link.id), true);
+  gate.resolve(VERSION);
+  await assert.rejects(opening, { code: "host_unregistered" });
+  await assertNothingSent(link);
+});
+
 test("a config_state report updates the host row and whether it is current", async (t) => {
-  const link = await sharingLink(t, "Config reporting", { share: false });
+  const link = await sharingLink(t, "Config reporting");
   await hub.masterConfigVersion();
   let changes = 0;
   t.after(
@@ -772,7 +777,7 @@ test("a config_state report updates the host row and whether it is current", asy
   assert.equal(changes, 3);
 });
 
-test("the sync applies to every online member that is not current, restores a linked non-member holding this server's configuration, and piles nothing on", async (t) => {
+test("the sync applies to every online linked host that is behind and piles nothing on", async (t) => {
   const links: Record<string, Driver> = {};
   for (const name of [
     "behind",
@@ -783,7 +788,7 @@ test("the sync applies to every online member that is not current, restores a li
     "holding",
     "outside",
   ]) {
-    links[name] = await sharingLink(t, `Config sync ${name}`, { share: false });
+    links[name] = await sharingLink(t, `Config sync ${name}`);
   }
   seedCluster(
     t,
@@ -816,7 +821,7 @@ test("the sync applies to every online member that is not current, restores a li
   await hub.syncClusterConfig();
   await hub.syncClusterConfig(); // the ops of the first are unanswered: nothing more
   const apply = ["clusterConfig", { action: "apply", version: VERSION }];
-  for (const name of ["pending", "foreign", "silent"])
+  for (const name of ["pending", "foreign", "silent", "holding", "outside"])
     assert.deepEqual(
       await nextRequest(links[name]).then((req) => [req.op, req.args]),
       apply,
@@ -837,16 +842,11 @@ test("the sync applies to every online member that is not current, restores a li
       owned: true,
     },
   });
-  const restore = await nextRequest(links.holding);
-  assert.deepEqual(
-    [restore.op, restore.args],
-    ["clusterConfig", { action: "restore" }],
-  );
   for (const link of Object.values(links)) await assertNothingSent(link);
 });
 
 test("an apply's answer never takes back a newer report: the plugin step finishing is reported ahead of the answer", async (t) => {
-  const link = await sharingLink(t, "Config stale answer", { share: false });
+  const link = await sharingLink(t, "Config stale answer");
   seedCluster(t, link.id);
   await hub.masterConfigVersion();
   const applying = hub.clusterConfigOp(link.id, {
@@ -886,7 +886,7 @@ test("an apply's answer never takes back a newer report: the plugin step finishi
   assert.equal(hub.isHostConfigCurrent(link.id), true);
 });
 
-test("a linked non-member without omp still gets its restore; a member without omp gets no apply", async (t) => {
+test("linked hosts without omp get no background apply", async (t) => {
   const noOmp = (label: string) =>
     linkHost(label, {
       hello: {
@@ -914,65 +914,10 @@ test("a linked non-member without omp still gets its restore; a member without o
     owned: false,
   });
   await hub.syncClusterConfig();
-  const restore = await nextRequest(left);
-  assert.deepEqual(
-    [restore.op, restore.args],
-    ["clusterConfig", { action: "restore" }],
-  );
   for (const link of [left, member]) await assertNothingSent(link);
 });
 
-test("a linked non-member that has not reported since its link came up gets one restore, and none once its answer says it holds nothing", async (t) => {
-  const link = await sharingLink(t, "Config unreported", { share: false });
-  seedCluster(t, "local");
-  // Its link-up config_state never arrived (dropped on a full send buffer).
-  await hub.syncClusterConfig();
-  await hub.syncClusterConfig(); // the first one's restore is unanswered: nothing more
-  const req = await nextRequest(link);
-  assert.deepEqual(
-    [req.op, req.args],
-    ["clusterConfig", { action: "restore" }],
-  );
-  await link.post({
-    type: "res",
-    id: req.id,
-    ok: true,
-    result: { state: configState(), owned: false },
-  });
-  await until(
-    () => configRow(link) !== undefined,
-    "the answer is kept like a report",
-  );
-  await hub.syncClusterConfig();
-  await assertNothingSent(link);
-});
-
-test("a relinked non-member can settle its restore from the answer when its new report is missing", async (t) => {
-  const link = await sharingLink(t, "Config relink unreported", {
-    share: false,
-  });
-  seedCluster(t, "local");
-  await link.post({ type: "config_state", state: configState(), owned: true });
-  assert.equal(configRow(link)!.owned, true);
-  link.drop();
-  await link.dial();
-  // The previous link reported; this link's report was lost before its restore answered.
-  await hub.syncClusterConfig();
-  const req = await nextRequest(link);
-  assert.deepEqual(
-    [req.op, req.args],
-    ["clusterConfig", { action: "restore" }],
-  );
-  await link.answer(req, { state: configState(), owned: false });
-  await until(
-    () => configRow(link)?.owned === false,
-    "the new link's restore answer settles ownership",
-  );
-  await hub.syncClusterConfig();
-  await assertNothingSent(link);
-});
-
-test("this machine's own daemon link never gets a restore, whether or not it is a member", async (t) => {
+test("this machine's own daemon link never gets a config op", async (t) => {
   const link = new LinkDriver("local", rotateLocalHostToken());
   await link.dial({
     hello: { v: LINK_PROTOCOL_VERSION, link: { id: "l1", notifier: true } },
@@ -994,7 +939,7 @@ test("this machine's own daemon link never gets a restore, whether or not it is 
 });
 
 test("the sync starts with one round at once", async (t) => {
-  const link = await sharingLink(t, "Config at start", { share: false });
+  const link = await sharingLink(t, "Config at start");
   seedCluster(t, link.id);
   t.after(() => {
     clearInterval(globalThis.__ompHostHub!.configSync);
@@ -1008,8 +953,8 @@ test("the sync starts with one round at once", async (t) => {
   );
 });
 
-test("a member that leaves while the sync reads the master's version gets no apply", async (t) => {
-  const leaving = await sharingLink(t, "Config leaving sync", { share: false });
+test("a host revoked while sync reads the server version gets no apply", async (t) => {
+  const leaving = await sharingLink(t, "Config leaving sync");
   seedCluster(t, leaving.id);
   const called = Promise.withResolvers<void>(),
     gate = Promise.withResolvers<string>();
@@ -1022,14 +967,14 @@ test("a member that leaves while the sync reads the master's version gets no app
   });
   const sync = hub.syncClusterConfig();
   await called.promise;
-  seedCluster(t);
+  assert.equal(revokeHost(leaving.id), true);
   gate.resolve(VERSION);
   await sync;
   await assertNothingSent(leaving);
 });
 
 test("a new master version goes to the members at once, not at the next 30 s round", async (t) => {
-  const link = await sharingLink(t, "Config master change", { share: false });
+  const link = await sharingLink(t, "Config master change");
   seedCluster(t, link.id);
   await link.post({
     type: "config_state",

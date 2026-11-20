@@ -40807,9 +40807,6 @@
                           },
                           {
                             "properties": {
-                              "allowAgentStart": {
-                                "type": "boolean"
-                              },
                               "clusterConfig": {
                                 "allOf": [
                                   {
@@ -40964,9 +40961,6 @@
                               "serverVersion": {
                                 "type": "number"
                               },
-                              "shareCredentials": {
-                                "type": "boolean"
-                              },
                               "status": {
                                 "anyOf": [
                                   {
@@ -41003,9 +40997,7 @@
                               "lastSeenAt",
                               "hostVersion",
                               "serverVersion",
-                              "workspaceOps",
-                              "allowAgentStart",
-                              "shareCredentials"
+                              "workspaceOps"
                             ],
                             "type": "object"
                           }
@@ -41529,7 +41521,7 @@
         }
       },
       "patch": {
-        "description": "### Usage\n\nUpdate host settings or rename one pool without replacing the registry.\n\n### Inputs\n\nJSON host id and at least one of label, allowAgentStart or shareCredentials; alternatively poolId and label.\n\n### Invariants\n\nThe local host cannot change agent-start or credential-sharing settings; an empty local label resets its name.\n\n### Effects\n\nPersists changes and notifies listeners; disabling effective credential sharing aborts broker requests.\n\n### Recovery\n\nCorrect invalid input, use an existing host or pool, or repair unavailable registry storage.",
+        "description": "### Usage\n\nRename one host or pool without replacing the registry.\n\n### Inputs\n\nJSON host id and label, or poolId and label.\n\n### Invariants\n\nAn empty local label resets its name.\n\n### Effects\n\nPersists the name and notifies listeners.\n\n### Recovery\n\nCorrect invalid input, use an existing host or pool, or repair unavailable registry storage.",
         "operationId": "patchHosts",
         "requestBody": {
           "content": {
@@ -41538,20 +41530,14 @@
                 "anyOf": [
                   {
                     "properties": {
-                      "allowAgentStart": {
-                        "type": "boolean"
-                      },
                       "id": {
                         "type": "string"
                       },
                       "label": {
                         "type": "string"
-                      },
-                      "shareCredentials": {
-                        "type": "boolean"
                       }
                     },
-                    "required": ["id"],
+                    "required": ["id", "label"],
                     "type": "object"
                   },
                   {
@@ -41687,9 +41673,6 @@
                             },
                             {
                               "properties": {
-                                "allowAgentStart": {
-                                  "type": "boolean"
-                                },
                                 "clusterConfig": {
                                   "allOf": [
                                     {
@@ -41844,9 +41827,6 @@
                                 "serverVersion": {
                                   "type": "number"
                                 },
-                                "shareCredentials": {
-                                  "type": "boolean"
-                                },
                                 "status": {
                                   "anyOf": [
                                     {
@@ -41883,9 +41863,7 @@
                                 "lastSeenAt",
                                 "hostVersion",
                                 "serverVersion",
-                                "workspaceOps",
-                                "allowAgentStart",
-                                "shareCredentials"
+                                "workspaceOps"
                               ],
                               "type": "object"
                             }
@@ -42392,13 +42370,13 @@
           },
           {}
         ],
-        "summary": "Update host or rename pool",
+        "summary": "Rename host or pool",
         "x-client-semantics": {
-          "Effects": "Persists changes and notifies listeners; disabling effective credential sharing aborts broker requests.",
-          "Inputs": "JSON host id and at least one of label, allowAgentStart or shareCredentials; alternatively poolId and label.",
-          "Invariants": "The local host cannot change agent-start or credential-sharing settings; an empty local label resets its name.",
+          "Effects": "Persists the name and notifies listeners.",
+          "Inputs": "JSON host id and label, or poolId and label.",
+          "Invariants": "An empty local label resets its name.",
           "Recovery": "Correct invalid input, use an existing host or pool, or repair unavailable registry storage.",
-          "Usage": "Update host settings or rename one pool without replacing the registry."
+          "Usage": "Rename one host or pool without replacing the registry."
         }
       },
       "post": {
@@ -42538,9 +42516,6 @@
                         },
                         {
                           "properties": {
-                            "allowAgentStart": {
-                              "type": "boolean"
-                            },
                             "clusterConfig": {
                               "allOf": [
                                 {
@@ -42695,9 +42670,6 @@
                             "serverVersion": {
                               "type": "number"
                             },
-                            "shareCredentials": {
-                              "type": "boolean"
-                            },
                             "status": {
                               "anyOf": [
                                 {
@@ -42734,9 +42706,7 @@
                             "lastSeenAt",
                             "hostVersion",
                             "serverVersion",
-                            "workspaceOps",
-                            "allowAgentStart",
-                            "shareCredentials"
+                            "workspaceOps"
                           ],
                           "type": "object"
                         }
@@ -43115,7 +43085,7 @@
         }
       },
       "put": {
-        "description": "### Usage\n\nReplace the complete pool registry.\n\n### Inputs\n\nJSON object with a pools array of pool, member and project configurations.\n\n### Invariants\n\nMembers must reference known hosts; pool configurations are validated before persistence.\n\n### Effects\n\nSaves pools, notifies listeners and aborts broker requests for hosts that lose credential sharing.\n\n### Recovery\n\nCorrect invalid configurations on 400; repair unreadable or unwritable registries on 503.",
+        "description": "### Usage\n\nReplace the complete pool registry.\n\n### Inputs\n\nJSON object with a pools array of pool, member and project configurations.\n\n### Invariants\n\nMembers must reference known hosts; pool configurations are validated before persistence.\n\n### Effects\n\nSaves pools and notifies listeners.\n\n### Recovery\n\nCorrect invalid configurations on 400; repair unreadable or unwritable registries on 503.",
         "operationId": "putHosts",
         "requestBody": {
           "content": {
@@ -43766,1076 +43736,11 @@
         ],
         "summary": "Replace pools",
         "x-client-semantics": {
-          "Effects": "Saves pools, notifies listeners and aborts broker requests for hosts that lose credential sharing.",
+          "Effects": "Saves pools and notifies listeners.",
           "Inputs": "JSON object with a pools array of pool, member and project configurations.",
           "Invariants": "Members must reference known hosts; pool configurations are validated before persistence.",
           "Recovery": "Correct invalid configurations on 400; repair unreadable or unwritable registries on 503.",
           "Usage": "Replace the complete pool registry."
-        }
-      }
-    },
-    "/api/hosts/{id}/cluster": {
-      "delete": {
-        "description": "### Usage\n\nRemove a host from the cluster and restore its prior daemon configuration.\n\n### Inputs\n\nHost id path parameter; no JSON body is required.\n\n### Invariants\n\nPool removal is persisted before restoration; restoration failure does not undo the leave.\n\n### Effects\n\nSaves pools, notifies listeners, aborts broker requests unless independently shared, and attempts daemon configuration restore.\n\n### Recovery\n\nInspect optional restoreError in a successful response; synchronization can retry a missed restore. Repair pool storage on 503.",
-        "operationId": "deleteHostsIdCluster",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "pools": {
-                      "items": {
-                        "properties": {
-                          "enabled": {
-                            "type": "boolean"
-                          },
-                          "id": {
-                            "type": "string"
-                          },
-                          "label": {
-                            "type": "string"
-                          },
-                          "members": {
-                            "items": {
-                              "properties": {
-                                "draining": {
-                                  "type": "boolean"
-                                },
-                                "hostId": {
-                                  "type": "string"
-                                },
-                                "projectsRoot": {
-                                  "type": "string"
-                                },
-                                "provisioned": {
-                                  "type": "boolean"
-                                }
-                              },
-                              "required": [
-                                "hostId",
-                                "projectsRoot",
-                                "provisioned",
-                                "draining"
-                              ],
-                              "type": "object"
-                            },
-                            "type": "array"
-                          },
-                          "projects": {
-                            "items": {
-                              "allOf": [
-                                {
-                                  "description": "Persisted project registry entry, including hidden entries.",
-                                  "properties": {
-                                    "addedAt": {
-                                      "description": "ISO timestamp of the latest explicit add.",
-                                      "type": "string"
-                                    },
-                                    "alias": {
-                                      "type": "string"
-                                    },
-                                    "hidden": {
-                                      "description": "Hidden entries suppress sidebar rediscovery until added again.",
-                                      "type": "boolean"
-                                    },
-                                    "launchConfig": {
-                                      "description": "Workspace-level omp launch configuration; only affects omp children spawned for that workspace.",
-                                      "properties": {
-                                        "advisor": {
-                                          "description": "Whether to launch with advisor mode.",
-                                          "type": "boolean"
-                                        },
-                                        "extraArgs": {
-                                          "description": "Extra OMP CLI args, stored as an array.",
-                                          "items": {
-                                            "type": "string"
-                                          },
-                                          "type": "array"
-                                        },
-                                        "profile": {
-                                          "description": "The OMP profile to use.",
-                                          "type": "string"
-                                        }
-                                      },
-                                      "type": "object"
-                                    },
-                                    "pinOrder": {
-                                      "type": "number"
-                                    },
-                                    "sortOrder": {
-                                      "type": "number"
-                                    }
-                                  },
-                                  "required": ["addedAt", "hidden"],
-                                  "type": "object"
-                                },
-                                {
-                                  "properties": {
-                                    "clonePaths": {
-                                      "patternProperties": {
-                                        "^(.*)$": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "type": "object"
-                                    },
-                                    "defaultRef": {
-                                      "type": "string"
-                                    },
-                                    "id": {
-                                      "type": "string"
-                                    },
-                                    "name": {
-                                      "type": "string"
-                                    },
-                                    "origin": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "required": [
-                                    "id",
-                                    "name",
-                                    "origin",
-                                    "clonePaths"
-                                  ],
-                                  "type": "object"
-                                }
-                              ],
-                              "type": "object"
-                            },
-                            "type": "array"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "label",
-                          "enabled",
-                          "members",
-                          "projects"
-                        ],
-                        "type": "object"
-                      },
-                      "type": "array"
-                    },
-                    "restoreError": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["pools"],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful response."
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "delivery": {
-                      "anyOf": [
-                        {
-                          "const": "refused",
-                          "type": "string"
-                        },
-                        {
-                          "const": "unknown",
-                          "type": "string"
-                        }
-                      ],
-                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "hostOffline": {
-                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
-                      "type": "boolean"
-                    }
-                  },
-                  "required": ["error"],
-                  "title": "ApiError",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Invalid request or rejected operation."
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "delivery": {
-                      "anyOf": [
-                        {
-                          "const": "refused",
-                          "type": "string"
-                        },
-                        {
-                          "const": "unknown",
-                          "type": "string"
-                        }
-                      ],
-                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "hostOffline": {
-                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
-                      "type": "boolean"
-                    }
-                  },
-                  "required": ["error"],
-                  "title": "ApiError",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Authentication is required when configured."
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "delivery": {
-                      "anyOf": [
-                        {
-                          "const": "refused",
-                          "type": "string"
-                        },
-                        {
-                          "const": "unknown",
-                          "type": "string"
-                        }
-                      ],
-                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "hostOffline": {
-                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
-                      "type": "boolean"
-                    }
-                  },
-                  "required": ["error"],
-                  "title": "ApiError",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Origin, ownership or authorization policy refused this request."
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "delivery": {
-                      "anyOf": [
-                        {
-                          "const": "refused",
-                          "type": "string"
-                        },
-                        {
-                          "const": "unknown",
-                          "type": "string"
-                        }
-                      ],
-                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "hostOffline": {
-                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
-                      "type": "boolean"
-                    }
-                  },
-                  "required": ["error"],
-                  "title": "ApiError",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "The requested resource does not exist."
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Conflict with current state or host capabilities."
-          },
-          "413": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Request exceeds the endpoint's size limit."
-          },
-          "415": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Content-Type must be application/json."
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Too many active transcription jobs."
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "delivery": {
-                      "anyOf": [
-                        {
-                          "const": "refused",
-                          "type": "string"
-                        },
-                        {
-                          "const": "unknown",
-                          "type": "string"
-                        }
-                      ],
-                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "hostOffline": {
-                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
-                      "type": "boolean"
-                    }
-                  },
-                  "required": ["error"],
-                  "title": "ApiError",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "The operation failed."
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Speech transcription is not configured."
-          },
-          "502": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Upstream push or host request failed."
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "delivery": {
-                      "anyOf": [
-                        {
-                          "const": "refused",
-                          "type": "string"
-                        },
-                        {
-                          "const": "unknown",
-                          "type": "string"
-                        }
-                      ],
-                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "hostOffline": {
-                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
-                      "type": "boolean"
-                    }
-                  },
-                  "required": ["error"],
-                  "title": "ApiError",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "The owning host or required service is unavailable."
-          }
-        },
-        "security": [
-          {
-            "webSession": []
-          },
-          {
-            "trustedProxy": []
-          },
-          {}
-        ],
-        "summary": "Remove host from cluster",
-        "x-client-semantics": {
-          "Effects": "Saves pools, notifies listeners, aborts broker requests unless independently shared, and attempts daemon configuration restore.",
-          "Inputs": "Host id path parameter; no JSON body is required.",
-          "Invariants": "Pool removal is persisted before restoration; restoration failure does not undo the leave.",
-          "Recovery": "Inspect optional restoreError in a successful response; synchronization can retry a missed restore. Repair pool storage on 503.",
-          "Usage": "Remove a host from the cluster and restore its prior daemon configuration."
-        }
-      },
-      "put": {
-        "description": "### Usage\n\nJoin a linked remote host to this server's cluster.\n\n### Inputs\n\nHost id path parameter and JSON object containing only an absolute projectsRoot.\n\n### Invariants\n\nJoining hosts must be ready and cannot hold another server's cluster configuration; the local master is added automatically when needed.\n\n### Effects\n\nGathers project facts, saves the cluster, notifies listeners and attempts to apply the master configuration to the joined daemon; an apply failure does not undo the join.\n\n### Recovery\n\nResolve readiness or ownership conflicts, retry a concurrent cluster change, or repair pool storage; daemon synchronization can apply a missed configuration later.",
-        "operationId": "putHostsIdCluster",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "projectsRoot": {
-                    "type": "string"
-                  }
-                },
-                "required": ["projectsRoot"],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "pools": {
-                      "items": {
-                        "properties": {
-                          "enabled": {
-                            "type": "boolean"
-                          },
-                          "id": {
-                            "type": "string"
-                          },
-                          "label": {
-                            "type": "string"
-                          },
-                          "members": {
-                            "items": {
-                              "properties": {
-                                "draining": {
-                                  "type": "boolean"
-                                },
-                                "hostId": {
-                                  "type": "string"
-                                },
-                                "projectsRoot": {
-                                  "type": "string"
-                                },
-                                "provisioned": {
-                                  "type": "boolean"
-                                }
-                              },
-                              "required": [
-                                "hostId",
-                                "projectsRoot",
-                                "provisioned",
-                                "draining"
-                              ],
-                              "type": "object"
-                            },
-                            "type": "array"
-                          },
-                          "projects": {
-                            "items": {
-                              "allOf": [
-                                {
-                                  "description": "Persisted project registry entry, including hidden entries.",
-                                  "properties": {
-                                    "addedAt": {
-                                      "description": "ISO timestamp of the latest explicit add.",
-                                      "type": "string"
-                                    },
-                                    "alias": {
-                                      "type": "string"
-                                    },
-                                    "hidden": {
-                                      "description": "Hidden entries suppress sidebar rediscovery until added again.",
-                                      "type": "boolean"
-                                    },
-                                    "launchConfig": {
-                                      "description": "Workspace-level omp launch configuration; only affects omp children spawned for that workspace.",
-                                      "properties": {
-                                        "advisor": {
-                                          "description": "Whether to launch with advisor mode.",
-                                          "type": "boolean"
-                                        },
-                                        "extraArgs": {
-                                          "description": "Extra OMP CLI args, stored as an array.",
-                                          "items": {
-                                            "type": "string"
-                                          },
-                                          "type": "array"
-                                        },
-                                        "profile": {
-                                          "description": "The OMP profile to use.",
-                                          "type": "string"
-                                        }
-                                      },
-                                      "type": "object"
-                                    },
-                                    "pinOrder": {
-                                      "type": "number"
-                                    },
-                                    "sortOrder": {
-                                      "type": "number"
-                                    }
-                                  },
-                                  "required": ["addedAt", "hidden"],
-                                  "type": "object"
-                                },
-                                {
-                                  "properties": {
-                                    "clonePaths": {
-                                      "patternProperties": {
-                                        "^(.*)$": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "type": "object"
-                                    },
-                                    "defaultRef": {
-                                      "type": "string"
-                                    },
-                                    "id": {
-                                      "type": "string"
-                                    },
-                                    "name": {
-                                      "type": "string"
-                                    },
-                                    "origin": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "required": [
-                                    "id",
-                                    "name",
-                                    "origin",
-                                    "clonePaths"
-                                  ],
-                                  "type": "object"
-                                }
-                              ],
-                              "type": "object"
-                            },
-                            "type": "array"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "label",
-                          "enabled",
-                          "members",
-                          "projects"
-                        ],
-                        "type": "object"
-                      },
-                      "type": "array"
-                    }
-                  },
-                  "required": ["pools"],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful response."
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "delivery": {
-                      "anyOf": [
-                        {
-                          "const": "refused",
-                          "type": "string"
-                        },
-                        {
-                          "const": "unknown",
-                          "type": "string"
-                        }
-                      ],
-                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "hostOffline": {
-                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
-                      "type": "boolean"
-                    }
-                  },
-                  "required": ["error"],
-                  "title": "ApiError",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Invalid request or rejected operation."
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "delivery": {
-                      "anyOf": [
-                        {
-                          "const": "refused",
-                          "type": "string"
-                        },
-                        {
-                          "const": "unknown",
-                          "type": "string"
-                        }
-                      ],
-                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "hostOffline": {
-                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
-                      "type": "boolean"
-                    }
-                  },
-                  "required": ["error"],
-                  "title": "ApiError",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Authentication is required when configured."
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "delivery": {
-                      "anyOf": [
-                        {
-                          "const": "refused",
-                          "type": "string"
-                        },
-                        {
-                          "const": "unknown",
-                          "type": "string"
-                        }
-                      ],
-                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "hostOffline": {
-                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
-                      "type": "boolean"
-                    }
-                  },
-                  "required": ["error"],
-                  "title": "ApiError",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Origin, ownership or authorization policy refused this request."
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "delivery": {
-                      "anyOf": [
-                        {
-                          "const": "refused",
-                          "type": "string"
-                        },
-                        {
-                          "const": "unknown",
-                          "type": "string"
-                        }
-                      ],
-                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "hostOffline": {
-                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
-                      "type": "boolean"
-                    }
-                  },
-                  "required": ["error"],
-                  "title": "ApiError",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "The requested resource does not exist."
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Conflict with current state or host capabilities."
-          },
-          "413": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Request exceeds the endpoint's size limit."
-          },
-          "415": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Content-Type must be application/json."
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Too many active transcription jobs."
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "delivery": {
-                      "anyOf": [
-                        {
-                          "const": "refused",
-                          "type": "string"
-                        },
-                        {
-                          "const": "unknown",
-                          "type": "string"
-                        }
-                      ],
-                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "hostOffline": {
-                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
-                      "type": "boolean"
-                    }
-                  },
-                  "required": ["error"],
-                  "title": "ApiError",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "The operation failed."
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Speech transcription is not configured."
-          },
-          "502": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Upstream push or host request failed."
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "delivery": {
-                      "anyOf": [
-                        {
-                          "const": "refused",
-                          "type": "string"
-                        },
-                        {
-                          "const": "unknown",
-                          "type": "string"
-                        }
-                      ],
-                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "hostOffline": {
-                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
-                      "type": "boolean"
-                    }
-                  },
-                  "required": ["error"],
-                  "title": "ApiError",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "The owning host or required service is unavailable."
-          }
-        },
-        "security": [
-          {
-            "webSession": []
-          },
-          {
-            "trustedProxy": []
-          },
-          {}
-        ],
-        "summary": "Join host to cluster",
-        "x-client-semantics": {
-          "Effects": "Gathers project facts, saves the cluster, notifies listeners and attempts to apply the master configuration to the joined daemon; an apply failure does not undo the join.",
-          "Inputs": "Host id path parameter and JSON object containing only an absolute projectsRoot.",
-          "Invariants": "Joining hosts must be ready and cannot hold another server's cluster configuration; the local master is added automatically when needed.",
-          "Recovery": "Resolve readiness or ownership conflicts, retry a concurrent cluster change, or repair pool storage; daemon synchronization can apply a missed configuration later.",
-          "Usage": "Join a linked remote host to this server's cluster."
         }
       }
     },
@@ -45302,7 +44207,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -45477,7 +44382,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -45654,7 +44559,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -45831,7 +44736,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -46008,7 +44913,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -46120,7 +45025,7 @@
     },
     "/api/hosts/broker/v1/credentials/disabled": {
       "get": {
-        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-enroll a revoked host or restore broker availability before retrying.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
         "operationId": "hostBrokerDisabledCredentials",
         "responses": {
           "401": {
@@ -46155,7 +45060,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -46259,15 +45164,15 @@
         "x-client-semantics": {
           "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
           "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
-          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
-          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Invariants": "The bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-enroll a revoked host or restore broker availability before retrying.",
           "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
         }
       }
     },
     "/api/hosts/broker/v1/healthz": {
       "get": {
-        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-enroll a revoked host or restore broker availability before retrying.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
         "operationId": "hostBrokerHealth",
         "responses": {
           "401": {
@@ -46302,7 +45207,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -46406,15 +45311,15 @@
         "x-client-semantics": {
           "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
           "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
-          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
-          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Invariants": "The bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-enroll a revoked host or restore broker availability before retrying.",
           "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
         }
       }
     },
     "/api/hosts/broker/v1/snapshot": {
       "get": {
-        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-enroll a revoked host or restore broker availability before retrying.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
         "operationId": "hostBrokerSnapshot",
         "responses": {
           "401": {
@@ -46449,7 +45354,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -46553,15 +45458,15 @@
         "x-client-semantics": {
           "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
           "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
-          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
-          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Invariants": "The bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-enroll a revoked host or restore broker availability before retrying.",
           "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
         }
       }
     },
     "/api/hosts/broker/v1/snapshot/stream": {
       "get": {
-        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-enroll a revoked host or restore broker availability before retrying.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
         "operationId": "hostBrokerSnapshotStream",
         "responses": {
           "401": {
@@ -46596,7 +45501,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -46700,15 +45605,15 @@
         "x-client-semantics": {
           "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
           "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
-          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
-          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Invariants": "The bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-enroll a revoked host or restore broker availability before retrying.",
           "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
         }
       }
     },
     "/api/hosts/broker/v1/usage": {
       "get": {
-        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-enroll a revoked host or restore broker availability before retrying.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
         "operationId": "hostBrokerUsage",
         "responses": {
           "401": {
@@ -46743,7 +45648,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -46847,15 +45752,15 @@
         "x-client-semantics": {
           "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
           "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
-          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
-          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Invariants": "The bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-enroll a revoked host or restore broker availability before retrying.",
           "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
         }
       }
     },
     "/api/hosts/broker/v1/usage/clients": {
       "get": {
-        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-enroll a revoked host or restore broker availability before retrying.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
         "operationId": "hostBrokerUsageClients",
         "responses": {
           "401": {
@@ -46890,7 +45795,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -46994,15 +45899,15 @@
         "x-client-semantics": {
           "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
           "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
-          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
-          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Invariants": "The bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-enroll a revoked host or restore broker availability before retrying.",
           "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
         }
       }
     },
     "/api/hosts/broker/v1/usage/history": {
       "get": {
-        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-establish sharing or service availability after refusal; revocation can abort an in-flight request.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
+        "description": "### Usage\n\nRead an allowed auth-broker resource through the host credential-sharing proxy.\n\n### Inputs\n\nSupply a host bearer token, allowed path and optional query; only selected request headers pass through.\n\n### Invariants\n\nThe bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.\n\n### Effects\n\nForwards the request and streams the upstream status and body with selected response headers.\n\n### Recovery\n\nRe-enroll a revoked host or restore broker availability before retrying.\n\n### Additional protocol details\n\nOnly content-type, accept, if-none-match, and omp-auth-broker-capabilities request headers and content-type, etag, cache-control, and vary response headers pass through. Query strings are forwarded; broker payload formats are intentionally opaque.",
         "operationId": "hostBrokerUsageHistory",
         "responses": {
           "401": {
@@ -47037,7 +45942,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -47141,8 +46046,8 @@
         "x-client-semantics": {
           "Effects": "Forwards the request and streams the upstream status and body with selected response headers.",
           "Inputs": "Supply a host bearer token, allowed path and optional query; only selected request headers pass through.",
-          "Invariants": "The non-local host must remain admitted for credential sharing; paths outside the allow-list are refused and payloads remain broker-defined.",
-          "Recovery": "Re-establish sharing or service availability after refusal; revocation can abort an in-flight request.",
+          "Invariants": "The bearer token must still name a linked host; paths outside the allow-list are refused and payloads remain broker-defined.",
+          "Recovery": "Re-enroll a revoked host or restore broker availability before retrying.",
           "Usage": "Read an allowed auth-broker resource through the host credential-sharing proxy."
         }
       }
@@ -47202,7 +46107,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -47367,7 +46272,7 @@
                 }
               }
             },
-            "description": "Credential sharing is disabled for this host."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -47479,7 +46384,7 @@
     },
     "/api/hosts/cluster-config/file/{hash}": {
       "get": {
-        "description": "### Usage\n\nDownload a file belonging to the current cluster configuration.\n\n### Inputs\n\nAuthenticate as a cluster member and supply the lowercase 64-character content hash in the path.\n\n### Invariants\n\nMembership is checked again after building the configuration; hashes absent from the current manifest, including older versions, return 404.\n\n### Effects\n\nReturns raw application/octet-stream bytes with no-store; it does not apply configuration.\n\n### Recovery\n\nFetch a fresh manifest if the hash is no longer present; restore membership or service availability after an admission failure.\n\n### Additional protocol details\n\nThe hash addresses content in the current manifest, not an older configuration.",
+        "description": "### Usage\n\nDownload a file belonging to the web server's current mirrored configuration.\n\n### Inputs\n\nAuthenticate with a linked host's bearer token and supply the lowercase 64-character content hash in the path.\n\n### Invariants\n\nThe token is checked again after building the configuration; hashes absent from the current manifest, including older versions, return 404.\n\n### Effects\n\nReturns raw application/octet-stream bytes with no-store; it does not apply configuration.\n\n### Recovery\n\nFetch a fresh manifest if the hash is gone, or re-enroll a revoked host before retrying.\n\n### Additional protocol details\n\nThe hash addresses content in the current manifest, not an older configuration.",
         "operationId": "hostClusterFile",
         "parameters": [
           {
@@ -47537,7 +46442,7 @@
                 }
               }
             },
-            "description": "The host is not a cluster member."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "404": {
             "content": {
@@ -47619,16 +46524,16 @@
         "summary": "Get a mirrored configuration file",
         "x-client-semantics": {
           "Effects": "Returns raw application/octet-stream bytes with no-store; it does not apply configuration.",
-          "Inputs": "Authenticate as a cluster member and supply the lowercase 64-character content hash in the path.",
-          "Invariants": "Membership is checked again after building the configuration; hashes absent from the current manifest, including older versions, return 404.",
-          "Recovery": "Fetch a fresh manifest if the hash is no longer present; restore membership or service availability after an admission failure.",
-          "Usage": "Download a file belonging to the current cluster configuration."
+          "Inputs": "Authenticate with a linked host's bearer token and supply the lowercase 64-character content hash in the path.",
+          "Invariants": "The token is checked again after building the configuration; hashes absent from the current manifest, including older versions, return 404.",
+          "Recovery": "Fetch a fresh manifest if the hash is gone, or re-enroll a revoked host before retrying.",
+          "Usage": "Download a file belonging to the web server's current mirrored configuration."
         }
       }
     },
     "/api/hosts/cluster-config/manifest": {
       "get": {
-        "description": "### Usage\n\nFetch the master's current mirrored configuration manifest.\n\n### Inputs\n\nAuthenticate with a cluster member's host bearer token.\n\n### Invariants\n\nMembership is checked both before and after building the current configuration; the response is not cached by HTTP clients.\n\n### Effects\n\nReads the current configuration and returns JSON; it does not apply it to the daemon.\n\n### Recovery\n\nOn revoked membership or unavailable configuration, restore admission or configuration availability before retrying.\n\n### Additional protocol details\n\nReturns the master's current mirrored configuration.",
+        "description": "### Usage\n\nFetch the web server's current mirrored configuration manifest.\n\n### Inputs\n\nAuthenticate with a linked host's bearer token.\n\n### Invariants\n\nThe token is checked both before and after building the current configuration; HTTP clients do not cache the response.\n\n### Effects\n\nReads the current configuration and returns JSON; it does not apply it to the daemon.\n\n### Recovery\n\nRe-enroll a revoked host or fix server configuration errors before retrying.\n\n### Additional protocol details\n\nReturns the web server's current configuration to a linked host.",
         "operationId": "hostClusterManifest",
         "responses": {
           "200": {
@@ -47782,7 +46687,7 @@
                 }
               }
             },
-            "description": "The host is not a cluster member."
+            "description": "The bearer token identifies the local host, not a linked host."
           },
           "409": {
             "content": {
@@ -47847,10 +46752,10 @@
         "summary": "Get cluster configuration manifest",
         "x-client-semantics": {
           "Effects": "Reads the current configuration and returns JSON; it does not apply it to the daemon.",
-          "Inputs": "Authenticate with a cluster member's host bearer token.",
-          "Invariants": "Membership is checked both before and after building the current configuration; the response is not cached by HTTP clients.",
-          "Recovery": "On revoked membership or unavailable configuration, restore admission or configuration availability before retrying.",
-          "Usage": "Fetch the master's current mirrored configuration manifest."
+          "Inputs": "Authenticate with a linked host's bearer token.",
+          "Invariants": "The token is checked both before and after building the current configuration; HTTP clients do not cache the response.",
+          "Recovery": "Re-enroll a revoked host or fix server configuration errors before retrying.",
+          "Usage": "Fetch the web server's current mirrored configuration manifest."
         }
       }
     },

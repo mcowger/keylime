@@ -1,3 +1,4 @@
+import { mock } from "bun:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -21,6 +22,9 @@ after(() => {
   rmSync(agentDir, { recursive: true, force: true });
 });
 
+mock.module("./cluster-config-server.ts", () => ({
+  clusterConfigVersion: async () => "a".repeat(64),
+}));
 const hub = await import("./hub.ts");
 // The agent directory must be set before loading modules that use it.
 const { encodeBlobFrame, HostOpError, LINK_LIMITS, LINK_PROTOCOL_VERSION } =
@@ -1555,7 +1559,14 @@ test("RemoteHost opens a channel over the link and its transport holds output se
   const { req, ch, spawning, result, post } = await spawnOverLink(link);
   assert.deepEqual(req.args, {
     sessionId: null,
-    launch: { cwd: "/w", recordedCwd: null, sessionFile: "", advisor: false },
+    launch: {
+      cwd: "/w",
+      recordedCwd: null,
+      sessionFile: "",
+      advisor: false,
+      shareCredentials: true,
+      configVersion: "a".repeat(64),
+    },
   });
   // The channel exists once the result lands; output after it is held for RpcProcess.
   assert.deepEqual(

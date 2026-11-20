@@ -79,8 +79,6 @@ const host = Type.Union([
   }),
   obj({
     ...hostBase,
-    allowAgentStart: B,
-    shareCredentials: B,
     clusterConfig: Type.Optional(
       Type.Intersect([ConfigStateSchema, obj({ owned: B, current: B })]),
     ),
@@ -354,16 +352,11 @@ add(
   "/api/hosts",
   "patch",
   "patchHosts",
-  "Update host or rename pool",
+  "Rename host or pool",
   Type.Union([obj({ host: Type.Optional(host) }), poolResult]),
   {
     body: Type.Union([
-      obj({
-        id: S,
-        label: Type.Optional(S),
-        allowAgentStart: Type.Optional(B),
-        shareCredentials: Type.Optional(B),
-      }),
+      obj({ id: S, label: S }),
       obj({ poolId: S, label: S }),
     ]),
   },
@@ -371,22 +364,6 @@ add(
 add("/api/hosts", "delete", "deleteHosts", "Revoke host", ok, {
   parameters: [queryParameter("id", S, true)],
 });
-add(
-  "/api/hosts/[id]/cluster",
-  "put",
-  "putHostsIdCluster",
-  "Join host to cluster",
-  poolResult,
-  { parameters: [id], body: obj({ projectsRoot: S }) },
-);
-add(
-  "/api/hosts/[id]/cluster",
-  "delete",
-  "deleteHostsIdCluster",
-  "Remove host from cluster",
-  obj({ pools, restoreError: Type.Optional(S) }),
-  { parameters: [id] },
-);
 add(
   "/api/omp-update",
   "post",

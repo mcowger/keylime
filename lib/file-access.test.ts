@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import type { TestContext } from "node:test";
 import { randomUUID } from "node:crypto";
+import { authorizeFileAccess } from "./file-authorization.ts";
 import type { StagedUploads } from "./hosts/uploads.ts";
 
 async function loadSubject() {
@@ -424,6 +425,53 @@ test("only omp's own credential files are denied, not files of the same name els
       ),
     ),
     false,
+  );
+});
+
+test("workspace reads deny mirrored credentials and cached objects by canonical path", async (t) => {
+  const workspace = workspaceRoot(t);
+  const agentDir = path.join(workspace, "agent");
+  const configuredAgentDir = path.join(workspace, "linked-agent");
+  const previous = process.env.PI_CODING_AGENT_DIR;
+  process.env.PI_CODING_AGENT_DIR = configuredAgentDir;
+  t.after(() => {
+    if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = previous;
+  });
+
+  const mirror = path.join(agentDir, "keylime", "cluster-config");
+  const scope = path.join(mirror, "servers", "a".repeat(64));
+  const models = path.join(scope, "generations", "v1", "agent", "models.yml");
+  const object = path.join(scope, "objects", "b".repeat(64));
+  for (const file of [models, object]) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "fake-provider-api-key");
+  }
+  fs.symlinkSync(agentDir, configuredAgentDir, "dir");
+  const alias = path.join(workspace, "notes.txt");
+  fs.symlinkSync(object, alias);
+  const control = path.join(agentDir, "keylime", "cluster-config-notes.txt");
+  fs.writeFileSync(control, "ordinary file");
+
+  for (const file of [mirror, models, object, alias]) {
+    const decision = await authorizeFileAccess(
+      file.split("/").filter(Boolean),
+      null,
+      false,
+      new Set([workspace]),
+    );
+    assert.equal(decision.ok ? 200 : decision.status, 403, file);
+  }
+  assert.equal(
+    (
+      await authorizeFileAccess(
+        control.split("/").filter(Boolean),
+        null,
+        false,
+        new Set([workspace]),
+      )
+    ).ok,
+    true,
   );
 });
 

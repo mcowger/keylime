@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { getAgentDir } from "../omp/paths";
 import { listPlugins, runOmpCli } from "../omp/plugins-cli";
 import { loadWebServerSettings } from "../web-settings";
-import { isClusterMember } from "./cluster";
 import {
   buildManifest,
   ClusterConfigError,
@@ -16,10 +15,9 @@ import {
   type PluginEntry,
 } from "./cluster-config";
 import { hostFromBearer } from "./host-bearer";
-import { loadPools } from "./pools";
 import { LOCAL_HOST_ID, type HostRecord } from "./registry";
 
-// The master's current configuration, as the two routes under /api/hosts/cluster-config/ serve it to cluster members.
+// The web server's current configuration, served to linked hosts.
 
 type Current = {
   manifest: ConfigManifest;
@@ -163,17 +161,10 @@ export async function clusterConfigVersion(): Promise<string> {
 export const configFail = (error: string, status: number) =>
   Response.json({ error }, { status, headers: noStore });
 
-/** The cluster member the bearer token names, or the refusal to answer with: 401, 503 (unreadable `hosts.json` or `pools.json`) or 403. */
-export function admitClusterMember(request: Request): HostRecord | Response {
+export function admitLinkedHost(request: Request): HostRecord | Response {
   const host = hostFromBearer(request);
   if (host instanceof Response) return host;
-  try {
-    // `local` is refused by id, whatever pools.json says.
-    if (host.id === LOCAL_HOST_ID || !isClusterMember(loadPools(), host.id))
-      return configFail("Not a cluster member", 403);
-  } catch {
-    return configFail("The host pool configuration cannot be read", 503);
-  }
+  if (host.id === LOCAL_HOST_ID) return configFail("Not a linked host", 403);
   return host;
 }
 

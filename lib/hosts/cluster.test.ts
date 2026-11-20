@@ -8,11 +8,9 @@ import {
   clusterJoinBlock,
   clusterOf,
   isClusterMember,
-  isClusterTarget,
   joinCluster,
   leaveCluster,
   ompSharesCredentials,
-  sharesCredentials,
 } from "./cluster.ts";
 import { validatePools } from "./pools.ts";
 import type { HostProjectFacts } from "./cluster.ts";
@@ -183,34 +181,6 @@ test("clusterOf is the first pool; isClusterMember looks only at it", () => {
   assert.equal(isClusterMember([], "local"), false);
   assert.equal(isClusterMember([first, second], "local"), true);
   assert.equal(isClusterMember([first, second], "other"), false);
-});
-
-test("a member shares credentials whatever its own flag says; a non-member follows its flag; local never shares", () => {
-  const pools = [
-    cluster([member("local"), member("worker")]),
-    cluster([member("other")], [], { id: "second" }),
-  ];
-  assert.equal(
-    sharesCredentials({ id: "worker", shareCredentials: false }, pools),
-    true,
-  );
-  assert.equal(
-    sharesCredentials({ id: "other", shareCredentials: false }, pools),
-    false,
-    "only the first pool is the cluster",
-  );
-  assert.equal(
-    sharesCredentials({ id: "other", shareCredentials: true }, pools),
-    true,
-  );
-  assert.equal(
-    sharesCredentials({ id: "stranger", shareCredentials: false }, []),
-    false,
-  );
-  assert.equal(
-    sharesCredentials({ id: "local", shareCredentials: true }, pools),
-    false,
-  );
 });
 
 test("joining with no pool creates the cluster with the member", () => {
@@ -825,71 +795,3 @@ test("a host that is the first member and leaves keeps its projects, unbound", (
   );
 });
 
-test("isClusterTarget: Settings act for the cluster for its pool and its members' projects, while the host is a member", () => {
-  const member = (hostId: string): PoolMember => ({
-    hostId,
-    projectsRoot: `/srv/${hostId}`,
-    provisioned: true,
-    draining: false,
-  });
-  const pools = [
-    {
-      id: CLUSTER_ID,
-      label: CLUSTER_LABEL,
-      enabled: true,
-      members: [member("local"), member("h1")],
-      projects: [],
-    },
-    {
-      id: "other",
-      label: "Other",
-      enabled: true,
-      members: [member("h4")],
-      projects: [],
-    },
-  ];
-  const cases: [
-    string,
-    { poolId?: string; hostId?: string } | null,
-    string | undefined,
-    boolean,
-  ][] = [
-    ["a pool project with no node", { poolId: CLUSTER_ID }, undefined, true],
-    [
-      "a member's pool session",
-      { poolId: CLUSTER_ID, hostId: "h1" },
-      "h1",
-      true,
-    ],
-    ["a member's own project", { hostId: "h1" }, "h1", true],
-    ["this machine's project, a member", { hostId: "local" }, undefined, true],
-    [
-      "a pool session of a host that has left",
-      { poolId: CLUSTER_ID, hostId: "h2" },
-      "h2",
-      false,
-    ],
-    ["a standalone host's project", { hostId: "h3" }, "h3", false],
-    [
-      "a project of another pool",
-      { poolId: "other", hostId: "h4" },
-      "h4",
-      false,
-    ],
-    ["nothing open", null, undefined, false],
-  ];
-  for (const [label, target, hostId, expected] of cases)
-    assert.equal(isClusterTarget(target, hostId, pools), expected, label);
-  assert.equal(
-    isClusterTarget({ hostId: "local" }, undefined, [
-      { ...pools[0], members: [member("h1")] },
-    ]),
-    false,
-    "this machine is not a member yet",
-  );
-  assert.equal(
-    isClusterTarget({ hostId: "h1" }, "h1", []),
-    false,
-    "no cluster",
-  );
-});

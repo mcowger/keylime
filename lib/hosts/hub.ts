@@ -76,7 +76,6 @@ import {
   UnknownMessageLog,
   type UpMessage,
 } from "./link-protocol";
-import { clusterOf, isClusterMember, sharesCredentials } from "./cluster";
 import { ClusterConfigError } from "./cluster-config";
 import { clusterConfigVersion } from "./cluster-config-server";
 import type { ConfigState } from "./daemon-cluster-config";
@@ -2294,14 +2293,29 @@ export class RemoteHost implements Host {
         );
       }
     }
-    // A pure join (expectedChannel) starts nothing, so it is neither refused nor flagged. An unreadable registry or pool
-    // file refuses the start: a host that may be sharing must never run a session with its own stored logins.
-    let sharing = false;
-    let configVersion: string | undefined;
+    let launch = spawnRequest;
+    // A pure join cannot start a child. Every other remote open carries both server policies.
     if (options?.expectedChannel === undefined && this.id !== LOCAL_HOST_ID) {
-      let record: HostRecord | undefined;
+      let configVersion: string;
       try {
-        record = readHosts().find((host) => host.id === this.id);
+        configVersion = await masterConfigVersion();
+      } catch (error) {
+        throw new HostOpError(
+          409,
+          "cluster_config_invalid",
+          error instanceof ClusterConfigError
+            ? error.message
+            : "The server configuration cannot be read",
+        );
+      }
+      // Check after the await so revocation cannot race the open.
+      try {
+        if (!readHosts().some((host) => host.id === this.id))
+          throw new HostOpError(
+            409,
+            "host_unregistered",
+            "This host is no longer in the linked-hosts registry; no session was started",
+          );
       } catch (error) {
         if (!(error instanceof HostRegistryUnreadableError)) throw error;
         throw new HostOpError(
@@ -2310,47 +2324,8 @@ export class RemoteHost implements Host {
           "The linked-hosts registry cannot be read; no session was started",
         );
       }
-      // A link that outlived its record (hosts.json deleted or hand-edited) cannot say whether it shares.
-      if (!record)
-        throw new HostOpError(
-          409,
-          "host_unregistered",
-          "This host is no longer in the linked-hosts registry; no session was started",
-        );
-      const readPools = (): HostPool[] => {
-        try {
-          return loadPools();
-        } catch {
-          throw new HostOpError(
-            503,
-            "pool_storage_unavailable",
-            "The host pool configuration cannot be read; no session was started",
-          );
-        }
-      };
-      let pools = readPools();
-      // A member runs only on the master's configuration, which its daemon applies before omp starts (spec K4).
-      if (isClusterMember(pools, this.id)) {
-        try {
-          configVersion = await masterConfigVersion();
-        } catch (error) {
-          throw new HostOpError(
-            409,
-            "cluster_config_invalid",
-            error instanceof Error ? error.message : String(error),
-          );
-        }
-        // Read again after the wait, with none until the open is sent: a host that left meanwhile gets no version, so no apply follows its restore.
-        pools = readPools();
-        if (!isClusterMember(pools, this.id)) configVersion = undefined;
-      }
-      sharing = sharesCredentials(record, pools);
+      launch = { ...spawnRequest, shareCredentials: true, configVersion };
     }
-    const launch = {
-      ...spawnRequest,
-      ...(sharing ? { shareCredentials: true as const } : {}),
-      ...(configVersion === undefined ? {} : { configVersion }),
-    };
     const opening: OpenChannelRequest = { sessionId, launch, ...options };
     // An open may wait for a cold child's `ready`, which sends nothing meanwhile.
     return (await request(
@@ -2460,8 +2435,6 @@ export interface LinkedHostRow {
   keylimeVersion?: string | null;
   platform: string | null;
   lastSeenAt: string | null;
-  allowAgentStart: boolean;
-  shareCredentials: boolean;
   /** Link protocol version the daemon last presented; null before it ever dialed. */
   hostVersion: number | null;
   serverVersion: number;
@@ -2484,8 +2457,6 @@ export function listHosts(): LinkedHostRow[] {
         keylimeVersion: link?.keylimeVersion ?? null,
         platform: link?.platform ?? null,
         lastSeenAt: link?.lastSeenAt ?? record.lastSeenAt,
-        allowAgentStart: record.allowAgentStart,
-        shareCredentials: record.shareCredentials,
         hostVersion: link?.hostVersion ?? null,
         serverVersion: LINK_PROTOCOL_VERSION,
         workspaceOps: [...(link?.workspaceOps ?? [])],
@@ -2582,53 +2553,32 @@ export async function clusterConfigOp(
   return { state, owned: result.owned };
 }
 
-/**
- * One round of startClusterConfigSync. A linked host outside the cluster that still holds this server's configuration
- * (its leave's restore failed or could not be sent), or has not said whether it does since its link came up (that report
- * may have been dropped), gets `restore`: its answer says, and a host that does not hold it changes nothing. Each online
- * member that is not current gets `apply`, which for the version it already holds costs nothing but a fresh report.
- * Never while one of its ops is unanswered.
- */
+/** Apply the server configuration to every linked host that is behind. */
 export async function syncClusterConfig(): Promise<void> {
-  const members = (): Set<string> | null => {
-    try {
-      return new Set(
-        clusterOf(loadPools())?.members.map((member) => member.hostId),
-      );
-    } catch {
-      return null; // who is a member is unknown: nobody gets either op
-    }
-  };
-  const ready = (link: Link) => link.configOps === 0;
-  const before = members();
-  if (!before) return;
-  // Read and sent with no await between: a host that joins meanwhile gets its apply after this restore. A host without omp
-  // still gets it: its files go back before its plugins are tried.
-  for (const link of hub().links.values()) {
-    if (
-      link.id !== LOCAL_HOST_ID &&
-      !before.has(link.id) &&
-      (link.configOwned || link.configState === null) &&
-      isLinkUp(link.status) &&
-      ready(link)
-    )
-      clusterConfigOp(link.id, { action: "restore" }).catch(() => {});
+  try {
+    if (!readHosts().some((host) => host.id !== LOCAL_HOST_ID)) return;
+  } catch {
+    return;
   }
-  if (![...before].some((id) => id !== LOCAL_HOST_ID)) return;
   let version: string;
   try {
     version = await masterConfigVersion();
   } catch {
     return; // logged by masterConfigVersion
   }
-  // The pools again, and nothing awaited before the sends: a host that left meanwhile never gets an apply after its restore.
-  for (const hostId of members() ?? []) {
+  let hosts: HostRecord[];
+  try {
+    hosts = readHosts();
+  } catch {
+    return;
+  }
+  for (const { id: hostId } of hosts) {
+    if (hostId === LOCAL_HOST_ID) continue;
     const link = hub().links.get(hostId);
     if (
-      hostId === LOCAL_HOST_ID ||
       !link ||
       link.status !== "online" ||
-      !ready(link) ||
+      link.configOps !== 0 ||
       configCurrent(link)
     )
       continue;
@@ -2636,7 +2586,7 @@ export async function syncClusterConfig(): Promise<void> {
   }
 }
 
-/** instrumentation.node.ts: at once, then every 30 s, members that are behind catch up and hosts that left get their own configuration back (spec K3, K6). */
+/** Start syncing server configuration now and every 30 seconds. */
 export function startClusterConfigSync(): void {
   const state = hub();
   if (state.configSync) return;
@@ -2722,11 +2672,9 @@ export function getHostLinkProtocol(hostId: string): number | null {
   return hub().links.get(hostId)?.hostVersion ?? null;
 }
 
-/** Whether placement may use this host: `local` and hosts outside the cluster always; a cluster member only once it
- * reports this server's current configuration (`clusterConfig.current`), so one with no report yet is not. */
+/** Linked hosts are current only after reporting this server's applied configuration. */
 export function isHostConfigCurrent(hostId: string): boolean {
-  if (hostId === LOCAL_HOST_ID || !isClusterMember(loadPools(), hostId))
-    return true;
+  if (hostId === LOCAL_HOST_ID) return true;
   const link = hub().links.get(hostId);
   return link !== undefined && configCurrent(link);
 }
