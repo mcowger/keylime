@@ -923,6 +923,7 @@ test("task chat uses a collapsible activity row and renders its full message", (
   }));
   const row = view.getByRole("button", { expanded: false });
   assert.match(row.textContent!, /Worker.*First line/);
+  assert.equal(row.querySelector("svg.lucide-check"), null);
   assert.doesNotMatch(view.container.textContent!, /Full message/);
   fireEvent.click(row);
   assert.equal(view.container.querySelector("strong")?.textContent, "Full message");
@@ -1245,6 +1246,9 @@ test("async-result notices preserve lines and wrap when expanded", () => {
   assert.equal(view.container.querySelector("pre"), null);
   assert.match(view.container.textContent!, /Background job bg_1 has completed/);
   assert.ok(view.container.querySelector(".activity-row-trigger"));
+  const header = view.getByRole("button", { expanded: false });
+  assert.ok(header.querySelector("svg.lucide-clock"));
+  assert.equal(header.querySelector("svg.lucide-check"), null);
   assert.doesNotMatch(view.container.textContent!, /Wall time/);
 
   fireEvent.click(view.getByRole("button", { expanded: false }));
@@ -1295,6 +1299,21 @@ test("async-result details show job status and duration while retaining raw JSON
   const raw = view.container.querySelector("details")!;
   assert.equal(raw.open, false);
   assert.match(raw.textContent!, /194633/);
+});
+
+test("completed job-result rows show the completion message without a check mark", () => {
+  const view = render(React.createElement(MessageView, {
+    message: {
+      role: "custom",
+      customType: "job-result",
+      display: true,
+      content: "Search review finished.",
+      details: { jobs: [{ jobId: "search-review", type: "task", status: "completed" }] },
+    },
+  }));
+  const header = view.getByRole("button", { expanded: false });
+  assert.match(header.textContent!, /job-result.*Search review finished\./);
+  assert.equal(header.querySelector("svg.lucide-check"), null);
 });
 
 test("cancelled async jobs render the aborted status instead of a running indicator", () => {
@@ -1359,6 +1378,7 @@ test("developer reminders show their wrapper attributes, start collapsed, and to
   );
   const header = view.getByRole("button", { expanded: false });
   assert.ok(header.classList.contains("activity-row-trigger"));
+  assert.equal(header.querySelector("svg.lucide-check"), null);
   assert.match(header.textContent!, /system-reminder/);
   assert.match(header.textContent!, /rule_violation/);
   assert.match(header.textContent!, /ts-no-tiny-functions/);

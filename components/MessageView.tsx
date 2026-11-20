@@ -2623,7 +2623,7 @@ function CustomActivityRow({ message, cwd, onOpenFile, sessionId, defaultCollaps
       <Collapsible open={expanded} onOpenChange={setExpanded}>
         <CollapsibleTrigger className="activity-row-trigger">
           <span className={`activity-row-indicator${failed ? " activity-row-indicator-error" : ""}`} aria-hidden>
-            {failed ? <CircleAlert size={12} strokeWidth={1.8} /> : cancelled ? <Ban size={12} strokeWidth={1.8} /> : running ? <LoaderCircle size={12} strokeWidth={1.8} className="activity-row-spinner" /> : warning ? <CircleAlert size={12} strokeWidth={1.8} style={{ color: "var(--status-modified)" }} /> : <Check size={12} strokeWidth={2} />}
+            {failed ? <CircleAlert size={12} strokeWidth={1.8} /> : cancelled ? <Ban size={12} strokeWidth={1.8} /> : running ? <LoaderCircle size={12} strokeWidth={1.8} className="activity-row-spinner" /> : warning ? <CircleAlert size={12} strokeWidth={1.8} style={{ color: "var(--status-modified)" }} /> : null}
           </span>
           <span className="activity-tool-icon" aria-hidden>{isHidden ? <EyeOff size={12} /> : isAsync ? <Clock size={12} /> : <MessagesSquare size={12} />}</span>
           <span className="activity-row-tool" style={{ minWidth: 0, maxWidth: "55%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={`${label}${isHidden ? " · hidden" : ""}`}>{label}{isHidden ? " · hidden" : ""}</span>
