@@ -8,7 +8,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ### Added
 - `bun run deploy:host` installs the daemon and runner over SSH, prompts for a host token, and offers user autostart with systemd or launchd. It doesn't deploy the FE.
-- **Settings → Hosts → Deploy release** lists compatible builds already on the web server and marks the newest. Deploy a matched daemon and runner with one restart, without opening a file picker.
+- **Settings → Hosts → Deploy release** lists compatible builds already on the web server, shows their build times in your time zone, and marks the newest. The dialog tracks transfer progress for the matched daemon and runner before they install and restart together.
 - In **Settings → Hosts**, use **Stage artifact** on a linked host to transfer a binary without SSH. On supported standalone hosts you can then verify its SHA-256, choose **Install & restart**, and confirm the outcome after reconnect.
 - Run `keylime host install-artifact` on the target host to verify the SHA-256 of a staged binary, replace the installed daemon or runner with a backup, and restart the standalone host service. The command refuses a busy daemon.
 - Standalone host activation runs `keylime preflight` before drain or replacement. A matching checksum alone no longer lets a wrong-platform or incompatible binary through.
@@ -154,6 +154,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Linked hosts can stage artifacts without SSH; supported standalone hosts can verify and install staged binaries with backups and service restart
 - The `keylime host install-artifact` command verifies staged binary checksums, runs preflight, and replaces supported standalone daemon or runner installs
 - Background job notices, system reminders, incoming agent messages, and diagnostics line up with tool rows. Job notices show the result without the internal event label
+- **Settings → Hosts → Deploy release** lists compatible builds already on the web server, shows their build times in your time zone, and marks the newest. The dialog tracks transfer progress for the matched daemon and runner before they install and restart together
 
 ### Changed
 - Linked hosts use their own OMP settings, plugins, environment, and provider logins. Keylime no longer mirrors configuration or brokers provider credentials. Binary deployment is unchanged.

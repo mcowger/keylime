@@ -48851,6 +48851,115 @@
       "required": ["state"],
       "type": "object"
     },
+    "hostControl_HostReleaseDeployFrame": {
+      "anyOf": [
+        {
+          "description": "Transfer is active. Until byte counts are known, bytes is omitted.",
+          "properties": {
+            "bytes": {
+              "properties": {
+                "received": {
+                  "description": "Cumulative bytes acknowledged by the target host across both binaries.",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "total": {
+                  "description": "Combined size in bytes of the two opened binaries.",
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": ["received", "total"],
+              "type": "object"
+            },
+            "type": {
+              "const": "transfer",
+              "type": "string"
+            }
+          },
+          "required": ["type"],
+          "type": "object"
+        },
+        {
+          "description": "Both binaries are staged; activation is being requested.",
+          "properties": {
+            "type": {
+              "const": "installing",
+              "type": "string"
+            }
+          },
+          "required": ["type"],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "result": {
+              "description": "Daemon-owned activation state, readable through the original link after restarting.",
+              "properties": {
+                "backup": {
+                  "description": "Path to the retained backup on the daemon; omitted before a backup exists.",
+                  "type": "string"
+                },
+                "error": {
+                  "description": "Reason for a known failure.",
+                  "type": "string"
+                },
+                "runnerBackup": {
+                  "description": "Path to the retained runner backup for a paired deployment.",
+                  "type": "string"
+                },
+                "state": {
+                  "anyOf": [
+                    {
+                      "const": "pending",
+                      "type": "string"
+                    },
+                    {
+                      "const": "succeeded",
+                      "type": "string"
+                    },
+                    {
+                      "const": "failed",
+                      "type": "string"
+                    }
+                  ],
+                  "description": "Pending is not confirmation; succeeded requires the replacement service to start."
+                }
+              },
+              "required": ["state"],
+              "type": "object"
+            },
+            "type": {
+              "const": "result",
+              "type": "string"
+            }
+          },
+          "required": ["type", "result"],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string"
+            },
+            "status": {
+              "description": "HTTP error status the operation would have returned before streaming began.",
+              "type": "integer"
+            },
+            "type": {
+              "const": "error",
+              "type": "string"
+            }
+          },
+          "required": ["type", "status", "code", "error"],
+          "type": "object"
+        }
+      ],
+      "description": "Ordered release deployment updates. Result and error are terminal stream frames. A pending result or missing terminal frame requires status lookup by operation ID."
+    },
     "hostControl_HostReleaseList": {
       "description": "Release picker options from the web server's complete builds for the selected daemon.",
       "properties": {

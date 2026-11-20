@@ -47,11 +47,14 @@ copies or shares them.
 
 ## Deploy a release without SSH
 
-In **Settings → Hosts**, choose **Deploy release** on the target host. Pick
-a build (the newest is marked), review it, then choose **Deploy & restart**.
-Keylime sends the matched daemon and runner over the managed link, checks both
-digests, and runs preflight on the pair. It refuses a busy host. Otherwise it
-keeps backups of both binaries, replaces them, and restarts the service once.
+In **Settings → Hosts**, choose **Deploy release** on the target host. The
+picker shows each build's time in your browser's time zone and marks the newest.
+Pick a build, review it, then choose **Deploy & restart**. The progress bar
+tracks the bytes the host acknowledges for the daemon and runner together.
+Once both binaries are staged, the dialog switches to **Installing and restarting…**.
+Keylime checks both digests and runs preflight on the pair. It refuses a busy
+host. Otherwise it keeps backups of both binaries, replaces them, and restarts
+the service once.
 
 The list comes from builds already on the web server. It includes matching
 native builds from `~/.local/share/keylime/releases/` and the unpacked
@@ -59,6 +62,10 @@ native builds from `~/.local/share/keylime/releases/` and the unpacked
 build must contain both `keylime` and `keylime-omp` to appear. If the list is
 empty, [build a matching release](release.md#building-binary-archives) on the
 web server and reopen it.
+
+For native builds, the catalog uses the timestamp assigned when the build
+starts. For unpacked builds, it uses the newer of the two binaries' modification
+times.
 
 Deploy from Hosts requires a standalone remote daemon that already supports
 release deployment. The web server and its own daemon aren't updated by this

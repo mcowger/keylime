@@ -224,3 +224,23 @@ export const DeployHostReleaseArgsSchema = Type.Object({
   operationId,
 }, { additionalProperties: false, description: "Deploy the selected server build's matched daemon and runner." });
 export type DeployHostReleaseArgs = Static<typeof DeployHostReleaseArgsSchema>;
+
+const releaseTransferBytes = Type.Object({
+  received: Type.Integer({ minimum: 0, description: "Cumulative bytes acknowledged by the target host across both binaries." }),
+  total: Type.Integer({ minimum: 1, description: "Combined size in bytes of the two opened binaries." }),
+});
+export const HostReleaseDeployFrameSchema = Type.Union([
+  Type.Object({
+    type: Type.Literal("transfer"),
+    bytes: Type.Optional(releaseTransferBytes),
+  }, { description: "Transfer is active. Until byte counts are known, bytes is omitted." }),
+  Type.Object({ type: Type.Literal("installing") }, { description: "Both binaries are staged; activation is being requested." }),
+  Type.Object({ type: Type.Literal("result"), result: HostArtifactActivationResultSchema }),
+  Type.Object({
+    type: Type.Literal("error"),
+    status: Type.Integer({ description: "HTTP error status the operation would have returned before streaming began." }),
+    code: Type.String(),
+    error: Type.String(),
+  }),
+], { description: "Ordered release deployment updates. Result and error are terminal stream frames. A pending result or missing terminal frame requires status lookup by operation ID." });
+export type HostReleaseDeployFrame = Static<typeof HostReleaseDeployFrameSchema>;

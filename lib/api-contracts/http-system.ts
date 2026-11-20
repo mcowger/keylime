@@ -17,6 +17,7 @@ import {
   HostArtifactActivationResultSchema,
   HostReleaseListSchema,
   DeployHostReleaseArgsSchema,
+  HostReleaseDeployFrameSchema,
 } from "./host-control-models";
 import {
   NotificationHistoryEntrySchema,
@@ -401,10 +402,20 @@ add(
 );
 add(
   "/api/hosts/[id]/releases", "post", "deployHostRelease",
-  "Deploy a matched daemon and runner to a linked host", HostArtifactActivationResultSchema,
+  "Deploy a matched daemon and runner to a linked host", null,
   {
-    parameters: [id], body: DeployHostReleaseArgsSchema, status: 202,
-    responses: { 501: fail("This host does not support paired releases."), 503: fail("The host is offline."), 504: fail("The host did not confirm activation." ) },
+    parameters: [id], body: DeployHostReleaseArgsSchema,
+    responses: {
+      200: {
+        description: "NDJSON deployment updates, one JSON object per line. Failures after streaming begins are error frames, not HTTP status changes.",
+        content: {
+          "application/x-ndjson": {
+            schema: Type.String({ description: "Each line is one HostReleaseDeployFrame." }),
+            "x-item-schema": HostReleaseDeployFrameSchema,
+          },
+        },
+      },
+    },
   },
 );
 add("/api/terminal/attach", "get", "getTerminalAttach", "Attach to a session terminal", null, {

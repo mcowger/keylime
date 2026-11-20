@@ -1429,6 +1429,7 @@
   "hostsConfig.deployReleaseUnavailable": "This host is offline or no longer supports release deployment.",
   "hostsConfig.deployReleaseVersion": "Release",
   "hostsConfig.deployReleaseNewest": "{id} (newest)",
+  "hostsConfig.deployReleaseTransferring": "Transferring release…",
   "hostsConfig.deployReleaseReview": "Review deployment",
   "hostsConfig.deployReleaseConfirm": "Deploy {id} to {name}? This replaces the Keylime daemon and runner and restarts the Keylime host service.",
   "hostsConfig.deployReleaseInstall": "Deploy & restart",

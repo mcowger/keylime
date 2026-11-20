@@ -45231,7 +45231,7 @@
         }
       },
       "post": {
-        "description": "### Usage\n\nDeploy the selected build to a linked standalone host over the managed link.\n\n### Inputs\n\nSupply the selected release ID and a new operation ID.\n\n### Invariants\n\nBoth binaries come from the same server build. Caller paths, binary names and digests are not accepted. The host refuses busy or incompatible installs.\n\n### Effects\n\nTransfers and hashes both binaries, then hands them off for paired activation and one restart. Acceptance does not confirm the restart.\n\n### Recovery\n\nRead GET /api/hosts/{id}/artifacts with the original operation ID after reconnect or a lost reply. Do not blindly send another deployment.",
+        "description": "### Usage\n\nDeploy the selected build to a linked standalone host and stream progress as NDJSON.\n\n### Inputs\n\nSupply the selected release ID and a new operation ID.\n\n### Invariants\n\nBoth binaries come from the same server build. Caller paths, binary names and digests are not accepted. The host refuses busy or incompatible installs.\n\n### Effects\n\nStreams cumulative host-acknowledged bytes across both binaries, then reports installation after both are staged. Acceptance does not confirm the restart.\n\n### Recovery\n\nA pending result or lost reply requires GET /api/hosts/{id}/artifacts with the original operation ID. Disconnect cancels remaining transfer, but can race activation. Do not blindly send another deployment.",
         "operationId": "deployHostRelease",
         "parameters": [
           {
@@ -45270,48 +45270,125 @@
           "required": true
         },
         "responses": {
-          "202": {
+          "200": {
             "content": {
-              "application/json": {
+              "application/x-ndjson": {
                 "schema": {
-                  "description": "Daemon-owned activation state, readable through the original link after restarting.",
-                  "properties": {
-                    "backup": {
-                      "description": "Path to the retained backup on the daemon; omitted before a backup exists.",
-                      "type": "string"
-                    },
-                    "error": {
-                      "description": "Reason for a known failure.",
-                      "type": "string"
-                    },
-                    "runnerBackup": {
-                      "description": "Path to the retained runner backup for a paired deployment.",
-                      "type": "string"
-                    },
-                    "state": {
-                      "anyOf": [
-                        {
-                          "const": "pending",
-                          "type": "string"
+                  "description": "Each line is one HostReleaseDeployFrame.",
+                  "type": "string"
+                },
+                "x-item-schema": {
+                  "anyOf": [
+                    {
+                      "description": "Transfer is active. Until byte counts are known, bytes is omitted.",
+                      "properties": {
+                        "bytes": {
+                          "properties": {
+                            "received": {
+                              "description": "Cumulative bytes acknowledged by the target host across both binaries.",
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "total": {
+                              "description": "Combined size in bytes of the two opened binaries.",
+                              "minimum": 1,
+                              "type": "integer"
+                            }
+                          },
+                          "required": ["received", "total"],
+                          "type": "object"
                         },
-                        {
-                          "const": "succeeded",
-                          "type": "string"
-                        },
-                        {
-                          "const": "failed",
+                        "type": {
+                          "const": "transfer",
                           "type": "string"
                         }
-                      ],
-                      "description": "Pending is not confirmation; succeeded requires the replacement service to start."
+                      },
+                      "required": ["type"],
+                      "type": "object"
+                    },
+                    {
+                      "description": "Both binaries are staged; activation is being requested.",
+                      "properties": {
+                        "type": {
+                          "const": "installing",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["type"],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "result": {
+                          "description": "Daemon-owned activation state, readable through the original link after restarting.",
+                          "properties": {
+                            "backup": {
+                              "description": "Path to the retained backup on the daemon; omitted before a backup exists.",
+                              "type": "string"
+                            },
+                            "error": {
+                              "description": "Reason for a known failure.",
+                              "type": "string"
+                            },
+                            "runnerBackup": {
+                              "description": "Path to the retained runner backup for a paired deployment.",
+                              "type": "string"
+                            },
+                            "state": {
+                              "anyOf": [
+                                {
+                                  "const": "pending",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "succeeded",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "failed",
+                                  "type": "string"
+                                }
+                              ],
+                              "description": "Pending is not confirmation; succeeded requires the replacement service to start."
+                            }
+                          },
+                          "required": ["state"],
+                          "type": "object"
+                        },
+                        "type": {
+                          "const": "result",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["type", "result"],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "description": "HTTP error status the operation would have returned before streaming began.",
+                          "type": "integer"
+                        },
+                        "type": {
+                          "const": "error",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["type", "status", "code", "error"],
+                      "type": "object"
                     }
-                  },
-                  "required": ["state"],
-                  "type": "object"
+                  ],
+                  "description": "Ordered release deployment updates. Result and error are terminal stream frames. A pending result or missing terminal frame requires status lookup by operation ID."
                 }
               }
             },
-            "description": "Successful response."
+            "description": "NDJSON deployment updates, one JSON object per line. Failures after streaming begins are error frames, not HTTP status changes."
           },
           "400": {
             "content": {
@@ -45596,7 +45673,7 @@
                 }
               }
             },
-            "description": "This host does not support paired releases."
+            "description": "Speech transcription is not configured."
           },
           "502": {
             "content": {
@@ -45621,39 +45698,39 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
                   "properties": {
                     "code": {
                       "type": "string"
                     },
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "The host is offline."
-          },
-          "504": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "code": {
-                      "type": "string"
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
                     },
                     "error": {
                       "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
                     }
                   },
                   "required": ["error"],
+                  "title": "ApiError",
                   "type": "object"
                 }
               }
             },
-            "description": "The host did not confirm activation."
+            "description": "The owning host or required service is unavailable."
           }
         },
         "security": [
@@ -45667,11 +45744,11 @@
         ],
         "summary": "Deploy a matched daemon and runner to a linked host",
         "x-client-semantics": {
-          "Effects": "Transfers and hashes both binaries, then hands them off for paired activation and one restart. Acceptance does not confirm the restart.",
+          "Effects": "Streams cumulative host-acknowledged bytes across both binaries, then reports installation after both are staged. Acceptance does not confirm the restart.",
           "Inputs": "Supply the selected release ID and a new operation ID.",
           "Invariants": "Both binaries come from the same server build. Caller paths, binary names and digests are not accepted. The host refuses busy or incompatible installs.",
-          "Recovery": "Read GET /api/hosts/{id}/artifacts with the original operation ID after reconnect or a lost reply. Do not blindly send another deployment.",
-          "Usage": "Deploy the selected build to a linked standalone host over the managed link."
+          "Recovery": "A pending result or lost reply requires GET /api/hosts/{id}/artifacts with the original operation ID. Disconnect cancels remaining transfer, but can race activation. Do not blindly send another deployment.",
+          "Usage": "Deploy the selected build to a linked standalone host and stream progress as NDJSON."
         }
       }
     },
