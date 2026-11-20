@@ -153,6 +153,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Settings → Hosts can deploy a compatible release by transferring and activating its matched daemon and runner over the managed link
 - Linked hosts can stage artifacts without SSH; supported standalone hosts can verify and install staged binaries with backups and service restart
 - The `keylime host install-artifact` command verifies staged binary checksums, runs preflight, and replaces supported standalone daemon or runner installs
+- Background job notices, system reminders, incoming agent messages, and diagnostics line up with tool rows. Job notices show the result without the internal event label
 
 ### Changed
 - Linked hosts use their own OMP settings, plugins, environment, and provider logins. Keylime no longer mirrors configuration or brokers provider credentials. Binary deployment is unchanged.
@@ -231,6 +232,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - System names line up beside their expand chevrons and stay visible when **Actions** is open, even at the sidebar's minimum width.
 - Launch in Notes & Tasks uses automatic naming for Workspaces, Efforts, and branches instead of copying the task summary.
 - Removed extra check marks from completed background job notices, system reminders, and incoming agent messages. Error, warning, running, and cancelled indicators remain.
+- Background job notices, system reminders, incoming agent messages, and diagnostics line up with tool rows. Job notices show the result without the internal event label.
 - Repo sidebar menus stack labeled actions vertically, and Notes & Tasks has a clipboard icon in both Repo and System menus.
 - Notes & Tasks opens in the workspace area, and task cards can be deleted without removing linked work.
 - Notes and their images are never sent to a model or agent. Launch and Resume use only the task's own prompt and attachments.

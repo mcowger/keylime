@@ -1246,9 +1246,13 @@ test("async-result notices preserve lines and wrap when expanded", () => {
   assert.equal(view.container.querySelector("pre"), null);
   assert.match(view.container.textContent!, /Background job bg_1 has completed/);
   assert.ok(view.container.querySelector(".activity-row-trigger"));
-  const header = view.getByRole("button", { expanded: false });
+  const header = view.getByRole("button", {
+    name: "Background job bg_1 has completed. Resume your work using the result below.",
+    expanded: false,
+  });
   assert.ok(header.querySelector("svg.lucide-clock"));
   assert.equal(header.querySelector("svg.lucide-check"), null);
+  assert.equal(header.querySelector(".activity-row-indicator"), null);
   assert.doesNotMatch(view.container.textContent!, /Wall time/);
 
   fireEvent.click(view.getByRole("button", { expanded: false }));
@@ -1311,8 +1315,7 @@ test("completed job-result rows show the completion message without a check mark
       details: { jobs: [{ jobId: "search-review", type: "task", status: "completed" }] },
     },
   }));
-  const header = view.getByRole("button", { expanded: false });
-  assert.match(header.textContent!, /job-result.*Search review finished\./);
+  const header = view.getByRole("button", { name: "Search review finished.", expanded: false });
   assert.equal(header.querySelector("svg.lucide-check"), null);
 });
 

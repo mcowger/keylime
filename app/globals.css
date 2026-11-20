@@ -4962,6 +4962,9 @@ html[data-touch-targets="accessible"] .right-panel-toolbar {
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
+.transcript-message-spacing {
+  margin-bottom: 6px;
+}
 .activity-row-trigger {
   display: flex;
   align-items: center;

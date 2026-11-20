@@ -1408,9 +1408,8 @@ function AssistantMessageView({
 
   return (
     <div
-      className="chat-message"
+      className="chat-message transcript-message-spacing"
       data-live={isStreaming ? "true" : undefined}
-      style={{ marginBottom: 6 }}
     >
       {/* Model label */}
       <div
@@ -2596,6 +2595,7 @@ function CustomActivityRow({ message, cwd, onOpenFile, sessionId, defaultCollaps
   const { copied, copy } = useCopyFeedback();
   const text = getMessageText(message.content);
   const isAsync = message.customType === "async-result";
+  const isJobResult = isAsync || message.customType === "job-result";
   const isIrc = IRC_CUSTOM_TYPES.has(message.customType);
   const isHidden = message.display === false;
   const isDeveloper = message.customType === "developer";
@@ -2606,7 +2606,7 @@ function CustomActivityRow({ message, cwd, onOpenFile, sessionId, defaultCollaps
   const label = envelope ? `IRC ← ${envelope.sender ?? formatCustomType(message.customType)}` : wrapper ? wrapperTitle(wrapper) : isHidden ? friendlyHiddenLabel(message.customType, t) : formatCustomType(message.customType);
   const images = getMessageImages(message.content);
   const time = formatTime(message.timestamp, locale);
-  const jobs = (isAsync || message.customType === "job-result") && message.details && typeof message.details === "object" &&
+  const jobs = isJobResult && message.details && typeof message.details === "object" &&
     "jobs" in message.details && Array.isArray(message.details.jobs)
     ? message.details.jobs.map((job: unknown) =>
         job && typeof job === "object" && "jobId" in job && typeof job.jobId === "string"
@@ -2618,16 +2618,25 @@ function CustomActivityRow({ message, cwd, onOpenFile, sessionId, defaultCollaps
   const cancelled = jobRows?.some((job) => job.status === "cancelled") ?? false;
   const running = jobRows?.some((job) => ["running", "started", "waiting"].includes(job.status)) ?? false;
   const warning = message.customType === "lsp-late-diagnostic" && /\b[1-9]\d*\s+warning\(s\)|\[warning\]/i.test(body);
+  const indicator = failed ? <CircleAlert size={14} strokeWidth={1.8} />
+    : cancelled ? <Ban size={14} strokeWidth={1.8} />
+    : running ? <LoaderCircle size={14} strokeWidth={1.8} className="activity-row-spinner" />
+    : warning ? <CircleAlert size={14} strokeWidth={1.8} style={{ color: "var(--status-modified)" }} />
+    : null;
+  const preview = previewText(body.split("\n").find((line) => line.trim()) ?? "");
   return (
-    <div className="activity-row" data-selection-scope="message" tabIndex={-1}>
+    <div className="activity-row transcript-message-spacing" data-selection-scope="message" tabIndex={-1}>
       <Collapsible open={expanded} onOpenChange={setExpanded}>
         <CollapsibleTrigger className="activity-row-trigger">
-          <span className={`activity-row-indicator${failed ? " activity-row-indicator-error" : ""}`} aria-hidden>
-            {failed ? <CircleAlert size={12} strokeWidth={1.8} /> : cancelled ? <Ban size={12} strokeWidth={1.8} /> : running ? <LoaderCircle size={12} strokeWidth={1.8} className="activity-row-spinner" /> : warning ? <CircleAlert size={12} strokeWidth={1.8} style={{ color: "var(--status-modified)" }} /> : null}
-          </span>
-          <span className="activity-tool-icon" aria-hidden>{isHidden ? <EyeOff size={12} /> : isAsync ? <Clock size={12} /> : <MessagesSquare size={12} />}</span>
-          <span className="activity-row-tool" style={{ minWidth: 0, maxWidth: "55%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={`${label}${isHidden ? " · hidden" : ""}`}>{label}{isHidden ? " · hidden" : ""}</span>
-          <span className="activity-row-preview">{previewText(body.split("\n").find((line) => line.trim()) ?? "")}</span>
+          {indicator ? (
+            <span className={`activity-row-indicator${failed ? " activity-row-indicator-error" : ""}`} aria-hidden>{indicator}</span>
+          ) : (
+            <span className="activity-tool-icon" aria-hidden>
+              {isHidden ? <EyeOff size={14} /> : isJobResult ? <Clock size={14} /> : <MessagesSquare size={14} />}
+            </span>
+          )}
+          {(!isJobResult || isHidden) && <span className="activity-row-tool" style={{ minWidth: 0, maxWidth: "55%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={`${label}${isHidden ? " · hidden" : ""}`}>{label}{isHidden ? " · hidden" : ""}</span>}
+          <span className="activity-row-preview">{preview || (isJobResult && !isHidden ? label : "")}</span>
           <ChevronDown size={12} strokeWidth={1.8} aria-hidden style={{ flexShrink: 0, transform: expanded ? "none" : "rotate(-90deg)" }} />
         </CollapsibleTrigger>
         {expanded && <div className="tool-call-details">
