@@ -656,6 +656,7 @@ test("ship job polling continues while hidden and restores progress", async () =
   try {
     const view = render(React.createElement(ShipDialog, props));
     await waitFor(() => assert.equal((view.getByRole("button", { name: "Ship" }) as HTMLButtonElement).disabled, false));
+    await view.findByText(/No uncommitted changes.*won't generate a new commit message/);
     fireEvent.click(view.getByRole("button", { name: "Ship" }));
     await view.findByText(/push/);
     assert.equal(view.queryByText("autoMerge"), null);

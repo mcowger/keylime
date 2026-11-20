@@ -193,6 +193,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Repos and Systems use matching sidebar headings, collapse independently, and share one search control above both sections.
 - Sidebar search reveals matches in collapsed Repos and Systems sections. Clearing the query restores their previous collapse state.
 - Failed commits show their full output in a scrollable area inside the Ship dialog.
+- Ship explains why there's no new commit message when all workspace changes are already committed.
 - Tool call rows stay visible without flashing while the transcript catches up, even if the next reply has already started.
 - Unsaved tool rows from a finished run no longer appear under the next prompt.
 - Chat shows the text you submitted with a skill invocation as a normal message, including in saved sessions. Session search finds what you typed, not the expanded skill instructions.

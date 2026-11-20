@@ -487,6 +487,14 @@ export function ShipDialog({
                 Nothing to ship.
               </p>
             )}
+            {plan === null && preview.ahead > 0 && (
+              <p
+                role="status"
+                style={{ margin: 0, color: "var(--text-muted)", fontSize: 13 }}
+              >
+                No uncommitted changes. Ship won't generate a new commit message.
+              </p>
+            )}
             {plan?.commits.map((commit, index) => (
               <Field
                 key={index}
