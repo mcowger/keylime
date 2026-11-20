@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import { ThemedSelect } from "@/components/ui/primitives";
 import { useI18n } from "@/lib/i18n";
+import type { UsageReport } from "@/lib/api-contracts/usage-models";
 import type {
   UsageBreakdownView,
   UsageGranularity,
   UsageMetricView,
-  UsageReport,
   UsageTimeRange,
 } from "@/lib/usage-types";
 
@@ -35,7 +35,7 @@ function formatCurrency(amount: number): string {
   return `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export function UsageConfig() {
+export function UsageConfig({ hostId }: { hostId: string }) {
   const { t } = useI18n();
 
   const [timeRange, setTimeRange] = useState<UsageTimeRange>("30d");
@@ -55,15 +55,21 @@ export function UsageConfig() {
     null,
   );
   const chartSvgRef = useRef<SVGSVGElement | null>(null);
+  const requestRef = useRef<AbortController | null>(null);
 
   const fetchUsage = useCallback(
-    async (isRefresh = false, signal?: AbortSignal) => {
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
+    async (isRefresh = false) => {
+      requestRef.current?.abort();
+      const controller = new AbortController();
+      requestRef.current = controller;
+      const { signal } = controller;
+      setRefreshing(isRefresh);
+      setLoading(!isRefresh);
       setError(null);
 
       try {
         const params = new URLSearchParams({
+          hostId,
           range: timeRange,
           granularity,
         });
@@ -71,29 +77,31 @@ export function UsageConfig() {
 
         const res = await fetch(`/api/usage?${params.toString()}`, { signal });
         if (!res.ok) {
-          throw new Error(`Failed to fetch usage: ${res.statusText}`);
+          const body = await res.json().catch(() => null);
+          throw new Error(
+            typeof body?.error === "string"
+              ? body.error
+              : `Failed to fetch usage: ${res.statusText}`,
+          );
         }
         const data: UsageReport = await res.json();
-        setReport(data);
+        if (!signal.aborted) setReport(data);
       } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") {
-          return;
-        }
+        if (signal.aborted) return;
         setError(err instanceof Error ? err.message : String(err));
       } finally {
-        setLoading(false);
-        setRefreshing(false);
+        if (!signal.aborted) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     },
-    [timeRange, granularity],
+    [hostId, timeRange, granularity],
   );
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetchUsage(false, controller.signal);
-    return () => {
-      controller.abort();
-    };
+    void fetchUsage();
+    return () => requestRef.current?.abort();
   }, [fetchUsage]);
 
   // Date range subtitle calculation

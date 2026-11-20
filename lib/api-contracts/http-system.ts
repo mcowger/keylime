@@ -23,6 +23,7 @@ import {
   NotificationHistoryEntrySchema,
   NotificationPrefsSchema,
 } from "./notification-models";
+import { UsageReportSchema } from "./usage-models";
 
 const S = Type.String(),
   N = Type.Number(),
@@ -101,82 +102,6 @@ const sttClaim = Type.Intersect([
     after: Type.Optional(literals("send", "steer", "followup")),
   }),
 ]);
-const totalFields = {
-  totalCost: N,
-  totalTokens: N,
-  inputTokens: N,
-  outputTokens: N,
-  reasoningTokens: N,
-  cacheReadTokens: N,
-  cacheWriteTokens: N,
-  cacheSavings: N,
-  activeDays: N,
-  tokensPerActiveDay: N,
-  cachePercentage: N,
-  costQuality: obj({ providerReported: N, modelPriced: N, unpriced: N }),
-};
-const usage = obj({
-  timeRange: literals("today", "7d", "30d", "90d", "month", "all"),
-  granularity: literals("daily", "monthly", "projects"),
-  summary: obj(totalFields),
-  providers: Type.Array(
-    obj({ provider: S, name: S, cost: N, tokens: N, share: N, color: S }),
-  ),
-  timeSeries: Type.Array(
-    obj({
-      date: S,
-      label: S,
-      timestamp: N,
-      totalCost: N,
-      totalTokens: N,
-      byProvider: Type.Record(S, obj({ cost: N, tokens: N })),
-    }),
-  ),
-  modelBreakdown: Type.Array(
-    obj({
-      model: S,
-      provider: S,
-      cost: N,
-      tokens: N,
-      inputTokens: N,
-      outputTokens: N,
-      cacheReadTokens: N,
-      cacheWriteTokens: N,
-      reasoningTokens: N,
-      share: N,
-      recordsCount: N,
-    }),
-  ),
-  dayBreakdown: Type.Array(
-    obj({
-      date: S,
-      label: S,
-      cost: N,
-      tokens: N,
-      inputTokens: N,
-      outputTokens: N,
-      cacheReadTokens: N,
-      share: N,
-    }),
-  ),
-  projectBreakdown: Type.Array(
-    obj({
-      project: S,
-      projectName: S,
-      cost: N,
-      tokens: N,
-      share: N,
-      sessionsCount: N,
-    }),
-  ),
-  scanInfo: obj({
-    transcriptsScanned: N,
-    transcriptsOutsideWindow: N,
-    usageRecordsCount: N,
-    durationSeconds: N,
-    scannedAt: N,
-  }),
-});
 const id = pathParameter("id"),
   jobId = pathParameter("jobId");
 /** Subscription control sent to POST /api/events for an existing SSE connection. */
@@ -692,10 +617,21 @@ add(
     }),
   },
 );
-add("/api/usage", "get", "getUsage", "Get usage report", usage, {
-  parameters: ["range", "granularity", "project", "from", "to", "refresh"].map(
-    (x) => queryParameter(x, S),
-  ),
+add("/api/usage", "get", "getUsage", "Get usage report", UsageReportSchema, {
+  parameters: [
+    "hostId",
+    "range",
+    "granularity",
+    "project",
+    "from",
+    "to",
+    "refresh",
+  ].map((x) => queryParameter(x, S)),
+  responses: {
+    404: fail("Unknown host."),
+    501: fail("Upgrade the selected daemon to use usage reports."),
+    503: fail("Selected daemon is offline."),
+  },
 });
 add(
   "/api/web-auth/session",

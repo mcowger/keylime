@@ -2,6 +2,7 @@ import "../tests/setup-dom.ts";
 import assert from "node:assert/strict";
 import test, { afterEach, type TestContext } from "node:test";
 import { createElement } from "react";
+import type { HostRow } from "@/lib/hosts/hub";
 const { cleanup, render, screen, waitFor } =
   await import("@testing-library/react/pure.js");
 const { default: userEvent } = await import("@testing-library/user-event");
@@ -10,9 +11,21 @@ const { PluginsConfig } = await import("./PluginsConfig");
 afterEach(cleanup);
 
 const noop = () => {};
-const MEMBER_CWD = "/srv/h1/keylime-cluster/app";
+const MEMBER_CWD = "/srv/h1/keylime/app";
 const MEMBER_SESSION = "member-session-1";
-const REMOTE = "Configure OMP on the host running the session. This editor only works on the web server.";
+const REMOTE =
+  "Manage native OMP settings on the selected host. They can't be edited from this controller.";
+const hosts: HostRow[] = ["laptop", "desktop"].map((id) => ({
+  id,
+  label: id,
+  status: "online",
+  ompVersion: null,
+  platform: null,
+  lastSeenAt: null,
+  hostVersion: 14,
+  serverVersion: 14,
+  workspaceOps: [],
+}));
 
 const settingsProps = {
   activeTab: "mcp",
@@ -34,7 +47,7 @@ const settingsProps = {
   openUrlAutomatically: false,
   onOpenUrlAutomaticallyChange: noop,
   cwd: MEMBER_CWD,
-  remoteHost: false,
+  hosts,
   sessionId: MEMBER_SESSION,
   onModelsSaved: noop,
   onPluginsReloaded: noop,
@@ -60,6 +73,8 @@ function recordRequests(t: TestContext) {
       });
       const path = String(url).split("?")[0];
       if (path === "/api/omp-settings") return Response.json({ settings: {} });
+      if (path === "/api/models")
+        return Response.json({ code: "host_offline" }, { status: 503 });
       if (path === "/api/mcp") {
         const inventory = [
           {
@@ -94,12 +109,18 @@ function recordRequests(t: TestContext) {
 }
 test("remote MCP shows live status without loading the web server's configuration", async (t) => {
   const requests = recordRequests(t);
-  render(createElement(SettingsConfig, { ...settingsProps, remoteHost: true }));
+  render(
+    createElement(SettingsConfig, {
+      ...settingsProps,
+      initialHostId: "laptop",
+    }),
+  );
   assert.ok(await screen.findByText("connected"));
   assert.equal(screen.queryByText("Load Project MCP Servers"), null);
   assert.equal(screen.queryByText("Project MCP Servers"), null);
   assert.equal(
-    (screen.getByRole("button", { name: "Reload MCP" }) as HTMLButtonElement).disabled,
+    (screen.getByRole("button", { name: "Reload MCP" }) as HTMLButtonElement)
+      .disabled,
     true,
   );
   const mcp = requests.filter(({ url }) => url.startsWith("/api/mcp"));
@@ -108,20 +129,64 @@ test("remote MCP shows live status without loading the web server's configuratio
     assert.equal(method, "GET");
     const query = new URL(url, "http://localhost").searchParams;
     assert.equal(query.get("attach"), "1");
+    assert.equal(query.get("hostId"), "laptop");
     assert.equal(query.get("sessionId"), MEMBER_SESSION);
     assert.equal(query.has("cwd"), false);
   }
   assert.equal(requests.length, mcp.length);
 });
 
-for (const tab of ["skills", "agents", "models", "safety"] as const) {
+for (const tab of ["skills", "agents", "intelligence", "safety"] as const) {
   test(`remote ${tab} settings do not load web server settings`, async (t) => {
     const requests = recordRequests(t);
-    render(createElement(SettingsConfig, { ...settingsProps, remoteHost: true, activeTab: tab }));
+    render(
+      createElement(SettingsConfig, {
+        ...settingsProps,
+        initialHostId: "laptop",
+        activeTab: tab,
+      }),
+    );
     assert.ok(await screen.findByText(REMOTE));
     assert.deepEqual(requests, []);
   });
 }
+
+test("switching settings hosts never attaches the open session on the new host", async (t) => {
+  const requests = recordRequests(t);
+  const user = userEvent.setup();
+  const props = { ...settingsProps, initialHostId: "laptop" };
+  const { rerender } = render(createElement(SettingsConfig, props));
+  assert.ok(await screen.findByText("connected"));
+  await user.click(screen.getByRole("combobox", { name: "Settings host" }));
+  await user.click(await screen.findByRole("option", { name: /^desktop\b/ }));
+  assert.equal(screen.queryByText("connected"), null);
+  assert.ok(
+    screen.getByText(
+      "Open a conversation to enable, disable, or reload MCP servers.",
+    ),
+  );
+  assert.ok(requests.every(({ url }) => !url.includes("hostId=desktop")));
+
+  rerender(createElement(SettingsConfig, { ...props, activeTab: "providers" }));
+  assert.match(
+    screen.getByRole("combobox", { name: "Settings host" }).textContent ?? "",
+    /desktop/,
+  );
+  assert.ok(
+    await screen.findByText(
+      "This host is offline. Reconnect it to view its models.",
+    ),
+  );
+  assert.deepEqual(
+    requests.filter(({ url }) => url.startsWith("/api/models")),
+    [{ url: "/api/models?hostId=desktop", method: "GET", body: undefined }],
+  );
+  assert.ok(
+    requests.every(
+      ({ url }) => !url.startsWith("/api/auth") && url !== "/api/omp-settings",
+    ),
+  );
+});
 
 test("without a workspace the Plugins panel works at the user level: no cwd, global installs only", async (t) => {
   const requests = recordRequests(t);

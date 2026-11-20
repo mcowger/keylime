@@ -37,6 +37,7 @@ import {
   saveHostSettings,
 } from "../web-settings";
 import { getHostModels } from "../models-cache";
+import { UsageQuerySchema } from "../api-contracts/usage-models";
 import type { HostControlCommand, HostControlStatus } from "./host-control";
 import { readHostLogin, type HostLink } from "./host-login";
 import { DaemonLink, dialable, nextRedialDelay } from "./daemon-link";
@@ -693,6 +694,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
           ompVersion,
           keylimeVersion: packageJson.version,
           workspaceOps: Object.keys(WORKSPACE_OP_PARAMS),
+          canReportUsage: true,
           canStageArtifact: true,
           ...(activation.supported() ? { canActivateArtifact: true } : {}),
           platform: process.platform,
@@ -1300,6 +1302,14 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
             "refresh must be a boolean",
           );
         return getHostModels(args.refresh === true);
+      case "usageReport":
+        if (!Value.Check(UsageQuerySchema, args))
+          throw new HostOpError(
+            400,
+            "invalid_request",
+            "Invalid usage filters",
+          );
+        return localHost.getUsageReport(args);
       default: {
         const run = sessionOps[op] as (
           ...params: unknown[]

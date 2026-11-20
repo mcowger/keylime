@@ -3,8 +3,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { FolderGit2, Settings2 } from "lucide-react";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { ThemedSelect } from "./ui/primitives";
-import { useHostRows } from "@/hooks/useHostRows";
 import { useI18n } from "@/lib/i18n";
 import type {
   HierarchyProject,
@@ -13,22 +11,19 @@ import type {
 import { CreationPipelineEditor } from "./CreationPipelineEditor";
 import { hostName, hostStatusText } from "./host-status";
 import { isLinkUp } from "@/lib/hosts/host";
+import type { HostRow } from "@/lib/hosts/hub";
 
-export function ProjectsConfig() {
+export function ProjectsConfig({ host }: { host: HostRow }) {
   const { t } = useI18n();
-  const { hosts, failed } = useHostRows();
-  const [hostId, setHostId] = useState("local");
-  const selectedHost = useRef(hostId);
-  selectedHost.current = hostId;
+  const hostId = host.id;
   const [snapshot, setSnapshot] = useState<HierarchySnapshot | null>(null);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
-  const host = hosts?.find((item) => item.id === hostId);
   useEffect(() => {
     const controller = new AbortController();
     setSnapshot(null);
     setError("");
-    if (!host || !isLinkUp(host.status)) return () => controller.abort();
+    if (!isLinkUp(host.status)) return () => controller.abort();
     void fetch(`/api/hierarchy?${new URLSearchParams({ host: hostId })}`, {
       signal: controller.signal,
     })
@@ -43,39 +38,12 @@ export function ProjectsConfig() {
           setError(e instanceof Error ? e.message : String(e));
       });
     return () => controller.abort();
-  }, [hostId, host?.status, revision]);
+  }, [hostId, host.status, revision]);
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      <div className="settings-card">
-        <div className="settings-card-text">
-          <label htmlFor="project-settings-host" className="settings-card-title">Host</label>
-          <div className="settings-card-desc">Choose the host whose repos you want to configure.</div>
-        </div>
-        {hosts && (
-          <span className="settings-card-control">
-            <ThemedSelect
-              id="project-settings-host"
-              value={hostId}
-              onChange={(value) => {
-                setSnapshot(null);
-                setError("");
-                setHostId(value);
-              }}
-              options={hosts.map((item) => ({
-                value: item.id,
-                label: `${hostName(t, item)} (${hostStatusText(t, item)})`,
-              }))}
-            />
-          </span>
-        )}
-      </div>
-      {failed && <div role="alert">Could not load hosts.</div>}
-      {!hosts && !failed && <div role="status">Loading hosts...</div>}
-      {hosts && !host && <div>Select a host.</div>}
-      {host && !isLinkUp(host.status) && (
+      {!isLinkUp(host.status) && (
         <div role="status">
-          {hostName(t, host)}: {hostStatusText(t, host)}. Repos are
-          unavailable.
+          {hostName(t, host)}: {hostStatusText(t, host)}. Repos are unavailable.
         </div>
       )}
       {error && (
@@ -86,7 +54,7 @@ export function ProjectsConfig() {
           </button>
         </div>
       )}
-      {host && isLinkUp(host.status) && !snapshot && !error && (
+      {isLinkUp(host.status) && !snapshot && !error && (
         <div role="status">Loading repos...</div>
       )}
       {snapshot && snapshot.projects.length === 0 && (
@@ -97,9 +65,7 @@ export function ProjectsConfig() {
           key={`${hostId}:${project.id}`}
           hostId={hostId}
           project={project}
-          onUpdated={(value) => {
-            if (selectedHost.current === hostId) setSnapshot(value);
-          }}
+          onUpdated={setSnapshot}
         />
       ))}
     </div>

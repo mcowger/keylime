@@ -171,6 +171,7 @@ export const HOST_OP_NAMES = [
   "hostSettingsGet",
   "hostSettingsSet",
   "modelsList",
+  "usageReport",
   "ptySessions",
 ] as const;
 
@@ -642,6 +643,9 @@ export function decodeUp(line: string): UpMessage | UnknownMessage {
         ...(o.canActivateArtifact === undefined
           ? {}
           : { canActivateArtifact: bool(o, "canActivateArtifact") }),
+        ...(o.canReportUsage === undefined
+          ? {}
+          : { canReportUsage: bool(o, "canReportUsage") }),
         platform: str(o, "platform"),
         ...(o.arch === undefined ? {} : { arch: str(o, "arch") }),
         home: str(o, "home"),

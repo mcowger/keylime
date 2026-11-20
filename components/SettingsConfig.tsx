@@ -48,7 +48,8 @@ import { Alert } from "@/components/ui/field";
 import { toast } from "@/components/ui/toast";
 import { useI18n } from "@/lib/i18n";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { useHostRows } from "@/hooks/useHostRows";
+import { LOCAL_HOST_ID } from "@/lib/project-ordering";
+import type { HostRow } from "@/lib/hosts/hub";
 import { hostName, hostStatusText } from "./host-status";
 import {
   SettingsTabs,
@@ -111,6 +112,10 @@ const SettingsTabLoading = () => {
 };
 const ModelsConfig = dynamic(
   () => import("./ModelsConfig").then((module) => module.ModelsConfig),
+  { loading: SettingsTabLoading },
+);
+const HostModelCatalog = dynamic(
+  () => import("./HostModelCatalog").then((module) => module.HostModelCatalog),
   { loading: SettingsTabLoading },
 );
 const SkillsConfig = dynamic(
@@ -1238,38 +1243,13 @@ function UploadRetentionSetting({ endpoint }: { endpoint: string }) {
   );
 }
 
-function HostPolicySettings({ hostId }: { hostId?: string }) {
-  const { t } = useI18n();
-  const { hosts } = useHostRows();
-  const [selected, setSelected] = useState(hostId ?? "local");
-  const endpoint = `/api/web-settings?hostId=${encodeURIComponent(selected)}`;
+function HostPolicySettings({ hostId }: { hostId: string }) {
+  const endpoint = `/api/web-settings?hostId=${encodeURIComponent(hostId)}`;
   return (
     <>
-      {hosts && (
-        <NativeSetting
-          label={t("settingsConfig.policyHost")}
-          description={t("settingsConfig.policyHostDesc")}
-        >
-          <ThemedSelect
-            style={nativeSelectStyle}
-            value={selected}
-            onChange={setSelected}
-            options={hosts.map((host) => ({
-              value: host.id,
-              label: `${hostName(t, host)} (${hostStatusText(t, host)})`,
-            }))}
-          />
-        </NativeSetting>
-      )}
-      <AutoResumeSessionsSetting
-        key={`resume:${selected}`}
-        endpoint={endpoint}
-      />
-      <AgentToolsSetting key={`tools:${selected}`} endpoint={endpoint} />
-      <UploadRetentionSetting
-        key={`retention:${selected}`}
-        endpoint={endpoint}
-      />
+      <AutoResumeSessionsSetting endpoint={endpoint} />
+      <AgentToolsSetting endpoint={endpoint} />
+      <UploadRetentionSetting endpoint={endpoint} />
     </>
   );
 }
@@ -1817,10 +1797,10 @@ export function SettingsConfig({
   onScopeNativeSelectAllChange,
   openUrlAutomatically,
   onOpenUrlAutomaticallyChange,
-  cwd,
-  remoteHost,
-  hostId,
-  sessionId,
+  cwd: contextCwd,
+  initialHostId = LOCAL_HOST_ID,
+  hosts,
+  sessionId: contextSessionId,
   onModelsSaved,
   onPluginsReloaded,
   onSelectTab,
@@ -1847,9 +1827,9 @@ export function SettingsConfig({
   openUrlAutomatically: boolean;
   onOpenUrlAutomaticallyChange: (enabled: boolean) => void;
   cwd: string | null;
-  /** Remote workspace paths do not exist on the web server's filesystem. */
-  remoteHost: boolean;
-  hostId?: string;
+  /** The workspace and session props belong to the initial host only. */
+  initialHostId?: string;
+  hosts: HostRow[] | null;
   sessionId: string | null;
   onModelsSaved: () => void;
   onPluginsReloaded: () => void;
@@ -1858,6 +1838,11 @@ export function SettingsConfig({
 }) {
   const isMobile = useIsMobile();
   const { t } = useI18n();
+  const [hostId, setHostId] = useState(initialHostId);
+  const host = hosts?.find((item) => item.id === hostId);
+  const remoteHost = hostId !== LOCAL_HOST_ID;
+  const cwd = hostId === initialHostId ? contextCwd : null;
+  const sessionId = hostId === initialHostId ? contextSessionId : null;
   const workspaceReady = cwd !== null;
   const { fontSize, setFontSize } = useFontSize();
   const { uiScale, setUiScale } = useUiScale();
@@ -1910,6 +1895,7 @@ export function SettingsConfig({
   const nativeSettingsMutatedRef = useRef(false);
 
   const loadNativeSettings = useCallback(() => {
+    if (nativeSaveDrainingRef.current) return;
     nativeSettingsMutatedRef.current = false;
     setNativeSettingsLoading(true);
     setNativeSettingsError(null);
@@ -2029,6 +2015,10 @@ export function SettingsConfig({
   const currentTab =
     activeTab === "skills" ? activeTab : getNormalizedActive(activeTab);
   const remoteOmpTab = remoteHost && LOCAL_OMP_TABS.includes(currentTab);
+  const hostScoped =
+    currentTab !== "general" &&
+    currentTab !== "notifications" &&
+    currentTab !== "hosts";
   const nativeSettingsRequired =
     !remoteHost &&
     (currentTab === "safety" ||
@@ -2064,6 +2054,7 @@ export function SettingsConfig({
       }
     }
     for (const setting of SETTING_INDEX) {
+      if (remoteHost && setting.scope === "Native OMP") continue;
       if (
         setting.id === "auto-thinking-source" &&
         nativeSettings?.defaultThinkingLevel !== "auto"
@@ -2093,7 +2084,7 @@ export function SettingsConfig({
       }
     }
     return results;
-  }, [trimmedQuery, t, nativeSettings?.defaultThinkingLevel]);
+  }, [trimmedQuery, t, remoteHost, nativeSettings?.defaultThinkingLevel]);
 
   const openSearchResult = useCallback(
     (result: SearchResult) => {
@@ -2183,7 +2174,7 @@ export function SettingsConfig({
           >
             {t("settingsConfig.title")}
           </h1>
-          {nativeSavesInFlight > 0 ? (
+          {!nativeSettingsRequired ? null : nativeSavesInFlight > 0 ? (
             <span
               className="settings-save-status"
               style={{
@@ -2338,18 +2329,72 @@ export function SettingsConfig({
             />
 
             <div className="settings-content" style={contentStyle}>
-              {remoteOmpTab ? (
-                <p
+              {hostScoped && (
+                <div
+                  className="settings-panel-inner"
                   style={{
-                    flexShrink: 0,
-                    margin: isMobile ? "16px 14px 0" : "16px 24px 0",
-                    fontSize: 13,
-                    color: "var(--text-muted)",
-                    lineHeight: 1.45,
+                    maxWidth: 940,
+                    padding: isMobile ? "16px 14px 0" : "24px 24px 0",
                   }}
                 >
-                  {t("settingsConfig.remoteOmpUnavailable")}
-                </p>
+                  <NativeSetting
+                    label={t("settingsConfig.settingsHost")}
+                    description={t("settingsConfig.settingsHostDesc")}
+                  >
+                    <ThemedSelect
+                      style={nativeSelectStyle}
+                      value={hostId}
+                      onChange={(value) => {
+                        setHostId(value);
+                        setHighlightId(null);
+                      }}
+                      options={[
+                        ...(host
+                          ? []
+                          : [
+                              {
+                                value: hostId,
+                                label:
+                                  hostId === LOCAL_HOST_ID
+                                    ? t("hostsConfig.thisMachine")
+                                    : hostId,
+                              },
+                            ]),
+                        ...(hosts ?? []).map((item) => ({
+                          value: item.id,
+                          label: `${hostName(t, item)} (${hostStatusText(t, item)})`,
+                        })),
+                      ]}
+                    />
+                  </NativeSetting>
+                </div>
+              )}
+              {remoteOmpTab ? (
+                <div
+                  role="tabpanel"
+                  id={`settings-panel-${getNormalizedActive(currentTab)}`}
+                  aria-labelledby={`settings-tab-${getNormalizedActive(currentTab)}`}
+                  className="settings-panel-inner"
+                  style={{
+                    maxWidth: 940,
+                    padding: isMobile ? "16px 14px 32px" : "24px 24px 64px",
+                    gap: 16,
+                  }}
+                >
+                  <p
+                    className="settings-content-subtitle"
+                    style={{ margin: 0 }}
+                  >
+                    {t(
+                      currentTab === "providers"
+                        ? "settingsConfig.remoteProvidersUnavailable"
+                        : "settingsConfig.remoteOmpUnavailable",
+                    )}
+                  </p>
+                  {(currentTab === "models" || currentTab === "providers") && (
+                    <HostModelCatalog key={hostId} hostId={hostId} />
+                  )}
+                </div>
               ) : nativeSettingsRequired && nativeSettingsLoading ? (
                 <div
                   className="settings-loading-state"
@@ -3325,7 +3370,7 @@ export function SettingsConfig({
                         padding: isMobile ? "16px 14px 32px" : "32px 24px 64px",
                       }}
                     >
-                      <UsageConfig />
+                      <UsageConfig key={hostId} hostId={hostId} />
                     </div>
                   )}
 
@@ -3801,6 +3846,11 @@ export function SettingsConfig({
                         >
                           {t("settingsConfig.extensionsToolsDesc")}
                         </p>
+                        {remoteHost && (
+                          <p className="settings-content-subtitle">
+                            {t("settingsConfig.remoteOmpUnavailable")}
+                          </p>
+                        )}
                         {cwd && (
                           <button
                             type="button"
@@ -3878,6 +3928,7 @@ export function SettingsConfig({
                       )}
                       {!remoteHost || sessionId ? (
                         <McpConfig
+                          key={JSON.stringify([hostId, sessionId, cwd])}
                           hostId={hostId}
                           cwd={remoteHost ? null : cwd}
                           sessionId={sessionId}
@@ -4054,7 +4105,17 @@ export function SettingsConfig({
                       >
                         Repos
                       </h2>
-                      <ProjectsConfig />
+                      {host ? (
+                        <ProjectsConfig key={hostId} host={host} />
+                      ) : (
+                        <p role="status">
+                          {t(
+                            hosts
+                              ? "settingsConfig.settingsHostUnavailable"
+                              : "hostsConfig.loading",
+                          )}
+                        </p>
+                      )}
                     </div>
                   )}
 

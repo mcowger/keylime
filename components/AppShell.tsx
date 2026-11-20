@@ -3191,8 +3191,6 @@ export function AppShell({ appName }: { appName: string }) {
   const chatHost = remoteHost
     ? hosts?.find((host) => host.id === currentHostId)
     : undefined;
-  const settingsHostId = activeCwd ? activeHostId : currentHostId;
-  const remoteSettings = remoteHostId(settingsHostId) !== undefined;
   const showChat = selectedSession !== null || effectiveNewSessionCwd !== null;
   const currentRate = generationSpeed?.current;
   const rate = currentRate ?? generationSpeed?.average;
@@ -3941,7 +3939,8 @@ export function AppShell({ appName }: { appName: string }) {
                 {settingsTab ? (
                   <SettingsConfig
                     activeTab={settingsTab}
-                    hostId={settingsHostId}
+                    initialHostId={workspaceHostId}
+                    hosts={hosts}
                     toolCallsDefaultCollapsed={toolCallsDefaultCollapsed}
                     onToolCallsDefaultCollapsedChange={
                       handleToolCallsDefaultCollapsedChange
@@ -3971,8 +3970,11 @@ export function AppShell({ appName }: { appName: string }) {
                     onOpenUrlAutomaticallyChange={
                       handleOpenUrlAutomaticallyChange
                     }
-                    cwd={activeCwd ?? selectedSession?.cwd ?? newSessionCwd}
-                    remoteHost={remoteSettings}
+                    cwd={
+                      selectedSession
+                        ? (sessionCwd ?? sidebarCwd)
+                        : (newSessionCwd ?? sidebarCwd)
+                    }
                     sessionId={selectedSession?.id ?? null}
                     onModelsSaved={() => setModelsRefreshKey((k) => k + 1)}
                     onPluginsReloaded={() => setSessionKey((k) => k + 1)}

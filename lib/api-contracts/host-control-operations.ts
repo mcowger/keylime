@@ -5,6 +5,7 @@ import {
   HostSettingsPatchSchema,
   HostSettingsSchema,
 } from "./configuration-models";
+import { UsageQuerySchema, UsageReportSchema } from "./usage-models";
 import {
   OpenChannelRequestSchema,
   OpenChannelResultSchema,
@@ -207,5 +208,12 @@ export const hostControlOperations: readonly OperationContract[] = [
       "Usage: Load the target daemon's model choices.\nInputs: Set refresh to rediscover models.\nInvariants: Uses the daemon's OMP settings and credentials; returns no credential values.\nEffects: Reads the host cache or queries the host's OMP runner.\nRecovery: Retry on the same host, or inspect that host's OMP configuration.",
     args: Type.Object({ refresh: Type.Optional(Type.Boolean()) }),
     result: HostModelsSchema,
+  },
+  {
+    name: "usageReport",
+    description:
+      "Usage: Report token usage and estimated costs on the selected daemon.\nInputs: Supply optional date, granularity and project filters, or request a refresh.\nInvariants: Requires canReportUsage; aggregates only this daemon's transcripts, and costs are not an authoritative provider bill.\nEffects: Reads transcripts and synchronizes the daemon's usage database. Refresh invalidates local caches.\nRecovery: Reconnect or upgrade the selected daemon and retry on the same host.",
+    args: UsageQuerySchema,
+    result: UsageReportSchema,
   },
 ];

@@ -21,6 +21,7 @@ import { resolveOmpBin, OMP_NOT_FOUND } from "../omp/omp-cli";
 import { sanitizeProjectCommandEnvironment } from "../project-command-env";
 import { sessionOps } from "./session-ops";
 import { getHostModels } from "../models-cache";
+import { getUsageReport } from "../usage-service";
 import { loadHostSettings, saveHostSettings } from "../web-settings";
 
 // omp aliases "find"->"glob" and has no "ls" tool; the web UI presets still use
@@ -246,6 +247,7 @@ export const localHost: Omit<Host, "workspaceOps" | "supportsWorkspaceOp"> = {
   getSettings: async () => loadHostSettings(),
   setSettings: async (patch) => saveHostSettings(patch),
   listModels: getHostModels,
+  getUsageReport,
   async spawnRpc(request, _sessionId, options) {
     const { cwd } = request;
     const launchConfig = await launchConfigForCwd(cwd);

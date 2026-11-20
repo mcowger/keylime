@@ -16,10 +16,9 @@ import {
 import { getUsageReportFromDb } from "./usage-db";
 import type {
   UsageQueryOptions,
-  UsageRecord,
   UsageReport,
-  UsageTimeRange,
-} from "./usage-types";
+} from "./api-contracts/usage-models";
+import type { UsageRecord, UsageTimeRange } from "./usage-types";
 
 /**
  * Version of the rules `parseSessionUsage` applies. Bump it whenever those

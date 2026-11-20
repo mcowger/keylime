@@ -47315,6 +47315,10 @@
               "description": "This standalone daemon accepts staged binary activation.",
               "type": "boolean"
             },
+            "canReportUsage": {
+              "description": "This daemon accepts usageReport.",
+              "type": "boolean"
+            },
             "canStageArtifact": {
               "description": "This daemon accepts stageHostArtifact. Omitted when unsupported.",
               "type": "boolean"
@@ -48126,6 +48130,435 @@
       ],
       "description": "Daemon-to-server text messages, including handshake, child channel events, host operation replies and advisory samples. Sequenced frames are acknowledged cumulatively and replayed on link resume; unsequenced samples are not retained.",
       "title": "HostLinkUpMessage"
+    },
+    "host_usageReport_args": {
+      "description": "Filters for one daemon's transcript usage report. From and to are Unix epoch milliseconds.",
+      "properties": {
+        "forceRefresh": {
+          "type": "boolean"
+        },
+        "from": {
+          "type": "integer"
+        },
+        "granularity": {
+          "anyOf": [
+            {
+              "const": "daily",
+              "type": "string"
+            },
+            {
+              "const": "monthly",
+              "type": "string"
+            },
+            {
+              "const": "projects",
+              "type": "string"
+            }
+          ]
+        },
+        "project": {
+          "type": "string"
+        },
+        "range": {
+          "anyOf": [
+            {
+              "const": "today",
+              "type": "string"
+            },
+            {
+              "const": "7d",
+              "type": "string"
+            },
+            {
+              "const": "30d",
+              "type": "string"
+            },
+            {
+              "const": "90d",
+              "type": "string"
+            },
+            {
+              "const": "month",
+              "type": "string"
+            },
+            {
+              "const": "all",
+              "type": "string"
+            }
+          ]
+        },
+        "to": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "host_usageReport_result": {
+      "description": "Transcript-derived token and estimated cost totals and breakdowns from one daemon, not a provider invoice.",
+      "properties": {
+        "dayBreakdown": {
+          "items": {
+            "properties": {
+              "cacheReadTokens": {
+                "type": "number"
+              },
+              "cost": {
+                "type": "number"
+              },
+              "date": {
+                "type": "string"
+              },
+              "inputTokens": {
+                "type": "number"
+              },
+              "label": {
+                "type": "string"
+              },
+              "outputTokens": {
+                "type": "number"
+              },
+              "share": {
+                "type": "number"
+              },
+              "tokens": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "date",
+              "label",
+              "cost",
+              "tokens",
+              "inputTokens",
+              "outputTokens",
+              "cacheReadTokens",
+              "share"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "granularity": {
+          "anyOf": [
+            {
+              "const": "daily",
+              "type": "string"
+            },
+            {
+              "const": "monthly",
+              "type": "string"
+            },
+            {
+              "const": "projects",
+              "type": "string"
+            }
+          ]
+        },
+        "modelBreakdown": {
+          "items": {
+            "properties": {
+              "cacheReadTokens": {
+                "type": "number"
+              },
+              "cacheWriteTokens": {
+                "type": "number"
+              },
+              "cost": {
+                "type": "number"
+              },
+              "inputTokens": {
+                "type": "number"
+              },
+              "model": {
+                "type": "string"
+              },
+              "outputTokens": {
+                "type": "number"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "reasoningTokens": {
+                "type": "number"
+              },
+              "recordsCount": {
+                "type": "number"
+              },
+              "share": {
+                "type": "number"
+              },
+              "tokens": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "model",
+              "provider",
+              "cost",
+              "tokens",
+              "inputTokens",
+              "outputTokens",
+              "cacheReadTokens",
+              "cacheWriteTokens",
+              "reasoningTokens",
+              "share",
+              "recordsCount"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "projectBreakdown": {
+          "items": {
+            "properties": {
+              "cost": {
+                "type": "number"
+              },
+              "project": {
+                "type": "string"
+              },
+              "projectName": {
+                "type": "string"
+              },
+              "sessionsCount": {
+                "type": "number"
+              },
+              "share": {
+                "type": "number"
+              },
+              "tokens": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "project",
+              "projectName",
+              "cost",
+              "tokens",
+              "share",
+              "sessionsCount"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "providers": {
+          "items": {
+            "properties": {
+              "color": {
+                "type": "string"
+              },
+              "cost": {
+                "type": "number"
+              },
+              "name": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "share": {
+                "type": "number"
+              },
+              "tokens": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "provider",
+              "name",
+              "cost",
+              "tokens",
+              "share",
+              "color"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "scanInfo": {
+          "properties": {
+            "durationSeconds": {
+              "type": "number"
+            },
+            "scannedAt": {
+              "type": "number"
+            },
+            "transcriptsOutsideWindow": {
+              "type": "number"
+            },
+            "transcriptsScanned": {
+              "type": "number"
+            },
+            "usageRecordsCount": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "transcriptsScanned",
+            "transcriptsOutsideWindow",
+            "usageRecordsCount",
+            "durationSeconds",
+            "scannedAt"
+          ],
+          "type": "object"
+        },
+        "summary": {
+          "properties": {
+            "activeDays": {
+              "type": "number"
+            },
+            "cachePercentage": {
+              "type": "number"
+            },
+            "cacheReadTokens": {
+              "type": "number"
+            },
+            "cacheSavings": {
+              "type": "number"
+            },
+            "cacheWriteTokens": {
+              "type": "number"
+            },
+            "costQuality": {
+              "properties": {
+                "modelPriced": {
+                  "type": "number"
+                },
+                "providerReported": {
+                  "type": "number"
+                },
+                "unpriced": {
+                  "type": "number"
+                }
+              },
+              "required": ["providerReported", "modelPriced", "unpriced"],
+              "type": "object"
+            },
+            "inputTokens": {
+              "type": "number"
+            },
+            "outputTokens": {
+              "type": "number"
+            },
+            "reasoningTokens": {
+              "type": "number"
+            },
+            "tokensPerActiveDay": {
+              "type": "number"
+            },
+            "totalCost": {
+              "type": "number"
+            },
+            "totalTokens": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "totalCost",
+            "totalTokens",
+            "inputTokens",
+            "outputTokens",
+            "reasoningTokens",
+            "cacheReadTokens",
+            "cacheWriteTokens",
+            "cacheSavings",
+            "activeDays",
+            "tokensPerActiveDay",
+            "cachePercentage",
+            "costQuality"
+          ],
+          "type": "object"
+        },
+        "timeRange": {
+          "anyOf": [
+            {
+              "const": "today",
+              "type": "string"
+            },
+            {
+              "const": "7d",
+              "type": "string"
+            },
+            {
+              "const": "30d",
+              "type": "string"
+            },
+            {
+              "const": "90d",
+              "type": "string"
+            },
+            {
+              "const": "month",
+              "type": "string"
+            },
+            {
+              "const": "all",
+              "type": "string"
+            }
+          ]
+        },
+        "timeSeries": {
+          "items": {
+            "properties": {
+              "byProvider": {
+                "patternProperties": {
+                  "^(.*)$": {
+                    "properties": {
+                      "cost": {
+                        "type": "number"
+                      },
+                      "tokens": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["cost", "tokens"],
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "date": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "number"
+              },
+              "totalCost": {
+                "type": "number"
+              },
+              "totalTokens": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "date",
+              "label",
+              "timestamp",
+              "totalCost",
+              "totalTokens",
+              "byProvider"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "timeRange",
+        "granularity",
+        "summary",
+        "providers",
+        "timeSeries",
+        "modelBreakdown",
+        "dayBreakdown",
+        "projectBreakdown",
+        "scanInfo"
+      ],
+      "type": "object"
     },
     "host_validateCwd_args": {
       "additionalProperties": false,

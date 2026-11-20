@@ -107,9 +107,10 @@ export async function linkHost(
 export async function linkLocalHost({
   channels = [],
   workspaceOps = [],
-}: { channels?: HelloChannel[]; workspaceOps?: string[] } = {}) {
+  hello = {},
+}: LinkOptions & { workspaceOps?: string[] } = {}) {
   const link = new LinkDriver("local", rotateLocalHostToken());
-  await link.dial({ channels, hello: { workspaceOps } });
+  await link.dial({ channels, hello: { workspaceOps, ...hello } });
   return link;
 }
 

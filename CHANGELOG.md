@@ -239,6 +239,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ### Fixed
 - Workspace names in the sidebar stay on one line, with PR links below. The running-agent badge sits beside the actions menu, and empty Ship and setup slots leave more room for the name.
+- Settings keeps one host selection across Models, Providers, Usage, Agents, Intelligence, Extensions, Repos, and System. Usage and the model catalog come from the selected daemon. Manage linked-host OMP settings and provider credentials on that host.
+- Workspace names in the sidebar stay on one line and truncate with an ellipsis. PR links sit below the name, and running-agent and attention indicators have fixed slots.
 - The PR link keeps its colored checks icon before the number. The bell after it warns about polling errors or expired delivery and is crossed out only when monitoring is off.
 - Pending PR checks show a spinner before the PR number and read as “Checks: in progress” in the tooltip and to screen readers.
 - New chats on linked hosts and in host pools use the chosen host's default model unless you explicitly pick one.
@@ -404,6 +406,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Workspace names stay on one line and truncate; PR links sit below names with stable status indicator slots
 - PR checks and monitoring bells show accurate status, with accessible pending-check labels
 - Workspace sidebar rows align running-agent and attention badges consistently while empty Ship and setup slots give workspace names more room
+- Settings keeps one host selection across Models, Providers, Usage, Agents, Intelligence, Extensions, Repos, and System. Usage and the model catalog come from the selected daemon. Manage linked-host OMP settings and provider credentials on that host
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

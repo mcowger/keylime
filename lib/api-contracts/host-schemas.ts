@@ -340,6 +340,9 @@ export const UpMessageSchema = Type.Union(
         ompVersion: Type.Union([Type.String(), Type.Null()]),
         keylimeVersion: Type.Optional(Type.String()),
         workspaceOps: Type.Optional(Type.Array(Type.String())),
+        canReportUsage: Type.Optional(
+          Type.Boolean({ description: "This daemon accepts usageReport." }),
+        ),
         canStageArtifact: Type.Optional(
           Type.Boolean({
             description:

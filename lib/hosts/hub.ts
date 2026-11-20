@@ -17,6 +17,11 @@ import {
   type HostSettingsPatch,
 } from "../api-contracts/configuration-models";
 import {
+  UsageReportSchema,
+  type UsageQueryOptions,
+  type UsageReport,
+} from "../api-contracts/usage-models";
+import {
   HostArtifactActivationResultSchema,
   type ActivateHostArtifactArgs,
   type HostArtifactActivationArgs,
@@ -185,6 +190,7 @@ interface Link {
   ompVersion: string | null;
   keylimeVersion: string | null;
   workspaceOps: Set<string>;
+  canReportUsage: boolean;
   canStageArtifact: boolean;
   canActivateArtifact: boolean;
   platform: string | null;
@@ -415,6 +421,7 @@ function linkFor(id: string): Link {
       ompVersion: null,
       keylimeVersion: null,
       workspaceOps: new Set(),
+      canReportUsage: false,
       canStageArtifact: false,
       canActivateArtifact: false,
       platform: null,
@@ -1010,6 +1017,7 @@ function openLink(link: Link, ws: LinkSocket, hello: Hello): void {
   link.ompVersion = hello.ompVersion;
   link.keylimeVersion = hello.keylimeVersion ?? null;
   link.workspaceOps = new Set(hello.workspaceOps ?? []);
+  link.canReportUsage = hello.canReportUsage === true;
   link.canStageArtifact = hello.canStageArtifact === true;
   link.canActivateArtifact = hello.canActivateArtifact === true;
   endWorkspaceWatches(link.id);
@@ -1425,10 +1433,11 @@ function request(
     );
   }
   if (
-    link.hostVersion === 13 &&
-    (op === "hostSettingsGet" ||
-      op === "hostSettingsSet" ||
-      op === "modelsList")
+    (op === "usageReport" && !link.canReportUsage) ||
+    (link.hostVersion === 13 &&
+      (op === "hostSettingsGet" ||
+        op === "hostSettingsSet" ||
+        op === "modelsList"))
   ) {
     return Promise.reject(
       new HostOpError(
@@ -2208,6 +2217,22 @@ export class RemoteHost implements Host {
 
   listModels(refresh?: boolean) {
     return listRemoteHostModels(this.id, refresh);
+  }
+
+  async getUsageReport(options: UsageQueryOptions): Promise<UsageReport> {
+    const result = await request(
+      this.id,
+      "usageReport",
+      { ...options },
+      180_000,
+    );
+    if (!Value.Check(UsageReportSchema, result))
+      throw new HostOpError(
+        502,
+        "invalid_host_result",
+        "Invalid host usage report",
+      );
+    return result;
   }
 
   supportsWorkspaceOp(name: keyof WorkspaceOps): boolean {

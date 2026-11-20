@@ -45,7 +45,7 @@ const settingsProps = {
   openUrlAutomatically: false,
   onOpenUrlAutomaticallyChange: noop,
   cwd: null,
-  remoteHost: false,
+  hosts: null,
   sessionId: null,
   onModelsSaved: noop,
   onPluginsReloaded: noop,
@@ -141,8 +141,7 @@ test("upload retention reads and writes the selected host", async (t) => {
   const { container } = render(
     createElement(SettingsConfig, {
       ...settingsProps,
-      remoteHost: true,
-      hostId,
+      initialHostId: hostId,
     }),
   );
   await settle();

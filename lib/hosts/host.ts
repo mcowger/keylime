@@ -7,6 +7,10 @@ import type {
   HostSettings,
   HostSettingsPatch,
 } from "../api-contracts/configuration-models";
+import type {
+  UsageQueryOptions,
+  UsageReport,
+} from "../api-contracts/usage-models";
 
 export type HostStatus = "online" | "offline" | "needs-upgrade" | "omp-missing";
 
@@ -42,6 +46,7 @@ export interface Host {
   getSettings(): Promise<HostSettings>;
   setSettings(patch: HostSettingsPatch): Promise<HostSettings>;
   listModels(refresh?: boolean): Promise<HostModels>;
+  getUsageReport(options: UsageQueryOptions): Promise<UsageReport>;
   /** `env`: extra child environment, over the agentEnv setting; only this machine's host honours it. */
   spawnRpc(
     request: SpawnRequest,

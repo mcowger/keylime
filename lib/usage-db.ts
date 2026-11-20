@@ -18,14 +18,16 @@ import {
 } from "./usage-service";
 import { getProviderColor, getProviderDisplayName } from "./usage-rates";
 import type {
+  UsageQueryOptions,
+  UsageReport,
+} from "./api-contracts/usage-models";
+import type {
   DayUsageSummary,
   ModelUsageSummary,
   ProjectUsageSummary,
   ProviderUsageSummary,
   TimeSeriesPoint,
-  UsageQueryOptions,
   UsageRecord,
-  UsageReport,
   UsageSummary,
 } from "./usage-types";
 

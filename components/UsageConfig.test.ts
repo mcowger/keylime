@@ -6,7 +6,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 const { UsageConfig } = await import("./UsageConfig");
 
 test("UsageConfig renders static markup without crashing", () => {
-  const html = renderToStaticMarkup(React.createElement(UsageConfig));
+  const html = renderToStaticMarkup(
+    React.createElement(UsageConfig, { hostId: "local" }),
+  );
   assert.ok(html.length > 0);
   // Initial state renders the loading indicator
   assert.ok(html.includes("Loading usage analytics") || html.includes("Usage"));

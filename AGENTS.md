@@ -1522,7 +1522,7 @@ btw` → localized "requires a newer omp" toast (`toastBtwError`); background
   `invalidateSessionFileListCache()` — never add a session-mutation path that
   forgets this. Regression test: `session-reader.test.ts`.
 - A mutation that main triggers calls `invalidateLocalSessionLists()`: it clears main's per-host entry and sends the daemon `invalidateSessionLists` (the daemon runs the invalidation above). A route that changes this machine's session files and does not call it leaves the sidebar stale for up to 30 s.
-- **Still read on main, from this machine's own files:** transcript search (`session-content-search.ts`, `/api/sessions/search`), the session watcher (`session-watcher.ts`), this machine's archive list/restore (linked hosts' go through their daemons), import, usage (`usage-db.ts`), subagent history and local file-reference readers. Their main-side session caches are invalidated separately. Workspace shell-output authorization and bytes now come from the owning daemon; new remote-capable readers must use the host seam.
+- **Still read on main, from this machine's own files:** transcript search (`session-content-search.ts`, `/api/sessions/search`), the session watcher (`session-watcher.ts`), this machine's archive list/restore (linked hosts' go through their daemons), import, subagent history and local file-reference readers. Their main-side session caches are invalidated separately. Workspace shell-output authorization, bytes, and Usage reports come from the owning daemon; new remote-capable readers must use the host seam.
 
 ### Chat scroll-follow
 

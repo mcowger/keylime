@@ -21,4 +21,6 @@ Upgrade the controller first and reload open browser tabs. The new controller ac
 
 New daemons read only the first entry in a legacy `host.json` `links` array, or the top-level `url` and `token` if the array is absent. Stop any secondary controller that still writes to a v13 daemon before cutover. If you want a different controller than the saved primary, choose it explicitly with `keylime host login`. Host policy editing and the host-wide model catalog require v14; they never fall back to another host.
 
+Settings keeps one host selection across host-owned pages. Usage reports come from that daemon's transcripts and usage database. A daemon without the `canReportUsage` capability needs an upgrade; an offline daemon shows an error rather than another host's report.
+
 Stop old writers and confirm no restore is in progress before switching. There is no requirement to drain, migrate, or replay old pending messages or restore claims. Leave their old files and existing transcripts, archives, checkouts, and local configuration intact. An orphaned filesystem restore claim still requires the existing manual recovery procedure; the cutover does not clear it.

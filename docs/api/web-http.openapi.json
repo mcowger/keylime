@@ -98154,9 +98154,17 @@
     },
     "/api/usage": {
       "get": {
-        "description": "### Usage\n\nObtain a usage report derived from local session transcripts and the persistent usage database, not an authoritative provider bill.\n\n### Inputs\n\nrange accepts today, 7d, 30d, 90d, month or all (default 30d); granularity accepts daily, monthly or projects (default daily). Optional project filters the report. from and to are integer Unix epoch milliseconds and override range only when both parse as numbers; refresh=true or 1 invalidates caches. Invalid range or granularity falls back to its default.\n\n### Invariants\n\nParsed usage and file listings are cached; pricing is calculated from available usage and model rates and can be incomplete or estimated.\n\n### Effects\n\nA refresh invalidates in-memory usage and session-file-list caches; report generation can synchronize the local SQLite database.\n\n### Recovery\n\nRetry a failed read; use refresh when underlying files changed but cached data appears stale. Estimates should not be used to reconcile invoices without provider records.",
+        "description": "### Usage\n\nObtain a usage report derived from the selected daemon's session transcripts and persistent usage database, not an authoritative provider bill.\n\n### Inputs\n\nOptional hostId selects the daemon; omission selects the local daemon. range accepts today, 7d, 30d, 90d, month or all (default 30d); granularity accepts daily, monthly or projects (default daily). Optional project filters the report. from and to are integer Unix epoch milliseconds and override range only when both parse as numbers; refresh=true or 1 invalidates caches. Invalid range or granularity falls back to its default.\n\n### Invariants\n\nNever falls back to another host. Pricing uses available usage and model rates and can be incomplete or estimated.\n\n### Effects\n\nRefresh invalidates usage and session-file-list caches on the selected daemon; report generation can synchronize its SQLite database.\n\n### Recovery\n\nUpgrade the selected daemon on 501 host_upgrade_required; reconnect it on 503 or check its identity on 404. Use refresh when underlying files changed but cached data appears stale.",
         "operationId": "getUsage",
         "parameters": [
+          {
+            "in": "query",
+            "name": "hostId",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
           {
             "in": "query",
             "name": "range",
@@ -98211,6 +98219,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "description": "Transcript-derived token and estimated cost totals and breakdowns from one daemon, not a provider invoice.",
                   "properties": {
                     "dayBreakdown": {
                       "items": {
@@ -98702,39 +98711,20 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
                   "properties": {
                     "code": {
                       "type": "string"
                     },
-                    "delivery": {
-                      "anyOf": [
-                        {
-                          "const": "refused",
-                          "type": "string"
-                        },
-                        {
-                          "const": "unknown",
-                          "type": "string"
-                        }
-                      ],
-                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
-                    },
                     "error": {
                       "type": "string"
-                    },
-                    "hostOffline": {
-                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
-                      "type": "boolean"
                     }
                   },
                   "required": ["error"],
-                  "title": "ApiError",
                   "type": "object"
                 }
               }
             },
-            "description": "The requested resource does not exist."
+            "description": "Unknown host."
           },
           "409": {
             "content": {
@@ -98867,7 +98857,7 @@
                 }
               }
             },
-            "description": "Speech transcription is not configured."
+            "description": "Upgrade the selected daemon to use usage reports."
           },
           "502": {
             "content": {
@@ -98892,39 +98882,20 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
                   "properties": {
                     "code": {
                       "type": "string"
                     },
-                    "delivery": {
-                      "anyOf": [
-                        {
-                          "const": "refused",
-                          "type": "string"
-                        },
-                        {
-                          "const": "unknown",
-                          "type": "string"
-                        }
-                      ],
-                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
-                    },
                     "error": {
                       "type": "string"
-                    },
-                    "hostOffline": {
-                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
-                      "type": "boolean"
                     }
                   },
                   "required": ["error"],
-                  "title": "ApiError",
                   "type": "object"
                 }
               }
             },
-            "description": "The owning host or required service is unavailable."
+            "description": "Selected daemon is offline."
           }
         },
         "security": [
@@ -98938,11 +98909,11 @@
         ],
         "summary": "Get usage report",
         "x-client-semantics": {
-          "Effects": "A refresh invalidates in-memory usage and session-file-list caches; report generation can synchronize the local SQLite database.",
-          "Inputs": "range accepts today, 7d, 30d, 90d, month or all (default 30d); granularity accepts daily, monthly or projects (default daily). Optional project filters the report. from and to are integer Unix epoch milliseconds and override range only when both parse as numbers; refresh=true or 1 invalidates caches. Invalid range or granularity falls back to its default.",
-          "Invariants": "Parsed usage and file listings are cached; pricing is calculated from available usage and model rates and can be incomplete or estimated.",
-          "Recovery": "Retry a failed read; use refresh when underlying files changed but cached data appears stale. Estimates should not be used to reconcile invoices without provider records.",
-          "Usage": "Obtain a usage report derived from local session transcripts and the persistent usage database, not an authoritative provider bill."
+          "Effects": "Refresh invalidates usage and session-file-list caches on the selected daemon; report generation can synchronize its SQLite database.",
+          "Inputs": "Optional hostId selects the daemon; omission selects the local daemon. range accepts today, 7d, 30d, 90d, month or all (default 30d); granularity accepts daily, monthly or projects (default daily). Optional project filters the report. from and to are integer Unix epoch milliseconds and override range only when both parse as numbers; refresh=true or 1 invalidates caches. Invalid range or granularity falls back to its default.",
+          "Invariants": "Never falls back to another host. Pricing uses available usage and model rates and can be incomplete or estimated.",
+          "Recovery": "Upgrade the selected daemon on 501 host_upgrade_required; reconnect it on 503 or check its identity on 404. Use refresh when underlying files changed but cached data appears stale.",
+          "Usage": "Obtain a usage report derived from the selected daemon's session transcripts and persistent usage database, not an authoritative provider bill."
         }
       }
     },
