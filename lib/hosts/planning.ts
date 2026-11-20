@@ -459,7 +459,7 @@ export async function planningOperation(
             prompt: task.prompt.trim() ? task.prompt : task.brief,
             ...(contextImages.length ? { images: contextImages } : {}),
             taskImagesOnly: true,
-            name: task.brief,
+            name: input.name,
             setup: input.setup,
           };
           if (task.status !== "done") task.status = "in_progress";

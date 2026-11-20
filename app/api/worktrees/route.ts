@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import {
   apiErrorResponse,
   opErrorResponse,
@@ -7,7 +6,7 @@ import {
 import { invalidateHostSessionList } from "@/lib/hosts/session-index";
 import { parseJsonWithinLimit } from "@/lib/bounded-form-data";
 import { isRecord } from "@/lib/type-guards";
-import { workspacePromptNames } from "@/lib/workspace-prompt";
+import { automaticWorkspaceNames } from "@/lib/workspace-naming";
 import { workspaceBaseRefPattern } from "@/lib/api-contracts/workspace-models";
 import type {
   WorkspaceCreateRequest,
@@ -123,29 +122,7 @@ export async function POST(request: Request) {
             { status: 400 },
           );
         }
-        let names: { name: string; branch: string };
-        const namingSignal = AbortSignal.any([
-          request.signal,
-          AbortSignal.timeout(10_000),
-        ]);
-        const { promise: aborted, reject: rejectAbort } =
-          Promise.withResolvers<never>();
-        const onAbort = () => rejectAbort(namingSignal.reason);
-        if (namingSignal.aborted) onAbort();
-        else namingSignal.addEventListener("abort", onAbort, { once: true });
-        try {
-          names = await Promise.race([
-            workspacePromptNames(prompt, namingSignal),
-            aborted,
-          ]);
-        } catch {
-          names = {
-            name: "Workspace",
-            branch: `workspace-${randomBytes(4).toString("hex")}`,
-          };
-        } finally {
-          namingSignal.removeEventListener("abort", onAbort);
-        }
+        const names = await automaticWorkspaceNames(prompt, request.signal);
         if (request.signal.aborted)
           return Response.json(
             { error: "Request cancelled", code: "request_cancelled" },

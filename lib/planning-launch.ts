@@ -15,6 +15,7 @@ import { isLinkUp, type Host } from "./hosts/host";
 import { HostOpError } from "./hosts/link-protocol";
 import { RpcCommandError } from "./omp/rpc-process";
 import { startNewRpcSession, WebRpcError } from "./rpc-manager";
+import { automaticWorkspaceNames } from "./workspace-naming";
 
 type Input = Extract<
   PlanningHttpInput,
@@ -46,10 +47,10 @@ async function planSetup(
   board: PlanningBoard,
   task: PlanningBoard["tasks"][number],
   review: Extract<Input, { action: "launch" }>["review"],
-  id: string,
   prior?: Extract<Setup, { kind: "system" }>,
-): Promise<Setup | PlanningResult> {
+): Promise<{ name: string; setup: Setup } | PlanningResult> {
   const ops = host.workspaceOps;
+  const prompt = task.prompt.trim() ? task.prompt : task.brief;
   if (owner.kind === "repo") {
     const { projects } = unwrap(await ops.hierarchy({ action: "list" }));
     const repo = projects.find((project) => project.id === owner.id);
@@ -81,20 +82,17 @@ async function planSetup(
           repo: { branches, baseRef: branches.defaultRef },
         },
       };
+    const { name, branch } = await automaticWorkspaceNames(prompt);
     return {
-      kind: "repo",
-      projectPath: repo.path,
-      baseRef,
-      branch: `plan-${id}`,
+      name,
+      setup: { kind: "repo", projectPath: repo.path, baseRef, branch },
     };
   }
+  // Keep the preview's name while choosing bases or refreshing a stale plan.
   const name =
     prior?.name ??
-    task.brief
-      .trim()
-      .replace(/[\u0000-\u001f\u007f]/g, " ")
-      .slice(0, 120)
-      .trim();
+    review?.effortName ??
+    (await automaticWorkspaceNames(prompt)).name;
   const preview = unwrap(
     await ops.systems({
       action: "preview",
@@ -127,13 +125,16 @@ async function planSetup(
       },
     };
   return {
-    kind: "system",
-    name,
-    confirmation: preview.confirmation,
-    bases: preview.members.map(({ repoPath, baseRef }) => ({
-      repoPath,
-      ref: baseRef,
-    })),
+    name: preview.name,
+    setup: {
+      kind: "system",
+      name: preview.name,
+      confirmation: preview.confirmation,
+      bases: preview.members.map(({ repoPath, baseRef }) => ({
+        repoPath,
+        ref: baseRef,
+      })),
+    },
   };
 }
 
@@ -178,14 +179,14 @@ export async function runPlanningLaunch(
         "This owner cannot launch tasks",
       );
     const id = randomUUID();
-    const setup = await planSetup(host, owner, board, task, input.review, id);
-    if (!("kind" in setup)) return setup;
+    const plan = await planSetup(host, owner, board, task, input.review);
+    if (!("setup" in plan)) return plan;
     board = await op({
       action: "begin",
       taskId,
       id,
       revision: input.revision,
-      setup,
+      ...plan,
     });
     launch = taskIn(board).launch;
   }
@@ -247,20 +248,19 @@ export async function runPlanningLaunch(
     launch.phase === "review_required" &&
     launch.setup?.kind === "system"
   ) {
-    const setup = await planSetup(
+    const plan = await planSetup(
       host,
       owner,
       board,
       task,
       input.review,
-      launch.id,
       launch.setup,
     );
-    if (!("kind" in setup)) return setup;
+    if (!("setup" in plan)) return plan;
     try {
       board = await update(launch, {
         phase: "creating",
-        setup,
+        setup: plan.setup,
         error: undefined,
       });
     } catch (error) {

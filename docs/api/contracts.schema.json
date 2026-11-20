@@ -34692,6 +34692,13 @@
                       "minLength": 1,
                       "type": "string"
                     },
+                    "name": {
+                      "description": "One-line task description.",
+                      "maxLength": 240,
+                      "minLength": 1,
+                      "pattern": "^[^\\r\\n]+$",
+                      "type": "string"
+                    },
                     "revision": {
                       "maximum": 9007199254740991,
                       "minimum": 0,
@@ -34769,7 +34776,14 @@
                       "type": "string"
                     }
                   },
-                  "required": ["action", "taskId", "revision", "id", "setup"],
+                  "required": [
+                    "action",
+                    "taskId",
+                    "revision",
+                    "id",
+                    "name",
+                    "setup"
+                  ],
                   "type": "object"
                 },
                 {

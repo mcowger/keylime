@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
+import { mock } from "bun:test";
 import type {
   PlanningBoard,
   PlanningLaunch,
@@ -23,6 +24,17 @@ import {
 import { TerminalManager } from "./hosts/terminals";
 import { workspaceCreationSettings } from "./hosts/workspace-creation";
 import { runPlanningLaunch } from "./planning-launch";
+
+mock.module("./omp/auth-gateway", () => ({
+  authGatewayRequest: async () => ({
+    status: 200,
+    body: {
+      choices: [
+        { message: { content: '{"name":"Base audit","branch":"base-audit"}' } },
+      ],
+    },
+  }),
+}));
 
 const owner = { kind: "repo", id: "repo-1" } as const;
 const prompt = "  inspect this\r\nwithout rewriting it\n";
@@ -63,7 +75,7 @@ function fixture(defaultRef = "refs/heads/main", existing?: PlanningLaunch) {
             id: input.id,
             phase: "creating",
             version: 0,
-            name: task.brief,
+            name: input.name,
             prompt: task.prompt,
             taskImagesOnly: true,
             setup: input.setup,
@@ -143,6 +155,8 @@ test("Repo launch claims and snapshots before setup and records a known spawn re
   assert.equal(launch.path, "/repo-worktrees/task");
   assert.equal(requests[0].creationId, launch.id);
   assert.equal(requests[0].baseRef, "refs/heads/main");
+  assert.equal(requests[0].name, "Base audit");
+  assert.match(requests[0].branch!, /^base-audit-[0-9a-f]{8}$/);
 });
 
 test("Repo without a default waits for review and uses the chosen full ref", async () => {
@@ -373,9 +387,11 @@ test("a moved Effort base requires fresh approval before admitting the same laun
     const initial = (await runPlanningLaunch(host, systemOwner, launchInput))
       .review!;
     assert.equal(initial.effort?.members[0].baseCommit, firstBase);
+    assert.equal(initial.effort?.name, "Base audit");
+    assert.match(initial.effort!.branch, /\/base-audit-[0-9a-f]{12}$/);
     await runPlanningLaunch(host, systemOwner, {
       ...launchInput,
-      review: { confirmation: initial.confirmation },
+      review: { confirmation: initial.confirmation, effortName: initial.name },
     });
     const waitForPhase = async (phase: PlanningLaunch["phase"]) => {
       for (let i = 0; i < 250; i++) {
@@ -392,6 +408,7 @@ test("a moved Effort base requires fresh approval before admitting the same laun
     ).review!;
     const movedBase = git("rev-parse", "HEAD");
     assert.equal(replacement.effort?.members[0].baseCommit, movedBase);
+    assert.equal(replacement.effort?.branch, initial.effort?.branch);
     assert.notEqual(replacement.confirmation, initial.confirmation);
     const stale = await runPlanningLaunch(host, systemOwner, {
       ...resumeInput,
@@ -407,6 +424,8 @@ test("a moved Effort base requires fresh approval before admitting the same laun
     assert.equal(resumed.id, rejected.id);
     assert.equal(resumed.prompt, prompt);
     const { efforts } = await systemOp({ action: "list" });
+    assert.equal(efforts[0].name, "Base audit");
+    assert.equal(efforts[0].branch, initial.effort?.branch);
     assert.deepEqual(
       efforts.map(({ id, members }) => [id, members[0].baseCommit]),
       [[rejected.id, movedBase]],

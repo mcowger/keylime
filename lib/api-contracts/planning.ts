@@ -262,7 +262,14 @@ const prepareLaunch = Type.Object(
   { additionalProperties: false },
 );
 const begin = Type.Object(
-  { action: Type.Literal("begin"), ...taskId, revision, id, setup },
+  {
+    action: Type.Literal("begin"),
+    ...taskId,
+    revision,
+    id,
+    name: brief,
+    setup,
+  },
   { additionalProperties: false },
 );
 const updateLaunch = Type.Object(
@@ -294,7 +301,18 @@ export const PlanningOperationSchema = Type.Object(
   },
 );
 const reviewInput = Type.Object(
-  { confirmation: id, baseRef: optional(text), bases: optional(bases) },
+  {
+    confirmation: id,
+    baseRef: optional(text),
+    bases: optional(bases),
+    effortName: optional(
+      Type.String({
+        minLength: 1,
+        maxLength: 120,
+        description: "Echo the generated Effort name from the review.",
+      }),
+    ),
+  },
   { additionalProperties: false },
 );
 const httpInput = Type.Union([
@@ -359,7 +377,7 @@ export const PlanningLaunchReviewSchema = Type.Object(
   },
   {
     description:
-      "Review required before creating a Workspace or Effort. Echo the confirmation and any chosen refs to continue.",
+      "Review required before creating a Workspace or Effort. Echo the confirmation, generated Effort name if present, and any chosen refs to continue.",
   },
 );
 export const PlanningResultSchema = Type.Object(

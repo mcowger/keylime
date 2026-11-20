@@ -64,9 +64,9 @@ export async function GET(request: Request) {
 /**
  * @apiContract workspacePlanningPost
  * @apiUsage Read or edit Repo and System notebooks and task boards, improve the contents of a task's Brief editor, or launch a saved task.
- * @apiInputs Select an owning daemon and stable Repo or System ID. Writes use the current revision. Notes and tasks accept PNG, JPEG, GIF or WebP attachments. If launch or resume returns a review, repeat that action with confirmation and selected refs. Maximum request size is 8 MiB.
+ * @apiInputs Select an owning daemon and stable Repo or System ID. Writes use the current revision. Notes and tasks accept PNG, JPEG, GIF or WebP attachments. If launch or resume returns a review, repeat that action with confirmation, the generated Effort name if present, and selected refs. Maximum request size is 8 MiB.
  * @apiInvariants Improvement sends the Brief, target name and selected task images, never shared Notes or checkout contents. Saved attachment IDs must belong to the task.
- * @apiEffects Improvement returns replacement text without saving edits. Launch pins the saved task prompt and task images (at most ten images and 5 MiB), never Notes text or images. Resume uses the pinned task snapshot, and refresh never resends an uncertain message.
+ * @apiEffects Improvement returns replacement text without saving edits. Launch generates names from the saved task prompt, then pins the prompt and task images (at most ten images and 5 MiB), never Notes text or images. Resume uses the pinned task snapshot, and refresh never resends an uncertain message.
  * @apiRecovery Read the board after a conflict or lost reply. Resume a stale, unadmitted Effort to review a fresh plan under the same launch ID. Admitted Efforts retry their saved setup; never resend if first-message delivery is uncertain.
  */
 export async function POST(request: Request) {

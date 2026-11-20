@@ -110,6 +110,7 @@ test("begin snapshots exact saved content; concurrent full launch CAS admits one
     taskId: saved.id,
     revision: saved.revision,
     id: "launch",
+    name: setup.name,
     setup,
   } as const;
   const started = await op(system, begin);
@@ -117,7 +118,7 @@ test("begin snapshots exact saved content; concurrent full launch CAS admits one
   expect(expected).toMatchObject({
     id: "launch",
     phase: "creating",
-    name: saved.brief,
+    name: setup.name,
     prompt: saved.prompt,
     version: 0,
   });
@@ -207,6 +208,7 @@ test("archived Systems can edit notes and tasks but cannot begin a launch", asyn
       taskId: saved.id,
       revision: saved.revision,
       id: "launch",
+      name: setup.name,
       setup,
     }),
   ).rejects.toMatchObject({ code: "planning_launch_unavailable" });
@@ -241,6 +243,7 @@ test("browser previews Notes, but launch pins only task images and retains them 
     taskId: task.id,
     revision: task.revision,
     id: "launch",
+    name: setup.name,
     setup,
   });
   expect(started.tasks[0].launch).toMatchObject({

@@ -997,6 +997,7 @@ function LaunchReview({
         if (disabled || missingBase) return;
         onConfirm({
           confirmation: plan.confirmation,
+          effortName: plan.effort?.name,
           baseRef: branches ? baseRef : undefined,
           bases: plan.effort
             ? members.map(({ repoPath }) => ({

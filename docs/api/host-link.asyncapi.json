@@ -1352,7 +1352,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Reply to planning; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Browser preview reads board references; Improve reads only live attachments on the selected task. Launch reads use the claimed launch ID and version, never arbitrary image IDs. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin pins the saved prompt and task images, never Notes. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Preparing an older launch for delivery keeps only pinned images still proven to belong to its task. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
+        "description": "Reply to planning; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Browser preview reads board references; Improve reads only live attachments on the selected task. Launch reads use the claimed launch ID and version, never arbitrary image IDs. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin pins the generated name, saved prompt and task images, never Notes. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Preparing an older launch for delivery keeps only pinned images still proven to belong to its task. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
         "name": "HostReply_planning",
         "payload": {
           "$ref": "#/components/schemas/HostReply_planning"
@@ -2312,7 +2312,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Browser preview reads board references; Improve reads only live attachments on the selected task. Launch reads use the claimed launch ID and version, never arbitrary image IDs. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin pins the saved prompt and task images, never Notes. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Preparing an older launch for delivery keeps only pinned images still proven to belong to its task. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
+        "description": "Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Browser preview reads board references; Improve reads only live attachments on the selected task. Launch reads use the claimed launch ID and version, never arbitrary image IDs. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin pins the generated name, saved prompt and task images, never Notes. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Preparing an older launch for delivery keeps only pinned images still proven to belong to its task. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
         "name": "HostRequest_planning",
         "payload": {
           "$ref": "#/components/schemas/HostRequest_planning"
@@ -53387,7 +53387,7 @@
             "type": "object"
           }
         ],
-        "description": "Reply to planning; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Browser preview reads board references; Improve reads only live attachments on the selected task. Launch reads use the claimed launch ID and version, never arbitrary image IDs. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin pins the saved prompt and task images, never Notes. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Preparing an older launch for delivery keeps only pinned images still proven to belong to its task. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
+        "description": "Reply to planning; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Browser preview reads board references; Improve reads only live attachments on the selected task. Launch reads use the claimed launch ID and version, never arbitrary image IDs. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin pins the generated name, saved prompt and task images, never Notes. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Preparing an older launch for delivery keeps only pinned images still proven to belong to its task. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
         "title": "HostReply_planning"
       },
       "HostReply_ptySessions": {
@@ -80832,7 +80832,7 @@
         "type": "object"
       },
       "HostRequest_planning": {
-        "description": "Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Browser preview reads board references; Improve reads only live attachments on the selected task. Launch reads use the claimed launch ID and version, never arbitrary image IDs. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin pins the saved prompt and task images, never Notes. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Preparing an older launch for delivery keeps only pinned images still proven to belong to its task. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
+        "description": "Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Browser preview reads board references; Improve reads only live attachments on the selected task. Launch reads use the claimed launch ID and version, never arbitrary image IDs. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin pins the generated name, saved prompt and task images, never Notes. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Preparing an older launch for delivery keeps only pinned images still proven to belong to its task. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
         "properties": {
           "args": {
             "properties": {
@@ -81166,6 +81166,13 @@
                             "minLength": 1,
                             "type": "string"
                           },
+                          "name": {
+                            "description": "One-line task description.",
+                            "maxLength": 240,
+                            "minLength": 1,
+                            "pattern": "^[^\\r\\n]+$",
+                            "type": "string"
+                          },
                           "revision": {
                             "maximum": 9007199254740991,
                             "minimum": 0,
@@ -81253,6 +81260,7 @@
                           "taskId",
                           "revision",
                           "id",
+                          "name",
                           "setup"
                         ],
                         "type": "object"
@@ -85178,7 +85186,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Browser preview reads board references; Improve reads only live attachments on the selected task. Launch reads use the claimed launch ID and version, never arbitrary image IDs. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin pins the saved prompt and task images, never Notes. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Preparing an older launch for delivery keeps only pinned images still proven to belong to its task. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
+      "description": "Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Browser preview reads board references; Improve reads only live attachments on the selected task. Launch reads use the claimed launch ID and version, never arbitrary image IDs. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin pins the generated name, saved prompt and task images, never Notes. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Preparing an older launch for delivery keeps only pinned images still proven to belong to its task. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/HostRequest_planning"

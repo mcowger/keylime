@@ -202,6 +202,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ### Fixed
 - System names line up beside their expand chevrons and stay visible when **Actions** is open, even at the sidebar's minimum width.
+- Launch in Notes & Tasks uses automatic naming for Workspaces, Efforts, and branches instead of copying the task summary.
 - Repo sidebar menus stack labeled actions vertically, and Notes & Tasks has a clipboard icon in both Repo and System menus.
 - Notes & Tasks opens in the workspace area, and task cards can be deleted without removing linked work.
 - Notes and their images are never sent to a model or agent. Launch and Resume use only the task's own prompt and attachments.
@@ -349,6 +350,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Notes & Tasks opens in the workspace area, and task cards can be deleted without removing linked work
 - Notes and their images are never sent to a model or agent. Launch and Resume use only the task's own prompt and attachments
 - System names line up beside their expand chevrons and stay visible when **Actions** is open, even at the sidebar's minimum width
+- Launch in Notes & Tasks uses automatic naming for Workspaces, Efforts, and branches instead of copying the task summary
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
