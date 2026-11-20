@@ -1,4 +1,4 @@
-import { Type, type TSchema } from "@sinclair/typebox";
+import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import {
   AgentMessageSchema,
   ArchivedSessionInfoSchema,
@@ -20,8 +20,16 @@ import {
   agentOperations,
 } from "./runner-messages";
 import { BrowserListSchema } from "./host-control-operations";
-import { BrowserControlArgsSchema, BrowserControlResultSchema } from "./runner-lifecycle";
-import { BrowserVideoRequestSchema, BrowserVideoStartResultSchema, BrowserVideoNextResultSchema, BrowserVideoStopResultSchema } from "./runner-lifecycle";
+import {
+  BrowserControlArgsSchema,
+  BrowserControlResultSchema,
+} from "./runner-lifecycle";
+import {
+  BrowserVideoRequestSchema,
+  BrowserVideoStartResultSchema,
+  BrowserVideoNextResultSchema,
+  BrowserVideoStopResultSchema,
+} from "./runner-lifecycle";
 import {
   ApiErrorSchema,
   jsonBody,
@@ -35,6 +43,8 @@ import type { HttpOperation } from "./operations";
 
 const str = () => Type.String();
 const nullable = (schema: TSchema) => Type.Union([schema, Type.Null()]);
+const sessionLocalFile = Type.Object({ path: str(), sessionId: str() });
+export type SessionLocalFile = Static<typeof sessionLocalFile>;
 const id = pathParameter("id");
 const q = (name: string, description?: string, required = false) =>
   queryParameter(name, str(), required, description);
@@ -209,28 +219,72 @@ const aid = "/api/agent/[id]";
 
 /** HTTP operations are bound to their handlers by @apiContract. */
 export const sessionHttpOperations: readonly HttpOperation[] = [
-  op(`${sid}/browser`, "get", "listSessionBrowserTabs", "List live session browser tabs", {
-    description: "Discovers tabs owned by the already-live session without starting a runner or browser.",
-    parameters: [id],
-    responses: { ...responses(BrowserListSchema), 429: err("A discovery request is already in progress for this session.") },
-  }),
-  op(`${sid}/browser/frame`, "get", "captureSessionBrowserFrame", "Capture a browser tab frame", {
-    description: "Captures one JPEG from a tab owned by the live session. X-Browser-Viewport-Width and X-Browser-Viewport-Height report CSS viewport dimensions. This read-only request does not change browser lifecycle.",
-    parameters: [id, q("tabId", "A tab ID returned by discovery.", true)],
-    responses: { ...webErrors, ...extras, 429: err("A frame capture is already in progress for this session."), 200: binary("image/jpeg", "A single uncached JPEG frame.") },
-  }),
-  op(`${sid}/browser/video`, "post", "sessionBrowserVideo", "Stream session browser video", {
-    description: "Starts, pulls bounded encoded packets from, or stops an ephemeral session-owned browser stream. Responses are never cached.",
-    parameters: [id],
-    requestBody: jsonBody(BrowserVideoRequestSchema),
-    responses: responses(Type.Union([BrowserVideoStartResultSchema, BrowserVideoNextResultSchema, BrowserVideoStopResultSchema])),
-  }),
-  op(`${sid}/browser/control`, "post", "controlSessionBrowserTab", "Control a session browser tab", {
-    description: "Applies 1–64 navigation or input actions in array order to a session-owned tab; request bodies are capped at 1 MiB. The whole batch is validated before dispatch. A failed request may have applied a prefix; never automatically retry it or the remaining actions.",
-    parameters: [id],
-    requestBody: jsonBody(BrowserControlArgsSchema),
-    responses: responses(BrowserControlResultSchema),
-  }),
+  op(
+    `${sid}/browser`,
+    "get",
+    "listSessionBrowserTabs",
+    "List live session browser tabs",
+    {
+      description:
+        "Discovers tabs owned by the already-live session without starting a runner or browser.",
+      parameters: [id],
+      responses: {
+        ...responses(BrowserListSchema),
+        429: err(
+          "A discovery request is already in progress for this session.",
+        ),
+      },
+    },
+  ),
+  op(
+    `${sid}/browser/frame`,
+    "get",
+    "captureSessionBrowserFrame",
+    "Capture a browser tab frame",
+    {
+      description:
+        "Captures one JPEG from a tab owned by the live session. X-Browser-Viewport-Width and X-Browser-Viewport-Height report CSS viewport dimensions. This read-only request does not change browser lifecycle.",
+      parameters: [id, q("tabId", "A tab ID returned by discovery.", true)],
+      responses: {
+        ...webErrors,
+        ...extras,
+        429: err("A frame capture is already in progress for this session."),
+        200: binary("image/jpeg", "A single uncached JPEG frame."),
+      },
+    },
+  ),
+  op(
+    `${sid}/browser/video`,
+    "post",
+    "sessionBrowserVideo",
+    "Stream session browser video",
+    {
+      description:
+        "Starts, pulls bounded encoded packets from, or stops an ephemeral session-owned browser stream. Responses are never cached.",
+      parameters: [id],
+      requestBody: jsonBody(BrowserVideoRequestSchema),
+      responses: responses(
+        Type.Union([
+          BrowserVideoStartResultSchema,
+          BrowserVideoNextResultSchema,
+          BrowserVideoStopResultSchema,
+        ]),
+      ),
+    },
+  ),
+  op(
+    `${sid}/browser/control`,
+    "post",
+    "controlSessionBrowserTab",
+    "Control a session browser tab",
+    {
+      description:
+        "Applies 1–64 navigation or input actions in array order to a session-owned tab; request bodies are capped at 1 MiB. The whole batch is validated before dispatch. A failed request may have applied a prefix; never automatically retry it or the remaining actions.",
+      parameters: [id],
+      requestBody: jsonBody(BrowserControlArgsSchema),
+      responses: responses(BrowserControlResultSchema),
+    },
+  ),
   op("/api/sessions", "get", "listSessions", "List sessions across hosts", {
     parameters: [
       q("id", "Filter by session ID; filtered responses do not use an ETag."),
@@ -329,27 +383,40 @@ export const sessionHttpOperations: readonly HttpOperation[] = [
       q("includeState", "Include live agent state if available."),
       q("deferThinking"),
       q("deferMedia"),
-      q("tail", "Return at most this many newest active-branch display entries (1–200)."),
-      q("before", "Exclusive oldest entry ID from a preceding tail response; requires tail and historyRevision."),
-      q("historyRevision", "Opaque revision from the first page; required with before."),
+      q(
+        "tail",
+        "Return at most this many newest active-branch display entries (1–200).",
+      ),
+      q(
+        "before",
+        "Exclusive oldest entry ID from a preceding tail response; requires tail and historyRevision.",
+      ),
+      q(
+        "historyRevision",
+        "Opaque revision from the first page; required with before.",
+      ),
     ],
     responses: {
-      ...responses(Type.Union([
-        Type.Object({
-          ...SessionReadValueSchema.properties,
-          sessionId: str(),
-          hostId: str(),
-          agent: Type.Optional(agentState),
-        }),
-        Type.Object({
-          ...SessionHistoryContinuationSchema.properties,
-          sessionId: str(),
-          hostId: str(),
-          agent: Type.Optional(agentState),
-        }),
-      ])),
+      ...responses(
+        Type.Union([
+          Type.Object({
+            ...SessionReadValueSchema.properties,
+            sessionId: str(),
+            hostId: str(),
+            agent: Type.Optional(agentState),
+          }),
+          Type.Object({
+            ...SessionHistoryContinuationSchema.properties,
+            sessionId: str(),
+            hostId: str(),
+            agent: Type.Optional(agentState),
+          }),
+        ]),
+      ),
       400: err("Invalid tail, before or historyRevision parameters."),
-      409: err("session_history_changed: discard partial pages and synchronize again."),
+      409: err(
+        "session_history_changed: discard partial pages and synchronize again.",
+      ),
     },
   }),
   op(sid, "patch", "renameSession", "Rename a session", {
@@ -467,7 +534,7 @@ export const sessionHttpOperations: readonly HttpOperation[] = [
         id,
         q("uri", "local:// URI, confined by the owning host.", true),
       ],
-      responses: responses(Type.Object({ path: str(), sessionId: str() })),
+      responses: responses(sessionLocalFile),
     },
   ),
   op(

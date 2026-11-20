@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import "../tests/setup-dom.ts";
 import test, { afterEach } from "node:test";
 import React from "react";
-const { cleanup, fireEvent, render } =
+const { cleanup, fireEvent, render, waitFor } =
   await import("@testing-library/react/pure.js");
 
 const { MarkdownBody } = await import("./MarkdownBody");
@@ -67,6 +67,74 @@ test("an inline screenshot and its link resolve from the chat cwd, including par
     false,
   );
   assert.deepEqual(opened, ["/var/tmp/omp-sshots-1.webp"]);
+});
+
+test("a session-local screenshot link opens the file for the resolved session, not its alias", async (t) => {
+  const uri = "local://shots/Search%20results%20%231.png";
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), "https://keylime.test");
+    if (
+      url.pathname !== "/api/sessions/alias/local-file" ||
+      url.searchParams.get("uri") !== uri
+    )
+      return new Response(null, { status: 404 });
+    return Response.json({
+      path: "/remote/session/local/shots/Search results #1.png",
+      sessionId: "owner",
+    });
+  });
+  const opened: [string, string | undefined][] = [];
+  const { getByRole } = render(
+    React.createElement(MarkdownBody, {
+      cwd: "/unrelated/workspace",
+      sourceSessionId: "alias",
+      onOpenFile: (file, owner) => opened.push([file, owner]),
+      children: `[Open full-size screenshot](${uri})`,
+    }),
+  );
+
+  assert.deepEqual(opened, []);
+  assert.equal(
+    fireEvent.click(getByRole("link", { name: "Open full-size screenshot" })),
+    false,
+  );
+  await waitFor(() =>
+    assert.deepEqual(opened, [
+      ["/remote/session/local/shots/Search results #1.png", "owner"],
+    ]),
+  );
+});
+
+test("session-local images use the file API, and a missing image is reported inline", async (t) => {
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), "https://keylime.test");
+    if (
+      url.pathname === "/api/sessions/alias/local-file" &&
+      url.searchParams.get("uri") === "local://shot.png"
+    )
+      return Response.json({
+        path: "/remote/session/local/shot.png",
+        sessionId: "owner",
+      });
+    return Response.json({ error: "File not found" }, { status: 404 });
+  });
+  const { findByRole } = render(
+    React.createElement(MarkdownBody, {
+      sourceSessionId: "alias",
+      children:
+        "![Screenshot](local://shot.png)\n\n![Missing](local://gone.png)",
+    }),
+  );
+
+  const preview = await findByRole("img", { name: "Screenshot" });
+  assert.equal(
+    preview.getAttribute("src"),
+    "/api/files/remote/session/local/shot.png?type=read&sessionId=owner",
+  );
+  assert.match(
+    (await findByRole("status")).textContent ?? "",
+    /Image unavailable: local:\/\/gone\.png/,
+  );
 });
 
 test("ordinary code, scheme handles, fenced blocks and escaping paths stay unlinked", () => {

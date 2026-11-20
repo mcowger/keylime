@@ -1753,8 +1753,7 @@ function TextFileViewer({
             <ReactMarkdown
               remarkPlugins={markdownPlugins.remarkPlugins}
               rehypePlugins={markdownPlugins.rehypePlugins}
-              // The shared sanitizer admits `agent:` for chat links; previews
-              // have no subagent to open, so drop such hrefs as before.
+              // File previews don't resolve chat-only agent: or local: URLs.
               urlTransform={(url) => defaultUrlTransform(url) || undefined}
               components={{
                 code: markdownCodeRenderer({ defaultPreview: true }),

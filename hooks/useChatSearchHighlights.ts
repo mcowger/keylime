@@ -18,7 +18,7 @@ const PAINT_DELAY_MS = 150;
 // (they repeat the table's labels and values) and GFM footnotes' generated numbers, back-links
 // and "Footnotes" heading (their bodies stay).
 const NOT_MESSAGE_TEXT =
-  "button, .markdown-code-header, .linenumber, .katex, .mermaid-block-loading, .mermaid-block-error, [data-table-chart], [data-footnote-ref], [data-footnote-backref], [data-footnotes] > h2";
+  "button, .markdown-code-header, .linenumber, .katex, .mermaid-block-loading, .mermaid-block-error, [data-table-chart], [data-footnote-ref], [data-footnote-backref], [data-footnotes] > h2, [data-image-unavailable]";
 
 // Absent before Chrome 105 / Safari 17.2 / Firefox 140: hits are then not
 // painted, but jumping to one still works.
@@ -110,7 +110,10 @@ export function useChatSearchHighlights({
     target: SearchMatchTarget;
   } | null>(null);
   const handledRef = useRef<SearchMatchTarget | null>(null);
-  const pendingViewRef = useRef<{ target: SearchMatchTarget; key: string } | null>(null);
+  const pendingViewRef = useRef<{
+    target: SearchMatchTarget;
+    key: string;
+  } | null>(null);
 
   useEffect(() => {
     const element = container.current;

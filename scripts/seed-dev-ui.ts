@@ -1,11 +1,15 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { planningOperation } from "../lib/hosts/planning";
 import { hierarchyOperation } from "../lib/hosts/project-hierarchy";
 import { systemsOperation, type SystemsRuntime } from "../lib/hosts/systems";
 import { TerminalManager } from "../lib/hosts/terminals";
-import { getSessionDirNameForCwd, getSessionsDir } from "../lib/omp/paths";
+import {
+  getSessionDirNameForCwd,
+  getSessionsDir,
+  sessionLocalRoot,
+} from "../lib/omp/paths";
 import { saveWebServerSettings } from "../lib/web-settings";
 
 // Invoked only by the dev launcher, before the host starts and caches its hierarchy.
@@ -134,6 +138,7 @@ const sessions = [
     cwd: worktree,
     id: "22222222-2222-4222-8222-222222222222",
     title: "Improve search",
+    screenshot: true,
     tasks: [
       { content: "Inspect search", status: "completed" },
       { content: "Improve search results", status: "in_progress" },
@@ -154,6 +159,16 @@ const sessions = [
 ];
 for (const session of sessions) {
   const dir = path.join(getSessionsDir(), getSessionDirNameForCwd(session.cwd));
+  const sessionFile = path.join(dir, `2026-01-01_${session.id}.jsonl`);
+  const screenshot = "Search results #1.png";
+  if (session.screenshot) {
+    const local = sessionLocalRoot(sessionFile);
+    mkdirSync(local, { recursive: true });
+    copyFileSync(
+      new URL("../public/icon-192.png", import.meta.url),
+      path.join(local, screenshot),
+    );
+  }
   mkdirSync(dir, { recursive: true });
   const timestamp = "2026-01-01T00:00:00.000Z";
   const entries = [
@@ -185,7 +200,9 @@ for (const session of sessions) {
         content: [
           {
             type: "text",
-            text: "This is a sample conversation for UI testing.",
+            text: session.screenshot
+              ? `![Search screenshot](local://${encodeURIComponent(screenshot)})\n\n[Open full-size screenshot](local://${encodeURIComponent(screenshot)})`
+              : "This is a sample conversation for UI testing.",
           },
         ],
         timestamp: 1767225601000,
@@ -465,7 +482,7 @@ for (const session of sessions) {
       : []),
   ];
   writeFileSync(
-    path.join(dir, `2026-01-01_${session.id}.jsonl`),
+    sessionFile,
     entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n",
   );
 }

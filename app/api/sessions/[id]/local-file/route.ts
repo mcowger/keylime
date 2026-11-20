@@ -3,6 +3,7 @@ import {
   opErrorResponse,
   resolveWorkspaceHost,
 } from "@/lib/api-utils";
+import type { SessionLocalFile } from "@/lib/api-contracts/http-sessions";
 import { parseLocalUri } from "@/lib/local-uri";
 
 /** GET ?uri=local://<file> — the absolute path of a file in the session's own `local://` directory, for the file
@@ -44,7 +45,7 @@ export async function GET(
     // The live conversation owns the file: a tab authorized through the alias the request named would lose access once
     // that alias is dropped with its wrapper.
     return Response.json(
-      { path: result.value.path, sessionId: owner },
+      { path: result.value.path, sessionId: owner } satisfies SessionLocalFile,
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

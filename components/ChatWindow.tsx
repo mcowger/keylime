@@ -198,7 +198,8 @@ const CHAT_COLUMN_MAX_WIDTH_DESKTOP = `min(${CHAT_COLUMN_MAX_WIDTH}, calc(100% -
 const LOAD_MORE_ROOT_MARGIN = "400px 0px 0px 0px";
 
 function getUserInputText(message: AgentMessage): string | null {
-  if (message.role !== "user") return getSkillPromptText(message)?.trim() ?? null;
+  if (message.role !== "user")
+    return getSkillPromptText(message)?.trim() ?? null;
   if (typeof message.content === "string") {
     const text = message.content.trim();
     return text.length > 0 ? text : null;
@@ -255,7 +256,6 @@ function assistantSpeech(
   }
   return null;
 }
-
 
 interface CommittedTranscriptProps {
   messages: AgentMessage[];
@@ -591,7 +591,12 @@ export function ChatWindow({
   onSearchTargetHandled,
 }: Props) {
   const { t, tn } = useI18n();
-  const nothingToShip = useShipAvailability(shipWorkspace?.host, shipWorkspace?.projectPath, shipWorkspace?.path, !!session);
+  const nothingToShip = useShipAvailability(
+    shipWorkspace?.host,
+    shipWorkspace?.projectPath,
+    shipWorkspace?.path,
+    !!session,
+  );
   const chatWidth = useChatWidth();
   const fileSource = useMemo<WorkspaceFileSource>(
     () => ({
@@ -610,8 +615,14 @@ export function ChatWindow({
   const onOpenFile = useMemo(
     () =>
       onOpenWorkspaceFile
-        ? (filePath: string) =>
-            onOpenWorkspaceFile(filePath, getFileName(filePath), fileSource)
+        ? (filePath: string, ownerSessionId?: string) =>
+            onOpenWorkspaceFile(
+              filePath,
+              getFileName(filePath),
+              ownerSessionId
+                ? { ...fileSource, sessionId: ownerSessionId }
+                : fileSource,
+            )
         : undefined,
     [onOpenWorkspaceFile, fileSource],
   );
@@ -1300,10 +1311,12 @@ export function ChatWindow({
       ({ id }) =>
         !committedToolCallIds.has(id) &&
         !pending.has(id) &&
-        !(streamingMessage?.role === "assistant" &&
+        !(
+          streamingMessage?.role === "assistant" &&
           streamingMessage.content?.some(
             (block) => block.type === "toolCall" && block.toolCallId === id,
-          )),
+          )
+        ),
     );
   }, [agentPhase, committedToolCallIds, pendingToolMessages, streamingMessage]);
 
@@ -1530,7 +1543,9 @@ export function ChatWindow({
       onFollowUp={agentRunning ? handleFollowUp : undefined}
       outbox={!isNew}
       isStreaming={sessionBusy}
-      submissionBlocked={editingEntryId !== null || workspaceSourceRequired || !!startupStage}
+      submissionBlocked={
+        editingEntryId !== null || workspaceSourceRequired || !!startupStage
+      }
       model={displayModelValue}
       isAutoModelSelection={isAutoModelSelection}
       modelNames={modelNames}
@@ -1677,11 +1692,17 @@ export function ChatWindow({
                         type="button"
                         aria-label="Ship workspace"
                         className="ui-focus-ring rounded-md border border-solid border-[var(--border)] bg-[var(--bg-panel)] px-3 py-1.5 text-sm font-semibold text-[var(--text)] hover:bg-[var(--bg-hover)] disabled:cursor-default disabled:opacity-50"
-                        disabled={sessionBusy || streamState.isStreaming || nothingToShip}
+                        disabled={
+                          sessionBusy ||
+                          streamState.isStreaming ||
+                          nothingToShip
+                        }
                         title={
                           sessionBusy || streamState.isStreaming
                             ? "Wait for the session to finish"
-                            : nothingToShip ? "Nothing to ship" : "Ship workspace"
+                            : nothingToShip
+                              ? "Nothing to ship"
+                              : "Ship workspace"
                         }
                         onClick={() => onShip?.(shipWorkspace)}
                       >
@@ -1818,7 +1839,9 @@ export function ChatWindow({
                   >
                     <div
                       className="w-full"
-                      style={{ maxWidth: `min(760px, ${CHAT_COLUMN_MAX_WIDTH})` }}
+                      style={{
+                        maxWidth: `min(760px, ${CHAT_COLUMN_MAX_WIDTH})`,
+                      }}
                     >
                       <div
                         className="mb-3 empty-chat-brand"

@@ -26,6 +26,7 @@ import type {
 } from "@/lib/subagent-types";
 import { translate } from "@/lib/i18n";
 import { isLocalUri } from "@/lib/local-uri";
+import { resolveSessionLocalFile } from "@/lib/session-local-file-client";
 import type { SessionStreamCursor } from "@/lib/session-sync";
 import type { ChatDraft } from "@/lib/draft-store";
 
@@ -89,7 +90,11 @@ export function streamReducer(
     case "hold-tools": {
       const pendingToolMessages = new Map(state.pendingToolMessages);
       pendingToolMessages.set(action.toolCallId, action.message);
-      return { isStreaming: false, streamingMessage: null, pendingToolMessages };
+      return {
+        isStreaming: false,
+        streamingMessage: null,
+        pendingToolMessages,
+      };
     }
     case "release": {
       const held = state.isStreaming ? null : state.streamingMessage;
@@ -113,7 +118,8 @@ export function streamReducer(
             if (
               block?.type !== "toolCall" ||
               !state.pendingToolMessages.has(block.toolCallId)
-            ) continue;
+            )
+              continue;
             pendingToolMessages ??= new Map(state.pendingToolMessages);
             pendingToolMessages.delete(block.toolCallId);
           }
@@ -449,72 +455,6 @@ export interface HostToolHandlers {
   ) => string | void;
 }
 
-/** How long a `local://` lookup may take before the agent is told the server did not answer: the host ops behind it give
- * up after 30 s themselves. */
-export const LOCAL_FILE_LOOKUP_TIMEOUT_MS = 30_000;
-
-/** A session's `local://` file as the absolute path the file viewer opens, found by the server that holds the session. */
-async function resolveLocalFile(
-  sessionId: string | undefined,
-  uri: string,
-  signal?: AbortSignal,
-): Promise<
-  { ok: true; path: string; sessionId?: string } | { ok: false; error: string }
-> {
-  if (!sessionId)
-    return {
-      ok: false,
-      error:
-        "A local:// file belongs to a session, and no session asked for it",
-    };
-  const unanswered = {
-    ok: false as const,
-    error: `Could not open ${uri}: the server did not answer`,
-  };
-  // An AbortController and a timer, not AbortSignal.timeout (older browsers lack it): a stalled request must not leave
-  // the agent's tool call pending until the tab goes away.
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  signal?.addEventListener("abort", abort, { once: true });
-  if (signal?.aborted) controller.abort();
-  const timer = setTimeout(
-    () => controller.abort(),
-    LOCAL_FILE_LOOKUP_TIMEOUT_MS,
-  );
-  try {
-    const response = await fetch(
-      `/api/sessions/${encodeURIComponent(sessionId)}/local-file?uri=${encodeURIComponent(uri)}`,
-      { signal: controller.signal },
-    );
-    const body = (await response.json().catch(() => ({}))) as {
-      path?: unknown;
-      sessionId?: unknown;
-      error?: unknown;
-    };
-    if (controller.signal.aborted) return unanswered;
-    if (response.ok && typeof body.path === "string")
-      return {
-        ok: true,
-        path: body.path,
-        ...(typeof body.sessionId === "string"
-          ? { sessionId: body.sessionId }
-          : {}),
-      };
-    return {
-      ok: false,
-      error:
-        typeof body.error === "string"
-          ? body.error
-          : `Could not open ${uri} (HTTP ${response.status})`,
-    };
-  } catch {
-    return unanswered;
-  } finally {
-    clearTimeout(timer);
-    signal?.removeEventListener("abort", abort);
-  }
-}
-
 /**
  * Execute an keylime host tool (open_url / notify / open_file) and return the
  * toolResult text. Shared by the session's own stream and by tabs answering
@@ -578,7 +518,16 @@ export async function runHostTool(
       let path = requested;
       let owner: string | undefined;
       if (isLocalUri(requested)) {
-        const resolved = await resolveLocalFile(sessionId, requested, signal);
+        if (!sessionId)
+          return {
+            text: "A local:// file belongs to a session, and no session asked for it",
+            isError: true,
+          };
+        const resolved = await resolveSessionLocalFile(
+          sessionId,
+          requested,
+          signal,
+        );
         if (signal?.aborted) return canceled;
         if (!resolved.ok) return { text: resolved.error, isError: true };
         path = resolved.path;

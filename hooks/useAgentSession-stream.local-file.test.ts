@@ -4,8 +4,8 @@ import test from "node:test";
 import { createServer, type ServerResponse } from "node:http";
 import type { HostToolHandlers } from "./useAgentSession-stream";
 
-const { runHostTool, LOCAL_FILE_LOOKUP_TIMEOUT_MS } =
-  await import("./useAgentSession-stream.ts");
+import { LOCAL_FILE_LOOKUP_TIMEOUT_MS } from "../lib/session-local-file-client";
+import { runHostTool } from "./useAgentSession-stream";
 
 test("a local:// lookup the server never answers ends the open_file call with an error, not a hang", async (t) => {
   // Client deadlines are an AbortController and a timer: AbortSignal.timeout is missing in older browsers.
@@ -75,7 +75,10 @@ test("a local:// lookup that answers in time is not cut short", async (t) => {
     "fetch",
     async (_url: Parameters<typeof fetch>[0], init?: RequestInit) => {
       request.signal = init?.signal;
-      return Response.json({ path: "/sessions/s1/local/note.md" });
+      return Response.json({
+        path: "/sessions/owner/local/note.md",
+        sessionId: "owner",
+      });
     },
   );
   const opened: Parameters<NonNullable<HostToolHandlers["openFile"]>>[] = [];
@@ -93,8 +96,8 @@ test("a local:// lookup that answers in time is not cut short", async (t) => {
   assert.deepEqual(result, { text: "Opened local://note.md", isError: false });
   assert.deepEqual(
     opened,
-    [["/sessions/s1/local/note.md", "note.md", undefined]],
-    "no owner other than the caller was named",
+    [["/sessions/owner/local/note.md", "note.md", "owner"]],
+    "the file tab belongs to the resolved owner, not the calling alias",
   );
   // The deadline timer is not left running after the answer: nothing fires when it would have.
   t.mock.timers.tick(LOCAL_FILE_LOOKUP_TIMEOUT_MS * 2);
@@ -174,7 +177,12 @@ test("canceling one local-file lookup closes its HTTP request without interrupti
   assert.ok(otherResponse);
   otherResponse
     .writeHead(200, { "content-type": "application/json" })
-    .end(JSON.stringify({ path: "/sessions/other/local/other.md" }));
+    .end(
+      JSON.stringify({
+        path: "/sessions/other/local/other.md",
+        sessionId: "other",
+      }),
+    );
   assert.equal((await other).isError, false);
   assert.deepEqual(opened, ["/sessions/other/local/other.md"]);
 });

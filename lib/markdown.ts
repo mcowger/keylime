@@ -10,10 +10,11 @@ const markdownSanitizeSchema = {
     ...defaultSchema.attributes,
     code: [["className", /^language-./, "math-inline", "math-display"]],
   },
-  // `agent://` subagent handles are opened in-app by MarkdownBody.
+  // Chat opens subagent links and session artifacts in-app.
   protocols: {
     ...defaultSchema.protocols,
-    href: [...(defaultSchema.protocols?.href ?? []), "agent"],
+    href: [...(defaultSchema.protocols?.href ?? []), "agent", "local"],
+    src: [...(defaultSchema.protocols?.src ?? []), "local"],
   },
   strip: [...(defaultSchema.strip || []), "iframe", "object", "style", "form"],
 };

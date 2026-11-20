@@ -215,6 +215,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- Chat previews screenshots embedded with `local://` and opens links to those files in the file panel. If the file is missing, Keylime shows an error instead of doing nothing.
 - A workspace shows **Attention required** after a chat crashes, even if the chat isn't open. Closing the crashed chat dismisses that warning in the current browser tab, and deleting the chat removes its badge.
 - System names line up beside their expand chevrons and stay visible when **Actions** is open, even at the sidebar's minimum width.
 - Launch in Notes & Tasks uses automatic naming for Workspaces, Efforts, and branches instead of copying the task summary.

@@ -7,6 +7,7 @@ import {
   useContext,
   useMemo,
   useEffect,
+  useRef,
   useState,
   type ComponentProps,
   type MouseEvent,
@@ -23,6 +24,11 @@ import {
 } from "@/lib/file-links";
 import { getFileApiUrl } from "@/lib/file-paths";
 import { useI18n } from "@/lib/i18n";
+import { isLocalUri } from "@/lib/local-uri";
+import {
+  resolveSessionLocalFile,
+  type SessionLocalFileResult,
+} from "@/lib/session-local-file-client";
 import { WorkspaceFileContext } from "@/lib/workspace-file-context";
 import {
   AgentLinkContext,
@@ -39,9 +45,11 @@ import {
 import { markdownCodeRenderer } from "./MarkdownCode";
 import { ClickableImage } from "./ImageLightbox";
 import { TableChart } from "./TableChart";
+import { toast } from "./ui/toast";
 
 // The default sanitizer reads `C:` as a scheme; a drive path (`\` arrives as `%5C`) is a local file the `a` renderer opens.
 const urlTransform: UrlTransform = (url, key, node) =>
+  ((key === "href" || key === "src") && isLocalUri(url)) ||
   /^[A-Za-z]:(?:\/|%5C)/i.test(url)
     ? url
     : agentAwareUrlTransform(url, key, node);
@@ -53,7 +61,9 @@ function LocalMarkdownImage({
   ...imgProps
 }: ComponentProps<"img"> & { src: string; filePath: string }) {
   const { t } = useI18n();
-  const [failure, setFailure] = useState<"unavailable" | "blocked" | null>(null);
+  const [failure, setFailure] = useState<"unavailable" | "blocked" | null>(
+    null,
+  );
 
   useEffect(() => {
     if (failure !== "unavailable") return;
@@ -70,19 +80,102 @@ function LocalMarkdownImage({
           body !== null &&
           "code" in body &&
           body.code === "access_denied"
-        ) setFailure("blocked");
+        )
+          setFailure("blocked");
       })
       .catch(() => {});
     return () => controller.abort();
   }, [src, failure]);
   if (failure) {
     return (
-      <span role="status">
-        {t(failure === "blocked" ? "imagePreview.blocked" : "imagePreview.unavailable", { path: filePath })}
+      <span role="status" data-image-unavailable="">
+        {t(
+          failure === "blocked"
+            ? "imagePreview.blocked"
+            : "imagePreview.unavailable",
+          { path: filePath },
+        )}
       </span>
     );
   }
-  return <ClickableImage src={src} alt={alt ?? ""} {...imgProps} onError={() => setFailure("unavailable")} />;
+  return (
+    <ClickableImage
+      src={src}
+      alt={alt ?? ""}
+      {...imgProps}
+      onError={() => setFailure("unavailable")}
+    />
+  );
+}
+
+function SessionLocalImage({
+  uri,
+  sessionId,
+  ...imgProps
+}: Omit<ComponentProps<"img">, "src"> & { uri: string; sessionId: string }) {
+  const { t } = useI18n();
+  const [resolved, setResolved] = useState<SessionLocalFileResult>();
+  useEffect(() => {
+    const request = new AbortController();
+    void resolveSessionLocalFile(sessionId, uri, request.signal).then(
+      (result) => {
+        if (!request.signal.aborted) setResolved(result);
+      },
+    );
+    return () => request.abort();
+  }, [sessionId, uri]);
+  if (!resolved) return null;
+  if (!resolved.ok)
+    return (
+      <span role="status" data-image-unavailable="" title={resolved.error}>
+        {t("imagePreview.unavailable", { path: uri })}
+      </span>
+    );
+  return (
+    <LocalMarkdownImage
+      {...imgProps}
+      filePath={resolved.path}
+      src={getFileApiUrl(resolved.path, "read", undefined, resolved.sessionId)}
+    />
+  );
+}
+
+function SessionLocalLink({
+  href,
+  sessionId,
+  onOpenFile,
+  ...anchorProps
+}: ComponentProps<"a"> & {
+  href: string;
+  sessionId: string;
+  onOpenFile: NonNullable<MarkdownBodyProps["onOpenFile"]>;
+}) {
+  const pending = useRef<AbortController | null>(null);
+  useEffect(() => () => pending.current?.abort(), []);
+  const open = async (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.defaultPrevented || event.button !== 0) return;
+    event.preventDefault();
+    if (pending.current) return;
+    const request = new AbortController();
+    pending.current = request;
+    const result = await resolveSessionLocalFile(
+      sessionId,
+      href,
+      request.signal,
+    );
+    if (request.signal.aborted) return;
+    pending.current = null;
+    if (result.ok) onOpenFile(result.path, result.sessionId);
+    else toast.error(result.error);
+  };
+  return (
+    <a
+      {...anchorProps}
+      href={href}
+      onClick={open}
+      onAuxClick={(event) => event.preventDefault()}
+    />
+  );
 }
 
 /** Props accepted by `MarkdownBody`. */
@@ -92,7 +185,7 @@ export interface MarkdownBodyProps {
   isStreaming?: boolean;
   cwd?: string;
   sourceSessionId?: string | null;
-  onOpenFile?: (filePath: string) => void;
+  onOpenFile?: (filePath: string, ownerSessionId?: string) => void;
   suppressImages?: boolean;
   autoCharts?: boolean;
 }
@@ -121,6 +214,7 @@ export function useMarkdownBodyRendering({
     [children],
   );
   const fileSource = useContext(WorkspaceFileContext);
+  const sessionId = sourceSessionId ?? fileSource?.sessionId;
   const { remarkPlugins: baseRemarkPlugins, rehypePlugins } =
     useMarkdownPlugins(normalizedMarkdown);
   const githubRepo = useContext(GithubRepoContext);
@@ -148,6 +242,19 @@ export function useMarkdownBodyRendering({
       // `node` is react-markdown metadata, not a DOM attribute.
       delete (imgProps as { node?: unknown }).node;
       if (suppressImages) return alt ?? null;
+      if (typeof src === "string" && isLocalUri(src)) {
+        if (!sessionId) return alt ?? null;
+        return (
+          <SessionLocalImage
+            key={`${sessionId}:${src}`}
+            uri={src}
+            sessionId={sessionId}
+            alt={alt}
+            loading="lazy"
+            {...imgProps}
+          />
+        );
+      }
       // Chat paths are relative to the agent's cwd, not the browser URL. The
       // session host still checks whether the resolved file can be served.
       const filePath = resolveLocalFileHref(src, cwd, null);
@@ -282,6 +389,26 @@ export function useMarkdownBodyRendering({
             anchor
           );
         }
+        if (href && isLocalUri(href)) {
+          return (
+            <>
+              {sessionId && onOpenFile ? (
+                <SessionLocalLink
+                  key={`${sessionId}:${href}`}
+                  {...props}
+                  href={href}
+                  sessionId={sessionId}
+                  onOpenFile={onOpenFile}
+                >
+                  {textParts}
+                </SessionLocalLink>
+              ) : (
+                textParts
+              )}
+              {imageParts}
+            </>
+          );
+        }
         const filePath = resolveLocalFileHref(href, cwd, null);
         if (filePath) {
           // Without a file panel (a remote host's session, a dialog) a path link has nowhere to go: show its text.
@@ -350,6 +477,7 @@ export function useMarkdownBodyRendering({
     isStreaming,
     cwd,
     sourceSessionId,
+    sessionId,
     onOpenFile,
     suppressImages,
     openAgentLink,

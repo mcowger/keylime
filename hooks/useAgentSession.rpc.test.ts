@@ -827,7 +827,10 @@ test("model refresh replaces the catalog and ignores an older GET", async () => 
     await w.latest.refreshModels();
   });
   assert.equal(callsTo("POST", "/api/models").length, 1);
-  assert.deepEqual(w.latest.modelList.map((model) => model.id), ["new"]);
+  assert.deepEqual(
+    w.latest.modelList.map((model) => model.id),
+    ["new"],
+  );
   await act(async () => {
     oldResponse.resolve({
       value: {
@@ -838,7 +841,10 @@ test("model refresh replaces the catalog and ignores an older GET", async () => 
     });
     await oldResponse.promise;
   });
-  assert.deepEqual(w.latest.modelList.map((model) => model.id), ["new"]);
+  assert.deepEqual(
+    w.latest.modelList.map((model) => model.id),
+    ["new"],
+  );
   assert.equal(w.latest.modelsLoading, false);
 });
 
@@ -859,7 +865,10 @@ test("model refresh reports failures and keeps the previous snapshot for retry",
     await w.latest.refreshModels();
   });
   assert.equal(w.latest.modelError, "Catalog unavailable");
-  assert.deepEqual(w.latest.modelList.map((model) => model.id), ["old"]);
+  assert.deepEqual(
+    w.latest.modelList.map((model) => model.id),
+    ["old"],
+  );
   await act(async () => {
     await w.latest.refreshModels();
   });
@@ -1247,7 +1256,10 @@ async function startRun(
 test("advisor review follows snapshots and events beyond the primary run and reconnect", async () => {
   resetWorld();
   primeSession("advisor-review", [userMsg("u0", "q")]);
-  world.agents.set("advisor-review", { running: true, state: { advisorReviewPending: true } });
+  world.agents.set("advisor-review", {
+    running: true,
+    state: { advisorReviewPending: true },
+  });
   const w = await mountSession("advisor-review");
   assert.equal(w.latest.advisorReviewPending, true);
   const es = lastEs();
@@ -1259,7 +1271,10 @@ test("advisor review follows snapshots and events beyond the primary run and rec
   assert.equal(w.latest.advisorReviewPending, false);
   await act(() => es.emit({ type: "advisor_review", pending: true }));
   assert.equal(w.latest.advisorReviewPending, true);
-  world.agents.set("advisor-review", { running: true, state: { advisorReviewPending: false } });
+  world.agents.set("advisor-review", {
+    running: true,
+    state: { advisorReviewPending: false },
+  });
   await act(() => es.dropRecoverably());
   await act(() => es.open());
   await settle();
@@ -1269,7 +1284,10 @@ test("advisor review follows snapshots and events beyond the primary run and rec
 test("advisor review clears when the runner exits", async () => {
   resetWorld();
   primeSession("advisor-exit", [userMsg("u0", "q")]);
-  world.agents.set("advisor-exit", { running: true, state: { advisorReviewPending: true } });
+  world.agents.set("advisor-exit", {
+    running: true,
+    state: { advisorReviewPending: true },
+  });
   const w = await mountSession("advisor-exit");
   assert.equal(w.latest.advisorReviewPending, true);
   const es = lastEs();
@@ -1278,7 +1296,6 @@ test("advisor review clears when the runner exits", async () => {
   await act(() => es.emit({ type: "process_exit" }));
   assert.equal(w.latest.advisorReviewPending, false);
 });
-
 
 // omp owns the queue. The panel shows its snapshot — on load (get_state, so a
 // reload or another device sees the same chips) and live via queue_update —
@@ -1510,7 +1527,15 @@ test("a `!` message with an uploaded text attachment is held as a prompt, never 
     value: "!touch /tmp/keylime-never-run",
     images: [],
     files: [],
-    uploads: [{ id: "notes-upload", name: "notes.txt", size: 8, hostId: "local", proof: "notes-proof" }],
+    uploads: [
+      {
+        id: "notes-upload",
+        name: "notes.txt",
+        size: 8,
+        hostId: "local",
+        proof: "notes-proof",
+      },
+    ],
   });
   const view = ownRoot(
     render(
@@ -1532,7 +1557,9 @@ test("a `!` message with an uploaded text attachment is held as a prompt, never 
   assert.equal(world.outbox[0].mode, "prompt");
   assert.equal(world.outbox[0].message, "!touch /tmp/keylime-never-run");
   assert.deepEqual(world.outbox[0].uploads, ["notes-upload"]);
-  assert.deepEqual(world.outbox[0].uploadProofs, { "notes-upload": "notes-proof" });
+  assert.deepEqual(world.outbox[0].uploadProofs, {
+    "notes-upload": "notes-proof",
+  });
   assert.deepEqual(
     world.calls.filter((call) => call.body?.type === "bash"),
     [],
@@ -4057,7 +4084,10 @@ test("a tool row keeps its live output and status until the saved transcript arr
     es.emit({ type: "agent_start" });
     es.emit({ type: "message_end", message: userMsg("u1", "q1") });
     es.emit({ type: "message_start", message: toolCallAssistant });
-    es.emit({ type: "message_end", message: toolCallAssistant }, { persist: false });
+    es.emit(
+      { type: "message_end", message: toolCallAssistant },
+      { persist: false },
+    );
     await Promise.resolve();
   });
   assert.equal(
@@ -4147,13 +4177,19 @@ test("a tool row keeps its live output and status until the saved transcript arr
     es.emit({ type: "message_end", message: result }, { persist: false });
     await Promise.resolve();
   });
-  const nextReply = { ...assistantMsg("a2", "Here is the result"), timestamp: 43 };
+  const nextReply = {
+    ...assistantMsg("a2", "Here is the result"),
+    timestamp: 43,
+  };
   await act(async () => {
     es.emit({ type: "message_start", message: nextReply });
   });
   assert.equal(w.latest.streamState.streamingMessage?.timestamp, 43);
   assert.deepEqual(heldToolContent(), toolCallAssistant.content);
-  assert.deepEqual(w.latest.liveToolResults.get("tc1")?.content, result.content);
+  assert.deepEqual(
+    w.latest.liveToolResults.get("tc1")?.content,
+    result.content,
+  );
   assert.ok(!w.latest.messages.some((message) => message.timestamp === 42));
 
   await act(async () => {
@@ -6357,7 +6393,9 @@ test("an open_file local:// call asks the server for the calling session's file 
   world.holds.push({
     match: (method, url) =>
       method === "GET" && url.includes("/api/sessions/s1/local-file"),
-    produce: async () => ({ value: { path: "/sessions/s1/local/note.md" } }),
+    produce: async () => ({
+      value: { path: "/sessions/s1/local/note.md", sessionId: "s1" },
+    }),
   });
   const opened: Parameters<
     NonNullable<UseAgentSessionOptions["onOpenFile"]>
@@ -6458,7 +6496,9 @@ test("a lookup pending when the chat's subscription drops is withdrawn, not answ
     produce: () =>
       new Promise((resolve) => {
         release = () =>
-          resolve({ value: { path: "/sessions/s1/local/note.md" } });
+          resolve({
+            value: { path: "/sessions/s1/local/note.md", sessionId: "s1" },
+          });
       }),
   });
   const opened: Parameters<
@@ -6558,7 +6598,9 @@ test("canceling a pending file open leaves other requests and a later run untouc
     produce: () =>
       new Promise((resolve) => {
         release = () =>
-          resolve({ value: { path: "/sessions/s1/local/canceled.md" } });
+          resolve({
+            value: { path: "/sessions/s1/local/canceled.md", sessionId: "s1" },
+          });
       }),
   });
   const opened: Parameters<
@@ -6624,7 +6666,9 @@ test("a delayed local-file lookup cannot open a tab after its chat unmounts", as
     produce: () =>
       new Promise((resolve) => {
         release = () =>
-          resolve({ value: { path: "/sessions/s1/local/note.md" } });
+          resolve({
+            value: { path: "/sessions/s1/local/note.md", sessionId: "s1" },
+          });
       }),
   });
   const opened: Parameters<
@@ -6694,7 +6738,12 @@ test("a delayed local-file lookup survives a confirmed Edit identity move", asyn
     produce: () =>
       new Promise((resolve) => {
         release = () =>
-          resolve({ value: { path: `/sessions/${target}/local/note.md` } });
+          resolve({
+            value: {
+              path: `/sessions/${target}/local/note.md`,
+              sessionId: target,
+            },
+          });
       }),
   });
   await act(async () => {
@@ -6722,10 +6771,10 @@ test("a delayed local-file lookup survives a confirmed Edit identity move", asyn
       [
         `/sessions/${target}/local/note.md`,
         "note.md",
-        { sessionId: sid, hostId: "local", cwd: "/workspace" },
+        { sessionId: target, hostId: "local", cwd: "/workspace" },
       ],
     ],
-    "the same conversation retains the request's source alias and host",
+    "the file tab uses the resolved owner after the move",
   );
   const answer = callsTo("POST", `/api/agent/${sid}`).find(
     (call) => call.body?.type === "host_tool_result",
@@ -8320,7 +8369,9 @@ for (const order of [
       clearDraft(target);
     });
     const images = [{ data: "AAAA", mimeType: "image/png" }];
-    const uploads = [{ id: "context-upload", name: "context.txt", size: 21, hostId: "local" }];
+    const uploads = [
+      { id: "context-upload", name: "context.txt", size: 21, hostId: "local" },
+    ];
     setDraft(sid, { value: "", images, files: [], uploads });
     const native = primeEditableHistory(sid);
     native.moveTo = target;
@@ -8547,8 +8598,18 @@ test("relocation merges existing target attachments and preserves typing added w
   });
   const sourceImage = { data: "AAAA", mimeType: "image/png" };
   const targetImage = { data: "BBBB", mimeType: "image/webp" };
-  const sourceUpload = { id: "source-upload", name: "source.txt", size: 6, hostId: "local" };
-  const targetUpload = { id: "target-upload", name: "target.txt", size: 6, hostId: "local" };
+  const sourceUpload = {
+    id: "source-upload",
+    name: "source.txt",
+    size: 6,
+    hostId: "local",
+  };
+  const targetUpload = {
+    id: "target-upload",
+    name: "target.txt",
+    size: 6,
+    hostId: "local",
+  };
   setDraft(sid, {
     value: "initial source draft",
     images: [sourceImage],
@@ -8590,8 +8651,17 @@ test("relocation merges existing target attachments and preserves typing added w
     "confirmed target history must be awaiting its load",
   );
   world.holds.push(
-    { match: (method, url) => method === "POST" && url === "/api/uploads", produce: async () => ({ value: { received: 0 } }) },
-    { match: (method, url) => method === "PUT" && url.startsWith("/api/uploads/"), produce: async () => ({ value: { received: 22, done: true, proof: "new-proof" } }) },
+    {
+      match: (method, url) => method === "POST" && url === "/api/uploads",
+      produce: async () => ({ value: { received: 0 } }),
+    },
+    {
+      match: (method, url) =>
+        method === "PUT" && url.startsWith("/api/uploads/"),
+      produce: async () => ({
+        value: { received: 22, done: true, proof: "new-proof" },
+      }),
+    },
   );
   await act(async () => {
     fireEvent.change(w.view.getByRole("textbox"), {
@@ -8619,8 +8689,15 @@ test("relocation merges existing target attachments and preserves typing added w
   assert.equal(draft?.value, "new source typing\n\nexisting target draft");
   assert.deepEqual(draft?.images, [sourceImage, targetImage]);
   assert.deepEqual(draft?.files, []);
-  assert.deepEqual(draft?.uploads?.map((upload) => upload.name).sort(), ["new.txt", "source.txt", "target.txt"]);
-  assert.equal(draft?.uploads?.find((upload) => upload.name === "new.txt")?.proof, "new-proof");
+  assert.deepEqual(draft?.uploads?.map((upload) => upload.name).sort(), [
+    "new.txt",
+    "source.txt",
+    "target.txt",
+  ]);
+  assert.equal(
+    draft?.uploads?.find((upload) => upload.name === "new.txt")?.proof,
+    "new-proof",
+  );
   assert.equal(
     (w.view.getByRole("textbox") as HTMLTextAreaElement).value,
     "new source typing\n\nexisting target draft",
@@ -12318,7 +12395,9 @@ test("new session slash commands load global skills without creating a workspace
   let workspacePreparations = 0;
   world.holds.push({
     match: (method, url) => method === "GET" && url === "/api/skills",
-    produce: async () => ({ value: { skills: [{ name: "review", description: "Review changes" }] } }),
+    produce: async () => ({
+      value: { skills: [{ name: "review", description: "Review changes" }] },
+    }),
   });
   const w = await mountSession(null, undefined, {
     newSessionCwd: "/project",
@@ -12327,8 +12406,12 @@ test("new session slash commands load global skills without creating a workspace
       throw new Error("workspace must not be created");
     },
   });
-  await act(async () => { await w.latest.loadSlashCommands(); });
-  assert.deepEqual(w.latest.slashCommands, [{ name: "skill:review", description: "Review changes", source: "skill" }]);
+  await act(async () => {
+    await w.latest.loadSlashCommands();
+  });
+  assert.deepEqual(w.latest.slashCommands, [
+    { name: "skill:review", description: "Review changes", source: "skill" },
+  ]);
   assert.equal(workspacePreparations, 0);
   assert.equal(callsTo("POST", "/api/agent/new").length, 0);
   assert.equal(w.latest.sessionIdRef.current, null);
@@ -12339,26 +12422,54 @@ test("late global skills cannot replace a newly created session's command roster
   resetWorld();
   const gate = Promise.withResolvers<void>();
   t.after(() => gate.resolve());
-  world.holds.push({
-    match: (method, url) => method === "GET" && url === "/api/skills",
-    produce: async () => {
-      await gate.promise;
-      return { value: { skills: [{ name: "global", description: "Global" }] } };
+  world.holds.push(
+    {
+      match: (method, url) => method === "GET" && url === "/api/skills",
+      produce: async () => {
+        await gate.promise;
+        return {
+          value: { skills: [{ name: "global", description: "Global" }] },
+        };
+      },
     },
-  }, {
-    match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: async () => ({ value: { success: true, sessionId: "new-roster", hostId: "local", cwd: "/project", data: {} } }),
-  });
+    {
+      match: (method, url) => method === "POST" && url === "/api/agent/new",
+      produce: async () => ({
+        value: {
+          success: true,
+          sessionId: "new-roster",
+          hostId: "local",
+          cwd: "/project",
+          data: {},
+        },
+      }),
+    },
+  );
   const w = await mountSession(null, undefined, { newSessionCwd: "/project" });
   let loading!: Promise<unknown>;
-  await act(async () => { loading = w.latest.loadSlashCommands(); await sleep(0); });
-  await act(async () => { await w.latest.resolveUploadHost(); });
   await act(async () => {
-    w.latest.handleAgentEventRef.current?.({ type: "available_commands_update", commands: [{ name: "project", description: "Project", source: "skill" }] } as AgentEvent);
+    loading = w.latest.loadSlashCommands();
+    await sleep(0);
   });
-  assert.deepEqual(w.latest.slashCommands, [{ name: "project", description: "Project", source: "skill" }]);
-  await act(async () => { gate.resolve(); await loading; });
-  assert.deepEqual(w.latest.slashCommands, [{ name: "project", description: "Project", source: "skill" }]);
+  await act(async () => {
+    await w.latest.resolveUploadHost();
+  });
+  await act(async () => {
+    w.latest.handleAgentEventRef.current?.({
+      type: "available_commands_update",
+      commands: [{ name: "project", description: "Project", source: "skill" }],
+    } as AgentEvent);
+  });
+  assert.deepEqual(w.latest.slashCommands, [
+    { name: "project", description: "Project", source: "skill" },
+  ]);
+  await act(async () => {
+    gate.resolve();
+    await loading;
+  });
+  assert.deepEqual(w.latest.slashCommands, [
+    { name: "project", description: "Project", source: "skill" },
+  ]);
   w.unmount();
 });
 
@@ -12896,7 +13007,11 @@ test("nonprompt pooled placement failures are visible once", async () => {
   );
   await settle();
   await act(async () => {
-    chatInputRef.current!.addFiles([new File([new Uint8Array([80, 75, 0, 0])], "placement.zip", { type: "application/zip" })]);
+    chatInputRef.current!.addFiles([
+      new File([new Uint8Array([80, 75, 0, 0])], "placement.zip", {
+        type: "application/zip",
+      }),
+    ]);
     await sleep(30);
   });
   await act(async () => {
@@ -13079,7 +13194,10 @@ test("workspace warns about a background crash until its chat is closed or remov
     }),
   );
   await until(() => view.queryByText("Mac project"), "workspace renders");
-  assert.equal(view.queryByRole("button", { name: "Close Mac conversation" }), null);
+  assert.equal(
+    view.queryByRole("button", { name: "Close Mac conversation" }),
+    null,
+  );
 
   const publishExit = async (at: number, refreshSessionList = false) => {
     const frame = JSON.stringify({
@@ -13093,7 +13211,8 @@ test("workspace warns about a background crash until its chat is closed or remov
     });
     await act(async () => {
       for (const stream of world.runningStreams) {
-        if (!stream.closedByCaller) stream.deliver({ type: "message", data: frame });
+        if (!stream.closedByCaller)
+          stream.deliver({ type: "message", data: frame });
       }
     });
   };
@@ -13101,7 +13220,9 @@ test("workspace warns about a background crash until its chat is closed or remov
   await publishExit(100);
   await until(badge, "the initial frame shows the crash without an open chat");
   await selectSidebarSession(view, "Mac conversation");
-  const close = await view.findByRole("button", { name: "Close Mac conversation" });
+  const close = await view.findByRole("button", {
+    name: "Close Mac conversation",
+  });
   await act(async () => fireEvent.click(close));
   assert.equal(badge(), null);
 
@@ -15988,8 +16109,17 @@ for (const changed of [false, true]) {
     );
     if (changed) {
       world.holds.push(
-        { match: (method, url) => method === "POST" && url === "/api/uploads", produce: async () => ({ value: { received: 0 } }) },
-        { match: (method, url) => method === "PUT" && url.startsWith("/api/uploads/"), produce: async () => ({ value: { received: 11, done: true, proof: "remount-proof" } }) },
+        {
+          match: (method, url) => method === "POST" && url === "/api/uploads",
+          produce: async () => ({ value: { received: 0 } }),
+        },
+        {
+          match: (method, url) =>
+            method === "PUT" && url.startsWith("/api/uploads/"),
+          produce: async () => ({
+            value: { received: 11, done: true, proof: "remount-proof" },
+          }),
+        },
       );
       await act(() => {
         fireEvent.change(second.getByRole("textbox"), {
@@ -16524,19 +16654,35 @@ test("paged history backfill follows without smooth scrolling", async () => {
   const recent = userMsg("recent", "recent message");
   primeSession(sid, [older, recent]);
   const context = (messages: AgentMessage[], entryIds: string[]) => ({
-    messages, entryIds, leafId: "e1", todoPhases: [], thinkingLevel: "off", model: null,
+    messages,
+    entryIds,
+    leafId: "e1",
+    todoPhases: [],
+    thinkingLevel: "off",
+    model: null,
   });
   const page = Promise.withResolvers<HeldResponse>();
   world.holds.push({
-    match: (method, url) => method === "GET" && url.includes(`/${sid}?`) && url.includes("before="),
+    match: (method, url) =>
+      method === "GET" && url.includes(`/${sid}?`) && url.includes("before="),
     produce: () => page.promise,
   });
   world.respond = (method, raw) => {
     const url = new URL(raw, "http://localhost");
-    if (method !== "GET" || url.pathname !== `/api/sessions/${sid}` || !url.searchParams.has("tail")) return null;
+    if (
+      method !== "GET" ||
+      url.pathname !== `/api/sessions/${sid}` ||
+      !url.searchParams.has("tail")
+    )
+      return null;
     return jsonResponse(200, {
-      sessionId: sid, filePath: "/fixture/session.jsonl", tree: [], leafId: "e1",
-      context: context([recent], ["e1"]), historyHasMore: true, historyRevision: "revision",
+      sessionId: sid,
+      filePath: "/fixture/session.jsonl",
+      tree: [],
+      leafId: "e1",
+      context: context([recent], ["e1"]),
+      historyHasMore: true,
+      historyRevision: "revision",
     });
   };
   const container = document.createElement("div");
@@ -16545,7 +16691,9 @@ test("paged history backfill follows without smooth scrolling", async () => {
   Object.defineProperty(end, "scrollIntoView", {
     configurable: true,
     value: (options?: ScrollIntoViewOptions | boolean) => {
-      behaviors.push(typeof options === "object" ? options.behavior : undefined);
+      behaviors.push(
+        typeof options === "object" ? options.behavior : undefined,
+      );
     },
   });
   const w = await mountSession(sid, undefined, {}, false, (state) => {
@@ -16559,13 +16707,27 @@ test("paged history backfill follows without smooth scrolling", async () => {
   assert.deepEqual(w.latest.entryIds, ["e1"]);
   const initialScrolls = behaviors.length;
   await act(async () => {
-    page.resolve({ value: { context: context([older], ["e0"]), historyHasMore: false, historyRevision: "revision" } });
+    page.resolve({
+      value: {
+        context: context([older], ["e0"]),
+        historyHasMore: false,
+        historyRevision: "revision",
+      },
+    });
     await sleep(100);
   });
-  await act(async () => { await sleep(100); });
+  await act(async () => {
+    await sleep(100);
+  });
   assert.deepEqual(w.latest.entryIds, ["e0", "e1"]);
-  assert.ok(behaviors.length > initialScrolls, "backfill triggers a follow scroll");
-  assert.ok(behaviors.every((behavior) => behavior === "instant"), `unexpected scroll behaviors: ${behaviors}`);
+  assert.ok(
+    behaviors.length > initialScrolls,
+    "backfill triggers a follow scroll",
+  );
+  assert.ok(
+    behaviors.every((behavior) => behavior === "instant"),
+    `unexpected scroll behaviors: ${behaviors}`,
+  );
 });
 
 test("an offline send follows its held bubble when the worker list arrives before the commit ACK", async () => {
