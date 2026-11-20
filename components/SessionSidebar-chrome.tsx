@@ -130,8 +130,8 @@ function SidebarSectionHeader({
           aria-disabled={!disclosure.onToggle || undefined}
           onClick={disclosure.onToggle}
         >
-          {label}
           <ChevronRight size={12} aria-hidden="true" />
+          {label}
         </button>
       </h2>
       {children}

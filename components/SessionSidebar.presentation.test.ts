@@ -35,6 +35,63 @@ const snapshot = {
   ],
 };
 
+test("the activity filter reveals a collapsed Repo and restores it afterward", async () => {
+  const project = snapshot.projects[0];
+  const restore = setup(() =>
+    Response.json({
+      projects: [
+        {
+          ...project,
+          kind: "git",
+          workspaces: [{ ...project.workspaces[0], sessionIds: ["active"] }],
+        },
+      ],
+    }),
+  );
+  try {
+    const noop = () => {};
+    const tree = (runningOnly: boolean) =>
+      React.createElement(HierarchySidebar, {
+        ...noSystemsSidebar,
+        hosts: [{ id: "local", label: "Local" }],
+        sessions: [],
+        selectedSessionId: null,
+        selectedCwd: null,
+        selectedHostId: "local",
+        onSelectWorkspace: noop,
+        onWorkspaceRemoved: noop,
+        onNewWorkspace: noop,
+        onProjects: noop,
+        onSnapshots: noop,
+        searchQuery: "",
+        matchedSessionIds: null,
+        runningOnly,
+        runningSessionIds: new Set(["active"]),
+        awaitingInputIds: new Set<string>(),
+        unreadSessionIds: new Set<string>(),
+        hasUndismissedExit: () => false,
+        collapsedHosts: new Set<string>(),
+        onToggleHost: noop,
+        onSelectSession: noop,
+        onAddProject: noop,
+        onChanged: noop,
+      });
+    const view = render(tree(false));
+    await screen.findByRole("button", { name: "Workspace" });
+    const repo = screen.getByRole("button", { name: "Project" });
+    fireEvent.click(repo);
+    assert.equal(screen.queryByRole("button", { name: "Workspace" }), null);
+    view.rerender(tree(true));
+    assert.ok(screen.getByRole("button", { name: "Workspace" }));
+    fireEvent.click(repo);
+    view.rerender(tree(false));
+    assert.equal(screen.queryByRole("button", { name: "Workspace" }), null);
+    assert.equal(repo.getAttribute("aria-expanded"), "false");
+  } finally {
+    restore();
+  }
+});
+
 function setup(
   hierarchy: (url: URL, init: RequestInit) => Response | Promise<Response>,
 ) {
@@ -93,7 +150,7 @@ function renderSidebar(
   );
 }
 
-test("registered hierarchy workspaces can be selected without a single-host heading", async () => {
+test("registered workspaces remain selectable under the single host heading", async () => {
   const hosts: (string | null)[] = [];
   const restore = setup((url) => {
     hosts.push(url.searchParams.get("host"));
@@ -108,7 +165,11 @@ test("registered hierarchy workspaces can be selected without a single-host head
     await waitFor(() =>
       assert.equal(workspace.getAttribute("aria-pressed"), "true"),
     );
-    assert.equal(screen.queryByRole("button", { name: /This machine/ }), null);
+    const host = screen.getByRole("button", { name: "This machine" });
+    fireEvent.click(host);
+    assert.equal(screen.queryByRole("button", { name: "Workspace" }), null);
+    fireEvent.click(host);
+    assert.ok(screen.getByRole("button", { name: "Workspace", pressed: true }));
   } finally {
     restore();
   }
@@ -146,15 +207,17 @@ test("sidebar search reveals collapsed Repos and Systems until cleared", async (
             data: {
               root: "/efforts",
               efforts: [],
-              systems: [{
-                id: "system-1",
-                slug: "workspace-system",
-                name: "Workspace System",
-                repoPaths: ["/workspace"],
-                services: [],
-                instructions: "",
-                archived: false,
-              }],
+              systems: [
+                {
+                  id: "system-1",
+                  slug: "workspace-system",
+                  name: "Workspace System",
+                  repoPaths: ["/workspace"],
+                  services: [],
+                  instructions: "",
+                  archived: false,
+                },
+              ],
             },
           },
         },
@@ -179,7 +242,10 @@ test("sidebar search reveals collapsed Repos and Systems until cleared", async (
       assert.equal(repos.getAttribute("aria-expanded"), "false");
       assert.equal(systems.getAttribute("aria-expanded"), "false");
       assert.equal(screen.queryByRole("button", { name: "Workspace" }), null);
-      assert.equal(screen.queryByRole("button", { name: "Workspace System" }), null);
+      assert.equal(
+        screen.queryByRole("button", { name: "Workspace System" }),
+        null,
+      );
     });
   } finally {
     restore();
@@ -192,63 +258,161 @@ test("pending workspace does not select its base workspace", async () => {
     const props = { selectedCwd: "/workspace", selectedHostId: "local" };
     const view = renderSidebar(props);
     const workspace = await screen.findByRole("button", { name: "Workspace" });
-    await waitFor(() => assert.equal(workspace.getAttribute("aria-pressed"), "true"));
-    view.rerender(React.createElement(SessionSidebar, {
-      ...noSystemsSidebar,
-      selectedSessionId: null, onSelectSession() {}, skipInitialProjectSelection: true,
-      addProjectOpen: false, setAddProjectOpen() {}, usageVisible: false,
-      ...props, pendingWorkspace: true,
-    }));
+    await waitFor(() =>
+      assert.equal(workspace.getAttribute("aria-pressed"), "true"),
+    );
+    view.rerender(
+      React.createElement(SessionSidebar, {
+        ...noSystemsSidebar,
+        selectedSessionId: null,
+        onSelectSession() {},
+        skipInitialProjectSelection: true,
+        addProjectOpen: false,
+        setAddProjectOpen() {},
+        usageVisible: false,
+        ...props,
+        pendingWorkspace: true,
+      }),
+    );
     assert.equal(workspace.getAttribute("aria-pressed"), "false");
     fireEvent.click(workspace);
     assert.equal(workspace.getAttribute("aria-pressed"), "false");
-    view.rerender(React.createElement(SessionSidebar, {
-      ...noSystemsSidebar,
-      selectedSessionId: null, onSelectSession() {}, skipInitialProjectSelection: true,
-      addProjectOpen: false, setAddProjectOpen() {}, usageVisible: false, ...props,
-    }));
+    view.rerender(
+      React.createElement(SessionSidebar, {
+        ...noSystemsSidebar,
+        selectedSessionId: null,
+        onSelectSession() {},
+        skipInitialProjectSelection: true,
+        addProjectOpen: false,
+        setAddProjectOpen() {},
+        usageVisible: false,
+        ...props,
+      }),
+    );
     assert.equal(workspace.getAttribute("aria-pressed"), "true");
   } finally {
     restore();
   }
 });
 test("workspace click reconciles after its registered sessions load", async () => {
-  const { promise: sessions, resolve: resolveSessions } = Promise.withResolvers<Response>();
-  const restore = setup(() => Response.json({ projects: [{ ...snapshot.projects[0], workspaces: [{ ...snapshot.projects[0].workspaces[0], sessionIds: ["saved"] }] }] }));
+  const { promise: sessions, resolve: resolveSessions } =
+    Promise.withResolvers<Response>();
+  const restore = setup(() =>
+    Response.json({
+      projects: [
+        {
+          ...snapshot.projects[0],
+          workspaces: [
+            { ...snapshot.projects[0].workspaces[0], sessionIds: ["saved"] },
+          ],
+        },
+      ],
+    }),
+  );
   const fetchBase = globalThis.fetch;
-  globalThis.fetch = Object.assign((input: RequestInfo | URL, init?: RequestInit) =>
-    new URL(String(input), "http://localhost").pathname === "/api/sessions" ? sessions : fetchBase(input, init),
-    { preconnect: fetchBase.preconnect });
+  globalThis.fetch = Object.assign(
+    (input: RequestInfo | URL, init?: RequestInit) =>
+      new URL(String(input), "http://localhost").pathname === "/api/sessions"
+        ? sessions
+        : fetchBase(input, init),
+    { preconnect: fetchBase.preconnect },
+  );
   const changes: unknown[][] = [];
   try {
     renderSidebar({ onCwdChange: (...args) => changes.push(args) });
     fireEvent.click(await screen.findByRole("button", { name: "Workspace" }));
     assert.ok(changes.some((args) => args[6] === "pending"));
-    resolveSessions(Response.json({ sessions: [{ id: "saved", cwd: "/workspace", path: "/saved", created: "2026-01-01", modified: "2026-01-02", messageCount: 1, firstMessage: "hello" }] }));
+    resolveSessions(
+      Response.json({
+        sessions: [
+          {
+            id: "saved",
+            cwd: "/workspace",
+            path: "/saved",
+            created: "2026-01-01",
+            modified: "2026-01-02",
+            messageCount: 1,
+            firstMessage: "hello",
+          },
+        ],
+      }),
+    );
     await waitFor(() => assert.equal(changes.at(-1)?.[6], "resolved"));
     assert.equal((changes.at(-1)?.[5] as SessionInfo).id, "saved");
-  } finally { restore(); }
+  } finally {
+    restore();
+  }
 });
 
-test("one connected host is ungrouped while offline host projects remain visible", async () => {
+test("collapsing the connected host leaves the offline host's repos visible", async () => {
   const restore = setup((url) => {
     const offline = url.searchParams.get("host") === "remote";
-    return Response.json(offline ? { projects: [{ ...snapshot.projects[0], id: "remote-project", name: "Offline project", workspaces: [{ ...snapshot.projects[0].workspaces[0], id: "remote-workspace", name: "Offline workspace" }] }] } : snapshot);
+    return Response.json(
+      offline
+        ? {
+            projects: [
+              {
+                ...snapshot.projects[0],
+                id: "remote-project",
+                name: "Offline project",
+                workspaces: [
+                  {
+                    ...snapshot.projects[0].workspaces[0],
+                    id: "remote-workspace",
+                    name: "Offline workspace",
+                  },
+                ],
+              },
+            ],
+          }
+        : snapshot,
+    );
   });
   try {
-    render(React.createElement(HierarchySidebar, {
-      ...noSystemsSidebar,
-      hosts: [{ id: "local", label: "Local", status: "omp-missing" }, { id: "remote", label: "Remote", status: "offline" }],
-      sessions: [], selectedSessionId: null, selectedCwd: null, selectedHostId: "local",
-      onSelectWorkspace() {}, onWorkspaceRemoved() {}, onNewWorkspace() {}, onProjects() {}, onSnapshots() {},
-      searchQuery: "", matchedSessionIds: null, runningOnly: false,
-      runningSessionIds: new Set<string>(), awaitingInputIds: new Set<string>(), unreadSessionIds: new Set<string>(), hasUndismissedExit: () => false,
-      collapsedHosts: new Set(["local"]), onToggleHost() {}, onSelectSession() {}, onAddProject() {}, onChanged() {},
-    }));
-    assert.ok(await screen.findByRole("button", { name: "Workspace" }));
+    render(
+      React.createElement(HierarchySidebar, {
+        ...noSystemsSidebar,
+        hosts: [
+          { id: "local", label: "Local", status: "omp-missing" },
+          { id: "remote", label: "Remote", status: "offline" },
+        ],
+        sessions: [],
+        selectedSessionId: null,
+        selectedCwd: null,
+        selectedHostId: "local",
+        onSelectWorkspace() {},
+        onWorkspaceRemoved() {},
+        onNewWorkspace() {},
+        onProjects() {},
+        onSnapshots() {},
+        searchQuery: "",
+        matchedSessionIds: null,
+        runningOnly: false,
+        runningSessionIds: new Set<string>(),
+        awaitingInputIds: new Set<string>(),
+        unreadSessionIds: new Set<string>(),
+        hasUndismissedExit: () => false,
+        collapsedHosts: new Set(["local"]),
+        onToggleHost() {},
+        onSelectSession() {},
+        onAddProject() {},
+        onChanged() {},
+      }),
+    );
     assert.ok(await screen.findByRole("button", { name: "Offline workspace" }));
-    assert.equal(screen.queryByRole("button", { name: "Local" }), null);
-    assert.ok(screen.getByRole("button", { name: "Remote" }));
+    assert.equal(screen.queryByRole("button", { name: "Workspace" }), null);
+    assert.equal(
+      screen
+        .getByRole("button", { name: "Local" })
+        .getAttribute("aria-expanded"),
+      "false",
+    );
+    assert.equal(
+      screen
+        .getByRole("button", { name: "Remote" })
+        .getAttribute("aria-expanded"),
+      "true",
+    );
   } finally {
     restore();
   }
@@ -346,9 +510,7 @@ test("failed project unregistration reports the error and keeps the hierarchy", 
   });
   try {
     renderSidebar();
-    fireEvent.click(
-      await screen.findByLabelText("Actions for repo Project"),
-    );
+    fireEvent.click(await screen.findByLabelText("Actions for repo Project"));
     assert.equal(
       screen.getByRole("button", { name: "Repo settings" }).textContent?.trim(),
       "Repo settings",
@@ -720,21 +882,31 @@ test("manager setup and teardown stay visible in the sidebar after dismissal", a
   const deleteReply = Promise.withResolvers<Response>();
   const statusReply = Promise.withResolvers<Response>();
   const baseFetch = globalThis.fetch;
-  globalThis.fetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = new URL(String(input), "http://localhost");
-    if (url.pathname !== "/api/worktrees") return baseFetch(input, init);
-    if (url.searchParams.get("action") === "branches") {
-      return Response.json({ local: ["main"], remote: [], defaultRef: "main" });
-    }
-    if (url.searchParams.get("action") === "status") return statusReply.promise;
-    const request = JSON.parse(String(init?.body));
-    if (request.action === "create") return createReply.promise;
-    if (request.action === "delete") return deleteReply.promise;
-    throw new Error(`Unexpected action: ${request.action}`);
-  }, { preconnect: baseFetch.preconnect });
-  const dismiss = () => fireEvent.keyDown(document.activeElement ?? document.body, {
-    key: "Escape", code: "Escape",
-  });
+  globalThis.fetch = Object.assign(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), "http://localhost");
+      if (url.pathname !== "/api/worktrees") return baseFetch(input, init);
+      if (url.searchParams.get("action") === "branches") {
+        return Response.json({
+          local: ["main"],
+          remote: [],
+          defaultRef: "main",
+        });
+      }
+      if (url.searchParams.get("action") === "status")
+        return statusReply.promise;
+      const request = JSON.parse(String(init?.body));
+      if (request.action === "create") return createReply.promise;
+      if (request.action === "delete") return deleteReply.promise;
+      throw new Error(`Unexpected action: ${request.action}`);
+    },
+    { preconnect: baseFetch.preconnect },
+  );
+  const dismiss = () =>
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+      code: "Escape",
+    });
   const openManager = async () => {
     fireEvent.click(await screen.findByLabelText("Actions for repo Project"));
     fireEvent.click(screen.getByRole("button", { name: "Manage workspaces" }));
@@ -744,33 +916,69 @@ test("manager setup and teardown stay visible in the sidebar after dismissal", a
     renderSidebar();
     await openManager();
     fireEvent.click(screen.getByRole("button", { name: "Create workspace" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Branch name" }), { target: { value: "feature" } });
-    await waitFor(() => assert.equal((screen.getByRole("button", { name: "Create" }) as HTMLButtonElement).disabled, false));
+    fireEvent.change(screen.getByRole("textbox", { name: "Branch name" }), {
+      target: { value: "feature" },
+    });
+    await waitFor(() =>
+      assert.equal(
+        (screen.getByRole("button", { name: "Create" }) as HTMLButtonElement)
+          .disabled,
+        false,
+      ),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
     dismiss();
-    await waitFor(() => assert.ok(!screen.queryByRole("dialog", { name: "Create workspace" })));
+    await waitFor(() =>
+      assert.ok(!screen.queryByRole("dialog", { name: "Create workspace" })),
+    );
     dismiss();
-    await waitFor(() => assert.ok(!screen.queryByRole("dialog", { name: "Manage workspaces" })));
+    await waitFor(() =>
+      assert.ok(!screen.queryByRole("dialog", { name: "Manage workspaces" })),
+    );
     assert.ok(screen.getByTitle("Building workspace…"));
 
-    hierarchy.projects = [{ ...project, workspaces: [...project.workspaces, feature] }];
-    const job = { id: "setup-job", workspaceId: feature.id, status: "running", stage: "postBlocking" };
+    hierarchy.projects = [
+      { ...project, workspaces: [...project.workspaces, feature] },
+    ];
+    const job = {
+      id: "setup-job",
+      workspaceId: feature.id,
+      status: "running",
+      stage: "postBlocking",
+    };
     createReply.resolve(Response.json(job));
     await screen.findByRole("button", { name: "Feature" });
-    assert.ok(screen.getByTitle("Setting up workspace…").parentElement?.textContent?.includes("Feature"));
+    assert.ok(
+      screen
+        .getByTitle("Setting up workspace…")
+        .parentElement?.textContent?.includes("Feature"),
+    );
     statusReply.resolve(Response.json({ ...job, status: "complete" }));
-    await waitFor(() => assert.ok(!screen.queryByTitle("Setting up workspace…")), { timeout: 3000 });
+    await waitFor(
+      () => assert.ok(!screen.queryByTitle("Setting up workspace…")),
+      { timeout: 3000 },
+    );
 
     await openManager();
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Delete workspace" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Delete workspace" }),
+    );
     await screen.findByText("Deleting workspace…");
     dismiss();
-    await waitFor(() => assert.ok(!screen.queryByRole("dialog", { name: "Manage workspaces" })));
-    assert.ok(screen.getByText("Deleting…").parentElement?.textContent?.includes("Feature"));
+    await waitFor(() =>
+      assert.ok(!screen.queryByRole("dialog", { name: "Manage workspaces" })),
+    );
+    assert.ok(
+      screen
+        .getByText("Deleting…")
+        .parentElement?.textContent?.includes("Feature"),
+    );
     hierarchy.projects = [project];
     deleteReply.resolve(Response.json({ status: "deleted" }));
-    await waitFor(() => assert.ok(!screen.queryByRole("button", { name: "Feature" })));
+    await waitFor(() =>
+      assert.ok(!screen.queryByRole("button", { name: "Feature" })),
+    );
     assert.equal(screen.queryByText("Deleting…"), null);
   } finally {
     restore();

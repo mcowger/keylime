@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, ClipboardList, Plus, Settings2 } from "lucide-react";
+import {
+  ChevronRight,
+  ClipboardList,
+  MoreHorizontal,
+  Plus,
+  Settings2,
+} from "lucide-react";
 import type { EffortRecord, SystemRecord } from "@/lib/api-contracts/systems";
 import { comparableProjectPath } from "@/lib/comparable-path";
 import { effortStatusLabels } from "./EffortDetails";
@@ -113,7 +119,9 @@ export function SystemsSidebar({
   onChanged: () => void;
 }) {
   const [editor, setEditor] = useState<Editor | null>(null);
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [systemExpansion, setSystemExpansion] = useState<Map<string, boolean>>(
+    () => new Map(),
+  );
   const [hidden, setHidden] = useState(false);
   const data = state?.data;
   const disabled = !data || !!unavailable || !!state?.error;
@@ -145,16 +153,12 @@ export function SystemsSidebar({
             effort.sessionIds.some((id) => matchedIds?.has(id))),
       ) ?? [];
     if ((runningOnly || !systemMatch) && !efforts.length) return null;
+    const forcedOpen = Boolean(query) || runningOnly;
     const open =
-      expanded.has(system.id) ||
-      efforts.some(findEffort) ||
-      Boolean(query) ||
-      runningOnly;
+      forcedOpen ||
+      (systemExpansion.get(system.id) ?? efforts.some(findEffort));
     return (
-      <div
-        key={system.id}
-        style={{ ...systemsStack, gap: 4, paddingInlineStart: 4 }}
-      >
+      <div key={system.id} style={{ ...systemsStack, gap: 4 }}>
         <div
           style={{
             ...systemsRow,
@@ -163,40 +167,30 @@ export function SystemsSidebar({
             position: "relative",
           }}
         >
-          <SystemsButton
+          <button
+            type="button"
+            className="sidebar-branch-toggle ui-focus-ring"
             aria-expanded={open}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              flex: 1,
-              minWidth: 0,
-              border: 0,
-              background: "transparent",
-              fontWeight: 600,
-              textAlign: "left",
-            }}
-            onClick={() =>
-              setExpanded((previous) => {
-                const next = new Set(previous);
-                if (next.has(system.id)) next.delete(system.id);
-                else next.add(system.id);
-                return next;
-              })
+            aria-disabled={forcedOpen || undefined}
+            style={{ fontWeight: 600, paddingInlineStart: 4 }}
+            onClick={
+              forcedOpen
+                ? undefined
+                : () =>
+                    setSystemExpansion((previous) =>
+                      new Map(previous).set(system.id, !open),
+                    )
             }
           >
             <ChevronRight
               size={12}
-              style={{
-                flexShrink: 0,
-                transform: open ? "rotate(90deg)" : undefined,
-              }}
+
               aria-hidden="true"
             />
             <span className="truncate" title={system.name}>
               {system.name}
             </span>
-          </SystemsButton>
+          </button>
           {!system.archived && (
             <SystemsButton
               style={{ flexShrink: 0 }}
@@ -211,9 +205,15 @@ export function SystemsSidebar({
           <details>
             <summary
               aria-label={`Actions for ${system.name}`}
-              style={{ cursor: "pointer", whiteSpace: "nowrap" }}
+              title={`Actions for ${system.name}`}
+              style={{
+                cursor: "pointer",
+                listStyle: "none",
+                padding: "3px 6px",
+                display: "flex",
+              }}
             >
-              Actions
+              <MoreHorizontal size={16} aria-hidden="true" />
             </summary>
             <div
               style={{
@@ -247,8 +247,8 @@ export function SystemsSidebar({
                         await systemsRequest(host.id)
                       ).efforts.find(({ id }) => id === effortId);
                       if (!effort) throw new Error("Effort not found.");
-                      setExpanded((previous) =>
-                        new Set(previous).add(effort.systemId),
+                      setSystemExpansion((previous) =>
+                        new Map(previous).set(effort.systemId, true),
                       );
                       onOpenEffort(effort, !!path && effort.status === "ready");
                     },
@@ -287,7 +287,10 @@ export function SystemsSidebar({
           </details>
         </div>
         {open && (
-          <div style={{ ...systemsStack, gap: 4, paddingInlineStart: 14 }}>
+          <div
+            className="sidebar-tree-children"
+            style={{ ...systemsStack, gap: 4 }}
+          >
             {!efforts.length && <span style={systemsMuted}>No Efforts.</span>}
             {efforts.map((effort) => (
               <div key={effort.id} style={systemsRow}>
@@ -346,9 +349,7 @@ export function SystemsSidebar({
       style={{
         ...systemsStack,
         gap: 5,
-        borderTop: "1px solid var(--border)",
         paddingBottom: 4,
-        marginTop: 5,
       }}
     >
       <SidebarSectionHeader
@@ -375,7 +376,10 @@ export function SystemsSidebar({
         </SidebarIconButton>
       </SidebarSectionHeader>
       {sectionExpanded && (
-        <>
+        <div
+          className="sidebar-tree-children"
+          style={{ ...systemsStack, gap: 5 }}
+        >
           <SystemsError message={unavailable ?? state?.error} />
           {!data && !unavailable && !state?.error && (
             <span role="status" style={systemsMuted}>
@@ -396,7 +400,7 @@ export function SystemsSidebar({
               {archive}
             </details>
           )}
-        </>
+        </div>
       )}
       {(editor?.kind === "new" || editor?.kind === "edit") && (
         <SystemEditor
@@ -424,7 +428,9 @@ export function SystemsSidebar({
           action={action}
           onClose={close}
           onCreated={(effort) => {
-            setExpanded((previous) => new Set(previous).add(effort.systemId));
+            setSystemExpansion((previous) =>
+              new Map(previous).set(effort.systemId, true),
+            );
             close();
             onChanged();
             onOpenEffort(effort, false);

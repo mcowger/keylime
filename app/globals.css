@@ -2247,6 +2247,32 @@ html[data-touch-targets="accessible"]
   transform: rotate(90deg);
 }
 
+.sidebar-tree-children {
+  padding-inline-start: 16px;
+}
+.sidebar-branch-toggle {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.sidebar-branch-toggle > svg:first-child,
+.sidebar-section-heading > button > svg {
+  flex-shrink: 0;
+}
+.sidebar-branch-toggle[aria-expanded="true"] > svg:first-child {
+  transform: rotate(90deg);
+}
+
 .sidebar-project-actions {
   /* Match the session status column after reserving timestamp + menu space;
      grows when the pin toggle sits beside the menu. */

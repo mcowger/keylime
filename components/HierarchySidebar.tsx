@@ -22,7 +22,7 @@ import {
   Trash2,
   Wrench,
 } from "lucide-react";
-import { isLinkUp, type HostStatus } from "@/lib/hosts/host";
+import type { HostStatus } from "@/lib/hosts/host";
 import { useI18n } from "@/lib/i18n";
 import type {
   HierarchyProject,
@@ -215,16 +215,10 @@ export function HierarchySidebar({
   onToggleHost,
 }: Props) {
   const { t } = useI18n();
-  const connectedHosts = hosts.filter(
-    (host) => host.status && isLinkUp(host.status),
-  );
-  const ungroupedHostId =
-    connectedHosts.length === 1
-      ? connectedHosts[0].id
-      : hosts.length === 1
-        ? hosts[0].id
-        : null;
   const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(
     () => new Set(),
   );
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -678,8 +672,7 @@ export function HierarchySidebar({
     );
   const query = searchQuery.trim().toLowerCase();
   const searching = Boolean(query);
-  const hostExpanded = (id: string) =>
-    searching || id === ungroupedHostId || !collapsedHosts.has(id);
+  const hostExpanded = (id: string) => searching || !collapsedHosts.has(id);
   const button = {
     border: "1px solid var(--border)",
     borderRadius: "var(--radius-control)",
@@ -859,743 +852,63 @@ export function HierarchySidebar({
       )}
       {hosts.map((host) => (
         <section key={host.id} style={{ marginBottom: 8 }}>
-          {host.id !== ungroupedHostId && (
-            <div
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+              padding: "4px 0 2px",
+            }}
+          >
+            <button
+              type="button"
+              className="ui-focus-ring"
+              aria-expanded={hostExpanded(host.id)}
+              aria-disabled={searching || undefined}
+              onClick={searching ? undefined : () => onToggleHost(host.id)}
               style={{
+                flex: 1,
+                minWidth: 0,
                 display: "flex",
                 alignItems: "center",
-                gap: 2,
-                padding: "4px 0 2px",
+                gap: 6,
+                padding: "3px 4px",
+                border: 0,
+                borderRadius: 6,
+                background: "none",
+                color: "var(--text-muted)",
+                fontSize: 13,
+                fontWeight: 600,
+                textAlign: "left",
+                cursor: "pointer",
               }}
             >
-              <button
-                type="button"
-                className="ui-focus-ring"
-                aria-expanded={hostExpanded(host.id)}
-                aria-disabled={searching || undefined}
-                onClick={searching ? undefined : () => onToggleHost(host.id)}
+              <ChevronRight
+                size={12}
+                aria-hidden="true"
                 style={{
-                  flex: 1,
-                  minWidth: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "3px 4px",
-                  border: 0,
-                  borderRadius: 6,
-                  background: "none",
-                  color: "var(--text-muted)",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  textAlign: "left",
-                  cursor: "pointer",
+                  flexShrink: 0,
+                  transform: hostExpanded(host.id)
+                    ? "rotate(90deg)"
+                    : undefined,
+                }}
+              />
+              <Server size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+              <span
+                style={{
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
                 }}
               >
-                <ChevronRight
-                  size={12}
-                  aria-hidden="true"
-                  style={{
-                    flexShrink: 0,
-                    transform: hostExpanded(host.id)
-                      ? "rotate(90deg)"
-                      : undefined,
-                  }}
-                />
-                <Server
-                  size={14}
-                  aria-hidden="true"
-                  style={{ flexShrink: 0 }}
-                />
-                <span
-                  style={{
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {host.label || "This machine"}
-                </span>
-              </button>
-            </div>
-          )}
-          {hostExpanded(host.id) && (
-            <SidebarSectionHeader
-              label={t("projects.heading")}
-              disclosure={{
-                expanded: searching || !collapsedRepos.has(host.id),
-                onToggle: searching
-                  ? undefined
-                  : () =>
-                      setCollapsedRepos((current) => {
-                        const next = new Set(current);
-                        if (next.has(host.id)) next.delete(host.id);
-                        else next.add(host.id);
-                        return next;
-                      }),
-              }}
-            >
-              <SidebarIconButton
-                label={
-                  host.id === ungroupedHostId
-                    ? t("projects.add")
-                    : t("projects.addOnHost", {
-                        host: host.label || "This machine",
-                      })
-                }
-                title={t("projects.addTitle")}
-                onClick={() => onAddProject(host.id)}
-              >
-                <Plus aria-hidden="true" />
-              </SidebarIconButton>
-            </SidebarSectionHeader>
-          )}
-          {hostExpanded(host.id) &&
-            (searching || !collapsedRepos.has(host.id)) &&
-            (snapshots[host.id]?.projects ?? []).map((project) => {
-              const projectMatch =
-                !!query &&
-                `${project.alias ?? ""} ${project.name} ${project.path}`
-                  .toLowerCase()
-                  .includes(query);
-              const workspaces = project.workspaces.filter(
-                (workspace) =>
-                  (!runningOnly ||
-                    (selectedHostId === host.id &&
-                      selectedCwd === workspace.path) ||
-                    workspace.sessionIds.some((id) =>
-                      runningSessionIds.has(id),
-                    )) &&
-                  (!query ||
-                    projectMatch ||
-                    `${workspace.name} ${workspace.path} ${workspace.branch ?? ""}`
-                      .toLowerCase()
-                      .includes(query) ||
-                    workspace.sessionIds.some((id) =>
-                      matchedSessionIds?.has(id),
-                    )),
-              );
-              if (!workspaces.length) return null;
-              const defaultWorkspace = project.workspaces.find(
-                (workspace) => workspace.isDefault,
-              );
-              const unavailableReason =
-                hostUnavailableReason?.(host.id) ?? null;
-              const projectKey = hostProjectKey(host.id, project.path);
-              const creation = managerCreations[projectKey];
-              const buildingFromManager =
-                creation === "starting" ||
-                (creation?.status === "running" &&
-                  !project.workspaces.some(
-                    (workspace) => workspace.id === creation.workspaceId,
-                  ));
-              return (
-                <div key={project.id} style={{ marginBottom: 4 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      padding: "5px 4px",
-                      fontWeight: 600,
-                    }}
-                  >
-                    <ProjectIcon project={project} />
-                    <span
-                      title={project.path}
-                      style={{
-                        flex: 1,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
-                      {project.alias || project.name}
-                    </span>
-                    {(buildingFromManager ||
-                      buildingWorkspaceProjects?.has(projectKey)) && (
-                      <PendingOperation compact label="Building workspace…" />
-                    )}
-                    <button
-                      type="button"
-                      aria-label={`New ${project.kind === "git" ? "workspace" : "session"} in ${project.alias || project.name}`}
-                      title={
-                        unavailableReason ??
-                        `New ${project.kind === "git" ? "workspace" : "session"}`
-                      }
-                      disabled={!defaultWorkspace || unavailableReason !== null}
-                      style={{ ...button, padding: "3px 6px" }}
-                      onClick={() => {
-                        if (!defaultWorkspace) return;
-                        onNewWorkspace({
-                          path: defaultWorkspace.path,
-                          hostId: host.id,
-                          name: defaultWorkspace.name,
-                          projectId: project.id,
-                          workspaceId: defaultWorkspace.id,
-                          projectPath: project.path,
-                          projectName: project.alias ?? project.name,
-                          projectKind: project.kind,
-                          isDefaultWorkspace: defaultWorkspace.isDefault,
-                          addedAt: project.addedAt,
-                          launchConfig: project.launchConfig,
-                        });
-                      }}
-                    >
-                      <Plus size={14} />
-                    </button>
-                    <details style={{ position: "relative" }}>
-                      <summary
-                        aria-label={`Actions for repo ${project.alias || project.name}`}
-                        style={{
-                          cursor: "pointer",
-                          listStyle: "none",
-                          padding: "3px 6px",
-                        }}
-                      >
-                        <MoreHorizontal size={16} aria-hidden="true" />
-                      </summary>
-                      <div
-                        style={{
-                          ...menu,
-                          flexDirection: "column",
-                          width: "max-content",
-                        }}
-                      >
-                        <button
-                          className="sidebar-menu-item"
-                          style={repoMenuButton}
-                          type="button"
-                          aria-label="Repo settings"
-                          title="Repo settings"
-                          onClick={(e) => {
-                            e.currentTarget
-                              .closest("details")
-                              ?.removeAttribute("open");
-                            setSettingsProject({ host: host.id, project });
-                          }}
-                        >
-                          <Wrench size={16} aria-hidden="true" /> Repo settings
-                        </button>
-                        <button
-                          className="sidebar-menu-item"
-                          style={repoMenuButton}
-                          type="button"
-                          onClick={(event) => {
-                            event.currentTarget
-                              .closest("details")
-                              ?.removeAttribute("open");
-                            onOpenPlanning?.({
-                              host: host.id,
-                              owner: { kind: "repo", id: project.id },
-                              onChanged,
-                              onOpenTarget: ({ path }) => {
-                                if (path) onSelectWorkspace(path, host.id);
-                              },
-                              onOpenChat: onOpenLinkedSession,
-                            });
-                          }}
-                        >
-                          <ClipboardList size={16} aria-hidden="true" /> Repo
-                          Notes &amp; Tasks
-                        </button>
-                        {project.kind === "git" && (
-                          <button
-                            className="sidebar-menu-item"
-                            style={repoMenuButton}
-                            type="button"
-                            aria-label="Manage workspaces"
-                            title="Manage workspaces"
-                            onClick={(e) => {
-                              e.currentTarget
-                                .closest("details")
-                                ?.removeAttribute("open");
-                              setManagedProject({ host: host.id, project });
-                            }}
-                          >
-                            <FolderCog size={16} aria-hidden="true" /> Manage
-                            workspaces
-                          </button>
-                        )}
-                        {project.kind === "git" && (
-                          <button
-                            className="sidebar-menu-item"
-                            style={repoMenuButton}
-                            type="button"
-                            aria-label="Import workspaces"
-                            title="Import workspaces"
-                            disabled={busy}
-                            onClick={(e) => {
-                              e.currentTarget
-                                .closest("details")
-                                ?.removeAttribute("open");
-                              void discover(host.id, project);
-                            }}
-                          >
-                            <FolderInput size={16} aria-hidden="true" /> Import
-                            workspaces
-                          </button>
-                        )}
-                        <button
-                          className="sidebar-menu-item"
-                          style={repoMenuButton}
-                          type="button"
-                          aria-label="Unregister repo"
-                          title="Unregister repo"
-                          disabled={busy}
-                          onClick={(e) => {
-                            e.currentTarget
-                              .closest("details")
-                              ?.removeAttribute("open");
-                            void confirmForget(
-                              "this repo and its registrations",
-                            ).then((confirmed) => {
-                              if (confirmed)
-                                void operate(host.id, {
-                                  action: "unregisterProject",
-                                  projectId: project.id,
-                                });
-                            });
-                          }}
-                        >
-                          <Trash2 size={16} aria-hidden="true" /> Unregister
-                          repo
-                        </button>
-                      </div>
-                    </details>
-                  </div>
-                  {workspaces.map((workspace) => {
-                    const runningCount = workspace.sessionIds.filter((id) =>
-                      runningSessionIds.has(id),
-                    ).length;
-                    const workspaceSessions = sessions.filter(
-                      (session) =>
-                        (session.hostId ?? LOCAL_HOST_ID) === host.id &&
-                        workspace.sessionIds.includes(session.id),
-                    );
-                    const latestSession = workspaceSessions.sort((a, b) =>
-                      (b.lastMessageAt ?? b.modified).localeCompare(
-                        a.lastMessageAt ?? a.modified,
-                      ),
-                    )[0];
-                    const needsAttention = workspaceSessions.some(
-                      ({ id }) =>
-                        awaitingInputIds.has(id) ||
-                        unreadSessionIds.has(id) ||
-                        hasUndismissedExit(id),
-                    );
-                    const workspaceKey = hostProjectKey(
-                      host.id,
-                      workspace.path,
-                    );
-                    const monitor = workspace.ship?.pr?.monitor;
-                    const stoppingMonitor =
-                      pendingMonitorStops.has(workspaceKey);
-                    const deleting = deletingWorkspace === workspaceKey;
-                    const cleaningUp =
-                      finishingWorkspace === workspaceKey ||
-                      (workspace.ship?.job?.status === "running" &&
-                        workspace.ship.job.kind === "finish");
-                    const setup =
-                      creation &&
-                      creation !== "starting" &&
-                      (creation.id === workspace.setup?.jobId ||
-                        (!workspace.setup &&
-                          creation.workspaceId === workspace.id))
-                        ? creation
-                        : workspace.setup;
-                    const pr = workspace.ship?.pr;
-                    const prLink = pr?.state === "open" && (
-                      <a
-                        href={pr.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={`Checks: ${pr.checks}`}
-                        style={{
-                          fontSize: 11,
-                          whiteSpace: "nowrap",
-                          color: "var(--text)",
-                        }}
-                      >
-                        <span
-                          aria-hidden="true"
-                          style={{
-                            color:
-                              pr.checks === "passing"
-                                ? "var(--status-success)"
-                                : pr.checks === "failing"
-                                  ? "var(--status-error)"
-                                  : "var(--status-warning)",
-                          }}
-                        >
-                          ●
-                        </span>{" "}
-                        PR #{pr.number}
-                        {monitor &&
-                          (monitor.state === "watching"
-                            ? " · Monitoring"
-                            : monitor.state === "error"
-                              ? " · Monitoring error"
-                              : " · Delivery expired")}
-                      </a>
-                    );
-                    return (
-                      <div key={workspace.id} style={{ marginLeft: 12 }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            padding: "4px 6px",
-                            borderRadius: "var(--radius-control)",
-                            background:
-                              selectedHostId === host.id &&
-                              selectedCwd === workspace.path
-                                ? "var(--bg-selected)"
-                                : "transparent",
-                          }}
-                        >
-                          <button
-                            style={rowButton}
-                            type="button"
-                            title={workspace.path}
-                            disabled={workspace.unavailable}
-                            aria-pressed={
-                              selectedHostId === host.id &&
-                              selectedCwd === workspace.path
-                            }
-                            onClick={() =>
-                              onSelectWorkspace(
-                                workspace.path,
-                                host.id,
-                                latestSession,
-                              )
-                            }
-                          >
-                            {workspace.name}
-                            {workspace.unavailable ? " (unavailable)" : ""}
-                          </button>
-                          {deleting ? (
-                            <PendingOperation label="Deleting…" />
-                          ) : cleaningUp ? (
-                            <PendingOperation label="Cleaning up…" />
-                          ) : workspace.ship?.job?.status === "running" ? (
-                            <span
-                              title="Shipping"
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 3,
-                                fontSize: 11,
-                                flexShrink: 0,
-                              }}
-                            >
-                              <Loader2 size={12} className="animate-spin" />{" "}
-                              Shipping...
-                            </span>
-                          ) : pr?.state === "open" ? (
-                            monitor ? null : (
-                              prLink
-                            )
-                          ) : workspace.ship?.pr?.state === "merged" ? (
-                            <span
-                              style={{ fontSize: 11, whiteSpace: "nowrap" }}
-                            >
-                              Merged{" "}
-                              <button
-                                type="button"
-                                disabled={busy || finishingWorkspace !== null}
-                                onClick={() =>
-                                  setFinishTarget({
-                                    host: host.id,
-                                    projectPath: project.path,
-                                    path: workspace.path,
-                                  })
-                                }
-                              >
-                                Clean up
-                              </button>
-                            </span>
-                          ) : workspace.ship?.pr?.state === "closed" ? (
-                            <span
-                              style={{ fontSize: 11, whiteSpace: "nowrap" }}
-                            >
-                              PR closed
-                            </span>
-                          ) : null}
-                          {runningCount > 0 && (
-                            <span
-                              title={`${runningCount} running agents`}
-                              aria-label={`${runningCount} running agents`}
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 3,
-                                flexShrink: 0,
-                              }}
-                            >
-                              <Bot size={14} aria-hidden="true" />
-                              {runningCount}
-                            </span>
-                          )}
-                          {needsAttention && (
-                            <span
-                              title="Attention required"
-                              aria-label="Attention required"
-                              style={{
-                                color: "var(--status-warning)",
-                                padding: "0 4px",
-                              }}
-                            >
-                              <AlertCircle size={14} aria-hidden="true" />
-                            </span>
-                          )}
-                          {setup?.status === "running" ? (
-                            <PendingOperation
-                              compact
-                              label="Setting up workspace…"
-                            />
-                          ) : setup && setup.status !== "complete" ? (
-                            <span
-                              title={setup.error || `Setup ${setup.status}`}
-                              aria-label={`Setup ${setup.status}`}
-                            >
-                              <Wrench size={14} aria-hidden="true" />
-                            </span>
-                          ) : null}
-                          <details
-                            style={{ position: "relative" }}
-                            onToggle={(e) =>
-                              setOpenWorkspaceMenu(
-                                e.currentTarget.open
-                                  ? `${host.id}:${workspace.path}`
-                                  : null,
-                              )
-                            }
-                          >
-                            <summary
-                              aria-label={`Actions for workspace ${workspace.name}`}
-                              style={{
-                                cursor: "pointer",
-                                listStyle: "none",
-                                padding: "3px 6px",
-                              }}
-                            >
-                              <MoreHorizontal size={16} aria-hidden="true" />
-                            </summary>
-                            <div style={menu}>
-                              {!workspace.isDefault &&
-                                project.kind === "git" && (
-                                  <SidebarShipButton
-                                    style={menuButton}
-                                    host={host.id}
-                                    projectPath={project.path}
-                                    path={workspace.path}
-                                    sessionId={latestSession?.id}
-                                    open={
-                                      openWorkspaceMenu ===
-                                      `${host.id}:${workspace.path}`
-                                    }
-                                    disabled={
-                                      workspace.unavailable ||
-                                      !latestSession ||
-                                      runningSessionIds.has(latestSession.id)
-                                    }
-                                    onClick={() => {
-                                      if (latestSession) {
-                                        onSelectWorkspace(
-                                          workspace.path,
-                                          host.id,
-                                          latestSession,
-                                        );
-                                        onShip?.({
-                                          host: host.id,
-                                          projectPath: project.path,
-                                          path: workspace.path,
-                                          sessionId: latestSession.id,
-                                        });
-                                      }
-                                    }}
-                                  />
-                                )}
-                              <button
-                                style={menuButton}
-                                type="button"
-                                aria-label="Import sessions"
-                                title="Import sessions"
-                                disabled={busy || workspace.unavailable}
-                                onClick={(e) => {
-                                  e.currentTarget
-                                    .closest("details")
-                                    ?.removeAttribute("open");
-                                  void discover(host.id, project, workspace.id);
-                                }}
-                              >
-                                <FolderInput size={16} aria-hidden="true" />
-                              </button>
-                              {!workspace.isDefault && (
-                                <button
-                                  style={menuButton}
-                                  type="button"
-                                  aria-label="Unregister workspace"
-                                  title="Unregister workspace"
-                                  disabled={
-                                    busy ||
-                                    cleaningUp ||
-                                    setup?.status === "running"
-                                  }
-                                  onClick={(e) => {
-                                    e.currentTarget
-                                      .closest("details")
-                                      ?.removeAttribute("open");
-                                    void unregisterWorkspace(
-                                      host.id,
-                                      project.path,
-                                      workspace.path,
-                                    );
-                                  }}
-                                >
-                                  <Trash2 size={16} aria-hidden="true" />
-                                </button>
-                              )}
-                            </div>
-                          </details>
-                        </div>
-                        {pr?.state === "open" &&
-                          monitor &&
-                          !deleting &&
-                          !cleaningUp &&
-                          workspace.ship?.job?.status !== "running" && (
-                            <div
-                              style={{
-                                display: "flex",
-                                gap: 8,
-                                alignItems: "center",
-                                paddingLeft: 10,
-                              }}
-                            >
-                              {prLink}
-                              <SidebarIconButton
-                                label={
-                                  stoppingMonitor
-                                    ? "Stopping monitoring"
-                                    : "Stop monitoring"
-                                }
-                                disabled={busy || stoppingMonitor}
-                                onClick={() =>
-                                  void stopMonitoring({
-                                    host: host.id,
-                                    projectPath: project.path,
-                                    path: workspace.path,
-                                    monitorId: monitor.id,
-                                  })
-                                }
-                              >
-                                {stoppingMonitor ? (
-                                  <Loader2
-                                    size={14}
-                                    className="animate-spin"
-                                    aria-hidden="true"
-                                  />
-                                ) : (
-                                  <BellOff size={14} aria-hidden="true" />
-                                )}
-                              </SidebarIconButton>
-                            </div>
-                          )}
-                        {query &&
-                          workspace.sessionIds
-                            .filter((id) => matchedSessionIds?.has(id))
-                            .map((id) => {
-                              const session = sessions.find(
-                                (item) =>
-                                  item.id === id &&
-                                  (item.hostId ?? "local") === host.id,
-                              );
-                              return (
-                                <div
-                                  key={id}
-                                  style={{
-                                    marginLeft: 18,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    background:
-                                      selectedSessionId === id
-                                        ? "var(--bg-selected)"
-                                        : undefined,
-                                  }}
-                                >
-                                  <button
-                                    style={rowButton}
-                                    type="button"
-                                    disabled={!session || workspace.unavailable}
-                                    aria-current={
-                                      selectedSessionId === id
-                                        ? "true"
-                                        : undefined
-                                    }
-                                    onClick={() => {
-                                      if (session) {
-                                        onSelectWorkspace(
-                                          workspace.path,
-                                          host.id,
-                                        );
-                                        onSelectSession(session);
-                                      }
-                                    }}
-                                  >
-                                    {session?.name ||
-                                      session?.firstMessage ||
-                                      id}
-                                  </button>
-                                  <details style={{ position: "relative" }}>
-                                    <summary
-                                      aria-label={`Actions for session ${session?.name || session?.firstMessage || id}`}
-                                      style={{
-                                        cursor: "pointer",
-                                        listStyle: "none",
-                                        padding: "3px 6px",
-                                      }}
-                                    >
-                                      <MoreHorizontal
-                                        size={16}
-                                        aria-hidden="true"
-                                      />
-                                    </summary>
-                                    <div style={menu}>
-                                      <button
-                                        style={menuButton}
-                                        type="button"
-                                        aria-label="Unregister session"
-                                        title="Unregister session"
-                                        disabled={busy}
-                                        onClick={(e) => {
-                                          e.currentTarget
-                                            .closest("details")
-                                            ?.removeAttribute("open");
-                                          void confirmForget(
-                                            "this session",
-                                          ).then((confirmed) => {
-                                            if (confirmed)
-                                              void operate(host.id, {
-                                                action: "unregisterSession",
-                                                workspaceId: workspace.id,
-                                                sessionId: id,
-                                              });
-                                          });
-                                        }}
-                                      >
-                                        <Trash2 size={16} aria-hidden="true" />
-                                      </button>
-                                    </div>
-                                  </details>
-                                </div>
-                              );
-                            })}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          {hostExpanded(host.id) && (
+                {host.label || "This machine"}
+              </span>
+            </button>
+          </div>
+          <div
+            className="sidebar-tree-children"
+            hidden={!hostExpanded(host.id)}
+          >
             <SystemsSidebar
               host={{
                 id: host.id,
@@ -1636,7 +949,756 @@ export function HierarchySidebar({
               onOpenPlanning={onOpenPlanning}
               onChanged={onChanged}
             />
-          )}
+            {hostExpanded(host.id) && (
+              <SidebarSectionHeader
+                label={t("projects.heading")}
+                disclosure={{
+                  expanded: searching || !collapsedRepos.has(host.id),
+                  onToggle: searching
+                    ? undefined
+                    : () =>
+                        setCollapsedRepos((current) => {
+                          const next = new Set(current);
+                          if (next.has(host.id)) next.delete(host.id);
+                          else next.add(host.id);
+                          return next;
+                        }),
+                }}
+              >
+                <SidebarIconButton
+                  label={t("projects.addOnHost", {
+                    host: host.label || t("hostsConfig.thisMachine"),
+                  })}
+                  title={t("projects.addTitle")}
+                  onClick={() => onAddProject(host.id)}
+                >
+                  <Plus aria-hidden="true" />
+                </SidebarIconButton>
+              </SidebarSectionHeader>
+            )}
+            <div className="sidebar-tree-children">
+              {hostExpanded(host.id) &&
+                (searching || !collapsedRepos.has(host.id)) &&
+                (snapshots[host.id]?.projects ?? []).map((project) => {
+                  const projectMatch =
+                    !!query &&
+                    `${project.alias ?? ""} ${project.name} ${project.path}`
+                      .toLowerCase()
+                      .includes(query);
+                  const workspaces = project.workspaces.filter(
+                    (workspace) =>
+                      (!runningOnly ||
+                        (selectedHostId === host.id &&
+                          selectedCwd === workspace.path) ||
+                        workspace.sessionIds.some((id) =>
+                          runningSessionIds.has(id),
+                        )) &&
+                      (!query ||
+                        projectMatch ||
+                        `${workspace.name} ${workspace.path} ${workspace.branch ?? ""}`
+                          .toLowerCase()
+                          .includes(query) ||
+                        workspace.sessionIds.some((id) =>
+                          matchedSessionIds?.has(id),
+                        )),
+                  );
+                  if (
+                    (searching || runningOnly) &&
+                    !projectMatch &&
+                    !workspaces.length
+                  )
+                    return null;
+                  const defaultWorkspace = project.workspaces.find(
+                    (workspace) => workspace.isDefault,
+                  );
+                  const unavailableReason =
+                    hostUnavailableReason?.(host.id) ?? null;
+                  const projectKey = hostProjectKey(host.id, project.path);
+                  const projectForcedOpen = searching || runningOnly;
+                  const projectExpanded =
+                    projectForcedOpen || !collapsedProjects.has(projectKey);
+                  const creation = managerCreations[projectKey];
+                  const buildingFromManager =
+                    creation === "starting" ||
+                    (creation?.status === "running" &&
+                      !project.workspaces.some(
+                        (workspace) => workspace.id === creation.workspaceId,
+                      ));
+                  return (
+                    <div key={project.id} style={{ marginBottom: 4 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          padding: "5px 4px",
+                          fontWeight: 600,
+                        }}
+                      >
+                        <button
+                          type="button"
+                          className="sidebar-branch-toggle ui-focus-ring"
+                          aria-expanded={projectExpanded}
+                          aria-disabled={projectForcedOpen || undefined}
+                          onClick={
+                            projectForcedOpen
+                              ? undefined
+                              : () =>
+                                  setCollapsedProjects((current) => {
+                                    const next = new Set(current);
+                                    if (next.has(projectKey))
+                                      next.delete(projectKey);
+                                    else next.add(projectKey);
+                                    return next;
+                                  })
+                          }
+                        >
+                          <ChevronRight size={12} aria-hidden="true" />
+                          <ProjectIcon project={project} />
+                          <span
+                            title={project.path}
+                            style={{
+                              flex: 1,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                            }}
+                          >
+                            {project.alias || project.name}
+                          </span>
+                        </button>
+                        {(buildingFromManager ||
+                          buildingWorkspaceProjects?.has(projectKey)) && (
+                          <PendingOperation
+                            compact
+                            label="Building workspace…"
+                          />
+                        )}
+                        <button
+                          type="button"
+                          aria-label={`New ${project.kind === "git" ? "workspace" : "session"} in ${project.alias || project.name}`}
+                          title={
+                            unavailableReason ??
+                            `New ${project.kind === "git" ? "workspace" : "session"}`
+                          }
+                          disabled={
+                            !defaultWorkspace || unavailableReason !== null
+                          }
+                          style={{ ...button, padding: "3px 6px" }}
+                          onClick={() => {
+                            if (!defaultWorkspace) return;
+                            onNewWorkspace({
+                              path: defaultWorkspace.path,
+                              hostId: host.id,
+                              name: defaultWorkspace.name,
+                              projectId: project.id,
+                              workspaceId: defaultWorkspace.id,
+                              projectPath: project.path,
+                              projectName: project.alias ?? project.name,
+                              projectKind: project.kind,
+                              isDefaultWorkspace: defaultWorkspace.isDefault,
+                              addedAt: project.addedAt,
+                              launchConfig: project.launchConfig,
+                            });
+                          }}
+                        >
+                          <Plus size={14} />
+                        </button>
+                        <details style={{ position: "relative" }}>
+                          <summary
+                            aria-label={`Actions for repo ${project.alias || project.name}`}
+                            style={{
+                              cursor: "pointer",
+                              listStyle: "none",
+                              padding: "3px 6px",
+                            }}
+                          >
+                            <MoreHorizontal size={16} aria-hidden="true" />
+                          </summary>
+                          <div
+                            style={{
+                              ...menu,
+                              flexDirection: "column",
+                              width: "max-content",
+                            }}
+                          >
+                            <button
+                              className="sidebar-menu-item"
+                              style={repoMenuButton}
+                              type="button"
+                              aria-label="Repo settings"
+                              title="Repo settings"
+                              onClick={(e) => {
+                                e.currentTarget
+                                  .closest("details")
+                                  ?.removeAttribute("open");
+                                setSettingsProject({ host: host.id, project });
+                              }}
+                            >
+                              <Wrench size={16} aria-hidden="true" /> Repo
+                              settings
+                            </button>
+                            <button
+                              className="sidebar-menu-item"
+                              style={repoMenuButton}
+                              type="button"
+                              onClick={(event) => {
+                                event.currentTarget
+                                  .closest("details")
+                                  ?.removeAttribute("open");
+                                onOpenPlanning?.({
+                                  host: host.id,
+                                  owner: { kind: "repo", id: project.id },
+                                  onChanged,
+                                  onOpenTarget: ({ path }) => {
+                                    if (path) onSelectWorkspace(path, host.id);
+                                  },
+                                  onOpenChat: onOpenLinkedSession,
+                                });
+                              }}
+                            >
+                              <ClipboardList size={16} aria-hidden="true" />{" "}
+                              Repo Notes &amp; Tasks
+                            </button>
+                            {project.kind === "git" && (
+                              <button
+                                className="sidebar-menu-item"
+                                style={repoMenuButton}
+                                type="button"
+                                aria-label="Manage workspaces"
+                                title="Manage workspaces"
+                                onClick={(e) => {
+                                  e.currentTarget
+                                    .closest("details")
+                                    ?.removeAttribute("open");
+                                  setManagedProject({ host: host.id, project });
+                                }}
+                              >
+                                <FolderCog size={16} aria-hidden="true" />{" "}
+                                Manage workspaces
+                              </button>
+                            )}
+                            {project.kind === "git" && (
+                              <button
+                                className="sidebar-menu-item"
+                                style={repoMenuButton}
+                                type="button"
+                                aria-label="Import workspaces"
+                                title="Import workspaces"
+                                disabled={busy}
+                                onClick={(e) => {
+                                  e.currentTarget
+                                    .closest("details")
+                                    ?.removeAttribute("open");
+                                  void discover(host.id, project);
+                                }}
+                              >
+                                <FolderInput size={16} aria-hidden="true" />{" "}
+                                Import workspaces
+                              </button>
+                            )}
+                            <button
+                              className="sidebar-menu-item"
+                              style={repoMenuButton}
+                              type="button"
+                              aria-label="Unregister repo"
+                              title="Unregister repo"
+                              disabled={busy}
+                              onClick={(e) => {
+                                e.currentTarget
+                                  .closest("details")
+                                  ?.removeAttribute("open");
+                                void confirmForget(
+                                  "this repo and its registrations",
+                                ).then((confirmed) => {
+                                  if (confirmed)
+                                    void operate(host.id, {
+                                      action: "unregisterProject",
+                                      projectId: project.id,
+                                    });
+                                });
+                              }}
+                            >
+                              <Trash2 size={16} aria-hidden="true" /> Unregister
+                              repo
+                            </button>
+                          </div>
+                        </details>
+                      </div>
+                      {projectExpanded &&
+                        workspaces.map((workspace) => {
+                          const runningCount = workspace.sessionIds.filter(
+                            (id) => runningSessionIds.has(id),
+                          ).length;
+                          const workspaceSessions = sessions.filter(
+                            (session) =>
+                              (session.hostId ?? LOCAL_HOST_ID) === host.id &&
+                              workspace.sessionIds.includes(session.id),
+                          );
+                          const latestSession = workspaceSessions.sort((a, b) =>
+                            (b.lastMessageAt ?? b.modified).localeCompare(
+                              a.lastMessageAt ?? a.modified,
+                            ),
+                          )[0];
+                          const needsAttention = workspaceSessions.some(
+                            ({ id }) =>
+                              awaitingInputIds.has(id) ||
+                              unreadSessionIds.has(id) ||
+                              hasUndismissedExit(id),
+                          );
+                          const workspaceKey = hostProjectKey(
+                            host.id,
+                            workspace.path,
+                          );
+                          const monitor = workspace.ship?.pr?.monitor;
+                          const stoppingMonitor =
+                            pendingMonitorStops.has(workspaceKey);
+                          const deleting = deletingWorkspace === workspaceKey;
+                          const cleaningUp =
+                            finishingWorkspace === workspaceKey ||
+                            (workspace.ship?.job?.status === "running" &&
+                              workspace.ship.job.kind === "finish");
+                          const setup =
+                            creation &&
+                            creation !== "starting" &&
+                            (creation.id === workspace.setup?.jobId ||
+                              (!workspace.setup &&
+                                creation.workspaceId === workspace.id))
+                              ? creation
+                              : workspace.setup;
+                          const pr = workspace.ship?.pr;
+                          const prLink = pr?.state === "open" && (
+                            <a
+                              href={pr.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={`Checks: ${pr.checks}`}
+                              style={{
+                                fontSize: 11,
+                                whiteSpace: "nowrap",
+                                color: "var(--text)",
+                              }}
+                            >
+                              <span
+                                aria-hidden="true"
+                                style={{
+                                  color:
+                                    pr.checks === "passing"
+                                      ? "var(--status-success)"
+                                      : pr.checks === "failing"
+                                        ? "var(--status-error)"
+                                        : "var(--status-warning)",
+                                }}
+                              >
+                                ●
+                              </span>{" "}
+                              PR #{pr.number}
+                              {monitor &&
+                                (monitor.state === "watching"
+                                  ? " · Monitoring"
+                                  : monitor.state === "error"
+                                    ? " · Monitoring error"
+                                    : " · Delivery expired")}
+                            </a>
+                          );
+                          return (
+                            <div
+                              key={workspace.id}
+                              className="sidebar-tree-children"
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  padding: "4px 6px",
+                                  borderRadius: "var(--radius-control)",
+                                  background:
+                                    selectedHostId === host.id &&
+                                    selectedCwd === workspace.path
+                                      ? "var(--bg-selected)"
+                                      : "transparent",
+                                }}
+                              >
+                                <button
+                                  style={rowButton}
+                                  type="button"
+                                  title={workspace.path}
+                                  disabled={workspace.unavailable}
+                                  aria-pressed={
+                                    selectedHostId === host.id &&
+                                    selectedCwd === workspace.path
+                                  }
+                                  onClick={() =>
+                                    onSelectWorkspace(
+                                      workspace.path,
+                                      host.id,
+                                      latestSession,
+                                    )
+                                  }
+                                >
+                                  {workspace.name}
+                                  {workspace.unavailable
+                                    ? " (unavailable)"
+                                    : ""}
+                                </button>
+                                {deleting ? (
+                                  <PendingOperation label="Deleting…" />
+                                ) : cleaningUp ? (
+                                  <PendingOperation label="Cleaning up…" />
+                                ) : workspace.ship?.job?.status ===
+                                  "running" ? (
+                                  <span
+                                    title="Shipping"
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 3,
+                                      fontSize: 11,
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    <Loader2
+                                      size={12}
+                                      className="animate-spin"
+                                    />{" "}
+                                    Shipping...
+                                  </span>
+                                ) : pr?.state === "open" ? (
+                                  monitor ? null : (
+                                    prLink
+                                  )
+                                ) : workspace.ship?.pr?.state === "merged" ? (
+                                  <span
+                                    style={{
+                                      fontSize: 11,
+                                      whiteSpace: "nowrap",
+                                    }}
+                                  >
+                                    Merged{" "}
+                                    <button
+                                      type="button"
+                                      disabled={
+                                        busy || finishingWorkspace !== null
+                                      }
+                                      onClick={() =>
+                                        setFinishTarget({
+                                          host: host.id,
+                                          projectPath: project.path,
+                                          path: workspace.path,
+                                        })
+                                      }
+                                    >
+                                      Clean up
+                                    </button>
+                                  </span>
+                                ) : workspace.ship?.pr?.state === "closed" ? (
+                                  <span
+                                    style={{
+                                      fontSize: 11,
+                                      whiteSpace: "nowrap",
+                                    }}
+                                  >
+                                    PR closed
+                                  </span>
+                                ) : null}
+                                {runningCount > 0 && (
+                                  <span
+                                    title={`${runningCount} running agents`}
+                                    aria-label={`${runningCount} running agents`}
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 3,
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    <Bot size={14} aria-hidden="true" />
+                                    {runningCount}
+                                  </span>
+                                )}
+                                {needsAttention && (
+                                  <span
+                                    title="Attention required"
+                                    aria-label="Attention required"
+                                    style={{
+                                      color: "var(--status-warning)",
+                                      padding: "0 4px",
+                                    }}
+                                  >
+                                    <AlertCircle size={14} aria-hidden="true" />
+                                  </span>
+                                )}
+                                {setup?.status === "running" ? (
+                                  <PendingOperation
+                                    compact
+                                    label="Setting up workspace…"
+                                  />
+                                ) : setup && setup.status !== "complete" ? (
+                                  <span
+                                    title={
+                                      setup.error || `Setup ${setup.status}`
+                                    }
+                                    aria-label={`Setup ${setup.status}`}
+                                  >
+                                    <Wrench size={14} aria-hidden="true" />
+                                  </span>
+                                ) : null}
+                                <details
+                                  style={{ position: "relative" }}
+                                  onToggle={(e) =>
+                                    setOpenWorkspaceMenu(
+                                      e.currentTarget.open
+                                        ? `${host.id}:${workspace.path}`
+                                        : null,
+                                    )
+                                  }
+                                >
+                                  <summary
+                                    aria-label={`Actions for workspace ${workspace.name}`}
+                                    style={{
+                                      cursor: "pointer",
+                                      listStyle: "none",
+                                      padding: "3px 6px",
+                                    }}
+                                  >
+                                    <MoreHorizontal
+                                      size={16}
+                                      aria-hidden="true"
+                                    />
+                                  </summary>
+                                  <div style={menu}>
+                                    {!workspace.isDefault &&
+                                      project.kind === "git" && (
+                                        <SidebarShipButton
+                                          style={menuButton}
+                                          host={host.id}
+                                          projectPath={project.path}
+                                          path={workspace.path}
+                                          sessionId={latestSession?.id}
+                                          open={
+                                            openWorkspaceMenu ===
+                                            `${host.id}:${workspace.path}`
+                                          }
+                                          disabled={
+                                            workspace.unavailable ||
+                                            !latestSession ||
+                                            runningSessionIds.has(
+                                              latestSession.id,
+                                            )
+                                          }
+                                          onClick={() => {
+                                            if (latestSession) {
+                                              onSelectWorkspace(
+                                                workspace.path,
+                                                host.id,
+                                                latestSession,
+                                              );
+                                              onShip?.({
+                                                host: host.id,
+                                                projectPath: project.path,
+                                                path: workspace.path,
+                                                sessionId: latestSession.id,
+                                              });
+                                            }
+                                          }}
+                                        />
+                                      )}
+                                    <button
+                                      style={menuButton}
+                                      type="button"
+                                      aria-label="Import sessions"
+                                      title="Import sessions"
+                                      disabled={busy || workspace.unavailable}
+                                      onClick={(e) => {
+                                        e.currentTarget
+                                          .closest("details")
+                                          ?.removeAttribute("open");
+                                        void discover(
+                                          host.id,
+                                          project,
+                                          workspace.id,
+                                        );
+                                      }}
+                                    >
+                                      <FolderInput
+                                        size={16}
+                                        aria-hidden="true"
+                                      />
+                                    </button>
+                                    {!workspace.isDefault && (
+                                      <button
+                                        style={menuButton}
+                                        type="button"
+                                        aria-label="Unregister workspace"
+                                        title="Unregister workspace"
+                                        disabled={
+                                          busy ||
+                                          cleaningUp ||
+                                          setup?.status === "running"
+                                        }
+                                        onClick={(e) => {
+                                          e.currentTarget
+                                            .closest("details")
+                                            ?.removeAttribute("open");
+                                          void unregisterWorkspace(
+                                            host.id,
+                                            project.path,
+                                            workspace.path,
+                                          );
+                                        }}
+                                      >
+                                        <Trash2 size={16} aria-hidden="true" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </details>
+                              </div>
+                              {pr?.state === "open" &&
+                                monitor &&
+                                !deleting &&
+                                !cleaningUp &&
+                                workspace.ship?.job?.status !== "running" && (
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      gap: 8,
+                                      alignItems: "center",
+                                      paddingLeft: 10,
+                                    }}
+                                  >
+                                    {prLink}
+                                    <SidebarIconButton
+                                      label={
+                                        stoppingMonitor
+                                          ? "Stopping monitoring"
+                                          : "Stop monitoring"
+                                      }
+                                      disabled={busy || stoppingMonitor}
+                                      onClick={() =>
+                                        void stopMonitoring({
+                                          host: host.id,
+                                          projectPath: project.path,
+                                          path: workspace.path,
+                                          monitorId: monitor.id,
+                                        })
+                                      }
+                                    >
+                                      {stoppingMonitor ? (
+                                        <Loader2
+                                          size={14}
+                                          className="animate-spin"
+                                          aria-hidden="true"
+                                        />
+                                      ) : (
+                                        <BellOff size={14} aria-hidden="true" />
+                                      )}
+                                    </SidebarIconButton>
+                                  </div>
+                                )}
+                              {query &&
+                                workspace.sessionIds
+                                  .filter((id) => matchedSessionIds?.has(id))
+                                  .map((id) => {
+                                    const session = sessions.find(
+                                      (item) =>
+                                        item.id === id &&
+                                        (item.hostId ?? "local") === host.id,
+                                    );
+                                    return (
+                                      <div
+                                        key={id}
+                                        style={{
+                                          marginLeft: 18,
+                                          display: "flex",
+                                          alignItems: "center",
+                                          background:
+                                            selectedSessionId === id
+                                              ? "var(--bg-selected)"
+                                              : undefined,
+                                        }}
+                                      >
+                                        <button
+                                          style={rowButton}
+                                          type="button"
+                                          disabled={
+                                            !session || workspace.unavailable
+                                          }
+                                          aria-current={
+                                            selectedSessionId === id
+                                              ? "true"
+                                              : undefined
+                                          }
+                                          onClick={() => {
+                                            if (session) {
+                                              onSelectWorkspace(
+                                                workspace.path,
+                                                host.id,
+                                              );
+                                              onSelectSession(session);
+                                            }
+                                          }}
+                                        >
+                                          {session?.name ||
+                                            session?.firstMessage ||
+                                            id}
+                                        </button>
+                                        <details
+                                          style={{ position: "relative" }}
+                                        >
+                                          <summary
+                                            aria-label={`Actions for session ${session?.name || session?.firstMessage || id}`}
+                                            style={{
+                                              cursor: "pointer",
+                                              listStyle: "none",
+                                              padding: "3px 6px",
+                                            }}
+                                          >
+                                            <MoreHorizontal
+                                              size={16}
+                                              aria-hidden="true"
+                                            />
+                                          </summary>
+                                          <div style={menu}>
+                                            <button
+                                              style={menuButton}
+                                              type="button"
+                                              aria-label="Unregister session"
+                                              title="Unregister session"
+                                              disabled={busy}
+                                              onClick={(e) => {
+                                                e.currentTarget
+                                                  .closest("details")
+                                                  ?.removeAttribute("open");
+                                                void confirmForget(
+                                                  "this session",
+                                                ).then((confirmed) => {
+                                                  if (confirmed)
+                                                    void operate(host.id, {
+                                                      action:
+                                                        "unregisterSession",
+                                                      workspaceId: workspace.id,
+                                                      sessionId: id,
+                                                    });
+                                                });
+                                              }}
+                                            >
+                                              <Trash2
+                                                size={16}
+                                                aria-hidden="true"
+                                              />
+                                            </button>
+                                          </div>
+                                        </details>
+                                      </div>
+                                    );
+                                  })}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
         </section>
       ))}
       {settingsProject && (

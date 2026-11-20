@@ -150,6 +150,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ### Changed
 - Repo and System Notes & Tasks use the workspace's compact typography, with a shorter notes editor and task actions on one row where space allows.
 - Drop image files onto the Notes or task attachment buttons, or click to choose files. Missing the button won't open the file or discard your draft.
+- The sidebar indents Systems and Repos under their host, and Efforts and Workspaces under their parent. Collapse each host, section, System, or Repo independently.
+- The sidebar activity filter temporarily expands matching Repos and restores their previous collapse state when turned off.
 - **New System → Member Repos** uses the same folder picker as **Add repo**, without the clone and launch options.
 - The sidebar and Settings call projects repos, including in add, remove, and settings controls.
 - Effort cleanup lists Git-ignored files and directories, like `.env` and local database folders. Removing them requires force confirmation.
@@ -198,6 +200,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - **New System → Member Repos** uses the same folder picker as **Add repo**, without the clone and launch options
 - Repo and System Notes & Tasks use the workspace's compact typography, with a shorter notes editor and task actions on one row where space allows
 - Drop image files onto the Notes or task attachment buttons, or click to choose files. Missing the button won't open the file or discard your draft
+- The sidebar nests Systems and Repos under hosts, and Efforts and Workspaces under their parent, with independent collapse controls. Activity filtering temporarily expands matching Repos and restores their prior collapse state afterward
+- The sidebar nests Systems and Repos under hosts, and Efforts and Workspaces under their parent, with independent collapse controls. Activity filtering temporarily reveals matching Repos and restores their previous collapse state
 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen
