@@ -34605,6 +34605,85 @@
                   "additionalProperties": false,
                   "properties": {
                     "action": {
+                      "const": "readTaskImages",
+                      "type": "string"
+                    },
+                    "ids": {
+                      "items": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "maxItems": 10,
+                      "minItems": 1,
+                      "type": "array",
+                      "uniqueItems": true
+                    },
+                    "taskId": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["action", "taskId", "ids"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "action": {
+                      "const": "readLaunchImages",
+                      "type": "string"
+                    },
+                    "id": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "taskId": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "version": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["action", "taskId", "id", "version"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "action": {
+                      "const": "prepareLaunch",
+                      "type": "string"
+                    },
+                    "id": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "taskId": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "version": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["action", "taskId", "id", "version"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "action": {
                       "const": "begin",
                       "type": "string"
                     },
@@ -34702,7 +34781,7 @@
                     },
                     "expected": {
                       "additionalProperties": false,
-                      "description": "Durable launch and immutable prompt snapshot. Unknown delivery is never retried.",
+                      "description": "Durable launch with the literal prompt and pinned task image snapshot. Legacy records without taskImagesOnly are not eligible for first-message delivery. Unknown delivery is never retried.",
                       "properties": {
                         "effortId": {
                           "maxLength": 128,
@@ -34902,6 +34981,11 @@
                             }
                           ],
                           "description": "Host-derived setup choices captured at admission for recovery of the same launch."
+                        },
+                        "taskImagesOnly": {
+                          "const": true,
+                          "description": "The launch image snapshot contains only proven task attachments.",
+                          "type": "boolean"
                         },
                         "version": {
                           "maximum": 9007199254740991,
@@ -34914,7 +34998,7 @@
                     },
                     "next": {
                       "additionalProperties": false,
-                      "description": "Durable launch and immutable prompt snapshot. Unknown delivery is never retried.",
+                      "description": "Durable launch with the literal prompt and pinned task image snapshot. Legacy records without taskImagesOnly are not eligible for first-message delivery. Unknown delivery is never retried.",
                       "properties": {
                         "effortId": {
                           "maxLength": 128,
@@ -35114,6 +35198,11 @@
                             }
                           ],
                           "description": "Host-derived setup choices captured at admission for recovery of the same launch."
+                        },
+                        "taskImagesOnly": {
+                          "const": true,
+                          "description": "The launch image snapshot contains only proven task attachments.",
+                          "type": "boolean"
                         },
                         "version": {
                           "maximum": 9007199254740991,
@@ -35336,7 +35425,7 @@
               },
               "launch": {
                 "additionalProperties": false,
-                "description": "Durable launch and immutable prompt snapshot. Unknown delivery is never retried.",
+                "description": "Durable launch with the literal prompt and pinned task image snapshot. Legacy records without taskImagesOnly are not eligible for first-message delivery. Unknown delivery is never retried.",
                 "properties": {
                   "effortId": {
                     "maxLength": 128,
@@ -35531,6 +35620,11 @@
                       }
                     ],
                     "description": "Host-derived setup choices captured at admission for recovery of the same launch."
+                  },
+                  "taskImagesOnly": {
+                    "const": true,
+                    "description": "The launch image snapshot contains only proven task attachments.",
+                    "type": "boolean"
                   },
                   "version": {
                     "maximum": 9007199254740991,

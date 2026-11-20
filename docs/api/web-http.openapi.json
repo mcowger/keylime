@@ -59789,7 +59789,7 @@
         }
       },
       "post": {
-        "description": "### Usage\n\nRead or edit Repo and System notebooks and task boards, improve the contents of a task's Brief editor, or launch a saved task.\n\n### Inputs\n\nSelect an owning daemon and stable Repo or System ID. Writes use the current revision. Notes and tasks accept PNG, JPEG, GIF or WebP attachments. If launch or resume returns a review, repeat that action with confirmation and selected refs. Maximum request size is 8 MiB.\n\n### Invariants\n\nImprovement sends the Brief, target name and selected task images, never shared Notes or checkout contents. Saved attachment IDs must belong to the task.\n\n### Effects\n\nImprovement returns replacement text without saving edits. Launch snapshots saved Notes and task images (at most ten images and 5 MiB combined) with the literal first message. Refresh never resends an uncertain message.\n\n### Recovery\n\nRead the board after a conflict or lost reply. Resume a stale, unadmitted Effort to review a fresh plan under the same launch ID. Admitted Efforts retry their saved setup; never resend if first-message delivery is uncertain.",
+        "description": "### Usage\n\nRead or edit Repo and System notebooks and task boards, improve the contents of a task's Brief editor, or launch a saved task.\n\n### Inputs\n\nSelect an owning daemon and stable Repo or System ID. Writes use the current revision. Notes and tasks accept PNG, JPEG, GIF or WebP attachments. If launch or resume returns a review, repeat that action with confirmation and selected refs. Maximum request size is 8 MiB.\n\n### Invariants\n\nImprovement sends the Brief, target name and selected task images, never shared Notes or checkout contents. Saved attachment IDs must belong to the task.\n\n### Effects\n\nImprovement returns replacement text without saving edits. Launch pins the saved task prompt and task images (at most ten images and 5 MiB), never Notes text or images. Resume uses the pinned task snapshot, and refresh never resends an uncertain message.\n\n### Recovery\n\nRead the board after a conflict or lost reply. Resume a stale, unadmitted Effort to review a fresh plan under the same launch ID. Admitted Efforts retry their saved setup; never resend if first-message delivery is uncertain.",
         "operationId": "workspacePlanningPost",
         "requestBody": {
           "content": {
@@ -60030,7 +60030,7 @@
                             "type": "string"
                           },
                           "images": {
-                            "description": "Replacement attachment list. Use IDs to keep existing images, or include new image bytes. Omit to keep the list unchanged.",
+                            "description": "Task editor images in order: saved IDs from this task or unsaved uploads. Notes images are not included.",
                             "items": {
                               "anyOf": [
                                 {
@@ -60423,7 +60423,7 @@
                               },
                               "launch": {
                                 "additionalProperties": false,
-                                "description": "Durable launch and immutable prompt snapshot. Unknown delivery is never retried.",
+                                "description": "Durable launch with the literal prompt and pinned task image snapshot. Legacy records without taskImagesOnly are not eligible for first-message delivery. Unknown delivery is never retried.",
                                 "properties": {
                                   "effortId": {
                                     "maxLength": 128,
@@ -60628,6 +60628,11 @@
                                       }
                                     ],
                                     "description": "Host-derived setup choices captured at admission for recovery of the same launch."
+                                  },
+                                  "taskImagesOnly": {
+                                    "const": true,
+                                    "description": "The launch image snapshot contains only proven task attachments.",
+                                    "type": "boolean"
                                   },
                                   "version": {
                                     "maximum": 9007199254740991,
@@ -61389,7 +61394,7 @@
         ],
         "summary": "Manage Repo and System notes, tasks, and launches",
         "x-client-semantics": {
-          "Effects": "Improvement returns replacement text without saving edits. Launch snapshots saved Notes and task images (at most ten images and 5 MiB combined) with the literal first message. Refresh never resends an uncertain message.",
+          "Effects": "Improvement returns replacement text without saving edits. Launch pins the saved task prompt and task images (at most ten images and 5 MiB), never Notes text or images. Resume uses the pinned task snapshot, and refresh never resends an uncertain message.",
           "Inputs": "Select an owning daemon and stable Repo or System ID. Writes use the current revision. Notes and tasks accept PNG, JPEG, GIF or WebP attachments. If launch or resume returns a review, repeat that action with confirmation and selected refs. Maximum request size is 8 MiB.",
           "Invariants": "Improvement sends the Brief, target name and selected task images, never shared Notes or checkout contents. Saved attachment IDs must belong to the task.",
           "Recovery": "Read the board after a conflict or lost reply. Resume a stale, unadmitted Effort to review a fresh plan under the same launch ID. Admitted Efforts retry their saved setup; never resend if first-message delivery is uncertain.",

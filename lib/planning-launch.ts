@@ -213,6 +213,36 @@ export async function runPlanningLaunch(
     }
   }
   if (
+    launch.phase !== "sent" &&
+    launch.phase !== "delivery_unknown" &&
+    !launch.taskImagesOnly
+  ) {
+    if (
+      input.action === "refresh" &&
+      launch.phase !== "creating" &&
+      launch.phase !== "ready"
+    )
+      return { board };
+    try {
+      board = await op({
+        action: "prepareLaunch",
+        taskId,
+        id: launch.id,
+        version: launch.version,
+      });
+    } catch (error) {
+      if (hasCode(error, "launch_conflict")) return { board: await read() };
+      if (!hasCode(error, "invalid_request")) throw error;
+    }
+    launch = taskIn(board).launch;
+    if (!launch?.taskImagesOnly)
+      throw new HostOpError(
+        409,
+        "planning_launch_upgrade_required",
+        "Update the owning daemon before continuing this launch",
+      );
+  }
+  if (
     input.action === "resume" &&
     launch.phase === "review_required" &&
     launch.setup?.kind === "system"
@@ -413,8 +443,10 @@ export async function runPlanningLaunch(
     if (current.images?.length) {
       try {
         const context = await op({
-          action: "readImages",
-          ids: current.images.map(({ id }) => id),
+          action: "readLaunchImages",
+          taskId,
+          id: current.id,
+          version: current.version,
         });
         images = context.imagePayloads;
         if (images?.length !== current.images.length)

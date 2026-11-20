@@ -12,6 +12,7 @@ import {
   BellOff,
   Bot,
   ChevronRight,
+  ClipboardList,
   FolderCog,
   FolderInput,
   Loader2,
@@ -48,7 +49,7 @@ import {
   SidebarIconButton,
   SidebarSectionHeader,
 } from "./SessionSidebar-chrome";
-import { PlanningDialog } from "./PlanningDialog";
+import type { PlanningDestination } from "./SessionSidebar";
 import { SystemsSidebar } from "./SystemsSidebar";
 import type { SystemsHosts } from "./SystemsHost";
 
@@ -119,6 +120,7 @@ type Props = {
   onToggleHost: (host: string) => void;
   onSelectSession: (session: SessionInfo) => void;
   onOpenLinkedSession?: (sessionId: string) => void;
+  onOpenPlanning?: (destination: PlanningDestination) => void;
   onAddProject: (host: string) => void;
   onNewWorkspace: (project: ManagedProject) => void;
   buildingWorkspaceProjects?: ReadonlySet<string>;
@@ -194,6 +196,7 @@ export function HierarchySidebar({
   onShip,
   onSelectSession,
   onOpenLinkedSession,
+  onOpenPlanning,
   onAddProject,
   onNewWorkspace,
   buildingWorkspaceProjects,
@@ -267,10 +270,6 @@ export function HierarchySidebar({
   const [settingsProject, setSettingsProject] = useState<{
     host: string;
     project: HierarchyProject;
-  } | null>(null);
-  const [planningRepo, setPlanningRepo] = useState<{
-    host: string;
-    id: string;
   } | null>(null);
   const [projectSettingsPending, setProjectSettingsPending] = useState(false);
   const [openWorkspaceMenu, setOpenWorkspaceMenu] = useState<string | null>(
@@ -710,6 +709,16 @@ export function HierarchySidebar({
     justifyContent: "center",
     padding: 6,
   } as const;
+  const repoMenuButton = {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "6px 8px",
+    borderRadius: "var(--radius-control)",
+    color: "var(--text)",
+    fontSize: 13,
+    whiteSpace: "nowrap",
+  } as const;
   const rowButton = {
     ...button,
     border: "none",
@@ -1044,9 +1053,16 @@ export function HierarchySidebar({
                       >
                         <MoreHorizontal size={16} aria-hidden="true" />
                       </summary>
-                      <div style={menu}>
+                      <div
+                        style={{
+                          ...menu,
+                          flexDirection: "column",
+                          width: "max-content",
+                        }}
+                      >
                         <button
-                          style={menuButton}
+                          className="sidebar-menu-item"
+                          style={repoMenuButton}
                           type="button"
                           aria-label="Repo settings"
                           title="Repo settings"
@@ -1060,20 +1076,31 @@ export function HierarchySidebar({
                           <Wrench size={16} aria-hidden="true" /> Repo settings
                         </button>
                         <button
-                          style={menuButton}
+                          className="sidebar-menu-item"
+                          style={repoMenuButton}
                           type="button"
                           onClick={(event) => {
                             event.currentTarget
                               .closest("details")
                               ?.removeAttribute("open");
-                            setPlanningRepo({ host: host.id, id: project.id });
+                            onOpenPlanning?.({
+                              host: host.id,
+                              owner: { kind: "repo", id: project.id },
+                              onChanged,
+                              onOpenTarget: ({ path }) => {
+                                if (path) onSelectWorkspace(path, host.id);
+                              },
+                              onOpenChat: onOpenLinkedSession,
+                            });
                           }}
                         >
-                          Repo Notes &amp; Tasks
+                          <ClipboardList size={16} aria-hidden="true" /> Repo
+                          Notes &amp; Tasks
                         </button>
                         {project.kind === "git" && (
                           <button
-                            style={menuButton}
+                            className="sidebar-menu-item"
+                            style={repoMenuButton}
                             type="button"
                             aria-label="Manage workspaces"
                             title="Manage workspaces"
@@ -1084,12 +1111,14 @@ export function HierarchySidebar({
                               setManagedProject({ host: host.id, project });
                             }}
                           >
-                            <FolderCog size={16} aria-hidden="true" />
+                            <FolderCog size={16} aria-hidden="true" /> Manage
+                            workspaces
                           </button>
                         )}
                         {project.kind === "git" && (
                           <button
-                            style={menuButton}
+                            className="sidebar-menu-item"
+                            style={repoMenuButton}
                             type="button"
                             aria-label="Import workspaces"
                             title="Import workspaces"
@@ -1101,11 +1130,13 @@ export function HierarchySidebar({
                               void discover(host.id, project);
                             }}
                           >
-                            <FolderInput size={16} aria-hidden="true" />
+                            <FolderInput size={16} aria-hidden="true" /> Import
+                            workspaces
                           </button>
                         )}
                         <button
-                          style={menuButton}
+                          className="sidebar-menu-item"
+                          style={repoMenuButton}
                           type="button"
                           aria-label="Unregister repo"
                           title="Unregister repo"
@@ -1125,7 +1156,8 @@ export function HierarchySidebar({
                             });
                           }}
                         >
-                          <Trash2 size={16} aria-hidden="true" />
+                          <Trash2 size={16} aria-hidden="true" /> Unregister
+                          repo
                         </button>
                       </div>
                     </details>
@@ -1600,25 +1632,12 @@ export function HierarchySidebar({
                 onOpenEffort(host.id, effort, navigate, latest);
               }}
               onOpenLinkedSession={onOpenLinkedSession}
+              onOpenPlanning={onOpenPlanning}
               onChanged={onChanged}
             />
           )}
         </section>
       ))}
-      {planningRepo && (
-        <PlanningDialog
-          key={`${planningRepo.host}:${planningRepo.id}`}
-          host={planningRepo.host}
-          owner={{ kind: "repo", id: planningRepo.id }}
-          launchDisabled={!!hostUnavailableReason?.(planningRepo.host)}
-          onClose={() => setPlanningRepo(null)}
-          onChanged={onChanged}
-          onOpenTarget={({ path }) => {
-            if (path) onSelectWorkspace(path, planningRepo.host);
-          }}
-          onOpenChat={onOpenLinkedSession}
-        />
-      )}
       {settingsProject && (
         <Dialog
           open

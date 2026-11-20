@@ -1352,7 +1352,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Reply to planning; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Image reads accept only IDs referenced by this board. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin snapshots the saved Brief and the Notes and task image IDs in that order. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
+        "description": "Reply to planning; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Browser preview reads board references; Improve reads only live attachments on the selected task. Launch reads use the claimed launch ID and version, never arbitrary image IDs. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin pins the saved prompt and task images, never Notes. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Preparing an older launch for delivery keeps only pinned images still proven to belong to its task. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
         "name": "HostReply_planning",
         "payload": {
           "$ref": "#/components/schemas/HostReply_planning"
@@ -2312,7 +2312,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Image reads accept only IDs referenced by this board. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin snapshots the saved Brief and the Notes and task image IDs in that order. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
+        "description": "Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Browser preview reads board references; Improve reads only live attachments on the selected task. Launch reads use the claimed launch ID and version, never arbitrary image IDs. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin pins the saved prompt and task images, never Notes. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Preparing an older launch for delivery keeps only pinned images still proven to belong to its task. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
         "name": "HostRequest_planning",
         "payload": {
           "$ref": "#/components/schemas/HostRequest_planning"
@@ -52593,7 +52593,7 @@
                         },
                         "launch": {
                           "additionalProperties": false,
-                          "description": "Durable launch and immutable prompt snapshot. Unknown delivery is never retried.",
+                          "description": "Durable launch with the literal prompt and pinned task image snapshot. Legacy records without taskImagesOnly are not eligible for first-message delivery. Unknown delivery is never retried.",
                           "properties": {
                             "effortId": {
                               "maxLength": 128,
@@ -52793,6 +52793,11 @@
                                 }
                               ],
                               "description": "Host-derived setup choices captured at admission for recovery of the same launch."
+                            },
+                            "taskImagesOnly": {
+                              "const": true,
+                              "description": "The launch image snapshot contains only proven task attachments.",
+                              "type": "boolean"
                             },
                             "version": {
                               "maximum": 9007199254740991,
@@ -53075,7 +53080,7 @@
                       },
                       "launch": {
                         "additionalProperties": false,
-                        "description": "Durable launch and immutable prompt snapshot. Unknown delivery is never retried.",
+                        "description": "Durable launch with the literal prompt and pinned task image snapshot. Legacy records without taskImagesOnly are not eligible for first-message delivery. Unknown delivery is never retried.",
                         "properties": {
                           "effortId": {
                             "maxLength": 128,
@@ -53276,6 +53281,11 @@
                             ],
                             "description": "Host-derived setup choices captured at admission for recovery of the same launch."
                           },
+                          "taskImagesOnly": {
+                            "const": true,
+                            "description": "The launch image snapshot contains only proven task attachments.",
+                            "type": "boolean"
+                          },
                           "version": {
                             "maximum": 9007199254740991,
                             "minimum": 0,
@@ -53377,7 +53387,7 @@
             "type": "object"
           }
         ],
-        "description": "Reply to planning; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Image reads accept only IDs referenced by this board. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin snapshots the saved Brief and the Notes and task image IDs in that order. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
+        "description": "Reply to planning; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Browser preview reads board references; Improve reads only live attachments on the selected task. Launch reads use the claimed launch ID and version, never arbitrary image IDs. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin pins the saved prompt and task images, never Notes. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Preparing an older launch for delivery keeps only pinned images still proven to belong to its task. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
         "title": "HostReply_planning"
       },
       "HostReply_ptySessions": {
@@ -80822,7 +80832,7 @@
         "type": "object"
       },
       "HostRequest_planning": {
-        "description": "Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Image reads accept only IDs referenced by this board. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin snapshots the saved Brief and the Notes and task image IDs in that order. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
+        "description": "Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Browser preview reads board references; Improve reads only live attachments on the selected task. Launch reads use the claimed launch ID and version, never arbitrary image IDs. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin pins the saved prompt and task images, never Notes. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Preparing an older launch for delivery keeps only pinned images still proven to belong to its task. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
         "properties": {
           "args": {
             "properties": {
@@ -81069,6 +81079,85 @@
                         "additionalProperties": false,
                         "properties": {
                           "action": {
+                            "const": "readTaskImages",
+                            "type": "string"
+                          },
+                          "ids": {
+                            "items": {
+                              "maxLength": 128,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 10,
+                            "minItems": 1,
+                            "type": "array",
+                            "uniqueItems": true
+                          },
+                          "taskId": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action", "taskId", "ids"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "readLaunchImages",
+                            "type": "string"
+                          },
+                          "id": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "taskId": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "version": {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["action", "taskId", "id", "version"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "prepareLaunch",
+                            "type": "string"
+                          },
+                          "id": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "taskId": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "version": {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["action", "taskId", "id", "version"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
                             "const": "begin",
                             "type": "string"
                           },
@@ -81177,7 +81266,7 @@
                           },
                           "expected": {
                             "additionalProperties": false,
-                            "description": "Durable launch and immutable prompt snapshot. Unknown delivery is never retried.",
+                            "description": "Durable launch with the literal prompt and pinned task image snapshot. Legacy records without taskImagesOnly are not eligible for first-message delivery. Unknown delivery is never retried.",
                             "properties": {
                               "effortId": {
                                 "maxLength": 128,
@@ -81382,6 +81471,11 @@
                                   }
                                 ],
                                 "description": "Host-derived setup choices captured at admission for recovery of the same launch."
+                              },
+                              "taskImagesOnly": {
+                                "const": true,
+                                "description": "The launch image snapshot contains only proven task attachments.",
+                                "type": "boolean"
                               },
                               "version": {
                                 "maximum": 9007199254740991,
@@ -81400,7 +81494,7 @@
                           },
                           "next": {
                             "additionalProperties": false,
-                            "description": "Durable launch and immutable prompt snapshot. Unknown delivery is never retried.",
+                            "description": "Durable launch with the literal prompt and pinned task image snapshot. Legacy records without taskImagesOnly are not eligible for first-message delivery. Unknown delivery is never retried.",
                             "properties": {
                               "effortId": {
                                 "maxLength": 128,
@@ -81605,6 +81699,11 @@
                                   }
                                 ],
                                 "description": "Host-derived setup choices captured at admission for recovery of the same launch."
+                              },
+                              "taskImagesOnly": {
+                                "const": true,
+                                "description": "The launch image snapshot contains only proven task attachments.",
+                                "type": "boolean"
                               },
                               "version": {
                                 "maximum": 9007199254740991,
@@ -85079,7 +85178,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Image reads accept only IDs referenced by this board. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin snapshots the saved Brief and the Notes and task image IDs in that order. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
+      "description": "Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Browser preview reads board references; Improve reads only live attachments on the selected task. Launch reads use the claimed launch ID and version, never arbitrary image IDs. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin pins the saved prompt and task images, never Notes. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Preparing an older launch for delivery keeps only pinned images still proven to belong to its task. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/HostRequest_planning"

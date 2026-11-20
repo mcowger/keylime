@@ -122,6 +122,24 @@ function boardImageRefs(board: SavedBoard): PlanningImageRef[] {
   ];
 }
 
+function cutOverTaskImages(
+  board: SavedBoard,
+  task: SavedBoard["tasks"][number],
+  launch: PlanningLaunch,
+): void {
+  const notesIds = new Set(board.notesImages?.map(({ id }) => id));
+  // Legacy snapshots mixed Notes and task refs. IDs can only be kept on
+  // their original attachment list; removed refs have no proven origin.
+  const taskIds = new Set(task.images?.map(({ id }) => id));
+  const images = launch.images?.filter(
+    ({ id }) => taskIds.has(id) && !notesIds.has(id),
+  );
+  if (images?.length) launch.images = images;
+  else delete launch.images;
+  launch.taskImagesOnly = true;
+  launch.version++;
+}
+
 function checkImageBudget(
   images: readonly PlanningImageRef[],
   context: string,
@@ -232,6 +250,8 @@ function checkTransition(previous: PlanningLaunch, next: PlanningLaunch): void {
     next.id !== previous.id ||
     next.prompt !== previous.prompt ||
     !isDeepStrictEqual(next.images, previous.images) ||
+    next.taskImagesOnly !== previous.taskImagesOnly ||
+    (next.phase === "sending" && !previous.taskImagesOnly) ||
     next.name !== previous.name ||
     (!replan && !isDeepStrictEqual(next.setup, previous.setup)) ||
     !transitions[previous.phase].includes(next.phase)
@@ -274,6 +294,11 @@ export async function planningOperation(
     invalid("Invalid planning request");
   const { owner, input } = operation;
   const { name, canLaunch, path } = await ownerInfo(owner, listSystems);
+  const readsOnly =
+    input.action === "read" ||
+    input.action === "readImages" ||
+    input.action === "readTaskImages" ||
+    input.action === "readLaunchImages";
   const db = database();
   try {
     const run = db.transaction((): PlanningBoard => {
@@ -289,7 +314,7 @@ export async function planningOperation(
       const changesImages =
         input.action === "saveNotes" || input.action === "saveTask"
           ? input.images !== undefined
-          : input.action === "deleteTask";
+          : input.action === "deleteTask" || input.action === "prepareLaunch";
       const beforeImages = changesImages ? boardImageRefs(board) : [];
       const task =
         "taskId" in input
@@ -304,20 +329,37 @@ export async function planningOperation(
       switch (input.action) {
         case "read":
           return board;
-        case "readImages": {
-          const refs = new Map(
-            boardImageRefs(board).map((image) => [image.id, image]),
-          );
-          const images = input.ids.map((id) => {
-            const ref = refs.get(id);
-            if (!ref)
-              throw new HostOpError(
-                404,
-                "planning_image_not_found",
-                "Image not found on this board",
-              );
-            return ref;
-          });
+        case "readImages":
+        case "readTaskImages":
+        case "readLaunchImages": {
+          const launch = task?.launch;
+          let images: PlanningImageRef[];
+          if (input.action === "readLaunchImages") {
+            if (
+              !launch?.taskImagesOnly ||
+              launch.phase !== "ready" ||
+              launch.id !== input.id ||
+              launch.version !== input.version
+            )
+              launchConflict();
+            images = launch.images ?? [];
+          } else {
+            const visible =
+              input.action === "readTaskImages"
+                ? (task?.images ?? [])
+                : boardImageRefs(board);
+            const refs = new Map(visible.map((image) => [image.id, image]));
+            images = input.ids.map((id) => {
+              const ref = refs.get(id);
+              if (!ref)
+                throw new HostOpError(
+                  404,
+                  "planning_image_not_found",
+                  "Image not found in this attachment list",
+                );
+              return ref;
+            });
+          }
           checkImageBudget(images, "A request");
           const select = db.query<{ data: string }, [string]>(
             "SELECT data FROM images WHERE id = ?",
@@ -408,26 +450,37 @@ export async function planningOperation(
             (input.setup.kind === "repo" && input.setup.projectPath !== path)
           )
             invalid("Launch setup does not belong to this owner");
-          const contextImages = [
-            ...(board.notesImages ?? []),
-            ...(task.images ?? []),
-          ];
-          checkImageBudget(
-            contextImages,
-            "A launch (Notes and task images combined)",
-          );
+          const contextImages = task.images ?? [];
+          checkImageBudget(contextImages, "A launch");
           task.launch = {
             id: input.id,
             version: 0,
             phase: "creating",
             prompt: task.prompt.trim() ? task.prompt : task.brief,
             ...(contextImages.length ? { images: contextImages } : {}),
+            taskImagesOnly: true,
             name: task.brief,
             setup: input.setup,
           };
           if (task.status !== "done") task.status = "in_progress";
           task.revision++;
           break;
+        case "prepareLaunch": {
+          const launch = task?.launch;
+          if (
+            !task ||
+            !launch ||
+            launch.id !== input.id ||
+            launch.version !== input.version ||
+            launch.phase === "sending" ||
+            launch.phase === "sent" ||
+            launch.phase === "delivery_unknown"
+          )
+            launchConflict();
+          if (launch.taskImagesOnly) return board;
+          cutOverTaskImages(board, task, launch);
+          break;
+        }
         case "updateLaunch":
           if (!task?.launch || !isDeepStrictEqual(task.launch, input.expected))
             launchConflict();
@@ -470,9 +523,7 @@ export async function planningOperation(
       return board;
     });
     // Hold the writer lock from before the read through commit, including across daemon processes.
-    return input.action === "read" || input.action === "readImages"
-      ? run()
-      : run.immediate();
+    return readsOnly ? run() : run.immediate();
   } finally {
     db.close(true);
   }

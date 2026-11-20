@@ -512,9 +512,9 @@ Recovery: List host state after uncertain delivery. Retry incomplete setup expli
   {
     name: "planning",
     description: `Usage: Read or edit the Notes & Tasks board on its owning daemon.
-Inputs: Identify a registered Repo or System by kind and ID, then select an action. Image reads accept only IDs referenced by this board. Begin and launch updates are internal.
-Invariants: Edits check the saved revision. Begin snapshots the saved Brief and the Notes and task image IDs in that order. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.
-Effects: Persists board changes outside the checkout. Does not write to Git or run workspace setup or chat delivery.
+Inputs: Identify a registered Repo or System by kind and ID, then select an action. Browser preview reads board references; Improve reads only live attachments on the selected task. Launch reads use the claimed launch ID and version, never arbitrary image IDs. Begin and launch updates are internal.
+Invariants: Edits check the saved revision. Begin pins the saved prompt and task images, never Notes. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.
+Effects: Persists board changes outside the checkout. Preparing an older launch for delivery keeps only pinned images still proven to belong to its task. Does not write to Git or run workspace setup or chat delivery.
 Recovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.`,
     args: obj({ operation: PlanningOperationSchema }),
     result: PlanningBoardSchema,

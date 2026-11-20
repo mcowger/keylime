@@ -66,7 +66,7 @@ export async function GET(request: Request) {
  * @apiUsage Read or edit Repo and System notebooks and task boards, improve the contents of a task's Brief editor, or launch a saved task.
  * @apiInputs Select an owning daemon and stable Repo or System ID. Writes use the current revision. Notes and tasks accept PNG, JPEG, GIF or WebP attachments. If launch or resume returns a review, repeat that action with confirmation and selected refs. Maximum request size is 8 MiB.
  * @apiInvariants Improvement sends the Brief, target name and selected task images, never shared Notes or checkout contents. Saved attachment IDs must belong to the task.
- * @apiEffects Improvement returns replacement text without saving edits. Launch snapshots saved Notes and task images (at most ten images and 5 MiB combined) with the literal first message. Refresh never resends an uncertain message.
+ * @apiEffects Improvement returns replacement text without saving edits. Launch pins the saved task prompt and task images (at most ten images and 5 MiB), never Notes text or images. Resume uses the pinned task snapshot, and refresh never resends an uncertain message.
  * @apiRecovery Read the board after a conflict or lost reply. Resume a stale, unadmitted Effort to review a fresh plan under the same launch ID. Admitted Efforts retry their saved setup; never resend if first-message delivery is uncertain.
  */
 export async function POST(request: Request) {
@@ -96,16 +96,11 @@ export async function POST(request: Request) {
     const target = resolved.host;
     let result: PlanningResult;
     if (input.action === "draft") {
-      const board = await target.workspaceOps.planning({
-        owner,
-        input: { action: "read" },
-      });
       const edits = input.images ?? [];
       const ids = edits.filter(
         (image): image is string => typeof image === "string",
       );
-      const task = board.tasks.find(({ id }) => id === input.taskId);
-      if (ids.some((id) => !task?.images?.some((image) => image.id === id)))
+      if (ids.length && !input.taskId)
         return Response.json(
           {
             error: "Refresh the task before improving its Brief.",
@@ -113,14 +108,14 @@ export async function POST(request: Request) {
           },
           { status: 404 },
         );
-      const saved = ids.length
-        ? ((
-            await target.workspaceOps.planning({
-              owner,
-              input: { action: "readImages", ids },
-            })
-          ).imagePayloads ?? [])
-        : [];
+      const board = await target.workspaceOps.planning({
+        owner,
+        input:
+          ids.length && input.taskId
+            ? { action: "readTaskImages", taskId: input.taskId, ids }
+            : { action: "read" },
+      });
+      const saved = board.imagePayloads ?? [];
       let index = 0;
       const images = edits.map((image) =>
         typeof image === "string"

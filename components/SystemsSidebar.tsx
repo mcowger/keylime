@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, Plus, Settings2 } from "lucide-react";
+import { ChevronRight, ClipboardList, Plus, Settings2 } from "lucide-react";
 import type { EffortRecord, SystemRecord } from "@/lib/api-contracts/systems";
 import { comparableProjectPath } from "@/lib/comparable-path";
 import { effortStatusLabels } from "./EffortDetails";
@@ -14,7 +14,7 @@ import {
   type SystemsHost,
   type SystemsAction,
 } from "./SystemsHost";
-import { PlanningDialog } from "./PlanningDialog";
+import type { PlanningDestination } from "./SessionSidebar";
 import {
   EffortCreator,
   EffortRootEditor,
@@ -30,7 +30,7 @@ import {
 
 type Editor =
   | { kind: "root" | "new" }
-  | { kind: "edit" | "archive" | "effort" | "planning"; system: SystemRecord };
+  | { kind: "edit" | "archive" | "effort"; system: SystemRecord };
 
 function ArchiveSystem({
   system,
@@ -94,6 +94,7 @@ export function SystemsSidebar({
   unavailable,
   onOpenEffort,
   onOpenLinkedSession,
+  onOpenPlanning,
   onChanged,
 }: {
   host: string;
@@ -108,6 +109,7 @@ export function SystemsSidebar({
   unavailable?: string | null;
   onOpenEffort: (effort: EffortRecord, navigate: boolean) => void;
   onOpenLinkedSession?: (sessionId: string) => void;
+  onOpenPlanning?: (destination: PlanningDestination) => void;
   onChanged: () => void;
 }) {
   const [editor, setEditor] = useState<Editor | null>(null);
@@ -202,13 +204,30 @@ export function SystemsSidebar({
             </summary>
             <div style={{ ...systemsStack, padding: 4 }}>
               <SystemsButton
+                style={{ display: "flex", alignItems: "center", gap: 8 }}
                 onClick={(event) => {
                   event.currentTarget
                     .closest("details")
                     ?.removeAttribute("open");
-                  setEditor({ kind: "planning", system });
+                  onOpenPlanning?.({
+                    host,
+                    owner: { kind: "system", id: system.id },
+                    onChanged,
+                    onOpenTarget: async ({ effortId, path }) => {
+                      const effort = (await systemsRequest(host)).efforts.find(
+                        ({ id }) => id === effortId,
+                      );
+                      if (!effort) throw new Error("Effort not found.");
+                      setExpanded((previous) =>
+                        new Set(previous).add(effort.systemId),
+                      );
+                      onOpenEffort(effort, !!path && effort.status === "ready");
+                    },
+                    onOpenChat: onOpenLinkedSession,
+                  });
                 }}
               >
+                <ClipboardList size={16} aria-hidden="true" />
                 System Notes &amp; Tasks
               </SystemsButton>
               {!system.archived && (
@@ -369,27 +388,6 @@ export function SystemsSidebar({
       )}
       {editor?.kind === "archive" && currentSystem && (
         <ArchiveSystem system={currentSystem} action={action} onClose={close} />
-      )}
-      {editor?.kind === "planning" && currentSystem && (
-        <PlanningDialog
-          key={`${host}:${currentSystem.id}`}
-          host={host}
-          owner={{ kind: "system", id: currentSystem.id }}
-          launchDisabled={disabled || currentSystem.archived}
-          onClose={close}
-          onChanged={onChanged}
-          onOpenTarget={async ({ effortId, path }) => {
-            const effort =
-              data?.efforts.find(({ id }) => id === effortId) ??
-              (await systemsRequest(host)).efforts.find(
-                ({ id }) => id === effortId,
-              );
-            if (!effort) throw new Error("Effort not found.");
-            setExpanded((previous) => new Set(previous).add(effort.systemId));
-            onOpenEffort(effort, !!path && effort.status === "ready");
-          }}
-          onOpenChat={onOpenLinkedSession}
-        />
       )}
       {editor?.kind === "effort" && currentSystem && (
         <EffortCreator

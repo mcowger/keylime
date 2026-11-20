@@ -10,7 +10,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - `bun run deploy:host` installs the daemon and runner over SSH, prompts for a host token, and offers user autostart with systemd or launchd. It doesn't deploy the FE.
 - Open **Notes & Tasks** from a Repo or System to save Markdown notes and plan work outside Git. Enter a Brief, optionally expand it in place with **Improve**, then launch a Workspace or Effort with the current text. If an Effort plan changes before creation, **Resume** lets you review the new starting commits without starting a second launch.
 - Task launch saves slash-prefixed Briefs as the first chat message instead of running them as commands.
-- Improve uses the task’s attached images with a vision-capable planning model. Shared Notes images are included only at launch.
+- Improve uses the task's attached images with a vision-capable planning model.
 - Ship can monitor a PR for new comments and reviews. The server checks that the shipping chat opted in and sends only feedback links. Stop monitoring from the sidebar PR pill.
 - Subagent previews show the model and effort as `model-slug:effort` when effort is reported.
 - **Systems** group repos, service commands, and shared instructions on one host. Create an **Effort** to get a branch and worktree for each repo, a root chat, and one terminal per service. Preview cleanup before removing worktrees; branches and PRs stay put.
@@ -145,7 +145,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - `bun run deploy:host` installs the daemon and runner over SSH, prompts for a host token, and offers user autostart with systemd or launchd. It doesn't deploy the FE
 - Open Notes & Tasks from a Repo or System to save Markdown notes and plan work outside Git. Enter a Brief, optionally expand it in place with Improve, then launch a Workspace or Effort with the current text. If an Effort plan changes before creation, Resume lets you review the new starting commits without starting a second launch
 - Task launch saves slash-prefixed Briefs as the first chat message instead of running them as commands
-- Improve uses the task’s attached images with a vision-capable planning model. Shared Notes images are included only at launch
+- Improve uses the task's attached images with a vision-capable planning model
 
 ### Changed
 - The sidebar and Settings call projects repos, including in add, remove, and settings controls.
@@ -199,6 +199,9 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- Repo sidebar menus stack labeled actions vertically, and Notes & Tasks has a clipboard icon in both Repo and System menus.
+- Notes & Tasks opens in the workspace area, and task cards can be deleted without removing linked work.
+- Notes and their images are never sent to a model or agent. Launch and Resume use only the task's own prompt and attachments.
 - Local deployment accepts Linux as well as macOS for Pitchfork-managed releases.
 - Root `bun install` installs the pinned OMP runner dependencies, so typechecking works without a separate runner setup step.
 - The desktop chat message indicator no longer overlaps transcript rows or their expand controls.
@@ -339,6 +342,9 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Sidebar search reveals matches in collapsed Repos and Systems sections. Clearing the query restores their previous collapse state
 - The desktop chat message indicator no longer overlaps transcript rows or their expand controls
 - Root `bun install` installs the pinned OMP runner dependencies, so typechecking works without a separate runner setup step
+- Repo sidebar menus stack labeled actions vertically, and Notes & Tasks has a clipboard icon in both Repo and System menus
+- Notes & Tasks opens in the workspace area, and task cards can be deleted without removing linked work
+- Notes and their images are never sent to a model or agent. Launch and Resume use only the task's own prompt and attachments
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

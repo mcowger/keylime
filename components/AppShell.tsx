@@ -22,7 +22,8 @@ import {
   NAVIGATION_HISTORY_MAX_ENTRIES,
 } from "@/lib/navigation-history";
 import { useMobileSidebarGestures } from "@/hooks/useMobileSidebarGestures";
-import { SessionSidebar } from "./SessionSidebar";
+import { SessionSidebar, type PlanningDestination } from "./SessionSidebar";
+import { PlanningPage } from "./PlanningDialog";
 import type { SearchMatchTarget } from "./SessionSearchMatches";
 import type { WorktreeContext } from "./SessionSidebar-helpers";
 import type {
@@ -483,8 +484,13 @@ export function AppShell({ appName }: { appName: string }) {
   const [explorerRefreshing, setExplorerRefreshing] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [archiveBrowserOpen, setArchiveBrowserOpen] = useState(false);
+  const [planning, setPlanning] = useState<PlanningDestination | null>(null);
   const [modelsRefreshKey, setModelsRefreshKey] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const closePlanning = useCallback(() => {
+    setPlanning(null);
+    if (isMobile) setSidebarOpen(false);
+  }, [isMobile]);
   const [mobileSidebarReady, setMobileSidebarReady] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState<number>(
     SIDEBAR_DEFAULT_WIDTH,
@@ -1131,7 +1137,7 @@ export function AppShell({ appName }: { appName: string }) {
   // the dialog records it, and closing could not return focus there.
   const [rightPanelMounted, setRightPanelMounted] = useState(false);
   const rightPanelIsModal =
-    isCompactOverlay && rightPanelMounted && rightPanelOpen && !settingsTab;
+    isCompactOverlay && rightPanelMounted && rightPanelOpen && !settingsTab && !planning;
   const rightPanelRef = useModalDialog<HTMLDivElement>({
     onClose: closeRightPanel,
     active: rightPanelIsModal,
@@ -1146,9 +1152,11 @@ export function AppShell({ appName }: { appName: string }) {
   useMobileSidebarGestures({
     enabled: isMobile && mobileSidebarReady && !settingsTab,
     leftOpen: sidebarOpen,
-    rightOpen: rightPanelOpen,
+    rightOpen: rightPanelOpen && !planning,
     onLeftOpenChange: setSidebarOpen,
-    onRightOpenChange: setRightPanelOpen,
+    onRightOpenChange: (open) => {
+      if (!planning) setRightPanelOpen(open);
+    },
   });
   const pendingRightPanelWidthRef = useRef<number | null>(null);
   const rightResizeHandlersRef = useRef<{
@@ -1329,6 +1337,7 @@ export function AppShell({ appName }: { appName: string }) {
       discovery?: "pending" | "resolved",
       allowDraft = true,
     ) => {
+      if (!synchronized && discovery !== "resolved") setPlanning(null);
       if (discovery === "resolved") {
         const pending = pendingWorkspaceDraft.current;
         pendingWorkspaceDraft.current = null;
@@ -1472,6 +1481,7 @@ export function AppShell({ appName }: { appName: string }) {
   const sessionLookupVersion = useRef(0);
   const handleSelectSession = useCallback(
     (session: SessionInfo, isRestore = false) => {
+      if (!isRestore) setPlanning(null);
       setActiveTerminalId(null);
       sessionLookupVersion.current += 1;
       // Re-picking the already-open session (sidebar double-click, palette
@@ -1537,6 +1547,7 @@ export function AppShell({ appName }: { appName: string }) {
       setActiveTerminalId(null);
       sessionLookupVersion.current += 1;
       setSettingsTab(null);
+      setPlanning(null);
       if (!cwd) return;
       const effort = effortForPath(hostId ?? LOCAL_HOST_ID, cwd);
       if (effort && effort.status !== "ready") return;
@@ -1569,6 +1580,7 @@ export function AppShell({ appName }: { appName: string }) {
 
   const handleNewWorkspace = useCallback(
     (project: ManagedProject) => {
+      setPlanning(null);
       if (project.projectKind !== "git") {
         handleNewSession(
           browserUUID(),
@@ -1946,9 +1958,14 @@ export function AppShell({ appName }: { appName: string }) {
   // layer always swallows the keystroke, so both directions stop dead at the
   // ends of the stack instead of continuing into browser history.
   const handleNavigateBack = useCallback(() => {
+    if (planning) {
+      closePlanning();
+      return;
+    }
     void navigateInHistory(-1);
-  }, [navigateInHistory]);
+  }, [closePlanning, navigateInHistory, planning]);
   const handleNavigateForward = useCallback(() => {
+    setPlanning(null);
     void navigateInHistory(1);
   }, [navigateInHistory]);
 
@@ -1957,7 +1974,7 @@ export function AppShell({ appName }: { appName: string }) {
   const [navIsMac] = useState(() => isMacPlatform());
   const sidebarNavigation = useMemo(
     () => ({
-      canBack: navigationHistory.canBack,
+      canBack: Boolean(planning) || navigationHistory.canBack,
       canForward: navigationHistory.canForward,
       onBack: handleNavigateBack,
       onForward: handleNavigateForward,
@@ -1965,6 +1982,7 @@ export function AppShell({ appName }: { appName: string }) {
       forwardShortcut: navigateShortcutHint(1, navIsMac),
     }),
     [
+      planning,
       navigationHistory.canBack,
       navigationHistory.canForward,
       handleNavigateBack,
@@ -2733,6 +2751,7 @@ export function AppShell({ appName }: { appName: string }) {
   const detailEffort = effortDetails && effortsByHost.find(({ host, effort }) => host === effortDetails.host && effort.id === effortDetails.id)?.effort;
   const detailHost = effortDetails && hosts?.find((host) => host.id === effortDetails.host);
   const openEffortPath = (host: string, path: string, latestSession?: SessionInfo, allowDraft = true) => {
+    setPlanning(null);
     setSettingsTab(null);
     setEffortDetails(null);
     handleCwdChange(path, path, host, undefined, false, latestSession, undefined, allowDraft);
@@ -2886,8 +2905,8 @@ export function AppShell({ appName }: { appName: string }) {
     ready: mobileSidebarReady,
     sidebarOpen,
     setSidebarOpen,
-    panelOpen: rightPanelIsModal,
-    closePanel: closeRightPanel,
+    panelOpen: rightPanelIsModal || (isMobile && Boolean(planning)),
+    closePanel: planning ? closePlanning : closeRightPanel,
     url: searchParams.toString(),
   });
   useEffect(() => {
@@ -2944,11 +2963,18 @@ export function AppShell({ appName }: { appName: string }) {
       optimisticSession={selectedSession?.path === "" ? selectedSession : null}
       onSelectSession={handleSelectSession}
       onOpenLinkedSession={openLinkedSession}
+      onOpenPlanning={(destination) => {
+        setPlanning(destination);
+        if (isMobile) setSidebarOpen(false);
+      }}
       onNewSession={handleNewSession}
       systemsHosts={systemsHosts}
       onOpenEffort={(host, effort, navigate, latestSession) => {
         if (navigate) openEffortPath(host, effort.root, latestSession);
-        else setEffortDetails({ host, id: effort.id });
+        else {
+          setPlanning(null);
+          setEffortDetails({ host, id: effort.id });
+        }
       }}
       onNewWorkspace={handleNewWorkspace}
       buildingWorkspaceProjects={buildingWorkspaceProjects}
@@ -2991,7 +3017,10 @@ export function AppShell({ appName }: { appName: string }) {
       usageVisible={providerUsageVisible}
       activityTargetRef={isMobile ? undefined : setSidebarActivityContainer}
       settingsOpen={Boolean(settingsTab)}
-      onOpenSettings={() => setSettingsTab((prev) => (prev ? null : "general"))}
+      onOpenSettings={() => {
+        setPlanning(null);
+        setSettingsTab((prev) => (prev ? null : "general"));
+      }}
       onOpenArchive={() => setArchiveBrowserOpen(true)}
       navigation={sidebarNavigation}
       onClose={isMobile ? () => setSidebarOpen(false) : undefined}
@@ -3250,14 +3279,15 @@ export function AppShell({ appName }: { appName: string }) {
             </>
           )}
 
-          {/* Center: chat */}
+          {/* Retain workspace tabs, connections, and drafts while planning is visible. */}
           <main
-            id="main-content"
+            id={planning ? undefined : "main-content"}
+            hidden={Boolean(planning)}
             tabIndex={-1}
             inert={rightPanelIsModal ? true : undefined}
             style={{
               flex: 1,
-              display: "flex",
+              display: planning ? "none" : "flex",
               flexDirection: "column",
               minHeight: 0,
               minWidth: 0,
@@ -4518,6 +4548,57 @@ export function AppShell({ appName }: { appName: string }) {
             </div>
             </div>
           </main>
+          {planning && (
+            <main
+              id="main-content"
+              tabIndex={-1}
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                minHeight: 0,
+                minWidth: 0,
+                overflow: "hidden",
+              }}
+            >
+              {(isMobile || !sidebarOpen) && (
+                <div style={{ padding: "4px 8px" }}>
+                  <button
+                    type="button"
+                    onClick={handleSidebarToggle}
+                    aria-expanded={sidebarOpen}
+                    aria-controls="workspace-sidebar"
+                    aria-label={t(sidebarOpen ? "appShell.hideSidebar" : "appShell.showSidebar")}
+                    className="shell-toolbar-btn ui-focus-ring"
+                  >
+                    <Menu size={16} strokeWidth={1.8} aria-hidden="true" />
+                  </button>
+                </div>
+              )}
+              <PlanningPage
+                key={JSON.stringify([planning.host, planning.owner.kind, planning.owner.id])}
+                {...planning}
+                launchDisabled={(() => {
+                  const host = hosts?.find(({ id }) => id === planning.host);
+                  if (host && !isLinkUp(host.status)) return true;
+                  if (planning.owner.kind === "repo") return false;
+                  const systems = systemsHosts.byHost[planning.host];
+                  return !!systems?.error || !systems?.data?.systems.some(
+                    ({ id, archived }) => id === planning.owner.id && !archived,
+                  );
+                })()}
+                onClose={closePlanning}
+                onChanged={() => {
+                  planning.onChanged();
+                  if (planning.owner.kind === "system") {
+                    void systemsHosts.run(planning.host, { action: "list" }).catch(() => {
+                      // The Systems poll handles transient errors and refreshes the sidebar.
+                    });
+                  }
+                }}
+              />
+            </main>
+          )}
           {rightPanelIsModal && (
             <div
               className="right-panel-backdrop"
@@ -4526,7 +4607,7 @@ export function AppShell({ appName }: { appName: string }) {
             />
           )}
           {!settingsTab && rightPanelHasOpened && (
-            <div inert={shipVisible ? true : undefined} style={{ display: "contents" }}>
+            <div hidden={Boolean(planning)} inert={shipVisible ? true : undefined} style={{ display: planning ? "none" : "contents" }}>
             <RightPanel
               onActivityContainerChange={setActivityContainer}
               fileTabs={fileTabs}

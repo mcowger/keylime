@@ -30,7 +30,7 @@ import {
 } from "@/lib/image-attachments";
 import { MarkdownBody } from "./MarkdownBody";
 import { SystemsButton } from "./SystemsForms";
-import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
+import { ConfirmDialog } from "./ui/field";
 
 const columns = [
   ["backlog", "Backlog"],
@@ -216,7 +216,7 @@ function taskTitle(brief: string): string {
     .trim();
 }
 
-export function PlanningDialog({
+export function PlanningPage({
   host,
   owner: { kind, id },
   launchDisabled,
@@ -234,6 +234,7 @@ export function PlanningDialog({
   onOpenChat?: (sessionId: string) => void;
 }) {
   const heading = useId();
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const [board, setBoard] = useState<PlanningBoard>();
   const [notes, setNotes] = useState<{
@@ -243,6 +244,7 @@ export function PlanningDialog({
   }>();
   const [preview, setPreview] = useState(false);
   const [edit, setEdit] = useState<TaskEdit>();
+  const [taskToDelete, setTaskToDelete] = useState<PlanningTask>();
   const [review, setReview] = useState<{
     task: PlanningTask;
     action: "launch" | "resume";
@@ -302,6 +304,10 @@ export function PlanningDialog({
       }),
     [request, run],
   );
+
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     void readBoard();
@@ -426,23 +432,15 @@ export function PlanningDialog({
   const canLaunch = !!board?.canLaunch && !launchDisabled;
 
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open && !pending) onClose();
-      }}
-    >
-      <DialogContent
-        className="planning-dialog"
-        style={{ maxWidth: "calc(100vw - 24px)" }}
-      >
+    <section className="planning-page" aria-labelledby={heading}>
+      <div className="planning-content">
         <header>
-          <DialogTitle>
+          <h1 id={heading} ref={headingRef} tabIndex={-1}>
             {kind === "repo" ? "Repo" : "System"} Notes &amp; Tasks
             {board ? `: ${board.name}` : ""}
-          </DialogTitle>
+          </h1>
           <SystemsButton disabled={pending} onClick={onClose}>
-            Close
+            Back to workspace
           </SystemsButton>
         </header>
         {pending && <p role="status">Working…</p>}
@@ -457,7 +455,7 @@ export function PlanningDialog({
           <>
             <section aria-labelledby={`${heading}-notes`}>
               <header>
-                <h3 id={`${heading}-notes`}>Notes</h3>
+                <h2 id={`${heading}-notes`}>Notes</h2>
                 <SystemsButton
                   aria-pressed={preview}
                   onClick={() => setPreview(!preview)}
@@ -504,8 +502,7 @@ export function PlanningDialog({
                 }
               />
               <p className="planning-muted">
-                Saved Notes images are sent with every task launch for this{" "}
-                {kind === "repo" ? "Repo" : "System"}.
+                Notes and their images aren't sent to models or agents.
               </p>
               {notesConflict && (
                 <details>
@@ -563,7 +560,7 @@ export function PlanningDialog({
             </section>
             <section aria-labelledby={`${heading}-tasks`}>
               <header>
-                <h3 id={`${heading}-tasks`}>Tasks</h3>
+                <h2 id={`${heading}-tasks`}>Tasks</h2>
                 <div className="planning-actions">
                   <SystemsButton
                     disabled={pending}
@@ -752,7 +749,7 @@ export function PlanningDialog({
                     key={status}
                     aria-labelledby={`${heading}-${status}`}
                   >
-                    <h4 id={`${heading}-${status}`}>{label}</h4>
+                    <h3 id={`${heading}-${status}`}>{label}</h3>
                     {board.tasks.some((task) => task.status === status) ? (
                       <ul>
                         {board.tasks
@@ -822,6 +819,17 @@ export function PlanningDialog({
                                         Launch
                                       </SystemsButton>
                                     )}
+                                    <SystemsButton
+                                      disabled={
+                                        pending ||
+                                        editing ||
+                                        !!review ||
+                                        isActive(launchState)
+                                      }
+                                      onClick={() => setTaskToDelete(task)}
+                                    >
+                                      Delete
+                                    </SystemsButton>
                                   </div>
                                   {launchState && (
                                     <>
@@ -916,8 +924,30 @@ export function PlanningDialog({
             </section>
           </>
         )}
-      </DialogContent>
-    </Dialog>
+        <ConfirmDialog
+          open={!!taskToDelete}
+          onOpenChange={(open) => {
+            if (!open) setTaskToDelete(undefined);
+          }}
+          title="Delete task?"
+          description={
+            taskToDelete &&
+            `${taskToDelete.brief}\n\nThis removes the task from the board. Any linked workspace, Effort, or chat stays.`
+          }
+          confirmLabel="Delete task"
+          danger
+          onConfirm={() => {
+            if (!taskToDelete) return;
+            setTaskToDelete(undefined);
+            void save({
+              action: "deleteTask",
+              taskId: taskToDelete.id,
+              revision: taskToDelete.revision,
+            });
+          }}
+        />
+      </div>
+    </section>
   );
 }
 

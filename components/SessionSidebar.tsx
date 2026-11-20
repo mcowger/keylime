@@ -9,6 +9,7 @@ import {
   useRef,
   useMemo,
   useDeferredValue,
+  type ComponentProps,
 } from "react";
 import type {
   ExitedRpcSession,
@@ -105,6 +106,7 @@ import {
 } from "./SessionSidebar-chrome";
 import { HierarchySidebar } from "./HierarchySidebar";
 import type { EffortRecord } from "@/lib/api-contracts/systems";
+import type { PlanningPage } from "./PlanningDialog";
 import type { SystemsHosts } from "./SystemsHost";
 import type { ShipTarget } from "./ShipDialog";
 
@@ -122,12 +124,18 @@ declare global {
   }
 }
 
+export type PlanningDestination = Omit<
+  ComponentProps<typeof PlanningPage>,
+  "onClose" | "launchDisabled"
+>;
+
 interface Props {
   selectedSessionId: string | null;
   /** The active session can exist in memory before its JSONL file is flushed. */
   optimisticSession?: SessionInfo | null;
   onSelectSession: (session: SessionInfo, isRestore?: boolean) => void;
   onOpenLinkedSession?: (sessionId: string) => void;
+  onOpenPlanning?: (destination: PlanningDestination) => void;
   onNewSession?: (
     sessionId: string,
     cwd: string | null,
@@ -229,6 +237,7 @@ export const SessionSidebar = memo(function SessionSidebar({
   optimisticSession,
   onSelectSession,
   onOpenLinkedSession,
+  onOpenPlanning,
   onNewSession,
   onNewWorkspace,
   buildingWorkspaceProjects,
@@ -2023,6 +2032,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 
         <HierarchySidebar
           systemsHosts={systemsHosts}
+          onOpenPlanning={onOpenPlanning}
           onOpenEffort={(host, effort, navigate, latestSession) => {
             if (navigate) {
               pendingWorkspaceDiscovery.current = null;

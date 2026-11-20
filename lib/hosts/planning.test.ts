@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +8,7 @@ import type {
   PlanningOwner,
 } from "../api-contracts/planning";
 import type { SystemsResult } from "../api-contracts/systems";
+import { MAX_ATTACHED_IMAGES } from "../image-attachments";
 import { planningOperation } from "./planning";
 
 let dir: string;
@@ -210,7 +212,7 @@ test("archived Systems can edit notes and tasks but cannot begin a launch", asyn
   ).rejects.toMatchObject({ code: "planning_launch_unavailable" });
 });
 
-test("launch keeps its original Notes and task images after edits and isolates them by board", async () => {
+test("browser previews Notes, but launch pins only task images and retains them after edits", async () => {
   const data =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+NmWQAAAAASUVORK5CYII=";
   const png = { mimeType: "image/png", data } as const;
@@ -218,7 +220,10 @@ test("launch keeps its original Notes and task images after edits and isolates t
     action: "saveNotes",
     notes: "Context",
     revision: 0,
-    images: [{ ...png, name: "notes.png" }],
+    images: Array.from({ length: MAX_ATTACHED_IMAGES }, (_, index) => ({
+      ...png,
+      name: `notes-${index}.png`,
+    })),
   });
   const {
     tasks: [task],
@@ -229,7 +234,8 @@ test("launch keeps its original Notes and task images after edits and isolates t
     status: "ready",
     images: [{ ...png, name: "task.png" }],
   });
-  const ids = [notes.notesImages![0].id, task.images![0].id];
+  const notesId = notes.notesImages![0].id;
+  const taskImageId = task.images![0].id;
   const started = await op(system, {
     action: "begin",
     taskId: task.id,
@@ -237,10 +243,26 @@ test("launch keeps its original Notes and task images after edits and isolates t
     id: "launch",
     setup,
   });
-  expect(started.tasks[0].launch?.images?.map(({ name }) => name)).toEqual([
-    "notes.png",
-    "task.png",
-  ]);
+  expect(started.tasks[0].launch).toMatchObject({
+    prompt: "Task",
+    taskImagesOnly: true,
+    images: task.images,
+  });
+  expect(
+    (await op(system, { action: "readImages", ids: [notesId] })).imagePayloads,
+  ).toEqual([{ ...png, type: "image" }]);
+  await expect(
+    op(system, { action: "readTaskImages", taskId: task.id, ids: [notesId] }),
+  ).rejects.toMatchObject({ code: "planning_image_not_found" });
+  expect(
+    (
+      await op(system, {
+        action: "readTaskImages",
+        taskId: task.id,
+        ids: [taskImageId],
+      })
+    ).imagePayloads,
+  ).toEqual([{ ...png, type: "image" }]);
   await op(system, {
     action: "saveNotes",
     notes: "New context",
@@ -256,14 +278,139 @@ test("launch keeps its original Notes and task images after edits and isolates t
     status: "in_progress",
     images: [],
   });
-  expect(
-    (await op(system, { action: "readImages", ids })).imagePayloads,
-  ).toEqual([
-    { ...png, type: "image" },
+  const expected = started.tasks[0].launch!;
+  const ready = {
+    ...expected,
+    version: expected.version + 1,
+    phase: "ready" as const,
+    path: dir,
+  };
+  await op(system, {
+    action: "updateLaunch",
+    taskId: task.id,
+    expected,
+    next: ready,
+  });
+  const readLaunch = {
+    action: "readLaunchImages",
+    taskId: task.id,
+    id: ready.id,
+    version: ready.version,
+  } as const;
+  expect((await op(system, readLaunch)).imagePayloads).toEqual([
     { ...png, type: "image" },
   ]);
-  await expect(op(repo, { action: "readImages", ids })).rejects.toMatchObject({
+  await expect(
+    op(system, { ...readLaunch, version: expected.version }),
+  ).rejects.toMatchObject({ code: "launch_conflict" });
+  expect(
+    (await op(system, { action: "readImages", ids: [taskImageId] }))
+      .imagePayloads,
+  ).toEqual([{ ...png, type: "image" }]);
+  await expect(
+    op(system, { action: "readImages", ids: [notesId] }),
+  ).rejects.toMatchObject({
+    code: "planning_image_not_found",
+  });
+  await expect(
+    op(repo, { action: "readImages", ids: [taskImageId] }),
+  ).rejects.toMatchObject({
     code: "planning_image_not_found",
   });
   expect((await op(system, { action: "read" })).imagePayloads).toBeUndefined();
+});
+
+test("preparing a stored legacy launch drops Notes and ambiguous IDs without changing the board editors", async () => {
+  const data =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+NmWQAAAAASUVORK5CYII=";
+  const png = { mimeType: "image/png", data } as const;
+  await op(system, {
+    action: "saveNotes",
+    revision: 0,
+    notes: "Private",
+    images: [{ ...png, name: "notes.png" }],
+  });
+  const board = await op(system, {
+    action: "saveTask",
+    brief: "Task",
+    prompt: "Literal task prompt",
+    status: "ready",
+    images: [
+      { ...png, name: "kept.png" },
+      { ...png, name: "removed.png" },
+    ],
+  });
+  const saved = board.tasks[0];
+  const [kept, removed] = saved.images!;
+  const [note] = board.notesImages!;
+  const legacy = {
+    id: "legacy",
+    version: 4,
+    phase: "ready" as const,
+    path: dir,
+    prompt: saved.prompt,
+    name: saved.brief,
+    setup,
+    images: [note, kept, removed],
+  };
+  const db = new Database(join(dir, "keylime", "planning.sqlite"));
+  try {
+    db.run(
+      "UPDATE boards SET data = ? WHERE kind = 'system' AND owner_id = ?",
+      [
+        JSON.stringify({
+          notes: board.notes,
+          notesRevision: board.notesRevision,
+          notesImages: board.notesImages,
+          tasks: [{ ...saved, images: [kept], launch: legacy }],
+        }),
+        system.id,
+      ],
+    );
+    const claim = { taskId: saved.id, id: legacy.id, version: legacy.version };
+    expect((await op(system, { action: "read" })).tasks[0].launch).toEqual(
+      legacy,
+    );
+    await expect(
+      op(system, { action: "readLaunchImages", ...claim }),
+    ).rejects.toMatchObject({ code: "launch_conflict" });
+    await expect(
+      op(system, {
+        action: "updateLaunch",
+        taskId: saved.id,
+        expected: legacy,
+        next: {
+          ...legacy,
+          version: 5,
+          phase: "sending",
+          sessionId: "chat",
+          sendingSince: 1,
+        },
+      }),
+    ).rejects.toMatchObject({ code: "invalid_request" });
+    const prepared = await op(system, { action: "prepareLaunch", ...claim });
+    expect(prepared).toMatchObject({
+      notes: "Private",
+      notesRevision: 1,
+      notesImages: [note],
+    });
+    expect(prepared.tasks[0]).toEqual({
+      ...saved,
+      images: [kept],
+      launch: { ...legacy, version: 5, taskImagesOnly: true, images: [kept] },
+    });
+    expect(
+      (await op(system, { action: "readLaunchImages", ...claim, version: 5 }))
+        .imagePayloads,
+    ).toEqual([{ ...png, type: "image" }]);
+    expect(
+      (await op(system, { action: "readImages", ids: [note.id] }))
+        .imagePayloads,
+    ).toEqual([{ ...png, type: "image" }]);
+    expect(
+      db.query("SELECT id FROM images WHERE id = ?").get(removed.id),
+    ).toBeNull();
+  } finally {
+    db.close(true);
+  }
 });

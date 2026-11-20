@@ -135,6 +135,12 @@ export const PlanningLaunchSchema = Type.Object(
     ),
     prompt,
     images: optional(imageRefs),
+    taskImagesOnly: optional(
+      Type.Literal(true, {
+        description:
+          "The launch image snapshot contains only proven task attachments.",
+      }),
+    ),
     name: brief,
     setup: optional(setup),
     jobId: optional(id),
@@ -157,7 +163,7 @@ export const PlanningLaunchSchema = Type.Object(
   },
   {
     description:
-      "Durable launch and immutable prompt snapshot. Unknown delivery is never retried.",
+      "Durable launch with the literal prompt and pinned task image snapshot. Legacy records without taskImagesOnly are not eligible for first-message delivery. Unknown delivery is never retried.",
     additionalProperties: false,
   },
 );
@@ -233,6 +239,28 @@ const readImages = Type.Object(
   { action: Type.Literal("readImages"), ids: imageIds },
   { additionalProperties: false },
 );
+const readTaskImages = Type.Object(
+  { action: Type.Literal("readTaskImages"), ...taskId, ids: imageIds },
+  { additionalProperties: false },
+);
+const readLaunchImages = Type.Object(
+  {
+    action: Type.Literal("readLaunchImages"),
+    ...taskId,
+    id,
+    version: revision,
+  },
+  { additionalProperties: false },
+);
+const prepareLaunch = Type.Object(
+  {
+    action: Type.Literal("prepareLaunch"),
+    ...taskId,
+    id,
+    version: revision,
+  },
+  { additionalProperties: false },
+);
 const begin = Type.Object(
   { action: Type.Literal("begin"), ...taskId, revision, id, setup },
   { additionalProperties: false },
@@ -249,7 +277,15 @@ const updateLaunch = Type.Object(
 export const PlanningOperationSchema = Type.Object(
   {
     owner: PlanningOwnerSchema,
-    input: Type.Union([...crud, readImages, begin, updateLaunch]),
+    input: Type.Union([
+      ...crud,
+      readImages,
+      readTaskImages,
+      readLaunchImages,
+      prepareLaunch,
+      begin,
+      updateLaunch,
+    ]),
   },
   {
     description:
@@ -272,7 +308,13 @@ const httpInput = Type.Union([
         description: "Current contents of the Brief editor to improve.",
       }),
       taskId: optional(id),
-      images: optional(imageEdits),
+      images: optional(
+        Type.Array(Type.Union([id, uploadImage]), {
+          maxItems: MAX_ATTACHED_IMAGES,
+          description:
+            "Task editor images in order: saved IDs from this task or unsaved uploads. Notes images are not included.",
+        }),
+      ),
     },
     { additionalProperties: false },
   ),

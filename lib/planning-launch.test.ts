@@ -65,6 +65,7 @@ function fixture(defaultRef = "refs/heads/main", existing?: PlanningLaunch) {
             version: 0,
             name: task.brief,
             prompt: task.prompt,
+            taskImagesOnly: true,
             setup: input.setup,
           };
           events.push("begin");
@@ -173,6 +174,7 @@ test("Resume retries the same setup identity and refresh never resends an unreso
     phase: "setup_failed",
     prompt,
     name: "Inspect",
+    taskImagesOnly: true,
     jobId: launchId,
     setup: {
       kind: "repo",
@@ -205,6 +207,31 @@ test("Resume retries the same setup identity and refresh never resends an unreso
   assert.equal(resumed.board?.tasks[0].launch?.sessionId, "session-1");
   assert.deepEqual(uncertain.events, ["delivery_unknown"]);
   assert.deepEqual(uncertain.requests, []);
+});
+
+test("an upgraded web server will not stage an unproven launch from an older daemon", async () => {
+  const legacy = fixture(undefined, {
+    id: launchId,
+    name: "Inspect",
+    phase: "ready",
+    version: 2,
+    path: "/repo-worktrees/task",
+    prompt,
+    images: [
+      {
+        id: "private-note",
+        name: "notes.png",
+        mimeType: "image/png",
+        bytes: 64,
+      },
+    ],
+  });
+  await assert.rejects(
+    runPlanningLaunch(legacy.host, owner, { action: "refresh", taskId }),
+    { code: "planning_launch_upgrade_required" },
+  );
+  assert.deepEqual(legacy.events, []);
+  assert.equal(legacy.board.tasks[0].launch?.phase, "ready");
 });
 
 test("a moved Effort base requires fresh approval before admitting the same launch", async () => {

@@ -50,7 +50,10 @@ mock.module("./SessionSidebar", () => ({
       projects.map(({ path }) =>
         React.createElement(
           "button",
-          { key: path, onClick: () => props.onCwdChange!(path, path, "local") },
+          { key: path, onClick: () => {
+            props.onCwdChange!(path, path, "local");
+            props.onClose?.();
+          } },
           path,
         ),
       ),
@@ -101,6 +104,13 @@ mock.module("./SessionSidebar", () => ({
         props.onShip!({ host: "remote", projectPath: "/repo", path: "/repo/worktrees/B", sessionId: "remote-initiator" });
       } }, "Ship remote B"),
       React.createElement("button", { onClick: () => props.onOpenSettings!() }, "Open settings"),
+      React.createElement("button", { onClick: () => props.onOpenPlanning!({
+        host: "local",
+        owner: { kind: "repo", id: "repo-test" },
+        onChanged: () => {},
+        onOpenTarget: ({ path }) => { if (path) props.onCwdChange!(path, path, "local"); },
+        onOpenChat: props.onOpenLinkedSession,
+      }) }, "Open test board"),
       showEffort && React.createElement("button", { onClick: () => props.onOpenEffort("local", effort, false) }, "Manage test Effort"),
     );
   },
@@ -240,9 +250,57 @@ globalThis.fetch = (async (url: Parameters<typeof fetch>[0]) =>
           }
         : showEffort && String(url).startsWith("/api/systems?")
           ? { root: "/efforts", systems: [], efforts: [effort] }
-          : {},
+          : String(url) === "/api/planning"
+            ? { board: { name: "Test repo", canLaunch: true, notes: "", notesRevision: 0, tasks: [] } }
+            : {},
   )) as typeof fetch;
 const { AppShell } = await import("./AppShell.tsx");
+
+for (const mobile of [false, true]) {
+  test(`planning retains the workspace and leaves on selection (${mobile ? "mobile" : "desktop"})`, async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = (query) => ({ ...originalMatchMedia(query), matches: mobile && query === "(max-width: 640px)" });
+    sessionStorage.clear();
+    window.history.replaceState(null, "", "/?cwd=%2Frepo");
+    try {
+      const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+      await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
+      const workspace = view.getByTestId("workspace-tabs");
+      const openSidebar = () => fireEvent.click(view.getByRole("button", { name: "Show sidebar" }));
+      const openBoard = async () => {
+        fireEvent.click(view.getByRole("button", { name: "Open test board" }));
+        const heading = await view.findByRole("heading", { name: "Repo Notes & Tasks: Test repo" });
+        assert.ok(heading.closest("main"));
+        assert.ok(workspace.closest("[hidden]"));
+        if (mobile) assert.equal(view.queryByRole("button", { name: "Open test board" }), null);
+      };
+
+      if (mobile) openSidebar();
+      await openBoard();
+      fireEvent.click(view.getByRole("button", { name: "Back to workspace" }));
+      assert.equal(view.getByTestId("workspace-tabs"), workspace);
+      assert.equal(workspace.closest("[hidden]"), null);
+      assert.equal(tabProps.cwd, "/repo");
+
+      if (mobile) openSidebar();
+      await openBoard();
+      if (mobile) openSidebar();
+      fireEvent.click(view.getByRole("button", { name: "/other" }));
+      await waitFor(() => assert.equal(tabProps.cwd, "/other"));
+      assert.equal(view.queryByRole("heading", { name: /Repo Notes & Tasks/ }), null);
+
+      if (mobile) openSidebar();
+      await openBoard();
+      if (mobile) openSidebar();
+      fireEvent.click(view.getByRole("button", { name: "Open saved nested chat" }));
+      await waitFor(() => assert.equal(tabProps.cwd, "/repo/worktrees/B"));
+      assert.equal(view.queryByRole("heading", { name: /Repo Notes & Tasks/ }), null);
+    } finally {
+      cleanup();
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+}
 
 test("pending workspace explorer shows the base project until the session starts", async () => {
   sessionStorage.clear();
