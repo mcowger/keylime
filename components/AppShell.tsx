@@ -267,6 +267,7 @@ export function AppShell({ appName }: { appName: string }) {
   const [hiddenSharedIds, setHiddenSharedIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const dismissExitedChatRef = useRef<((id: string) => void) | null>(null);
   const sharedDiscoveryComplete = useRef(false);
   const membershipStreams = useRef(new Map<string, EventStream>());
   useEffect(() => {
@@ -2960,6 +2961,7 @@ export function AppShell({ appName }: { appName: string }) {
   const sidebarContent = (
     <SessionSidebar
       selectedSessionId={selectedSession?.id ?? null}
+      dismissExitedChatRef={dismissExitedChatRef}
       optimisticSession={selectedSession?.path === "" ? selectedSession : null}
       onSelectSession={handleSelectSession}
       onOpenLinkedSession={openLinkedSession}
@@ -3389,6 +3391,7 @@ export function AppShell({ appName }: { appName: string }) {
                   (tab) => tab.id === id,
                 );
                 if (!closing && id.startsWith("shared:")) {
+                  dismissExitedChatRef.current?.(id.slice(7));
                   setHiddenSharedIds((hidden) =>
                     new Set(hidden).add(id.slice(7)),
                   );
@@ -3396,6 +3399,7 @@ export function AppShell({ appName }: { appName: string }) {
                 }
                 if (!closing) return;
                 if (closing.session) {
+                  dismissExitedChatRef.current?.(closing.session.id);
                   setHiddenSharedIds((hidden) =>
                     new Set(hidden).add(closing.session!.id),
                   );

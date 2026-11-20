@@ -9,7 +9,9 @@ import {
   useRef,
   useMemo,
   useDeferredValue,
+  useImperativeHandle,
   type ComponentProps,
+  type Ref,
 } from "react";
 import type {
   ExitedRpcSession,
@@ -131,6 +133,7 @@ export type PlanningDestination = Omit<
 
 interface Props {
   selectedSessionId: string | null;
+  dismissExitedChatRef?: Ref<(id: string) => void>;
   /** The active session can exist in memory before its JSONL file is flushed. */
   optimisticSession?: SessionInfo | null;
   onSelectSession: (session: SessionInfo, isRestore?: boolean) => void;
@@ -234,6 +237,7 @@ function loadCollapsedHosts(): Set<string> {
 
 export const SessionSidebar = memo(function SessionSidebar({
   selectedSessionId,
+  dismissExitedChatRef,
   optimisticSession,
   onSelectSession,
   onOpenLinkedSession,
@@ -341,6 +345,19 @@ export const SessionSidebar = memo(function SessionSidebar({
   const [exitedSessions, setExitedSessions] = useState<
     Map<string, ExitedRpcSession>
   >(() => new Map());
+  const [dismissedExits, setDismissedExits] = useState(() => {
+    try {
+      return new Map<string, number>(
+        JSON.parse(sessionStorage.getItem("omp-web:dismissed-chat-exits") ?? "[]"),
+      );
+    } catch {
+      return new Map<string, number>();
+    }
+  });
+  const hasUndismissedExit = useCallback((id: string) => {
+    const exit = exitedSessions.get(id);
+    return exit !== undefined && dismissedExits.get(id) !== exit.at;
+  }, [exitedSessions, dismissedExits]);
   const awaitingInputIds = useMemo(
     () =>
       new Set(
@@ -355,6 +372,24 @@ export const SessionSidebar = memo(function SessionSidebar({
   const [unreadSessionIds, setUnreadSessionIds] = useState<Set<string>>(() =>
     loadUnreadSessionIds(),
   );
+  // Close only acknowledges the crash we saw. A replacement process can fail again.
+  useImperativeHandle(dismissExitedChatRef, () => (id) => {
+    const exit = exitedSessions.get(id);
+    if (!exit || dismissedExits.get(id) === exit.at) return;
+    const next = new Map(dismissedExits).set(id, exit.at);
+    setDismissedExits(next);
+    try {
+      sessionStorage.setItem("omp-web:dismissed-chat-exits", JSON.stringify([...next]));
+    } catch {
+      // Storage may be unavailable.
+    }
+    setUnreadSessionIds((previous) => {
+      if (!previous.has(id)) return previous;
+      const unread = new Set(previous);
+      unread.delete(id);
+      return unread;
+    });
+  }, [exitedSessions, dismissedExits]);
   const [recentCompletedRuns, setRecentCompletedRuns] = useState<
     RecentRunEntry[]
   >(() => loadRecentRuns());
@@ -2054,7 +2089,7 @@ export const SessionSidebar = memo(function SessionSidebar({
           runningSessionIds={runningSessionIds}
           awaitingInputIds={awaitingInputIds}
           unreadSessionIds={unreadSessionIds}
-          exitedSessionIds={exitedSessions.keys()}
+          hasUndismissedExit={hasUndismissedExit}
           matchedSessionIds={matchedSessionIds}
           refreshKey={(refreshKey ?? 0) + hierarchyRefresh}
           sessions={allSessions}

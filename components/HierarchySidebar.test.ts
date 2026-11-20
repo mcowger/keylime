@@ -95,7 +95,7 @@ for (const [state, label] of [
           runningSessionIds: new Set<string>(),
           awaitingInputIds: new Set<string>(),
           unreadSessionIds: new Set<string>(),
-          exitedSessionIds: [],
+          hasUndismissedExit: () => false,
           collapsedHosts: new Set<string>(),
           onToggleHost: noop,
           onSelectSession: noop,

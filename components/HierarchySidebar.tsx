@@ -115,7 +115,7 @@ type Props = {
   runningSessionIds: Set<string>;
   awaitingInputIds: Set<string>;
   unreadSessionIds: Set<string>;
-  exitedSessionIds: Iterable<string>;
+  hasUndismissedExit: (id: string) => boolean;
   collapsedHosts: Set<string>;
   onToggleHost: (host: string) => void;
   onSelectSession: (session: SessionInfo) => void;
@@ -210,7 +210,7 @@ export function HierarchySidebar({
   runningSessionIds,
   awaitingInputIds,
   unreadSessionIds,
-  exitedSessionIds,
+  hasUndismissedExit,
   collapsedHosts,
   onToggleHost,
 }: Props) {
@@ -676,7 +676,6 @@ export function HierarchySidebar({
       `Unregister ${what}? Files and processes will not be deleted.`,
       "Unregister",
     );
-  const exitedIds = new Set(exitedSessionIds);
   const query = searchQuery.trim().toLowerCase();
   const searching = Boolean(query);
   const hostExpanded = (id: string) =>
@@ -1166,22 +1165,21 @@ export function HierarchySidebar({
                     const runningCount = workspace.sessionIds.filter((id) =>
                       runningSessionIds.has(id),
                     ).length;
-                    const latestSession = sessions
-                      .filter(
-                        (item) =>
-                          workspace.sessionIds.includes(item.id) &&
-                          (item.hostId ?? "local") === host.id,
-                      )
-                      .sort((a, b) =>
-                        (b.lastMessageAt ?? b.modified).localeCompare(
-                          a.lastMessageAt ?? a.modified,
-                        ),
-                      )[0];
-                    const needsAttention = workspace.sessionIds.some(
-                      (id) =>
+                    const workspaceSessions = sessions.filter(
+                      (session) =>
+                        (session.hostId ?? LOCAL_HOST_ID) === host.id &&
+                        workspace.sessionIds.includes(session.id),
+                    );
+                    const latestSession = workspaceSessions.sort((a, b) =>
+                      (b.lastMessageAt ?? b.modified).localeCompare(
+                        a.lastMessageAt ?? a.modified,
+                      ),
+                    )[0];
+                    const needsAttention = workspaceSessions.some(
+                      ({ id }) =>
                         awaitingInputIds.has(id) ||
                         unreadSessionIds.has(id) ||
-                        exitedIds.has(id),
+                        hasUndismissedExit(id),
                     );
                     const workspaceKey = hostProjectKey(
                       host.id,

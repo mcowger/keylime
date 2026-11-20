@@ -201,6 +201,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- A workspace shows **Attention required** after a chat crashes, even if the chat isn't open. Closing the crashed chat dismisses that warning in the current browser tab, and deleting the chat removes its badge.
 - System names line up beside their expand chevrons and stay visible when **Actions** is open, even at the sidebar's minimum width.
 - Launch in Notes & Tasks uses automatic naming for Workspaces, Efforts, and branches instead of copying the task summary.
 - Removed extra check marks from completed background job notices, system reminders, and incoming agent messages. Error, warning, running, and cancelled indicators remain.
@@ -353,6 +354,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - System names line up beside their expand chevrons and stay visible when **Actions** is open, even at the sidebar's minimum width
 - Launch in Notes & Tasks uses automatic naming for Workspaces, Efforts, and branches instead of copying the task summary
 - Removed extra check marks from completed background job notices, system reminders, and incoming agent messages. Error, warning, running, and cancelled indicators remain
+- A workspace shows **Attention required** after a chat crashes, even if the chat isn't open. Closing the crashed chat dismisses that warning in the current browser tab, and deleting the chat removes its badge
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

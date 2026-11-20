@@ -13059,6 +13059,65 @@ async function selectSidebarSession(view: RenderResult, name: string) {
   });
 }
 
+test("workspace warns about a background crash until its chat is closed or removed", async (t) => {
+  resetWorld();
+  const { sessions } = serveManagedWorkspace();
+  const reply = world.respond!;
+  let deleted = false;
+  world.respond = (method, raw, body, init) => {
+    if (deleted && method === "GET" && raw === "/api/sessions") {
+      return jsonResponse(200, {
+        sessions: sessions.filter((session) => session.id !== "mac"),
+      });
+    }
+    return reply(method, raw, body, init);
+  };
+  window.history.replaceState(null, "", "/");
+  t.after(() => window.history.replaceState(null, "", "/"));
+  const view = ownRoot(
+    render(React.createElement(AppShell, { appName: "keylime" }), {
+      wrapper: TestRoot,
+    }),
+  );
+  await until(() => view.queryByText("Mac project"), "workspace renders");
+  assert.equal(view.queryByRole("button", { name: "Close Mac conversation" }), null);
+
+  const publishExit = async (at: number, refreshSessionList = false) => {
+    const frame = JSON.stringify({
+      type: "running",
+      runningSessionIds: [],
+      runningSessions: [],
+      exitedSessions: [
+        { id: "mac", cwd: "/shared", at, code: 1, signal: null, detail: "" },
+      ],
+      refreshSessionList,
+    });
+    await act(async () => {
+      for (const stream of world.runningStreams) {
+        if (!stream.closedByCaller) stream.deliver({ type: "message", data: frame });
+      }
+    });
+  };
+  const badge = () => view.queryByLabelText("Attention required");
+  await publishExit(100);
+  await until(badge, "the initial frame shows the crash without an open chat");
+  await selectSidebarSession(view, "Mac conversation");
+  const close = await view.findByRole("button", { name: "Close Mac conversation" });
+  await act(async () => fireEvent.click(close));
+  assert.equal(badge(), null);
+
+  await publishExit(100);
+  assert.equal(badge(), null, "replaying the same exit leaves it dismissed");
+  await publishExit(200);
+  assert.ok(badge(), "a later crash in the same chat needs attention");
+
+  // The workspace and last running frame still include the deleted session.
+  deleted = true;
+  await publishExit(200, true);
+  await until(() => !badge(), "the deleted chat no longer marks the workspace");
+  view.unmount();
+});
+
 test("registered remote sessions remain searchable alongside other hosts' projects", async () => {
   resetWorld();
   serveManagedWorkspace();
