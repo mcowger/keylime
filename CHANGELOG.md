@@ -238,7 +238,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
-- Workspace names in the sidebar stay on one line and truncate with an ellipsis. PR links sit below the name, and running-agent and attention indicators have fixed slots.
+- Workspace names in the sidebar stay on one line, with PR links below. The running-agent badge sits beside the actions menu, and empty Ship and setup slots leave more room for the name.
 - The PR link keeps its colored checks icon before the number. The bell after it warns about polling errors or expired delivery and is crossed out only when monitoring is off.
 - Pending PR checks show a spinner before the PR number and read as “Checks: in progress” in the tooltip and to screen readers.
 - New chats on linked hosts and in host pools use the chosen host's default model unless you explicitly pick one.
@@ -403,6 +403,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - New chats on linked hosts and in host pools use the chosen host's default model unless you explicitly pick one
 - Workspace names stay on one line and truncate; PR links sit below names with stable status indicator slots
 - PR checks and monitoring bells show accurate status, with accessible pending-check labels
+- Workspace sidebar rows align running-agent and attention badges consistently while empty Ship and setup slots give workspace names more room
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

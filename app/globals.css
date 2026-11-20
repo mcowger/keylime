@@ -2254,10 +2254,10 @@ html[data-touch-targets="accessible"]
 .sidebar-workspace-row {
   display: grid;
   grid-template-areas:
-    "name ship running attention setup menu"
+    "name ship setup attention running menu"
     "pr   pr   pr      pr        pr    pr";
-  /* Keep badge tracks reserved even when a workspace is idle. */
-  grid-template-columns: minmax(0, 1fr) 18px 38px 18px 18px 28px;
+  /* Keep attention and agent badges aligned across rows; collapse empty operation slots. */
+  grid-template-columns: minmax(0, 1fr) max-content max-content 18px 38px 28px;
   align-items: center;
   padding: 4px 6px;
   border-radius: var(--radius-control);
@@ -2294,11 +2294,16 @@ html[data-touch-targets="accessible"]
 }
 .sidebar-workspace-running {
   grid-area: running;
+  justify-self: end;
   display: flex;
   align-items: center;
   gap: 2px;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+.sidebar-workspace-ship:not(:empty),
+.sidebar-workspace-setup:not(:empty) {
+  margin-inline-end: 4px;
 }
 .sidebar-workspace-attention {
   grid-area: attention;
@@ -2314,7 +2319,7 @@ html[data-touch-targets="accessible"]
 }
 @container (max-width: 240px) {
   .sidebar-workspace-row {
-    grid-template-columns: minmax(0, 1fr) repeat(4, 16px) 28px;
+    grid-template-columns: minmax(0, 1fr) max-content max-content 18px 18px 28px;
   }
   .sidebar-workspace-count {
     display: none;
