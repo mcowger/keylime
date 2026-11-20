@@ -137,6 +137,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Tool call rows leave more room for intent: standard tools use icons, failures tint the icon red, and MCP names omit the `mcp__` prefix
 - Tool call rows use icons for standard tools to make more room for intent, tint failed-tool icons red, and omit the `mcp__` prefix from MCP names
 - New workspace drafts show the project name and base branch in a thin row attached to the composer
+- Documented that Keylime is a single-user tool and clarified its security boundaries
 
 ### Changed
 - The sidebar and Settings call projects repos, including in add, remove, and settings controls.

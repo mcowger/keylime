@@ -10,6 +10,10 @@ This repository is Keylime (`mcowger/keylime`), Matt Cowger's independent, inten
 - Breaking changes and divergence from upstream are acceptable. Prefer the simplest implementation that serves this fork's current requirements.
 - This policy does not authorize deleting user data or weakening security, data integrity, or license compliance. Call out destructive consequences before implementing them.
 
+## Security model
+
+Keylime is a single-user tool. Multiple tabs, devices, and linked hosts serve the same operator; they are not separate users or tenants. Cross-user isolation is out of scope. Preserve configured authentication, credential protection, and validation of untrusted inputs.
+
 ## Runtime management
 
 Use mise exclusively for runtime management. `mise.toml` pins Bun, the sole JavaScript/TypeScript runtime. Run `mise trust && mise install` before installing dependencies; use `mise exec -- bun <args>` when shell activation is unavailable. Do not add Node runtime requirements, Nix packaging, flakes, or alternate runtime managers. Bun's supported `node:*` APIs and compatibility types are allowed.
