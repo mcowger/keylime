@@ -1,7 +1,8 @@
-// Local macOS/Pitchfork deployment with a bounded, daemon-authoritative idle drain.
+// Local Pitchfork deployment with a bounded, daemon-authoritative idle drain.
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   realpathSync,
   readFileSync,
@@ -40,8 +41,8 @@ if (!values.root || !values.id)
   throw new Error("Deploy worker requires --root and --id");
 const root = path.resolve(values.root);
 const agent = process.env.PI_CODING_AGENT_DIR || path.join(home, ".omp/agent");
-if (process.platform !== "darwin")
-  throw new Error("This deployment command targets macOS with Pitchfork");
+if (process.platform !== "darwin" && process.platform !== "linux")
+  throw new Error("Local deployment requires Pitchfork on macOS or Linux");
 mkdirSync(base, { recursive: true, mode: 0o700 });
 const unlock = acquireDeployLock(base);
 const prior = readDeployState(base);
@@ -110,6 +111,13 @@ try {
     run(["pitchfork", "start", "global/keylime-host"]);
     onPhase("recovered");
   } else {
+    if (!values.frontend) {
+      const current = path.join(base, "current");
+      if (!lstatSync(current, { throwIfNoEntry: false })?.isSymbolicLink())
+        throw new Error(
+          `${current} must be a symlink to the active release before deploying; see docs/local-deployment.md`,
+        );
+    }
     onPhase("building");
     let candidate: string;
     if (values.activate) {

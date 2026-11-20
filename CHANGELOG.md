@@ -191,6 +191,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- Local deployment accepts Linux as well as macOS for Pitchfork-managed releases.
 - Root `bun install` installs the pinned OMP runner dependencies, so typechecking works without a separate runner setup step.
 - The desktop chat message indicator no longer overlaps transcript rows or their expand controls.
 - The sidebar no longer flashes the Provider Usage bar on reload when Provider usage limits is off.

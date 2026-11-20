@@ -1,9 +1,16 @@
 # Local production deployment
 
-This Mac uses Pitchfork's `global/keylime` and `global/keylime-host`, port 8080,
-existing password authentication, and `~/.omp/agent`. Both services use
-`~/.local/share/keylime/current/keylime`. Mise's `keylime-local` tool points at
-that same stable directory.
+Local deployment uses Pitchfork on macOS and glibc Linux. Run it as the user
+that owns the `global/keylime` and `global/keylime-host` services. Both services
+run `~/.local/share/keylime/current/keylime`, with web on port 8080 and the
+host using `~/.omp/agent` by default. Deployment keeps existing authentication
+and service configuration.
+
+`current` must be a symlink to the active release so deployment can switch it
+atomically. If `current` is a directory, stop both services during a maintenance
+window (stopping the host ends active runs), move the directory to an unused
+path under `~/.local/share/keylime/releases/`, and create `current` as a symlink
+to that path. Start both services again before deploying.
 
 ## Deploy a new version
 
@@ -85,7 +92,7 @@ mise exec -- bun run deploy:local --activate /absolute/path/to/previous-release 
 Rollback to earlier builds is not a data-compatibility promise. Maintain an
 independent backup before deploying if recovery of agent data is needed. Never
 restore a backup over a running agent.
-The initial upstream installation is retained at
+On the original macOS install, upstream is retained at
 `~/.local/share/mise/installs/github-ompweb-dev-ompweb/0.7.0/`; original service
 and mise config are in the directory named by
 `~/.local/share/keylime/initial-backup`. Returning to upstream requires manually
@@ -97,7 +104,7 @@ The worker holds a kernel-owned SQLite writer lock; concurrent deployments are
 refused and process death releases ownership without stale PID/time expiry.
 Each phase is recorded atomically with fsync before its service mutation.
 If a worker itself crashes, inspect `--status` and its log, then run
-`keylime-deploy --recover --wait` to start both services at the selected release.
+`mise exec -- bun run deploy:local --recover --wait` to start both services at the selected release.
 New deployments refuse an unfinished transaction until explicit recovery.
 This is a recoverable service transaction, not zero-downtime or a power-loss
 atomicity guarantee. Builds remain for manual disk management.
